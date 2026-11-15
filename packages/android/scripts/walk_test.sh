@@ -94,6 +94,22 @@ expect "dump" dump
 expect "the screen is the new one" ui has Dashboard
 expect "what is not on it is absent" ui absent Back
 
+echo "== what the demo's shell says"
+ok='HTTP/1.1 200 OK
+content-type: application/vnd.navree.native+json
+'
+named="$ok
+x-navree-person: 0193a4b2-0000-7000-8000-00000000ra01
+"
+ask() { rm -f "$WORK/asked" "$WORK/shell-first" "$WORK/shell-second"; [ -n "$1" ] && printf '%s' "$1" > "$WORK/shell-first"; [ -n "$2" ] && printf '%s' "$2" > "$WORK/shell-second"; PATH="$WORK:$PATH" person_named; }
+expect "a shell that names nobody" test "$(ask "$ok" "$ok")" = no
+expect "a shell that names a person from the first answer" test "$(ask "$named" "$named")" = yes
+expect "a shell that names its visitor from the second answer on" test "$(ask "$ok" "$named")" = yes
+refute "a server that does not answer" ask "" ""
+refute "an answer that is not a 200" ask "HTTP/1.1 502 Bad Gateway
+" "HTTP/1.1 502 Bad Gateway
+"
+
 echo
 if [ "$problems" -ne 0 ]; then echo "$problems failed"; exit 1; fi
 echo "all passed"

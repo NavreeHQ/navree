@@ -125,6 +125,27 @@ rotate() {
 # The smallest number among the orders (CS-nnnnnn) that are in the dump.
 lowest_order() { ui texts | grep -o 'CS-[0-9]*' | sort | head -1 | tr -d 'CS-'; }
 
+# The server of the demo, as the walk's machine reaches it (the device reaches it as $ORIGIN).
+SERVER=${SERVER:-http://127.0.0.1:8787}
+
+# Whether the demo's shell, asked as a client asks it, names a person (the header `x-navree-person`).
+# It is asked twice with the cookies of the first answer: a demo that names its visitor by a cookie
+# names it from the second answer on. Prints yes or no; fails when the server does not answer.
+person_named() {
+  local jar headers=""
+  jar=$(mktemp)
+  for _ in 1 2; do
+    headers="$headers
+$(curl -s -S --max-time 15 -D - -o /dev/null -c "$jar" -b "$jar" \
+      -H 'X-Navree-Native: 1' \
+      -H 'X-Navree-Client: platform=android; form=phone; vocab=0; scheme=light; text=1.00' \
+      -H 'Accept: application/vnd.navree.native+json' "$SERVER/_navree/native/shell")" || { rm -f "$jar"; return 1; }
+  done
+  rm -f "$jar"
+  printf '%s' "$headers" | tr -d '\r' | grep -qi '^HTTP/[0-9.]* 200' || return 1
+  if printf '%s' "$headers" | tr -d '\r' | grep -qi '^x-navree-person: *[^ ]'; then echo yes; else echo no; fi
+}
+
 # The first screen shown and nothing of the place the app was in before.
 first_screen_only() { ui contains 'Revenue today' && ui absent-part 'Fulfilment'; }
 
@@ -313,6 +334,9 @@ fi
 # ---------------------------------------------------------------- the system ends the app
 
 say "== the app ended by the system, and opened again, with no network"
+named=$(person_named) || named=unknown
+say "the demo's shell names a person: $named"
+check "the demo's shell answers" test "$named" != unknown
 # The restock left the keyboard up and the search view open (it takes the focus): back closes them.
 "$ADB" shell input keyevent KEYCODE_BACK
 sleep 1
@@ -339,10 +363,16 @@ dump
 shot returned-online
 say "after trying again it says: $(ui texts | tr '
 ' '|' | cut -c1-300)"
-# The core puts a place back only for a person the server names by id; this demo names its visitor by a cookie
-# and does not tell the framework who it is, so after the system ended the app it starts at its first screen
-# and nothing of the earlier place is shown before the server has named the person.
-check "it starts at its first screen, with nothing of the earlier place" first_screen_only
+# The core puts a place back only for a person the server names by id. So what the walk expects
+# depends on what the demo's shell says: when it names a person, the app returns to the place it
+# was in; when it does not (the demo names its visitor by a cookie and does not tell the framework
+# who it is), the app starts at its first screen and shows nothing of the earlier place before the
+# server has named the person.
+case "$named" in
+  yes) check "it returns to the place it was in" wait_for_part "Fulfilment" 20 ;;
+  no) check "it starts at its first screen, with nothing of the earlier place" first_screen_only ;;
+  *) check "what it returns to is known only when the demo's shell answers" false ;;
+esac
 check "the person is named once the server has answered" wait_for_part "Account, " 20
 
 say "walk done: $fails failed"
