@@ -516,6 +516,87 @@ fn naming_what_an_answer_repeats_costs_what_it_repeats() {
     assert!(took.as_secs() < 20, "naming the forms took {took:?}");
 }
 
+/// A field with no id of its own is named from its form and its name; the
+/// form's id, which may be as long as an id may be, is not copied whole into
+/// the name of every field in it. Forms that go by short ids keep the names
+/// they have always had, and two forms whose long ids begin alike do not share
+/// their fields' names.
+#[test]
+fn a_field_name_is_short_whatever_its_forms_id_is() {
+    let mut core = Core::new(Config::new(
+        "https://shop.example",
+        Client::new(Platform::Android, FormFactor::Phone),
+    ));
+    let shell = request_of(&core.send(Event::Start));
+    let page = request_of(&answer(
+        &mut core,
+        shell,
+        &json!({"navree": 1, "build": "b1", "name": "Charkha Supply Co.", "home": "/"}),
+    ));
+    let long = "x".repeat(255);
+    let (first, second) = (format!("{long}a"), format!("{long}b"));
+    let fields = |count: usize| -> Vec<Value> {
+        (0..count)
+            .map(|number| {
+                json!({"t": "field", "name": format!("n{number}"), "input": {"t": "text"}})
+            })
+            .collect()
+    };
+    let body = json!({"t": "stack", "children": [
+        {"t": "form", "id": first, "method": "post", "action": "/a", "children": fields(20_000)},
+        {"t": "form", "id": second, "method": "post", "action": "/b", "children": fields(20_000)},
+        {"t": "form", "id": "pay", "method": "post", "action": "/pay", "children": fields(3)},
+    ]});
+    let page_of = json!({"navree": 1, "build": "b1", "vocab": 1,
+        "screen": {"title": "Forms", "body": body}});
+    answer(&mut core, page, &page_of);
+    let screen = core.view().front.expect("a screen is in front");
+    let names = |core: &Core| -> Vec<(String, Vec<String>)> {
+        core.view().screens[&screen]
+            .forms
+            .iter()
+            .map(|(form, view)| (form.clone(), view.fields.keys().cloned().collect()))
+            .collect()
+    };
+    let before = names(&core);
+    let mut all = std::collections::BTreeSet::new();
+    for (form, fields) in &before {
+        for field in fields {
+            // The name of the form is not in the name of every field.
+            assert!(
+                field.len() <= 80,
+                "a field of a form called {} bytes long is named {} bytes long",
+                form.len(),
+                field.len()
+            );
+            assert!(all.insert(field.clone()), "two fields are named {field}");
+        }
+    }
+    let count = |id: &str| {
+        before
+            .iter()
+            .find(|(form, _)| form.starts_with(id))
+            .map_or(0, |(_, fields)| fields.len())
+    };
+    assert_eq!(count(&first), 20_000);
+    assert_eq!(count(&second), 20_000);
+    // A short id is the name it always was.
+    let pay = &before
+        .iter()
+        .find(|(form, _)| form == "pay")
+        .expect("pay")
+        .1;
+    assert_eq!(pay, &["pay.n0", "pay.n1", "pay.n2"]);
+    // The same page again names the same fields the same.
+    let again = request_of(&core.send(Event::Refresh { screen }));
+    answer(&mut core, again, &page_of);
+    assert_eq!(
+        names(&core),
+        before,
+        "a page fetched again is named as before"
+    );
+}
+
 /// A screen of the largest size: ninety-nine thousand nine hundred and ninety
 /// rows, and three more answers of as many. The list may say where more rows
 /// are.

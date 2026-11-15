@@ -496,6 +496,29 @@ fn count_bases(node: &Node, counts: &mut BTreeMap<String, usize>) {
     }
 }
 
+/// The longest form id a field's name carries whole.
+const FORM_STEM: usize = 64;
+
+/// What a field with no id of its own is named from, of its form: the form's
+/// id when that is short; when it is long, its beginning and a number made of
+/// all of it, so a long id (up to what an id may be, twice over for a form
+/// that is repeated) is not copied into the name of every field of the form,
+/// and two long ids that begin alike do not share the names of their fields.
+fn form_stem(handle: &str) -> std::borrow::Cow<'_, str> {
+    if handle.len() <= FORM_STEM {
+        return std::borrow::Cow::Borrowed(handle);
+    }
+    let mut end = 48;
+    while !handle.is_char_boundary(end) {
+        end -= 1;
+    }
+    // FNV-1a: the same number on every device, for as long as the id is.
+    let number = handle.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    });
+    std::borrow::Cow::Owned(format!("{}~{number:08x}", &handle[..end]))
+}
+
 /// A name not in `taken`: `stem`, or `stem~2`, `stem~3`, ... The next suffix
 /// to try is remembered for the stem (`next`, under `kind`), so a name an
 /// answer repeats a hundred thousand times is made a hundred thousand times,
@@ -555,7 +578,7 @@ impl Names<'_> {
     fn field(&mut self, field: &mut Field, form: Option<&str>) {
         let own = field.id.clone().filter(|id| !self.fields.contains(id));
         let id = own.unwrap_or_else(|| {
-            let mut stem = format!("{}.{}", form.unwrap_or(""), field.name);
+            let mut stem = format!("{}.{}", form_stem(form.unwrap_or("")), field.name);
             if let Input::Toggle(toggle) = &field.input
                 && let Some(value) = &toggle.value
             {
