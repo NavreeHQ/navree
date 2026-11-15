@@ -7,12 +7,14 @@ on:
       - "crates/navree-native/**"
       - "crates/navree-native-core/**"
       - "packages/android/**"
+      - "packages/windows/**"
       - ".github/workflows/native.yml"
   pull_request:
     paths:
       - "crates/navree-native/**"
       - "crates/navree-native-core/**"
       - "packages/android/**"
+      - "packages/windows/**"
       - ".github/workflows/native.yml"
 
 permissions:
@@ -399,4 +401,155 @@ jobs:
           name: android-screens-${{ matrix.device }}
           if-no-files-found: ignore
           path: ${{ runner.temp }}/screens
+          retention-days: 30
+
+  # The Windows client: the core built as a DLL, the solution built and tested with
+  # the dotnet command alone, and the demo started from its build folder and pictured.
+  # It runs twice. "image" is the runner as it comes. "plain" hides Visual Studio and
+  # the Windows SDK before the solution is built, to show the build needs neither.
+  windows:
+    name: Windows client (${{ matrix.variant }})
+    runs-on: windows-2025
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [image, plain]
+    concurrency:
+      group: native-windows-${{ matrix.variant }}-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: windows-core
+
+      # The core as a DLL for 64-bit Windows, which the bridge imports and the apps carry.
+      - name: The core as a DLL
+        shell: bash
+        run: |
+          cargo rustc -p navree-native-core --locked --release --target x86_64-pc-windows-msvc --crate-type cdylib
+          mkdir -p packages/windows/native/win-x64
+          cp target/x86_64-pc-windows-msvc/release/navree_native_core.dll packages/windows/native/win-x64/
+          ls -l packages/windows/native/win-x64
+
+      # The five functions of the C interface are exported by the DLL.
+      - name: The DLL's exports
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" | Select-Object -First 1
+          $exports = & $dumpbin.FullName /exports packages/windows/native/win-x64/navree_native_core.dll | Select-String 'navree_'
+          $exports
+          if (@($exports).Count -ne 5) { throw "expected five exported functions, found $(@($exports).Count)" }
+
+      - name: What the runner has
+        shell: pwsh
+        working-directory: packages/windows
+        run: |
+          dotnet --list-sdks
+          dotnet --version
+          dotnet --list-runtimes
+          if (Test-Path "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe") {
+            & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -all -property displayName
+          } else { "no vswhere" }
+          Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\Include" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+
+      # What a machine with only the .NET SDK has: no Visual Studio and no Windows SDK.
+      - name: Hide Visual Studio and the Windows SDK
+        if: matrix.variant == 'plain'
+        shell: pwsh
+        run: |
+          $folders = @(
+            "$env:ProgramFiles\Microsoft Visual Studio",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio",
+            "${env:ProgramFiles(x86)}\Windows Kits",
+            "${env:ProgramFiles(x86)}\Microsoft SDKs"
+          )
+          foreach ($folder in $folders) {
+            if (Test-Path -LiteralPath $folder) {
+              try {
+                Rename-Item -LiteralPath $folder -NewName ((Split-Path $folder -Leaf) + ' (hidden)') -ErrorAction Stop
+                "hidden: $folder"
+              } catch { "not hidden: $folder ($($_.Exception.Message))" }
+            } else { "not there: $folder" }
+          }
+
+      # The dotnet command alone: restore, then build the whole solution.
+      - name: Restore
+        shell: pwsh
+        working-directory: packages/windows
+        run: dotnet restore Navree.Native.sln
+
+      - name: Build
+        shell: pwsh
+        working-directory: packages/windows
+        run: dotnet build Navree.Native.sln -c Release --no-restore
+
+      - name: Unit tests
+        shell: pwsh
+        working-directory: packages/windows
+        run: dotnet test Navree.Native.sln -c Release --no-build --logger trx --results-directory "$env:RUNNER_TEMP/trx"
+
+      - name: Keep the test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-test-reports-${{ matrix.variant }}
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/trx
+          retention-days: 14
+
+      # A tool that drives and pictures a running app: tried beside the other ways of taking a picture.
+      - name: The winapp command
+        if: matrix.variant == 'image'
+        continue-on-error: true
+        uses: microsoft/setup-WinAppCli@9288bd0729bd3f71e2ed1b9eb247dc91470b824e # v0.3
+
+      # The demo is started from its build folder, with no registration, and its window is
+      # pictured every way there is; the report says which ways worked on this runner.
+      - name: Start the demo and take pictures
+        if: matrix.variant == 'image'
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter Navree.Demo.exe | Select-Object -First 1
+          if (-not $exe) { throw "the demo was not built" }
+          Get-ChildItem $exe.Directory.FullName | Select-Object -First 400 | ForEach-Object { $_.Name } | Out-File "$env:RUNNER_TEMP\demo-files.txt"
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/take-pictures.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\pictures"
+          Copy-Item "$env:RUNNER_TEMP\demo-files.txt" "$env:RUNNER_TEMP\pictures\"
+
+      - name: A picture was taken
+        if: matrix.variant == 'image'
+        shell: pwsh
+        run: |
+          $pictures = Get-ChildItem "$env:RUNNER_TEMP/pictures" -Filter *.png -ErrorAction SilentlyContinue
+          $pictures | ForEach-Object { "$($_.Name) $($_.Length) bytes" }
+          if (-not $pictures) { throw "no picture of the demo was taken" }
+
+      - name: Keep the pictures
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-pictures
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/pictures
+          retention-days: 30
+
+      - name: Keep the core's DLL
+        if: matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: navree-native-core-windows
+          if-no-files-found: error
+          path: packages/windows/native/win-x64/navree_native_core.dll
           retention-days: 30
