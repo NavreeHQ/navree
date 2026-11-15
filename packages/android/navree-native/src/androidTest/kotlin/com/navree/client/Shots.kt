@@ -44,54 +44,6 @@ object Shots {
     private var demo = false
 
     /**
-     * Gives the device the language of the look, as a person's settings do: one
-     * that runs right to left (a pseudo-locale, English words laid out from the
-     * right, and Arabic itself) for the right to left look, English for the
-     * others. The system then lays out every window an app opens, a dialog, a
-     * menu and a picker among them. Each way of asking is tried until the
-     * system holds the direction the look wants; what each answered is
-     * returned, and written beside the pictures.
-     */
-    fun language(): String {
-        val rtl = look == "rtl"
-        val wanted = if (rtl) android.view.View.LAYOUT_DIRECTION_RTL else android.view.View.LAYOUT_DIRECTION_LTR
-        val report = StringBuilder()
-        fun direction() = android.content.res.Resources.getSystem().configuration.layoutDirection
-        fun appDirection() = InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.layoutDirection
-        val tags = if (rtl) listOf("ar-XB", "ar") else listOf("en-US")
-        for (tag in tags) {
-            if (direction() == wanted && (!rtl || report.isNotEmpty())) break
-            val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-            try {
-                automation.adoptShellPermissionIdentity("android.permission.CHANGE_CONFIGURATION")
-                try {
-                    Class.forName("com.android.internal.app.LocalePicker")
-                        .getMethod("updateLocales", android.os.LocaleList::class.java)
-                        .invoke(null, android.os.LocaleList.forLanguageTags(tag))
-                } finally {
-                    automation.dropShellPermissionIdentity()
-                }
-                Thread.sleep(3000)
-                report.append("the system asked for $tag: it holds ${android.content.res.Resources.getSystem().configuration.locales}, direction ${direction()}\n")
-            } catch (e: Throwable) {
-                report.append("the system asked for $tag: not given: $e, cause ${e.cause}\n")
-            }
-            if (direction() == wanted) break
-        }
-        if (direction() != wanted) {
-            for (tag in tags) {
-                val said = shell("cmd locale set-app-locales com.navree.client.test --locales $tag").trim()
-                Thread.sleep(2000)
-                val held = shell("cmd locale get-app-locales com.navree.client.test").trim()
-                report.append("the app asked for $tag: $said | $held | the app's direction ${appDirection()}\n")
-                if (appDirection() == wanted) break
-            }
-        }
-        report.append("the system's direction ${direction()}, the app's ${appDirection()}, wanted $wanted\n")
-        return report.toString()
-    }
-
-    /**
      * Puts the system bar in the system's own demo mode, as pictures that are
      * shown to people want it: a fixed time, full battery, full signal and
      * wifi, no notification icons. Once for the process; a device that does
@@ -171,12 +123,14 @@ object Shots {
             // An extra, as above.
         }
         rule?.let { provider ->
+            val roots = provider.onAllNodes(isRoot()).fetchSemanticsNodes()
             try {
-                val report = Audit.report(provider.onRoot().fetchSemanticsNode())
-                put("$device-$look-$name.sem.txt", report)
+                put("$device-$look-$name.sem.txt", Audit.report(roots))
             } catch (_: Throwable) {
                 // The picture is what was asked for; the reading list is an extra.
             }
+            // A picture taken while a screen moves (a zoom caught between frames) has controls the size of the frame it is in.
+            if (!name.contains("zoom")) Audit.require("$device-$look-$name", Audit.faults(roots))
         }
     }
 
