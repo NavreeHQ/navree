@@ -157,6 +157,8 @@ private fun TextView(node: Navree.Text, modifier: Modifier) {
         Navree.Align.START -> TextAlign.Start
         else -> null
     }
+    // In a block at the end of a table's column, the lines of a text that wraps end together too.
+    val wrapped = align ?: if (LocalEndAligned.current) TextAlign.End else null
     val heading = node.heading != null || node.style == Navree.TextStyle.LARGE_TITLE || node.style == Navree.TextStyle.TITLE || node.style == Navree.TextStyle.DISPLAY
     val shaped = (if (align != null) modifier.fillMaxWidth() else modifier).then(if (heading) Modifier.semantics { heading() } else Modifier)
     val draw: @Composable (String) -> Unit = { words ->
@@ -165,7 +167,7 @@ private fun TextView(node: Navree.Text, modifier: Modifier) {
             modifier = shaped,
             style = style,
             color = colour,
-            textAlign = align,
+            textAlign = wrapped,
             maxLines = node.lines ?: Int.MAX_VALUE,
             overflow = TextOverflow.Ellipsis,
         )
