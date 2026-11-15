@@ -9,6 +9,7 @@ using Navree.Controls.Composition;
 using Navree.Controls.Flags;
 using Navree.Controls.Health;
 using Navree.Design;
+using Navree.Design.Pages;
 using Navree.Protocol;
 using Navree.Runtime;
 
@@ -133,7 +134,7 @@ internal sealed partial class NodeRenderer
             case Models.Carousel carousel:
                 return Composed.Carousel(carousel, Render);
             case Models.Adaptive adaptive:
-                return Column(context.Width != WidthClass.Compact ? adaptive.Wide : adaptive.Compact);
+                return DrawAdaptive(adaptive);
             case Models.FeedRow row:
                 return DrawFeedRow(row);
             case Models.Message message:
@@ -145,6 +146,26 @@ internal sealed partial class NodeRenderer
             default:
                 return null;
         }
+    }
+
+    // The parts for a wide window, or for a compact one: they stand in a column, and the column is brought up to date with the answer.
+    private UIElement DrawAdaptive(Models.Adaptive adaptive)
+    {
+        StackPanel column = new() { Spacing = 8 };
+        Func<Models.Adaptive, IReadOnlyList<Models.Node>> chosen = node => context.Width != WidthClass.Compact ? node.Wide : node.Compact;
+        Group run = Run(chosen(adaptive), new PanelHost(column.Children), () => 0);
+        Drawn me = current!;
+        me.Update = now =>
+        {
+            if (now is not Models.Adaptive next || me.Node is not Models.Adaptive previous)
+            {
+                return false;
+            }
+
+            static Models.Adaptive Bare(Models.Adaptive node) => node with { Compact = [], Wide = [] };
+            return PageRules.Same(Bare(previous), Bare(next)) && run.Update(this, me, chosen(next));
+        };
+        return column;
     }
 
     // ---- words, with flags -------------------------------------------------------------------------------
@@ -245,19 +266,21 @@ internal sealed partial class NodeRenderer
         double gap = WindowRules.Space(grid.Gap);
         if (context.Width == WidthClass.Compact)
         {
-            return Column(grid.Children, Math.Max(gap, 16));
+            StackPanel stacked = new() { Spacing = Math.Max(gap, 16) };
+            Group stackedRun = Run(grid.Children, new PanelHost(stacked.Children), () => 0);
+            UpdateRun<Models.Grid>(node => node with { Children = [] }, stackedRun, node => node.Children, node => WindowRules.IsLanes(node.Children));
+            return stacked;
         }
 
         Grid row = new() { ColumnSpacing = gap };
-        int at = 0;
         foreach (Models.Node child in grid.Children)
         {
             row.ColumnDefinitions.Add(new ColumnDefinition());
-            UIElement lane = Render(child);
-            Grid.SetColumn((FrameworkElement)lane, at++);
-            row.Children.Add(lane);
         }
 
+        // The lanes are the columns of a grid, one each: a lane that comes or goes is a grid drawn again.
+        Group lanes = Run(grid.Children, new PanelHost(row.Children), () => 0, (_, element, at) => Grid.SetColumn((FrameworkElement)element, at), resizable: false);
+        UpdateRun<Models.Grid>(node => node with { Children = [] }, lanes, node => node.Children, node => WindowRules.IsLanes(node.Children));
         return InLanes(row, gap);
     }
 
@@ -307,10 +330,21 @@ internal sealed partial class NodeRenderer
             body.Children.Add(Look.Label(card.Label, "BodyStrongTextBlockStyle"));
         }
 
-        foreach (Models.Node child in card.Children)
+        int leading = body.Children.Count;
+        Group run = Run(card.Children, new PanelHost(body.Children), () => leading);
+        Drawn me = current!;
+        me.Update = now =>
         {
-            body.Children.Add(Render(child));
-        }
+            if (now is not Models.Card next || me.Node is not Models.Card previous || next.Appear is not null)
+            {
+                return false;
+            }
+
+            static Models.Card Bare(Models.Card node) => node with { Children = [] };
+            ScreenFacts was = new(me.Screen, fields: false);
+            ScreenFacts nowFacts = new(context.Screen, fields: false);
+            return PageRules.Same(Bare(previous), Bare(next)) && next.Menu.All(item => PageRules.SameAround(item, was, nowFacts)) && run.Update(this, me, next.Children);
+        };
 
         double pad = card.Pad is int steps ? WindowRules.Space(steps) : 16;
         Microsoft.UI.Xaml.Controls.Border surface = new()
