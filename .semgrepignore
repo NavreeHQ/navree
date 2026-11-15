@@ -26,6 +26,9 @@ crates/navree-template/tests/fixtures/xss-vectors.json
 # Vendored third-party browser bundles, served byte for byte
 crates/navree-api/assets/
 crates/navree-graphql/assets/
+# (the map library bundled by plugins/geo/assets/build.mjs; the plugin's own
+# script, plugins/geo/assets/src/map.js, is scanned)
+plugins/geo/assets/map.js
 
 # Scanner output
 sast-reports/

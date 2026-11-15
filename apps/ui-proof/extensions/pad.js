@@ -33,6 +33,8 @@ function note(id) {
  */
 async function addCells(body) {
   const start = performance.now();
+  // A constant of this file, written as markup on purpose: the proof is what the seal does with it.
+  // nosemgrep: navree-raw-html
   body.insertAdjacentHTML("beforeend", `<div data-slot="app:cells">${CELL.repeat(2000)}</div>`);
   const written = performance.now();
   const last = body.lastElementChild?.lastElementChild;
@@ -91,6 +93,8 @@ export function mount(el, props, ui) {
   wire("add-cells", () => addCells(body));
 
   if (props.vendor) {
+    // A constant of this file: the markup a library would write into the body it was given.
+    // nosemgrep: navree-raw-html
     body.insertAdjacentHTML("beforeend", VENDOR);
     // A library keeps writing after it first draws: it points a field at the page's form, takes the
     // body's mark away and adds a field of its own.
