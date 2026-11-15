@@ -99,6 +99,16 @@
      }
     },
     {
+     "t": "field",
+     "id": "word",
+     "name": "word",
+     "label": "Security word",
+     "input": {
+      "t": "text",
+      "kind": "secret"
+     }
+    },
+    {
      "t": "button",
      "label": "Pay",
      "action": {

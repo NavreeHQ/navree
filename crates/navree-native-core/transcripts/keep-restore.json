@@ -156,6 +156,19 @@
       }
     },
     {
+      "note": "And a word into a field whose kind a newer server wrote and this build does not know: it is drawn as plain text is, and is never kept.",
+      "send": {"t":"field","screen":2,"form":"pay","field":"word","value":{"t":"text","text":"kesar"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":2,"form":"pay"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/forms/pay/fields/word/value/text","is":"kesar"}
+      ]
+    },
+    {
       "note": "The app goes to the background, and the client stores the snapshot. Only the note, the city and the tick are in it: kinds on the short list of what is safe to keep. Ravneet is told by her id.",
       "send": {"t":"background"},
       "expect": {
@@ -223,7 +236,8 @@
         {"at":"/screens/2/forms/pay/fields/note-text/value/text","is":"Wrap the dupattas separately"},
         {"at":"/screens/2/forms/pay/fields/gift/value/on","is":true},
         {"at":"/screens/2/forms/pay/fields/code/value/text","is":""},
-        {"at":"/screens/2/forms/pay/fields/card/value/text","is":""}
+        {"at":"/screens/2/forms/pay/fields/card/value/text","is":""},
+        {"at":"/screens/2/forms/pay/fields/word/value/text","is":""}
       ]
     },
     {

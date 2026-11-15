@@ -484,6 +484,8 @@ mod tests {
         for secret in [
             text(TextKind::Password, None),
             text(TextKind::OneTimeCode, None),
+            // A kind a newer server wrote that this build does not know.
+            text(TextKind::Unknown, None),
             text(TextKind::Plain, Some("one-time-code")),
             text(TextKind::Plain, Some("current-password")),
             text(TextKind::Number, Some("cc-number")),
