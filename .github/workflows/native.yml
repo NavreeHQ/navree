@@ -408,7 +408,10 @@ jobs:
             if [ "$rtl" = 1 ]; then
               for _ in 1 2 3; do "$adb" root && break; sleep 5; done
               "$adb" wait-for-device
+              # The system keeps the language it was given in two places: the property, and the setting the
+              # system writes when its configuration last changed (the text size just above). Both are set.
               "$adb" shell setprop persist.sys.locale ar-XB
+              "$adb" shell settings put system system_locales ar-XB
               "$adb" shell setprop ctl.restart zygote
               sleep 15
               for _ in $(seq 1 60); do
@@ -416,7 +419,8 @@ jobs:
                 sleep 3
               done
               sleep 10
-              echo "system language: $("$adb" shell getprop persist.sys.locale)"
+              echo "system language: $("$adb" shell getprop persist.sys.locale) $("$adb" shell settings get system system_locales)"
+              echo "system configuration: $("$adb" shell am get-config | tr '\n' ' ' | cut -c1-400)"
               "$adb" shell cmd locale get-app-locales com.navree.client.test || true
             fi
             "$adb" shell am instrument -w -e look "$look" -e device "$name" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
@@ -425,6 +429,7 @@ jobs:
           done
           # The next way up starts from left to right.
           "$adb" shell setprop persist.sys.locale en-US
+          "$adb" shell settings put system system_locales en-US
           "$adb" shell setprop ctl.restart zygote
           sleep 15
           for _ in $(seq 1 60); do
