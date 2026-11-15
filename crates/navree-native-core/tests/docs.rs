@@ -27,3 +27,17 @@ fn a_client_is_told_to_refuse_a_body_past_the_cap_before_it_hands_it_over() {
         );
     }
 }
+
+/// What a snapshot never keeps is said for what it is: the fields the page
+/// marks. A field the page does not mark is kept, and a page that wants one
+/// never kept marks it.
+#[test]
+fn the_readme_says_exactly_what_a_snapshot_never_keeps() {
+    let readme = read(README);
+    for words in [
+        "never kept: a field the page marks as a password, a one-time code or a card's",
+        "a plain or number field the page does not mark is kept",
+    ] {
+        assert!(readme.contains(words), "the README does not say: {words}");
+    }
+}

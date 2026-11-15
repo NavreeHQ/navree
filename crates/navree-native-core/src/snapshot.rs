@@ -9,8 +9,9 @@
 //! no page, no message. And nothing secret: no cookie, no token of a form or
 //! of a push service, no ticket, no verifier of a sign-in, and no file; what
 //! was typed only for kinds on a short list of what is safe to keep (never a
-//! password, a one-time code, a card's number or security code, or a kind
-//! this build does not know).
+//! field the page marks as a password, a one-time code or a card's, or of a
+//! kind this build does not know; a plain or number field the page does not
+//! mark is kept).
 //!
 //! Starting from one (`restore`, in place of `start`) fetches the shell as
 //! any start does. Only when this launch's shell (not one kept on the
@@ -183,8 +184,10 @@ fn safe_autofill(autofill: Option<&str>) -> bool {
 }
 
 /// Whether what a field holds may be kept: only a kind on the short list of
-/// what is safe to keep. Never a password, a one-time code, a card's number
-/// or security code, a file, or a kind this build does not know.
+/// what is safe to keep. Never a field the page marks as a password, a
+/// one-time code or a card's (by its kind, or by an `autofill` that names
+/// one), a file, or a kind this build does not know. A field the page does
+/// not mark is kept, whatever it holds.
 fn may_keep(input: &Input, value: &FieldValue) -> bool {
     let safe = match input {
         Input::Text(text) => {
