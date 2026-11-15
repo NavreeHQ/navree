@@ -147,13 +147,13 @@ public sealed partial class RingView : KindControl
         TextBlock value = Ink.Words(RingRules.Centre(ring), size, canvas.Palette.Primary, strong: true);
         TextBlock? unit = ring.Value is not null && ring.Unit is not null ? Ink.Words(ring.Unit, size * 0.42, canvas.Palette.Secondary, strong: true) : null;
         double wide = Ink.Measured(value).Width + (unit is null ? 0 : Ink.Measured(unit).Width + 2);
-        if (wide > room)
+        double shrink = TextFit.Shrink(room, wide, 0.4);
+        if (shrink < 1)
         {
-            double shrink = Math.Max(room / wide, 0.4);
-            value.FontSize = size * shrink;
+            value.FontSize = Math.Max(size * shrink, 1);
             if (unit is not null)
             {
-                unit.FontSize = size * 0.42 * shrink;
+                unit.FontSize = Math.Max(size * 0.42 * shrink, 1);
             }
         }
 

@@ -48,8 +48,7 @@ public sealed partial class CalendarHeatView : KindControl
     private double Step(double width)
     {
         (DateOnly first, DateOnly last) = Span();
-        int weeks = HeatRules.Weeks(first, last, FirstDay);
-        return Math.Min((width - (Label * 1.6)) / weeks, 20);
+        return HeatRules.Step(width, Label * 1.6, HeatRules.Window(first, last, FirstDay).Weeks);
     }
 
     internal override UIElement Build(Palette palette)
@@ -68,7 +67,7 @@ public sealed partial class CalendarHeatView : KindControl
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(heatmap.Title) ? said : SpeechRules.Fact(heatmap.Title, said),
             AccessType = "calendar",
-            HeightFor = width => Label + 6 + (Math.Max(Step(width), 4) * 7),
+            HeightFor = width => Label + 6 + (Step(width) * 7),
         };
         plot.Painter = Paint;
         stack.Children.Add(plot);
@@ -102,16 +101,15 @@ public sealed partial class CalendarHeatView : KindControl
     {
         Palette palette = canvas.Palette;
         (DateOnly first, DateOnly last) = Span();
-        int weeks = HeatRules.Weeks(first, last, FirstDay);
+        (DateOnly start, int weeks) = HeatRules.Window(first, last, FirstDay);
         double gutter = Label * 1.6;
-        double step = Math.Max(Math.Min((canvas.Width - gutter) / weeks, 20), 4);
-        double cell = Math.Max(step - 2, 2);
+        double step = HeatRules.Step(canvas.Width, gutter, weeks);
+        double cell = HeatRules.Square(step);
         double top = Label + 6;
-        DateOnly start = HeatRules.Start(first, FirstDay);
         double highest = Highest;
         Windows.UI.Color colour = palette.Of(heatmap.Colour, Models.Hue.Accent);
 
-        foreach ((int week, int month) in HeatRules.Months(first, weeks, FirstDay))
+        foreach ((int week, int month) in HeatRules.Months(start, weeks, FirstDay))
         {
             canvas.Text(canvas.Caption(culture.DateTimeFormat.AbbreviatedMonthNames[month - 1]), gutter + (week * step), 0, Across.Start, Down.Top);
         }
@@ -174,9 +172,10 @@ public sealed partial class MatrixHeatView : KindControl
 
     private List<int> Columns => matrix.Lower ? [.. Enumerable.Range(0, Math.Max(matrix.Measures.Count - 1, 0))] : [.. Enumerable.Range(0, matrix.Measures.Count)];
 
-    private double LeftWidth() => matrix.Measures.Select(name => Ink.Measured(Ink.Words(name, 12, Palette.Resource("TextFillColorSecondaryBrush"))).Width).DefaultIfEmpty(0).Max() + 8;
+    private double LeftWidth(double width) =>
+        MatrixRules.Left(matrix.Measures.Select(name => Ink.Measured(Ink.Words(name, 12, Palette.Resource("TextFillColorSecondaryBrush"))).Width).DefaultIfEmpty(0).Max(), width);
 
-    private double CellFor(double width) => Math.Max(Math.Min(44 * TextScale.Capped(1.4), (width - LeftWidth()) / Math.Max(Columns.Count, 1) - 3), 16);
+    private double CellFor(double width) => MatrixRules.Cell(width, LeftWidth(width), Columns.Count, 44 * TextScale.Capped(1.4));
 
     internal override UIElement Build(Palette palette)
     {
@@ -206,13 +205,15 @@ public sealed partial class MatrixHeatView : KindControl
         Palette palette = canvas.Palette;
         List<int> rows = Rows;
         List<int> columns = Columns;
-        double left = LeftWidth();
+        double left = LeftWidth(canvas.Width);
         double cell = CellFor(canvas.Width);
         double gap = 3;
         for (int row = 0; row < rows.Count; row++)
         {
             double y = row * (cell + gap);
-            canvas.Text(Ink.Words(matrix.Measures[rows[row]], 12, palette.Secondary), left - 8, y + (cell / 2), Across.End, Down.Middle);
+            TextBlock rowName = Ink.Words(matrix.Measures[rows[row]], 12, palette.Secondary);
+            rowName.MaxWidth = Math.Max(left - 8, 1);
+            canvas.Text(rowName, left - 8, y + (cell / 2), Across.End, Down.Middle);
             for (int column = 0; column < columns.Count; column++)
             {
                 int a = rows[row];
@@ -245,7 +246,7 @@ public sealed partial class MatrixHeatView : KindControl
                     x,
                     y);
                 string words = relation?.Value is null ? "Not tested" : value.ToString("0.00", ClientCulture.Current);
-                if (relation?.Value is not null)
+                if (relation?.Value is not null && MatrixRules.HoldsNumber(cell))
                 {
                     Brush ink = strength > 0.55 && relation.Significant ? Palette.Mark(Microsoft.UI.Colors.White) : palette.Primary;
                     canvas.Text(Ink.Words(words, 11, ink, strong: true), x + (cell / 2), y + (cell / 2), Across.Middle, Down.Middle);

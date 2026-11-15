@@ -82,7 +82,7 @@ public static class Arrivals
 /// <summary>The parts of the composition kinds that need no more than layout: a plain shape, parts laid over each other.</summary>
 public static class Composed
 {
-    private static double Scaled(int? size, bool scaled) => size is int value ? value * (scaled ? TextScale.Full : 1) : double.NaN;
+    private static double Scaled(int? size, bool scaled) => ComposeRules.Extent(size, scaled, TextScale.Full);
 
     /// <summary>A plain shape, filled or outlined in a colour by name: the ground behind a symbol, a dot in a key, a bar at the edge of a card.</summary>
     /// <param name="shape">The shape.</param>
@@ -176,7 +176,7 @@ public static class Composed
         {
             Width = Scaled(layers.Size?.Width, scaled),
             Height = Scaled(layers.Size?.Height, scaled),
-            Padding = new Thickness(layers.Pad * 4),
+            Padding = new Thickness(ComposeRules.Steps(layers.Pad)),
         };
         (HorizontalAlignment across, VerticalAlignment down) = Placed(layers.Place);
         foreach (Models.Node child in layers.Children)
@@ -228,7 +228,7 @@ public static class Composed
     /// <returns>The run.</returns>
     public static UIElement Carousel(Models.Carousel carousel, Func<Models.Node, UIElement> render)
     {
-        double gap = carousel.Gap * 4;
+        double gap = ComposeRules.Steps(carousel.Gap);
         StackPanel run = new() { Orientation = Orientation.Horizontal, Spacing = gap };
         List<FrameworkElement> parts = [];
         foreach (Models.Node child in carousel.Children)

@@ -122,7 +122,12 @@ public sealed partial class DayClockView : KindControl
         ClockRules.Dial dial = ClockRules.DialOf(half, label, mark);
         double? most = ClockRules.Most(clock);
         double width = ClockRules.BarWidth(dial.Inner);
-        double length = dial.Outer - dial.Inner - width;
+        if (!ClockRules.Draws(dial))
+        {
+            return;
+        }
+
+        double length = Math.Max(dial.Outer - dial.Inner - width, 0);
         const double stub = 0.06;
 
         // The dial's face: a faint band from the hole to the rim the moments stand on.
@@ -191,11 +196,7 @@ public sealed partial class DayClockView : KindControl
         if (clock.Shown is not null)
         {
             TextBlock total = Ink.Words(clock.Shown, 30 * scale, palette.Primary, strong: true);
-            double room = dial.Inner * 1.5;
-            if (Ink.Measured(total).Width > room)
-            {
-                total.FontSize *= Math.Max(room / Ink.Measured(total).Width, 0.5);
-            }
+            total.FontSize *= TextFit.Shrink(dial.Inner * 1.5, Ink.Measured(total).Width, 0.5);
 
             lines.Add(total);
         }

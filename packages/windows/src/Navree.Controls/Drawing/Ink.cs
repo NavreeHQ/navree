@@ -49,8 +49,8 @@ internal static class Ink
     internal static T Put<T>(this Canvas canvas, T element, double x, double y)
         where T : UIElement
     {
-        Canvas.SetLeft(element, x);
-        Canvas.SetTop(element, y);
+        Canvas.SetLeft(element, Guard.Finite(x));
+        Canvas.SetTop(element, Guard.Finite(y));
         canvas.Children.Add(element);
         return element;
     }
@@ -60,17 +60,17 @@ internal static class Ink
     {
         Rectangle box = new()
         {
-            Width = Math.Max(width, 0),
-            Height = Math.Max(height, 0),
+            Width = Guard.Length(width),
+            Height = Guard.Length(height),
             Fill = fill,
-            RadiusX = radius,
-            RadiusY = radius,
+            RadiusX = Guard.Length(radius),
+            RadiusY = Guard.Length(radius),
             IsHitTestVisible = false,
         };
         if (stroke is not null)
         {
             box.Stroke = stroke;
-            box.StrokeThickness = strokeWidth;
+            box.StrokeThickness = Guard.Length(strokeWidth);
         }
 
         return box;
@@ -79,11 +79,11 @@ internal static class Ink
     /// <summary>A disc of a width.</summary>
     internal static Ellipse Disc(double width, Brush? fill, Brush? stroke = null, double strokeWidth = 0)
     {
-        Ellipse disc = new() { Width = width, Height = width, Fill = fill, IsHitTestVisible = false };
+        Ellipse disc = new() { Width = Guard.Length(width), Height = Guard.Length(width), Fill = fill, IsHitTestVisible = false };
         if (stroke is not null)
         {
             disc.Stroke = stroke;
-            disc.StrokeThickness = strokeWidth;
+            disc.StrokeThickness = Guard.Length(strokeWidth);
         }
 
         return disc;
@@ -96,7 +96,7 @@ internal static class Ink
         {
             Data = geometry,
             Stroke = stroke,
-            StrokeThickness = width,
+            StrokeThickness = Guard.Length(width),
             StrokeStartLineCap = cap,
             StrokeEndLineCap = cap,
             StrokeLineJoin = PenLineJoin.Round,
@@ -107,7 +107,7 @@ internal static class Ink
             DoubleCollection pattern = new();
             foreach (double part in dash)
             {
-                pattern.Add(part);
+                pattern.Add(Guard.Length(part));
             }
 
             path.StrokeDashArray = pattern;
@@ -124,9 +124,18 @@ internal static class Ink
     internal static ShapePath Rule(double x1, double y1, double x2, double y2, Brush stroke, double width = 1, double[]? dash = null) =>
         Stroked(Lines([new Pt(x1, y1), new Pt(x2, y2)]), stroke, width, PenLineCap.Flat, dash);
 
+    /// <summary>The points that are places: a point that is not a number is left out, so a geometry is always one that can be drawn.</summary>
+    private static List<Pt> Numbers(IReadOnlyList<Pt> points) => [.. points.Where(point => double.IsFinite(point.X) && double.IsFinite(point.Y))];
+
+    /// <summary>A rectangle in the drawing's frame whose size is never below nothing.</summary>
+    internal static Rect Area(double x, double y, double width, double height) =>
+        new(Guard.Finite(x), Guard.Finite(y), Guard.Length(width), Guard.Length(height));
+
     /// <summary>A geometry of straight lines through points; closed when asked, or closed down to a level to fill under the line.</summary>
-    internal static PathGeometry Lines(IReadOnlyList<Pt> points, bool closed = false, double? fillTo = null)
+    internal static PathGeometry Lines(IReadOnlyList<Pt> input, bool closed = false, double? fillTo = null)
     {
+        IReadOnlyList<Pt> points = Numbers(input);
+        fillTo = fillTo is double level0 ? Guard.Finite(level0) : null;
         PathFigure figure = new() { IsClosed = closed || fillTo.HasValue, IsFilled = closed || fillTo.HasValue };
         if (fillTo is double level && points.Count > 0)
         {
@@ -161,8 +170,10 @@ internal static class Ink
     }
 
     /// <summary>A smooth geometry through points that never goes past them; closed down to a level to fill under the line when asked.</summary>
-    internal static PathGeometry Smooth(IReadOnlyList<Pt> points, double? fillTo = null)
+    internal static PathGeometry Smooth(IReadOnlyList<Pt> input, double? fillTo = null)
     {
+        IReadOnlyList<Pt> points = Numbers(input);
+        fillTo = fillTo is double level0 ? Guard.Finite(level0) : null;
         PathFigure figure = new() { IsClosed = fillTo.HasValue, IsFilled = fillTo.HasValue };
         if (points.Count > 0)
         {
@@ -201,7 +212,11 @@ internal static class Ink
     /// <summary>An arc round a middle, clockwise from an angle (degrees from three o'clock), as far as a sweep (degrees).</summary>
     internal static PathGeometry Arc(double cx, double cy, double radius, double startDegrees, double sweepDegrees)
     {
-        double sweep = Math.Clamp(sweepDegrees, 0, 359.99);
+        radius = Guard.Length(radius);
+        cx = Guard.Finite(cx);
+        cy = Guard.Finite(cy);
+        startDegrees = Guard.Finite(startDegrees);
+        double sweep = Math.Clamp(Guard.Finite(sweepDegrees), 0, 359.99);
         Point At(double degrees)
         {
             double angle = degrees * Math.PI / 180;
@@ -232,8 +247,8 @@ internal static class Ink
     /// <summary>The point at an angle and a distance from a middle.</summary>
     internal static Pt Polar(double cx, double cy, double radius, double degrees)
     {
-        double angle = degrees * Math.PI / 180;
-        return new Pt(cx + (radius * Math.Cos(angle)), cy + (radius * Math.Sin(angle)));
+        double angle = Guard.Finite(degrees) * Math.PI / 180;
+        return new Pt(Guard.Finite(cx) + (Guard.Length(radius) * Math.Cos(angle)), Guard.Finite(cy) + (Guard.Length(radius) * Math.Sin(angle)));
     }
 
 
@@ -254,17 +269,19 @@ internal static class Ink
     /// </summary>
     internal static void BlendedArc(Canvas canvas, double cx, double cy, double radius, double stroke, double startDegrees, double sweepDegrees, Windows.UI.Color begin, Windows.UI.Color end)
     {
-        if (sweepDegrees <= 0)
+        if (!(sweepDegrees > 0) || !double.IsFinite(sweepDegrees))
         {
             return;
         }
 
+        stroke = Guard.Length(stroke);
         if (begin == end)
         {
             canvas.Put(Stroked(Arc(cx, cy, radius, startDegrees, sweepDegrees), new SolidColorBrush(begin), stroke, PenLineCap.Round), 0, 0);
             return;
         }
 
+        sweepDegrees = Math.Min(sweepDegrees, 359.99);
         int pieces = Math.Clamp((int)Math.Ceiling(sweepDegrees / 5), 1, 72);
         double each = sweepDegrees / pieces;
         for (int at = 0; at < pieces; at++)
@@ -286,52 +303,43 @@ internal static class Ink
     /// </summary>
     internal static void StackedBar(Canvas canvas, bool across, double x, double y, double width, double height, IReadOnlyList<(double Share, Brush Fill)> parts, double hair, double radius)
     {
-        List<(double Share, Brush Fill)> drawn = [.. parts.Where(part => part.Share > 0)];
-        if (drawn.Count == 0)
+        IReadOnlyList<(int Index, double Start, double Size)> slots = BarRules.Slots(across ? width : height, [.. parts.Select(part => part.Share)], hair);
+        for (int at = 0; at < slots.Count; at++)
         {
-            return;
-        }
-
-        double length = across ? width : height;
-        double room = Math.Max(length - (hair * (drawn.Count - 1)), 1);
-        double at = 0;
-        for (int index = 0; index < drawn.Count; index++)
-        {
-            double size = Math.Max(room * drawn[index].Share, 1);
-            bool first = index == 0;
-            bool last = index == drawn.Count - 1;
-            double px = across ? x + at : x;
-            double py = across ? y : (y + height) - at - size;
+            (int index, double start, double size) = slots[at];
+            bool first = at == 0;
+            bool last = at == slots.Count - 1;
+            double px = across ? x + start : x;
+            double py = across ? y : (y + height) - start - size;
             double w = across ? size : width;
             double h = across ? height : size;
-            double corner = Math.Min(radius, Math.Min(w, h) / 2);
+            Brush fill = parts[index].Fill;
+            double corner = Math.Min(Guard.Length(radius), Math.Min(w, h) / 2);
             if (first && last)
             {
-                canvas.Put(Box(w, h, drawn[index].Fill, corner), px, py);
+                canvas.Put(Box(w, h, fill, corner), px, py);
             }
             else if (first || last)
             {
-                canvas.Put(Box(w, h, drawn[index].Fill, corner), px, py);
+                canvas.Put(Box(w, h, fill, corner), px, py);
 
                 // Square off the end that faces the next part.
                 double cover = Math.Min(Math.Max((across ? w : h) - corner, 0), Math.Max(across ? w : h, 0));
                 bool atStart = across ? last : first;
                 if (across)
                 {
-                    canvas.Put(Box(cover, h, drawn[index].Fill), atStart ? px : px + (w - cover), py);
+                    canvas.Put(Box(cover, h, fill), atStart ? px : px + (w - cover), py);
                 }
                 else
                 {
                     // Up from the foot: the first part is at the bottom.
-                    canvas.Put(Box(w, cover, drawn[index].Fill), px, first ? py : py + (h - cover));
+                    canvas.Put(Box(w, cover, fill), px, first ? py : py + (h - cover));
                 }
             }
             else
             {
-                canvas.Put(Box(w, h, drawn[index].Fill), px, py);
+                canvas.Put(Box(w, h, fill), px, py);
             }
-
-            at += size + hair;
         }
     }
 
@@ -341,7 +349,7 @@ internal static class Ink
         TextBlock block = new()
         {
             Text = text,
-            FontSize = size,
+            FontSize = Math.Max(Guard.Finite(size, 12), 1),
             Foreground = brush,
             TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis,

@@ -265,7 +265,7 @@ public sealed partial class ChartView : KindControl
             double b = Along(Math.Max(begin, to));
             double low = Math.Min(a, b);
             double length = Math.Abs(a - b);
-            return Horizontal ? new Rect(low, bandStart, length, bandSize) : new Rect(bandStart, low, bandSize, length);
+            return Horizontal ? Ink.Area(low, bandStart, length, bandSize) : Ink.Area(bandStart, low, bandSize, length);
         }
 
         // A stretch of the whole plot between two values.
@@ -628,12 +628,16 @@ public sealed partial class ChartView : KindControl
             return;
         }
 
-        double outer = Math.Min(canvas.Width, canvas.Height) / 2 - 2;
-        double inner = outer * 0.62;
-        double middle = (outer + inner) / 2;
-        double width = outer - inner;
-        double cx = canvas.Width / 2;
-        double cy = canvas.Height / 2;
+        DonutRules.Ring ring = DonutRules.Of(canvas.Width, canvas.Height);
+        if (!ring.Draws)
+        {
+            return;
+        }
+
+        double middle = ring.Middle;
+        double width = ring.Width;
+        double cx = ring.Cx;
+        double cy = ring.Cy;
         double angle = -90;
         double gap = parts.Count > 1 ? 1.5 : 0;
         for (int at = 0; at < parts.Count; at++)
@@ -653,7 +657,7 @@ public sealed partial class ChartView : KindControl
     {
         int levels = chart.Levels.Count;
         int count = Math.Max(AxisRules.Count(chart), 1);
-        double laneHeight = (canvas.Height - 24) / levels;
+        double laneHeight = Guard.Length(canvas.Height - 24) / levels;
         double x0 = 0;
         double x1 = canvas.Width;
         double X(double place) => x0 + ((x1 - x0) * place / count);

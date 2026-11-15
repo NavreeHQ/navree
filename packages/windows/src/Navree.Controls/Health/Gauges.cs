@@ -50,7 +50,8 @@ public sealed partial class GaugeView : KindControl
     {
         string said = SpeechRules.Value(gauge.Summary ?? Words, gauge.Label);
         string name = string.IsNullOrEmpty(gauge.Label) ? said : SpeechRules.Fact(gauge.Label, said);
-        (double, double, double)? range = (gauge.Min, gauge.Max, Math.Clamp(gauge.Value, gauge.Min, Math.Max(gauge.Max, gauge.Min)));
+        (double Low, double High) ends = RangeRules.Ends(gauge.Min, gauge.Max);
+        (double, double, double)? range = (ends.Low, ends.High, RangeRules.Value(gauge.Value, ends.Low, ends.High));
         if (aside)
         {
             double side = GaugeRules.Diameter(aside: true) * TextScale.Capped(1.3);
@@ -125,12 +126,7 @@ public sealed partial class GaugeView : KindControl
 
         (string number, _) = GaugeRules.Split(Words);
         TextBlock text = Ink.Words(number, side * 0.27, canvas.Palette.Primary, strong: true);
-        double room = side - (2 * stroke) - 4;
-        double width = Ink.Measured(text).Width;
-        if (width > room)
-        {
-            text.FontSize *= Math.Max(room / width, 0.5);
-        }
+        text.FontSize *= TextFit.Shrink(side - (2 * stroke) - 4, Ink.Measured(text).Width, 0.5);
 
         canvas.Labels.Say(text, cx, cy + (side * 0.04), Across.Middle, Down.Middle);
     }
@@ -181,11 +177,7 @@ public sealed partial class GaugeView : KindControl
         (string number, string? unit) = GaugeRules.Split(Words);
         List<TextBlock> lines = [];
         TextBlock big = Ink.Words(number, diameter * 0.2, palette.Primary, strong: true);
-        double room = diameter - (2 * stroke) - 24;
-        if (Ink.Measured(big).Width > room)
-        {
-            big.FontSize *= Math.Max(room / Ink.Measured(big).Width, 0.5);
-        }
+        big.FontSize *= TextFit.Shrink(diameter - (2 * stroke) - 24, Ink.Measured(big).Width, 0.5);
 
         lines.Add(big);
         if (unit is not null)
@@ -276,7 +268,7 @@ public sealed partial class RangeView : KindControl
             Height = Math.Max(height + 10, 18),
             AccessName = string.IsNullOrEmpty(range.Title) ? said : SpeechRules.Fact(range.Title, said),
             AccessType = "range",
-            Range = range.Value is double at ? (range.Min, range.Max, Math.Clamp(at, range.Min, range.Max)) : null,
+            Range = range.Value is double at && RangeRules.Ends(range.Min, range.Max) is (double lowest, double highest) ? (lowest, highest, RangeRules.Value(at, lowest, highest)) : null,
         };
         line.Painter = canvas => PaintLine(canvas, height, current);
         stack.Children.Add(line);
@@ -313,15 +305,15 @@ public sealed partial class RangeView : KindControl
         {
             double low = AxisRules.Position(Math.Min(zone.From, zone.To), range.Min, range.Max);
             double high = AxisRules.Position(Math.Max(zone.From, zone.To), range.Min, range.Max);
-            double size = Math.Max((high - low) * width, height);
-            canvas.Shapes.Put(Ink.Box(size, height, palette.Fill(zone.Colour, Models.Hue.Neutral, 0.55), height / 2), Math.Min(low * width, width - size), middle - (height / 2));
+            (double start, double size) = RangeRules.Band(low, high, width, height);
+            canvas.Shapes.Put(Ink.Box(size, height, palette.Fill(zone.Colour, Models.Hue.Neutral, 0.55), height / 2), start, middle - (height / 2));
         }
 
         if (range.Value is double value)
         {
             Windows.UI.Color colour = current is int zone ? palette.Of(range.Zones[zone].Colour, Models.Hue.Neutral) : ((SolidColorBrush)palette.Primary).Color;
             double marker = height + 10;
-            double x = Math.Clamp(AxisRules.Position(value, range.Min, range.Max) * width, marker / 2, width - (marker / 2));
+            double x = RangeRules.MarkerAt(AxisRules.Position(value, range.Min, range.Max), width, marker);
             canvas.Shapes.Put(Ink.Disc(marker, Palette.Mark(colour), palette.Card, 3), x - (marker / 2), middle - (marker / 2));
         }
     }

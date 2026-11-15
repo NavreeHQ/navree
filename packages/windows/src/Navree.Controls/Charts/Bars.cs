@@ -14,21 +14,8 @@ namespace Navree.Controls.Charts;
 internal static class BarSlots
 {
     /// <summary>The start and size of each part along a bar this long, by its share, with a hair between parts.</summary>
-    internal static IReadOnlyList<(int Index, double Start, double Size)> Of(double length, IReadOnlyList<double> shares, double hair)
-    {
-        List<int> drawn = [.. Enumerable.Range(0, shares.Count).Where(index => shares[index] > 0)];
-        double room = Math.Max(length - (hair * Math.Max(drawn.Count - 1, 0)), 1);
-        List<(int Index, double Start, double Size)> slots = [];
-        double at = 0;
-        foreach (int index in drawn)
-        {
-            double size = Math.Max(room * shares[index], 1);
-            slots.Add((index, at, size));
-            at += size + hair;
-        }
-
-        return slots;
-    }
+    internal static IReadOnlyList<(int Index, double Start, double Size)> Of(double length, IReadOnlyList<double> shares, double hair) =>
+        BarRules.Slots(length, shares, hair);
 
     /// <summary>White or black words, whichever reads on a colour.</summary>
     internal static Windows.UI.Color Words(Windows.UI.Color ground)
@@ -215,10 +202,9 @@ public sealed partial class ColumnsView : KindControl
             return;
         }
 
-        const double gap = 10;
         const double top = 18;
         const double foot = 20;
-        double width = (canvas.Width - (gap * (count - 1))) / count;
+        (double width, double gap) = BarRules.Columns(canvas.Width, count, 10);
         double height = Math.Max(canvas.Height - top - foot, 10);
         for (int at = 0; at < count; at++)
         {

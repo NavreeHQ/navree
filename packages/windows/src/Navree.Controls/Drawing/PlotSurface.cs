@@ -65,7 +65,7 @@ internal sealed class PlotCanvas
 
     /// <summary>A rectangle across as it is drawn.</summary>
     internal Rect Mrect(double x, double y, double width, double height) =>
-        new(Mirror ? Width - x - width : x, y, width, height);
+        Ink.Area(Mirror ? Width - x - Guard.Length(width) : x, y, width, height);
 
     /// <summary>Puts a text where shapes would be put if they were not flipped.</summary>
     internal TextBlock Text(TextBlock block, double x, double y, Across across = Across.Start, Down down = Down.Top)
@@ -105,7 +105,13 @@ internal sealed partial class PlotSurface : UserControl
         shapes.RenderTransformOrigin = new Point(0.5, 0.5);
         HorizontalAlignment = HorizontalAlignment.Stretch;
         IsTabStop = false;
-        SizeChanged += (_, _) => Paint();
+        SizeChanged += (_, e) =>
+        {
+            // What is drawn never shows past the surface's edge, whatever room its parts were laid out for.
+            shapes.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
+            labels.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
+            Paint();
+        };
         ActualThemeChanged += (_, _) => Paint(force: true);
         Loaded += (_, _) => Paint(force: true);
         PointerMoved += OnPointerMoved;
@@ -180,7 +186,7 @@ internal sealed partial class PlotSurface : UserControl
             return;
         }
 
-        current = Math.Clamp(index, 0, probes.Count - 1);
+        current = Guard.Place(index, probes.Count);
         Show(probes[current]);
         if (speak)
         {
@@ -249,7 +255,19 @@ internal sealed partial class PlotSurface : UserControl
             Palette = new Palette(this),
             Mirror = mirror,
         };
-        Painter(plot);
+        try
+        {
+            Painter(plot);
+        }
+        catch (Exception)
+        {
+            // A drawing is the picture of what the part says, and the part's name still says it to a screen reader: a drawing that cannot
+            // be made for the data or the size it was given is left empty, and never faults the window it stands in.
+            shapes.Children.Clear();
+            labels.Children.Clear();
+            plot.Probes.Clear();
+        }
+
         probes.AddRange(plot.Probes);
         if (current >= probes.Count)
         {
