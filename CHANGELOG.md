@@ -7,6 +7,17 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Added
+
+- `Text::tone(Tone)` colours the words of a `Text` by what they mean: `Tone::Danger`,
+  `Tone::Success`, `Tone::Warning`, `Tone::Info` or a `Tone::named` colour. It writes the
+  `data-tone` a `Badge` reads, and the stylesheet draws it as the colour of the text and nothing
+  else, taken from the tone tokens, on `Text::muted`, `Text::code` and `.inline()` text too, and
+  winning over the colour of the look. `Tone::Neutral` writes nothing, and a `Text` with no tone
+  is drawn as before. `Text::tone` is a new inherent method: an app whose own extension trait
+  gives `Text` a method named `tone` calls it through the trait (`MyExt::tone(text, ..)`). The
+  stylesheet every page loads gains two rules.
+
 ## [1.2.2] - 2026-11-14
 
 ### Upgrading

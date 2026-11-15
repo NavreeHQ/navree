@@ -293,6 +293,82 @@ fn a_hostile_tone_name_is_neutral_and_writes_nothing() {
     }
 }
 
+// Text in a tone
+
+#[test]
+fn a_text_with_no_tone_is_drawn_as_it_was_and_a_tone_is_one_attribute() {
+    assert_eq!(
+        html(Text::new("₹1,250.00")),
+        r#"<p data-slot="text">₹1,250.00</p>"#
+    );
+    // No colour is no attribute.
+    assert_eq!(
+        html(Text::new("₹1,250.00").tone(Tone::Neutral)),
+        r#"<p data-slot="text">₹1,250.00</p>"#
+    );
+    for (tone, name) in [
+        (Tone::Danger, "danger"),
+        (Tone::Success, "success"),
+        (Tone::Warning, "warning"),
+        (Tone::Info, "info"),
+    ] {
+        assert_eq!(
+            html(Text::new("₹1,250.00").inline().tone(tone)),
+            format!(r#"<span data-slot="text" data-tone="{name}">₹1,250.00</span>"#)
+        );
+    }
+}
+
+#[test]
+fn a_tone_goes_on_muted_and_code_text_and_keeps_their_look() {
+    assert_eq!(
+        html(Text::muted("Meera Sharma, Model Town").tone(Tone::Warning)),
+        r#"<p data-slot="text" data-variant="muted" data-tone="warning">Meera Sharma, Model Town</p>"#
+    );
+    let lead = Text::new("Sarabha Nagar").variant(TextVariant::Lead);
+    assert_eq!(
+        html(lead.tone(Tone::Success)),
+        r#"<p data-slot="text" data-variant="lead" data-tone="success">Sarabha Nagar</p>"#
+    );
+    assert_eq!(
+        html(Text::code("INV-2041").tone(Tone::Danger)),
+        r#"<code data-slot="code" data-tone="danger">INV-2041</code>"#
+    );
+}
+
+#[test]
+fn a_named_tone_reaches_text_and_a_hostile_name_writes_nothing() {
+    assert_eq!(
+        html(Text::new("Ludhiana").tone(Tone::named("violet"))),
+        r#"<p data-slot="text" data-tone="violet">Ludhiana</p>"#
+    );
+    for bad in ["x;y", "", "Brand", "a\"onload=\"x", "9"] {
+        let out = html(Text::new("Ludhiana").tone(Tone::Named(bad)));
+        assert!(!out.contains("data-tone"), "{bad:?}: {out}");
+        assert!(!out.contains("style="), "{out}");
+    }
+}
+
+#[test]
+fn the_stylesheet_colours_a_toned_text_from_the_tone_token_and_nothing_else() {
+    let css = include_str!("../styles/20-display.css");
+    let text = css
+        .lines()
+        .find(|line| line.starts_with("[data-slot=text]{"))
+        .expect("the rule of Text");
+    assert!(text.contains("&[data-tone]{color:var(--tone)}"), "{text}");
+    // It comes after the looks, so a tone wins over the colour of a muted or lead text.
+    let tone = text.find("&[data-tone]").unwrap();
+    for look in ["&[data-variant=muted]", "&[data-variant=lead]"] {
+        assert!(text.find(look).unwrap() < tone, "{look} in {text}");
+    }
+    assert!(css.contains("[data-slot=code][data-tone]{color:var(--tone)}"));
+    // The colours are the sheet's tone tokens: a rule for a toned text holds no colour value.
+    for line in css.lines().filter(|line| line.contains("[data-tone]{")) {
+        assert!(!line.contains('#') && !line.contains("rgb"), "{line}");
+    }
+}
+
 #[test]
 fn extreme_times_do_not_panic() {
     for at in [i64::MIN, -1, 0, i64::MAX] {

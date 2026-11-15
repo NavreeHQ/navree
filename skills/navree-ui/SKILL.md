@@ -802,7 +802,9 @@ Notes on a few: `Tabs` panels can load on first show with `Tab::lazy(src)`;
 a chat; `Empty` is the plain version of `EmptyState`; `Table` is the small
 static table and `DataTable` the paged, sorted, filtered one; `Pagination`
 puts page links under a static list; `Stat` shows a figure with its change
-and `Bars` a small bar chart drawn on the server. A real chart is a
+and `Bars` a small bar chart drawn on the server; `Text::tone(Tone::Danger)`
+(or `Success`, `Warning`, `Info`) colours a figure or a phrase, in a table
+cell too, where a `Badge` pill would say too much. A real chart is a
 `Chart` (line, area or bar, with series, stacks and a table of the same
 numbers), a `Donut`, a `Funnel` or a `Sparkline` under a `Stat`; a `Report`
 reads its window from the address and counts per period. `AvatarGroup`

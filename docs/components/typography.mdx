@@ -38,6 +38,18 @@ Heading::h5("Billing address")
 
 `Text::code` writes `<code>` in the system monospace font, which costs no download.
 
+## Tones
+
+`.tone(Tone)` colours the words of a `Text` by what they mean: a balance at its limit in the danger colour, a paid one in green. It sets the `data-tone` a [Badge](/docs/components/badge/) reads, and the stylesheet draws it as the colour of the text and nothing else: no pill and no tint. `Tone` has five built-in values (`Neutral`, which writes nothing, `Info`, `Success`, `Warning` and `Danger`), and `Tone::named("violet")` picks one of the extra colours the stylesheet ships. A tone works on `Text::muted`, on `Text::code` and on `.inline()` text, such as a figure in a table cell, and it wins over the colour of the look. A text with no tone writes no `data-tone` and keeps the colour of its look.
+
+<UiPreview example="typography/tones" />
+
+```rust
+Text::new("₹1,250.00 over the limit").inline().tone(Tone::Danger)
+```
+
+The colour never carries the meaning alone: say it in the words ("over the limit"). Use a [Badge](/docs/components/badge/) for a label or a status, and a toned `Text` for a figure or a phrase inside a sentence or a cell.
+
 ## Keyboard and accessibility
 
 <UiA11y>
@@ -60,3 +72,7 @@ Heading::h5("Billing address")
 ### TextVariant
 
 <UiProps type="TextVariant" />
+
+### Tone
+
+<UiProps type="Tone" />
