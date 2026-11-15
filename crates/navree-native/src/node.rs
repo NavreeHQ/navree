@@ -1283,6 +1283,20 @@ pub struct IconShape {
     pub view_box: Option<String>,
 }
 
+impl IconShape {
+    /// What the shape takes to hold: the bytes of its text, and 24 more for
+    /// each string, which is what a string takes besides its text.
+    pub(crate) fn bytes(&self) -> usize {
+        self.paths
+            .iter()
+            .chain(&self.fills)
+            .chain(&self.view_box)
+            .fold(0_usize, |sum, text| {
+                sum.saturating_add(text.len()).saturating_add(24)
+            })
+    }
+}
+
 impl Icon {
     /// The icon's own shapes, when it carries any.
     pub fn shape(&self) -> Option<IconShape> {

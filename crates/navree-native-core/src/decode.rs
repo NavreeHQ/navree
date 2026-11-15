@@ -21,6 +21,7 @@ use crate::event::{Response, TransportError};
 use crate::origin::{Origin, Target};
 use crate::state::Failure;
 use crate::tree::{Slot, slots};
+use crate::weight::Tally;
 
 /// The response header the server names the shell's stamp in, while it does
 /// not write it into the envelope.
@@ -428,13 +429,18 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
         return Err(Failure::Protocol);
     }
     // Nor is one that holds more than it allows: what a client does with an
-    // answer grows with its nodes and its ops.
+    // answer grows with its nodes and its ops, and a table's rows, a list of
+    // facts' items and a chart's points weigh as nodes do.
     if read.envelope.ops.len() > MAX_OPS || !nodes_within(&read.envelope, MAX_NODES) {
         return Err(Failure::Protocol);
     }
     // Icons the answer keeps in one place go back to where they are drawn, so
-    // a screen stands on its own.
-    read.envelope.inline_icons();
+    // a screen stands on its own. Each icon that names a shape takes a copy of
+    // it, so the shapes are added up first, and nothing is copied when they
+    // come to more than a body may hold.
+    if !read.envelope.inline_icons_within(MAX_BODY) {
+        return Err(Failure::Protocol);
+    }
     if let Some(screen) = &mut read.envelope.screen {
         check_screen(screen, config, &mut read.missing, pictures);
     }
@@ -462,32 +468,20 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
 }
 
 /// Whether `envelope` holds at most `cap` nodes, counted across its screen,
-/// its ops and their rows. It stops counting once past the cap.
+/// its ops and their rows, with the parts that weigh as nodes (see `weight`).
+/// It stops counting once past the cap.
 fn nodes_within(envelope: &Envelope, cap: usize) -> bool {
-    let mut stack: Vec<&Node> = Vec::new();
+    let mut tally = Tally::new(cap);
     if let Some(screen) = &envelope.screen {
-        stack.extend(crate::tree::roots(screen));
+        tally.screen(screen);
     }
     for op in &envelope.ops {
-        match op {
-            Op::Morph { node, .. } | Op::Replace { node, .. } => stack.push(node),
-            Op::Append { nodes, .. } | Op::Prepend { nodes, .. } | Op::Merge { nodes, .. } => {
-                stack.extend(nodes)
-            }
-            Op::Rows { rows, .. } => rows.iter().for_each(|row| stack.extend(row.nodes())),
-            Op::Row { row, .. } => stack.extend(row.nodes()),
-            _ => {}
+        tally.op(op);
+        if !tally.within() {
+            break;
         }
     }
-    let mut count = 0_usize;
-    while let Some(node) = stack.pop() {
-        count += 1;
-        if count > cap {
-            return false;
-        }
-        stack.extend(node.children());
-    }
-    true
+    tally.within()
 }
 
 /// Reads a response. `asked` is the address the request went to. The core
@@ -691,6 +685,74 @@ mod tests {
         let fits = texts(1);
         let fits = format!("{fits}{}", " ".repeat(MAX_BODY - fits.len()));
         assert!(envelope(&fits, &config()).is_ok());
+    }
+
+    #[test]
+    fn an_answer_cannot_grow_past_its_caps_while_it_is_read() {
+        use navree_native::{MAX_BODY, MAX_NODES};
+        // One large shape in the icon table and many icons that name it: each
+        // icon is given a copy when the answer is read, so a body of a
+        // mebibyte would become a hundred. The copies are added up first, and
+        // the answer fails before one is made.
+        let depots = |count: usize| {
+            let icons = vec![r#"{"t":"icon","name":"depot"}"#; count].join(",");
+            let shape = "M".repeat(1 << 20);
+            format!(
+                r#"{{"navree":1,"build":"b1","vocab":0,"icons":{{"depot":{{"paths":["{shape}"]}}}},"screen":{{"title":"Depots","body":{{"t":"stack","children":[{icons}]}}}}}}"#
+            )
+        };
+        let many = depots(100);
+        assert!(many.len() < MAX_BODY);
+        assert_eq!(envelope(&many, &config()).err(), Some(Failure::Protocol));
+        // A few fit, and each is drawn with the shape.
+        let read = envelope(&depots(3), &config()).unwrap();
+        let screen = serde_json::to_value(read.envelope.screen.unwrap()).unwrap();
+        assert_eq!(
+            screen["body"]["children"][2]["paths"][0]
+                .as_str()
+                .map(str::len),
+            Some(1 << 20)
+        );
+
+        // What stands in a tree without being a node weighs as one: a table
+        // of empty rows is not an answer of one node.
+        let table = |rows: usize| {
+            let rows = vec!["{}"; rows].join(",");
+            body(&format!(r#"{{"t":"table","rows":[{rows}]}}"#))
+        };
+        assert!(envelope(&table(MAX_NODES - 1), &config()).is_ok());
+        for rows in [MAX_NODES, 1_000_000] {
+            assert_eq!(
+                envelope(&table(rows), &config()).err(),
+                Some(Failure::Protocol),
+                "{rows} rows"
+            );
+        }
+        for (kind, list, item) in [
+            ("facts", "items", r#"{"label":"City"}"#),
+            ("tabs", "items", r#"{"label":"Open"}"#),
+            ("timeline", "items", r#"{"title":"Packed"}"#),
+            ("toolbar", "items", r#"{"title":"Share","icon":{}}"#),
+        ] {
+            let items = vec![item; MAX_NODES].join(",");
+            let answer = body(&format!(r#"{{"t":"{kind}","{list}":[{items}]}}"#));
+            assert_eq!(
+                envelope(&answer, &config()).err(),
+                Some(Failure::Protocol),
+                "{kind}"
+            );
+        }
+        let points = vec!["1"; MAX_NODES].join(",");
+        let chart = body(&format!(
+            r#"{{"t":"chart","series":[{{"label":"Orders","values":[{points}]}}]}}"#
+        ));
+        assert_eq!(envelope(&chart, &config()).err(), Some(Failure::Protocol));
+        // The rows an op brings weigh the same.
+        let rows = vec!["{}"; MAX_NODES + 1].join(",");
+        let ops = format!(
+            r#"{{"navree":1,"build":"b1","vocab":0,"ops":[{{"op":"rows","target":"ledger","rows":[{rows}]}}]}}"#
+        );
+        assert_eq!(envelope(&ops, &config()).err(), Some(Failure::Protocol));
     }
 
     #[test]

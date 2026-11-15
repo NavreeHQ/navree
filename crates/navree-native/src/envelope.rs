@@ -267,6 +267,47 @@ impl Envelope {
         });
     }
 
+    /// As [`inline_icons`](Self::inline_icons), but only when the shapes it
+    /// would write add up to no more than `budget` bytes: what a shape takes
+    /// to hold, once for every icon that is given it. A table that holds one
+    /// large shape and many icons that name it is as large as all those icons
+    /// together, not as the table. `false`, with the envelope as it was and
+    /// nothing copied, when they add up to more.
+    ///
+    /// ```
+    /// use navree_native::{Envelope, Node, Screen};
+    /// use navree_native::node::{Button, Icon, IconShape};
+    ///
+    /// let truck = IconShape { paths: vec!["M1 3h15v13H1z".to_owned()], ..IconShape::default() };
+    /// let named = Icon { name: Some("truck".to_owned()), ..Icon::default() };
+    /// let button = Node::Button(Button { label: "Ship".to_owned(), icon: Some(named), ..Button::default() });
+    /// let mut envelope = Envelope::screen("b1", Screen::new("Orders", button));
+    /// envelope.icons.insert("truck".to_owned(), truck);
+    /// let before = envelope.clone();
+    /// assert!(!envelope.inline_icons_within(10));
+    /// assert_eq!(envelope, before);
+    /// assert!(envelope.inline_icons_within(1024));
+    /// assert!(envelope.icons.is_empty());
+    /// ```
+    pub fn inline_icons_within(&mut self, budget: usize) -> bool {
+        let table = std::mem::take(&mut self.icons);
+        let mut bytes = 0_usize;
+        self.each_icon(|icon| {
+            if icon.paths.is_empty()
+                && icon.fills.is_empty()
+                && let Some(shape) = icon.name.as_ref().and_then(|name| table.get(name))
+            {
+                bytes = bytes.saturating_add(shape.bytes());
+            }
+        });
+        self.icons = table;
+        if bytes > budget {
+            return false;
+        }
+        self.inline_icons();
+        true
+    }
+
     /// An answer that is a whole page.
     pub fn screen(build: impl Into<String>, screen: Screen) -> Self {
         Self {
@@ -393,6 +434,50 @@ mod tests {
             icon: Some(icon),
             ..Button::default()
         })
+    }
+
+    #[test]
+    fn a_large_shape_that_many_icons_name_is_counted_by_its_uses() {
+        let named = |count: usize| {
+            let icons = (0..count)
+                .map(|_| {
+                    Node::Icon(Icon {
+                        name: Some("map".to_owned()),
+                        ..Icon::default()
+                    })
+                })
+                .collect();
+            let body = Node::Stack(Stack {
+                children: icons,
+                ..Stack::default()
+            });
+            let mut envelope = Envelope::screen("b1", Screen::new("Depots", body));
+            envelope.icons.insert(
+                "map".to_owned(),
+                IconShape {
+                    paths: vec!["M".repeat(1 << 20)],
+                    ..IconShape::default()
+                },
+            );
+            envelope
+        };
+        // A hundred uses of one mebibyte are a hundred mebibytes, whatever the
+        // table's own size: nothing is copied, and the envelope is as it was.
+        let mut many = named(100);
+        let before = many.clone();
+        assert!(!many.inline_icons_within(8 << 20));
+        assert_eq!(many, before);
+        // Three fit, and are put back as `inline_icons` puts them.
+        let mut few = named(3);
+        let mut plain = few.clone();
+        assert!(few.inline_icons_within(8 << 20));
+        plain.inline_icons();
+        assert_eq!(few, plain);
+        assert!(few.icons.is_empty());
+        // An icon whose name the table does not hold costs nothing.
+        let mut unlisted = named(1);
+        unlisted.icons.clear();
+        assert!(unlisted.inline_icons_within(0));
     }
 
     #[test]
