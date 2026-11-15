@@ -1,4 +1,7 @@
 using System.Globalization;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Navree.Design;
 using Navree.Platform;
 using Navree.Protocol;
@@ -35,6 +38,7 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
             }
 
             await Step("a second window", SecondWindow);
+            await Step("the account menu", AccountMenu);
             await Step("signing out", SignOut);
         }
         catch (Exception problem)
@@ -276,6 +280,53 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
         {
             await ScreenPicture.SaveAsync(Path.Combine(folder, app + "-two-windows.png"));
         }
+    }
+
+    // The person's picture is pressed, as a person does: the menu that opens holds what a screen reader is given, and a way out.
+    private async Task AccountMenu()
+    {
+        Models.User? user = host.State.App?.User;
+        Button? account = FindAccount(window.Content);
+        Check("the person's picture is in the title bar", account is not null && user is not null, account is null ? "no button named Account was found" : "found");
+        if (account?.Flyout is not MenuFlyout menu || user is null)
+        {
+            return;
+        }
+
+        account.Flyout.ShowAt(account);
+        await Task.Delay(1200);
+        string[] spoken = [.. menu.Items.OfType<MenuFlyoutItemBase>().Select(item => item is MenuFlyoutSeparator ? "-" : Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(item).Length > 0 ? Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(item) : item is MenuFlyoutItem entry ? entry.Text : item is MenuFlyoutSubItem sub ? sub.Text : "?")];
+        Say("the menu holds: " + string.Join(" | ", spoken));
+        Check("the menu says who is signed in, to a screen reader", spoken.Contains(AccountRules.SignedInAs(user)), AccountRules.SignedInAs(user) + " looked for in what the items say");
+        bool out1 = menu.Items.OfType<MenuFlyoutItem>().Any(item => item.Text.Contains("Sign out", StringComparison.OrdinalIgnoreCase));
+        Check("the menu has a way to sign out", out1, out1 ? "an item says Sign out" : "no item says Sign out");
+        Check("the name and the address are items a screen reader reaches", menu.Items.OfType<MenuFlyoutItem>().Take(1).All(item => item.IsEnabled), "the first item is " + (menu.Items.OfType<MenuFlyoutItem>().FirstOrDefault()?.IsEnabled == true ? "enabled" : "disabled"));
+        await ScreenPicture.SaveAsync(Path.Combine(folder, app + "-account-menu.png"));
+        account.Flyout.Hide();
+        await Task.Delay(400);
+    }
+
+    private static Button? FindAccount(DependencyObject? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        if (node is Button button && Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(button).StartsWith("Account,", StringComparison.Ordinal))
+        {
+            return button;
+        }
+
+        for (int child = 0; child < VisualTreeHelper.GetChildrenCount(node); child++)
+        {
+            if (FindAccount(VisualTreeHelper.GetChild(node, child)) is Button found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private async Task SignOut()
