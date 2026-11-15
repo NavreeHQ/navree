@@ -69,7 +69,9 @@ object Shots {
         demo = true
         try {
             shell("settings put global sysui_demo_allowed 1")
-            for (command in listOf(
+            // The first look of a run is taken soon after the device came up, when the bar has not yet drawn the wifi icon it is told to
+            // show: the commands are given twice, a moment apart.
+            val commands = listOf(
                 "enter",
                 "clock -e hhmm 1000",
                 "battery -e level 100 -e plugged false",
@@ -78,8 +80,10 @@ object Shots {
                 "network -e mobile hide",
                 "network -e nosim hide",
                 "notifications -e visible false",
-            )) {
-                shell("am broadcast -a com.android.systemui.demo -e command $command")
+            )
+            for (pass in 1..2) {
+                for (command in commands) shell("am broadcast -a com.android.systemui.demo -e command $command")
+                if (pass == 1) Thread.sleep(1200)
             }
             // The bar fades its icons in and out; a picture waits for it to settle.
             Thread.sleep(1500)
