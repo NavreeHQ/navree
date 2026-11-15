@@ -513,26 +513,26 @@ jobs:
           cp "$RUNNER_TEMP"/demo/walk-server.log "$RUNNER_TEMP/walk/" || echo "::warning title=Walk::The log of the walk's server was not found."
           exit $status
 
-      # The same start, timed, on the build a store would ship. Not reaching the first screen, or having no
-      # such build, fails this step, which does not fail the run: the next step says so on the run.
-      - name: Starts of the release build
-        id: release-starts
+      # The first frame of the build a store would ship, timed (`am start -W`, three cold starts). Only the first
+      # frame: the release build is not allowed plain http, so it cannot reach the demo's server at 10.0.2.2 and
+      # never shows a page. Each way this can fail is its own warning on the run and a line in the summary; a
+      # run in which the release build starts has no warning.
+      - name: First frame of the release build
         if: always() && matrix.device == 'phone'
-        continue-on-error: true
         run: |
           adb="$ANDROID_HOME/platform-tools/adb"
+          warn() {
+            echo "::warning title=First frame of the release build::$1"
+            echo "The first frame of the release build is not timed in this run: $1" >> "$GITHUB_STEP_SUMMARY"
+          }
           apk=$(ls "$RUNNER_TEMP"/apks/demo/build/outputs/apk/release/demo-release-signed.apk 2>/dev/null | head -1)
-          if [ -z "$apk" ]; then echo "no release build was made"; exit 1; fi
+          if [ -z "$apk" ]; then warn "no release build was made."; exit 0; fi
           "$adb" uninstall com.navree.demo > /dev/null
-          "$adb" install -r "$apk"
+          if ! "$adb" install -r "$apk"; then warn "the release build was made but could not be installed."; exit 0; fi
           chmod +x packages/android/scripts/walk.sh
-          ADB="$adb" OUT="$RUNNER_TEMP/walk-release" ONLY=starts BUILD="the release build" packages/android/scripts/walk.sh
-
-      - name: Say that the release build was not started
-        if: always() && matrix.device == 'phone' && steps.release-starts.outcome == 'failure'
-        run: |
-          echo "::warning title=Starts of the release build::The release build of the demo was not made, was not installed, or did not show its first screen, so its starts are not timed in this run."
-          echo "The starts of the release build of the demo are not timed in this run: it was not made or installed, or it did not show its first screen." >> "$GITHUB_STEP_SUMMARY"
+          if ! ADB="$adb" OUT="$RUNNER_TEMP/walk-release" ONLY=starts FIRST_SCREEN=no BUILD="the release build" packages/android/scripts/walk.sh; then
+            warn "the release build was installed but a start did not begin or the app was not running after its first frame (see walk.txt in the android-walk-release artifact)."
+          fi
 
       - name: Keep the starts of the release build
         if: always() && matrix.device == 'phone'

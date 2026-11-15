@@ -23,6 +23,8 @@ case "$*" in
     if [ -e "$WORK/dump-broken" ]; then printf '<hierarchy rotation=' > "$device"; fi
     ;;
   "pull /sdcard/window.xml "*) [ -e "$device" ] && cp "$device" "${3}" ;;
+  "shell am start -W -n "*) if [ -e "$WORK/start-output" ]; then cat "$WORK/start-output"; else printf 'Status: ok\nTotalTime: 500\n'; fi ;;
+  "shell pidof "*) [ -e "$WORK/alive" ] && echo 4242 ;;
   *) exit 0 ;;
 esac
 STAND_IN
@@ -93,6 +95,25 @@ touch "$WORK/dump-works"
 expect "dump" dump
 expect "the screen is the new one" ui has Dashboard
 expect "what is not on it is absent" ui absent Back
+
+echo "== the starts that are timed"
+export SETTLE=0
+touch "$WORK/alive"
+starts() { ( FIRST_SCREEN=$1; timed_starts "a test build" > /dev/null ); }
+rm -f "$WORK/screen.xml" "$WORK/dump-works"
+expect "a start that is only timed to its first frame passes with no page ever shown" starts no
+expect "and says that it timed the first frame only" grep -q "the first frame only" "$OUT/walk.txt"
+printf 'Status: error\nError type 3\n' > "$WORK/start-output"
+refute "a start that did not begin fails" starts no
+expect "and says that it did not begin" grep -q "did not begin" "$OUT/walk.txt"
+rm -f "$WORK/start-output" "$WORK/alive"
+refute "an app that is not running after its first frame fails" starts no
+expect "and says so" grep -q "is not running after its first frame" "$OUT/walk.txt"
+touch "$WORK/alive"
+echo "$SCREEN" > "$WORK/screen.xml"
+touch "$WORK/dump-works"
+expect "a start timed to the first screen passes when the screen is shown" starts yes
+export -n SETTLE
 
 echo "== what the demo's shell says"
 ok='HTTP/1.1 200 OK

@@ -149,25 +149,39 @@ $(curl -s -S --max-time 15 -D - -o /dev/null -c "$jar" -b "$jar" \
 # The first screen shown and nothing of the place the app was in before.
 first_screen_only() { ui contains 'Revenue today' && ui absent-part 'Fulfilment'; }
 
-# Cold starts, timed: what the system says it took to show the first frame and to show the page
-# (the app reports when it is fully drawn), and the app's own marks of where the time went. Fails
-# when a start did not show the first screen within 30 seconds: a time of a start that never got
-# there is not a time of a start.
+# Cold starts, timed: what the system says it took to show the first frame (`am start -W`) and, where the
+# build can reach its server, to show the page (the app reports when it is fully drawn), and the app's own
+# marks of where the time went. With FIRST_SCREEN=no only the first frame is timed: a build that cannot reach
+# its server (the release build is not allowed plain http to the demo's address) never shows a page, and
+# asking it for one would only fail. Fails when a start did not begin (`Status: ok` is missing), the app is
+# not running afterwards, or, with FIRST_SCREEN=yes, the first screen is not shown within 30 seconds.
 timed_starts() {
-  local n missing=0
-  say "== how long a cold start takes (${1:-this build})"
+  local n missing=0 started
+  say "== how long a cold start takes (${1:-this build}, $([ "${FIRST_SCREEN:-yes}" = yes ] && echo 'to the first screen' || echo 'the first frame only'))"
   for n in 1 2 3; do
     "$ADB" shell input keyevent KEYCODE_HOME
     stop_app
-    sleep 2
+    sleep "${SETTLE:-2}"
     "$ADB" logcat -c
-    "$ADB" shell am start -W -n "$PKG/$ACTIVITY" | grep -E 'ThisTime|TotalTime|WaitTime' | tr '\n' ' ' | tee -a "$OUT/walk.txt"
+    started=$("$ADB" shell am start -W -n "$PKG/$ACTIVITY")
+    printf '%s\n' "$started" | grep -E 'ThisTime|TotalTime|WaitTime' | tr '\n' ' ' | tee -a "$OUT/walk.txt"
     echo >> "$OUT/walk.txt"
-    if ! wait_for Dashboard 30 > /dev/null; then
-      say "start $n did not show the first screen within 30 seconds"
+    if ! printf '%s\n' "$started" | tr -d '\r' | grep -q '^Status: ok'; then
+      say "start $n did not begin: $(printf '%s' "$started" | tr -d '\r' | tr '\n' ' ' | cut -c1-200)"
       missing=$((missing + 1))
+    elif [ "${FIRST_SCREEN:-yes}" = yes ]; then
+      if ! wait_for Dashboard 30 > /dev/null; then
+        say "start $n did not show the first screen within 30 seconds"
+        missing=$((missing + 1))
+      fi
+    else
+      sleep "${SETTLE:-2}"
+      if ! alive; then
+        say "start $n: the app is not running after its first frame"
+        missing=$((missing + 1))
+      fi
     fi
-    sleep 2
+    sleep "${SETTLE:-2}"
     "$ADB" logcat -d | grep -E 'NavreeStart|Fully drawn' | sed 's/^.*\(NavreeStart\|ActivityTaskManager\)/\1/' | tee -a "$OUT/walk.txt"
   done
   [ "$missing" -eq 0 ]
