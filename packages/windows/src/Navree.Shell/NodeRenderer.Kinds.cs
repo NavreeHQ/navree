@@ -221,11 +221,13 @@ internal sealed partial class NodeRenderer
     {
         long screen = context.Screen.Id;
         string? from = pager.Id;
+        string? inForm = currentForm;
+        string? inOverlay = currentOverlay;
         return new DayPagerView(
             pager,
             Render,
-            href => Act(new Models.ActionNavigate { Href = href }, null, from),
-            (href, day) => context.Send(Events.Act(screen, new Models.ActionNavigate { Href = href }, currentForm, currentOverlay, day, null, null, from)));
+            href => Act(new Models.ActionNavigate { Href = href }, null, from, inForm, inOverlay),
+            (href, day) => context.Send(Events.Act(screen, new Models.ActionNavigate { Href = href }, inForm, inOverlay, day, null, null, from)));
     }
 
     // ---- composition -------------------------------------------------------------------------------------

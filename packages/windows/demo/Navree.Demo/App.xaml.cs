@@ -62,7 +62,7 @@ public partial class App : Application
 
         string? answers = Option(arguments, "--answers") ?? FixtureFetcher.Recorded();
         string? live = Option(arguments, "--server");
-        bool testing = Option(arguments, "--walk") is not null || Option(arguments, "--system-walk") is not null || Option(arguments, "--probe") is not null;
+        bool testing = Option(arguments, "--walk") is not null || Option(arguments, "--system-walk") is not null || Option(arguments, "--probe") is not null || Option(arguments, "--run") is not null;
         PlaceOptions placeOptions = new()
         {
             Scheme = Scheme,
@@ -78,7 +78,7 @@ public partial class App : Application
             {
                 Origin = "https://charkha.example",
                 AppName = "Navree Demo",
-                Fetcher = fetcher,
+                Fetcher = fetcher is null ? null : new RecordingFetcher(fetcher),
                 RecordedPages = answers is null ? null : address => FixtureFetcher.Page(answers, address),
                 KeptFolder = testing ? Path.Combine(Path.GetTempPath(), "navree-demo-kept-" + Environment.ProcessId) : null,
                 Place = placeOptions,
@@ -120,6 +120,10 @@ public partial class App : Application
         else if (Option(arguments, "--probe") is string probeFile)
         {
             Probe(probeFile);
+        }
+        else if (Option(arguments, "--run") == "press" && Option(arguments, "--out") is string pressed)
+        {
+            _ = new Pressing(host, window, pressed).RunAsync();
         }
     }
 

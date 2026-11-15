@@ -14,10 +14,16 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>
 
-  <!-- The drawn kinds (charts, rings, gauges, flags) read the protocol's parts and the plain rules. -->
+  <!-- The drawn kinds and the data table read the protocol's parts and the plain rules. -->
   <ItemGroup>
     <ProjectReference Include="..\Navree.Protocol\Navree.Protocol.csproj" />
     <ProjectReference Include="..\Navree.Design\Navree.Design.csproj" />
+  </ItemGroup>
+
+  <!-- The gallery and the tests read the control's inner parts. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Navree.Gallery" />
+    <InternalsVisibleTo Include="Navree.Controls.Tests" />
   </ItemGroup>
 
 </Project>

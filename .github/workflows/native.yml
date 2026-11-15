@@ -410,7 +410,7 @@ jobs:
   windows:
     name: Windows client (${{ matrix.variant }})
     runs-on: windows-2025
-    timeout-minutes: 60
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -669,6 +669,142 @@ jobs:
           name: windows-system-packaged
           if-no-files-found: ignore
           path: ${{ runner.temp }}/system-packaged
+          retention-days: 30
+
+      # The data table on its own in the gallery: each time the gallery says a table is ready a picture of its window is taken,
+      # and what the scenarios measured (rows made, scroll positions, keys and the pointer) is written beside the pictures.
+      - name: The data table in the gallery
+        if: matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          if (-not $exe) { throw "the gallery was not built" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\gallery" -Run "table,pointer,rows100k,stick,anchor"
+
+      - name: What the gallery measured
+        if: always() && matrix.variant == 'image'
+        shell: pwsh
+        run: |
+          foreach ($name in 'script.txt', 'results.txt', 'analysis.txt') {
+            "---- $name"
+            if (Test-Path "$env:RUNNER_TEMP/gallery/$name") { Get-Content "$env:RUNNER_TEMP/gallery/$name" } else { "(not written)" }
+          }
+
+      - name: Keep the pictures and measurements of the data table
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-gallery
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/gallery
+          retention-days: 30
+
+      # The store demo on the recorded answers, with the real pointer and keys: the order number is pressed, a quantity is typed
+      # and Restock is pressed, the Filter button is opened and a box ticked. The demo writes what the core was asked to send.
+      - name: Press the buttons of the store demo
+        if: matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter Navree.Demo.exe | Select-Object -First 1
+          if (-not $exe) { throw "the demo was not built" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\press" -Run "press" -Seconds 300
+
+      - name: What was pressed, and what the core was asked to send
+        if: always() && matrix.variant == 'image'
+        shell: pwsh
+        run: |
+          foreach ($name in 'press.txt', 'script.txt') {
+            "---- $name"
+            if (Test-Path "$env:RUNNER_TEMP/press/$name") { Get-Content "$env:RUNNER_TEMP/press/$name" } else { "(not written)" }
+          }
+          $log = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter navree-demo.log | Select-Object -First 1
+          if ($log) { "---- navree-demo.log"; Get-Content $log.FullName }
+
+      - name: Keep what was pressed
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-pressing
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/press
+          retention-days: 30
+
+      # The same tables at larger text and in the system's high contrast colours. The system may not take either on a hosted
+      # machine, so what it was told and what the gallery read are both kept. These come last: they change the machine.
+      - name: The data table at larger text
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          $key = 'HKCU:\Software\Microsoft\Accessibility'
+          if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
+          try {
+            foreach ($scale in 150, 225) {
+              Set-ItemProperty -Path $key -Name TextScaleFactor -Value $scale -Type DWord -Force
+              Start-Sleep -Seconds 2
+              powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\gallery-text$scale" -Run "tabletext" -Seconds 200
+            }
+          } finally {
+            Remove-ItemProperty -Path $key -Name TextScaleFactor -ErrorAction SilentlyContinue
+          }
+
+      - name: The data table in high contrast
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          try {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -On
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\gallery-contrast" -Run "tabletext" -Seconds 200
+          } finally {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -Off
+          }
+
+      # The box that chooses a row, drawn on a page of its own in two ways, each in a process of its own so that a way
+      # that stops the app costs one page: in light and dark, then in the system's high contrast colours.
+      - name: The chosen box in light and dark
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          foreach ($way in 'states', 'dictionary') {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\box-$way" -Run "contrast-$way" -Seconds 90
+          }
+
+      - name: The chosen box in high contrast
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          try {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -On
+            foreach ($way in 'states', 'dictionary') {
+              powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\box-contrast-$way" -Run "contrast-$way" -Seconds 90
+            }
+          } finally {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -Off
+          }
+
+      - name: Keep the larger text and high contrast pictures
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-gallery-settings
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/gallery-text150
+            ${{ runner.temp }}/gallery-text225
+            ${{ runner.temp }}/gallery-contrast
+            ${{ runner.temp }}/box-states
+            ${{ runner.temp }}/box-dictionary
+            ${{ runner.temp }}/box-contrast-states
+            ${{ runner.temp }}/box-contrast-dictionary
           retention-days: 30
 
       # What the generator wrote is what is committed: a stale model fails the run, after the rest has run.

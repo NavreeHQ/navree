@@ -21,10 +21,6 @@
     <ProjectReference Include="..\Navree.Design\Navree.Design.csproj" />
     <ProjectReference Include="..\Navree.Platform\Navree.Platform.csproj" />
     <ProjectReference Include="..\Navree.Presence\Navree.Presence.csproj" />
-  </ItemGroup>
-
-  <!-- The charts, rings, gauges and flags are controls of our own. -->
-  <ItemGroup>
     <ProjectReference Include="..\Navree.Controls\Navree.Controls.csproj" />
   </ItemGroup>
 

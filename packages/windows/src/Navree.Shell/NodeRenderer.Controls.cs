@@ -61,7 +61,9 @@ internal sealed partial class NodeRenderer
         Models.Action? action = button.Action;
         Models.Question? ask = button.Ask;
         string? from = button.Id;
-        control.Click += (_, _) => Act(action, ask, from);
+        string? inForm = currentForm;
+        string? inOverlay = currentOverlay;
+        control.Click += (_, _) => Act(action, ask, from, inForm, inOverlay);
         return control;
     }
 
@@ -72,7 +74,9 @@ internal sealed partial class NodeRenderer
         AutomationProperties.SetName(control, link.Label);
         Models.Action action = link.Action;
         string? from = link.Id;
-        control.Click += (_, _) => Act(action, null, from);
+        string? inForm = currentForm;
+        string? inOverlay = currentOverlay;
+        control.Click += (_, _) => Act(action, null, from, inForm, inOverlay);
         return control;
     }
 
@@ -93,6 +97,8 @@ internal sealed partial class NodeRenderer
     /// <summary>The items of a menu, as the system's own menu draws them.</summary>
     private MenuFlyout MenuFor(IEnumerable<Models.Node> items)
     {
+        string? inForm = currentForm;
+        string? inOverlay = currentOverlay;
         MenuFlyout flyout = new();
         foreach (Models.Node node in items)
         {
@@ -108,7 +114,7 @@ internal sealed partial class NodeRenderer
                     Models.Action? action = entry.Action;
                     Models.Question? ask = entry.Ask;
                     string? from = entry.Id;
-                    item.Click += (_, _) => Act(action, ask, from);
+                    item.Click += (_, _) => Act(action, ask, from, inForm, inOverlay);
                     flyout.Items.Add(item);
                     break;
                 case Models.Divider:
@@ -278,9 +284,9 @@ internal sealed partial class NodeRenderer
         return grid;
     }
 
-    // A table is drawn as a list for now: each row folded by its columns' roles, as the other clients fold it
-    // when there is no room for columns. The table of our own (columns, frozen cells, choosing) is not drawn yet.
-    private UIElement DrawTable(Models.Table table)
+    // A table drawn as a list of folded rows, as the other clients fold a table when there is no room for columns.
+    // The table of our own (NodeRenderer.Table.cs) draws every table; this stays for a table that cannot be given a table's room.
+    private UIElement DrawTableAsList(Models.Table table)
     {
         StackPanel panel = new() { Spacing = 4 };
         if (table.Caption is not null)

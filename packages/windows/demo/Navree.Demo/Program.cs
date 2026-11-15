@@ -14,7 +14,7 @@ public static class Program
     private static int Main(string[] args)
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();
-        bool walking = Array.IndexOf(args, "--walk") >= 0 || Array.IndexOf(args, "--system-walk") >= 0 || Array.IndexOf(args, "--kinds") >= 0;
+        bool walking = Array.IndexOf(args, "--walk") >= 0 || Array.IndexOf(args, "--system-walk") >= 0 || Array.IndexOf(args, "--kinds") >= 0 || Array.IndexOf(args, "--run") >= 0;
         if (!Activation.Claim(App.InstanceKey, App.Scheme, single: !walking))
         {
             return 0;
