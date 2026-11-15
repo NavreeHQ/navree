@@ -50,7 +50,7 @@ pub(crate) fn build(
                 store: Arc::new(DriverStore(driver)),
                 provider: None,
             },
-            None => return Err(registered_by_a_module(name, disk)),
+            None => return Err(not_built_in(name, disk)),
         },
         #[cfg(feature = "s3")]
         DiskConfig::S3(config) => cloud::s3(name, config, &cloud::process_env())?,
@@ -86,11 +86,12 @@ pub(crate) fn build(
     })
 }
 
-/// The error of disk `name`, whose driver a module registers, where no
-/// driver was built for it (`Storage::new`, which has no app).
-pub(crate) fn registered_by_a_module(name: &str, disk: &RegisteredDisk) -> StorageError {
+/// The error of disk `name`, whose driver is not built in, where no driver
+/// was built for it (`Storage::new`, which has no app). It does not say a
+/// module registered the driver: nothing has checked that here.
+pub(crate) fn not_built_in(name: &str, disk: &RegisteredDisk) -> StorageError {
     StorageError::InvalidOptions(format!(
-        "disk `{name}`: the `{}` driver is registered by a module; StorageModule builds it at boot",
+        "disk `{name}`: the `{}` driver is not built in, and only StorageModule builds a driver a module registers, at boot",
         disk.driver()
     ))
 }

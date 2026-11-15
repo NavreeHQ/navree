@@ -26,9 +26,9 @@ impl Storage {
     /// `tokio::task::spawn_blocking` (the module does). Cloud disks make no
     /// request until they are used.
     ///
-    /// A disk whose driver a module registers is refused
-    /// ([`StorageError::InvalidOptions`]): its driver is built at boot by
-    /// `StorageModule`, which needs the app.
+    /// A disk whose driver is not built in is refused
+    /// ([`StorageError::InvalidOptions`]): only `StorageModule` builds a
+    /// driver a module registers, at boot, with the app.
     pub fn new(options: &StorageOptions, signing_key: &[u8]) -> Result<Self, StorageError> {
         Storage::with_drivers(options, signing_key, BTreeMap::new())
     }
@@ -47,7 +47,7 @@ impl Storage {
             if let DiskConfig::Registered(disk) = config
                 && !registered.contains_key(name)
             {
-                return Err(drivers::registered_by_a_module(name, disk));
+                return Err(drivers::not_built_in(name, disk));
             }
         }
         let signer = Arc::new(Signer::new(signing_key));
