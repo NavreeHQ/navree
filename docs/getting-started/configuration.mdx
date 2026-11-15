@@ -423,6 +423,8 @@ Secrets are masked and there is no option that shows them. A key whose name look
 - keys that `.env` and a config file both set with different values (a warning);
 - settings in a kit's `web/.env.local` that differ from the API's configuration (a warning; see [environment files](/docs/configuration/environments-and-files/)).
 
+`--env <name>` checks that environment as a boot in it would: the check reads `config/env/<name>.toml` in place of the file of the environment the app would pick, so `navree config:check --env production` sees what `config/env/production.toml` sets without `APP_ENV` being set. `.env` and the `APP_*` variables still win over the file.
+
 With `--env production`, or when `app.env` is `production`, it also checks the settings that are unsafe in production: no `app.key`, a SQLite `database.url`, `mail.transport = "log"` and `session.secure = false` (set `APP_SESSION__SECURE=true`) fail the check; a missing or non-https `app.url`, an unset `database.url` and a `debug` log level are notes. New apps send the session cookie over plain HTTP in development (`[session] secure = false` in `config/app.toml`), so production has to turn it back on. The check exits with 0 when nothing fails and 1 otherwise, so it fits a CI step or a check before a deploy. Warnings and notes don't change the exit code. The sections the framework's own modules read are always known; register your own with `m.config::<T>()` so the check can read them. The check finds a mistyped key inside a section when the app registers that section; the boot warning finds it in every section the app reads.
 
 ## Limits

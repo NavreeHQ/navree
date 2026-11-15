@@ -55,6 +55,31 @@ pub struct ConfigSources {
     pub(crate) overrides: Vec<(String, serde_json::Value)>,
     max_file_bytes: Option<u64>,
     max_depth: Option<usize>,
+    /// Where the file of the environment is among `sources`, when
+    /// [`defaults_in`](ConfigSources::defaults_in) built them.
+    environment_file: Option<EnvironmentFile>,
+}
+
+/// The place of the file of the environment among the sources of
+/// [`ConfigSources::defaults_in`], so that the file of another environment can
+/// take it.
+#[derive(Clone)]
+struct EnvironmentFile {
+    /// The app's `config` directory.
+    config_dir: PathBuf,
+    /// The index in `sources` of the file, or of where it would be.
+    index: usize,
+    /// Whether the file is in `sources`.
+    present: bool,
+}
+
+impl EnvironmentFile {
+    /// `config/env/<name>.toml`, when the file exists. `name` is a file name
+    /// (see [`environment_file_name`]).
+    fn file_of(&self, name: &str) -> Option<PathBuf> {
+        let path = self.config_dir.join("env").join(format!("{name}.toml"));
+        path.is_file().then_some(path)
+    }
 }
 
 /// One configuration source.
@@ -137,16 +162,45 @@ impl ConfigSources {
     pub fn defaults_in(dir: impl AsRef<Path>) -> Self {
         let dir = dir.as_ref();
         let dotenv = dir.join(".env");
-        let files = default_files(dir);
+        let (files, mut environment_file) = default_files(dir);
         let mut sources = Self::new();
         if Self::DOTENV_RANKS_ABOVE_FILES {
             sources.sources.extend(files);
             sources = sources.dotenv(dotenv);
         } else {
             sources = sources.dotenv(dotenv);
+            // `.env` is first, so the files start after it.
+            environment_file.index += 1;
             sources.sources.extend(files);
         }
+        sources.environment_file = Some(environment_file);
         sources.env()
+    }
+
+    /// These sources for the environment `name`: the file of the environment
+    /// that [`defaults_in`](ConfigSources::defaults_in) chose is replaced by
+    /// `config/env/<name>.toml` of the same directory, at the same place in
+    /// the order, so `.env` and the `APP_` variables still rank above it.
+    /// Sources that did not come from `defaults` or `defaults_in` have no
+    /// file of the environment and are returned as they are. A `name` that
+    /// cannot be a file name (`../secret`) reads no file.
+    ///
+    /// `config:check --env <name>` loads what a boot in that environment
+    /// would.
+    pub(crate) fn for_environment(&self, name: &str) -> Self {
+        let mut sources = self.clone();
+        if let Some(mut slot) = sources.environment_file.take() {
+            if slot.present {
+                sources.sources.remove(slot.index);
+            }
+            let file = environment_file_name(name).and_then(|name| slot.file_of(&name));
+            slot.present = file.is_some();
+            if let Some(file) = file {
+                sources.sources.insert(slot.index, Source::File(file));
+            }
+            sources.environment_file = Some(slot);
+        }
+        sources
     }
 
     /// A TOML file (or a JSON file, when the name ends in `.json`) whose
@@ -294,8 +348,9 @@ impl fmt::Debug for Source {
 }
 
 /// The file sources of the conventional setup, lowest first: `app.toml`, the
-/// section files, and the file of the environment.
-fn default_files(dir: &Path) -> Vec<Source> {
+/// section files, and the file of the environment; and where that file is,
+/// counted from the first of them.
+fn default_files(dir: &Path) -> (Vec<Source>, EnvironmentFile) {
     let config_dir = dir.join("config");
     let mut files = vec![Source::File(dir.join("config/app.toml"))];
     files.extend(
@@ -303,13 +358,16 @@ fn default_files(dir: &Path) -> Vec<Source> {
             .into_iter()
             .map(|(key, path)| Source::Section { path, key }),
     );
-    if let Some(name) = environment_name(dir) {
-        let overlay = config_dir.join("env").join(format!("{name}.toml"));
-        if overlay.is_file() {
-            files.push(Source::File(overlay));
-        }
+    let mut slot = EnvironmentFile {
+        config_dir,
+        index: files.len(),
+        present: false,
+    };
+    if let Some(overlay) = environment_name(dir).and_then(|name| slot.file_of(&name)) {
+        files.push(Source::File(overlay));
+        slot.present = true;
     }
-    files
+    (files, slot)
 }
 
 /// The files `config/<section>.toml` and `config/<section>.json` other than
@@ -361,8 +419,14 @@ fn environment_name(dir: &Path) -> Option<String> {
         .or_else(|| std::env::var("APP_APP__ENV").ok().and_then(named))
         .or_else(|| dotenv_environment(&dir.join(".env")))
         .or_else(|| file_environment(&dir.join("config/app.toml")))
-        .unwrap_or_else(|| "local".to_owned())
-        .to_ascii_lowercase();
+        .unwrap_or_else(|| "local".to_owned());
+    environment_file_name(&name)
+}
+
+/// `name` as the name of an environment's file: lower case. `None` when it
+/// cannot be a file name.
+fn environment_file_name(name: &str) -> Option<String> {
+    let name = name.trim().to_ascii_lowercase();
     let valid = name
         .chars()
         .next()

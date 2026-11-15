@@ -457,6 +457,127 @@ fn the_options_parse_env_in_both_spellings() {
 }
 
 // ---------------------------------------------------------------------------
+// `--env <name>` reads the file of that environment
+// ---------------------------------------------------------------------------
+
+/// What `config/app.toml` holds when every setting but the session cookie is
+/// right for production.
+const SAFE: &str = "[app]\nkey = \"base64:abc\"\nurl = \"https://agra.example.com\"\n[database]\nurl = \"postgres://u:p@db/agra\"\nmax_connections = 10\n[mail]\ntransport = \"smtp://mail.agra.example.com:587\"\n[queue]\nworkers = 4\n";
+
+/// An app's directory holding `files`, as (path, text).
+fn app_dir(files: &[(&str, &str)]) -> TempDir {
+    let dir: TempDir = tempfile::tempdir().expect("tempdir");
+    for (path, text) in files {
+        let target = dir.path().join(path);
+        std::fs::create_dir_all(target.parent().expect("parent")).expect("directory");
+        std::fs::write(&target, text).expect("write");
+    }
+    dir
+}
+
+/// The check of the app in `dir`, with the conventional sources.
+fn check_app(dir: &TempDir, environment: Option<&str>) -> CheckReport {
+    CheckReport::run(
+        &ConfigSources::defaults_in(dir.path()),
+        &registrations(),
+        &CheckOptions {
+            environment: environment.map(str::to_owned),
+        },
+    )
+    .expect("load")
+}
+
+/// A new app sends the session cookie over plain HTTP in `config/app.toml` and
+/// turns it back on in `config/env/production.toml`: `--env production`
+/// reads that file, with no `APP_ENV` set, or it reports the cookie.
+#[test]
+fn env_production_reads_the_production_file_without_app_env() {
+    let app_toml = format!("{SAFE}[session]\nsecure = false\n");
+    let dir = app_dir(&[
+        ("config/app.toml", app_toml.as_str()),
+        ("config/env/production.toml", "[session]\nsecure = true\n"),
+    ]);
+    let report = check_app(&dir, Some("production"));
+    assert_eq!(report.environment, Some(Environment::Production));
+    assert!(report.is_ok(), "{}", report.render());
+    assert!(report.profile.is_empty(), "{:?}", report.profile);
+    assert_eq!(report.exit_code(), 0);
+    // Another environment never reads the file of production.
+    let report = check_app(&dir, Some("staging"));
+    assert!(
+        findings(&report).contains(&("session.secure", true)),
+        "{}",
+        report.render()
+    );
+}
+
+/// What only the file of production makes wrong is found by `--env
+/// production` and by nothing else.
+#[test]
+fn env_production_reports_a_setting_only_the_production_file_makes_wrong() {
+    let app_toml = format!("{SAFE}[session]\nsecure = true\n");
+    let dir = app_dir(&[
+        ("config/app.toml", app_toml.as_str()),
+        (
+            "config/env/production.toml",
+            "[mail]\ntransport = \"log\"\n",
+        ),
+    ]);
+    let report = check_app(&dir, Some("production"));
+    assert!(
+        findings(&report).contains(&("mail.transport", true)),
+        "{}",
+        report.render()
+    );
+    assert_eq!(report.exit_code(), 1);
+    assert!(check_app(&dir, Some("staging")).is_ok());
+    assert!(check_app(&dir, None).is_ok());
+}
+
+/// The file of the environment the sources chose is replaced by the named
+/// one, not read as well, and `.env` still ranks above the named one.
+#[test]
+fn the_named_environments_file_replaces_the_one_the_sources_chose() {
+    let app_toml = format!("{SAFE}[session]\nsecure = true\n");
+    let dir = app_dir(&[
+        ("config/app.toml", app_toml.as_str()),
+        (".env", "APP_ENV=staging\nAPP_QUEUE__WORKERS=2\n"),
+        ("config/env/staging.toml", "[mail]\ntransport = \"log\"\n"),
+        ("config/env/production.toml", "[queue]\nworkers = 0\n"),
+    ]);
+    // Without `--env` the sources are staging, with its file.
+    let report = check_app(&dir, None);
+    assert_eq!(report.environment, Some(Environment::Staging));
+    assert!(
+        findings(&report).contains(&("mail.transport", true)),
+        "{}",
+        report.render()
+    );
+    // `--env production` reads the file of production instead: its
+    // `queue.workers` is under `.env`, and the staging file is not read.
+    let report = check_app(&dir, Some("production"));
+    assert!(report.is_ok(), "{}", report.render());
+    // Case and spaces in the name are as in `app.env`.
+    assert!(check_app(&dir, Some(" Production ")).is_ok());
+}
+
+/// A name that cannot be a file name reads no file.
+#[test]
+fn an_environment_name_that_is_not_a_file_name_reads_no_file() {
+    let app_toml = format!("{SAFE}[session]\nsecure = true\n");
+    let dir = app_dir(&[
+        ("config/app.toml", app_toml.as_str()),
+        ("secret.toml", "[queue]\nworkers = 0\n"),
+    ]);
+    let report = check_app(&dir, Some("../../secret"));
+    assert!(
+        !report.render().contains("workers must be at least 1"),
+        "{}",
+        report.render()
+    );
+}
+
+// ---------------------------------------------------------------------------
 // The command, through the app
 // ---------------------------------------------------------------------------
 
@@ -514,6 +635,29 @@ async fn the_command_applies_the_production_profile_for_env_production() {
         .await
         .expect_err("SQLite and no key in production");
     assert!(error.to_string().contains("problem"), "{error}");
+}
+
+/// The file of production makes the cookie secure: `config:check --env
+/// production` passes with no `APP_ENV` set, in either spelling of the flag.
+#[tokio::test]
+async fn the_command_reads_the_production_file_for_env_production() {
+    let app_toml = format!("{SAFE}[session]\nsecure = false\n");
+    let dir = app_dir(&[
+        ("config/app.toml", app_toml.as_str()),
+        ("config/env/production.toml", "[session]\nsecure = true\n"),
+    ]);
+    let sources = ConfigSources::defaults_in(dir.path());
+    run(sources.clone(), &["--env", "production"])
+        .await
+        .expect("the file of production is read");
+    run(sources.clone(), &["--env=production"])
+        .await
+        .expect("the file of production is read");
+    // Another environment does not read it, so the cookie is reported.
+    let error = run(sources, &["--env", "staging"])
+        .await
+        .expect_err("a cookie over plain HTTP");
+    assert_eq!(error.to_string(), "config:check found 1 problem(s)");
 }
 
 #[tokio::test]

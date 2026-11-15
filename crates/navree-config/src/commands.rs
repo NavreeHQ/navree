@@ -100,7 +100,7 @@ pub(crate) fn publish() -> CommandSpec {
 pub(crate) fn check() -> CommandSpec {
     CommandSpec::new(
         "config:check",
-        "Check the configuration: invalid sections, unknown keys, keys set in .env and in a config file, settings web/.env.local repeats; --env production adds the production profile",
+        "Check the configuration: invalid sections, unknown keys, keys set in .env and in a config file, settings web/.env.local repeats; --env <name> checks that environment (its config/env/<name>.toml is read), and production adds the production profile",
         |ctx: AppContext, args: Vec<String>| async move {
             let options = CheckOptions::parse(&args)?;
             let sources = ctx.get::<ConfigSources>().await?;

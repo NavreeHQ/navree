@@ -59,7 +59,7 @@ Two commands read the configuration without starting the app: they open no datab
 |---|---|
 | `navree config:show [section] [--defaults] [--origin] [--json]` | Prints the effective configuration with credentials masked. `--origin` adds where each value came from, `--defaults` adds the defaults no source sets. |
 | `navree config:show --fallbacks` | Lists the environment variables a key falls back to when nothing else sets it (`REDIS_URL`, the `AWS_*` variables) and whether each is set. It never prints a value. |
-| `navree config:check [--env production]` | Reads every section and prints all the problems together: sections that do not read or validate, keys nothing reads, keys set in two places. With `--env production`, or when the app runs in `production` or `staging`, it also fails on a missing `app.key`, a SQLite database, mail that goes to the log and `session.secure = false`. |
+| `navree config:check [--env production]` | Reads every section and prints all the problems together: sections that do not read or validate, keys nothing reads, keys set in two places. With `--env production`, or when the app runs in `production` or `staging`, it also fails on a missing `app.key`, a SQLite database, mail that goes to the log and `session.secure = false`. `--env <name>` checks that environment as a boot in it would: it reads `config/env/<name>.toml` in place of the file of the environment the app would pick, and `.env` and the `APP_*` variables still win over it. It needs no `APP_ENV`. |
 | `navree config:schema [--out <file>]` | Writes a JSON Schema of the whole tree. Point your editor's TOML support at it for completion and type checks in `config/app.toml`. |
 | `navree config:publish <section>` | Writes a section's file, as above. |
 
