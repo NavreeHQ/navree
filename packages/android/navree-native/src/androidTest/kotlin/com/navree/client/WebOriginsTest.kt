@@ -128,7 +128,7 @@ class WebOriginsTest {
     }
 
     private val links = java.util.concurrent.CopyOnWriteArrayList<String>()
-    private val left = AtomicBoolean(false)
+    private val pageLeft = AtomicBoolean(false)
     private val finished = java.util.concurrent.CopyOnWriteArrayList<String>()
     private var web: WebView? = null
     private lateinit var base: String
@@ -152,7 +152,7 @@ class WebOriginsTest {
                         webViewClient = object : OriginWebClient(
                             origins,
                             onLink = { links += it },
-                            onLeft = { left.set(true) },
+                            onLeft = { pageLeft.set(true) },
                         ) {
                             override fun onPageFinished(view: WebView, url: String?) {
                                 super.onPageFinished(view, url)
@@ -170,7 +170,7 @@ class WebOriginsTest {
     }
 
     private fun open(path: String) {
-        left.set(false)
+        pageLeft.set(false)
         compose.runOnUiThread { web!!.loadUrl("$base$path") }
         compose.waitUntil(15_000) { appAsked.any { it.endsWith(" $path") } }
         // Time for the page to load its frame, post its form or run its script.
@@ -197,9 +197,9 @@ class WebOriginsTest {
             open(path)
             assertEquals("asked of the other origin after $path", emptyList<String>(), otherAsked.toList())
             val url = shown()
-            assertTrue("after $path the page is $url", left.get() || url == null || origins.ours(url))
+            assertTrue("after $path the page is $url", pageLeft.get() || url == null || origins.ours(url))
         }
-        assertTrue("a first load redirected elsewhere ends as a failed screen", run { open("/redirect"); left.get() })
+        assertTrue("a first load redirected elsewhere ends as a failed screen", run { open("/redirect"); pageLeft.get() })
         assertTrue("the app's own page loaded", finished.any { it.startsWith(base) })
 
         // A frame of a host the app names for the web view loads, and runs.
@@ -230,7 +230,7 @@ class WebOriginsTest {
         open("/post-redirect")
         android.util.Log.i("WebOriginsTest", "asked of the other origin through a posted form's 307: $otherAsked")
         assertFalse("the page the form was posted to ran", appAsked.any { it.endsWith(" /ran") })
-        assertTrue("the screen was told the page left", left.get() || origins.ours(shown() ?: base))
+        assertTrue("the screen was told the page left", pageLeft.get() || origins.ours(shown() ?: base))
 
         // A sandboxed frame has no origin of its own: the check goes by its address. One on the app's
         // origin is left alone and runs; one the app's server redirects elsewhere is emptied.
