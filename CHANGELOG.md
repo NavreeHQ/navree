@@ -28,6 +28,18 @@ every `@navree/*` package carries the same version.
   named. Both are new inherent methods: an app whose own extension trait gives `DataTable` a method
   of either name calls it through the trait (`MyExt::without_density_switch(table)`). A table that
   calls neither is drawn as before.
+- `FormView::id_prefix(prefix)` puts the prefix and a hyphen before every id a form writes and
+  every reference to one (the form's own id, each field's, a label's `for`, `aria-describedby`,
+  `aria-labelledby`, the ids of a field's help and error, and those of the pickers, date and time
+  pickers, phone fields, sliders and uploads it draws), so two forms of one
+  type on one page, such as the same entry form in two dialogs, share no id. What a form posts is
+  as it was, so the handler reads it as before; anything in the prefix but letters, digits, `-` and
+  `_` becomes `-`, and a prefix with nothing left is none. `FormView::form_id()` says the id of the
+  `<form>`, and `Rejected::id_prefix(prefix)` makes a refusal name the form with that prefix in the
+  errors it answers the runtime with, and draw it in that scope on the page with no script. A form
+  with no prefix is drawn as before. All three are new inherent methods: an app whose own extension
+  trait gives `FormView` a method named `id_prefix` or `form_id`, or `Rejected` one named
+  `id_prefix`, calls it through the trait (`MyExt::id_prefix(form, ..)`).
 
 ## [1.2.2] - 2026-11-14
 

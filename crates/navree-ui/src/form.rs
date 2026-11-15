@@ -6,6 +6,7 @@
 //! `min` and, when a rule says `browser`, `pattern` in the browser, and run again on
 //! the server.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::marker::PhantomData;
@@ -791,6 +792,8 @@ pub struct FormView<T> {
     date_locale: DateLocale,
     slider_labels: crate::flow::SliderLabels,
     today: Option<chrono::NaiveDate>,
+    /// What goes before every id the form writes, from [`id_prefix`](Self::id_prefix).
+    id_scope: Option<String>,
     #[cfg(feature = "phone")]
     phone_region: Option<navree_phone::Region>,
     #[cfg(feature = "phone")]
@@ -824,6 +827,7 @@ impl<T: Form> FormView<T> {
             date_locale: DateLocale::english(),
             slider_labels: crate::flow::SliderLabels::default(),
             today: None,
+            id_scope: None,
             #[cfg(feature = "phone")]
             phone_region: None,
             #[cfg(feature = "phone")]
@@ -1005,6 +1009,87 @@ impl<T: Form> FormView<T> {
         self
     }
 
+    /// Puts `prefix` and a hyphen before every id the form writes, and before every reference
+    /// to one: the form's own, each field's (a label's `for`, `aria-describedby`,
+    /// `aria-labelledby`), the ids of its help and its error, and those of the pickers,
+    /// uploads and sliders it draws. Two forms of one type on one page,
+    /// such as the same small entry form in two dialogs, then share no id. What the form posts
+    /// is as it was, so the handler reads it as before.
+    ///
+    /// Anything but letters, digits, `-` and `_` in the prefix becomes `-`, and a prefix with
+    /// nothing left is no prefix. A refusal answered to the runtime names the form by its own id:
+    /// call [`Rejected::id_prefix`] with the same prefix to name the one that was posted.
+    ///
+    /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: these are its paths.
+    /// # use navree_ui::{InputKind, form};
+    /// use navree_ui::form::FormView;
+    /// use navree_ui::{Form, Validate, render};
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Deserialize, Validate, Form)]
+    /// struct Entry {
+    ///     /// Party
+    ///     #[validate(length(min = 1))]
+    ///     party: String,
+    /// }
+    ///
+    /// # fn main() {
+    /// let add = render(&FormView::<Entry>::new().id_prefix("add").into());
+    /// let edit = render(&FormView::<Entry>::new().id_prefix("edit").into());
+    /// assert!(add.contains(r#"id="add-entry-party""#) && add.contains(r#"for="add-entry-party""#));
+    /// assert!(edit.contains(r#"id="edit-entry-party""#));
+    /// // What is posted is the field's name, whatever the prefix.
+    /// assert!(add.contains(r#"name="party""#) && edit.contains(r#"name="party""#));
+    /// # }
+    /// ```
+    pub fn id_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.id_scope = id_scope(&prefix.into());
+        self
+    }
+
+    /// The id of the `<form>` element: the form's own id, or, with an
+    /// [`id_prefix`](Self::id_prefix), that after the prefix and a hyphen. A button outside the
+    /// form, in a dialog's footer, names it in its `form` attribute.
+    ///
+    /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: these are its paths.
+    /// # use navree_ui::{InputKind, form};
+    /// use navree_ui::form::FormView;
+    /// use navree_ui::{Button, Form, Validate, render};
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Deserialize, Validate, Form)]
+    /// struct Entry {
+    ///     #[validate(length(min = 1))]
+    ///     party: String,
+    /// }
+    ///
+    /// # fn main() {
+    /// let form = FormView::<Entry>::new().id_prefix("add");
+    /// assert_eq!(form.form_id(), "add-entry");
+    /// let save = render(&Button::primary("Save").attr("form", form.form_id()).into());
+    /// assert!(save.contains(r#"form="add-entry""#));
+    /// # }
+    /// ```
+    pub fn form_id(&self) -> String {
+        self.scope().into_owned()
+    }
+
+    /// What every id the form writes starts with: the form's own id, or that after the prefix
+    /// and a hyphen.
+    fn scope(&self) -> Cow<'static, str> {
+        match &self.id_scope {
+            Some(prefix) => Cow::Owned(format!("{prefix}-{}", self.shape.id)),
+            None => Cow::Borrowed(self.shape.id),
+        }
+    }
+
+    /// The id the field's own control has: the form's scope, a hyphen and the field's name.
+    fn field_id(&self, field: &FormField) -> String {
+        format!("{}-{}", self.scope(), field.name)
+    }
+
     /// Every value the form holds for `name`: a field that is a list has several.
     fn values_of(&self, name: &str) -> Vec<String> {
         self.values
@@ -1033,7 +1118,7 @@ impl<T: Form> FormView<T> {
     }
 
     fn picker_id(&self, field: &FormField) -> String {
-        format!("{}-{}-picker", self.shape.id, field.name)
+        format!("{}-{}-picker", self.scope(), field.name)
     }
 
     fn value_of(&self, name: &str) -> Option<&str> {
@@ -1068,6 +1153,10 @@ impl<T: Form> FormView<T> {
                 let mut picker = DatePicker::new(field.name)
                     .locale(self.date_locale.clone())
                     .invalid(invalid);
+                // The picker's popup and calendar take their ids from its own.
+                if self.id_scope.is_some() {
+                    picker = picker.id(self.picker_id(field));
+                }
                 if let Some(today) = self.today {
                     picker = picker.today(today);
                 }
@@ -1091,6 +1180,10 @@ impl<T: Form> FormView<T> {
                 let mut picker = TimePicker::new(field.name)
                     .locale(self.date_locale.clone())
                     .invalid(invalid);
+                // The picker's popup and list take their ids from its own.
+                if self.id_scope.is_some() {
+                    picker = picker.id(self.picker_id(field));
+                }
                 if let Some(text) = value {
                     picker = picker.value_text(text);
                 }
@@ -1208,12 +1301,17 @@ impl<T: Form> FormView<T> {
                 let shown = value
                     .and_then(|text| crate::flow::Decimal::from_browser(text.trim()).ok())
                     .unwrap_or_else(|| spec.minimum());
-                crate::flow::Slider::new(field.name)
+                let mut slider = crate::flow::Slider::new(field.name)
                     .labels(self.slider_labels.clone())
                     .spec(spec)
                     .value(shown)
-                    .invalid(invalid)
-                    .into()
+                    .invalid(invalid);
+                // The thumb takes the id the field ties to its label, so the slider's value,
+                // which is `for` that id, finds it.
+                if self.id_scope.is_some() {
+                    slider = slider.id(self.field_id(field));
+                }
+                slider.into()
             }
             Widget::File => {
                 let mut upload = self.uploads.get(field.name).cloned().map_or_else(
@@ -1232,6 +1330,9 @@ impl<T: Form> FormView<T> {
                 }
                 if rules.required {
                     upload = upload.required();
+                }
+                if self.id_scope.is_some() {
+                    upload = upload.scoped(&self.scope());
                 }
                 upload.into()
             }
@@ -1261,6 +1362,10 @@ impl<T: Form> FormView<T> {
         }
         if field.autofocus {
             input = input.autofocus();
+        }
+        // The list of countries and the button that opens it are tied by an id.
+        if self.id_scope.is_some() {
+            input = input.list_id(format!("{}-countries", self.field_id(field)));
         }
         input.into()
     }
@@ -1354,7 +1459,7 @@ impl<T: Form> FormView<T> {
             .errors
             .get(field.name)
             .map(|messages| messages.join(" "));
-        let id = format!("{}-{}", self.shape.id, field.name);
+        let id = self.field_id(field);
         let holder = match field.widget {
             Widget::Input(InputKind::Hidden) => return Some(input_only(self.control(field))),
             Widget::Checkbox | Widget::Switch => {
@@ -1510,6 +1615,8 @@ impl<T: Form> FormView<T> {
                     .attr("value", value.clone())
             })
             .collect();
+        // The id a native client names the form by (the errors that answer it, the button that
+        // submits it) is the form's own, whatever the prefix its fields' ids carry.
         el("form")
             .slot("form")
             .attr("id", self.shape.id)
@@ -1531,6 +1638,7 @@ impl<T: Form> FormView<T> {
     fn into_node(self) -> Node {
         let fields = self.fields_node();
         let token = self.token_field();
+        let id = self.scope();
         // A file goes with the form when no script sent it first.
         let files = self
             .shape
@@ -1549,7 +1657,7 @@ impl<T: Form> FormView<T> {
             .collect();
         el("form")
             .slot("form")
-            .attr("id", self.shape.id)
+            .attr("id", id)
             .attr("method", self.method)
             .attr_opt("action", self.action.map(AttrHref))
             .attr_opt("enctype", files.then_some("multipart/form-data"))
@@ -1600,6 +1708,24 @@ impl From<AttrHref> for crate::node::AttrValue {
 
 fn min_attr(value: usize) -> i64 {
     i64::try_from(value).unwrap_or(i64::MAX)
+}
+
+/// What goes before the ids of a form with an id prefix: the prefix with anything but letters,
+/// digits, `-` and `_` turned into `-`, and no hyphen at either end. `None` when nothing is
+/// left, which is no prefix at all.
+fn id_scope(prefix: &str) -> Option<String> {
+    let clean: String = prefix
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let clean = clean.trim_matches('-');
+    (!clean.is_empty()).then(|| clean.to_owned())
 }
 
 fn lengths_textarea(mut area: Textarea, rules: &Native) -> Textarea {
@@ -2764,6 +2890,8 @@ pub struct Rejected<T> {
     shell: Option<AppShell>,
     /// The reader's words, for the heading of the page of its own.
     reader: ReaderWords,
+    /// What goes before the form's ids, when it was drawn with [`FormView::id_prefix`].
+    id_scope: Option<String>,
     marker: PhantomData<fn() -> T>,
 }
 
@@ -2818,8 +2946,49 @@ impl<T: Form> Rejected<T> {
             rich: BTreeMap::new(),
             shell: None,
             reader: ReaderWords::english(),
+            id_scope: None,
             marker: PhantomData,
         }
+    }
+
+    /// Answers for a form drawn with [`FormView::id_prefix`]: the errors a runtime is sent name
+    /// the form by its id with that prefix, so they show on the form that was posted, and the
+    /// page a browser with no script is sent draws the form in that scope. Without it the form
+    /// is named by its own id. A refusal that a handler never sees, from a `Submit<T>` taken
+    /// alone, cannot know the prefix: take `Result<Submit<T>, Rejected<T>>`.
+    ///
+    /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: these are its paths.
+    /// # use navree_ui::{InputKind, form};
+    /// use navree_ui::form::{FieldErrors, Rejected};
+    /// use navree_ui::{Form, Validate, View};
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Deserialize, Validate, Form)]
+    /// struct Entry {
+    ///     #[validate(length(min = 1))]
+    ///     party: String,
+    /// }
+    ///
+    /// # fn main() {
+    /// let entry = Entry { party: String::new() };
+    /// let errors = FieldErrors::from([("party".to_owned(), vec!["Give a name.".to_owned()])]);
+    /// let (parts, ()) = http::Request::builder()
+    ///     .method("POST")
+    ///     .uri("/entries")
+    ///     .header("x-navree-ui", "1")
+    ///     .body(())
+    ///     .unwrap()
+    ///     .into_parts();
+    /// let response = Rejected::<Entry>::after_decode(&entry, errors, &parts)
+    ///     .id_prefix("add")
+    ///     .respond(|form| View::new("Entry").body(form));
+    /// assert_eq!(response.status(), http::StatusCode::UNPROCESSABLE_ENTITY);
+    /// # }
+    /// ```
+    pub fn id_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.id_scope = id_scope(&prefix.into());
+        self
     }
 
     /// Draws the page this refusal falls back on the way the request's reader expects:
@@ -2942,8 +3111,12 @@ impl<T: Form> Rejected<T> {
             return response;
         }
         if self.from_runtime {
+            // The form that was posted is the one with the prefix its ids were drawn with.
             let ops = vec![Op::Errors {
-                form: T::ID.to_owned(),
+                form: match &self.id_scope {
+                    Some(prefix) => format!("{prefix}-{}", T::ID),
+                    None => T::ID.to_owned(),
+                },
                 fields: self.errors,
             }];
             return (StatusCode::UNPROCESSABLE_ENTITY, Envelope::new(ops)).into_response();
@@ -2953,6 +3126,7 @@ impl<T: Form> Rejected<T> {
             .post(self.action)
             .with_values(self.values)
             .with_errors(self.errors);
+        form.id_scope = self.id_scope;
         for (field, options) in self.options {
             form = form.options(field, options);
         }
@@ -3028,6 +3202,7 @@ where
             rich: BTreeMap::new(),
             shell: None,
             reader: ReaderWords::english(),
+            id_scope: None,
             marker: PhantomData,
         };
         let files = has_files::<T>();
@@ -3092,6 +3267,7 @@ where
                 rich: BTreeMap::new(),
                 shell: None,
                 reader: language.words.clone(),
+                id_scope: None,
                 marker: PhantomData,
             };
         let decoded = match decode_for::<T>(&values, &language) {
