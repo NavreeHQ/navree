@@ -343,8 +343,11 @@ class WebWorkersTest {
         settle("socket-control.txt", "without the check at the start of every document")
     }
 
+    // What the client cannot cover: the first, empty document of a frame the page makes and has not navigated
+    // does not get the script at the start of a document, so a socket made through it is not checked. A frame
+    // given a document (srcdoc, or an address) is.
     @Test
-    fun whatASocketOpenedFromAFrameThePageMakesReachesIsRecorded() {
+    fun aSocketOpenedFromAnEmptyFrameThePageMakesIsNotChecked() {
         documentChecks()
         serve({
             "<p>ours</p><script>" +
@@ -354,7 +357,8 @@ class WebWorkersTest {
         openedBy(Origins(base, loopbackHttp = true))
         waitForSaid(2)
         settle("socket-in-frame.txt", "a socket opened from a frame the page made, an empty one and one with srcdoc")
-        assertTrue("both frames said what they did: $said", said.size == 2)
+        assertEquals("what the frames were told", listOf("empty-frame-made", "srcdoc-refused"), said.sorted())
+        assertEquals("only the empty frame's socket reached the other origin: $otherAsked", listOf("UPGRADE /socket"), otherAsked.toList())
     }
 
     // What the client cannot cover: the check at the start of a document does not run inside a worker, and a
