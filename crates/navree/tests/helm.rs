@@ -711,18 +711,29 @@ async fn fresh_mark(client: &TestClient, path: &str) -> (bool, Option<String>, O
     )
 }
 
+/// A source of pictures an app allows its pages in this test.
+const ALLOWED_SOURCE: &str = "https://cdn.ludhiana.example";
+
 // Staff act on every tenant in the panel and in the monitoring dashboard, and neither draws a
-// plugin component: in an app with a UI extension their pages start from a clean document and
-// keep the toolkit's policy; in an app with none they are the pages they always were.
+// plugin component: in an app with a UI extension their pages start from a clean document; in an
+// app with none they are the pages they always were. Lighthouse's pages are served with the
+// toolkit's policy, and a fresh one keeps exactly it whatever the app allows. Helm serves every
+// response of its panel with a policy of its own (pictures from `https:` too, for the files on a
+// storage disk of its own): the app's allowed sources never reach it, in any app.
 #[tokio::test]
 async fn helm_and_lighthouse_pages_are_fresh() {
-    for (has_extension, marked) in [(true, true), (false, false)] {
-        let builder = app_builder().module(LighthouseModule::from_config());
-        let app = if has_extension {
-            builder.module(ProofModule).build().await
-        } else {
-            builder.build().await
-        };
+    // The app with nothing, the app with a UI extension, and the app with an extension that also
+    // allows a source for its pages.
+    let mut panel_policy: Option<String> = None;
+    for (has_extension, allowed) in [(false, false), (true, false), (true, true)] {
+        let mut builder = app_builder().module(LighthouseModule::from_config());
+        if has_extension {
+            builder = builder.module(ProofModule);
+        }
+        if allowed {
+            builder = builder.config("ui.policy.allow.app.img_src", json!([ALLOWED_SOURCE]));
+        }
+        let app = builder.build().await;
         let staff = create_user(&app, "priya@example.com", "rep").await;
         // The role that may open the panel may open the dashboard too.
         let db = app.get::<navree::db::Db>().await;
@@ -733,9 +744,26 @@ async fn helm_and_lighthouse_pages_are_fresh() {
         let rep = app.acting_as(principal(staff.id));
         for path in ["/admin", "/_lighthouse"] {
             let (root_marked, header, policy) = fresh_mark(&rep, path).await;
-            assert_eq!(root_marked, marked, "{path}: the mark");
-            assert_eq!(header.as_deref(), marked.then_some("1"), "{path}: the header");
-            assert_eq!(policy.as_deref(), Some(PAGE_CSP), "{path}: the policy");
+            let label = format!("{path} (extension {has_extension}, allowed {allowed})");
+            assert_eq!(root_marked, has_extension, "{label}: the mark");
+            assert_eq!(
+                header.as_deref(),
+                has_extension.then_some("1"),
+                "{label}: the header"
+            );
+            let policy = policy.unwrap_or_else(|| panic!("{label}: no policy"));
+            if path == "/_lighthouse" {
+                // The toolkit's own, byte for byte, composed or not.
+                assert_eq!(policy, PAGE_CSP, "{label}: the policy");
+            } else {
+                // Helm's own, the same in every app, with nothing the app allowed in it.
+                assert!(
+                    !policy.contains(ALLOWED_SOURCE),
+                    "{label}: the panel's policy took a source: {policy}"
+                );
+                let reference = panel_policy.get_or_insert_with(|| policy.clone());
+                assert_eq!(policy, *reference, "{label}: the panel's policy");
+            }
         }
     }
 }
