@@ -440,7 +440,10 @@ fn settle(takeovers: Vec<Takeover>, provided: &[String], first_dir: Option<&Path
         } else {
             let folder = match first_dir {
                 Some(dir) => {
-                    format!(" ({})", dir.join(&name).to_string_lossy().replace('\\', "/"))
+                    format!(
+                        " ({})",
+                        dir.join(&name).to_string_lossy().replace('\\', "/")
+                    )
                 }
                 None => String::new(),
             };
