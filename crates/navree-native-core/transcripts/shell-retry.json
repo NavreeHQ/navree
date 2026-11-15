@@ -1,5 +1,5 @@
 {
-  "about": "A shell that could not be fetched is asked for again. With the kept shell drawn and the network gone, the bars stay, the screens show what could not load, and the shell is asked for again after a pause that doubles up to a minute, when the person retries, and when a request of the app gets through. Only an answer that is not a shell (a 404) gives the blank shell.",
+  "about": "A shell that could not be fetched is asked for again. With the kept shell drawn and the network gone, the bars stay, the screens show what could not load, and the shell is asked for again after a pause that doubles up to a minute, when the person retries, and when a request of the app gets through. Whichever comes first, the shell's failure or the kept shell being read, the end is the same. Only an answer that is not a shell (a 404) gives the blank shell.",
   "config": {"cache":{"persist":true}},
   "steps": [
     {
@@ -149,6 +149,78 @@
       "check": [
         {"at":"/app/name","is":""},
         {"at":"/destinations/1","is":null}
+      ]
+    },
+    {
+      "note": "Another launch, in airplane mode: the shell's request fails at once, before the file the kept shell is kept in has been read. Whichever comes first, the end is the same.",
+      "restart": true,
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"cache_read","key":"boot"},
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"error":"offline"},
+      "expect": {
+        "changed": [
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/stage","is":"failed"}
+      ]
+    },
+    {
+      "note": "The kept shell is read: its bars are drawn, the first page is asked for, and the shell is asked for again after two seconds.",
+      "send": {"t":"cache","key":"boot"},
+      "body": "made/kept-boot-workspace.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"timer","timer":1,"ms":2000},
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/stage","is":"ready"},
+        {"at":"/app/name","is":"Charkha Supply Co."},
+        {"at":"/app/context","is":null}
+      ]
+    },
+    {
+      "note": "The pause is over: the shell is asked for again, and answers.",
+      "send": {"t":"timer","timer":1},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "made/shell-workspace.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": [
+          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Acme Production\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"label\\\": \\\"Admin\\\",\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Dashboard\\\",\\n      \\\"icon\\\": {\\n       \\\"name\\\": \\\"layout-dashboard\\\",\\n       \\\"paths\\\": [\\n        \\\"M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z\\\"\\n       ]\\n      },\\n      \\\"href\\\": \\\"/\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Orders\\\",\\n      \\\"icon\\\": {\\n       \\\"name\\\": \\\"shopping-bag\\\",\\n       \\\"paths\\\": [\\n        \\\"M16 10a4 4 0 0 1-8 0\\\"\\n       ]\\n      },\\n      \\\"href\\\": \\\"/orders\\\",\\n      \\\"badge\\\": \\\"12\\\",\\n      \\\"items\\\": [\\n       {\\n        \\\"label\\\": \\\"Ravneet's orders\\\",\\n        \\\"href\\\": \\\"/orders/mine\\\",\\n        \\\"badge\\\": \\\"3\\\"\\n       }\\n      ]\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"user\\\": {\\n  \\\"name\\\": \\\"Ravneet Kaur\\\",\\n  \\\"email\\\": \\\"ravneet.kaur@example.com\\\",\\n  \\\"menu\\\": [\\n   {\\n    \\\"t\\\": \\\"button\\\",\\n    \\\"label\\\": \\\"Sign out\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"request\\\",\\n     \\\"method\\\": \\\"post\\\",\\n     \\\"href\\\": \\\"/sign-out\\\"\\n    }\\n   }\\n  ]\\n }\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"id\":\"0193a4b2-0000-7000-8000-00000000ra01\",\"name\":\"Ravneet Kaur\",\"email\":\"ravneet.kaur@example.com\"}},\"build\":\"152bd84abf4d\"}"}
+        ]
+      },
+      "check": [
+        {"at":"/app/context","is":"Acme Production"},
+        {"at":"/app/user/name","is":"Ravneet Kaur"}
       ]
     }
   ]

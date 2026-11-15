@@ -1090,6 +1090,9 @@ pub(crate) struct Inner {
     pub shell_pause: u32,
     /// The timer of that pause, while one runs.
     pub shell_timer: Option<u64>,
+    /// How this launch's last shell request failed, until a shell answers:
+    /// it may fail before the kept shell has been read.
+    pub shell_failure: Option<Failure>,
     /// The id of the part whose action is being carried out now: a screen
     /// that action opens keeps it.
     pub acting: Option<String>,
