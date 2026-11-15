@@ -131,6 +131,24 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
             await ClickAsync(cell);
         }
 
+        // The wheel before this took the rows to their end: the table is asked for its first rows again, so that the end is a place where more come.
+        if (host.State.FrontScreen is { } front)
+        {
+            host.Send(Events.Refresh(front.Id));
+            for (int waited = 0; waited < 8000 && RowsHeld() > 60; waited += 200)
+            {
+                await Task.Delay(200);
+            }
+
+            await Task.Delay(1500);
+            table = TableNow() ?? table;
+            FrameworkElement? first = Below(table).OfType<FrameworkElement>().FirstOrDefault(element => element.GetType().Name == "DataTableCell" && element.ActualWidth > 0 && element.TransformToVisual(table).TransformPoint(new Point(0, 0)).Y > 60);
+            if (first is not null)
+            {
+                await ClickAsync(first);
+            }
+        }
+
         int before = RowsHeld();
         Navree.Controls.DataTableCellRef? chosen = table.ActiveCell;
         Say("the active cell before End: " + Words(chosen));
