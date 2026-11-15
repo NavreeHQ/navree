@@ -503,10 +503,12 @@ internal sealed partial class NodeRenderer
                 {
                     PasswordBox password = new() { Header = header, PlaceholderText = text.Placeholder ?? string.Empty, Password = start, IsEnabled = !field.Disabled };
                     bool passwordApplying = false;
+                    TextEcho passwordEcho = new(initial: start);
                     password.PasswordChanged += (_, _) =>
                     {
                         if (!passwordApplying)
                         {
+                            passwordEcho.Told(password.Password, DateTime.UtcNow);
                             send(new TextValue(password.Password));
                         }
                     };
@@ -514,7 +516,7 @@ internal sealed partial class NodeRenderer
                     show = view =>
                     {
                         password.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
-                        if (view?.Value is TextValue echoed && echoed.Text != password.Password && password.FocusState == FocusState.Unfocused)
+                        if (view?.Value is TextValue echoed && passwordEcho.ShouldWrite(echoed.Text, password.Password, DateTime.UtcNow))
                         {
                             passwordApplying = true;
                             try
@@ -582,10 +584,12 @@ internal sealed partial class NodeRenderer
                     // Every change the person makes is sent: the client holds no copy of the text to compare with (the page it was drawn from
                     // is not the core's state any more), and the core ignores a value it already holds. What the core itself sets in the box is not sent back.
                     bool applying = false;
+                    TextEcho echo = new(initial: start);
                     box.TextChanged += (_, _) =>
                     {
                         if (!applying)
                         {
+                            echo.Told(box.Text, DateTime.UtcNow);
                             send(new TextValue(box.Text));
                         }
                     };
@@ -629,12 +633,25 @@ internal sealed partial class NodeRenderer
                     show = view =>
                     {
                         box.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
-                        if (view?.Value is TextValue echoed && echoed.Text != box.Text && box.FocusState == FocusState.Unfocused)
+                        // The text in the box is the person's: the core's value is written into it only when the core set it (it is not the answer to what was
+                        // typed), and then the caret stays where it was if it still fits, and goes to the end when the box was not being typed in.
+                        if (view?.Value is TextValue echoed && echo.ShouldWrite(echoed.Text, box.Text, DateTime.UtcNow))
                         {
+                            bool typing = box.FocusState != FocusState.Unfocused;
+                            int caret = Math.Min(box.SelectionStart, echoed.Text.Length);
+                            int length = Math.Min(box.SelectionLength, echoed.Text.Length - caret);
                             applying = true;
                             try
                             {
                                 box.Text = echoed.Text;
+                                if (typing)
+                                {
+                                    box.Select(caret, length);
+                                }
+                                else
+                                {
+                                    box.Select(echoed.Text.Length, 0);
+                                }
                             }
                             finally
                             {
@@ -1057,6 +1074,11 @@ internal sealed partial class NodeRenderer
         if (current is not null)
         {
             current.Fields.Add(((form, id), handle));
+
+            // What the core holds for a field (its value, what is wrong with it) is shown by the handle, in place; what the tree says of the field's
+            // starting value does not decide it any more. The field is the same control while nothing else about it changed.
+            Drawn me = current;
+            me.Update = now => now is Models.Field next && me.Node is Models.Field previous && PageRules.Same(BareField(previous), BareField(next));
         }
         else
         {
@@ -1066,6 +1088,22 @@ internal sealed partial class NodeRenderer
 
         return panel;
     }
+
+    // A field without the value the tree gave it to start with: what two answers' fields are compared by.
+    private static Models.Field BareField(Models.Field field) =>
+        field with
+        {
+            Input = field.Input switch
+            {
+                Models.TextInput text => text with { Value = string.Empty },
+                Models.ToggleInput toggle => toggle with { On = false },
+                Models.ChoiceInput choice => choice with { Value = null },
+                Models.ChoicesInput many => many with { Values = [] },
+                Models.DateInput date => date with { Value = string.Empty },
+                Models.SliderInput slider => slider with { Value = string.Empty },
+                _ => field.Input,
+            },
+        };
 
     // The button that sends a form: the first with an action that sends, in the form's own parts.
     private Models.Button? SubmitButtonOf(string formId)

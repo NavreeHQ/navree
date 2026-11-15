@@ -60,4 +60,16 @@ public sealed class TextEchoTests
         echo.Told("k", Start);
         Assert.IsTrue(echo.ShouldWrite("k", "ka", Start.AddSeconds(6)), "the box said k six seconds ago and nothing answered: k is now the core's own");
     }
+
+    [TestMethod]
+    public void The_core_saying_again_what_it_said_is_never_taken_for_a_change_of_its_own()
+    {
+        TextEcho echo = new(initial: "k");
+        echo.Told("ka", Start);
+        echo.Told("kau", Start.AddMilliseconds(100));
+        Assert.IsFalse(echo.ShouldWrite("k", "kau", Start.AddMilliseconds(120)), "the box was given k when it was drawn: the core still says k");
+        Assert.IsFalse(echo.ShouldWrite("ka", "kau", Start.AddMilliseconds(140)));
+        Assert.IsFalse(echo.ShouldWrite("ka", "kau", Start.AddMilliseconds(160)), "an answer to something else repeats ka: the box has moved on");
+        Assert.IsTrue(echo.ShouldWrite("x", "kau", Start.AddMilliseconds(180)), "a value nobody typed is the core's own");
+    }
 }

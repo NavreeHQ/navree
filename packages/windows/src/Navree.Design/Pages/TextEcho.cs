@@ -9,10 +9,16 @@ public sealed class TextEcho
 {
     private readonly List<(string Text, DateTime At)> told = [];
     private readonly TimeSpan lifetime;
+    private string? lastCore;
 
     /// <summary>Makes the record of one box.</summary>
     /// <param name="lifetime">How long a told text is waited for before it is given up (an answer that never came); ten seconds when none is said.</param>
-    public TextEcho(TimeSpan? lifetime = null) => this.lifetime = lifetime ?? TimeSpan.FromSeconds(10);
+    /// <param name="initial">What the core held when the box was drawn, which the box was given.</param>
+    public TextEcho(TimeSpan? lifetime = null, string? initial = null)
+    {
+        this.lifetime = lifetime ?? TimeSpan.FromSeconds(10);
+        lastCore = initial;
+    }
 
     /// <summary>The box told the core this.</summary>
     /// <param name="text">What the box held.</param>
@@ -32,6 +38,13 @@ public sealed class TextEcho
     /// </returns>
     public bool ShouldWrite(string core, string box, DateTime at)
     {
+        if (lastCore == core)
+        {
+            // The core says again what it said: nothing it did, whatever the box holds now.
+            return false;
+        }
+
+        lastCore = core;
         _ = told.RemoveAll(entry => at - entry.At > lifetime);
         int echo = told.FindIndex(entry => entry.Text == core);
         if (echo >= 0)
