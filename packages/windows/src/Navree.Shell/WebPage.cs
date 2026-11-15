@@ -71,7 +71,7 @@ internal sealed class WebPage : Grid
                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Navree", host.Options.AppName, "web"),
                     new CoreWebView2EnvironmentOptions());
                 await view.EnsureCoreWebView2Async(environment);
-                Hold(view.CoreWebView2);
+                Hold(view.CoreWebView2!);
             }
 
             if (!host.Origins.Ours(web.Url))

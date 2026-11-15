@@ -534,7 +534,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
 
     private static UIElement DrawCode(Models.Code code)
     {
-        TextBlock text = new() { Text = code.Value, FontFamily = new FontFamily("Cascadia Mono, Consolas"), IsTextSelectionEnabled = true, TextWrapping = TextWrapping.Wrap };
+        TextBlock text = new() { Text = code.Text, FontFamily = new FontFamily("Cascadia Mono, Consolas"), IsTextSelectionEnabled = true, TextWrapping = TextWrapping.Wrap };
         return Cardlike(new ScrollViewer { Content = text, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto }, 12);
     }
 
