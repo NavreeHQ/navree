@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "0bac839501a9";
+pub const BUILD: &str = "0bdadb3d685b";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-af51383c393e.js";
@@ -18,7 +18,7 @@ pub const OVERLAY_URL: &str = "/_navree/ui/overlay-2a7611c102e9.js";
 pub const TABLE_URL: &str = "/_navree/ui/table-a32b1c0c5469.js";
 
 /// The URL of `live.js`.
-pub const LIVE_URL: &str = "/_navree/ui/live-40d2d60cffa0.js";
+pub const LIVE_URL: &str = "/_navree/ui/live-6dcce9d0765f.js";
 
 /// The URL of `select.js`.
 pub const SELECT_URL: &str = "/_navree/ui/select-9d4e3cd64065.js";
@@ -229,7 +229,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "live",
         ext: "js",
-        hash: "40d2d60cffa0",
+        hash: "6dcce9d0765f",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/live.js"),
         gzip: Some(include_bytes!("../dist/live.js.gz")),
