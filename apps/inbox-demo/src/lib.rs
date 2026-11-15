@@ -218,9 +218,8 @@ pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
     let mut config = vec![
         ("APP_HTTP__ADDR".to_owned(), format!("127.0.0.1:{port}")),
         ("APP_DATABASE__URL".to_owned(), database_url),
-        // The framework limits one person's live streams (16 by default, one per open
-        // tab), and the visitors working as one agent are one person: their tabs would
-        // share those.
+        // Visitors who are one person share the framework's limit of live streams per person
+        // (16 by default); the streams of a visitor with no person are not counted at all.
         (
             "APP_REALTIME__STREAMS__PER_USER".to_owned(),
             "10000".to_owned(),

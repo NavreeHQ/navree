@@ -175,9 +175,8 @@ pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
             "APP_HTTP__SERVER__MAX_CONNECTIONS_PER_IP".to_owned(),
             "10000".to_owned(),
         ),
-        // The framework limits one account's live streams (16 by default, one per open
-        // tab), and everyone here is the one staff account: the tabs of every visitor
-        // would share those.
+        // Visitors who are one person share the framework's limit of live streams per person
+        // (16 by default); the streams of a visitor with no person are not counted at all.
         (
             "APP_REALTIME__STREAMS__PER_USER".to_owned(),
             "10000".to_owned(),
