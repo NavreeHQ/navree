@@ -606,6 +606,71 @@ jobs:
           path: packages/windows/native/win-x64/navree_native_core.dll
           retention-days: 30
 
+      # The demo's place in Windows, with no package: the count on the taskbar, the icon in the notification area, the
+      # small window, settings, a notification, more windows, the full screen, what comes from outside. The report says
+      # what the system accepted and what it only was asked.
+      - name: The place in Windows, no package
+        if: matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter Navree.Demo.exe | Select-Object -First 1
+          if (-not $exe) { throw "the demo was not built" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/take-system-pictures.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\system-unpackaged"
+
+      - name: Keep the pictures of the place in Windows, no package
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-system-unpackaged
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/system-unpackaged
+          retention-days: 30
+
+      # The demo as a package: its pictures are drawn, a development certificate is made, and the package is built and signed.
+      # Then the same walk is run with package identity, through the loose layout the winapp command registers from the same
+      # manifest, which is what lets the features that need identity be tried.
+      - name: The demo as a package
+        if: matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v AllowAllTrustedApps /d 1
+          $project = "packages/windows/demo/Navree.Demo.Packaged/Navree.Demo.Packaged.csproj"
+          $out = "$env:RUNNER_TEMP\package"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/make-assets.ps1 -Out packages/windows/demo/Navree.Demo.Packaged/Assets
+          winapp cert generate --manifest packages/windows/demo/Navree.Demo.Packaged/Package.appxmanifest --output "$out\devcert.pfx" --export-cer --install 2>&1 | Tee-Object -FilePath "$out\cert.txt"
+          winapp pack $project -c Release --arch x64 --cert "$out\devcert.pfx" --output "$out\Navree.Demo.msix" 2>&1 | Tee-Object -FilePath "$out\pack.txt"
+          Get-ChildItem $out | ForEach-Object { "$($_.Name) $($_.Length)" }
+          if (-not (Test-Path "$out\Navree.Demo.msix")) { throw "the package was not built" }
+
+      - name: Keep the package
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-demo-package
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/package
+          retention-days: 30
+
+      - name: The place in Windows, with package identity
+        if: matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/take-system-pictures.ps1 -Project packages/windows/demo/Navree.Demo.Packaged/Navree.Demo.Packaged.csproj -Packaged -OutDir "$env:RUNNER_TEMP\system-packaged"
+
+      - name: Keep the pictures of the place in Windows, with package identity
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-system-packaged
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/system-packaged
+          retention-days: 30
+
       # What the generator wrote is what is committed: a stale model fails the run, after the rest has run.
       - name: The written models are the committed ones
         if: always()

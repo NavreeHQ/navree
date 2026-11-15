@@ -29,6 +29,9 @@ public sealed record ShellOptions
     /// <summary>Where what the app keeps between launches goes; the app's folder under the local application data when left out.</summary>
     public string? KeptFolder { get; init; }
 
+    /// <summary>What the app says about its place in Windows: its own scheme, its instance key, what its jump list holds.</summary>
+    public PlaceOptions Place { get; init; } = new();
+
     /// <summary>The names of the kinds this build does not draw, which the core then shows in the web view.</summary>
     public IReadOnlyList<string> Undrawable { get; init; } = [];
 }

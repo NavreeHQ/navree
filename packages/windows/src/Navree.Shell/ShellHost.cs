@@ -11,7 +11,7 @@ namespace Navree.Shell;
 /// not a window's. A window subscribes to <see cref="StateChanged"/>, shows what the state says and tells the host
 /// what the person did; it keeps no state of its own about navigation, trees, forms or loading.
 /// </summary>
-public sealed class ShellHost : IDisposable
+public sealed partial class ShellHost : IDisposable
 {
     private readonly DispatcherQueue dispatcher;
     private readonly CoreClient client;
@@ -81,8 +81,14 @@ public sealed class ShellHost : IDisposable
     /// <param name="eventJson">An event, from <see cref="Events"/>.</param>
     public void Send(string eventJson) => client.Send(eventJson);
 
-    /// <summary>Starts the app: the core asks for its shell.</summary>
-    public void Start() => client.Send(Events.Start);
+    /// <summary>Starts the app: the core asks for its shell, and is given the snapshot the last run kept, when there is one that reads.</summary>
+    public void Start()
+    {
+        string? saved = kept.Read("snapshot");
+        client.Send(SnapshotRulesAllow(saved) ? Events.Restore(saved!) : Events.Start);
+    }
+
+    private static bool SnapshotRulesAllow(string? saved) => Navree.Presence.SnapshotRules.ShouldKeep(saved);
 
     /// <summary>Waits until the core has handled everything sent so far, and returns the state.</summary>
     /// <returns>The whole view state.</returns>
@@ -130,7 +136,12 @@ public sealed class ShellHost : IDisposable
     /// <summary>What a page in the web view is answered with when the app has recorded answers instead of a network.</summary>
     internal Func<Uri, (byte[] Body, string ContentType)?>? RecordedPages => Options.RecordedPages;
 
-    private void OnProblem(string what) => dispatcher.TryEnqueue(() => Problem?.Invoke(what));
+    private void OnProblem(string what) =>
+        dispatcher.TryEnqueue(() =>
+        {
+            Problem?.Invoke(what);
+            NoteStop(what);
+        });
 
     // On the core's thread: the state is handed to the UI thread, and then each effect, in order.
     private void OnUpdate(Update update)
@@ -170,9 +181,8 @@ public sealed class ShellHost : IDisposable
             case OpenUrlEffect open:
                 _ = OpenAsync(open);
                 break;
-            case SignInEffect:
-                // Signing in through the system's browser is not carried out yet: the core is told the session did not finish.
-                client.Send(Events.SignInDone(null));
+            case SignInEffect signInEffect:
+                BeginSignIn(signInEffect);
                 break;
             case ShowEffect show:
                 if (state.Messages.FirstOrDefault(message => message.Id == show.Id) is Message message)
@@ -184,11 +194,7 @@ public sealed class ShellHost : IDisposable
             case HapticEffect:
                 break;
             case DeviceEffect device:
-                if (device.Posts)
-                {
-                    client.Send(Events.DeviceRefused(device.Call, "unsupported"));
-                }
-
+                RunDevice(device);
                 break;
             case CacheReadEffect read:
                 disk.Run(() => client.Send(Events.Cache(read.Key, kept.Read(read.Key))));
@@ -393,6 +399,7 @@ public sealed class ShellHost : IDisposable
             Problem?.Invoke("the wipe did not finish: " + string.Join(", ", report.Failed.Select(failed => failed.Key)));
         }
 
+        Place?.EndSession();
         SessionEnded?.Invoke(report);
     }
 }

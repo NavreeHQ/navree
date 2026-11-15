@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The app's place in Windows as plain rules and the few calls of the system that need no window: what a build
+       can offer with and without package identity, the count on the taskbar, notifications and when they are due,
+       the jump list's and the sign-in's addresses, the notification-area icon. Windows only, but with no UI
+       toolkit, so every rule in it is tested without a window. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>Navree.Presence</RootNamespace>
+    <AssemblyName>Navree.Presence</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Navree.Protocol\Navree.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

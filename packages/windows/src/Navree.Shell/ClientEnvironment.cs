@@ -81,10 +81,20 @@ internal static class ClientEnvironment
             }
 
             w.WriteStartArray("caps");
-            w.WriteStringValue("clipboard");
-            w.WriteStringValue("open_url");
+            foreach (string cap in Navree.Presence.Capabilities.ProtocolCaps(PlaceCapabilities.Current()))
+            {
+                w.WriteStringValue(cap);
+            }
+
             w.WriteEndArray();
             w.WriteEndObject();
+            if (options.Place.Scheme is string scheme)
+            {
+                w.WriteStartObject("sign_in");
+                w.WriteString("callback", scheme);
+                w.WriteEndObject();
+            }
+
             w.WriteStartObject("cache");
             w.WriteNumber("pages", 24);
             w.WriteBoolean("persist", true);

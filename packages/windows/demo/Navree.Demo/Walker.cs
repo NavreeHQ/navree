@@ -10,7 +10,7 @@ namespace Navree.Demo;
 /// window, a middle one and a wide one. The picture is of what the app draws (the system's own frame is not in it).
 /// What was done, and anything that went wrong, is written to <c>walk.txt</c> beside the pictures.
 /// </summary>
-internal sealed class Walker(ShellHost host, ShellWindow window, string folder)
+internal sealed class Walker(ShellHost host, ShellWindow window, string folder, SystemPlace? place = null)
 {
     private static readonly (string Name, int Width)[] Widths = [("narrow", 480), ("middle", 840), ("wide", 1280)];
     private readonly List<string> log = [];
@@ -54,7 +54,7 @@ internal sealed class Walker(ShellHost host, ShellWindow window, string folder)
         {
             Say("done");
             File.WriteAllLines(Path.Combine(folder, prefix + "walk.txt"), log);
-            Application.Current.Exit();
+            App.Finish(place);
         }
     }
 

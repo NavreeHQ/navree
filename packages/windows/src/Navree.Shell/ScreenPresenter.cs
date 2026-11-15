@@ -24,6 +24,21 @@ internal sealed class ScreenPresenter : Grid
     {
         this.host = host;
         Children.Add(scroller);
+        scroller.SizeChanged += (_, _) => FitPage();
+    }
+
+    // The page is as wide as the room the window gives it, up to its widest, and stands at the start: left to be centred by the layout alone, a wide
+    // window (full screen) was seen to place it right of the middle and run it off the edge.
+    private void FitPage()
+    {
+        if (scroller.Content is StackPanel page)
+        {
+            double room = scroller.ViewportWidth > 0 ? scroller.ViewportWidth : scroller.ActualWidth;
+            if (room > 0)
+            {
+                page.Width = Math.Min(page.MaxWidth, room);
+            }
+        }
     }
 
     /// <summary>The page the screen was drawn into, all of it: the element a picture of the whole page is taken of.</summary>
@@ -98,6 +113,7 @@ internal sealed class ScreenPresenter : Grid
         };
         Context = context;
         scroller.Content = Page(context);
+        FitPage();
         if (offset > 0)
         {
             scroller.UpdateLayout();
@@ -119,7 +135,7 @@ internal sealed class ScreenPresenter : Grid
     {
         ScreenView screen = context.Screen;
         double side = context.Width == WidthClass.Compact ? 16 : 32;
-        StackPanel page = new() { Spacing = 16, Padding = new Thickness(side, 16, side, 32), MaxWidth = WindowRules.ReadingMeasure + 2 * side + 400 };
+        StackPanel page = new() { Spacing = 16, Padding = new Thickness(side, 16, side, 32), MaxWidth = WindowRules.ReadingMeasure + 2 * side + 400, HorizontalAlignment = HorizontalAlignment.Left };
         if (screen.Loading || screen.Refreshing)
         {
             page.Children.Add(new ProgressBar { IsIndeterminate = true });

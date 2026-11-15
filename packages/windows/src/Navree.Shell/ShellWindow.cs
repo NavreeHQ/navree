@@ -17,7 +17,7 @@ namespace Navree.Shell;
 /// The app's window: the title bar with its back button, Mica behind everything, the navigation by the window's
 /// width, and the screen in front. It shows the host's view state and tells the host what the person did.
 /// </summary>
-public sealed class ShellWindow : Window
+public sealed partial class ShellWindow : Window
 {
     private readonly ShellHost host;
     private readonly TitleBar titleBar = new();
@@ -63,7 +63,17 @@ public sealed class ShellWindow : Window
                 host.Send(Events.Search(current.Id, e.QueryText));
             }
         };
-        titleBar.BackRequested += (_, _) => host.Send(Events.Back);
+        titleBar.BackRequested += (_, _) =>
+        {
+            if (settingsOpen)
+            {
+                HideSettings();
+            }
+            else
+            {
+                host.Send(Events.Back);
+            }
+        };
         titleBar.PaneToggleRequested += (_, _) => navigation.IsPaneOpen = !navigation.IsPaneOpen;
 
         navigation.IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed;
@@ -104,7 +114,9 @@ public sealed class ShellWindow : Window
             host.StateChanged -= Show;
             host.MessageRequested -= ShowMessage;
             host.Announcement -= Announce;
+            host.CoreStopped -= OfferRestart;
         };
+        InitializeSystem();
     }
 
     /// <summary>The element the window's pictures are taken of: everything but the system's own frame.</summary>
@@ -118,8 +130,11 @@ public sealed class ShellWindow : Window
 
     /// <summary>Sets the direction text runs in, for a language that runs right to left.</summary>
     /// <param name="rightToLeft">Whether it runs from the right.</param>
-    public void SetFlowDirection(bool rightToLeft) =>
+    public void SetFlowDirection(bool rightToLeft)
+    {
         root.FlowDirection = rightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+        MirrorFrame(rightToLeft);
+    }
 
     /// <summary>Sizes the window, in effective pixels, and gives its smallest.</summary>
     /// <param name="widthEpx">The width.</param>
@@ -156,6 +171,17 @@ public sealed class ShellWindow : Window
 
         widthKnown = true;
         width = now;
+
+        // The navigation follows the window's width by our own rule, at the breakpoints the system's own pane has: open at the
+        // side when wide, icons when in between, a button that opens it over the content when narrow. (Left to the pane's own
+        // automatic mode, a window made larger at the start could be left with a wide pane that showed icons only.)
+        navigation.PaneDisplayMode = now switch
+        {
+            WidthClass.Compact => NavigationViewPaneDisplayMode.LeftMinimal,
+            WidthClass.Medium => NavigationViewPaneDisplayMode.LeftCompact,
+            _ => NavigationViewPaneDisplayMode.Left,
+        };
+        navigation.IsPaneOpen = now == WidthClass.Expanded;
         host.Send(Events.Window(now switch
         {
             WidthClass.Compact => Runtime.Width.Compact,
@@ -182,7 +208,7 @@ public sealed class ShellWindow : Window
     private void Show(ViewState state)
     {
         NavPart nav = state.Nav;
-        titleBar.IsBackButtonEnabled = nav.CanGoBack;
+        titleBar.IsBackButtonEnabled = nav.CanGoBack || settingsOpen;
         ShowDestinations(nav);
         ShowSearch(state.FrontScreen?.Screen?.Search);
 
@@ -333,7 +359,7 @@ public sealed class ShellWindow : Window
                 }
             }
 
-            if (nav.Selected >= 0 && nav.Selected < navigation.MenuItems.Count && !ReferenceEquals(navigation.SelectedItem, navigation.MenuItems[nav.Selected]))
+            if (!settingsOpen && nav.Selected >= 0 && nav.Selected < navigation.MenuItems.Count && !ReferenceEquals(navigation.SelectedItem, navigation.MenuItems[nav.Selected]))
             {
                 navigation.SelectedItem = navigation.MenuItems[nav.Selected];
             }
