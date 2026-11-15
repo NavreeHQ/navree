@@ -49,8 +49,8 @@ object ListRules {
         return runs
     }
 
-    fun tableAsList(contentWidthDp: Int, columns: Int): Boolean =
-        contentWidthDp < TABLE_FROM_DP || columns * COLUMN_LEAST_DP > contentWidthDp
+    fun tableAsList(contentWidthDp: Int, columns: Int, fontScale: Float = 1f): Boolean =
+        contentWidthDp < TABLE_FROM_DP || columns * COLUMN_LEAST_DP * fontScale.coerceAtLeast(1f) > contentWidthDp
 
     /**
      * Whether the last line of a grid, when it has fewer parts than the
@@ -166,6 +166,25 @@ object ListRules {
         column.role == Navree.ColumnRole.TRAILING || column.numeric -> 0.9f
         else -> 1f
     }
+
+    /**
+     * The share of a wide table's width each column takes. A column of words
+     * takes what its longest cell needs, between a short status and a long
+     * place, so a place such as "Maharashtra" is not broken in the middle;
+     * the title, the numbers, the actions and the subtitle keep their shares.
+     */
+    fun columnWeights(columns: List<Navree.Column>, rows: List<Navree.TableRow>): List<Float> =
+        columns.mapIndexed { index, column ->
+            val base = columnWeight(column)
+            val fixed = base == 0f || column.role == Navree.ColumnRole.TITLE || column.role == Navree.ColumnRole.ACTIONS ||
+                column.role == Navree.ColumnRole.TRAILING || column.numeric
+            if (fixed) {
+                base
+            } else {
+                val longest = rows.maxOfOrNull { row -> row.cells.getOrNull(index)?.walk()?.filterIsInstance<Navree.Text>()?.sumOf { it.value.length } ?: 0 } ?: 0
+                (longest / 10f).coerceIn(1f, 2f)
+            }
+        }
 
     /**
      * Whether a row's trailing value moves under its text. At large text sizes

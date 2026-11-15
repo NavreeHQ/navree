@@ -461,6 +461,27 @@ class FormRulesTest {
     }
 }
 
+class ColumnShareTest {
+    private fun column(label: String, role: Navree.ColumnRole? = null) = Navree.Column(label = label, role = role)
+    private fun row(vararg cells: String) = Navree.TableRow(cells = cells.map { Navree.Text(value = it) })
+
+    @Test
+    fun a_column_of_long_places_takes_more_of_the_width_than_a_column_of_short_words() {
+        val columns = listOf(column("Order", Navree.ColumnRole.TITLE), column("Payment"), column("Ships to"))
+        val rows = listOf(row("CS-1", "Paid", "Mumbai, Maharashtra"), row("CS-2", "Paid", "Delhi"))
+        val weights = ListRules.columnWeights(columns, rows)
+        assertEquals(1.6f, weights[0], 0.001f)
+        assertEquals(1f, weights[1], 0.001f)
+        assertEquals(1.9f, weights[2], 0.001f)
+    }
+
+    @Test
+    fun at_the_largest_text_a_table_with_seven_columns_is_a_list_even_in_a_wide_pane() {
+        assertFalse(ListRules.tableAsList(1000, 7, 1f))
+        assertTrue(ListRules.tableAsList(1000, 7, 2f))
+    }
+}
+
 class DetailRunsTest {
     @Test
     fun badges_that_follow_each_other_are_one_line_and_other_parts_keep_theirs() {

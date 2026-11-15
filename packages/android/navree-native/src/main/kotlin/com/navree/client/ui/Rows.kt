@@ -526,6 +526,7 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
     val choosable = node.rows.filter { SelectionRules.choosable(node, it) }
     val tickedCount = choosable.count { SelectionRules.ticked(node, it, choosing.across) }
     val chooseAll = stringResource(R.string.navree_choose_all_shown)
+    val weights = remember(node.columns, node.rows) { ListRules.columnWeights(node.columns, node.rows) }
     Column(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             if (node.select != null) {
@@ -541,11 +542,11 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                 )
             }
             node.columns.forEachIndexed { index, column ->
-                if (ListRules.columnWeight(column) == 0f) return@forEachIndexed
+                if (weights[index] == 0f) return@forEachIndexed
                 val sort = column.sort
                 Row(
                     modifier = Modifier
-                        .weight(ListRules.columnWeight(column))
+                        .weight(weights[index])
                         .then(
                             if (sort != null) {
                                 Modifier.clickable(role = Role.Button) {
@@ -612,7 +613,7 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                 row.cells.forEachIndexed { index, cell ->
                     val end = atEnd(index)
                     val column = node.columns.getOrNull(index)
-                    val weight = ListRules.columnWeight(column)
+                    val weight = weights.getOrElse(index) { 1f }
                     if (weight == 0f) return@forEachIndexed
                     Box(Modifier.weight(weight).padding(end = 8.dp), contentAlignment = if (end) Alignment.CenterEnd else Alignment.CenterStart) {
                         when {
