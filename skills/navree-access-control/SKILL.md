@@ -230,7 +230,9 @@ roles: it is the right client for the refused side; give real roles through
 - Listing with `Post::query()` without `Accessible`: users see rows they
   then can't open.
 - A `from = "id"` route on a subject not registered with `for_feature` (500).
-- Soft-deleted rows still load in record checks: check `deleted_at`.
+- Expecting a soft-deleted record to reach a `from = "id"` handler: it is a
+  404 before any rule is checked, whoever asks. Lists, and records whose
+  parent is soft-deleted, are yours to filter.
 - Integers above 2^53 - 1 in conditions: pass them as strings.
 - Making a route `#[public]` to fix a 403: grant the permission or add a rule.
 
