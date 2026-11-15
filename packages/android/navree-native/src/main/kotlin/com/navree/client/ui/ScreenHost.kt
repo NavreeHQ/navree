@@ -381,7 +381,8 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             val node = block.node
             // A table where there is room for one takes the pane's width: its columns need it.
             val most = when {
-                node is Navree.Table -> ContentRules.TABLE_MOST_DP
+                // Two panes side by side need the pane's width: a list and what it opened.
+                node is Navree.Table || node is Navree.Split -> ContentRules.TABLE_MOST_DP
                 block.form != null -> FormRules.FORM_MOST_DP
                 else -> column
             }
