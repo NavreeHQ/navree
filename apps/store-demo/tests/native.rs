@@ -1195,3 +1195,28 @@ async fn a_browser_asking_for_an_address_that_does_not_exist_gets_the_404_in_the
     // The account the shell shows is there, as on every other page.
     assert!(html.contains("ravneet.kaur@example.com"), "{html:.600}");
 }
+
+#[tokio::test]
+async fn a_page_that_is_not_found_runs_no_statement_at_all() {
+    let (app, _dir) = boot().await;
+    let (page, ran) = navree::db::QueryLog::capture(
+        app.client()
+            .get("/no-such-page")
+            .header("accept", "text/html")
+            .send(),
+    )
+    .await;
+    assert_eq!(page.status().as_u16(), 404);
+    assert!(
+        ran.is_empty(),
+        "{:?}",
+        ran.iter().map(|q| &q.sql).collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn the_live_streams_one_person_may_hold_are_the_number_the_app_is_built_with() {
+    let (app, _dir) = boot().await;
+    let options = app.get::<navree::realtime::RealtimeOptions>().await;
+    assert_eq!(options.streams.per_user, 10_000);
+}
