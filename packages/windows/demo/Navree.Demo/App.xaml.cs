@@ -31,6 +31,16 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         string[] arguments = Environment.GetCommandLineArgs();
+
+        // The drawn kinds on their own, with no core behind them: each screen of a folder of pages, pictured.
+        if (Option(arguments, "--kinds") is string kinds)
+        {
+            Window page = new() { Title = "Navree drawn kinds" };
+            page.Activate();
+            _ = new KindsWalker(page, kinds).RunAsync();
+            return;
+        }
+
         string? answers = Option(arguments, "--answers") ?? FixtureFetcher.Recorded();
         string? live = Option(arguments, "--server");
         ShellOptions options = live is not null

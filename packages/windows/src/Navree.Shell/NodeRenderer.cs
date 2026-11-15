@@ -46,7 +46,10 @@ internal sealed partial class NodeRenderer(RenderContext context)
         return panel;
     }
 
-    private UIElement Draw(Models.Node node) =>
+    // The kinds drawn by controls of our own (NodeRenderer.Kinds.cs) come first; the rest are drawn here.
+    private UIElement Draw(Models.Node node) => DrawKind(node) ?? DrawPlain(node);
+
+    private UIElement DrawPlain(Models.Node node) =>
         node switch
         {
             Models.Stack stack => DrawStack(stack),

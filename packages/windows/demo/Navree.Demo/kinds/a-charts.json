@@ -1,0 +1,599 @@
+{
+ "navree": 1,
+ "build": "x",
+ "vocab": 0,
+ "screen": {
+  "title": "Charts",
+  "id": "a-charts",
+  "nav": "/",
+  "body": {
+   "t": "stack",
+   "gap": 4,
+   "children": [
+    {
+     "t": "section",
+     "title": "Line, with a gap, zones and a reference",
+     "children": [
+      {
+       "t": "chart",
+       "id": "c1",
+       "kind": "line",
+       "title": "Resting heart rate",
+       "labels": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "series": [
+        {
+         "label": "bpm",
+         "values": [
+          58,
+          57,
+          null,
+          59,
+          56,
+          55,
+          57
+         ],
+         "colour": {
+          "hue": "rose"
+         },
+         "unit": "bpm"
+        }
+       ],
+       "zones": [
+        {
+         "from": 40,
+         "to": 50,
+         "label": "Low",
+         "colour": {
+          "hue": "cyan"
+         }
+        },
+        {
+         "from": 50,
+         "to": 65,
+         "label": "Usual",
+         "colour": {
+          "hue": "success"
+         }
+        },
+        {
+         "from": 65,
+         "to": 90,
+         "label": "High",
+         "colour": {
+          "hue": "warning"
+         }
+        }
+       ],
+       "references": [
+        {
+         "value": 60,
+         "label": "Goal: 60"
+        }
+       ],
+       "y": {
+        "unit": "bpm",
+        "min": 40,
+        "max": 80
+       },
+       "summary": "Resting heart rate: 55 to 59 bpm, with no reading on Wednesday.",
+       "hint": {
+        "about": "the resting rate",
+        "title": "How to read it",
+        "text": "The lowest rate you held while still."
+       }
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Area, smooth, two series",
+     "children": [
+      {
+       "t": "chart",
+       "id": "c2",
+       "kind": "area",
+       "title": "Orders",
+       "curve": "smooth",
+       "labels": [
+        "1 Nov",
+        "2 Nov",
+        "3 Nov",
+        "4 Nov",
+        "5 Nov",
+        "6 Nov",
+        "7 Nov",
+        "8 Nov",
+        "9 Nov",
+        "10 Nov",
+        "11 Nov",
+        "12 Nov",
+        "13 Nov",
+        "14 Nov"
+       ],
+       "series": [
+        {
+         "label": "This fortnight",
+         "values": [
+          310,
+          355,
+          402,
+          388,
+          441,
+          462,
+          420,
+          380,
+          430,
+          470,
+          455,
+          500,
+          520,
+          498
+         ],
+         "colour": {
+          "hue": "accent"
+         }
+        },
+        {
+         "label": "Before",
+         "values": [
+          285,
+          301,
+          296,
+          322,
+          340,
+          331,
+          310,
+          300,
+          315,
+          330,
+          341,
+          350,
+          362,
+          358
+         ],
+         "colour": {
+          "hue": "neutral"
+         }
+        }
+       ],
+       "y": {
+        "unit": "orders"
+       }
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Step",
+     "children": [
+      {
+       "t": "chart",
+       "id": "c3",
+       "kind": "line",
+       "title": "Temperature set",
+       "curve": "step",
+       "labels": [
+        "6 am",
+        "8 am",
+        "10 am",
+        "12 pm",
+        "2 pm",
+        "4 pm",
+        "6 pm"
+       ],
+       "series": [
+        {
+         "label": "Set",
+         "values": [
+          18,
+          21,
+          22,
+          22,
+          21,
+          19,
+          18
+         ],
+         "colour": {
+          "hue": "orange"
+         },
+         "unit": "\u00b0C"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Bars, side by side",
+     "children": [
+      {
+       "t": "chart",
+       "id": "c4",
+       "kind": "bar",
+       "title": "Orders by payment",
+       "labels": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "series": [
+        {
+         "label": "UPI",
+         "values": [
+          41,
+          38,
+          null,
+          52,
+          47,
+          60,
+          55
+         ],
+         "colour": {
+          "hue": "green"
+         }
+        },
+        {
+         "label": "Card",
+         "values": [
+          12,
+          9.5,
+          17,
+          11,
+          14,
+          20,
+          18
+         ],
+         "colour": {
+          "hue": "blue"
+         },
+         "shown": [
+          "12",
+          "9.5",
+          "17",
+          "11",
+          "14",
+          "20",
+          "18"
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Bars, stacked, in rupees",
+     "children": [
+      {
+       "t": "chart",
+       "id": "c5",
+       "kind": "bar",
+       "title": "Sales by category",
+       "labels": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "stacking": "values",
+       "series": [
+        {
+         "label": "Snacks",
+         "values": [
+          125000,
+          98000,
+          143000,
+          110000,
+          160000,
+          190000,
+          175000
+         ],
+         "colour": {
+          "hue": "amber"
+         },
+         "shown": [
+          "\u20b91,25,000",
+          "\u20b998,000",
+          "\u20b91,43,000",
+          "\u20b91,10,000",
+          "\u20b91,60,000",
+          "\u20b91,90,000",
+          "\u20b91,75,000"
+         ]
+        },
+        {
+         "label": "Sweets",
+         "values": [
+          64000,
+          72000,
+          51000,
+          80000,
+          76000,
+          120000,
+          98000
+         ],
+         "colour": {
+          "hue": "rose"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Bars, stacked to a whole",
+     "children": [
+      {
+       "t": "chart",
+       "id": "c6",
+       "kind": "bar",
+       "title": "Share of orders",
+       "labels": [
+        "North",
+        "South",
+        "East",
+        "West"
+       ],
+       "stacking": "shares",
+       "series": [
+        {
+         "label": "UPI",
+         "values": [
+          60,
+          40,
+          55,
+          48
+         ],
+         "colour": {
+          "hue": "green"
+         }
+        },
+        {
+         "label": "Card",
+         "values": [
+          25,
+          35,
+          20,
+          30
+         ],
+         "colour": {
+          "hue": "blue"
+         }
+        },
+        {
+         "label": "Cash",
+         "values": [
+          15,
+          25,
+          25,
+          22
+         ],
+         "colour": {
+          "hue": "amber"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Horizontal bars",
+     "children": [
+      {
+       "t": "chart",
+       "id": "c7",
+       "kind": "bar",
+       "horizontal": true,
+       "title": "Orders by city",
+       "labels": [
+        "Ludhiana",
+        "Amritsar",
+        "Chandigarh",
+        "Jalandhar",
+        "Patiala",
+        "Bathinda"
+       ],
+       "series": [
+        {
+         "label": "Orders",
+         "values": [
+          142,
+          118,
+          96,
+          71,
+          64,
+          33
+         ],
+         "colour": {
+          "hue": "violet"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Funnel",
+     "children": [
+      {
+       "t": "chart",
+       "id": "c8",
+       "kind": "funnel",
+       "title": "From visit to paid",
+       "labels": [
+        "Visited",
+        "Added to cart",
+        "Checked out",
+        "Paid"
+       ],
+       "series": [
+        {
+         "label": "People",
+         "values": [
+          4200,
+          1380,
+          610,
+          540
+         ],
+         "colour": {
+          "hue": "cyan"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Donut",
+     "children": [
+      {
+       "t": "chart",
+       "id": "c9",
+       "kind": "donut",
+       "title": "Where orders come from",
+       "labels": [
+        "Ludhiana",
+        "Amritsar",
+        "Chandigarh",
+        "Other"
+       ],
+       "series": [
+        {
+         "label": "Orders",
+         "values": [
+          142,
+          118,
+          96,
+          104
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Sparkline",
+     "children": [
+      {
+       "t": "chart",
+       "id": "c10",
+       "kind": "sparkline",
+       "labels": [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+       ],
+       "series": [
+        {
+         "label": "Steps",
+         "values": [
+          6100,
+          7400,
+          5200,
+          8800,
+          9100,
+          12000,
+          4300
+         ],
+         "colour": {
+          "hue": "green"
+         },
+         "unit": "steps"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Scatter, equal axes with a diagonal",
+     "children": [
+      {
+       "t": "scatter",
+       "id": "s1",
+       "title": "This week against last",
+       "equal_axes": true,
+       "x": {
+        "name": "Last week",
+        "unit": "steps"
+       },
+       "y": {
+        "name": "This week",
+        "unit": "steps"
+       },
+       "references": [
+        {
+         "kind": "diagonal"
+        }
+       ],
+       "series": [
+        {
+         "name": "Days",
+         "colour": {
+          "hue": "accent"
+         },
+         "points": [
+          {
+           "x": 5200,
+           "y": 6100,
+           "label": "Mon"
+          },
+          {
+           "x": 7400,
+           "y": 7000,
+           "label": "Tue"
+          },
+          {
+           "x": 6100,
+           "y": 8800,
+           "label": "Wed"
+          },
+          {
+           "x": 9000,
+           "y": 9100,
+           "label": "Thu"
+          },
+          {
+           "x": 4300,
+           "y": 3900,
+           "label": "Fri"
+          },
+          {
+           "x": 11000,
+           "y": 12000,
+           "label": "Sat"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

@@ -559,6 +559,27 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/take-pictures.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\pictures"
           Copy-Item "$env:RUNNER_TEMP\demo-files.txt" "$env:RUNNER_TEMP\pictures\"
 
+      # The drawn kinds (charts, rings, gauges, flags and the composition kinds) on their own, at three widths, in light, dark and
+      # right to left; the screens are written for the purpose, and the protocol's own examples.
+      - name: Pictures of the drawn kinds
+        if: matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter Navree.Demo.exe | Select-Object -First 1
+          $folder = Split-Path -Parent $exe.FullName
+          $out = "$env:RUNNER_TEMP\pictures\kinds"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          foreach ($look in @(@('--light'), @('--dark'), @('--light', '--rtl'))) {
+            $arguments = @('--kinds', $out) + $look
+            $run = Start-Process -FilePath $exe.FullName -ArgumentList $arguments -WorkingDirectory $folder -PassThru
+            if (-not $run.WaitForExit(480000)) { "the kinds walk $($look -join ' ') did not end in 480 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+          }
+          Get-ChildItem $out | ForEach-Object { "$($_.Name) $($_.Length)" }
+          Get-ChildItem $out -Filter '*kinds.txt' | ForEach-Object { "--- $($_.Name)"; Get-Content $_.FullName }
+          $log = Join-Path $folder 'navree-demo.log'
+          if (Test-Path $log) { Copy-Item $log (Join-Path $out 'navree-demo.log') }
+
       - name: A picture was taken
         if: matrix.variant == 'image'
         shell: pwsh
