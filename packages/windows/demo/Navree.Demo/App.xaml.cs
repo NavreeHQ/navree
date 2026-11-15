@@ -70,8 +70,8 @@ public partial class App : Application
             ChoicesFolder = testing ? Path.Combine(Path.GetTempPath(), "navree-demo-place-" + Environment.ProcessId) : null,
         };
         string? sheet = Option(arguments, "--sheet");
-        IFetcher? fetcher = sheet is not null && CorpusFetcher.Folder() is string corpus
-            ? new CorpusFetcher(corpus)
+        IFetcher? fetcher = sheet is not null && CorpusFetcher.Folders() is var (corpus, sheets)
+            ? new CorpusFetcher(corpus, sheets)
             : Array.IndexOf(arguments, "--offline") >= 0
                 ? new OfflineFetcher()
                 : answers is null ? null : new FixtureFetcher(answers, Array.IndexOf(arguments, "--search") >= 0);

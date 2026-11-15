@@ -1,0 +1,35 @@
+{
+  "navree": 1,
+  "build": "3f9a1c07b2de",
+  "vocab": 0,
+  "screen": {
+    "title": "New order",
+    "body": {
+      "t": "form",
+      "id": "new-order",
+      "action": "/orders",
+      "method": "post",
+      "children": [
+        {
+          "t": "field",
+          "name": "customer",
+          "label": "Customer",
+          "required": true,
+          "input": { "t": "text", "kind": "text" }
+        },
+        {
+          "t": "field",
+          "name": "quantity",
+          "label": "Quantity",
+          "input": { "t": "text", "kind": "number" }
+        },
+        {
+          "t": "button",
+          "label": "Save order",
+          "role": "primary",
+          "action": { "t": "submit" }
+        }
+      ]
+    }
+  }
+}
