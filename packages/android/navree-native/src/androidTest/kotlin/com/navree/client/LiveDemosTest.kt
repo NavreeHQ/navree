@@ -304,4 +304,31 @@ class LiveDemosTest {
         assertTrue("the search is still a field", compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty())
         Shots.take("store-restock-done")
     }
+
+    /** The name the board's person menu says it is showing the board as. */
+    private fun viewingAs(app: NavreeSession): String? =
+        front(app)?.screen?.actions.orEmpty().filterIsInstance<Navree.Menu>().firstOrNull { it.id == "viewer" }?.label
+
+    @Test
+    fun theBoardIsShownAsAnotherPersonAndAsTheFirstAgain() {
+        val origin = arguments.getString("board")
+        assumeTrue("no board demo was named", origin != null)
+        val app = start(origin!!)
+        val first = viewingAs(app)
+        assertTrue("the board says who it is shown as", first != null)
+        // The demos have no sign-in; a visitor is named by a cookie. Naming another person is the nearest thing:
+        // a post, a new answer, and the person the screen speaks of changes.
+        fun chooseOther(name: String) {
+            compose.onAllNodes(hasContentDescription("More options") or hasContentDescription("More"), useUnmergedTree = true).onFirst().performClick()
+            Thread.sleep(500)
+            compose.onAllNodes(hasText(name, substring = true) and hasAnyAncestor(isPopup())).onFirst().performClick()
+        }
+        chooseOther("Neha Kapoor")
+        waitFor("the board shown as Neha") { viewingAs(app)?.contains("Neha Kapoor") == true }
+        settled(app)
+        Shots.take("board-as-neha")
+        val back = first!!.removePrefix("Viewing as ").substringBefore(" (")
+        chooseOther(back)
+        waitFor("the board shown as $back") { viewingAs(app)?.contains(back) == true }
+    }
 }
