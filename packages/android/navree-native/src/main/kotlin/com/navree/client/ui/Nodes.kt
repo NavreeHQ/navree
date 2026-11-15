@@ -90,6 +90,7 @@ import com.navree.client.core.Events
 import com.navree.client.design.ContentRules
 import com.navree.client.design.ListRules
 import com.navree.client.design.ProgressRules
+import com.navree.client.design.ScreenRules
 import com.navree.client.design.ToneRole
 import com.navree.client.design.TypeRole
 import com.navree.client.design.expressive.ConnectedChoice
@@ -688,10 +689,8 @@ private fun SplitView(node: Navree.Split, place: Place, modifier: Modifier) {
                 }
             }
         } else {
-            val detailFirst = (node.detail as? Navree.Pane)?.current == true
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                NodeView(if (detailFirst) node.detail else node.primary, place)
-                NodeView(if (detailFirst) node.primary else node.detail, place)
+                for (pane in ScreenRules.splitPanes(node)) NodeView(pane, place)
             }
         }
     }

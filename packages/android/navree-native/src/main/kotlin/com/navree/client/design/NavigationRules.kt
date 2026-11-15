@@ -73,6 +73,18 @@ object NavigationRules {
         return minOf(fontScale, maxOf(1f, fits))
     }
 
+    /**
+     * How many lines the labels of a bar's equal items may take: two where a
+     * whole label does not fit on one line of its item at the default size (it
+     * wraps between its words, rather than ending in an ellipsis), else what
+     * the plan says.
+     */
+    fun labelLines(widthDp: Int, labels: List<String>, planned: Int): Int {
+        val longest = labels.maxOfOrNull { it.length } ?: return planned
+        val room = widthDp / labels.size.coerceAtLeast(1) - ITEM_SIDES_DP
+        return if (longest * LABEL_GLYPH_DP > room) maxOf(planned, 2) else planned
+    }
+
     /** `groups` is how many destinations each group of the shell holds. */
     fun plan(window: WindowInfo, groups: List<Int>): NavigationPlan {
         val total = groups.sum()

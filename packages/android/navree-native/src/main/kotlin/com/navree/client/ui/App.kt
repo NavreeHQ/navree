@@ -353,7 +353,9 @@ private fun BottomBar(destinations: List<Destination>, plan: NavigationPlan, sel
     // In a wider window the bar's items sit side by side with their icons, in the middle.
     val beside = window.width >= WidthClass.Medium
     // Equal items share the width: the labels grow with the text setting only as far as their longest word fits.
-    val scale = if (beside) window.fontScale else NavigationRules.labelScale(window.fontScale, window.widthDp, plan.shown.mapNotNull { destinations.getOrNull(it)?.label })
+    val labels = plan.shown.mapNotNull { destinations.getOrNull(it)?.label }
+    val scale = if (beside) window.fontScale else NavigationRules.labelScale(window.fontScale, window.widthDp, labels)
+    val lines = if (beside) plan.labelLines else NavigationRules.labelLines(window.widthDp, labels, plan.labelLines)
     ShortNavigationBar(arrangement = if (beside) ShortNavigationBarArrangement.Centered else ShortNavigationBarArrangement.EqualWeight) {
         for (index in plan.shown) {
             val destination = destinations.getOrNull(index) ?: continue
@@ -361,7 +363,7 @@ private fun BottomBar(destinations: List<Destination>, plan: NavigationPlan, sel
                 selected = index == selected,
                 onClick = { choose(index) },
                 icon = { WithTextScale(scale) { NavIcon(destination, index == selected) } },
-                label = { WithTextScale(scale) { NavLabel(destination.label, plan) } },
+                label = { WithTextScale(scale) { NavLabel(destination.label, plan.copy(labelLines = lines)) } },
                 iconPosition = if (beside) NavigationItemIconPosition.Start else NavigationItemIconPosition.Top,
             )
         }

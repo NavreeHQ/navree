@@ -461,6 +461,30 @@ class FormRulesTest {
     }
 }
 
+class SplitPanesTest {
+    private fun pane(role: Navree.PaneRole, current: Boolean = false, vararg inside: Navree.Node) = Navree.Pane(role = role, current = current, children = inside.toList())
+
+    @Test
+    fun a_conversation_is_the_pane_in_hand_even_when_it_is_deep_in_the_detail() {
+        val thread = pane(Navree.PaneRole.DETAIL, current = true)
+        val customer = pane(Navree.PaneRole.INSPECTOR)
+        val list = pane(Navree.PaneRole.LIST)
+        val inner = Navree.Split(primary = thread, detail = customer)
+        val outer = Navree.Split(primary = list, detail = inner)
+        assertEquals(listOf<Navree.Node>(inner), ScreenRules.splitPanes(outer))
+        assertEquals("the thread, the customer under it", listOf<Navree.Node>(thread, customer), ScreenRules.splitPanes(inner))
+    }
+
+    @Test
+    fun a_list_in_hand_is_drawn_alone_and_a_split_with_none_in_hand_draws_both() {
+        val list = pane(Navree.PaneRole.LIST, current = true)
+        val empty = pane(Navree.PaneRole.DETAIL)
+        assertEquals(listOf<Navree.Node>(list), ScreenRules.splitPanes(Navree.Split(primary = list, detail = empty)))
+        val plain = Navree.Split(primary = pane(Navree.PaneRole.LIST), detail = empty)
+        assertEquals(listOf(plain.primary, plain.detail), ScreenRules.splitPanes(plain))
+    }
+}
+
 class BoardRulesTest {
     private fun section(title: String) = Navree.Section(title = title)
 
@@ -568,6 +592,13 @@ class NavigationLabelTest {
         val labels = listOf("All open", "Assigned to me", "Unassigned", "Snoozed", "Closed")
         val scale = NavigationRules.labelScale(2.0f, 412, labels)
         assertTrue("no word of five labels fits at twice the size: $scale", scale < 1.3f && scale >= 1f)
+    }
+
+    @Test
+    fun a_label_that_does_not_fit_one_line_wraps_between_its_words() {
+        val labels = listOf("All open", "Assigned to me", "Unassigned", "Snoozed", "Closed")
+        assertEquals(2, NavigationRules.labelLines(412, labels, 1))
+        assertEquals(1, NavigationRules.labelLines(412, listOf("Dashboard", "Orders", "Inventory"), 1))
     }
 
     @Test

@@ -300,6 +300,23 @@ object ScreenRules {
     fun twoPanes(window: WindowInfo, first: Navree.Screen?, depth: Int): Boolean =
         depth >= 2 && window.width >= WidthClass.Expanded && window.height != HeightClass.Compact && isCollection(first?.body)
 
+    /**
+     * What a split draws where there is room for one pane: the pane the server
+     * says is in hand (the one that holds a pane marked `current`, however deep),
+     * with an inspector beside it under it. A split with none in hand draws
+     * both, the list first. The pane out of hand is not drawn: it is where Back goes.
+     */
+    fun splitPanes(split: Navree.Split): List<Navree.Node> {
+        fun holdsCurrent(node: Navree.Node) = node.walk().any { it is Navree.Pane && it.current }
+        val primary = split.primary
+        val detail = split.detail
+        return when {
+            holdsCurrent(detail) -> listOf(detail)
+            holdsCurrent(primary) -> if (detail is Navree.Pane && detail.role == Navree.PaneRole.INSPECTOR) listOf(primary, detail) else listOf(primary)
+            else -> listOf(primary, detail)
+        }
+    }
+
     /** The width of the list pane, in dp, when there are two. */
     fun listPaneDp(window: WindowInfo): Int = if (window.width >= WidthClass.Large) 412 else 360
 
