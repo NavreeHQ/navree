@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use http::Method;
 use navree_http::{Controller, HttpModule, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
-    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
+    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, PluginInfo, ProviderKey, Resolver,
 };
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_ui::table::NoFilter;
@@ -397,4 +397,438 @@ fn test_view_says_which_extensions_a_page_uses_including_in_table_rows() {
 
     let none = TestView::of(&View::new("Plain").body(el("p").child("Ludhiana")));
     assert!(!none.uses_extension(&MAP) && !none.uses_extension(&BADGE));
+}
+
+/// The plugin that ships the map: its namespace is `geo`.
+fn geo() -> PluginInfo {
+    PluginInfo::new(
+        "navree-plugin-geo",
+        env!("CARGO_CRATE_NAME"),
+        "geo",
+        "1.0.0",
+    )
+}
+
+/// An extension of another namespace, one of the app's own, a second map with other files, and
+/// extensions whose declarations the boot refuses.
+static PIN: UiExtension = UiExtension::new("maps", "pin").sheet(ExtensionFile::__new(
+    b"/* scoped for maps */",
+    "bbbbbbbbbbbb",
+    Some("maps"),
+));
+static RATING: UiExtension = UiExtension::new("app", "rating").sheet(ExtensionFile::__new(
+    b"/* scoped for app */",
+    "cccccccccccc",
+    Some("app"),
+));
+static OTHER_MAP: UiExtension = UiExtension::new("geo", "map")
+    .script(ExtensionFile::__new(
+        b"export const contract = 1; /* another map */",
+        "eeeeeeeeeeee",
+        None,
+    ))
+    .contract(1);
+static TOUR: UiExtension = UiExtension::new("geo", "tour").script(ExtensionFile::__new(
+    b"export const contract = 1;",
+    "dddddddddddd",
+    None,
+));
+static NEWER_TOUR: UiExtension = UiExtension::new("geo", "tour")
+    .script(ExtensionFile::__new(
+        b"export const contract = 2;",
+        "dddddddddddd",
+        None,
+    ))
+    .contract(2);
+static EMPTY: UiExtension = UiExtension::new("geo", "empty");
+
+/// A module of the plugin `geo` that contributes extensions.
+macro_rules! plugin_module {
+    ($name:ident, $($extension:expr),+) => {
+        struct $name;
+
+        impl Module for $name {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(geo());
+                $(m.contribute($extension);)+
+            }
+        }
+    };
+}
+
+/// A module that names no plugin and contributes extensions.
+macro_rules! app_module {
+    ($name:ident, $($extension:expr),+) => {
+        struct $name;
+
+        impl Module for $name {
+            fn register(&self, m: &mut ModuleBuilder) {
+                $(m.contribute($extension);)+
+            }
+        }
+    };
+}
+
+plugin_module!(GeoModule, MAP, BADGE);
+plugin_module!(MapsModule, PIN);
+plugin_module!(GeoMapModule, MAP);
+plugin_module!(NoContractModule, TOUR);
+plugin_module!(NewerContractModule, NEWER_TOUR);
+plugin_module!(EmptyModule, EMPTY);
+plugin_module!(BadgeModule, BADGE);
+app_module!(Shop, BADGE);
+app_module!(ShopOwn, RATING);
+app_module!(FirstMapModule, MAP);
+app_module!(SecondMapModule, OTHER_MAP);
+app_module!(SameMapModule, MAP);
+
+/// What the log says, one line each, with every `WARN` and `INFO` line that is about the files.
+fn said_about_extensions(capture: &LogCapture) -> Vec<String> {
+    capture
+        .lines()
+        .into_iter()
+        .filter(|line| line.contains("UI extension"))
+        .collect()
+}
+
+/// Asks `app` for `path` and checks it is not found.
+async fn not_found(app: &TestApp, path: &str) {
+    app.client().get(path).send().await.assert_status(404);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_extension_route_serves_current_hashes_immutable_and_old_ones_uncached() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let app = builder().module(UiModule).module(GeoModule).build().await;
+    let script = MAP.script_url().expect("a script");
+    let sheet = MAP.sheet_url().expect("a stylesheet");
+
+    let served = app.client().get(script).send().await.assert_status(200);
+    assert_eq!(
+        served.header("content-type"),
+        Some("text/javascript; charset=utf-8")
+    );
+    assert_eq!(
+        served.header("cache-control"),
+        Some("public, max-age=31536000, immutable")
+    );
+    assert_eq!(
+        &served.bytes()[..],
+        MAP.script_file().expect("a script").bytes()
+    );
+    let packed = app
+        .client()
+        .get(script)
+        .header("accept-encoding", "br")
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(packed.header("content-encoding"), Some("br"));
+
+    let served = app.client().get(sheet).send().await.assert_status(200);
+    assert_eq!(
+        served.header("content-type"),
+        Some("text/css; charset=utf-8")
+    );
+    assert_eq!(
+        served.header("cache-control"),
+        Some("public, max-age=31536000, immutable")
+    );
+    assert_eq!(
+        &served.bytes()[..],
+        MAP.sheet_file().expect("a stylesheet").bytes()
+    );
+
+    // An older hash still gets the current file, uncached, so a page open across a deploy works.
+    let old = app
+        .client()
+        .get("/_navree/ui/ext/geo.map-000000000000.js")
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(old.header("cache-control"), Some("no-cache"));
+    assert_eq!(
+        &old.bytes()[..],
+        MAP.script_file().expect("a script").bytes()
+    );
+
+    // A client that holds the current file is told so.
+    app.client()
+        .get(script)
+        .header("if-none-match", "\"1a2b3c4d5e6f\"")
+        .send()
+        .await
+        .assert_status(304);
+
+    let routes = navree_http::route_table(app.ctx())
+        .await
+        .expect("the route table");
+    let route = routes
+        .iter()
+        .find(|route| route.name.as_deref() == Some("ui.extensions"))
+        .expect("the extension route");
+    assert!(route.access.public);
+    assert_eq!(
+        route.api.as_ref().and_then(|api| api.summary.as_deref()),
+        Some("A UI extension's script or stylesheet")
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn an_app_with_no_extension_has_no_extension_route() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let app = builder().module(UiModule).module(PagesModule).build().await;
+    let routes = navree_http::route_table(app.ctx())
+        .await
+        .expect("the route table");
+    assert!(
+        routes
+            .iter()
+            .all(|route| route.name.as_deref() != Some("ui.extensions"))
+    );
+    app.client()
+        .get(MAP.script_url().expect("a script"))
+        .send()
+        .await
+        .assert_status(404);
+    assert!(said_about_extensions(&capture).is_empty());
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn an_unknown_extension_file_is_warned_only_for_the_apps_namespaces_and_at_most_64_times() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let app = builder().module(UiModule).module(GeoModule).build().await;
+    let warned = || {
+        capture
+            .lines()
+            .into_iter()
+            .filter(|line| line.contains("was asked for"))
+            .collect::<Vec<_>>()
+    };
+
+    // A name in a namespace of the plugin: once, however often it is asked for.
+    for _ in 0..3 {
+        not_found(&app, "/_navree/ui/ext/geo.pin-0123456789ab.js").await;
+    }
+    let lines = warned();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].contains("WARN")
+            && lines[0].contains(
+                "UI extension file `geo.pin-0123456789ab.js` was asked for, but `geo` has no extension of that name: contribute it with m.contribute(..)"
+            ),
+        "{}",
+        lines[0]
+    );
+    // A name in the app's own namespace warns too; another namespace, a name of no shape and a
+    // name that does have an extension (of the other kind of file) do not.
+    not_found(&app, "/_navree/ui/ext/app.x-0123456789ab.css").await;
+    assert_eq!(warned().len(), 2);
+    for silent in [
+        "/_navree/ui/ext/other.map-0123456789ab.js",
+        "/_navree/ui/ext/geo.map.js",
+        "/_navree/ui/ext/geo.map-0123456789ab.mjs",
+        "/_navree/ui/ext/geo.badge-0123456789ab.js",
+        "/_navree/ui/ext/Geo.pin-0123456789ab.js",
+    ] {
+        not_found(&app, silent).await;
+    }
+    assert_eq!(warned().len(), 2, "{:?}", warned());
+    // Anyone can ask for any name: the log holds 64 of them and no more.
+    for number in 0..70 {
+        not_found(&app, &format!("/_navree/ui/ext/geo.name{number}-0123456789ab.js")).await;
+    }
+    assert_eq!(warned().len(), 64);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_extension_outside_its_namespace_fails_the_boot() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let Err(error) = builder()
+        .module(UiModule)
+        .module(MapsModule)
+        .try_build()
+        .await
+    else {
+        panic!("a plugin's extension is under its plugin's namespace")
+    };
+    assert!(
+        error.to_string().contains(
+            "plugin `navree-plugin-geo` contributes the UI extension `maps.pin`, which is not under its namespace: build it with UiExtension::new(\"geo\", \"pin\")"
+        ),
+        "{error}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn an_app_module_taking_a_plugins_namespace_for_an_extension_fails_the_boot() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let Err(error) = builder()
+        .module(UiModule)
+        .module(GeoMapModule)
+        .module(Shop)
+        .try_build()
+        .await
+    else {
+        panic!("an app's own extension is under a namespace no plugin has")
+    };
+    assert!(
+        error.to_string().contains(
+            "module `Shop` contributes the UI extension `geo.badge` under `geo`, the namespace of plugin `navree-plugin-geo`; an app's own extensions use a namespace no plugin has, such as app"
+        ),
+        "{error}"
+    );
+
+    // The same module with an extension under `app` boots, and its file is served.
+    let app = builder()
+        .module(UiModule)
+        .module(GeoMapModule)
+        .module(ShopOwn)
+        .build()
+        .await;
+    app.client()
+        .get(RATING.sheet_url().expect("a stylesheet"))
+        .send()
+        .await
+        .assert_status(200);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn two_modules_contributing_one_extension_name_fail_the_boot() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let Err(error) = builder()
+        .module(UiModule)
+        .module(FirstMapModule)
+        .module(SecondMapModule)
+        .try_build()
+        .await
+    else {
+        panic!("two different files can not share one name")
+    };
+    let error = error.to_string();
+    for part in [
+        "UI extension `geo.map` is contributed by both `",
+        "FirstMapModule",
+        "SecondMapModule",
+        "` with different files; give one another name",
+    ] {
+        assert!(error.contains(part), "{part}: {error}");
+    }
+
+    // The same files from both are one extension: it boots, is served and is logged once.
+    let app = builder()
+        .module(UiModule)
+        .module(FirstMapModule)
+        .module(SameMapModule)
+        .build()
+        .await;
+    app.client()
+        .get(MAP.script_url().expect("a script"))
+        .send()
+        .await
+        .assert_status(200);
+    let said = said_about_extensions(&capture);
+    assert_eq!(
+        said.iter()
+            .filter(|line| line.contains("UI extension geo.map "))
+            .count(),
+        1,
+        "{said:?}"
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_script_extension_without_a_contract_or_with_an_unknown_one_fails_the_boot() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let Err(error) = builder()
+        .module(UiModule)
+        .module(NoContractModule)
+        .try_build()
+        .await
+    else {
+        panic!("a script names its contract")
+    };
+    assert!(
+        error.to_string().contains(
+            "UI extension `geo.tour` has a script but declares no contract: add .contract(1)"
+        ),
+        "{error}"
+    );
+
+    let Err(error) = builder()
+        .module(UiModule)
+        .module(NewerContractModule)
+        .try_build()
+        .await
+    else {
+        panic!("a contract this toolkit does not run stops the boot")
+    };
+    assert!(
+        error.to_string().contains(
+            "UI extension `geo.tour` is written for extension contract 2, and this navree-ui runs contract 1: update navree, or use a release of `navree-plugin-geo` written for contract 1"
+        ),
+        "{error}"
+    );
+
+    let Err(error) = builder()
+        .module(UiModule)
+        .module(EmptyModule)
+        .try_build()
+        .await
+    else {
+        panic!("an extension has a file")
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("UI extension `geo.empty` has no script and no stylesheet"),
+        "{error}"
+    );
+
+    // A stylesheet alone needs no contract.
+    let app = builder()
+        .module(UiModule)
+        .module(BadgeModule)
+        .build()
+        .await;
+    app.client()
+        .get(BADGE.sheet_url().expect("a stylesheet"))
+        .send()
+        .await
+        .assert_status(200);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_booted_app_logs_each_extension_once_with_the_size_of_its_files() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let app = builder().module(UiModule).module(GeoModule).build().await;
+    let said = said_about_extensions(&capture);
+    assert!(
+        said.iter().any(|line| line.contains("INFO")
+            && line.contains(
+                "UI extension geo.map (plugin `navree-plugin-geo`): script 1 KB, stylesheet 1 KB, contract 1"
+            )),
+        "{said:?}"
+    );
+    assert!(
+        said.iter().any(|line| line.contains(
+            "UI extension geo.badge (plugin `navree-plugin-geo`): stylesheet 1 KB"
+        )),
+        "{said:?}"
+    );
+    app.shutdown().await.unwrap();
 }

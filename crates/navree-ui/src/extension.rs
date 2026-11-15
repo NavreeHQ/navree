@@ -19,6 +19,16 @@
 //! `app`. A plugin contributing an extension outside its namespace stops the boot, and so
 //! do two modules giving one extension name to different files.
 
+use std::collections::BTreeSet;
+use std::sync::{Mutex, PoisonError};
+
+use bytes::Bytes;
+use http::{HeaderMap, StatusCode};
+use navree_http::response::{IntoResponse, Response};
+use navree_kernel::AppContext;
+use navree_kernel::__private::is_community_plugin;
+
+use crate::assets;
 use crate::node::{AttrValue, Node, Uses};
 
 /// Where extension files are served.
@@ -627,6 +637,272 @@ pub(crate) fn markup_values(markup: &str) -> Vec<(&'static str, &str)> {
         .collect()
 }
 
+/// The most unknown files a boot warns about: a request can name anything, so the log is
+/// never filled by asking.
+const MOST_WARNED: usize = 64;
+
+/// One file of a contributed extension as the toolkit serves it: the file, and its brotli form
+/// made once.
+struct Served {
+    /// The name before the hash (`geo.map`).
+    stem: String,
+    /// `js` or `css`.
+    ext: &'static str,
+    hash: &'static str,
+    bytes: &'static [u8],
+    brotli: Bytes,
+}
+
+impl Served {
+    fn new(stem: &str, ext: &'static str, file: ExtensionFile) -> Self {
+        Self {
+            stem: stem.to_owned(),
+            ext,
+            hash: file.hash(),
+            bytes: file.bytes(),
+            brotli: Bytes::from(crate::compress::brotli(file.bytes())),
+        }
+    }
+
+    /// What the file is served as.
+    fn content_type(&self) -> &'static str {
+        if self.ext == "js" {
+            "text/javascript; charset=utf-8"
+        } else {
+            "text/css; charset=utf-8"
+        }
+    }
+}
+
+/// The files the app's modules contributed as UI extensions, ready to serve, and what is
+/// needed to warn about a file nobody contributed.
+#[derive(Default)]
+pub(crate) struct Extensions {
+    served: Vec<Served>,
+    /// The namespaces a missing file is worth a warning in: the app's plugins' and `app`.
+    watched: Vec<String>,
+    /// The (namespace, name) pairs already warned about.
+    warned: Mutex<BTreeSet<(String, String)>>,
+}
+
+impl Extensions {
+    /// Whether no module contributed an extension: the toolkit then has no route for them.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.served.is_empty()
+    }
+}
+
+/// Says `text` once among `errors`.
+fn note(errors: &mut Vec<String>, text: String) {
+    if !errors.contains(&text) {
+        errors.push(text);
+    }
+}
+
+/// An extension as it was first contributed, with who contributed it.
+struct First {
+    stem: String,
+    extension: UiExtension,
+    /// The module that contributed it.
+    module: &'static str,
+    /// What the log calls who contributed it: the plugin, or the module when it names none.
+    who: String,
+}
+
+/// The extensions the app's modules contributed, checked and ready to serve. Fails with every
+/// problem when a plugin contributes an extension outside its namespace, a module of the app
+/// takes a plugin's namespace, two modules give one name to different files, an extension has
+/// no file, a script has no contract, or a contract is one this toolkit does not run. Two
+/// modules that give one name the same files contribute one extension. Each extension is
+/// logged once, with the size of its files.
+pub(crate) fn checked(ctx: &AppContext) -> Result<Extensions, String> {
+    let contributed = ctx.contributions::<UiExtension>();
+    if contributed.is_empty() {
+        return Ok(Extensions::default());
+    }
+    let plugins = ctx.plugins().plugins;
+    let mut errors: Vec<String> = Vec::new();
+    let mut firsts: Vec<First> = Vec::new();
+    for entry in &contributed {
+        let extension: UiExtension = *entry.value;
+        let module = &entry.module;
+        let stem = extension.stem();
+        let plugin = ctx.plugin(module.id);
+
+        // Whose namespace it is: a plugin keeps to its own, and nobody else takes a plugin's.
+        match plugin {
+            Some(info) if is_community_plugin(ctx, module.id) => {
+                if info.namespace != extension.namespace() {
+                    note(
+                        &mut errors,
+                        format!(
+                            "plugin `{}` contributes the UI extension `{stem}`, which is not under its namespace: build it with UiExtension::new(\"{}\", \"{}\")",
+                            info.name,
+                            info.namespace,
+                            extension.name()
+                        ),
+                    );
+                }
+            }
+            _ => {
+                let owner = plugins
+                    .iter()
+                    .find(|owner| owner.info.namespace == extension.namespace());
+                if let Some(owner) = owner
+                    && plugin.map(|info| info.namespace) != Some(extension.namespace())
+                {
+                    note(
+                        &mut errors,
+                        format!(
+                            "module `{}` contributes the UI extension `{stem}` under `{}`, the namespace of plugin `{}`; an app's own extensions use a namespace no plugin has, such as app",
+                            module.name,
+                            extension.namespace(),
+                            owner.info.name
+                        ),
+                    );
+                }
+            }
+        }
+
+        // One name is one set of files, however many modules say it.
+        if let Some(earlier) = firsts.iter().find(|first| first.stem == stem) {
+            let files = |extension: &UiExtension| (extension.script_file(), extension.sheet_file());
+            if files(&earlier.extension) != files(&extension) {
+                note(
+                    &mut errors,
+                    format!(
+                        "UI extension `{stem}` is contributed by both `{}` and `{}` with different files; give one another name",
+                        earlier.module, module.name
+                    ),
+                );
+            }
+            continue;
+        }
+        let who = match plugin {
+            Some(info) => format!("plugin `{}`", info.name),
+            None => format!("module `{}`", module.name),
+        };
+        firsts.push(First {
+            stem: stem.clone(),
+            extension,
+            module: module.name,
+            who,
+        });
+
+        if extension.script_file().is_none() && extension.sheet_file().is_none() {
+            note(
+                &mut errors,
+                format!("UI extension `{stem}` has no script and no stylesheet"),
+            );
+        }
+        if extension.script_file().is_some() && extension.declared_contract().is_none() {
+            note(
+                &mut errors,
+                format!(
+                    "UI extension `{stem}` has a script but declares no contract: add .contract(1)"
+                ),
+            );
+        }
+        if let Some(contract) = extension.declared_contract()
+            && contract != EXTENSION_CONTRACT
+        {
+            let owner = plugin.map_or(module.name, |info| info.name);
+            note(
+                &mut errors,
+                format!(
+                    "UI extension `{stem}` is written for extension contract {contract}, and this navree-ui runs contract {EXTENSION_CONTRACT}: update navree, or use a release of `{owner}` written for contract {EXTENSION_CONTRACT}"
+                ),
+            );
+        }
+    }
+    if !errors.is_empty() {
+        return Err(errors.join("\n"));
+    }
+
+    let mut served = Vec::new();
+    for First {
+        stem,
+        extension,
+        who,
+        ..
+    } in &firsts
+    {
+        let mut said = Vec::new();
+        if let Some(file) = extension.script_file() {
+            said.push(format!("script {} KB", file.bytes().len().div_ceil(1024)));
+            served.push(Served::new(stem, "js", file));
+        }
+        if let Some(file) = extension.sheet_file() {
+            said.push(format!("stylesheet {} KB", file.bytes().len().div_ceil(1024)));
+            served.push(Served::new(stem, "css", file));
+        }
+        if let Some(contract) = extension.declared_contract() {
+            said.push(format!("contract {contract}"));
+        }
+        tracing::info!(
+            target: "navree::ui",
+            "UI extension {stem} ({who}): {}",
+            said.join(", ")
+        );
+    }
+    let mut watched: Vec<String> = plugins
+        .iter()
+        .map(|plugin| plugin.info.namespace.to_owned())
+        .collect();
+    watched.push("app".to_owned());
+    watched.sort();
+    watched.dedup();
+    Ok(Extensions {
+        served,
+        watched,
+        warned: Mutex::new(BTreeSet::new()),
+    })
+}
+
+/// Answers `GET /_navree/ui/ext/{file}`: the script or stylesheet named in `file`, `immutable`
+/// when the hash is its own, uncached under an older hash (a page open across a deploy keeps
+/// working), and not found for a name no module contributed. A name that is not an extension
+/// file's is not found, silently; a name in one of the app's own namespaces (a plugin's, or
+/// `app`) that no extension has is a warning, once for each name, for at most 64 of them.
+pub(crate) fn respond(file: &str, request: &HeaderMap, extensions: &Extensions) -> Response {
+    let Some(asked) = read_file_name(file) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let stem = format!("{}.{}", asked.namespace, asked.name);
+    if let Some(served) = extensions
+        .served
+        .iter()
+        .find(|served| served.stem == stem && served.ext == asked.ext)
+    {
+        return assets::answer(
+            served.hash,
+            served.content_type(),
+            served.hash == asked.hash,
+            request,
+            Bytes::from_static(served.bytes),
+            None,
+            Some(served.brotli.clone()),
+        );
+    }
+    let known = extensions.served.iter().any(|served| served.stem == stem);
+    if !known && extensions.watched.iter().any(|name| name == asked.namespace) {
+        let mut warned = extensions
+            .warned
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if warned.len() < MOST_WARNED
+            && warned.insert((asked.namespace.to_owned(), asked.name.to_owned()))
+        {
+            tracing::warn!(
+                target: "navree::ui",
+                "UI extension file `{file}` was asked for, but `{}` has no extension of that name: contribute it with m.contribute(..)",
+                asked.namespace
+            );
+        }
+    }
+    StatusCode::NOT_FOUND.into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -969,6 +1245,65 @@ mod tests {
         let found = named(&tree);
         assert_eq!(found.scripts, [map_script]);
         assert_eq!(found.sheets, [map_sheet, badge_sheet]);
+    }
+
+    #[test]
+    fn a_file_is_served_by_its_hash_and_an_old_hash_still_gets_it_uncached() {
+        use http::header::{
+            ACCEPT_ENCODING, CACHE_CONTROL, CONTENT_ENCODING, CONTENT_TYPE, HeaderValue,
+        };
+
+        let extensions = Extensions {
+            served: vec![
+                Served::new("geo.map", "js", SCRIPT),
+                Served::new("geo.map", "css", SHEET),
+            ],
+            watched: vec!["geo".to_owned()],
+            warned: Mutex::new(BTreeSet::new()),
+        };
+        assert!(!extensions.is_empty());
+        assert!(Extensions::default().is_empty());
+
+        let mut request = HeaderMap::new();
+        request.insert(ACCEPT_ENCODING, HeaderValue::from_static("br"));
+        let current = respond("geo.map-1a2b3c4d5e6f.js", &request, &extensions);
+        assert_eq!(current.status(), StatusCode::OK);
+        assert_eq!(
+            current.headers()[CONTENT_TYPE],
+            "text/javascript; charset=utf-8"
+        );
+        assert_eq!(
+            current.headers()[CACHE_CONTROL],
+            "public, max-age=31536000, immutable"
+        );
+        assert_eq!(current.headers()[CONTENT_ENCODING], "br");
+
+        let sheet = respond("geo.map-0f9e8d7c6b5a.css", &HeaderMap::new(), &extensions);
+        assert_eq!(sheet.status(), StatusCode::OK);
+        assert_eq!(sheet.headers()[CONTENT_TYPE], "text/css; charset=utf-8");
+        assert!(sheet.headers().get(CONTENT_ENCODING).is_none());
+
+        let old = respond("geo.map-000000000000.js", &HeaderMap::new(), &extensions);
+        assert_eq!(old.status(), StatusCode::OK);
+        assert_eq!(old.headers()[CACHE_CONTROL], "no-cache");
+
+        // A name no extension has, a name of no shape and a folder above are not found.
+        for missing in [
+            "geo.pin-1a2b3c4d5e6f.js",
+            "geo.badge-0f9e8d7c6b5a.css",
+            "other.map-1a2b3c4d5e6f.js",
+            "geo.map.js",
+            "geo.map-1a2b3c4d5e6f.mjs",
+            "../geo.map-1a2b3c4d5e6f.js",
+            "geo.map-1a2b3c4d5e6f.js/",
+            "",
+        ] {
+            assert_eq!(
+                respond(missing, &request, &extensions).status(),
+                StatusCode::NOT_FOUND,
+                "{missing}"
+            );
+        }
     }
 
     #[test]
