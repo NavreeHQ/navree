@@ -552,6 +552,20 @@ mod tests {
             scope(".a{--off: ;--on:initial;color:red ! important}").as_deref(),
             Ok(wrapped(".a{--off: ;--on:initial;color:red!important}").as_str())
         );
+        // Also last in its block, with a comment in it, and as `--off:;` (no value, no space).
+        assert_eq!(
+            scope(".a{--off:/* x */ }").as_deref(),
+            Ok(wrapped(".a{--off: }").as_str())
+        );
+        assert_eq!(
+            scope(".a{--off:;--on: }").as_deref(),
+            Ok(wrapped(".a{--off:;--on: }").as_str())
+        );
+        // An ordinary property keeps no white space for a value, however it is written.
+        assert_eq!(
+            scope(".a{color: ;width:1px;height:\n}").as_deref(),
+            Ok(wrapped(".a{color:;width:1px;height:}").as_str())
+        );
     }
 
     #[test]

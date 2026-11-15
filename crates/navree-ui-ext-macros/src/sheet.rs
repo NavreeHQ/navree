@@ -638,7 +638,13 @@ fn opens_a_custom_property(prefix: &[Tok]) -> bool {
 /// A declaration, or `None` for what a browser drops: an item that is not a name, a colon and a
 /// value (`*zoom: 1` is one).
 fn declaration(tokens: &[Tok]) -> Option<Decl> {
-    let (first, rest) = trimmed(tokens).split_first()?;
+    // Only the white space before the name goes: what follows the colon is kept whole, so that a
+    // value of white space only can be told from no value.
+    let tokens = match tokens.first() {
+        Some(token) if is_space(token) => &tokens[1..],
+        _ => tokens,
+    };
+    let (first, rest) = tokens.split_first()?;
     let Kind::Ident(name) = &first.kind else {
         return None;
     };
@@ -663,8 +669,10 @@ fn declaration(tokens: &[Tok]) -> Option<Decl> {
             value = trimmed(&before[..before.len() - 1]);
         }
     }
-    // A value of white space only is a value (a custom property's `--off: ;`).
-    let value = if value.is_empty() && !raw.is_empty() && raw.iter().all(is_space) {
+    // A custom property whose value is white space only keeps it (`--off: ;`, which is not the
+    // same as `--off:;`). An ordinary property with no value has none.
+    let spaced = name.starts_with("--") && !raw.is_empty() && raw.iter().all(is_space);
+    let value = if value.is_empty() && spaced {
         vec![Tok::new(Kind::Space)]
     } else {
         value.to_vec()
