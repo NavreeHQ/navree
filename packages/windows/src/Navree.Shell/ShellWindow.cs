@@ -107,6 +107,15 @@ public sealed partial class ShellWindow : Window
         }));
         root.KeyboardAccelerators.Add(Accelerator(VirtualKey.Left, VirtualKeyModifiers.Menu, () => host.Send(Events.Back)));
 
+        WindowVisibility.Follow(this, host);
+
+        // What the shell keeps of the person (the pictures of their pages) goes with the rest when they sign out.
+        host.AddWipeStep("the pictures", () =>
+        {
+            PictureCache.Clear();
+            return Task.CompletedTask;
+        });
+
         host.StateChanged += Show;
         host.MessageRequested += ShowMessage;
         host.Announcement += Announce;

@@ -127,10 +127,13 @@ internal sealed class ScreenPresenter : Grid
             NodeRenderer.Forget(gone);
         }
 
-        // A web screen that has left the app is not kept here (the web view's own closing is the web page's, which is not this file's).
+        // A web screen that has left the app lets go of its web view and the process behind it.
         foreach (long gone in webs.Keys.Where(id => !host.State.Screens.ContainsKey(id)).ToList())
         {
-            _ = webs.Remove(gone);
+            if (webs.Remove(gone, out WebPage? left))
+            {
+                left.Release();
+            }
         }
 
         double offset = offsets.TryGetValue(screen.Id, out double kept1) ? kept1 : 0;

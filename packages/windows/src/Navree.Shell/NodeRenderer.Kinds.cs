@@ -195,7 +195,7 @@ internal sealed partial class NodeRenderer
 
             if (text.Colour is not null)
             {
-                block.Foreground = KindHooks.HueWords(text.Colour, Models.Hue.Neutral);
+                block.Foreground = KindHooks.HueWords(text.Colour, Models.Hue.Neutral, block);
             }
         }
 
@@ -219,7 +219,7 @@ internal sealed partial class NodeRenderer
             bar.Value = value;
         }
 
-        bar.Foreground = KindHooks.HueBrush(progress.Colour, ProgressRules.Hue(progress));
+        bar.Foreground = KindHooks.HueBrush(progress.Colour, ProgressRules.Hue(progress), owner: bar);
         AutomationProperties.SetName(bar, progress.Label ?? string.Empty);
         if (fraction is null)
         {
@@ -333,8 +333,8 @@ internal sealed partial class NodeRenderer
             // The tint says which thing the card is about and never carries meaning alone: a soft wash over the card's own ground.
             bool dark = Application.Current.RequestedTheme == ApplicationTheme.Dark;
             (double ground, double edge) = ComposeRules.Tint(dark);
-            surface.Background = KindHooks.HueBrush(card.Colour, Models.Hue.Neutral, ground);
-            surface.BorderBrush = KindHooks.HueBrush(card.Colour, Models.Hue.Neutral, edge);
+            surface.Background = KindHooks.HueBrush(card.Colour, Models.Hue.Neutral, ground, surface);
+            surface.BorderBrush = KindHooks.HueBrush(card.Colour, Models.Hue.Neutral, edge, surface);
             Microsoft.UI.Xaml.Controls.Border under = new() { Child = surface, CornerRadius = new CornerRadius(8), Background = Look.Resource("CardBackgroundFillColorDefaultBrush") };
             return Finish(under, card);
         }

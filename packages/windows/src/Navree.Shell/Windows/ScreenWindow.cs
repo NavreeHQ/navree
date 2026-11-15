@@ -59,6 +59,7 @@ internal sealed class ScreenWindow : Window
             WindowFrame.SetRightToLeft(Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id), true);
         }
 
+        WindowVisibility.Follow(this, host);
         frontWas = host.State.Nav.Front;
         host.StateChanged += Show;
         Closed += (_, _) => host.StateChanged -= Show;
