@@ -33,44 +33,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Activation": {
     "name": "Activation",
@@ -361,44 +324,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "AlertDialog": {
     "name": "AlertDialog",
@@ -428,44 +354,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "AlertTone": {
     "name": "AlertTone",
@@ -762,6 +651,12 @@
         "doc": "Adds to the page."
       },
       {
+        "name": "fresh",
+        "generics": "",
+        "args": "",
+        "doc": "This page starts from a clean document and keeps the toolkit's strict policy: in an app with a UI extension, a plugin's island script or an allowed policy source, entering or leaving it is a full page load, no answer it gives is drawn into a page that is not fresh, it is served with `PAGE_CSP`, and no extension mounts on it. In any other app it does nothing. Mark the pages that take a password, a code or a PIN: see `View::fresh`, which this gives the view the page becomes."
+      },
+      {
         "name": "to_view",
         "generics": "",
         "args": "",
@@ -1031,44 +926,7 @@
     ],
     "methods": [],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "At": {
     "name": "At",
@@ -1141,44 +999,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "AuthLayout": {
     "name": "AuthLayout",
@@ -1250,44 +1071,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "AvatarGroup": {
     "name": "AvatarGroup",
@@ -1329,44 +1113,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Backdrop": {
     "name": "Backdrop",
@@ -1452,44 +1199,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "BadgeVariant": {
     "name": "BadgeVariant",
@@ -1573,44 +1283,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Block": {
     "name": "Block",
@@ -1760,44 +1433,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "BreathingGuide": {
     "name": "BreathingGuide",
@@ -1879,44 +1515,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Bubble": {
     "name": "Bubble",
@@ -1940,44 +1539,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "BubbleSide": {
     "name": "BubbleSide",
@@ -2334,44 +1896,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "ButtonGroup": {
     "name": "ButtonGroup",
@@ -2401,44 +1926,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "ButtonKind": {
     "name": "ButtonKind",
@@ -3008,44 +2496,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Carousel": {
     "name": "Carousel",
@@ -3911,44 +3362,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Choice": {
     "name": "Choice",
@@ -4454,44 +3868,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "ColorPicker": {
     "name": "ColorPicker",
@@ -4551,44 +3928,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "ColorStrip": {
     "name": "ColorStrip",
@@ -5176,44 +4516,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "ContainerSize": {
     "name": "ContainerSize",
@@ -6974,44 +6277,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Direction": {
     "name": "Direction",
@@ -7034,44 +6300,7 @@
     ],
     "methods": [],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Dock": {
     "name": "Dock",
@@ -7557,44 +6786,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "EmptyKind": {
     "name": "EmptyKind",
@@ -7919,44 +7111,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "FactGrid": {
     "name": "FactGrid",
@@ -7992,44 +7147,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Faq": {
     "name": "Faq",
@@ -8155,44 +7273,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "FeatureRow": {
     "name": "FeatureRow",
@@ -8270,44 +7351,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "FeedHeight": {
     "name": "FeedHeight",
@@ -8386,44 +7430,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "FieldSet": {
     "name": "FieldSet",
@@ -8447,44 +7454,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Flag": {
     "name": "Flag",
@@ -8556,44 +7526,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "FlagShape": {
     "name": "FlagShape",
@@ -9533,44 +8466,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "GridFit": {
     "name": "GridFit",
@@ -9750,44 +8646,7 @@
     ],
     "methods": [],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "HeadingAlign": {
     "name": "HeadingAlign",
@@ -9930,44 +8789,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Icon": {
     "name": "Icon",
@@ -10198,44 +9020,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "InputGroup": {
     "name": "InputGroup",
@@ -10265,44 +9050,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "InputKind": {
     "name": "InputKind",
@@ -10559,44 +9307,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "ItemVariant": {
     "name": "ItemVariant",
@@ -10712,44 +9423,7 @@
     ],
     "methods": [],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "KindWords": {
     "name": "KindWords",
@@ -10776,44 +9450,7 @@
     ],
     "methods": [],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "LazyEnd": {
     "name": "LazyEnd",
@@ -11260,44 +9897,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Markdown": {
     "name": "Markdown",
@@ -11417,44 +10017,7 @@
     ],
     "methods": [],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "MarkerVariant": {
     "name": "MarkerVariant",
@@ -12081,44 +10644,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Meta": {
     "name": "Meta",
@@ -13051,44 +11577,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "NavGroup": {
     "name": "NavGroup",
@@ -13975,44 +12464,7 @@
     ],
     "methods": [],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Palette": {
     "name": "Palette",
@@ -14198,44 +12650,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "PhoneInput": {
     "name": "PhoneInput",
@@ -14458,44 +12873,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Plan": {
     "name": "Plan",
@@ -14710,44 +13088,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "PopupAlign": {
     "name": "PopupAlign",
@@ -14899,44 +13240,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "PromptInput": {
     "name": "PromptInput",
@@ -15080,44 +13384,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "QuestionnaireLabels": {
     "name": "QuestionnaireLabels",
@@ -15232,44 +13499,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Radius": {
     "name": "Radius",
@@ -17053,44 +15283,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "RowAction": {
     "name": "RowAction",
@@ -17440,44 +15633,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "ScrollHeight": {
     "name": "ScrollHeight",
@@ -17992,44 +16148,7 @@
     ],
     "methods": [],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Series": {
     "name": "Series",
@@ -18846,44 +16965,7 @@
     ],
     "methods": [],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "SkeletonShape": {
     "name": "SkeletonShape",
@@ -19823,44 +17905,7 @@
     ],
     "methods": [],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "SplitHeight": {
     "name": "SplitHeight",
@@ -20132,44 +18177,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Stage": {
     "name": "Stage",
@@ -20277,44 +18285,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "StatBand": {
     "name": "StatBand",
@@ -20344,44 +18315,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "State": {
     "name": "State",
@@ -20964,44 +18898,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Tab": {
     "name": "Tab",
@@ -21115,44 +19012,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "TableCell": {
     "name": "TableCell",
@@ -21182,44 +19042,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "TableHead": {
     "name": "TableHead",
@@ -21255,44 +19078,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "TableMode": {
     "name": "TableMode",
@@ -21348,44 +19134,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Tabs": {
     "name": "Tabs",
@@ -21580,44 +19329,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Text": {
     "name": "Text",
@@ -21665,44 +19377,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "TextVariant": {
     "name": "TextVariant",
@@ -21781,44 +19456,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Theme": {
     "name": "Theme",
@@ -23053,44 +20691,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "ToggleGroup": {
     "name": "ToggleGroup",
@@ -23753,44 +21354,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "Trace": {
     "name": "Trace",
@@ -23826,44 +21390,7 @@
       }
     ],
     "variants": [],
-    "shared": [
-      {
-        "name": "id",
-        "generics": "",
-        "args": "id: impl Into<AttrValue>",
-        "doc": "Sets the root element's `id`."
-      },
-      {
-        "name": "attr",
-        "generics": "",
-        "args": "name: &'static str, value: impl Into<AttrValue>",
-        "doc": "Sets an attribute on the root element."
-      },
-      {
-        "name": "on",
-        "generics": "",
-        "args": "trigger: $crate::Trigger, commands: impl Into<$crate::Commands>",
-        "doc": "Runs `commands` in the browser when `trigger` happens on the root element, with no request: a counter as a field is typed in, a label as a choice is made."
-      },
-      {
-        "name": "hotkey",
-        "generics": "",
-        "args": "key: &str",
-        "doc": "Makes `key` a shortcut that clicks this, or focuses it if it is a field: see `Element::hotkey`."
-      },
-      {
-        "name": "hotkey_within",
-        "generics": "",
-        "args": "key: &str, scope: &str",
-        "doc": "Makes `key` a shortcut that works only while the focus is inside the element whose id is `scope`: see `Element::hotkey_within`."
-      },
-      {
-        "name": "span",
-        "generics": "",
-        "args": "columns: u8",
-        "doc": "Takes `columns` columns of a `Grid`."
-      }
-    ]
+    "shared": []
   },
   "TraceLabels": {
     "name": "TraceLabels",
