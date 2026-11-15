@@ -77,7 +77,12 @@ public sealed partial class DataTable
         }
 
         IReadOnlyList<DataTableColumn> columns = model.Columns;
-        LoadStoredLayout(columns);
+        if (LoadStoredLayout(columns))
+        {
+            // The person's density is known only now, and the height of a row follows it.
+            RecomputeMetrics();
+        }
+
         Dictionary<string, int> byKey = [];
         for (int i = 0; i < columns.Count; i++)
         {
@@ -90,7 +95,7 @@ public sealed partial class DataTable
         // Every column that is not hidden is measured, so that the room decides which of them are shown: the secondary ones go first.
         MeasureWidths(model, presenter, columns, personsOrder.Where(i => !hiddenKeys.Contains(columns[i].Key) && columns[i].Role != ColumnRole.Subtitle).ToList(), remeasure);
         hasCheckColumn = model.Choice.Available;
-        hasChevronColumn = AnyDetail(model);
+        hasChevronColumn = shapeWatch.SawDetail || AnyDetail(model);
         double gutter = (hasCheckColumn ? FrozenGutter.CheckWidth : 0) + (hasChevronColumn ? FrozenGutter.ChevronWidth : 0);
         double[] asked = personsOrder.Select(i => widths.TryGetValue(columns[i].Key, out double known) ? known : ColumnSizing.LeastWidth(columns[i].Kind)).ToArray();
         IReadOnlyList<int> chosen = ColumnSet.Shown(infos, hiddenKeys, forcedShownKeys, asked, viewport - gutter);
@@ -124,7 +129,7 @@ public sealed partial class DataTable
             placedByIndex[order[i]] = built.Columns[i];
         }
 
-        string signature = string.Join('|', order.Select(i => columns[i].Key)) + (hasCheckColumn ? "+c" : string.Empty) + (hasChevronColumn ? "+d" : string.Empty);
+        string signature = string.Join('|', order.Select(i => columns[i].Key)) + (hasCheckColumn ? "+c" : string.Empty) + (hasChevronColumn ? "+d" : string.Empty) + (shape == RowShape.TwoLine ? "+2" : string.Empty);
         bool modeChanged = UpdateMode(columns, order, gutter);
         bool versionChanged = signature != shownSignature || modeChanged;
         if (versionChanged)

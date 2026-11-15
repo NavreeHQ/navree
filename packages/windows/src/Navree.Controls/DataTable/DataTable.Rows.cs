@@ -18,9 +18,9 @@ public sealed partial class DataTable
     private double headerHeight = 40;
     private RowShape shape = RowShape.OneLine;
     private bool sortAsked;
-    private int askedAfterAt = -1;
-    private int askedBeforeAt = -1;
-    private bool heldLimitRaised;
+    private readonly CursorWatch cursorWatch = new();
+    private readonly DetailSeeds detailSeeds = new();
+    private readonly RowShapeWatch shapeWatch = new();
     private bool detailGeometryQueued;
     private DispatcherQueueTimer? anchorPinTimer;
     private DispatcherQueueTimer? assistivePinTimer;
@@ -55,6 +55,8 @@ public sealed partial class DataTable
         activeSet = false;
         nameCache.Clear();
         openKeys.Clear();
+        detailSeeds.Forget();
+        shapeWatch.Forget();
         detailExtras.Clear();
         if (templateWired)
         {
@@ -73,8 +75,7 @@ public sealed partial class DataTable
     // Everything is drawn again for a model and a presenter: the columns are measured, the rows are listed.
     private void ModelAttached()
     {
-        askedAfterAt = askedBeforeAt = -1;
-        heldLimitRaised = false;
+        cursorWatch.Forget();
         RecomputeMetrics();
         RebuildColumns(remeasure: true);
         ReloadRows();
@@ -98,6 +99,8 @@ public sealed partial class DataTable
         switch (e.Kind)
         {
             case DataTableChangeKind.Reset:
+                cursorWatch.Forget();
+                shapeWatch.Forget();
                 RecomputeMetrics();
                 RebuildColumns(remeasure: false);
                 ReloadRows();
@@ -139,7 +142,7 @@ public sealed partial class DataTable
 
                 break;
             case DataTableChangeKind.Cursor:
-                askedAfterAt = askedBeforeAt = -1;
+                cursorWatch.Asked();
                 UpdateFooter();
                 CheckCursors();
                 break;
@@ -156,12 +159,27 @@ public sealed partial class DataTable
         }
     }
 
-    private List<RowHandle> Handles(IDataTableModel model, int first, int count)
+    // The handles of rows that arrive. A row that arrives with its detail open is opened once; and a row that needs what the rows
+    // so far did not (a second line, a detail) is said by the two flags, so the table can be shaped for it.
+    private List<RowHandle> Handles(IDataTableModel model, int first, int count, out bool newSecondLine, out bool newDetail)
     {
         List<RowHandle> handles = new(count);
+        IDataTablePresenter? presenter = Presenter;
+        newSecondLine = false;
+        newDetail = false;
         for (int i = first; i < first + count; i++)
         {
-            handles.Add(new RowHandle(model.GetRow(i).Key ?? ("\u0001" + i.ToString(Culture))));
+            DataTableRecord record = model.GetRow(i);
+            handles.Add(new RowHandle(record.Key ?? ("\u0001" + i.ToString(Culture))));
+            if (detailSeeds.Arrive(record.Key, record.HasDetail, record.DetailOpen))
+            {
+                openKeys.Add(record.Key!);
+            }
+
+            bool second = !shapeWatch.SawSecondLine && presenter?.SecondLine(record) is not null;
+            (bool newSecond, bool newDetailHere) = shapeWatch.Observe(second, record.HasDetail);
+            newSecondLine |= newSecond;
+            newDetail |= newDetailHere;
         }
 
         return handles;
@@ -188,8 +206,16 @@ public sealed partial class DataTable
             NormalizeActive();
         }
 
+        List<RowHandle> handles = Handles(model, 0, model.RowCount, out bool newSecondLine, out bool newDetail);
+        if (newSecondLine || newDetail)
+        {
+            // A later row needs a second line or a detail the first rows did not: the shape of the rows and the columns follow.
+            RecomputeMetrics();
+            RebuildColumns(remeasure: false);
+        }
+
         UpdateGeometry();
-        rows.Reset(Handles(model, 0, model.RowCount));
+        rows.Reset(handles);
         scroll?.ScrollTo(scroll.HorizontalOffset, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
         CheckCursors();
         if (hadFocus)
@@ -227,6 +253,8 @@ public sealed partial class DataTable
 
         int top = TopIndex();
         double offset = scroll?.VerticalOffset ?? 0;
+        double within = WithinTopRow(offset, top);
+        double heightBefore = rowHeight;
         int heldBefore = rows.Count;
         bool keepFirst = scroll is not null && ActiveRowRules.KeepsFirstRowInView(index, heldBefore, offset);
         bool above = index <= top && heldBefore > 0 && scroll is not null && offset > 0;
@@ -246,26 +274,41 @@ public sealed partial class DataTable
             rowsLayout.Pinned = pins.Indices;
         }
 
+        List<RowHandle> handles = Handles(model, index, count, out bool newSecondLine, out bool newDetail);
         UpdateGeometry();
-        rows.InsertRows(index, Handles(model, index, count));
+        rows.InsertRows(index, handles);
         if (above || keepFirst)
         {
             ReleasePinSoon(PinOwner.Anchor);
         }
 
-        if (keepFirst)
+        if (newSecondLine || newDetail)
         {
-            KeepFirstRowInView(count);
+            // A page that needs a second line or a detail the rows so far did not: the shape of the rows and the columns follow it.
+            RecomputeMetrics();
+            RebuildColumns(remeasure: false);
         }
 
-        askedAfterAt = askedBeforeAt = -1;
+        if (keepFirst || (rowHeight != heightBefore && heldBefore > 0))
+        {
+            // The view stays on the row it was on: the row that was first when it was at the top, else the row at the top of the view.
+            int anchor = keepFirst ? top + count : (index <= top ? top + count : top);
+            KeepAnchorInView(anchor, keepFirst ? 0 : within * rowHeight / heightBefore);
+        }
+
+        cursorWatch.Asked();
         NoteRowsAdded(count, earlier: index == 0 && rows.Count > count);
         CheckCursors();
     }
 
+    // How far down inside the row at the top of the view the view is, by the rows as they stood.
+    private double WithinTopRow(double offset, int top) =>
+        rows.Count > 0 && scroll is not null ? Math.Max(0, offset - rowsLayout.Geometry.RowTop(top)) : 0;
+
     // A view at the very top has nothing above it for the scroll view to anchor to: rows that joined the start are above the row that was
-    // first, and the view is moved down to that row, whose place is the arithmetic of the rows now held.
-    private void KeepFirstRowInView(int count)
+    // first, and the view is moved down to that row. The same is done when the rows change height because of what joined. The place of
+    // the row is the arithmetic of the rows now held.
+    private void KeepAnchorInView(int anchorIndex, double within)
     {
         if (scroll is not { } view)
         {
@@ -275,7 +318,7 @@ public sealed partial class DataTable
         holdingFirstRow = true;
         void Move()
         {
-            double wanted = Anchoring.OffsetAfterChange(count, 0, rowsLayout.Geometry, rows.Count, view.ViewportHeight);
+            double wanted = Anchoring.OffsetAfterChange(anchorIndex, within, rowsLayout.Geometry, rows.Count, view.ViewportHeight);
             if (Math.Abs(view.VerticalOffset - wanted) > 0.5)
             {
                 view.ScrollTo(view.HorizontalOffset, wanted, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
@@ -387,8 +430,8 @@ public sealed partial class DataTable
     private void RecomputeMetrics()
     {
         measurer.Reset();
-        shape = RowShape.OneLine;
-        if (Model is { } model && Presenter is { } presenter)
+        shape = shapeWatch.SawSecondLine ? RowShape.TwoLine : RowShape.OneLine;
+        if (shape == RowShape.OneLine && Model is { } model && Presenter is { } presenter)
         {
             int sample = Math.Min(60, model.RowCount);
             for (int i = 0; i < sample; i++)
@@ -397,6 +440,7 @@ public sealed partial class DataTable
                 if (presenter.SecondLine(record) is not null)
                 {
                     shape = RowShape.TwoLine;
+                    shapeWatch.Observe(true, false);
                     break;
                 }
             }
@@ -526,9 +570,8 @@ public sealed partial class DataTable
         int limit = RowGeometry.MaxHeldRows(rowHeight);
         if (model.RowCount >= limit)
         {
-            if (!heldLimitRaised)
+            if (cursorWatch.LimitReached())
             {
-                heldLimitRaised = true;
                 RaiseHeldLimitReached();
                 Announce(DataTableStrings.Get("DataTable_HeldLimit", Choosing.FormatCount(limit, Culture)));
                 UpdateFooter();
@@ -537,19 +580,21 @@ public sealed partial class DataTable
             return;
         }
 
-        if (model.Later is { Available: true, State: CursorState.Idle }
-            && askedAfterAt != model.RowCount
-            && Cursor.ShouldAskMore(scroll.VerticalOffset, viewport, scroll.ExtentHeight))
+        if (cursorWatch.ShouldAskAfter(
+            model.RowCount,
+            model.Later.Available,
+            model.Later.State == CursorState.Idle,
+            Cursor.ShouldAskMore(scroll.VerticalOffset, viewport, scroll.ExtentHeight)))
         {
-            askedAfterAt = model.RowCount;
             RaiseMoreRequested(MoreDirection.After);
         }
 
-        if (model.Earlier is { Available: true, State: CursorState.Idle }
-            && askedBeforeAt != model.RowCount
-            && Cursor.ShouldAskBefore(scroll.VerticalOffset, viewport))
+        if (cursorWatch.ShouldAskBefore(
+            model.RowCount,
+            model.Earlier.Available,
+            model.Earlier.State == CursorState.Idle,
+            Cursor.ShouldAskBefore(scroll.VerticalOffset, viewport)))
         {
-            askedBeforeAt = model.RowCount;
             RaiseMoreRequested(MoreDirection.Before);
         }
     }

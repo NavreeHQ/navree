@@ -400,61 +400,39 @@ public sealed partial class DataTable
         RaiseLayoutChanged();
     }
 
-    // What a person has kept of the columns is read when the columns first arrive for a key.
-    private void LoadStoredLayout(IReadOnlyList<DataTableColumn> columns)
+    // What a person has kept of the columns is read when the columns first arrive for a key; true when it changed the density.
+    private bool LoadStoredLayout(IReadOnlyList<DataTableColumn> columns)
     {
         if (layoutKey is not { } key || layoutStore is not { } store)
         {
-            return;
+            return false;
         }
 
         if (!keeper.ShouldRead(key, columns.Select(c => c.Key).ToList()))
         {
-            return;
+            return false;
         }
 
         if (!store.TryLoad(key, out string json) || LayoutText.Parse(json) is not { } stored)
         {
-            return;
+            return false;
         }
 
-        List<string> serverKeys = columns.Select(c => c.Key).ToList();
-        if (!stored.Order.Any(serverKeys.Contains) && stored.Columns.Keys.All(k => !serverKeys.Contains(k)))
+        if (StoredLayoutApplier.Apply(stored, columns, widths, personWidths, hiddenKeys, forcedShownKeys) is not { } applied)
         {
-            return;
+            return false;
         }
 
-        columnOrder = [.. ColumnOrder.Reconcile(serverKeys, stored.Order)];
-        frozenWish = Math.Clamp(stored.Frozen, 0, columns.Count);
-        if (Enum.TryParse(stored.Density, ignoreCase: true, out Density kept))
+        columnOrder = [.. applied.Order];
+        frozenWish = applied.Frozen;
+        keeper.Resume(applied.Seen);
+        if (applied.Density is { } kept && kept != density)
         {
             density = kept;
+            return true;
         }
 
-        foreach (DataTableColumn column in columns)
-        {
-            if (!stored.Columns.TryGetValue(column.Key, out StoredColumn? kept2))
-            {
-                continue;
-            }
-
-            if (kept2.Width is { } width && string.Equals(kept2.Kind, column.Kind.ToString(), StringComparison.OrdinalIgnoreCase))
-            {
-                widths[column.Key] = ColumnSizing.Clamp(column.Kind, width);
-                personWidths.Add(column.Key);
-            }
-
-            if (kept2.Hidden is true)
-            {
-                hiddenKeys.Add(column.Key);
-            }
-            else if (kept2.Hidden is false)
-            {
-                forcedShownKeys.Add(column.Key);
-            }
-        }
-
-        keeper.Resume(stored.Columns.Values.Select(c => c.Seen).DefaultIfEmpty(0).Max());
+        return false;
     }
 
     private void ScheduleSave()
