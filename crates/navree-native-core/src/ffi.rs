@@ -27,7 +27,12 @@
 //! call answers `{"error":"..."}`, and the core stops for good: what it held
 //! is dropped, nothing it had queued is sent, and every later call on the
 //! handle answers the same error. A client shows that the app must be started
-//! again.
+//! again. Reading what a call is given (the configuration, an event, a query)
+//! is inside the guard too: a failure there stops the core in the same way
+//! (for the configuration, which no core yet holds, the answer is a null
+//! handle), and a lock a failure left poisoned makes the core it guards a
+//! stopped one. An input that merely does not read is only an error, and the
+//! core goes on.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Mutex;
@@ -103,7 +108,14 @@ unsafe fn taken<'a>(ptr: *const u8, len: usize) -> &'a [u8] {
 }
 
 fn new(config: &[u8]) -> Option<Box<NavreeCore>> {
-    let config: Config = serde_json::from_slice(config).ok()?;
+    // A failure while the configuration is read is a configuration that does
+    // not read.
+    let config: Config = catch_unwind(|| {
+        #[cfg(test)]
+        tests::before_parse();
+        serde_json::from_slice(config).ok()
+    })
+    .ok()??;
     let core = catch_unwind(|| Box::new(Core::new(config))).ok()?;
     Some(Box::new(NavreeCore {
         core: Mutex::new(Slot::Live(core)),
@@ -118,11 +130,18 @@ fn using(
     handle: &NavreeCore,
     call: impl FnOnce(&mut Core) -> serde_json::Result<Vec<u8>>,
 ) -> Vec<u8> {
-    // A lock poisoned by a failure that escaped is a stopped core too.
-    let mut slot = handle
-        .core
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut slot = match handle.core.lock() {
+        Ok(slot) => slot,
+        // A lock poisoned by a failure that escaped guards a core that can't
+        // be trusted: it is a stopped core too.
+        Err(poisoned) => {
+            let mut slot = poisoned.into_inner();
+            if !matches!(*slot, Slot::Freed) {
+                stop(&mut slot);
+            }
+            slot
+        }
+    };
     let core = match &mut *slot {
         Slot::Live(core) => core,
         Slot::Stopped => return error(STOPPED),
@@ -131,21 +150,31 @@ fn using(
     match catch_unwind(AssertUnwindSafe(|| call(core))) {
         Ok(Ok(bytes)) => bytes,
         Ok(Err(_)) | Err(_) => {
-            let failed = std::mem::replace(&mut *slot, Slot::Stopped);
-            // Dropping plain data does not fail; if it ever did, the failure
-            // still stays on this side, and the slot already says stopped.
-            let _ = catch_unwind(AssertUnwindSafe(|| drop(failed)));
+            stop(&mut slot);
             error(STOPPED)
         }
     }
 }
 
+/// Stops the core in `slot` for good: it is dropped, so what it had queued is
+/// never sent.
+fn stop(slot: &mut Slot) {
+    let failed = std::mem::replace(slot, Slot::Stopped);
+    // Dropping plain data does not fail; if it ever did, the failure still
+    // stays on this side, and the slot already says stopped.
+    let _ = catch_unwind(AssertUnwindSafe(|| drop(failed)));
+}
+
 fn send(handle: &NavreeCore, event: &[u8]) -> Vec<u8> {
-    let event: Event = match serde_json::from_slice(event) {
-        Ok(event) => event,
-        Err(problem) => return error(&format!("the event does not read: {problem}")),
-    };
     using(handle, |core| {
+        #[cfg(test)]
+        tests::before_parse();
+        let event: Event = match serde_json::from_slice(event) {
+            Ok(event) => event,
+            // An event that does not read is the caller's mistake, and no
+            // failure of the core's.
+            Err(problem) => return Ok(error(&format!("the event does not read: {problem}"))),
+        };
         #[cfg(test)]
         tests::before_send(core);
         serde_json::to_vec(&core.send(event))
@@ -153,15 +182,19 @@ fn send(handle: &NavreeCore, event: &[u8]) -> Vec<u8> {
 }
 
 fn view(handle: &NavreeCore, query: &[u8]) -> Vec<u8> {
-    let query: Query = if query.is_empty() {
-        Query::All
-    } else {
-        match serde_json::from_slice(query) {
-            Ok(query) => query,
-            Err(problem) => return error(&format!("the query does not read: {problem}")),
-        }
-    };
-    using(handle, |core| serde_json::to_vec(&core.part(&query)))
+    using(handle, |core| {
+        #[cfg(test)]
+        tests::before_parse();
+        let query: Query = if query.is_empty() {
+            Query::All
+        } else {
+            match serde_json::from_slice(query) {
+                Ok(query) => query,
+                Err(problem) => return Ok(error(&format!("the query does not read: {problem}"))),
+            }
+        };
+        serde_json::to_vec(&core.part(&query))
+    })
 }
 
 /// Makes a core from a configuration, as JSON. Null when the configuration
@@ -406,6 +439,22 @@ mod tests {
         BEFORE_SEND.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
     }
 
+    thread_local! {
+        /// What the next read of a call's input on this thread does first, so
+        /// a test can make that fail.
+        static BEFORE_PARSE: RefCell<Option<Box<dyn FnOnce()>>> = RefCell::new(None);
+    }
+
+    pub(super) fn before_parse() {
+        if let Some(hook) = BEFORE_PARSE.with(|hook| hook.borrow_mut().take()) {
+            hook();
+        }
+    }
+
+    fn on_next_parse(hook: impl FnOnce() + 'static) {
+        BEFORE_PARSE.with(|slot| *slot.borrow_mut() = Some(Box::new(hook)));
+    }
+
     fn text(bytes: NavreeBytes) -> String {
         // SAFETY: `bytes` came from this interface just now and is freed once, here.
         unsafe {
@@ -472,6 +521,77 @@ mod tests {
             assert!(all.contains("stopped"), "{all}");
             let nav = br#"{"part":"nav"}"#;
             assert!(text(navree_core_view(core, nav.as_ptr(), nav.len())).contains("stopped"));
+            navree_core_free(core);
+        }
+    }
+
+    /// A failure while the configuration, an event or a query is read stops
+    /// the core instead of ending the process: a panic that came out of a
+    /// function of the C interface would abort the app.
+    #[test]
+    fn a_failure_while_the_input_is_read_is_a_failure_inside_the_core_and_not_the_end_of_the_process()
+     {
+        // SAFETY: as above.
+        unsafe {
+            // A configuration whose reading fails is a configuration that does not read.
+            on_next_parse(|| panic!("a failure while the configuration is read"));
+            assert!(navree_core_new(CONFIG.as_ptr(), CONFIG.len()).is_null());
+
+            let core = navree_core_new(CONFIG.as_ptr(), CONFIG.len());
+            assert!(!core.is_null());
+            let start = br#"{"t":"start"}"#;
+            assert!(text(navree_core_send(core, start.as_ptr(), start.len())).contains("fetch"));
+            // A failure reading an event stops the core, as one inside it does.
+            on_next_parse(|| panic!("a failure while an event is read"));
+            let back = br#"{"t":"back"}"#;
+            let failed = text(navree_core_send(core, back.as_ptr(), back.len()));
+            assert!(failed.contains("stopped"), "{failed}");
+            let later = text(navree_core_send(core, back.as_ptr(), back.len()));
+            assert!(later.contains("stopped"), "{later}");
+            navree_core_free(core);
+
+            // And so does one reading a query.
+            let core = navree_core_new(CONFIG.as_ptr(), CONFIG.len());
+            on_next_parse(|| panic!("a failure while a query is read"));
+            let nav = br#"{"part":"nav"}"#;
+            let failed = text(navree_core_view(core, nav.as_ptr(), nav.len()));
+            assert!(failed.contains("stopped"), "{failed}");
+            navree_core_free(core);
+
+            // A bad input that does not panic is still only an error: the core goes on.
+            let core = navree_core_new(CONFIG.as_ptr(), CONFIG.len());
+            let junk = br#"{"t":"teleport"}"#;
+            assert!(
+                text(navree_core_send(core, junk.as_ptr(), junk.len())).contains("does not read")
+            );
+            assert!(text(navree_core_send(core, start.as_ptr(), start.len())).contains("fetch"));
+            navree_core_free(core);
+        }
+    }
+
+    /// A lock a failure left poisoned guards a core that can't be trusted:
+    /// the core is stopped, as the comment says, and not used.
+    #[test]
+    fn a_poisoned_lock_is_a_stopped_core() {
+        // SAFETY: as above.
+        unsafe {
+            let core = navree_core_new(CONFIG.as_ptr(), CONFIG.len());
+            let start = br#"{"t":"start"}"#;
+            assert!(text(navree_core_send(core, start.as_ptr(), start.len())).contains("fetch"));
+            let handle = core as usize;
+            std::thread::spawn(move || {
+                // The handle is live, and this only takes its lock.
+                let handle = &*(handle as *const NavreeCore);
+                let _held = handle.core.lock().unwrap();
+                panic!("a failure while the lock is held");
+            })
+            .join()
+            .unwrap_err();
+            let back = br#"{"t":"back"}"#;
+            let later = text(navree_core_send(core, back.as_ptr(), back.len()));
+            assert!(later.contains("stopped"), "{later}");
+            let all = text(navree_core_view(core, std::ptr::null(), 0));
+            assert!(all.contains("stopped"), "{all}");
             navree_core_free(core);
         }
     }
