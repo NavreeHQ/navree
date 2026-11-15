@@ -9,3 +9,5 @@ dark,large LiveDemosTest#aCardMovesToAnotherLaneByItsHandle walked in the light 
 dark,large LiveDemosTest#aFormThatIsRefusedShowsWhatIsWrongAndTheFirstFieldTakesTheFocus walked in the light and right to left looks only
 dark,large LiveDemosTest#aFieldThatIsDoneWithLetsGoOfTheFocusWithoutTheSearchTakingIt walked in the light and right to left looks only
 all ?ScreensTest#aTabWalkThroughAFormStopsOnceAtEachPickedField the recorded form screen is shown as a web page, not a native screen
+all ?WebOtherReachTest#aPageReachesAStunServerOfItsChoiceThroughWebRtc this system's web view has no WebRTC
+all ?WebOtherReachTest#aPageReachesAServerOfItsChoiceThroughWebTransport this system's web view has no WebTransport
