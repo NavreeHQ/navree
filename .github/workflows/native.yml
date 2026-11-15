@@ -627,6 +627,19 @@ jobs:
           $out = "$env:RUNNER_TEMP\full"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           $apps = @(@('store', 8095), @('inbox', 8096), @('board', 8097))
+          # What the machine says about the three servers before the walk: which are alive, which ports listen, what each answers.
+          $diagnosis = "$env:RUNNER_TEMP\demos\diagnosis.txt"
+          Get-Content "$env:RUNNER_TEMP\demos\ids.txt" | ForEach-Object { if ($_) { $p = Get-Process -Id ([int]$_) -ErrorAction SilentlyContinue; "process ${_}: " + $(if ($p) { $p.ProcessName + ' alive' } else { 'gone' }) } } | Out-File $diagnosis
+          netstat -ano | Select-String ':809[5-7]' | Out-File $diagnosis -Append
+          foreach ($app in $apps) {
+            foreach ($path in '/', '/_navree/native/shell') {
+              try {
+                $reply = Invoke-WebRequest -Uri "http://127.0.0.1:$($app[1])$path" -UseBasicParsing -TimeoutSec 10 -Headers @{ 'X-Navree-Native' = '1'; 'X-Navree-Client' = 'platform=windows; form=desktop; vocab=0; scheme=light; text=1.00'; 'Accept' = 'application/vnd.navree.native+json' }
+                "$($app[0]) $path : $($reply.StatusCode), $($reply.Content.Length) bytes" | Out-File $diagnosis -Append
+              } catch { "$($app[0]) $path : $($_.Exception.Message)" | Out-File $diagnosis -Append }
+            }
+          }
+          Get-Content $diagnosis
           $looks = @(@('--light'), @('--dark'), @('--light', '--rtl'))
           foreach ($app in $apps) {
             foreach ($look in $looks) {
@@ -649,6 +662,7 @@ jobs:
           path: |
             ${{ runner.temp }}/full
             ${{ runner.temp }}/demos/*.log
+            ${{ runner.temp }}/demos/*.txt
           retention-days: 30
 
       - name: Stop the demos
