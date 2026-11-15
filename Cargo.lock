@@ -5711,7 +5711,7 @@ dependencies = [
 
 [[package]]
 name = "navree-plugin-geo"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "http",
  "navree",
@@ -6238,7 +6238,7 @@ dependencies = [
 
 [[package]]
 name = "navree-ui-ext-macros"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "cssparser",
  "proc-macro-crate",
