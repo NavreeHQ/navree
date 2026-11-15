@@ -123,7 +123,10 @@ object WebRules {
      * The same script puts a check in front of the page's own `WebSocket`,
      * `Worker` and `SharedWorker`, which are not requests the web view's client
      * is asked about: one is made only for an address on the origins (so never
-     * from a `blob:` or `data:` address). It holds for the scripts of the
+     * from a `blob:` or `data:` address). What the page hands over is turned into a
+     * string once, and that string is what is checked and what the real constructor
+     * gets, so an object whose conversion answers differently the second time gets
+     * nowhere. It holds for the scripts of the
      * document and of its frames that are given a document, not the empty first
      * document of a frame the page makes and has not navigated. It does not reach into a worker: a script
      * that already runs in a worker from one of the app's addresses opens what
@@ -154,9 +157,12 @@ object WebRules {
             // Neither a socket nor a worker is a request the web view's client is asked about, and a
             // document-start script does not run inside a worker: the page's own scripts may open a
             // socket or start a worker only where its loads may go (never from a `blob:` or `data:`
-            // address). The check and the wrappers are one `try`: a failure of either empties the document.
-            "try{var wrap=function(k,s){var C=self[k];if(!C)return;var N=function(u,q){var h=new URL(u,document.baseURI).href;if(s)h=h.replace(/^ws/,'http');" +
-            "if(!at(h))throw new DOMException('Not allowed','SecurityError');return q===undefined?new C(u):new C(u,q)};" +
+            // address). What the page hands over is turned into a string once, that string is what is checked
+            // and what the real constructor gets, and the options are copied: the page's own object, whose
+            // conversion could answer differently the second time, never reaches the real constructor.
+            // The check and the wrappers are one `try`: a failure of either empties the document.
+            "try{var wrap=function(k,s){var C=self[k];if(!C)return;var N=function(u,q){var x=String(u),h=new URL(x,document.baseURI).href;if(s)h=h.replace(/^ws/,'http');" +
+            "if(!at(h))throw new DOMException('Not allowed','SecurityError');return q===undefined?new C(x):new C(x,q&&typeof q==='object'?s?Array.from(q,String):{name:q.name,type:q.type,credentials:q.credentials}:q===null?q:String(q))};" +
             "N.prototype=C.prototype;C.prototype.constructor=N;['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(n){if(n in C)N[n]=C[n]});self[k]=N};" +
             "wrap('WebSocket',1);wrap('Worker');wrap('SharedWorker');" +
             "var o=self.origin;if(o!=='null'){if(!at(o))stop();return}" +
