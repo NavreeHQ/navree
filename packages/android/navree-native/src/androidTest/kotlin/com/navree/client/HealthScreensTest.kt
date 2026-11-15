@@ -216,7 +216,7 @@ class HealthScreensTest {
         send(app, Events.openLink("${server.url("/fitness")}"))
         front(app, "Fitness")
         runCatching {
-            val chart = hasContentDescription("Steps", substring = true, ignoreCase = true) and hasScrollAction().not()
+            val chart = hasContentDescription("Active minutes by intensity, last 7 days:", substring = true) and hasScrollAction().not()
             compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(chart)
             compose.onAllNodes(chart).onFirst().performTouchInput { down(Offset(width * 0.6f, height * 0.5f)) }
             Thread.sleep(500)
