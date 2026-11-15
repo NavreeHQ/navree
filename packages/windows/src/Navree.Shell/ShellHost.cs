@@ -185,6 +185,10 @@ public sealed partial class ShellHost : IDisposable
     /// <summary>What a page in the web view is answered with when the app has recorded answers instead of a network.</summary>
     internal Func<Uri, (byte[] Body, string ContentType)?>? RecordedPages => Options.RecordedPages;
 
+    /// <summary>Reports a problem of the client's own from a part of the shell that is not the host (a dialog that could not be shown): it is raised as <see cref="Problem"/>.</summary>
+    /// <param name="what">What went wrong, by its kind: never the server's words or a person's.</param>
+    internal void ReportProblem(string what) => dispatcher.TryEnqueue(() => Problem?.Invoke(what));
+
     private void OnProblem(string what) =>
         dispatcher.TryEnqueue(() =>
         {
