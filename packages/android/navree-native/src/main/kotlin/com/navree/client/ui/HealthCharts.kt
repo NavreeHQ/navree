@@ -148,23 +148,24 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
                 }
                 val rows = if (node.levels.isNotEmpty()) node.levels.indices.map { it.toDouble() } else listOf(bounds.low, (bounds.low + bounds.high) / 2, bounds.high)
                 for (value in rows) drawLine(scheme.outlineVariant, Offset(plot.left, y(value)), Offset(plot.right, y(value)), strokeWidth = 1f)
-                // The value axis: the levels' names, or its lowest and highest numbers.
-                if (node.levels.isNotEmpty()) {
-                    node.levels.forEachIndexed { index, word ->
-                        val text = measurer.measure(word, small)
-                        val line = y(index.toDouble())
-                        // Above its line, the top one under it; on the card's own colour so the line behind does not run through the letters.
-                        val top = if (index == node.levels.lastIndex) line + 2.dp.toPx() else line - text.size.height - 1.dp.toPx()
-                        val left = if (rtl) plot.right - text.size.width - 4.dp.toPx() else plot.left + 4.dp.toPx()
-                        drawRoundRect(scheme.surfaceContainerLow.copy(alpha = 0.8f), Offset(left - 2.dp.toPx(), top), Size(text.size.width + 4.dp.toPx(), text.size.height.toFloat()), CornerRadius(3.dp.toPx()))
-                        drawText(text, topLeft = Offset(left, top))
-                    }
-                } else {
+                // The value axis: the levels' names (drawn over the series, below), or its lowest and highest numbers.
+                if (node.levels.isEmpty()) {
                     for (value in listOf(bounds.low, bounds.high)) {
                         val text = measurer.measure(amount(value), small)
                         val left = if (rtl) plot.right + 8.dp.toPx() else plot.left - 8.dp.toPx() - text.size.width
                         drawText(text, topLeft = Offset(left, (y(value) - text.size.height / 2f).coerceIn(0f, size.height - text.size.height)))
                     }
+                }
+            }
+            // The levels' names stand above their lines, the top one under it, on the card's own colour: drawn after the series, so a line that runs through the start of a name does not cross its letters.
+            fun levelNames() {
+                node.levels.forEachIndexed { index, word ->
+                    val text = measurer.measure(word, small)
+                    val line = y(index.toDouble())
+                    val top = if (index == node.levels.lastIndex) line + 2.dp.toPx() else line - text.size.height - 1.dp.toPx()
+                    val left = if (rtl) plot.right - text.size.width - 4.dp.toPx() else plot.left + 4.dp.toPx()
+                    drawRoundRect(scheme.surfaceContainerLow, Offset(left - 2.dp.toPx(), top), Size(text.size.width + 4.dp.toPx(), text.size.height.toFloat()), CornerRadius(3.dp.toPx()))
+                    drawText(text, topLeft = Offset(left, top))
                 }
             }
             val bar = node.kind == Navree.ChartKind.BAR || node.kind == Navree.ChartKind.FUNNEL
@@ -212,6 +213,7 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
                     if (spark) drawCircle(inks[s].mark, 3.5.dp.toPx(), points.last())
                 }
             }
+            if (!spark && node.levels.isNotEmpty()) levelNames()
             if (!spark) {
                 node.references.forEachIndexed { index, reference ->
                     val value = reference.value ?: return@forEachIndexed
