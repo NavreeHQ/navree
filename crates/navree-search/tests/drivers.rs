@@ -3,10 +3,8 @@
 //! name no module registers fails the boot and `config:check` alike.
 
 #[path = "search/servers.rs"]
-#[allow(dead_code)]
 mod servers;
 #[path = "search/support.rs"]
-#[allow(dead_code)]
 mod support;
 
 use std::sync::{Arc, Mutex};

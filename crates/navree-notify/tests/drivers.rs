@@ -5,11 +5,9 @@
 //! queued payloads never add one.
 
 #[path = "notify/support.rs"]
-#[allow(dead_code)]
 mod support;
 
 #[path = "notify/database.rs"]
-#[allow(dead_code)]
 mod database;
 
 use std::sync::{Arc, Mutex};
