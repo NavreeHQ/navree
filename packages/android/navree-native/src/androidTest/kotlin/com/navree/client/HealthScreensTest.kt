@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.navree.client.core.Content
@@ -42,6 +43,7 @@ class HealthScreensTest {
     }
 
     private val server = MockWebServer()
+    private lateinit var recorded: Recorded
 
     @After
     fun stop() {
@@ -50,7 +52,7 @@ class HealthScreensTest {
 
     /** The app on its first screen: the plain today screen, or the designed one as the first screen of its destination. */
     private fun start(designedAtRoot: Boolean = false): NavreeSession {
-        server.dispatcher = Recorded(
+        recorded = Recorded(
             "",
             routes = mapOf(
                 "/_navree/native/shell" to "health/shell",
@@ -63,6 +65,7 @@ class HealthScreensTest {
                 "/shelves" to "screen-designed-store",
             ),
         )
+        server.dispatcher = recorded
         server.start()
         val origin = server.url("/").toString().trimEnd('/')
         val config = NavreeConfig(origin = origin, name = "Health", seed = null, loopbackHttp = true, openAnyLink = true)
@@ -155,6 +158,50 @@ class HealthScreensTest {
         send(app, Events.back)
         front(app, "Today")
         Shots.take("designed-health-back")
+    }
+
+    /**
+     * The zoom from a card into the screen it opens, caught while it moves: the
+     * test clock is held and let on a few frames at a time, a picture taken
+     * between. A device that does not let the clock be held leaves no picture.
+     */
+    @Test
+    fun aCardZoomIsDrawnWhileItMoves() {
+        val app = start(designedAtRoot = true)
+        front(app, "Today")
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasContentDescription("Heart, 20% of score"))
+        runCatching {
+            compose.mainClock.autoAdvance = false
+            compose.onNodeWithContentDescription("Heart, 20% of score").performClick()
+            val end = System.currentTimeMillis() + 15_000
+            while (System.currentTimeMillis() < end) {
+                val front = app.driver.nav.front?.let { app.driver.screens[it] }
+                if ((front?.content as? Content.Native)?.screen?.title == "Shelves") break
+                compose.mainClock.advanceTimeByFrame()
+                Thread.sleep(16)
+            }
+            for (step in 1..4) {
+                compose.mainClock.advanceTimeBy(70)
+                Shots.take("designed-health-zoom-$step")
+            }
+        }.onFailure { android.util.Log.w("NavreeShots", "the zoom was not caught: $it") }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+    }
+
+    /** A screen of days turns to the day before or after when it is swiped along, the way the page moves with the finger. */
+    @Test
+    fun aSwipeTurnsTheDay() {
+        val app = start()
+        front(app, "Today")
+        send(app, Events.openLink("${server.url("/sleep")}"))
+        front(app, "Sleep")
+        compose.onRoot().performTouchInput { swipeRight(startX = left + 40f, endX = right - 40f, durationMillis = 300) }
+        val wanted = if (Shots.look == "rtl") "GET /sleep?date=2026-11-13" else "GET /sleep?date=2026-11-11"
+        waitFor("the day $wanted") { recorded.asked.contains(wanted) }
+        Thread.sleep(1500)
+        compose.waitForIdle()
+        Shots.take("health-sleep-swiped")
     }
 
     @Test
