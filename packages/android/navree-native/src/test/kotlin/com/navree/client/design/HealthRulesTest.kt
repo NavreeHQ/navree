@@ -218,6 +218,16 @@ class AxisRulesTest {
     }
 }
 
+class ChartLabelStepTest {
+    @Test
+    fun labels_that_would_touch_stand_every_second_or_third_mark() {
+        assertEquals(1, AxisRules.labelStep(40f, 60f, 6f))
+        assertEquals(2, AxisRules.labelStep(60f, 56f, 6f))
+        assertEquals(3, AxisRules.labelStep(100f, 40f, 6f))
+        assertEquals(1, AxisRules.labelStep(40f, 0f, 6f))
+    }
+}
+
 class ChartTouchTest {
     @Test
     fun a_touch_is_over_the_bar_it_falls_in_and_the_nearest_point_of_a_line() {

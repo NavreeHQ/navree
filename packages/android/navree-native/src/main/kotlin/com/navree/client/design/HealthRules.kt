@@ -352,6 +352,16 @@ object MatrixRules {
 /** The bounds of a chart's axes. */
 object AxisRules {
     /**
+     * How many marks apart the labels under a chart stand so that none touches
+     * the next: 1 when the widest label fits its mark's share of the line with
+     * a gap, else every second, third and so on.
+     */
+    fun labelStep(widestPx: Float, slotPx: Float, gapPx: Float): Int {
+        if (slotPx <= 0f) return 1
+        return Math.ceil(((widestPx + gapPx) / slotPx).toDouble()).toInt().coerceAtLeast(1)
+    }
+
+    /**
      * The mark of a chart a touch at `x` is over, or null outside the plot:
      * the bar whose width it falls in, or the nearest point of a line. Where
      * the line runs right to left the first mark is at the right.

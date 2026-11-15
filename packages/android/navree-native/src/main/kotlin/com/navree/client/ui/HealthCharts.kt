@@ -227,7 +227,10 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
                     }
                 }
                 // The labels under: every one when there are few, else the first, middle and last.
-                val shown = if (count <= 8) node.labels.indices.toList() else listOf(0, node.labels.size / 2, node.labels.lastIndex).distinct()
+                val widest = node.labels.maxOfOrNull { measurer.measure(it, small).size.width } ?: 0
+                val slot = if (bar) plot.width / count else if (count > 1) plot.width / (count - 1) else plot.width
+                val step = AxisRules.labelStep(widest.toFloat(), slot, 6.dp.toPx())
+                val shown = if (count <= 8) node.labels.indices.filter { it % step == 0 } else listOf(0, node.labels.size / 2, node.labels.lastIndex).distinct()
                 for (at in shown) {
                     val word = node.labels.getOrNull(at) ?: continue
                     val text = measurer.measure(word, small)
