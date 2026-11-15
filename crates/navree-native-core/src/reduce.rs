@@ -1341,13 +1341,16 @@ impl Core {
 
     /// Writes the paths `keys` of a device call as whole addresses on the
     /// app's origin, as a picture's source is written: what the system is
-    /// handed (a page shared) or the client fetches (a file shared) is never
-    /// a path for it to read against something. One that does not read as
-    /// one of the app's addresses is taken out.
-    fn whole_in(&self, call: &mut Value, keys: &[&str]) {
+    /// handed (a page shared) or the client fetches (a file shared, the
+    /// options of a passkey) is never a path for it to read against
+    /// something. One that does not read as one of the app's addresses is
+    /// taken out, and that is said: the name of what was taken out, never the
+    /// address.
+    fn whole_in(&mut self, call: &mut Value, keys: &[&str]) {
         let Some(call) = call.as_object_mut() else {
             return;
         };
+        let mut dropped = Vec::new();
         for key in keys {
             let Some(path) = call.get(*key).and_then(Value::as_str) else {
                 continue;
@@ -1358,8 +1361,17 @@ impl Core {
                 }
                 None => {
                     call.remove(*key);
+                    dropped.push(*key);
                 }
             }
+        }
+        for key in dropped {
+            self.report(
+                "device",
+                format!(
+                    "the `{key}` of a device call is not an address of the app, and was left out"
+                ),
+            );
         }
     }
 
@@ -1498,8 +1510,16 @@ impl Core {
                     return;
                 }
                 let mut value = serde_json::to_value(&call);
-                if let (Call::Share(_), Ok(value)) = (&call, value.as_mut()) {
-                    self.whole_in(value, &["href", "file"]);
+                // What the system is handed or the client fetches is written whole.
+                let addresses: &[&str] = match &call {
+                    Call::Share(_) => &["href", "file"],
+                    Call::Passkey(_) => &["options"],
+                    _ => &[],
+                };
+                if !addresses.is_empty()
+                    && let Ok(value) = value.as_mut()
+                {
+                    self.whole_in(value, addresses);
                 }
                 let number = self.run(value, then.is_some());
                 if let Some(then) = then {
@@ -2631,6 +2651,84 @@ mod tests {
             "{device}"
         );
         assert_eq!(device["title"], "Order");
+    }
+
+    /// The address a passkey call has the client fetch is written whole too,
+    /// and an address that is taken out of a device call is said.
+    #[test]
+    fn what_a_passkey_fetches_is_a_whole_address_or_nothing_and_a_dropped_one_is_said() {
+        let mut client = Client::new(Platform::Android, FormFactor::Phone);
+        client.caps = vec!["passkey".to_owned(), "share".to_owned()];
+        let mut core = Core::new(Config::new("https://shop.example", client));
+        core.send(Event::Start);
+        core.send(Event::Response(Response {
+            request: 1,
+            status: 404,
+            ..Response::default()
+        }));
+        let mut call = |call: serde_json::Value| {
+            let action = serde_json::from_value(serde_json::json!({"t": "device", "call": call}))
+                .expect("a device action");
+            core.send(Event::Act {
+                screen: Some(1),
+                action,
+                form: None,
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            })
+            .effects
+        };
+        let device_of = |effects: &[Effect]| {
+            effects
+                .iter()
+                .find_map(|effect| match effect {
+                    Effect::Device { device, .. } => Some(device.clone()),
+                    _ => None,
+                })
+                .expect("the call is started")
+        };
+        let said = |effects: &[Effect]| -> Vec<String> {
+            effects
+                .iter()
+                .filter_map(|effect| match effect {
+                    Effect::Report { what, detail } if what == "device" => Some(detail.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let effects = call(
+            serde_json::json!({"f": "passkey", "mode": "sign_in", "options": "/auth/passkeys/options"}),
+        );
+        assert_eq!(
+            device_of(&effects)["options"],
+            "https://shop.example/auth/passkeys/options"
+        );
+        assert!(said(&effects).is_empty(), "{effects:?}");
+        // A path the core does not read as one of the app's addresses is not
+        // handed over, and that is said, with the name of what was dropped
+        // and never the address.
+        let effects = call(
+            serde_json::json!({"f": "passkey", "mode": "sign_in", "options": "/auth/\u{3000}options"}),
+        );
+        assert!(device_of(&effects).get("options").is_none());
+        let reports = said(&effects);
+        assert_eq!(reports.len(), 1, "{effects:?}");
+        assert!(
+            reports[0].contains("options") && !reports[0].contains("auth"),
+            "{reports:?}"
+        );
+        let effects = call(
+            serde_json::json!({"f": "share", "title": "Order", "href": "/orders/\u{3000}1", "file": "/orders/\u{3000}2"}),
+        );
+        let reports = said(&effects);
+        assert_eq!(reports.len(), 2, "{reports:?}");
+        assert!(
+            reports[0].contains("href") && reports[1].contains("file"),
+            "{reports:?}"
+        );
     }
 
     /// A core that started against a server with no shell: one destination,
