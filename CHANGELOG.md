@@ -17,6 +17,17 @@ every `@navree/*` package carries the same version.
   is drawn as before. `Text::tone` is a new inherent method: an app whose own extension trait
   gives `Text` a method named `tone` calls it through the trait (`MyExt::tone(text, ..)`). The
   stylesheet every page loads gains two rules.
+- `DataTable::without_columns_picker()` and `DataTable::without_density_switch()` leave the
+  Columns picker and the Density switch out of a table's toolbar, for a small table whose toolbar
+  is a search box. Without the picker the table draws the columns it starts with (every one not
+  marked `hidden` and not taken away), whatever `cols` the address names, and has no "Hide column"
+  item and no dragging a heading to a new place, since each writes `cols`; without the switch it
+  draws the default density whatever `density` says. Neither parameter is read, or written into a
+  sort, page, filter, detail, export or retry link, the bulk form's state or a saved view's, and
+  the `TableQuery` is not changed: `visible_columns` and `density` still say what the address
+  named. Both are new inherent methods: an app whose own extension trait gives `DataTable` a method
+  of either name calls it through the trait (`MyExt::without_density_switch(table)`). A table that
+  calls neither is drawn as before.
 
 ## [1.2.2] - 2026-11-14
 

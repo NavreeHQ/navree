@@ -556,12 +556,7 @@ impl State {
         // A table is not left with no column by what was taken away: it starts over from
         // the columns it starts with, or from the first column there is left.
         if self.cols.is_empty() {
-            self.cols = default_cols_of(shape, &withdrawn);
-            if self.cols.is_empty()
-                && let Some(first) = (0..shape.columns.len()).find(|at| !withdrawn.contains(at))
-            {
-                self.cols.push(first);
-            }
+            self.start_columns(shape);
         }
         self.filters
             .retain(|filter| !withdrawn.contains(&filter.column));
@@ -578,6 +573,20 @@ impl State {
             .any(|(at, column)| column.search && !withdrawn.contains(&at));
         if !searchable {
             self.q = None;
+        }
+    }
+
+    /// Puts the columns the table starts with in the place of the ones asked for: every
+    /// column not marked `hidden` and not taken away, in the definition's order, or, when
+    /// that leaves none, the first column there is left. A table that has no say in its
+    /// columns draws these whatever the URL names.
+    pub(crate) fn start_columns(&mut self, shape: &Shape) {
+        let withdrawn = self.withdrawn.clone();
+        self.cols = default_cols_of(shape, &withdrawn);
+        if self.cols.is_empty()
+            && let Some(first) = (0..shape.columns.len()).find(|at| !withdrawn.contains(at))
+        {
+            self.cols.push(first);
         }
     }
 
@@ -1034,7 +1043,8 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
         self.state.density
     }
 
-    fn write_href(&self, state: &State) -> String {
+    /// The URL of `state` on this table's path, with the page's own filters first.
+    pub(crate) fn write_href(&self, state: &State) -> String {
         let pairs = state.pairs_in(&self.shape);
         let own = self.filter.params();
         let mut out = String::with_capacity(self.path.len() + 40);
@@ -1061,13 +1071,6 @@ impl<R: TableRow, F: FilterBar> TableQuery<R, F> {
     /// This state's URL: one spelling for one state.
     pub fn href(&self) -> String {
         self.write_href(&self.state)
-    }
-
-    /// The URL with something changed.
-    pub(crate) fn href_with(&self, edit: impl FnOnce(&mut State)) -> String {
-        let mut state = self.state.clone();
-        edit(&mut state);
-        self.write_href(&state)
     }
 
     /// The query string alone.
