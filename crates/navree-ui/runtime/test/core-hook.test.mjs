@@ -1,5 +1,5 @@
 // A module that needs core's own write path, op applier and announcer asks for them with a `ui:core`
-// event, and keeps no copy of their state. And a page that starts clean (it carries `data-ui-fresh`) is
+// event, and keeps no copy of their state. And a page that starts clean (it carries `data-ui-fresh-page`) is
 // never drawn into a plain page: it is entered by a full load, whichever fetch brought it (a link, a
 // form, a prefetched answer, a region, a lazy part), and a feed takes no rows from one.
 import { test } from "node:test";
@@ -32,7 +32,7 @@ Object.defineProperty(HTMLTemplateElement.prototype, "innerHTML", {
 });
 
 const PAGE = { "content-type": "text/html; charset=utf-8", "x-navree-page": "1" };
-const SIGN_IN = `<!doctype html><html data-build="b1" data-ui-fresh><head><title>Sign in</title></head><body data-ui-boost>
+const SIGN_IN = `<!doctype html><html data-build="b1" data-ui-fresh-page><head><title>Sign in</title></head><body data-ui-boost>
   <main id="main"><h1>Sign in</h1><form method="post" action="/sign-in"><input type="password" name="password"></form></main>
 </body></html>`;
 /** What a page that starts clean answers. @param {{url?: string, redirected?: boolean}} [init] */
