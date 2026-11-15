@@ -159,6 +159,44 @@
           {"t":"fetch","request":5,"method":"get","url":"https://shop.example/orders?paid=on&near=on&call=on&share=on&pay=on","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
         ]
       }
+    },
+    {
+      "note": "The filter answers.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/order-filter.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "A filter whose change names an address that is not its form's own: refused, and said. The form's data does not go to an endpoint the form did not name.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"export","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"filter"}
+        ],
+        "effects": [
+          {"t":"report","what":"changed","detail":"a change of value may not start another address"}
+        ]
+      }
+    },
+    {
+      "note": "One that names its form's own address is the same as naming none: the form is sent.",
+      "send": {"t":"field","screen":1,"form":"filter","field":"again","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/orders?paid=on&near=on&call=on&share=on&pay=on&export=on&again=on","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/forms/filter/pending","is":true}
+      ]
     }
   ]
 }
