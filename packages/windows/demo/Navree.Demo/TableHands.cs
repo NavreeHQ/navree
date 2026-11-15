@@ -235,6 +235,7 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
         }
 
         (int x, int y) = ScreenOf(cell, cell.ActualWidth / 2, cell.ActualHeight / 2);
+        Navree.Controls.DataTableCellRef? activeBefore = table?.ActiveCell;
         Foreground();
         Move(x, y);
         await Task.Delay(250);
@@ -242,6 +243,10 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
         await Task.Delay(80);
         mouse_event(RightUp, 0, 0, 0, UIntPtr.Zero);
         await Task.Delay(900);
+
+        // Where a click that opens no menu went: whether it reached a row (the active cell's keys before and after) and what is open over the window.
+        Say("the active cell before the right click: " + Words(activeBefore) + ", after: " + Words(TableNow()?.ActiveCell));
+        Say("open over the window: " + string.Join(", ", VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Select(popup => popup.Child?.GetType().Name ?? "nothing")) + "; menus in them: " + Popups().SelectMany(Below).OfType<MenuFlyoutPresenter>().Count());
         List<MenuFlyoutItem> items = [.. Popups().SelectMany(Below).OfType<MenuFlyoutItem>()];
         Check("a right click on a row opens its menu", items.Count > 0, "items: " + string.Join(", ", items.Select(item => item.Text + (item.IsEnabled ? string.Empty : " (disabled)"))));
         await ShotAsync("hands-row-menu");
