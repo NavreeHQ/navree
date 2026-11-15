@@ -133,8 +133,17 @@ public static class DataTableStrings
         return arguments.Length == 0 ? text : string.Format(CultureInfo.CurrentCulture, text, arguments);
     }
 
-    /// <summary>The words for an announcement the plain rules gave.</summary>
+    /// <summary>The words for an announcement the plain rules gave, with its numbers grouped as the table's culture groups them.</summary>
     /// <param name="announcement">The announcement.</param>
+    /// <param name="culture">The culture of the table.</param>
     /// <returns>The words.</returns>
-    internal static string Get(Announcement announcement) => Get(announcement.Id, [.. announcement.Arguments]);
+    internal static string Get(Announcement announcement, CultureInfo culture) =>
+        Get(
+            announcement.Id,
+            [.. announcement.Arguments.Select(argument => argument switch
+            {
+                int whole => whole.ToString("N0", culture),
+                long whole => whole.ToString("N0", culture),
+                _ => argument,
+            })]);
 }

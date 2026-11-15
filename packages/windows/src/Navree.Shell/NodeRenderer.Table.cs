@@ -473,6 +473,18 @@ internal sealed class ProtocolTableModel : IDataTableModel
     };
 }
 
+internal static class TextBlockWidth
+{
+    /// <summary>The width of the words of a text block in one line.</summary>
+    /// <param name="block">The text block.</param>
+    /// <returns>The width in effective pixels.</returns>
+    internal static double MeasuredWidth(this TextBlock block)
+    {
+        block.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+        return Math.Ceiling(block.DesiredSize.Width);
+    }
+}
+
 /// <summary>Draws a protocol table's cells: each is a node, drawn by the shell as it draws it anywhere.</summary>
 internal sealed class ProtocolTablePresenter(
     Models.Table table,
@@ -558,10 +570,78 @@ internal sealed class ProtocolTablePresenter(
             return 0;
         }
 
-        // What the controls ask for when nothing limits them: the column is as wide as the widest row's.
+        // What the controls ask for when nothing limits them: the column is as wide as the widest row's. A control that is
+        // not on the screen yet may measure short of what it will be, so what its words and marks need is the least it gets.
         UIElement element = Element(row, columnIndex);
+        Prepare(element);
         element.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-        return element.DesiredSize.Width;
+        return Math.Max(element.DesiredSize.Width, Needed(row.Cells[columnIndex]));
+    }
+
+    private static void Prepare(DependencyObject element)
+    {
+        if (element is Control control)
+        {
+            control.ApplyTemplate();
+        }
+
+        switch (element)
+        {
+            case Panel panel:
+                foreach (UIElement child in panel.Children)
+                {
+                    Prepare(child);
+                }
+
+                break;
+            case ContentControl { Content: DependencyObject inner }:
+                Prepare(inner);
+                break;
+            default:
+                break;
+        }
+    }
+
+    // The width the controls of a node need side by side: a button its words, its mark and its padding, a number field its width.
+    private static double Needed(Models.Node node)
+    {
+        List<double> widths = [];
+        Gather(node, widths);
+        return widths.Count == 0 ? 0 : widths.Sum() + ((widths.Count - 1) * 8);
+    }
+
+    private static void Gather(Models.Node node, List<double> widths)
+    {
+        switch (node)
+        {
+            case Models.Button button:
+                double words = button.IconOnly ? 0 : new TextBlock { Text = button.Label }.MeasuredWidth();
+                bool mark = button.Icon is not null || button.Standard is not null || button.Pending;
+                widths.Add(words + (mark ? (button.IconOnly ? 16 : 24) : 0) + 24);
+                break;
+            case Models.Menu menu:
+                widths.Add(new TextBlock { Text = menu.Label }.MeasuredWidth() + (menu.Icon is not null ? 24 : 0) + 24 + 20);
+                break;
+            case Models.Field:
+                widths.Add(88);
+                break;
+            case Models.Form form:
+                foreach (Models.Node child in form.Children)
+                {
+                    Gather(child, widths);
+                }
+
+                break;
+            case Models.Stack stack:
+                foreach (Models.Node child in stack.Children)
+                {
+                    Gather(child, widths);
+                }
+
+                break;
+            default:
+                break;
+        }
     }
 
     /// <inheritdoc />
@@ -664,6 +744,12 @@ internal sealed class ProtocolTablePresenter(
                 button.HorizontalContentAlignment = HorizontalAlignment.Left;
                 break;
             case Panel panel:
+                // A row of one part that is as wide as its words would never cut them: it takes the room it has, and the words end in an ellipsis.
+                if (panel is Grid { ColumnDefinitions.Count: 1 } single && single.ColumnDefinitions[0].Width.IsAuto)
+                {
+                    single.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+                }
+
                 foreach (UIElement child in panel.Children)
                 {
                     Settle(child, align);

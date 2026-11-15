@@ -103,7 +103,7 @@ public sealed partial class DataTable
         (_, int chosen) = CountChoice();
         long? total = Model?.Choice.AcrossTotal;
         Announcement announcement = Announcements.Chosen(chosen, total, choice.Across);
-        Announce(DataTableStrings.Get(announcement));
+        Announce(DataTableStrings.Get(announcement, Culture));
     }
 
     // Rows that join while focus is in the table are said once, a second after the last.
@@ -136,12 +136,12 @@ public sealed partial class DataTable
     {
         if (addedLater > 0)
         {
-            Announce(DataTableStrings.Get(Announcements.RowsAdded(addedLater, earlier: false)));
+            Announce(DataTableStrings.Get(Announcements.RowsAdded(addedLater, earlier: false), Culture));
         }
 
         if (addedEarlier > 0)
         {
-            Announce(DataTableStrings.Get(Announcements.RowsAdded(addedEarlier, earlier: true)));
+            Announce(DataTableStrings.Get(Announcements.RowsAdded(addedEarlier, earlier: true), Culture));
         }
 
         addedLater = 0;

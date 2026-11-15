@@ -237,7 +237,7 @@ public sealed partial class DataTable
         RaiseLayoutChanged();
         if (say is not null)
         {
-            Announce(DataTableStrings.Get(say));
+            Announce(DataTableStrings.Get(say, Culture));
         }
     }
 
