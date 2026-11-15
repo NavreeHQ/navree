@@ -17,55 +17,72 @@ class LazyLaneRulesTest {
     @Test
     fun a_held_row_stays_until_its_middle_passes_the_middle_of_a_neighbour() {
         // Row 2 stands at 200..300; its middle is 250. Row 3's middle is 350.
-        assertEquals(2, LaneRules.landing(2, 200f, 100, others(2), 0, 600))
-        assertEquals("a finger moved 90 px: the middle is at 340, short of 350", 2, LaneRules.landing(2, 290f, 100, others(2), 0, 600))
-        assertEquals("100 px of the finger and the middle is at 351", 3, LaneRules.landing(2, 301f, 100, others(2), 0, 600))
-        assertEquals("up: the middle at 149 is short of row 1's 150", 1, LaneRules.landing(2, 99f, 100, others(2), 0, 600))
-        assertEquals(2, LaneRules.landing(2, 101f, 100, others(2), 0, 600))
+        assertEquals(2, LaneRules.landing(2, 200f, 100, others(2), 0, 600, 200))
+        assertEquals("a finger moved 90 px: the middle is at 340, short of 350", 2, LaneRules.landing(2, 290f, 100, others(2), 0, 600, 200))
+        assertEquals("100 px of the finger and the middle is at 351", 3, LaneRules.landing(2, 301f, 100, others(2), 0, 600, 200))
+        assertEquals("up: the middle at 149 is short of row 1's 150", 1, LaneRules.landing(2, 99f, 100, others(2), 0, 600, 200))
+        assertEquals(2, LaneRules.landing(2, 101f, 100, others(2), 0, 600, 200))
     }
 
     @Test
     fun a_row_held_far_down_passes_every_row_in_between_in_one_go() {
-        assertEquals(5, LaneRules.landing(1, 520f, 100, others(1), 0, 600))
-        assertEquals(0, LaneRules.landing(4, -80f, 100, others(4), 0, 600))
+        assertEquals(5, LaneRules.landing(1, 520f, 100, others(1), 0, 600, 100))
+        assertEquals(0, LaneRules.landing(4, -80f, 100, others(4), 0, 600, 400))
     }
 
     @Test
     fun a_row_that_has_just_swapped_does_not_swap_back() {
         // Row 2 passed row 3 (the rows then stand 0,1,3,2: row 3 at 200..300, the held at 300..400), the finger still at 301.
         val after = listOf(LaneRules.Slot(0, 0, 100), LaneRules.Slot(1, 100, 100), LaneRules.Slot(2, 200, 100), LaneRules.Slot(4, 400, 100))
-        assertEquals(3, LaneRules.landing(3, 301f, 100, after, 0, 600))
+        assertEquals(3, LaneRules.landing(3, 301f, 100, after, 0, 600, 300))
     }
 
     @Test
     fun rows_of_different_heights_are_passed_by_their_own_middles() {
         val tall = listOf(LaneRules.Slot(0, 0, 40), LaneRules.Slot(1, 40, 300), LaneRules.Slot(2, 340, 60))
         // Held row 0 (40 px): the tall row's middle is 190.
-        assertEquals(0, LaneRules.landing(0, 150f, 40, tall.drop(1), 0, 400))
-        assertEquals(1, LaneRules.landing(0, 171f, 40, tall.drop(1), 0, 400))
+        assertEquals(0, LaneRules.landing(0, 150f, 40, tall.drop(1), 0, 400, 0))
+        assertEquals(1, LaneRules.landing(0, 171f, 40, tall.drop(1), 0, 400, 0))
     }
 
     @Test
     fun a_row_held_below_the_window_passes_only_the_rows_that_can_be_seen() {
         // The window ends at 400, so rows 4 and 5 are not laid: held row 1 is dragged to 900 and goes as far as the last visible row.
         val seen = rows.take(4)
-        assertEquals(3, LaneRules.landing(1, 900f, 100, others(1, seen), 0, 400))
+        assertEquals(3, LaneRules.landing(1, 900f, 100, others(1, seen), 0, 400, 100))
         // Nor does a gap in the rows that are laid let it jump over what it cannot see: row 2 is not laid, so row 3 is not passed.
         val gap = listOf(LaneRules.Slot(1, 100, 100), LaneRules.Slot(3, 300, 100))
-        assertEquals(1, LaneRules.landing(0, 900f, 100, gap, 0, 400))
+        assertEquals(1, LaneRules.landing(0, 900f, 100, gap, 0, 400, 0))
     }
 
     @Test
     fun a_row_held_above_the_window_is_taken_as_at_its_top_edge() {
         // The window starts at 100: a row held at -300 goes up past the rows that can be seen, and no further.
         val seen = rows.drop(1)
-        assertEquals(1, LaneRules.landing(3, -300f, 100, others(3, seen), 100, 600))
+        assertEquals(1, LaneRules.landing(3, -300f, 100, others(3, seen), 100, 600, 300))
+    }
+
+    @Test
+    fun a_row_does_not_pass_a_neighbour_when_the_place_it_would_stand_in_is_not_wholly_in_the_window() {
+        // Row 2 stands at 200..300; passing row 3 would put it at 300..400, and the window ends at 380.
+        assertEquals(2, LaneRules.landing(2, 450f, 100, others(2), 0, 380, 200))
+        // With a window to 400 it would stand wholly inside: it passes.
+        assertEquals(3, LaneRules.landing(2, 450f, 100, others(2), 0, 400, 200))
+        // Up: row 2 passing row 1 would stand at 100..200; the window starts at 120.
+        assertEquals(2, LaneRules.landing(2, -50f, 100, others(2), 120, 600, 200))
+        // Rows passed on the way count: row 1 would reach 400..500 passing row 4, beyond a window that ends at 480, so it goes as far as row 3.
+        assertEquals(3, LaneRules.landing(1, 600f, 100, others(1), 0, 480, 100))
+    }
+
+    @Test
+    fun a_row_whose_own_place_is_not_reported_passes_nothing() {
+        assertEquals(2, LaneRules.landing(2, 450f, 100, others(2), 0, 600, null))
     }
 
     @Test
     fun nothing_moves_without_rows_to_pass_or_a_height() {
-        assertEquals(2, LaneRules.landing(2, 500f, 100, emptyList(), 0, 600))
-        assertEquals(2, LaneRules.landing(2, 500f, 0, others(2), 0, 600))
+        assertEquals(2, LaneRules.landing(2, 500f, 100, emptyList(), 0, 600, 200))
+        assertEquals(2, LaneRules.landing(2, 500f, 0, others(2), 0, 600, 200))
     }
 
     @Test

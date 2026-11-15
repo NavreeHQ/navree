@@ -196,7 +196,9 @@ internal class LaneState {
             val place = shown.places[other] ?: continue
             if (place != from) slots += LaneRules.Slot(place, item.offset, item.size)
         }
-        val to = LaneRules.landing(from, startOffset + offsetY, heldSize, slots, info.viewportStartOffset, info.viewportEndOffset)
+        val ownKey = LaneRules.key(list.id, id)
+        val heldTop = info.visibleItemsInfo.firstOrNull { it.key == ownKey }?.offset
+        val to = LaneRules.landing(from, startOffset + offsetY, heldSize, slots, info.viewportStartOffset, info.viewportEndOffset, heldTop)
         if (to != from) order = LaneRules.moved(shown.ids, from, to)
     }
 

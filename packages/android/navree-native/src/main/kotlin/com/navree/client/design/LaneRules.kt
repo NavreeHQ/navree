@@ -16,28 +16,37 @@ object LaneRules {
     /**
      * The place a held row has reached. The row is `held` (its place in the
      * lane now) and its top is at `top`, `size` tall, in the list's frame; the
-     * others are `slots`. The row passes a neighbour when the middle of the held
-     * row goes beyond the middle of that neighbour, so a row that has just
-     * swapped does not swap back. The middle is kept inside the window
-     * (`viewStart` to `viewEnd`): a row held below the window passes only the
-     * rows that can be seen, and the row is then never moved out of the lazily
-     * drawn rows. Rows that are not visible are not passed.
+     * others are `slots`, and the row's own place stands at `heldTop` (null
+     * where the lazy list does not report it). The row passes a neighbour when
+     * the middle of the held row goes beyond the middle of that neighbour, so a
+     * row that has just swapped does not swap back. The middle is kept inside
+     * the window (`viewStart` to `viewEnd`), and the row passes a neighbour
+     * only if the place it then stands in is wholly inside the window: a row
+     * that stood outside the window would be one the lazy list does not lay,
+     * and the finger would lose it. Rows that are not visible are not passed.
      */
-    fun landing(held: Int, top: Float, size: Int, slots: List<Slot>, viewStart: Int, viewEnd: Int): Int {
-        if (size <= 0 || slots.isEmpty()) return held
+    fun landing(held: Int, top: Float, size: Int, slots: List<Slot>, viewStart: Int, viewEnd: Int, heldTop: Int?): Int {
+        if (size <= 0 || slots.isEmpty() || heldTop == null) return held
         val centre = (top + size / 2f).coerceIn(viewStart.toFloat(), viewEnd.toFloat())
         val ordered = slots.sortedBy { it.place }
         var place = held
+        var passed = 0
         for (slot in ordered) {
             if (slot.place <= held) continue
             if (slot.place != place + 1) break
-            if (slot.offset + slot.size / 2f < centre) place = slot.place else break
+            if (slot.offset + slot.size / 2f >= centre) break
+            if (heldTop + passed + slot.size + size > viewEnd) break
+            passed += slot.size
+            place = slot.place
         }
         if (place != held) return place
         for (slot in ordered.asReversed()) {
             if (slot.place >= held) continue
             if (slot.place != place - 1) break
-            if (slot.offset + slot.size / 2f > centre) place = slot.place else break
+            if (slot.offset + slot.size / 2f <= centre) break
+            if (heldTop - passed - slot.size < viewStart) break
+            passed += slot.size
+            place = slot.place
         }
         return place
     }
