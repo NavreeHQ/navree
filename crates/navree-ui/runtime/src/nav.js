@@ -1,6 +1,6 @@
 // Link boosting and regions: fetch a page, morph what changed, keep the shell
 // alive. A failed fetch falls back to a real navigation.
-import { E, active, all, attr, body, byId, clean, closest, cookies, emit, every, fetchHere, head, hidden, holds, make, on, one, ownModule, root, sameOrigin, set, setTitle, titleOf, unset, who } from "./dom.js";
+import { E, active, all, attr, body, byId, clean, closest, cookies, emit, every, fetchHere, fresh, head, hidden, holds, make, on, one, ownModule, root, sameOrigin, set, setTitle, titleOf, unset, who } from "./dom.js";
 import { morph, pieces } from "./morph.js";
 import { adoptToasts, announce, noteWrite, sameUser } from "./ui.js";
 
@@ -232,7 +232,8 @@ export async function showPage(response, how = {}) {
   if (late()) return true;
   const build = root(doc).getAttribute("data-build");
   // Anything else, a page from another build, or one without the runtime, loads for real.
-  if (!ours || build !== root().getAttribute("data-build")) {
+  // A swap between a fresh and a plain page, and a fresh answer to a region of a plain page, load in full.
+  if (!ours || build !== root().getAttribute("data-build") || (fresh(doc) !== fresh() && (!id || fresh(doc)))) {
     location.assign(url);
     return;
   }
@@ -532,6 +533,11 @@ async function feed(el, src, current) {
   const response = await fetchHere(url, { headers: asking(el.id), signal: withinLimit() });
   // Before anything is done for it, a redirect too: a newer fetch may have been answered since.
   if (stale()) return;
+  // A fresh answer is never drawn into a plain page. The rows carry no document, so the header says it.
+  if (response.headers.has("x-navree-fresh") && !fresh()) {
+    failed(el, 403);
+    return;
+  }
   const taken = takes(response);
   // An error is not rows: it is not added to the feed, and a door that is shut stops the poll.
   if (!taken || response.headers.has("x-navree-state")) {
@@ -645,6 +651,11 @@ export async function refresh(id, polled = false, tried = 0) {
     const build = root(doc).getAttribute("data-build");
     if (build && build !== root().getAttribute("data-build")) {
       location.reload();
+      return;
+    }
+    // A fresh page's answer is never drawn into a plain page's region.
+    if (fresh(doc) && !fresh()) {
+      failed(el, 403);
       return;
     }
     clean(body(doc));
