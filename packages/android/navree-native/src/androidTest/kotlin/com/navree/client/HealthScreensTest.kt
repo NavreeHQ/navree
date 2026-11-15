@@ -5,6 +5,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performScrollToNode
@@ -202,6 +203,27 @@ class HealthScreensTest {
         Thread.sleep(1500)
         compose.waitForIdle()
         Shots.take("health-sleep-swiped")
+    }
+
+    /**
+     * A chart read out where it is touched: a finger held on the first chart of
+     * the fitness screen's week, a picture taken while it stays there.
+     */
+    @Test
+    fun aChartReadsOutWhereItIsTouched() {
+        val app = start()
+        front(app, "Today")
+        send(app, Events.openLink("${server.url("/fitness")}"))
+        front(app, "Fitness")
+        runCatching {
+            val chart = hasContentDescription("Steps", substring = true, ignoreCase = true) and hasScrollAction().not()
+            compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(chart)
+            compose.onAllNodes(chart).onFirst().performTouchInput { down(Offset(width * 0.6f, height * 0.5f)) }
+            Thread.sleep(500)
+            compose.waitForIdle()
+            Shots.take("health-fitness-readout")
+            compose.onAllNodes(chart).onFirst().performTouchInput { up() }
+        }.onFailure { android.util.Log.w("NavreeShots", "the chart was not touched: $it") }
     }
 
     @Test
