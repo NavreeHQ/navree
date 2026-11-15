@@ -238,7 +238,11 @@ internal sealed class ShareSurface(nint window)
             }
 
             package.ShareCompleted += (_, _) => _ = done.TrySetResult(true);
-            package.ShareCanceled += (_, _) => _ = done.TrySetResult(false);
+            if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
+            {
+                package.ShareCanceled += (_, _) => _ = done.TrySetResult(false);
+            }
+
         };
         try
         {

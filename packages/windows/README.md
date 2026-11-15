@@ -9,9 +9,11 @@ The Windows client of Navree Native, written in C# on .NET 10 and WinUI 3. The r
 | `src/Navree.Runtime` | the view state, events and effects, and the client that drives the core |
 | `src/Navree.Design` | the rules as plain functions, with no UI types: what is the app's own address, the window's width classes, the words and icons, the tree walked |
 | `src/Navree.Platform` | what the client does with the system that needs no window, as plain .NET: the connections (no redirect followed, only the app's origins), the cookies, what is kept on the device (protected for this person), the wipe |
+| `src/Navree.Presence` | the app's place in Windows as plain rules and the few calls of the system that need no window: what a build offers with and without package identity, the count on the taskbar, when a notification is due, the addresses of a jump list and of a sign-in's return, the notification-area icon |
 | `src/Navree.Controls` | our own controls over WinUI 3 |
 | `src/Navree.Shell` | the app: window, title bar, navigation, pages, the tree drawn with the system's own controls, every effect carried out, the web view held to the app's origins |
 | `demo/Navree.Demo` | the demo app, which starts with no package identity and no registration |
+| `demo/Navree.Demo.Packaged` | the same demo as an installable package, so the features that need package identity can be tried |
 | `demo/Navree.Gallery` | each control in every state |
 | `tests/*` | MSTest projects beside each library |
 
@@ -39,3 +41,8 @@ The DLL is copied next to every program that uses `Navree.Core`. The "Native cli
 ## The demo
 
 `Navree.Demo` runs the client on the store demo's recorded answers (`packages/android/fixtures/store-demo`, found above the program), or on a server with `--server https://...`. `--dark` and `--light` choose the theme, `--rtl` the direction. `--walk <folder>` walks it through its screens at three widths and writes a picture of the window's content and of each page whole, and `walk.txt` saying what was done. `scripts/take-pictures.ps1` runs the demo on a Windows machine with a desktop, pictures its window in each way there is, and walks it in light, dark and right to left.
+
+
+## The app's place in Windows
+
+Each feature is offered only where the build can do it, and the client's capability list and the About page say which. With a package: the taskbar badge, the jump list, the startup task. Without: an overlay icon on the taskbar button, the person's own list of programs to run at sign-in. Either way: the icon in the notification area with a small window by it, app notifications (not to an app that runs as an administrator), the share sheet, several windows over the one core, one running app (a second start hands what it was asked to the first), and a sign-in in the system's browser that comes back on the app's own scheme. `--system-walk <folder>` walks these and writes what each answered; `--probe <file>` runs the app for a while so a second start and an address on its scheme can be tried on it; `scripts/take-system-pictures.ps1` does both with and without a package.
