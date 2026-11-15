@@ -29,7 +29,7 @@ public sealed partial class DataTable
 
         try
         {
-            if (!AutomationPeer.ListenerExists(NotificationEvent) || FrameworkElementAutomationPeer.FromElement(this) is not { } peer)
+            if (!NotificationsHeard() || FrameworkElementAutomationPeer.FromElement(this) is not { } peer)
             {
                 return;
             }
@@ -46,6 +46,20 @@ public sealed partial class DataTable
         catch (System.Runtime.InteropServices.COMException)
         {
             // A client went away between asking whether it listens and being told.
+        }
+    }
+
+    // Whether a client listens for notifications. The platform may not know the event by the number this build gives it, and then a client
+    // is taken to listen: the notification is raised, as it was before the question was asked.
+    private static bool NotificationsHeard()
+    {
+        try
+        {
+            return AutomationPeer.ListenerExists(NotificationEvent);
+        }
+        catch (Exception)
+        {
+            return true;
         }
     }
 
