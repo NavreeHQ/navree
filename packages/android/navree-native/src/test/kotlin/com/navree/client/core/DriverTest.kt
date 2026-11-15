@@ -12,6 +12,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -290,7 +291,10 @@ class ConfigTest {
         assertEquals(listOf("clipboard", "share"), client["caps"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertEquals("Android's back goes to the first destination before it leaves", "true", config["back_to_first"]!!.jsonPrimitive.content)
         assertNull("a release build takes no plain http", config["loopback_http"])
-        assertTrue("a part this build does not draw goes to the web view", config["undrawable"]!!.jsonArray.any { it.jsonPrimitive.content == "input:file" })
+        val undrawable = config["undrawable"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals("only the web part is told as one this build does not draw", listOf("web"), undrawable)
+        assertFalse("a file field is drawn", "input:file" in undrawable)
+        assertFalse("a colour field is drawn", "input:colour" in undrawable)
         assertNull("no package name, no hand-over", config["app_id"])
     }
 
