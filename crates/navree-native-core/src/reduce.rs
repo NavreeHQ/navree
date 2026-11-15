@@ -267,6 +267,8 @@ impl Core {
                 self.push_forget();
                 self.inner.has_shell = false;
                 self.inner.user = None;
+                // A snapshot that waited for the shell was the one who left's.
+                self.inner.restore = None;
                 self.view.app = None;
                 self.view.destinations.clear();
                 self.view.stage = Stage::Starting;
@@ -2825,6 +2827,35 @@ mod tests {
                 "{what}: it was not counted as a write"
             );
         }
+    }
+
+    /// Signing out ends what a snapshot waited for, as signing out on purpose
+    /// does: the person who comes back is told by the shell, and the snapshot
+    /// of the one who left is nobody's.
+    #[test]
+    fn a_snapshot_that_waits_for_the_shell_is_dropped_when_the_person_signs_out() {
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.cache.persist = true;
+        let mut core = Core::new(config);
+        let waiting = serde_json::json!({
+            "version": 1,
+            "origin": "https://shop.example",
+            "person": "1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e",
+            "selected": "/orders",
+            "destinations": [{"href": "/orders", "stack": [{"url": "/orders"}]}],
+        });
+        core.send(Event::Restore { snapshot: waiting });
+        assert_eq!(
+            core.snapshot().person.as_deref(),
+            Some("1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e"),
+            "the snapshot waits, and is what is given back"
+        );
+        core.send(Event::SignedOut);
+        assert_eq!(core.snapshot().person, None);
+        assert!(core.snapshot().destinations.is_empty());
     }
 
     #[test]
