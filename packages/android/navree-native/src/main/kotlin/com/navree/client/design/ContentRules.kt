@@ -35,6 +35,20 @@ object ListRules {
     /** The least a column gets, in dp. A table with more columns than fit is a list at any width. */
     const val COLUMN_LEAST_DP = 112
 
+    /**
+     * The lines under a row's title, with runs of badges (a status, a priority,
+     * who has it) gathered into one line that wraps, as a table's statuses are:
+     * four badges one under the other would make a row four lines taller.
+     */
+    fun detailRuns(detail: List<Navree.Node>): List<List<Navree.Node>> {
+        val runs = ArrayList<MutableList<Navree.Node>>()
+        for (part in detail) {
+            val last = runs.lastOrNull()
+            if (part is Navree.Badge && last != null && last.all { it is Navree.Badge }) last += part else runs += mutableListOf(part)
+        }
+        return runs
+    }
+
     fun tableAsList(contentWidthDp: Int, columns: Int): Boolean =
         contentWidthDp < TABLE_FROM_DP || columns * COLUMN_LEAST_DP > contentWidthDp
 

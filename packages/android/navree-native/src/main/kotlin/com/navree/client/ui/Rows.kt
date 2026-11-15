@@ -200,7 +200,15 @@ internal fun RowView(
                 {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         row.subtitle?.let { Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis) }
-                        for (part in row.detail) NodeView(part, place)
+                        for (run in ListRules.detailRuns(row.detail)) {
+                            if (run.size > 1) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    for (part in run) NodeView(part, place)
+                                }
+                            } else {
+                                for (part in run) NodeView(part, place)
+                            }
+                        }
                         if (below) {
                             row.trailing?.let { NodeView(it, place) }
                             badge?.let { StatusView(it) }

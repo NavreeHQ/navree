@@ -461,6 +461,18 @@ class FormRulesTest {
     }
 }
 
+class DetailRunsTest {
+    @Test
+    fun badges_that_follow_each_other_are_one_line_and_other_parts_keep_theirs() {
+        val high = Navree.Badge(text = "High")
+        val overdue = Navree.Badge(text = "Overdue 9 min")
+        val note = Navree.Text(value = "Ananya")
+        val runs = ListRules.detailRuns(listOf(high, overdue, note, high))
+        assertEquals(listOf(listOf<Navree.Node>(high, overdue), listOf<Navree.Node>(note), listOf<Navree.Node>(high)), runs)
+        assertEquals(emptyList<List<Navree.Node>>(), ListRules.detailRuns(emptyList()))
+    }
+}
+
 class NavigationLabelTest {
     @Test
     fun five_labels_on_a_phone_keep_to_the_size_their_longest_word_fits() {
