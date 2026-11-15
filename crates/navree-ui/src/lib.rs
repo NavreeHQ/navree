@@ -180,8 +180,8 @@ pub use sortable::{
     SortLayout, SortList, Sortable, SortableGrid, SortableGridLabels, Spot,
 };
 pub use table::{
-    BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity, TableHeight,
-    TableLabels, TablePage, TableQuery,
+    BulkAction, BulkRequest, DataTable, EditRefused, EditedValue, FilterOption, Region, RowAction,
+    TableDensity, TableHeight, TableLabels, TablePage, TableQuery,
 };
 pub use test_view::TestView;
 #[cfg(feature = "storage")]

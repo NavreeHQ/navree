@@ -58,7 +58,7 @@ mod view;
 
 pub use crate::hint::ColumnRole;
 pub use csv::write_csv_field;
-pub use edit::EditCell;
+pub use edit::{EditCell, EditRefused, EditedValue};
 pub(crate) use query::Shape;
 pub use query::{
     ActiveFilter, FilterValue, MAX_OPEN_ROWS, MAX_TEXT, MAX_VALUES, SearchMode, SortTerm,
