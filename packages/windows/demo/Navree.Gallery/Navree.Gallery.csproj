@@ -24,6 +24,11 @@
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
 
+  <!-- The script the gallery starts to listen to the events its own window raises. -->
+  <ItemGroup>
+    <None Include="Tools\watch-uia.ps1" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>

@@ -30,6 +30,7 @@ internal static class CareScenarios
             ("density-kept", DensityKeptAsync),
             ("late-shape", LateShapeAsync),
             ("unloaded", UnloadedAsync),
+            ("assistive", AssistiveAsync),
         })
         {
             try
@@ -339,6 +340,124 @@ internal static class CareScenarios
         await Task.Delay(1200);
         Report.Line($"[care-unloaded] in the tree again: the model holds {second.RowCount} rows and the table lists {table.RowsList.Count}; rows made {table.RowsLayout.LastRealized.Count}");
         await Handshake.StepAsync("care-unloaded", "the table put back in the tree after its model changed");
+    }
+
+    // What assistive technology is told: a client in a process of its own listens to the window's events while the table is used, and the
+    // peers are asked what a client would ask. What Narrator says is not heard here.
+    private static async Task AssistiveAsync(MainWindow window)
+    {
+        ListDataTableModel<Customer> model = DemoData.Model();
+        model.HasDetailOf = _ => true;
+        model.Reset(DemoData.Make(500, 50));
+        model.TotalCount = 1204;
+        model.Summary = "1–50 of 1,204";
+        model.Later = new DataTableCursor(true, CursorState.Idle);
+        model.Earlier = new DataTableCursor(true, CursorState.Idle);
+        TextTablePresenter<Customer> presenter = new(model)
+        {
+            Menu = c => new MenuFlyout { Items = { new MenuFlyoutItem { Text = "Open " + c.Name } } },
+            Detail = c => new TextBlock { Text = c.Name + " wrote from " + c.City + ".", TextWrapping = TextWrapping.Wrap },
+        };
+        model.HasMenuOf = _ => true;
+        DataTable table = await ShowAsync(window, model, presenter);
+        await Task.Delay(500);
+
+        string? folder = Report.Folder;
+        string script = Path.Combine(AppContext.BaseDirectory, "Tools", "watch-uia.ps1");
+        string log = Path.Combine(folder ?? Path.GetTempPath(), "uia-events.txt");
+        string stop = Path.Combine(folder ?? Path.GetTempPath(), "uia-events.stop");
+        File.Delete(stop);
+        File.Delete(log);
+        System.Diagnostics.Process? watcher = null;
+        try
+        {
+            watcher = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                "powershell.exe",
+                $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -ProcessId {Environment.ProcessId} -Out \"{log}\" -StopFile \"{stop}\"")
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+            });
+        }
+        catch (Exception problem)
+        {
+            Report.Line("[care-assistive] the listener could not be started: " + problem.Message);
+        }
+
+        for (int i = 0; i < 100 && !(File.Exists(log) && File.ReadAllText(log).Contains("handlers added", StringComparison.Ordinal)); i++)
+        {
+            await Task.Delay(200);
+        }
+
+        Report.Line("[care-assistive] listener " + (File.Exists(log) ? "started" : "did not start"));
+
+        // What a client asks of the peers.
+        Microsoft.UI.Xaml.Automation.Peers.AutomationPeer tablePeer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(table);
+        DataTableRow? first = table.RowsRepeater?.TryGetElement(3) as DataTableRow;
+        if (first is not null)
+        {
+            Microsoft.UI.Xaml.Automation.Peers.AutomationPeer rowPeer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(first);
+            Report.Line($"[care-assistive] row 3 of 1,204 held 50 with more after and before: position {rowPeer.GetPositionInSet()}, size {rowPeer.GetSizeOfSet()}");
+        }
+
+        if (tablePeer is DataTableAutomationPeer grid)
+        {
+            Report.Line($"[care-assistive] the grid says {grid.RowCount} rows (the rows held) and {grid.ColumnCount} columns");
+            foreach ((int r, int c) in new[] { (-1, 0), (0, -1), (50, 0), (0, 99) })
+            {
+                try
+                {
+                    grid.GetItem(r, c);
+                    Report.Line($"[care-assistive] GetItem({r}, {c}) answered");
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    Report.Line($"[care-assistive] GetItem({r}, {c}) threw ArgumentOutOfRangeException");
+                }
+            }
+
+            Report.Line($"[care-assistive] GetItem(20, 1) answered {(grid.GetItem(20, 1) is not null)}; row 20 is {(table.RowsRepeater?.TryGetElement(20) is DataTableRow ? "made" : "not made")}");
+        }
+
+        // What a person does, and what the listener hears.
+        table.ToggleChoice(2);
+        await Task.Delay(500);
+        table.ToggleChoice(4);
+        await Task.Delay(500);
+        table.ToggleChoice(2);
+        await Task.Delay(500);
+        table.ChooseAllHeld();
+        await Task.Delay(700);
+        table.ClearChoice();
+        await Task.Delay(700);
+        if (table.RowsRepeater?.TryGetElement(5) is DataTableRow detailRow)
+        {
+            table.ToggleDetail(detailRow);
+            await Task.Delay(600);
+            table.ToggleDetail(detailRow);
+            await Task.Delay(600);
+        }
+
+        model.Append(DemoData.Make(550, 25));
+        await Task.Delay(700);
+        Scroll(table, 1200);
+        await Task.Delay(900);
+        Report.Line($"[care-assistive] last said: '{table.LastAnnouncement}'");
+        await Handshake.StepAsync("care-assistive", "the table after the events were raised");
+
+        File.WriteAllText(stop, "stop");
+        if (watcher is not null)
+        {
+            await Task.Run(() => watcher.WaitForExit(8000));
+        }
+
+        if (File.Exists(log))
+        {
+            foreach (string line in File.ReadAllLines(log))
+            {
+                Report.Line("[care-assistive] heard " + line);
+            }
+        }
     }
 
     // A new model: what is typed looks through the new model's names, not the old one's.
