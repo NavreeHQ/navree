@@ -47,7 +47,7 @@ export const sections: DocsSection[] = [
   {
     slug: "prologue",
     title: "Prologue",
-    description: "What Navree is, what 1.0 ships, how it is versioned and supported, what comes next, and how to send a change.",
+    description: "What Navree is, what each release ships, how it is versioned and supported, what comes next, and how to send a change.",
     pages: ["introduction", "release-notes", "versioning-and-support", "roadmap", "contributing"],
   },
   {

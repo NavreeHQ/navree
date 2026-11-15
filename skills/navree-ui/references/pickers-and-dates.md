@@ -152,8 +152,6 @@ pub fn window_of(query: &DateRangeQuery) -> Option<DateRange> {
 - `DateLocale::of("hi")` and 18 other locales set month and weekday names,
   the order of a typed date, the first weekday and the clock. India's week
   starts on Sunday. `FormView::dates(locale, today)` sets them for a form.
-- A date and a time together are two fields. A single control for both is
-  not built yet.
 - Years 1 to 9999, Gregorian only. With JavaScript off a native `date` or
   `time` field stands in and posts the same value.
 
