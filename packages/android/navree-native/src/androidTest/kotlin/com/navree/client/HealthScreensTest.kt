@@ -197,7 +197,8 @@ class HealthScreensTest {
         front(app, "Today")
         send(app, Events.openLink("${server.url("/sleep")}"))
         front(app, "Sleep")
-        compose.onRoot().performTouchInput { swipeRight(startX = left + 40f, endX = right - 40f, durationMillis = 300) }
+        // Inside the page, clear of a navigation rail at either edge.
+        compose.onRoot().performTouchInput { swipeRight(startX = width * 0.5f, endX = width * 0.9f, durationMillis = 300) }
         val wanted = if (Shots.look == "rtl") "GET /sleep?date=2026-11-13" else "GET /sleep?date=2026-11-11"
         waitFor("the day $wanted") { recorded.asked.contains(wanted) }
         Thread.sleep(1500)
