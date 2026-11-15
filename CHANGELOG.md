@@ -132,7 +132,8 @@ every `@navree/*` package carries the same version.
   runtime module mounts the script, seals what it draws and lets it call only the routes the server
   named (browser contract 1). `GET /_navree/ui/ext/{file}` serves the files of an app that
   contributes one. `navree::plugin` names `UiExtension`, `ExtensionFile`, `FieldControl`, `Control`,
-  `ControlCx`, `EditedValue`, `PageSources`, `Directive` and `PagePolicy` for a plugin's modules.
+  `ControlCx`, `ControlField`, `EditedValue`, `PageSources`, `Directive` and `PagePolicy` for a
+  plugin's modules.
 - A form field of your own: a `FieldControl`, drawn with `#[form(control = ..)]` in a derived form,
   `Widget::Control` in a described one and `EditCell::control` in a table. Its server check runs on
   every path a value arrives by (`Submit`, wizard steps, drafts read with `Draft::read_for`,

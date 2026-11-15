@@ -2202,6 +2202,11 @@ fn the_plugin_module_brings_the_ui_extension_names() {
         navree::ui::ControlCx<'static>,
     >());
     assert!(same::<navree::plugin::Control, navree::ui::Control>());
+    // What `FieldControl::draw` is given: a plugin names it to write the method.
+    assert!(same::<
+        navree::plugin::ControlField<'static>,
+        navree::ui::ControlField<'static>,
+    >());
     assert!(same::<
         navree::plugin::EditedValue<String>,
         navree::ui::EditedValue<String>,
