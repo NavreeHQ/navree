@@ -84,6 +84,25 @@ FormView::<NewDeal>::new()
 
 Fields sit in two columns where there is room, and a `wide` field takes both; `FormView::one_column()` puts each field on its own line.
 
+## Two forms of one type on a page
+
+Every id a form writes is made of its type's id and the field's name (`new-deal-title`), so the same form drawn twice, as in two dialogs, repeats them: a label would find the wrong field, and an `aria-describedby` the wrong help. `FormView::id_prefix` puts a prefix and a hyphen before every id the form writes and every reference to one: the form's own id, each field's, the ids of its help and its error, and those of the pickers, uploads and sliders it draws.
+
+```rust
+FormView::<NewDeal>::new().post("/deals").id_prefix("add")
+FormView::<NewDeal>::new().post("/deals/42").id_prefix("edit")
+```
+
+The first form's title field is `add-new-deal-title` and the second's `edit-new-deal-title`. What a form posts is as it was, the field's name (`title`), so the handler reads it as before. Anything in the prefix but letters, digits, `-` and `_` becomes `-`, and a prefix with nothing left is no prefix. `FormView::form_id()` says the id of the `<form>` element, for a button outside it that names the form in its `form` attribute, such as a dialog's footer.
+
+A form that is refused answers the runtime with an op that names the form by its id, so that the errors show under its fields. Take `Result<Submit<T>, Rejected<T>>` and call `Rejected::id_prefix` with the same prefix, and the errors show on the form that was posted; with no script the page that comes back has the form in that scope too. A `Submit<T>` taken alone cannot know the prefix, and names the form by its own id.
+
+```rust
+Err(rejected) => rejected.id_prefix("add").respond(|form| {
+    shell.page("New deal").body(form.post("/deals").submit("Create deal"))
+}),
+```
+
 ## Reading it back
 
 `Submit<T>` is an extractor. It decodes the form, runs the rules and hands you a valid `T`, or a `Rejected<T>`, whose `respond` draws your page again around a form that holds what was typed and the errors:

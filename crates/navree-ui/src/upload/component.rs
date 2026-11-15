@@ -222,6 +222,17 @@ impl Upload {
         self
     }
 
+    /// Puts `scope` and a hyphen before the id the upload writes, the one it was given or the
+    /// one its name makes: a form whose ids carry a prefix scopes its file fields so.
+    pub(crate) fn scoped(mut self, scope: &str) -> Self {
+        let id = self
+            .id
+            .take()
+            .unwrap_or_else(|| format!("upload-{}", self.name));
+        self.id = Some(format!("{scope}-{id}"));
+        self
+    }
+
     /// Makes the upload a form of its own that posts to `href`.
     pub fn action(mut self, href: impl Into<Href>) -> Self {
         self.action = Some(href.into());
