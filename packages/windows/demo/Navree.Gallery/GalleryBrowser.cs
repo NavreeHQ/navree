@@ -187,7 +187,14 @@ internal sealed class GalleryBrowser
             {
                 foreach (string key in e.Keys)
                 {
-                    _ = e.On ? chosen.Add(key) : chosen.Remove(key);
+                    if (e.On)
+                    {
+                        chosen.Add(key);
+                    }
+                    else
+                    {
+                        chosen.Remove(key);
+                    }
                 }
             }
 
