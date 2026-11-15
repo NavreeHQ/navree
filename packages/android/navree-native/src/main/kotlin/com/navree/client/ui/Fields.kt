@@ -104,12 +104,12 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 /** What a field shows under itself: its errors if it has any, its help otherwise. */
-private class Support(val errors: List<String>, val help: String?) {
+internal class Support(val errors: List<String>, val help: String?) {
     val isError: Boolean get() = errors.isNotEmpty()
     val text: String? get() = if (isError) errors.joinToString(" ") else help
 }
 
-private fun support(field: Navree.Field, place: Place): Support = Support(place.errors(field), field.help)
+internal fun support(field: Navree.Field, place: Place): Support = Support(place.errors(field), field.help)
 
 @Composable
 private fun SupportText(support: Support, counter: String? = null) {
@@ -130,6 +130,8 @@ internal fun FieldView(field: Navree.Field, place: Place, modifier: Modifier = M
         is Navree.DateInput -> DateView(field, input, place, modifier)
         is Navree.RangeInput -> DateRangeView(field, input, place, modifier)
         is Navree.SliderInput -> SliderView(field, input, place, modifier)
+        is Navree.ColourInput -> ColourFieldView(field, input, place, modifier)
+        is Navree.FileInput -> FileFieldView(field, input, place, modifier)
         // A screen with an input this client cannot draw was shown in the web view instead.
         else -> Unit
     }
@@ -372,7 +374,7 @@ private fun FieldLabel(field: Navree.Field) {
 }
 
 @Composable
-private fun FieldSupport(support: Support) {
+internal fun FieldSupport(support: Support) {
     support.text?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = if (support.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -493,7 +495,7 @@ private fun ChoiceView(field: Navree.Field, input: Navree.ChoiceInput, place: Pl
 
 /** A field that is filled by picking, not typing: it reads like a text field and opens its picker when touched. */
 @Composable
-private fun PickerField(
+internal fun PickerField(
     field: Navree.Field,
     text: String,
     placeholder: String?,
