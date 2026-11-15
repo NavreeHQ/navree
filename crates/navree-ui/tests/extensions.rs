@@ -896,7 +896,10 @@ fn an_extension_prints_its_names_and_hashes_and_never_its_files() {
     assert!(!printed.contains("export"), "{printed}");
     assert!(!printed.contains("data-slot"), "{printed}");
     let file = format!("{:?}", MAP.script_file().expect("a script"));
-    assert!(file.contains("1a2b3c4d5e6f") && file.contains("53"), "{file}");
+    assert!(
+        file.contains("1a2b3c4d5e6f") && file.contains("53"),
+        "{file}"
+    );
     assert!(!file.contains("mount"), "{file}");
 }
 
