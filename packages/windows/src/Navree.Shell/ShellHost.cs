@@ -426,8 +426,13 @@ public sealed partial class ShellHost : IDisposable
                     kept.Clear();
                     return Task.CompletedTask;
                 }),
-                new WipeStep("what the web view keeps", OnUiAsync(WebPage.ClearAllAsync)),
-            ]).ConfigureAwait(true);
+                new WipeStep("what the web view keeps", OnUiAsync(() => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName)))),
+            ]).ConfigureAwait(false);
+        if (!await OnDispatcherAsync().ConfigureAwait(false))
+        {
+            return;
+        }
+
         if (!report.Complete)
         {
             Problem?.Invoke("the wipe did not finish: " + string.Join(", ", report.Failed.Select(failed => failed.Key)));
