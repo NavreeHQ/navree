@@ -63,9 +63,17 @@ internal sealed partial class NodeRenderer
         string? from = button.Id;
         string? inForm = currentForm;
         string? inOverlay = currentOverlay;
-        control.Click += (_, _) => Act(action, ask, from, inForm, inOverlay);
+        string trigger = TriggerKey(button);
+        context.Triggers[trigger] = control;
+        control.Click += (_, _) =>
+        {
+            Triggers.Last = trigger;
+            Act(action, ask, from, inForm, inOverlay);
+        };
         return control;
     }
+
+    private static string TriggerKey(Models.Button button) => button.Id ?? "label:" + button.Label;
 
     private UIElement DrawLink(Models.Link link)
     {

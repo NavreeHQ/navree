@@ -17,6 +17,8 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
     private Wanted? latest;
     private Wanted? showing;
     private ContentDialog? dialog;
+    private Flyout? flyout;
+    private bool flyoutClosedByUs;
     private TaskCompletionSource closing = new();
     private bool closedByUs;
     private bool pumping;
@@ -87,6 +89,24 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
 
                 OverlayRequest overlay = request;
                 bool large = overlay.Node is Models.Sheet { Size: Models.SheetSize.Large };
+
+                // A popover opens at the control that opened it, where that control is found again on the screen.
+                FrameworkElement? anchor = overlay.Node is Models.Popover && Triggers.Last is string key && context.Triggers.TryGetValue(key, out FrameworkElement? found) && found.XamlRoot is not null ? found : null;
+                if (anchor is not null)
+                {
+                    return new Wanted(
+                        "overlay:" + screen.Id + ":" + overlay.Id,
+                        () => OverlayDialog(overlay, context),
+                        null,
+                        null,
+                        _ => host.Send(Events.Overlay(screen.Id, overlay.Id, false)),
+                        large: false)
+                    {
+                        Flyout = () => new Flyout { Content = new ScrollViewer { Content = OverlayBody(overlay, context), MaxHeight = 420 } },
+                        Anchor = anchor,
+                    };
+                }
+
                 return new Wanted(
                     "overlay:" + screen.Id + ":" + overlay.Id,
                     () => OverlayDialog(overlay, context),
@@ -188,6 +208,15 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                     return;
                 }
 
+                if (flyout is not null)
+                {
+                    flyoutClosedByUs = true;
+                    flyout.Hide();
+                    flyout = null;
+                    showing = null;
+                    continue;
+                }
+
                 if (dialog is not null)
                 {
                     closedByUs = true;
@@ -205,6 +234,32 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
 
                 if (want is null)
                 {
+                    return;
+                }
+
+                if (want.Flyout is not null && want.Anchor is { XamlRoot: not null } anchor)
+                {
+                    // Light dismiss (a click away, Escape) closes it and tells the core; the focus goes back to the control that opened it.
+                    Flyout shown = want.Flyout();
+                    flyout = shown;
+                    showing = want;
+                    flyoutClosedByUs = false;
+                    shown.Closed += (_, _) =>
+                    {
+                        bool byUs = flyoutClosedByUs;
+                        if (ReferenceEquals(flyout, shown))
+                        {
+                            flyout = null;
+                            showing = null;
+                        }
+
+                        if (!byUs)
+                        {
+                            want.OnClosed(ContentDialogResult.None);
+                            _ = anchor.Focus(FocusState.Programmatic);
+                        }
+                    };
+                    shown.ShowAt(anchor);
                     return;
                 }
 
@@ -254,5 +309,18 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
     private sealed record Wanted(string Key, Func<ContentDialog> Dialog, PaneBody? Pane, Action? Refresh, Action<ContentDialogResult> OnClosed, bool large = false)
     {
         internal bool Large { get; } = large;
+
+        /// <summary>Makes the flyout, for a popover that has the control it opens at.</summary>
+        internal Func<Flyout>? Flyout { get; init; }
+
+        /// <summary>The control a flyout opens at.</summary>
+        internal FrameworkElement? Anchor { get; init; }
     }
+}
+
+/// <summary>The key of the button pressed last, so a popover it opens is shown at it even when the screen was drawn again for the opening.</summary>
+internal static class Triggers
+{
+    /// <summary>The key, or none.</summary>
+    internal static string? Last { get; set; }
 }

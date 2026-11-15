@@ -651,6 +651,20 @@ jobs:
               $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--checks', $out, '--name', $app[0], '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
               if (-not $run.WaitForExit(600000)) { "the checks of $($app[0]) did not end in 600 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
               else { "the checks of $($app[0]) ended" }
+              # A popover of the inbox opened with the real pointer and taken away with Escape.
+              if ($app[0] -eq 'inbox') {
+                $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--popover', $out, '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+                if (-not $run.WaitForExit(240000)) { "the popover check did not end in 240 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+                else { "the popover check ended" }
+                if (Test-Path "$out\popover.txt") { Get-Content "$out\popover.txt" }
+              }
+              # A card of the board moved with the real keys, a real click on its menu and the real pointer, and what the server kept.
+              if ($app[0] -eq 'board') {
+                $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--moves', $out, '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+                if (-not $run.WaitForExit(300000)) { "the moves of a card did not end in 300 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+                else { "the moves of a card ended" }
+                if (Test-Path "$out\moves.txt") { Get-Content "$out\moves.txt" }
+              }
             }
             Get-ChildItem $out -Filter '*-checks.txt' | ForEach-Object { "--- $($_.Name)"; Get-Content $_.FullName }
             Get-ChildItem $out -Filter '*-faults.txt' | ForEach-Object { "--- $($_.Name)"; Get-Content $_.FullName }

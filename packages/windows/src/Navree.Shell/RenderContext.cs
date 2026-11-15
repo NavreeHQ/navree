@@ -25,6 +25,9 @@ internal sealed class RenderContext
     /// <summary>Loads a picture's bytes by a whole address the core made, or null.</summary>
     internal Func<string, Task<byte[]?>>? Pictures { get; init; }
 
+    /// <summary>The buttons drawn, by the key that names them (their id, or their words), so the one that opened a popover can be found again after the screen is drawn again.</summary>
+    internal Dictionary<string, FrameworkElement> Triggers { get; } = [];
+
     /// <summary>The sheets, dialogs and popovers found in the tree.</summary>
     internal List<OverlayRequest> Overlays { get; } = [];
 
