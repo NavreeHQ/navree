@@ -6,6 +6,28 @@ namespace Navree.Controls.Tests.Tables;
 public sealed class PixelsTests
 {
     [TestMethod]
+    public void A_row_whose_name_takes_two_lines_and_has_a_second_line_under_it_is_three_lines_tall_and_the_other_shapes_are_as_they_were()
+    {
+        double two = RowGeometry.RowHeight(Density.Standard, RowShape.TwoLine, false, 20, 16, 1);
+        double three = RowGeometry.RowHeight(Density.Standard, RowShape.ThreeLine, false, 20, 16, 1);
+        double one = RowGeometry.RowHeight(Density.Standard, RowShape.OneLine, false, 20, 16, 1);
+        Assert.IsTrue(one < two && two < three, one + " " + two + " " + three);
+        Same.Number(Math.Max(72, 20 + 20 + 16 + 16 + 1), three);
+        Same.Number(Math.Max(56, 20 + 16 + 16 + 1), two);
+    }
+
+    [TestMethod]
+    public void A_name_takes_a_second_line_only_when_its_words_and_their_room_do_not_fit_its_column()
+    {
+        Assert.IsFalse(ColumnSet.NameWraps(200, 240));
+        Assert.IsFalse(ColumnSet.NameWraps(216, 240), "the words and the 24 round them fill the column exactly");
+        Assert.IsTrue(ColumnSet.NameWraps(217, 240));
+        Assert.IsTrue(ColumnSet.NameWraps(340, 267));
+        Assert.IsFalse(ColumnSet.NameWraps(340, 364));
+        Assert.IsFalse(ColumnSet.NameWraps(0, 120));
+    }
+
+    [TestMethod]
     [DataRow(39.3, 1.25, 40.0)]
     [DataRow(40.0, 1.25, 40.0)]
     [DataRow(37.0, 1.75, 37.142857142857146)]

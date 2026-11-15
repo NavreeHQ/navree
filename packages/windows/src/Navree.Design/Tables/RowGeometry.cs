@@ -21,6 +21,9 @@ public enum RowShape
 
     /// <summary>The name cell holds a second line under the name.</summary>
     TwoLine,
+
+    /// <summary>The name cell holds a second line under the name and the name itself may take two lines: its words do not fit the column on one.</summary>
+    ThreeLine,
 }
 
 /// <summary>The heights of rows, and what follows from them.</summary>
@@ -37,6 +40,7 @@ public static class RowGeometry
 
     private static readonly double[] OneLineMinimum = [32, 40, 48];
     private static readonly double[] TwoLineMinimum = [48, 56, 64];
+    private static readonly double[] ThreeLineMinimum = [64, 72, 80];
     private static readonly double[] Padding = [4, 8, 12];
 
     /// <summary>The height of a row, including its one-pixel divider, made whole in physical pixels.</summary>
@@ -66,13 +70,23 @@ public static class RowGeometry
         }
 
         int at = (int)density;
-        double minimum = shape == RowShape.TwoLine ? TwoLineMinimum[at] : OneLineMinimum[at];
+        double minimum = shape switch
+        {
+            RowShape.ThreeLine => ThreeLineMinimum[at],
+            RowShape.TwoLine => TwoLineMinimum[at],
+            _ => OneLineMinimum[at],
+        };
         if (hasControls && shape == RowShape.OneLine && density == Density.Compact)
         {
             minimum = 40;
         }
 
-        double content = lineHeight + (shape == RowShape.TwoLine ? Math.Max(0, secondLineHeight) : 0);
+        double content = shape switch
+        {
+            RowShape.ThreeLine => (2 * lineHeight) + Math.Max(0, secondLineHeight),
+            RowShape.TwoLine => lineHeight + Math.Max(0, secondLineHeight),
+            _ => lineHeight,
+        };
         double height = Math.Max(minimum, content + (2 * Padding[at]) + 1);
         return Pixels.RoundUp(height, rasterizationScale);
     }

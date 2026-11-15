@@ -12,6 +12,10 @@ internal sealed record ShownColumn(int ModelIndex, DataTableColumn Column, Place
 public sealed partial class DataTable
 {
     private readonly Dictionary<string, double> widths = new(StringComparer.Ordinal);
+
+    // The width of the widest name's words as they were measured, whatever the name's column was given: what decides whether a name takes a second line.
+    private readonly Dictionary<string, double> nameWords = new(StringComparer.Ordinal);
+    private bool wrapNames;
     private readonly Dictionary<int, PlacedColumn> placedByIndex = [];
     private readonly HashSet<string> hiddenKeys = new(StringComparer.Ordinal);
     private readonly HashSet<string> forcedShownKeys = new(StringComparer.Ordinal);
@@ -119,6 +123,22 @@ public sealed partial class DataTable
         int wish = frozenWish ?? ColumnSet.DefaultFrozen(startInfos);
         ColumnLayout built = ColumnLayoutBuilder.Build(start.Select(Spec).ToList(), wish, end.Select(Spec).ToList(), gutter, viewport);
 
+        // A name whose words do not fit its column takes a second line, and every row is that much taller: asked for once, and kept until the rows are replaced.
+        bool needsLines = false;
+        for (int i = 0; i < start.Count; i++)
+        {
+            if (columns[start[i]].Kind == ColumnKind.Title && nameWords.TryGetValue(columns[start[i]].Key, out double words) && ColumnSet.NameWraps(words, built.Columns[i].Width))
+            {
+                needsLines = true;
+            }
+        }
+
+        if (needsLines && !wrapNames && shape == RowShape.TwoLine && !IsList)
+        {
+            wrapNames = true;
+            RecomputeMetrics();
+        }
+
         List<int> order = [.. start, .. end];
         List<ShownColumn> list = new(order.Count);
         placedByIndex.Clear();
@@ -129,7 +149,7 @@ public sealed partial class DataTable
             placedByIndex[order[i]] = built.Columns[i];
         }
 
-        string signature = string.Join('|', order.Select(i => columns[i].Key)) + (hasCheckColumn ? "+c" : string.Empty) + (hasChevronColumn ? "+d" : string.Empty) + (shape == RowShape.TwoLine ? "+2" : string.Empty);
+        string signature = string.Join('|', order.Select(i => columns[i].Key)) + (hasCheckColumn ? "+c" : string.Empty) + (hasChevronColumn ? "+d" : string.Empty) + (shape == RowShape.TwoLine ? "+2" : shape == RowShape.ThreeLine ? "+3" : string.Empty);
         bool modeChanged = UpdateMode(columns, order, gutter);
         bool versionChanged = signature != shownSignature || modeChanged;
         if (versionChanged)
@@ -208,6 +228,10 @@ public sealed partial class DataTable
             }
 
             widths[column.Key] = ColumnSizing.AutoWidth(column.Kind, widest, column.Sort is not null);
+            if (column.Kind == ColumnKind.Title)
+            {
+                nameWords[column.Key] = widest;
+            }
         }
     }
 
@@ -231,6 +255,11 @@ public sealed partial class DataTable
             for (int r = first; r < first + sample && r < model.RowCount; r++)
             {
                 widest = Math.Max(widest, measurer.Width(presenter.CellText(model.GetRow(r), index), TextStyle.Body) + beside);
+            }
+
+            if (column.Kind == ColumnKind.Title && widest > nameWords.GetValueOrDefault(column.Key))
+            {
+                nameWords[column.Key] = widest;
             }
 
             double wanted = ColumnSizing.AutoWidth(column.Kind, widest, column.Sort is not null);
@@ -288,6 +317,8 @@ public sealed partial class DataTable
         forcedShownKeys.Clear();
         frozenWish = null;
         widths.Clear();
+        nameWords.Clear();
+        wrapNames = false;
         if (templateWired)
         {
             RebuildColumns(remeasure: true);

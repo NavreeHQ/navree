@@ -750,9 +750,15 @@ internal sealed class ProtocolTablePresenter(
     private readonly Queue<(Models.TableRow Row, int Column)> drawnOrder = [];
     private const int DrawnLeast = 600;
 
+    // The shape the rows were last made for: when the name's words do not fit its column the name takes a second line.
+    private RowShape rowShape = RowShape.OneLine;
+
     /// <inheritdoc />
-    public UIElement CreateCell(DataTableColumn definition, RowShape shape) =>
-        new Border { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = definition.Align == DataTableAlign.End ? HorizontalAlignment.Right : HorizontalAlignment.Left };
+    public UIElement CreateCell(DataTableColumn definition, RowShape shape)
+    {
+        rowShape = shape;
+        return new Border { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = definition.Align == DataTableAlign.End ? HorizontalAlignment.Right : HorizontalAlignment.Left };
+    }
 
     /// <inheritdoc />
     public void BindCell(UIElement cell, in DataTableRecord record, int columnIndex)
@@ -769,6 +775,40 @@ internal sealed class ProtocolTablePresenter(
         }
 
         holder.Child = element;
+        if (columnIndex == Table.Columns.ToList().FindIndex(column => column.Role == Models.ColumnRole.Title))
+        {
+            NameLines(element, rowShape == RowShape.ThreeLine);
+        }
+    }
+
+    // The name is the first words of the name's cell: on one line and cut with a sign, or, when the rows are made for a name that takes a second line, on two.
+    private static void NameLines(UIElement cell, bool two)
+    {
+        TextBlock? name = cell as TextBlock;
+        if (name is null && cell is DependencyObject root)
+        {
+            Queue<DependencyObject> waiting = new([root]);
+            while (name is null && waiting.Count > 0)
+            {
+                DependencyObject at = waiting.Dequeue();
+                if (at is TextBlock found)
+                {
+                    name = found;
+                    break;
+                }
+
+                for (int child = 0; child < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(at); child++)
+                {
+                    waiting.Enqueue(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(at, child));
+                }
+            }
+        }
+
+        if (name is not null)
+        {
+            name.TextWrapping = two ? TextWrapping.Wrap : TextWrapping.NoWrap;
+            name.MaxLines = two ? 2 : 0;
+        }
     }
 
     /// <inheritdoc />

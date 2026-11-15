@@ -13,6 +13,16 @@ public static class ColumnSet
     /// <summary>The width the words of a name need: a name is counted at its own width, or at this when it asks for more, and is given this before any other column keeps more than its least.</summary>
     public const double TitleNeed = 240;
 
+    /// <summary>
+    /// Whether the words of the longest name do not fit the name's column on one line, so the name takes a second line (the way a list row on Android gives its
+    /// title two lines before it is cut, and a table of the web wraps its first column): a name that fits stays on one line and the rows keep their height.
+    /// </summary>
+    /// <param name="widestWords">The width of the longest name's words, in effective pixels, as they were measured.</param>
+    /// <param name="columnWidth">The width the name's column has been given.</param>
+    /// <param name="cellPadding">The room round the words in a cell.</param>
+    /// <returns>True when the name needs a second line.</returns>
+    public static bool NameWraps(double widestWords, double columnWidth, double cellPadding = 24) => widestWords + cellPadding > columnWidth + 0.5;
+
     /// <summary>The most columns a table shows.</summary>
     public const int MostShown = 48;
 

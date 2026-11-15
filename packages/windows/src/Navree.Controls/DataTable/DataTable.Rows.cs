@@ -469,7 +469,7 @@ public sealed partial class DataTable
     private void RecomputeMetrics()
     {
         measurer.Reset();
-        shape = shapeWatch.SawSecondLine ? RowShape.TwoLine : RowShape.OneLine;
+        shape = shapeWatch.SawSecondLine ? (wrapNames ? RowShape.ThreeLine : RowShape.TwoLine) : RowShape.OneLine;
         if (shape == RowShape.OneLine && Model is { } model && Presenter is { } presenter)
         {
             int sample = Math.Min(60, model.RowCount);
@@ -478,7 +478,7 @@ public sealed partial class DataTable
                 DataTableRecord record = model.GetRow(i);
                 if (presenter.SecondLine(record) is not null)
                 {
-                    shape = RowShape.TwoLine;
+                    shape = wrapNames ? RowShape.ThreeLine : RowShape.TwoLine;
                     shapeWatch.Observe(true, false);
                     break;
                 }
