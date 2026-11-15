@@ -33,6 +33,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Navree.Protocol.Tests", "te
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Navree.Runtime.Tests", "tests\Navree.Runtime.Tests\Navree.Runtime.Tests.csproj", "{F7E130FB-006D-48E9-A380-0BEB872CB39D}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Navree.Design.Tests", "tests\Navree.Design.Tests\Navree.Design.Tests.csproj", "{14A91BDD-5141-4BB3-9D9F-5418A2FC1371}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -87,6 +89,10 @@ Global
 		{F7E130FB-006D-48E9-A380-0BEB872CB39D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F7E130FB-006D-48E9-A380-0BEB872CB39D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F7E130FB-006D-48E9-A380-0BEB872CB39D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{14A91BDD-5141-4BB3-9D9F-5418A2FC1371}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14A91BDD-5141-4BB3-9D9F-5418A2FC1371}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14A91BDD-5141-4BB3-9D9F-5418A2FC1371}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14A91BDD-5141-4BB3-9D9F-5418A2FC1371}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -104,5 +110,6 @@ Global
 		{F7146A6D-2BB2-45E4-89F3-E5A4CC83C784} = {313ED949-9D43-45A6-A308-4BDABF6E5554}
 		{70712AD0-7D60-4648-9B93-5396754F8C0F} = {313ED949-9D43-45A6-A308-4BDABF6E5554}
 		{F7E130FB-006D-48E9-A380-0BEB872CB39D} = {313ED949-9D43-45A6-A308-4BDABF6E5554}
+		{14A91BDD-5141-4BB3-9D9F-5418A2FC1371} = {313ED949-9D43-45A6-A308-4BDABF6E5554}
 	EndGlobalSection
 EndGlobal
