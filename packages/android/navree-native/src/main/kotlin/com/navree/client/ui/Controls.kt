@@ -305,7 +305,7 @@ internal fun MenuHeading(text: String) {
 internal fun FormView(node: Navree.Form, place: Place, modifier: Modifier = Modifier) {
     // A form of nothing but filters, where it stands in a part drawn whole (a pane of a split, a card), is the same row of chips.
     if (FilterRules.bar(node) != null) {
-        FilterBar(node, place, sends = true)
+        FilterBar(node, place, sends = true, edge = false)
         return
     }
     val inner = place.copy(form = node.id)

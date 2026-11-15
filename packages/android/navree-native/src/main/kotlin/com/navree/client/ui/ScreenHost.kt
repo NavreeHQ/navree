@@ -840,7 +840,7 @@ private fun SearchTopBar(
  * of its choices. Choosing tells the core, which asks for the rows again.
  */
 @Composable
-internal fun FilterBar(form: Navree.Form, place: Place, sends: Boolean) {
+internal fun FilterBar(form: Navree.Form, place: Place, sends: Boolean, edge: Boolean = true) {
     val ui = LocalUi.current
     val inForm = place.copy(form = form.id)
     val bar = remember(form) { FilterRules.bar(form) }
@@ -848,7 +848,8 @@ internal fun FilterBar(form: Navree.Form, place: Place, sends: Boolean) {
     // A table's query keeps its box of words in the app bar and has no links to draw here.
     val actions = if (sends) bar?.actions.orEmpty() else emptyList()
     if (filters.isEmpty()) return
-    val margin = ContentRules.marginDp(ui.window).dp
+    // On the screen's own line the row keeps the screen's margins; inside a part that has its own, it has none.
+    val margin = if (edge) ContentRules.marginDp(ui.window).dp else 0.dp
     // A form of filters on a page asks by itself with each choice; a table's query is asked by the core.
     val change: (Navree.Field, FieldValue) -> Unit = { field, value ->
         ui.change(inForm, field, value)
