@@ -90,9 +90,10 @@ impl EditCell {
     /// cells of a table share one), no label id, `aria-label` from [`label`](Self::label) (its
     /// text is the control's `label`) and `disabled` from [`disabled`](Self::disabled).
     ///
-    /// The control's keys and its inner change events do not reach the cell. The handler reads
-    /// the post with [`EditedValue::read`], which runs the control's check: a value the control
-    /// refuses is never stored.
+    /// Only a change of the field named `value` posts the cell, and only Enter and Escape in that
+    /// field are the cell's; the other keys and changes inside the control are the control's own.
+    /// The handler reads the post with [`EditedValue::read`], which runs the control's check: a
+    /// value the control refuses is never stored.
     ///
     /// ```
     /// use navree_ui::form::{Control, ControlField, FieldControl};
