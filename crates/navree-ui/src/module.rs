@@ -524,6 +524,7 @@ struct Assets {
     wanted: bool,
     islands: Arc<Vec<crate::island::Served>>,
     app_files: Arc<Vec<crate::app_files::Served>>,
+    extensions: Arc<crate::extension::Extensions>,
     links: Arc<crate::shell::links::Links>,
 }
 
@@ -542,10 +543,17 @@ impl Injectable for Assets {
                         source: message.into(),
                     }
                 })?;
+            let extensions = crate::extension::checked(&r.app()).map_err(|message| {
+                KernelError::Construction {
+                    provider: std::any::type_name::<Assets>().to_owned(),
+                    source: message.into(),
+                }
+            })?;
             Ok(Self {
                 wanted: gate.0.get().copied().unwrap_or(false),
                 islands: Arc::new(islands),
                 app_files: Arc::new(app_files),
+                extensions: Arc::new(extensions),
                 links: gate.1.clone(),
             })
         })
@@ -664,6 +672,30 @@ impl Controller for Assets {
                 )
             }),
         ];
+        // The files of the UI extensions the app's modules contributed, by namespace, name and
+        // content hash: there only when a module contributes one.
+        if !self.extensions.is_empty() {
+            let extensions = self.extensions.clone();
+            routes.push(
+                RouteDef::on(
+                    Method::GET,
+                    format!("!{}/{{file}}", crate::extension::EXTENSION_PATH),
+                    move |Path(file): Path<String>, headers: HeaderMap| {
+                        let extensions = extensions.clone();
+                        async move { crate::extension::respond(&file, &headers, &extensions) }
+                    },
+                )
+                .name("ui.extensions")
+                .public()
+                .api(api(
+                    "A UI extension's script or stylesheet",
+                    "A script or stylesheet a module contributed as a UI extension, by its \
+                     namespace, name and content hash; under an older hash it is still served, \
+                     uncached.",
+                    &[304, 404],
+                )),
+            );
+        }
         // The links other modules add, those the caller may open: there only when a module
         // adds one.
         if !self.links.is_empty() {
