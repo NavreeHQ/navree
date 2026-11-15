@@ -10,6 +10,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -466,7 +467,10 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
             table.select != null -> {
                 {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = ticked, onCheckedChange = if (choosable) tick else null, enabled = choosable)
+                        // A box that cannot be ticked (its row cannot be chosen) has no touch slot of its own: it keeps the room of the others, so every row starts alike.
+                        Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp), contentAlignment = Alignment.Center) {
+                            Checkbox(checked = ticked, onCheckedChange = if (choosable) tick else null, enabled = choosable)
+                        }
                         folded.leading?.let { leading -> Leading(leading, place) }
                     }
                 }
@@ -603,11 +607,13 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (node.select != null) {
-                    Checkbox(
-                        checked = ticked,
-                        onCheckedChange = if (canTick) ({ on: Boolean -> choosing.tick(ui, place, row, on) }) else null,
-                        enabled = canTick,
-                    )
+                    Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp), contentAlignment = Alignment.Center) {
+                        Checkbox(
+                            checked = ticked,
+                            onCheckedChange = if (canTick) ({ on: Boolean -> choosing.tick(ui, place, row, on) }) else null,
+                            enabled = canTick,
+                        )
+                    }
                 }
                 val titleAt = node.columns.indexOfFirst { it.role == Navree.ColumnRole.TITLE }.takeIf { it >= 0 } ?: 0
                 row.cells.forEachIndexed { index, cell ->
