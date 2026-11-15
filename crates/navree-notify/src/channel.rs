@@ -3,7 +3,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use navree_config::__private::{lookup_in, selector_name};
+use navree_config::__private::{lookup_in, selector_error, selector_name};
 use navree_config::DriverName;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize, Serializer};
@@ -234,12 +234,22 @@ impl Serialize for Channel {
 /// A built-in channel's name (also written as a table whose only key is
 /// the name), or the name of a channel a module adds that the process
 /// already knows ([`Channel::from_name`]): reading one never adds a name.
-/// Another name is the error ``unknown notification channel `{name}` ``.
+/// Another name is the error ``unknown notification channel `{name}` ``; a
+/// text that is not a name at all is the error that lists the built-in
+/// channels, which never repeats it.
 impl<'de> Deserialize<'de> for Channel {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let name = selector_name(deserializer, "channel", &CHANNEL_SLOT)?;
-        Channel::from_name(&name)
-            .ok_or_else(|| de::Error::custom(format!("unknown notification channel `{name}`")))
+        match Channel::from_name(&name) {
+            Some(channel) => Ok(channel),
+            None if DriverName::is_valid(&name) => Err(de::Error::custom(format!(
+                "unknown notification channel `{name}`"
+            ))),
+            None => Err(de::Error::custom(selector_error(
+                "channel",
+                &CHANNEL_SLOT,
+            ))),
+        }
     }
 }
 
@@ -318,6 +328,13 @@ mod tests {
         assert_eq!(error, "unknown notification channel `kabutar_9a`");
         assert_eq!(DriverName::lookup("kabutar_9a"), None);
         assert_eq!(Channel::EVERY.len(), 9);
+
+        // A text that is not a name is never said back.
+        let error = serde_json::from_value::<Channel>(serde_json::json!("Kabutar Old!"))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(error, selector_error("channel", &CHANNEL_SLOT));
+        assert!(!error.contains("Kabutar"), "{error}");
 
         // A driver of another kind is no channel: its name reads as one
         // nobody registered, with the same text.

@@ -142,7 +142,7 @@ async fn an_unregistered_session_store_fails_the_boot_naming_m_session_store() {
         .expect_err("no store named almari");
     let message = error.to_string();
     assert!(
-        message.contains("session.store is `almari`, but no module registers a session store under that name with m.session_store (known: memory, database, redis, tijori)"),
+        message.contains("session.store does not name a built-in session store or one a module registers with m.session_store (known: memory, database, redis, tijori)"),
         "{message}"
     );
 }

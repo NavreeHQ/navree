@@ -182,7 +182,7 @@ async fn a_registered_ai_driver_answers_streams_and_embeds() {
     };
     let message = format!("{error}");
     assert!(
-        message.contains("ai.providers.backup.driver is `sarvagya`, but no module registers an AI provider driver under that name with m.ai_provider (known: anthropic, openai, gemini, mistral, ollama, bedrock, vaani)"),
+        message.contains("ai.providers.backup.driver does not name a built-in AI provider driver or one a module registers with m.ai_provider (known: anthropic, openai, gemini, mistral, ollama, bedrock, vaani)"),
         "{message}"
     );
 }

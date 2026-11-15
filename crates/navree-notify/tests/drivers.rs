@@ -190,7 +190,7 @@ async fn registered_sms_and_whatsapp_drivers_are_selected_by_name() {
     )
     .await;
     assert!(
-        error.contains("notify.sms.driver is `doorsanchar`, but no module registers an SMS driver under that name with m.sms_driver (known: twilio, vonage, sns, aws_sns, log, sandesh)"),
+        error.contains("notify.sms.driver does not name a built-in SMS driver or one a module registers with m.sms_driver (known: twilio, vonage, sns, aws_sns, log, sandesh)"),
         "{error}"
     );
 }

@@ -185,9 +185,10 @@ every `@navree/*` package carries the same version.
 - A driver setting (`cache.store`, `queue.driver`, `session.store`, `realtime.backplane`,
   `notify.sms.driver`, `notify.whatsapp.driver`, `search.engine`, a disk's `driver` and an AI
   provider's `driver`) now reads any lower-case name, and a name no module registers fails the
-  boot, naming the method that registers one, where it failed as the configuration was read. A
-  value that is not such a name fails as the configuration is read, as before, with a message that
-  lists the built-in names and never repeats the value. Values that worked before read, print and
+  boot, naming the setting, the method that registers one and the names that are known, never the
+  value, where it failed as the configuration was read. A value that is not such a name fails as
+  the configuration is read, as before, with a message that lists the built-in names and never
+  repeats the value. Values that worked before read, print and
   boot as before, and so does a table of one key that is a built-in name
   (`cache.store = { memory = {} }`), which never selects a registered driver. `config:check` reads
   `search.engine` trimmed and in lower case, as the boot does. `config:schema` describes
@@ -212,8 +213,9 @@ every `@navree/*` package carries the same version.
   also implements another trait with a method of that name in scope must call it through that
   trait.
 - `Channel`'s error for a name it does not know is now ``unknown notification channel `{name}` ``,
-  where it said `unknown variant`. A name is a channel only when a module adds a channel under it,
-  so the name of another kind's driver gets the same error. The notification preference routes
+  where it said `unknown variant`, and for a text that is not a name at all a message that lists
+  the built-in channels without repeating the text. A name is a channel only when a module adds a
+  channel under it, so the name of another kind's driver gets the same error. The notification preference routes
   answer it as they answer any other bad value, with status 400 and the code `validation_failed`,
   the text under `errors.preferences`. A stored preference that names a channel no module adds
   keeps its other choices (the unknown one is skipped with a warning), and a held delivery of such

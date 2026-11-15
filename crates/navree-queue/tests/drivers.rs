@@ -188,7 +188,7 @@ async fn an_unregistered_queue_store_fails_the_boot_naming_m_queue_store() {
         .expect_err("no store named tapal");
     let message = error.to_string();
     assert!(
-        message.contains("queue.driver is `tapal`, but no module registers a queue store under that name with m.queue_store (known: database, memory, redis, dak)"),
+        message.contains("queue.driver does not name a built-in queue store or one a module registers with m.queue_store (known: database, memory, redis, dak)"),
         "{message}"
     );
 }
