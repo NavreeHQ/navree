@@ -84,11 +84,20 @@ internal sealed class PageKeeper
     internal static void Restore(FrameworkElement page, Held held)
     {
         int attempts = 0;
+        object? seen = null;
         void Try()
         {
             attempts++;
+
+            // The focus is not where the last attempt left it: the person moved it (a click on a box while the parts were being laid out), and it is theirs.
+            if (attempts > 1 && page.XamlRoot is not null && !ReferenceEquals(FocusManager.GetFocusedElement(page.XamlRoot), seen))
+            {
+                return;
+            }
+
             if (page.XamlRoot is null || !Give(page, held.Node, held))
             {
+                seen = page.XamlRoot is null ? null : FocusManager.GetFocusedElement(page.XamlRoot);
                 if (attempts < 12 && page.XamlRoot is not null)
                 {
                     page.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, async () =>
