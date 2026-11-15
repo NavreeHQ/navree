@@ -62,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -282,12 +283,34 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
             },
             snackbarHost = { Snackbars(info) },
         ) { padding ->
+            val dayPager = remember(screen) { PagerRules.inBar(screen) }
+            val dayRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+            val dayDensity = androidx.compose.ui.platform.LocalDensity.current.density
             BoxWithConstraints(
                 Modifier
                     .fillMaxSize()
                     .padding(top = padding.calculateTopPadding())
                     .consumeWindowInsets(padding)
-                    .imePadding(),
+                    .imePadding()
+                    // A screen of days turns to the day before or after when it is swiped along.
+                    .then(
+                        if (dayPager != null) {
+                            Modifier.pointerInput(dayPager.previous, dayPager.next, dayRtl) {
+                                var dragged = 0f
+                                androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                                    onDragStart = { dragged = 0f },
+                                    onDragEnd = {
+                                        PagerRules.swipe(dragged / dayDensity, dayRtl, dayPager.previous, dayPager.next)?.let {
+                                            ui.act(place, Navree.Action.Navigate(it))
+                                        }
+                                    },
+                                    onHorizontalDrag = { _, amount -> dragged += amount },
+                                )
+                            }
+                        } else {
+                            Modifier
+                        },
+                    ),
             ) {
                 val items = remember(screen.body, view, maxWidth, barSubmit, hoisted, window.fontScale) {
                     blocks(screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted, fontScale = window.fontScale)

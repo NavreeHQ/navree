@@ -462,4 +462,20 @@ object PagerRules {
 
     /** The day as the core wants it in `text`. */
     fun text(day: LocalDate): String = day.toString()
+
+    /** The least a swipe along the line goes to turn the day, in dp. */
+    const val SWIPE_DP = 72f
+
+    /**
+     * The day a horizontal swipe goes to, as the address the pager gives for it.
+     * The page moves with the finger: a swipe toward the end of the line
+     * shows the day before, and a swipe toward the start the day after; where
+     * the line runs right to left, the other way round. A short swipe, or one
+     * toward a day there is none of, turns nothing.
+     */
+    fun swipe(dragDp: Float, rtl: Boolean, previous: String?, next: String?): String? {
+        if (kotlin.math.abs(dragDp) < SWIPE_DP) return null
+        val towardEnd = if (rtl) dragDp < 0f else dragDp > 0f
+        return if (towardEnd) previous else next
+    }
 }

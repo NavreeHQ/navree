@@ -231,6 +231,15 @@ class PagerRulesTest {
     }
 
     @Test
+    fun a_swipe_turns_the_day_the_way_the_page_moves_with_the_finger() {
+        assertEquals("/day/10", PagerRules.swipe(120f, rtl = false, previous = "/day/10", next = "/day/12"))
+        assertEquals("/day/12", PagerRules.swipe(-120f, rtl = false, previous = "/day/10", next = "/day/12"))
+        assertEquals("/day/12", PagerRules.swipe(120f, rtl = true, previous = "/day/10", next = "/day/12"))
+        assertNull("a short swipe", PagerRules.swipe(40f, rtl = false, previous = "/day/10", next = "/day/12"))
+        assertNull("no day after today", PagerRules.swipe(-120f, rtl = false, previous = "/day/10", next = null))
+    }
+
+    @Test
     fun only_the_days_there_are_may_be_chosen() {
         assertTrue(PagerRules.choosable(LocalDate.parse("2026-06-01"), "2026-01-02", "2026-11-13"))
         assertFalse(PagerRules.choosable(LocalDate.parse("2026-11-14"), "2026-01-02", "2026-11-13"))
