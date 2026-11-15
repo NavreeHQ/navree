@@ -18,7 +18,7 @@ drives a real browser from `cargo test`. The source is
 
 ```toml
 [dev-dependencies]
-navree-browser = { git = "https://github.com/NavreeHQ/navree" }
+navree-browser = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

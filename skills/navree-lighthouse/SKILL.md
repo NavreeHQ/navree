@@ -251,7 +251,7 @@ the facade then turns on navree-lighthouse's own `mcp` feature) and
 app's MCP server at `/mcp`. Nothing to write:
 
 ```toml
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["mcp"] }
+navree = { version = "1", features = ["mcp"] }
 ```
 
 ```rust,ignore

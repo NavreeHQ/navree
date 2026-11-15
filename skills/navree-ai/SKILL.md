@@ -19,7 +19,7 @@ vendor model id. Everything below is in the code: when in doubt read
 
 ```toml
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["ai"] }
+navree = { version = "1", features = ["ai"] }
 ```
 
    It brings `navree::ai` (the crate and the `#[agent]` macro) and puts `AiModule` and `ModuleBuilderAiExt` in the prelude.

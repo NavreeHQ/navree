@@ -18,7 +18,7 @@ the docs page's examples, fixtures in `tests/fixtures/locales`).
 
 ```toml
 [dependencies]
-navree = { git = "https://github.com/NavreeHQ/navree", features = ["i18n"] }
+navree = { version = "1", features = ["i18n"] }
 ```
 
    It brings `navree::i18n` (with `t!`, `args!`, `embed_locales!`) and puts
