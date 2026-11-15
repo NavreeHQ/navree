@@ -231,12 +231,67 @@ With nothing opened, the list has the window.
 | date | a field that opens the calendar in a dialog |
 | time | a field that opens the clock dial in a dialog |
 | slider | a slider with its value beside its label |
+| colour | a field that shows the colour as a swatch and its hex value and opens a dialog (see below) |
+| file | an outlined box: the label, a row for each file chosen (symbol, name, size, a button to remove it) and a button that opens the system's picker |
 
 - In a short window a date and a time are typed instead of picked.
 - A required field's label ends in an asterisk.
 - An error shows under its field, in the error colour, and is said by TalkBack
   with the field. When a post comes back with errors, the first field in error
   is scrolled to and focused. An error goes when its field is changed.
+
+### A colour field (`ColourRules.kt`, `ui/ColourField.kt`)
+
+- Material 3 has no colour picker (its component list for Compose has none).
+  The field is a picker field like the date's: the label, the hex value in
+  words (`#16a34a`) and a swatch of the colour at its end. It opens a dialog.
+- The dialog has a palette of 15 swatches in rows of five (the protocol's colour
+  input carries no choices, so the palette is the client's own), a slider each
+  for hue (degrees), saturation and lightness (percent), and a box for the hex
+  value. All of them change one draft; nothing is sent until OK, which is not
+  offered while the hex box holds what is not a colour. Cancel and a tap outside
+  send nothing.
+- The hex box reads `#rrggbb`, `rrggbb` and `#rgb`, in either case. What is not
+  a colour is said under the box, with a symbol, and read by TalkBack as the
+  box's error. What is sent is always `#rrggbb` in lower case, as the protocol
+  says.
+- A swatch is 48 dp square (its circle 40 dp) and is a radio button of a
+  group. The chosen one has a thicker ring and a tick drawn in black or white,
+  whichever reads better on it, so it is never marked by colour alone.
+- A screen reader hears a swatch as its family and its value ("Green,
+  #16a34a"), a slider as its name with its value in words ("Hue, 120
+  degrees"), the field as its label and value. A colour that is not set is
+  an outlined swatch and no value.
+
+### A file field (`FileRules.kt`, `ui/FileField.kt`, `platform/PickedFiles.kt`)
+
+- Material 3 has no file upload component. The field is composed from its
+  parts: an outlined box (as a text field's) with the label, a row for each file
+  (a symbol, the name, the size; a button to remove it with the file's name in
+  its description) and a button to choose with. The button's description starts
+  with its words and ends with the field's label, so each is told apart.
+- The button opens the system's own picker and asks for no permission. A field
+  that takes only pictures and video (by the protocol's own rule) opens the photo
+  picker, one picture or several; any other opens the system's file picker,
+  limited to the kinds the field names. The camera the protocol's `capture` may
+  ask for is not used.
+- What comes back is checked against the field's `accept`: an extension
+  against the end of the name, a family (every picture) against the start of
+  the type, any other kind against the whole type. A file that does not fit is
+  said so at the field, with what the field takes, and is not added. The
+  protocol gives a file field no largest size; the client's own is 100 MiB.
+- Each file is copied at once, off the main thread and as a stream, into the
+  app's cache folder (no backup takes it) under a token the client makes; the
+  core holds the token, name, type and size. The form's request streams the copy
+  into its multipart body. A copy that is gone is shown as gone ("No longer
+  available. Choose it again.") when the app comes back to the front, and no
+  part is sent for it, never an empty one. The copies are removed when a file is
+  removed, at the end of a session, and a day after they were made.
+- Unless the field says `keep_location`, the place a picture was taken is taken
+  out of the copy (JPEG, PNG, WebP); a picture of another kind that holds one is
+  refused. The place in a video is not taken out.
+- While the form is on its way the field cannot be changed. A field that takes
+  one file replaces it; one that takes several adds.
 
 ### Type, colour, space
 
