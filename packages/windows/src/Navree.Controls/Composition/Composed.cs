@@ -202,8 +202,9 @@ public static class Composed
     /// <returns>The grid.</returns>
     public static UIElement Grid(Models.Grid grid, Func<Models.Node, UIElement> render)
     {
-        bool cards = grid.Children.All(child => child is Models.Card);
-        FlowGrid flow = new() { Cols = grid.Cols, Min = grid.Min, Gap = ComposeRules.GridGap(grid.Gap, cards), RuleBrush = cards ? null : Palette.Resource("DividerStrokeColorDefaultBrush") };
+        // Figures stand with no surface of their own: they stand further apart and a hairline runs between their columns. Links, cards and the rest are left bare.
+        bool figures = grid.Children.Count > 0 && grid.Children.All(child => child is Models.Figure);
+        FlowGrid flow = new() { Cols = grid.Cols, Min = grid.Min, Gap = ComposeRules.GridGap(grid.Gap, cards: !figures), RuleBrush = figures ? Palette.Resource("DividerStrokeColorDefaultBrush") : null };
         foreach (Models.Node child in grid.Children)
         {
             UIElement part = render(child);

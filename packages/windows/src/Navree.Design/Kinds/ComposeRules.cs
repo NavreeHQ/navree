@@ -58,11 +58,11 @@ public static class ComposeRules
     }
 
     /// <summary>
-    /// The space between a grid's parts: its own steps, or 12 when it gives none; parts that are not cards (figures with a ring at their
+    /// The space between a grid's parts: its own steps, or 12 when it gives none; parts that are figures (with a ring at their
     /// end) stand further apart, so the ring at the end of one is not taken for the start of the next.
     /// </summary>
     /// <param name="steps">The page's steps of spacing, or none (0).</param>
-    /// <param name="cards">Whether every part is a card.</param>
+    /// <param name="cards">Whether the parts have a surface of their own (not figures): they keep the gap.</param>
     /// <returns>The gap.</returns>
     public static double GridGap(int steps, bool cards)
     {
