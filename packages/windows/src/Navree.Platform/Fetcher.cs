@@ -74,6 +74,9 @@ public sealed class HttpFetcher : IFetcher, IDisposable
         UseProxy = true,
         AutomaticDecompression = DecompressionMethods.All,
         ConnectTimeout = TimeSpan.FromSeconds(15),
+
+        // A name with several addresses is tried address by address after a short wait, not after the whole time out.
+        ConnectCallback = Connecting.OpenAsync,
         PooledConnectionLifetime = TimeSpan.FromMinutes(5),
         SslOptions = new System.Net.Security.SslClientAuthenticationOptions
         {
