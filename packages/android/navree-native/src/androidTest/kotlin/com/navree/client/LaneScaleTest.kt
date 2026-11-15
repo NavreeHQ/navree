@@ -1,6 +1,8 @@
 package com.navree.client
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasText
@@ -67,19 +69,26 @@ class LaneScaleTest {
         val firstMs = (System.nanoTime() - began) / 1_000_000
         val drawnFirst = cardsDrawn()
         Shots.take("lane-$cards-first")
+        val before = cardNumbers()
+        val stats = FrameStats(compose.activity.window)
+        compose.runOnUiThread { stats.start() }
         val scrolled = System.nanoTime()
         repeat(10) {
             compose.onRoot().performTouchInput { swipeUp(startY = bottom * 0.85f, endY = bottom * 0.2f, durationMillis = 200) }
             compose.waitForIdle()
         }
         val scrollMs = (System.nanoTime() - scrolled) / 1_000_000
+        val frames = compose.runOnUiThread { stats.stop() }
+        val after = cardNumbers()
         val drawn = cardsDrawn()
         val heap = Runtime.getRuntime().let { (it.totalMemory() - it.freeMemory()) / (1024 * 1024) }
         Shots.take("lane-$cards-scrolled")
         Shots.put(
             "lanes-${Shots.device}-${Shots.look}-$cards.txt",
             "cards in the first lane: $cards\nfirst screen drawn: $firstMs ms\nten swipes up the page: $scrollMs ms\n" +
-                "cards of the lane drawn at the first screen: $drawnFirst, after the swipes: $drawn\nheap in use afterwards: $heap MB\n",
+                "cards of the lane drawn at the first screen: $drawnFirst, after the swipes: $drawn\nheap in use afterwards: $heap MB\n" +
+                "the ten swipes moved the cards drawn from ${before.minOrNull()}..${before.maxOrNull()} to ${after.minOrNull()}..${after.maxOrNull()}\n" +
+                "frames of the ten swipes: $frames\n",
         )
         assertTrue("the board with $cards cards in a lane came up with cards in it", drawnFirst > 0)
         assertTrue("$drawnFirst cards of the lane are drawn at the first screen of $cards: only the ones near the window are", drawnFirst < MOST_DRAWN)
@@ -88,6 +97,13 @@ class LaneScaleTest {
             assertTrue("the first screen of a lane of $cards cards took $firstMs ms, over $MOST_FIRST_MS", firstMs < MOST_FIRST_MS)
         }
     }
+
+    /** The numbers of the first lane's cards that are drawn now. */
+    private fun cardNumbers(): List<Int> =
+        compose.onAllNodes(hasText(LaneBoard.TITLE_END, substring = true)).fetchSemanticsNodes().mapNotNull { node ->
+            val words = node.config.getOrNull(SemanticsProperties.Text)?.joinToString(" ") { it.text }.orEmpty()
+            Regex("Card (\\d+) of").find(words)?.groupValues?.get(1)?.toInt()
+        }
 
     /** How many of the first lane's cards are drawn now: each is a node that says its title. */
     private fun cardsDrawn(): Int =
