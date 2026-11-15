@@ -110,6 +110,9 @@ public sealed class ShellWindow : Window
     /// <summary>The element the window's pictures are taken of: everything but the system's own frame.</summary>
     public FrameworkElement Surface => root;
 
+    /// <summary>The page of the screen in front, all of it (not only what the window's height shows).</summary>
+    public FrameworkElement? CurrentPage => front.PageElement;
+
     /// <summary>Sets the direction text runs in, for a language that runs right to left.</summary>
     /// <param name="rightToLeft">Whether it runs from the right.</param>
     public void SetFlowDirection(bool rightToLeft) =>

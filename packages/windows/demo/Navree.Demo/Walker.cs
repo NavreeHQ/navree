@@ -24,7 +24,7 @@ internal sealed class Walker(ShellHost host, ShellWindow window, string folder)
             await ReadyAsync();
             foreach ((string name, int width) in Widths)
             {
-                window.Size(width, 2600);
+                window.Size(width, 1000);
                 await SettleAsync();
                 await HomeAsync();
 
@@ -111,6 +111,12 @@ internal sealed class Walker(ShellHost host, ShellWindow window, string folder)
         {
             await WindowPicture.SaveAsync((Microsoft.UI.Xaml.Controls.Panel)window.Surface, file);
             Say("wrote " + Path.GetFileName(file));
+            if (window.CurrentPage is Microsoft.UI.Xaml.Controls.Panel page)
+            {
+                string whole = Path.Combine(folder, prefix + width + "-" + screen + "-page.png");
+                await WindowPicture.SaveAsync(page, whole);
+                Say("wrote " + Path.GetFileName(whole) + " (" + (int)page.ActualWidth + "x" + (int)page.ActualHeight + ")");
+            }
         }
         catch (Exception problem)
         {

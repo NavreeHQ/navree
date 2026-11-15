@@ -53,10 +53,32 @@ internal static class Look
     /// <summary>The system's secondary text brush, for what is said in passing.</summary>
     internal static Brush Muted => Resource("TextFillColorSecondaryBrush");
 
+    /// <summary>
+    /// A text that begins with a digit or a sign and holds nothing of a right-to-left script (a phone number, an amount) is
+    /// marked as left to right, so a right-to-left page does not turn it round; the mark is invisible and says nothing to a screen reader.
+    /// </summary>
+    internal static string Directed(string text)
+    {
+        if (text.Length == 0 || char.IsLetter(text[0]))
+        {
+            return text;
+        }
+
+        foreach (char letter in text)
+        {
+            if (letter is >= '\u0590' and <= '\u08FF' or >= '\uFB1D' and <= '\uFDFF' or >= '\uFE70' and <= '\uFEFF')
+            {
+                return text;
+            }
+        }
+
+        return "\u200E" + text;
+    }
+
     /// <summary>A text, in a style of the type ramp.</summary>
     internal static TextBlock Label(string text, string? ramp = null, bool muted = false, Models.Tone? tone = null)
     {
-        TextBlock block = new() { Text = text, TextWrapping = TextWrapping.Wrap, TextReadingOrder = TextReadingOrder.DetectFromContent };
+        TextBlock block = new() { Text = Directed(text), TextWrapping = TextWrapping.Wrap, TextReadingOrder = TextReadingOrder.DetectFromContent };
         if (ramp is not null)
         {
             Style? found = Ramp(ramp);

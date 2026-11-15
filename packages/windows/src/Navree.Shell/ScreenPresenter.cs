@@ -26,6 +26,9 @@ internal sealed class ScreenPresenter : Grid
         Children.Add(scroller);
     }
 
+    /// <summary>The page the screen was drawn into, all of it: the element a picture of the whole page is taken of.</summary>
+    internal FrameworkElement? PageElement => scroller.Content as FrameworkElement;
+
     /// <summary>What drawing the screen found and drew; null while nothing is shown.</summary>
     internal RenderContext? Context { get; private set; }
 
