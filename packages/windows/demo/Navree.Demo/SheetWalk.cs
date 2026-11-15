@@ -11,34 +11,35 @@ using Navree.Shell;
 namespace Navree.Demo;
 
 /// <summary>
-/// Answers the core's requests from the protocol's own examples (the shell, the list of orders that has a button leading to a screen the
-/// shell presents as a sheet, and that screen): the demo servers present no route as a sheet, and this is the only way a screen that is
-/// pushed as a sheet is reached.
+/// Answers the core's requests from the protocol's own shell, which presents <c>/orders/new</c> as a sheet, and two small screens of the
+/// demo's own: a list of orders with a button that leads there, and the form it leads to. The demo servers present no route as a sheet,
+/// and this is the only way a screen that is pushed as a sheet is reached.
 /// </summary>
-internal sealed class CorpusFetcher(string corpus) : IFetcher
+internal sealed class CorpusFetcher(string corpus, string sheets) : IFetcher
 {
     public Task<FetchResult> FetchAsync(FetchEffect effect, CancellationToken cancel)
     {
         string path = new Uri(effect.Url).AbsolutePath;
-        string? file = path.EndsWith("/_navree/native/shell", StringComparison.Ordinal) ? "shell.json"
-            : path == "/orders/new" ? "screen-form.json"
-            : path is "/" or "/orders" ? "screen-list.json"
+        string? file = path.EndsWith("/_navree/native/shell", StringComparison.Ordinal) ? Path.Combine(corpus, "shell.json")
+            : path == "/orders/new" ? Path.Combine(sheets, "orders_new.json")
+            : path is "/" or "/orders" ? Path.Combine(sheets, "orders.json")
             : null;
-        return Task.FromResult(effect.Method == "get" && file is not null && File.Exists(Path.Combine(corpus, file))
-            ? new FetchResult(200, "application/vnd.navree.native+json", null, [], File.ReadAllText(Path.Combine(corpus, file)), null)
+        return Task.FromResult(effect.Method == "get" && file is not null && File.Exists(file)
+            ? new FetchResult(200, "application/vnd.navree.native+json", null, [], File.ReadAllText(file), null)
             : new FetchResult(404, "text/plain", null, [], string.Empty, null));
     }
 
-    /// <summary>The folder of the protocol's examples, found above the program.</summary>
-    internal static string? Folder()
+    /// <summary>The folder of the protocol's examples and the demo's own, found above the program.</summary>
+    internal static (string Corpus, string Sheets)? Folders()
     {
         DirectoryInfo? at = new(AppContext.BaseDirectory);
         while (at is not null)
         {
-            string candidate = Path.Combine(at.FullName, "crates", "navree-native", "corpus");
-            if (Directory.Exists(candidate))
+            string corpus = Path.Combine(at.FullName, "crates", "navree-native", "corpus");
+            string sheets = Path.Combine(at.FullName, "packages", "windows", "demo", "Navree.Demo", "sheets");
+            if (Directory.Exists(corpus) && Directory.Exists(sheets))
             {
-                return candidate;
+                return (corpus, sheets);
             }
 
             at = at.Parent;
@@ -101,8 +102,8 @@ internal sealed class SheetWalk(ShellHost host, ShellWindow window, string folde
         bool open = host.State.Nav.Modals.Count > 0;
         Check(width + ": the screen is presented as a sheet", open, open ? "a modal is in front, " + host.State.Nav.Modals[0].Present : "no modal in front");
         string words = DrawnText.Everything(window);
-        Check(width + ": the sheet shows the screen's title", words.Contains("New customer", StringComparison.Ordinal), "\"New customer\" looked for in the words of the window and what is open over it");
-        Check(width + ": the sheet shows the screen's first field", words.Contains("Name", StringComparison.Ordinal), "\"Name\" looked for in the words of the window and what is open over it");
+        Check(width + ": the sheet shows the screen's title", words.Contains("New order", StringComparison.Ordinal), "\"New order\" looked for in the words of the window and what is open over it");
+        Check(width + ": the sheet shows the screen's first field", words.Contains("Customer", StringComparison.Ordinal), "\"Customer\" looked for in the words of the window and what is open over it");
         await ScreenPicture.SaveAsync(Path.Combine(folder, "sheet-w" + width.ToString(CultureInfo.InvariantCulture) + ".png"));
         if (host.State.Nav.Modals.Count > 0 && host.State.Nav.Front is long front)
         {
