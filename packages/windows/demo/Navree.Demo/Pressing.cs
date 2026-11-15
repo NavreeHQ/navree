@@ -47,8 +47,9 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
             window.Size(1280, 1000);
             await SettleAsync();
             Say("== pressing, at 1280 wide");
-            await OrderNumberAsync();
             await RestockAsync();
+            await OrderNumberAsync();
+            await PutAwayAsync();
             await FilterAsync();
         }
         catch (Exception problem)
@@ -79,6 +80,23 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
         SentRequest? asked = await WaitAsync(from, request => request.Url.Contains("/peek", StringComparison.Ordinal), 6000);
         Check("pressing the order number " + NameOf(number) + " sends its form's address", asked is { Method: "get" } && asked.Url.EndsWith("/orders/200000/peek", StringComparison.Ordinal), Describe(from));
         await ShotAsync("press-order-number", "after the order number was pressed");
+    }
+
+    // What the order number opened (the peek is a sheet of the Orders screen) is closed, as a person closes it, before the next step.
+    private async Task PutAwayAsync()
+    {
+        foreach (ScreenView screen in host.State.Screens.Values.ToList())
+        {
+            foreach (string overlay in screen.Overlays)
+            {
+                Say("closing the overlay " + overlay + " of screen " + screen.Id.ToString(CultureInfo.InvariantCulture));
+                host.Send(Events.Overlay(screen.Id, overlay, false));
+            }
+        }
+
+        await SettleAsync();
+        await Task.Delay(800);
+        Say("popups open after the peek was put away: " + VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Count);
     }
 
     // A quantity is typed into the field of a row, and the row's Restock button is pressed: the form's fields go with it.
