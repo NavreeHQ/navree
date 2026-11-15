@@ -145,19 +145,26 @@ impl Core {
         let mut signed_out = false;
         let focuses = ops.iter().any(|op| matches!(op, Op::Focus { .. }));
         // An answer's changes are applied whole or not at all. What its ops
-        // bring is bounded by the screen's largest size, and what the ops
-        // that look through the screen ask for together by `MAX_WORK`: when
-        // either would be passed, none of the ops that change the screen is
-        // applied.
-        let brings = ops
-            .iter()
-            .map(crate::weight::of_op)
-            .fold(0_usize, usize::saturating_add);
-        let looking = ops.iter().filter(|op| looks_through(op)).count();
-        if (brings > 0 || looking > 0)
+        // bring is bounded by the screen's largest size, and the work of its
+        // ops by `MAX_WORK`, counted as it will be done: an op that looks
+        // through the screen is charged what the screen holds when it runs,
+        // with what the ops before it brought. When either would be passed,
+        // none of the ops that change the screen is applied.
+        let brought: Vec<usize> = ops.iter().map(crate::weight::of_op).collect();
+        let any = ops.iter().any(looks_through) || brought.iter().any(|brought| *brought > 0);
+        if any
             && !self.screen_fits(id, |held| {
-                held.saturating_add(brings) <= MAX_SCREEN_NODES
-                    && held.saturating_mul(looking) <= MAX_WORK
+                let (mut size, mut work) = (held, 0_usize);
+                for (op, brought) in ops.iter().zip(&brought) {
+                    if looks_through(op) {
+                        work = work.saturating_add(size);
+                    }
+                    size = size.saturating_add(*brought);
+                    if size > MAX_SCREEN_NODES || work > MAX_WORK {
+                        return false;
+                    }
+                }
+                true
             })
         {
             return self.answer_refused(id, ops);

@@ -311,7 +311,7 @@ fn ops_answer(core: &mut Core, screen: u64, ops: Value) -> navree_native_core::U
 }
 
 /// What an answer may ask of a client is bounded: its ops that look through
-/// the screen, times the nodes the screen holds, may not pass twenty million.
+/// the screen, times the nodes the screen holds, may not pass four million.
 #[test]
 fn an_answer_whose_ops_would_look_through_a_big_screen_too_often_is_refused() {
     let focus = |count: usize| Value::Array(vec![json!({"op": "focus", "target": "note"}); count]);
@@ -641,4 +641,85 @@ fn a_page_the_screen_has_no_room_for_leaves_the_list_failed_and_not_finished() {
         "the list keeps where its rows are"
     );
     assert_eq!(list_rows(&core, screen).len(), 4 * 99_990);
+}
+
+/// What one visit to a node costs an op that looks through the screen, for
+/// the ops that cost most per node. `MAX_WORK` is set from this. Run it with
+/// `cargo test --release -p navree-native-core --test scale -- --ignored --nocapture`.
+#[test]
+#[ignore = "a measurement, not a check"]
+fn what_a_visit_to_a_node_costs() {
+    const ROWS: usize = 20_000;
+    const OPS: usize = 150;
+    type Op = fn(usize) -> Value;
+    let kinds: [(&str, Op); 6] = [
+        (
+            "focus naming nothing",
+            |_| json!({"op": "focus", "target": "nowhere"}),
+        ),
+        (
+            "remove a row",
+            |at| json!({"op": "remove", "target": format!("order-{at}")}),
+        ),
+        (
+            "append a row",
+            |at| json!({"op": "append", "target": "orders", "nodes": [{"t": "row", "id": format!("new-{at}"), "title": "CS"}]}),
+        ),
+        (
+            "morph a row",
+            |at| json!({"op": "morph", "target": format!("order-{at}"), "node": {"t": "row", "id": format!("order-{at}"), "title": "CS 2"}}),
+        ),
+        (
+            "merge a row",
+            |at| json!({"op": "merge", "target": "orders", "since": format!("{at}"), "nodes": [{"t": "row", "id": format!("order-{at}"), "title": "CS 3"}]}),
+        ),
+        (
+            "open nothing",
+            |_| json!({"op": "open", "target": "nowhere"}),
+        ),
+    ];
+    for (name, op) in kinds {
+        let (mut core, screen) = screen_of(ROWS);
+        let ops = Value::Array((0..OPS).map(|at| op(at * 3 + 7)).collect());
+        let started = Instant::now();
+        ops_answer(&mut core, screen, ops);
+        let took = started.elapsed();
+        let visits = (ROWS * OPS) as f64;
+        println!(
+            "{name}: {OPS} ops on {ROWS} rows took {took:?}: {:.1} ns for each node an op may visit",
+            took.as_nanos() as f64 / visits
+        );
+    }
+}
+
+/// The work of an answer is counted as it is done: what an op brings is
+/// looked through by every op after it, so an answer that starts within the
+/// budget and brings a great deal early is refused at the start, and nothing
+/// of it is applied.
+#[test]
+fn what_an_early_op_brings_is_looked_through_by_every_op_after_it() {
+    // A thousand ops on this screen are within the budget as it stands.
+    let (mut core, screen) = screen_of(19_000);
+    let rows: Vec<Value> = (0..99_000)
+        .map(|number| json!({"t": "row", "id": format!("big-{number}"), "title": "CS"}))
+        .collect();
+    let mut ops = vec![json!({"op": "append", "target": "orders", "nodes": rows})];
+    ops.extend((0..999).map(|_| json!({"op": "focus", "target": "nowhere"})));
+    let started = Instant::now();
+    let update = ops_answer(&mut core, screen, Value::Array(ops));
+    let took = started.elapsed();
+    println!("the refused answer took {took:?}");
+    assert_eq!(
+        list_rows(&core, screen).len(),
+        19_000,
+        "nothing of it was applied"
+    );
+    assert!(
+        update
+            .effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "size")),
+        "{:?}",
+        update.effects
+    );
 }
