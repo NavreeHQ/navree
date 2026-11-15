@@ -111,9 +111,9 @@ public sealed partial class FigureView : KindControl
             if (aside is FrameworkElement stood)
             {
                 stood.VerticalAlignment = VerticalAlignment.Top;
+                Grid.SetColumn(stood, 1);
             }
 
-            Grid.SetColumn(aside, 1);
             top.Children.Add(aside);
         }
 
