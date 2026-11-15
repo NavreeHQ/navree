@@ -284,13 +284,18 @@ object BidiRules {
 
     private val PHONE = Regex("""^\+?\d[\d\s().-]{5,}\d$""")
     private val EMAIL = Regex("""^[^\s@]+@[^\s@]+\.[^\s@]+$""")
+    private val DATE = Regex("""^(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})$""")
 
     /**
-     * A phone number or an e-mail address, which Android's right to left
-     * guidance has read left to right whatever the language around it (a number
-     * read right to left has its groups reversed); any other text as it is.
+     * A phone number or an e-mail address in a right to left line, read left to
+     * right as Android's right to left guidance has it (a number read right to
+     * left has its groups reversed); any other text as it is, and every text
+     * as it is in a left to right line, where an isolate says nothing and only
+     * lands in what a screen reader reads and what is copied. A date is not a
+     * phone number.
      */
-    fun codes(text: String): String = if (PHONE.matches(text) || EMAIL.matches(text)) amount(text) else text
+    fun codes(text: String, rtl: Boolean): String =
+        if (rtl && !DATE.matches(text) && (PHONE.matches(text) || EMAIL.matches(text))) amount(text) else text
 }
 
 /** Parts of a whole: a meter's segments, a column's parts, a strip's cells. */
