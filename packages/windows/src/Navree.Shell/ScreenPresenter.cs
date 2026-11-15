@@ -134,6 +134,13 @@ internal sealed class ScreenPresenter : Grid
         }
 
         double offset = offsets.TryGetValue(screen.Id, out double kept1) ? kept1 : 0;
+
+        // Earlier rows that have just arrived above a list push what the person was reading down: the view is moved by what they added, so the
+        // same rows stay where they were under the eye.
+        double extentBefore = scroller.ExtentHeight;
+        ScreenView? previous = shown;
+        bool earlierArrived = previous is not null && previous.Id == screen.Id
+            && previous.Lists.Any(pair => pair.Value.LoadingBefore && screen.Lists.TryGetValue(pair.Key, out ListState? now) && !now.LoadingBefore && !now.FailedBefore);
         shown = screen;
         shownWidth = width;
         RenderContext context = new()
@@ -149,9 +156,15 @@ internal sealed class ScreenPresenter : Grid
         FrameworkElement built = (FrameworkElement)drawn;
         scroller.Content = drawn;
         FitPage();
-        if (offset > 0)
+        if (offset > 0 || earlierArrived)
         {
             scroller.UpdateLayout();
+            if (earlierArrived)
+            {
+                offset += Math.Max(0, scroller.ExtentHeight - extentBefore);
+                offsets[screen.Id] = offset;
+            }
+
             scroller.ChangeView(null, offset, null, disableAnimation: true);
         }
 

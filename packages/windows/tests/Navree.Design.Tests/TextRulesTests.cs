@@ -27,6 +27,20 @@ public sealed class TextRulesTests
     }
 
     [TestMethod]
+    public void What_is_said_and_copied_is_the_words_as_they_were_sent()
+    {
+        string sent = "Stock against the point it reorders at";
+        string drawn = TextRules.KeepEnd(sent);
+        Assert.AreNotEqual(sent, drawn);
+        Assert.AreEqual(sent, TextRules.Said(drawn));
+
+        // The mark that fixes the order of an amount in a right-to-left page is drawn and not said.
+        Assert.AreEqual("\u20B91,24,050", TextRules.Said("\u200E\u20B91,24,050"));
+        Assert.AreEqual("Ship to Goa", TextRules.Said("\u200EShip to\u00A0Goa"));
+        Assert.AreEqual("plain words", TextRules.Said("plain words"));
+    }
+
+    [TestMethod]
     public void Only_the_last_space_changes_and_nothing_else_is_lost()
     {
         string once = TextRules.KeepEnd("Stock against the point it reorders at");

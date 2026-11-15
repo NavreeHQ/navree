@@ -357,6 +357,7 @@ internal sealed partial class NodeRenderer
         {
             case TextBlock words:
                 words.IsTextSelectionEnabled = false;
+                Look.KeepEnd(words);
                 break;
             case Panel panel:
                 foreach (UIElement child in panel.Children)

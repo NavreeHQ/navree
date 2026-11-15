@@ -485,7 +485,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
 
     private UIElement DrawText(Models.Text text)
     {
-        TextBlock block = Look.Label(text.Value, RampOf(text.Style, text.Heading), text.Muted, text.Tone);
+        TextBlock block = Look.Label(text.Value, RampOf(text.Style, text.Heading), text.Muted, text.Tone, keepEnd: false);
         if (text.Style == Models.TextStyle.Mono)
         {
             block.FontFamily = new FontFamily("Cascadia Mono, Consolas");

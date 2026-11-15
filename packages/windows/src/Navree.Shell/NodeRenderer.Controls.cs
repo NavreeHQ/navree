@@ -720,13 +720,40 @@ internal sealed partial class NodeRenderer
                         combo.Items.Add(option.Label);
                     }
 
+                    // The options go on past those held (a list the server gives by cursor): the last entry asks for the next of them.
+                    bool goesOn = held?.More ?? choice.More is not null;
+                    if (goesOn)
+                    {
+                        combo.Items.Add("Show more");
+                    }
+
                     combo.SelectedIndex = IndexOfValue(options, chosen);
                     bool comboApplying = false;
                     combo.SelectionChanged += (_, _) =>
                     {
-                        if (!comboApplying && combo.SelectedIndex >= 0 && combo.SelectedIndex < options.Count)
+                        if (comboApplying)
+                        {
+                            return;
+                        }
+
+                        if (combo.SelectedIndex >= 0 && combo.SelectedIndex < options.Count)
                         {
                             send(new TextValue(options[combo.SelectedIndex].Value));
+                        }
+                        else if (goesOn && combo.SelectedIndex == options.Count)
+                        {
+                            // Not a choice: the entry that asks for more. The choice that stood stays, and the options that come are put in the list.
+                            comboApplying = true;
+                            try
+                            {
+                                combo.SelectedIndex = IndexOfValue(options, chosen);
+                            }
+                            finally
+                            {
+                                comboApplying = false;
+                            }
+
+                            context.Send(Events.Options(context.Screen.Id, currentFormOf(), id, null, more: true));
                         }
                     };
                     control = combo;
@@ -737,13 +764,21 @@ internal sealed partial class NodeRenderer
                         try
                         {
                             IReadOnlyList<Models.ChoiceOption> latest = view?.Options ?? options;
-                            if (latest.Count != combo.Items.Count || latest.Select((option, at) => combo.Items[at] as string != option.Label).Any(different => different))
+                            bool more = view is not null ? view.More : goesOn;
+                            int expected = latest.Count + (more ? 1 : 0);
+                            if (expected != combo.Items.Count || latest.Select((option, at) => combo.Items[at] as string != option.Label).Any(different => different))
                             {
                                 options = latest;
+                                goesOn = more;
                                 combo.Items.Clear();
                                 foreach (Models.ChoiceOption option in latest)
                                 {
                                     combo.Items.Add(option.Label);
+                                }
+
+                                if (more)
+                                {
+                                    combo.Items.Add("Show more");
                                 }
                             }
 

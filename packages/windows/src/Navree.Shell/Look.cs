@@ -58,6 +58,27 @@ internal static class Look
     /// A text that begins with a digit or a sign and holds nothing of a right-to-left script (a phone number, an amount) is
     /// marked as left to right, so a right-to-left page does not turn it round; the mark is invisible and says nothing to a screen reader.
     /// </summary>
+    /// <summary>
+    /// Shapes the words of a text block that is not selectable after the fact (a card that is a button makes the words under it not selectable):
+    /// the short last word is kept with the one before it, and the name stays the words as they were sent.
+    /// </summary>
+    /// <param name="block">The text block.</param>
+    internal static void KeepEnd(TextBlock block)
+    {
+        if (block.IsTextSelectionEnabled || block.Inlines.Count > 1)
+        {
+            return;
+        }
+
+        string said = TextRules.Said(block.Text);
+        string shaped = TextRules.KeepEnd(said);
+        if (shaped != said)
+        {
+            block.Text = block.Text.StartsWith('\u200E') ? "\u200E" + shaped : shaped;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(block, said);
+        }
+    }
+
     internal static string Directed(string text)
     {
         if (text.Length == 0 || char.IsLetter(text[0]))
@@ -77,9 +98,18 @@ internal static class Look
     }
 
     /// <summary>A text, in a style of the type ramp.</summary>
-    internal static TextBlock Label(string text, string? ramp = null, bool muted = false, Models.Tone? tone = null)
+    internal static TextBlock Label(string text, string? ramp = null, bool muted = false, Models.Tone? tone = null, bool keepEnd = true)
     {
-        TextBlock block = new() { Text = Directed(TextRules.KeepEnd(text)), TextWrapping = TextWrapping.Wrap, TextReadingOrder = TextReadingOrder.DetectFromContent };
+        // What is drawn may be shaped; the name a screen reader, voice control and a search are given is the words as they were sent. A label that is
+        // not copied (a title, a caption of a card, a button, a row) keeps its short last word with the one before it; one a person may select and
+        // copy (the body text) is drawn as it came, since the clipboard would be given the shaped words.
+        string drawn = Directed(keepEnd ? TextRules.KeepEnd(text) : text);
+        TextBlock block = new() { Text = drawn, TextWrapping = TextWrapping.Wrap, TextReadingOrder = TextReadingOrder.DetectFromContent };
+        if (drawn != text)
+        {
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(block, text);
+        }
+
         if (ramp is not null)
         {
             Style? found = Ramp(ramp);
