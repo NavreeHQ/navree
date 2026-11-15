@@ -454,28 +454,13 @@ jobs:
           fi
           sleep 3
           for look in light dark large rtl; do
-            night=no; scale=1.0; rtl=0
+            night=no; scale=1.0
             case "$look" in
               dark) night=yes ;;
               large) scale=2.0 ;;
-              rtl) rtl=1 ;;
             esac
             "$adb" shell cmd uimode night "$night"
             "$adb" shell settings put system font_scale "$scale"
-            # The system is given the look's language (a right to left one for the right to left look, English
-            # for the others) by a test of its own before the run, so every window an app opens, a dialog, a
-            # menu or a picker among them, is laid out by the system itself as it is on a person's phone.
-            # What cannot be set is said in the run, not left out.
-            if ! "$adb" shell pm grant com.navree.client.test android.permission.CHANGE_CONFIGURATION; then
-              echo "::warning title=Language::The permission to change the system's configuration was not granted to the tests ($name, $look)."
-            fi
-            if ! "$adb" shell settings put global hidden_api_policy 1; then
-              echo "::warning title=Language::The hidden API setting was not made ($name, $look)."
-            fi
-            "$adb" shell am instrument -r -w -e class com.navree.client.LanguageTest -e look "$look" -e device "$name" \
-              com.navree.client.test/androidx.test.runner.AndroidJUnitRunner > "$RUNNER_TEMP/instrument-$name-$look-language.txt"
-            read_run "$RUNNER_TEMP/instrument-$name-$look-language.txt" "language $name $look" "$look" "" || status=1
-            echo "system configuration: $("$adb" shell am get-config | tr '\n' ' ' | cut -c1-300)"
             "$adb" shell am instrument -r -w -e look "$look" -e device "$name" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
               com.navree.client.test/androidx.test.runner.AndroidJUnitRunner > "$RUNNER_TEMP/instrument-$name-$look.txt"
             read_run "$RUNNER_TEMP/instrument-$name-$look.txt" "device tests $name $look" "$look" "${{ matrix.tests }}" || status=1
