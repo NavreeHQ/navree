@@ -372,6 +372,24 @@ jobs:
           "$adb" shell wm size
           "$adb" shell wm density
 
+      # What the web view's engine costs the first time something asks for it, asked first by each of the two
+      # things that start it, each in a process of its own, three times. The numbers are in the run's summary.
+      - name: The web view's engine, timed
+        continue-on-error: true
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          "$adb" install -r -t "$RUNNER_TEMP"/apks/navree-native/build/outputs/apk/androidTest/debug/*.apk
+          echo "### The web view's engine, the first time it is asked for (${{ matrix.device }}, an emulator)" >> "$GITHUB_STEP_SUMMARY"
+          for method in theFirstNativeRequestStartsTheEngineThroughTheCookieJar theGuardOnServiceWorkersStartsTheEngineWhenItIsAskedFirst; do
+            for run in 1 2 3; do
+              "$adb" logcat -c
+              "$adb" shell am instrument -w -e cold 1 -e look light -e device "${{ matrix.device }}" -e class "com.navree.client.WebEngineStartTest#$method" \
+                com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/engine-$method-$run.txt" | grep -E '^(OK|FAILURES)' || true
+              "$adb" logcat -d -s WebEngineStart:I | grep 'WebEngineStart' | sed 's/^.*WebEngineStart *: *//' | tee -a "$GITHUB_STEP_SUMMARY"
+              echo >> "$GITHUB_STEP_SUMMARY"
+            done
+          done
+
       - name: Screens
         run: |
           adb="$ANDROID_HOME/platform-tools/adb"
