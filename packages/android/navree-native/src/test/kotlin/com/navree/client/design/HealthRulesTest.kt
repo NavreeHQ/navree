@@ -304,7 +304,7 @@ class CentreFitTest {
     @Test
     fun two_lines_in_a_hole_are_made_smaller_together_when_they_are_taller_than_the_hole_allows() {
         assertEquals("they fit", 1f, ClockRules.centreFit(100f, 200f), 0.0001f)
-        assertEquals("62 % of 200 px is 124 px: 248 px of lines are halved", 0.5f, ClockRules.centreFit(248f, 200f), 0.0001f)
+        assertEquals("105 % of 200 px is 210 px: 420 px of lines are halved", 0.5f, ClockRules.centreFit(420f, 200f), 0.0001f)
         assertEquals("no lines", 1f, ClockRules.centreFit(0f, 200f), 0.0001f)
     }
 }
