@@ -184,9 +184,7 @@ public sealed partial class DataTable
                 double control = 0;
                 for (int r = 0; r < sample; r++)
                 {
-                    DataTableRecord record = model.GetRow(r);
-                    int count = presenter.ControlCount(record, index);
-                    control = Math.Max(control, (count * 32) + (Math.Max(0, count - 1) * 8));
+                    control = Math.Max(control, presenter.ControlsWidth(model.GetRow(r), index));
                 }
 
                 widths[column.Key] = ColumnSizing.AutoWidth(column.Kind, 0, false, Math.Max(control, 32));
@@ -194,9 +192,10 @@ public sealed partial class DataTable
             }
 
             double widest = measurer.Width(column.Header, TextStyle.BodyStrong);
+            double beside = presenter.BesideWords(index);
             for (int r = 0; r < sample; r++)
             {
-                widest = Math.Max(widest, measurer.Width(presenter.CellText(model.GetRow(r), index), TextStyle.Body));
+                widest = Math.Max(widest, measurer.Width(presenter.CellText(model.GetRow(r), index), TextStyle.Body) + beside);
             }
 
             widths[column.Key] = ColumnSizing.AutoWidth(column.Kind, widest, column.Sort is not null);

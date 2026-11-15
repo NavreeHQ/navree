@@ -26,7 +26,7 @@ public sealed partial class DataTable
 
     /// <summary>Whether a heading cell is the active one.</summary>
     /// <param name="gridColumn">The cell's column among the columns shown.</param>
-    internal bool IsActiveHeader(int gridColumn) => activeSet && activeRow < 0 && gridColumn == activeColumn;
+    internal bool IsActiveHeader(int gridColumn) => activeRow < 0 && (activeSet || (Model?.RowCount ?? 0) == 0) && gridColumn == activeColumn;
 
     /// <summary>A cell took focus: it becomes the active one.</summary>
     internal void CellGotFocus(DataTableCell cell, RoutedEventArgs e)
@@ -59,9 +59,11 @@ public sealed partial class DataTable
             return;
         }
 
-        activeSet = true;
+        // A table with no rows yet keeps the heading as its active place and decides again when rows come.
+        int count = Model?.RowCount ?? 0;
+        activeSet = count > 0;
         activeColumn = 0;
-        activeRow = (Model?.RowCount ?? 0) > 0 ? 0 : -1;
+        activeRow = count > 0 ? 0 : -1;
         rowsLayout.PinnedIndex = activeRow;
     }
 

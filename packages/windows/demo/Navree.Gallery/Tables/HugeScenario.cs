@@ -103,8 +103,9 @@ internal static class HugeScenario
             DataTableRowStandInAutomationPeer? standIn = peer.RowStandIn(50_000);
             Report.Line($"[rows100k] asked for {key} by its id: found {found is not null}; its stand-in is called '{standIn?.GetName()}' and has the id {standIn?.GetAutomationId()}; it is made now: {table.RowsRepeater?.TryGetElement(50_000) is not null}");
             standIn?.Realize();
+            Report.Line($"[rows100k] right after Realize the row is {(table.RowsRepeater?.TryGetElement(50_000) is not null ? "made" : "not made")}");
             await Task.Delay(500);
-            Report.Line($"[rows100k] after Realize the row is {(table.RowsRepeater?.TryGetElement(50_000) is not null ? "made" : "not made")}");
+            Report.Line($"[rows100k] half a second after Realize the row is {(table.RowsRepeater?.TryGetElement(50_000) is not null ? "made" : "not made")}");
         }
 
         await Handshake.StepAsync("table-rows100k-light", "a table of a hundred thousand rows, at the last row");

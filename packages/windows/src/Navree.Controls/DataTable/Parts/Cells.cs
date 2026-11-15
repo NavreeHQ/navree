@@ -79,6 +79,8 @@ public sealed class DataTableHeaderCell : Control
     private bool pressedForDrag;
     private bool dragging;
     private double dragStartX;
+    private Microsoft.UI.Xaml.Input.Pointer? touchPointer;
+    private double touchX;
     private bool resizable;
     private ResizeGrip? grip;
     private UIElement? options;
@@ -192,6 +194,12 @@ public sealed class DataTableHeaderCell : Control
             pressedForDrag = true;
             dragStartX = point.Position.X;
         }
+        else if (e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Touch)
+        {
+            // A short touch is a pan or a tap; a touch held in place lifts the heading (OnHolding).
+            touchPointer = e.Pointer;
+            touchX = point.Position.X;
+        }
     }
 
     /// <inheritdoc />
@@ -213,6 +221,23 @@ public sealed class DataTableHeaderCell : Control
         if (dragging)
         {
             Row?.Owner?.ReorderMoved(this, moved);
+            e.Handled = true;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnHolding(HoldingRoutedEventArgs e)
+    {
+        base.OnHolding(e);
+        if (e.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Touch
+            && e.HoldingState == Microsoft.UI.Input.HoldingState.Started
+            && touchPointer is not null
+            && CapturePointer(touchPointer))
+        {
+            dragging = true;
+            pressedForDrag = true;
+            dragStartX = touchX;
+            Row?.Owner?.ReorderStarted(this);
             e.Handled = true;
         }
     }

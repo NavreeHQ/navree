@@ -61,7 +61,9 @@ internal sealed partial class NodeRenderer
         Models.Action? action = button.Action;
         Models.Question? ask = button.Ask;
         string? from = button.Id;
-        control.Click += (_, _) => Act(action, ask, from);
+        string? inForm = currentForm;
+        string? inOverlay = currentOverlay;
+        control.Click += (_, _) => Act(action, ask, from, inForm, inOverlay);
         return control;
     }
 
@@ -72,7 +74,9 @@ internal sealed partial class NodeRenderer
         AutomationProperties.SetName(control, link.Label);
         Models.Action action = link.Action;
         string? from = link.Id;
-        control.Click += (_, _) => Act(action, null, from);
+        string? inForm = currentForm;
+        string? inOverlay = currentOverlay;
+        control.Click += (_, _) => Act(action, null, from, inForm, inOverlay);
         return control;
     }
 
@@ -93,6 +97,8 @@ internal sealed partial class NodeRenderer
     /// <summary>The items of a menu, as the system's own menu draws them.</summary>
     private MenuFlyout MenuFor(IEnumerable<Models.Node> items)
     {
+        string? inForm = currentForm;
+        string? inOverlay = currentOverlay;
         MenuFlyout flyout = new();
         foreach (Models.Node node in items)
         {
@@ -108,7 +114,7 @@ internal sealed partial class NodeRenderer
                     Models.Action? action = entry.Action;
                     Models.Question? ask = entry.Ask;
                     string? from = entry.Id;
-                    item.Click += (_, _) => Act(action, ask, from);
+                    item.Click += (_, _) => Act(action, ask, from, inForm, inOverlay);
                     flyout.Items.Add(item);
                     break;
                 case Models.Divider:

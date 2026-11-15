@@ -85,7 +85,14 @@ public sealed partial class DataTable
             texts[i] = presenter.CellText(record, i);
             int controls = presenter.ControlCount(record, i);
             foldColumns.Add(new FoldColumn(column.Role, column.Kind == ColumnKind.Number, column.Secondary));
-            cells.Add(new FoldCell(controls > 0 ? CellKind.Control : CellKind.Text, string.IsNullOrWhiteSpace(texts[i]) ? [] : [texts[i]], controls));
+            IReadOnlyList<string> said = string.IsNullOrWhiteSpace(texts[i]) ? [] : [texts[i]];
+            if (column.Role == ColumnRole.Title && presenter.SecondLine(record) is { Length: > 0 } second)
+            {
+                // A name with a line under it says the name first and the line after it, as two lines of the row.
+                said = [presenter.RowName(record), second];
+            }
+
+            cells.Add(new FoldCell(controls > 0 ? CellKind.Control : CellKind.Text, said, controls));
         }
 
         return (RowFolding.Fold(foldColumns, cells), texts);

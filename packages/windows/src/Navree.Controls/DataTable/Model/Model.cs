@@ -280,6 +280,21 @@ public interface IDataTablePresenter
     /// <returns>The count.</returns>
     int ControlCount(in DataTableRecord record, int columnIndex);
 
+    /// <summary>How wide the controls of a cell are, for sizing a column of controls. By default each is a square button with a gap between.</summary>
+    /// <param name="record">The record.</param>
+    /// <param name="columnIndex">The index of the column among the model's columns.</param>
+    /// <returns>The width in effective pixels.</returns>
+    double ControlsWidth(in DataTableRecord record, int columnIndex)
+    {
+        int count = ControlCount(record, columnIndex);
+        return (count * 32) + (Math.Max(0, count - 1) * 8);
+    }
+
+    /// <summary>How wide what stands beside the words of a column's cells is (a mark before them), for sizing the column.</summary>
+    /// <param name="columnIndex">The index of the column among the model's columns.</param>
+    /// <returns>The width in effective pixels, by default none.</returns>
+    double BesideWords(int columnIndex) => 0;
+
     /// <summary>Makes what stands under an open row.</summary>
     /// <param name="record">The record.</param>
     /// <returns>The content, or null.</returns>

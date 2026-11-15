@@ -897,14 +897,23 @@ internal sealed partial class NodeRenderer(RenderContext context)
 
     // ---- acting -----------------------------------------------------------------------------------------
 
-    internal void Act(Models.Action? action, Models.Question? ask, string? from)
+    internal void Act(Models.Action? action, Models.Question? ask, string? from) =>
+        Act(action, ask, from, currentForm, currentOverlay);
+
+    /// <summary>Sends an action, with the form and the overlay it stood in when it was drawn (a button is pressed long after it was drawn).</summary>
+    /// <param name="action">The action.</param>
+    /// <param name="ask">The question to ask first, if any.</param>
+    /// <param name="from">The part it came from.</param>
+    /// <param name="form">The form the part stood in.</param>
+    /// <param name="overlay">The overlay the part stood in.</param>
+    internal void Act(Models.Action? action, Models.Question? ask, string? from, string? form, string? overlay)
     {
         if (action is null)
         {
             return;
         }
 
-        context.Send(Events.Act(context.Screen.Id, action, currentForm, currentOverlay, null, null, ask, from));
+        context.Send(Events.Act(context.Screen.Id, action, form, overlay, null, null, ask, from));
     }
 
     /// <summary>Draws a node as it stands in a sheet or dialog: what it asks of the core carries the overlay's id.</summary>
