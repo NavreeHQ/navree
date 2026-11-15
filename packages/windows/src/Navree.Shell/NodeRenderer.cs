@@ -180,6 +180,11 @@ internal sealed partial class NodeRenderer(RenderContext context)
             row.Children.Add(element);
         }
 
+        if (WindowRules.IsLanes(stack.Children))
+        {
+            return InLanes(row, gap);
+        }
+
         if (stack.Justify is Models.Justify.End or Models.Justify.Center)
         {
             row.HorizontalAlignment = stack.Justify == Models.Justify.End ? HorizontalAlignment.Right : HorizontalAlignment.Center;
@@ -213,6 +218,29 @@ internal sealed partial class NodeRenderer(RenderContext context)
         }
 
         return row;
+    }
+
+    // Lanes share the room equally down to a least width each; below that the row scrolls across (the bar, the wheel with shift, touch).
+    private static UIElement InLanes(Grid row, double gap)
+    {
+        int lanes = row.ColumnDefinitions.Count;
+        foreach (ColumnDefinition column in row.ColumnDefinitions)
+        {
+            column.Width = new GridLength(1, GridUnitType.Star);
+        }
+
+        double least = (lanes * WindowRules.LeastLane) + ((lanes - 1) * gap);
+        row.HorizontalAlignment = HorizontalAlignment.Left;
+        ScrollViewer scroller = new()
+        {
+            Content = row,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollMode = ScrollMode.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollMode = ScrollMode.Disabled,
+        };
+        scroller.SizeChanged += (_, _) => row.Width = Math.Max(least, scroller.ViewportWidth);
+        return scroller;
     }
 
     private UIElement DrawGrid(Models.Grid grid)

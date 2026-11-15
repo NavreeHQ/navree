@@ -97,7 +97,26 @@ public static class WindowRules
     public static bool FoldsDown(WidthClass width, IEnumerable<Models.Node> children) =>
         width == WidthClass.Compact
         && children.Count() > 1
-        && children.Any(child => child is Models.Field or Models.Form or Models.Table or Models.Section or Models.List or Models.Card);
+        && (children.Any(child => child is Models.Field or Models.Form or Models.Table or Models.Section or Models.List or Models.Card) || IsLanes(children));
+
+    /// <summary>
+    /// Whether what a stack holds across is a set of lanes (the columns of a board, a row of charts): three or more parts that each hold a list or a
+    /// chart. Lanes are not squeezed to what is left of the window; a window too narrow for them scrolls across, or lays them down when it is compact.
+    /// </summary>
+    /// <param name="children">What the stack holds.</param>
+    /// <returns>Whether they are lanes.</returns>
+    public static bool IsLanes(IEnumerable<Models.Node> children)
+    {
+        List<Models.Node> parts = [.. children];
+        return parts.Count >= 3 && parts.All(HoldsLaneContent);
+    }
+
+    // A list, a table or a chart is in the part, at any depth.
+    private static bool HoldsLaneContent(Models.Node node) =>
+        node is Models.List or Models.Table or Models.Chart || Tree.ChildNodes(node).Any(HoldsLaneContent);
+
+    /// <summary>The least width of a lane, in effective pixels, before a stack of lanes scrolls across.</summary>
+    public const double LeastLane = 220;
 
     /// <summary>The space of a step of the protocol's spacing: four effective pixels, the grid of the Windows design guidance.</summary>
     /// <param name="steps">How many steps.</param>

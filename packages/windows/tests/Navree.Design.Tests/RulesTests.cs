@@ -49,6 +49,19 @@ public sealed class RulesTests
     }
 
     [TestMethod]
+    public void Three_parts_that_each_hold_a_list_are_lanes_that_lie_down_in_a_compact_window_and_scroll_in_a_narrow_one()
+    {
+        Models.Node lane = new Models.Stack { Children = [new Models.Text { Text = "Backlog" }, new Models.List()] };
+        Models.Node plain = new Models.Stack { Children = [new Models.Text { Text = "Name" }] };
+
+        Assert.IsTrue(WindowRules.IsLanes([lane, lane, lane]));
+        Assert.IsFalse(WindowRules.IsLanes([lane, lane]));
+        Assert.IsFalse(WindowRules.IsLanes([lane, lane, plain]));
+        Assert.IsTrue(WindowRules.FoldsDown(WidthClass.Compact, [lane, lane, lane]));
+        Assert.IsFalse(WindowRules.FoldsDown(WidthClass.Medium, [lane, lane, lane]));
+    }
+
+    [TestMethod]
     public void A_long_form_is_a_pane_at_the_side_only_when_the_window_is_wide_and_everything_else_is_a_dialog()
     {
         Assert.IsTrue(WindowRules.UsesSidePane(WidthClass.Expanded, true));
