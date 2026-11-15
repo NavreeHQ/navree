@@ -265,6 +265,20 @@ public sealed class PageRulesTests
         Assert.IsTrue(PageRules.SameAroundRow(table.Rows[1], new Facts(), busy));
     }
 
+    [TestMethod]
+    public void A_bar_of_fields_stands_while_only_what_the_fields_hold_differs()
+    {
+        const string Bar = """
+            {"t":"form","id":"q","action":"/q","children":[{"t":"stack","children":[{"t":"field","name":"search","id":"search","label":"Search","input":{"t":"text","value":"VALUE"}},{"t":"field","name":"on","id":"on","label":"On","input":{"t":"toggle","on":FLAG}}]}]}
+            """;
+        Models.Node one = Read(Bar.Replace("VALUE", "k", StringComparison.Ordinal).Replace("FLAG", "false", StringComparison.Ordinal));
+        Models.Node typed = Read(Bar.Replace("VALUE", "kaur", StringComparison.Ordinal).Replace("FLAG", "true", StringComparison.Ordinal));
+        Models.Node relabelled = Read(Bar.Replace("VALUE", "k", StringComparison.Ordinal).Replace("FLAG", "false", StringComparison.Ordinal).Replace("Search", "Find", StringComparison.Ordinal));
+        Assert.IsFalse(PageRules.Same(one, typed));
+        Assert.IsTrue(PageRules.SameButFieldValues(one, typed));
+        Assert.IsFalse(PageRules.SameButFieldValues(one, relabelled), "a label that changed is not a value");
+    }
+
     // ---- helpers -----------------------------------------------------------------------------------------
 
     private static IReadOnlyList<Models.Node> Texts(params string[] ids) =>

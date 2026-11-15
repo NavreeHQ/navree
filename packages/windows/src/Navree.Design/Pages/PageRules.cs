@@ -91,6 +91,69 @@ public static class PageRules
         return ReferenceEquals(a, b) || (a.GetType() == b.GetType() && Digest(a).AsSpan().SequenceEqual(Digest(b)));
     }
 
+    /// <summary>
+    /// Whether two nodes are equal by value except for what the fields inside them hold: the value, the flag or the values of an input is the person's
+    /// and the core's, not the tree's, so a bar of fields stands while only those differ.
+    /// </summary>
+    /// <param name="a">One node.</param>
+    /// <param name="b">The other.</param>
+    /// <returns>True when they write the same once the fields' starting values are left out.</returns>
+    public static bool SameButFieldValues(Models.Node a, Models.Node b)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        if (a.GetType() != b.GetType())
+        {
+            return false;
+        }
+
+        return ReferenceEquals(a, b) || System.Text.Json.Nodes.JsonNode.DeepEquals(WithoutFieldValues(a), WithoutFieldValues(b));
+    }
+
+    private static System.Text.Json.Nodes.JsonNode? WithoutFieldValues(Models.Node node)
+    {
+        ArrayBufferWriter<byte> buffer = new(1024);
+        using (Utf8JsonWriter writer = new(buffer))
+        {
+            Models.WriteNode(writer, node);
+        }
+
+        System.Text.Json.Nodes.JsonNode? root = System.Text.Json.Nodes.JsonNode.Parse(buffer.WrittenSpan);
+        Strip(root);
+        return root;
+    }
+
+    private static void Strip(System.Text.Json.Nodes.JsonNode? at)
+    {
+        switch (at)
+        {
+            case System.Text.Json.Nodes.JsonObject one:
+                if (one["t"]?.GetValue<string>() == "field" && one["input"] is System.Text.Json.Nodes.JsonObject input)
+                {
+                    foreach (string key in new[] { "value", "values", "on" })
+                    {
+                        _ = input.Remove(key);
+                    }
+                }
+
+                foreach (KeyValuePair<string, System.Text.Json.Nodes.JsonNode?> pair in one.ToList())
+                {
+                    Strip(pair.Value);
+                }
+
+                break;
+            case System.Text.Json.Nodes.JsonArray many:
+                foreach (System.Text.Json.Nodes.JsonNode? item in many)
+                {
+                    Strip(item);
+                }
+
+                break;
+            default:
+                break;
+        }
+    }
+
     /// <summary>Whether two rows of a table are equal by value, all the way down: the cells, the actions, the detail, what is chosen and what is open.</summary>
     /// <param name="a">One row.</param>
     /// <param name="b">The other.</param>

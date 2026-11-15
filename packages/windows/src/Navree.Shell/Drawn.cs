@@ -424,11 +424,30 @@ public static class PageReports
     /// <summary>How many reports there have been in all, so a check can say which came after a moment.</summary>
     public static int Total { get; private set; }
 
+    /// <summary>The first drawing of each screen, by the screen's number.</summary>
+    public static IReadOnlyDictionary<long, PageReport> FirstDrawings
+    {
+        get
+        {
+            lock (Held)
+            {
+                return new Dictionary<long, PageReport>(Firsts);
+            }
+        }
+    }
+
+    private static readonly Dictionary<long, PageReport> Firsts = [];
+
     internal static void Add(PageReport report)
     {
         lock (Held)
         {
             Total++;
+            if (report.Kind == "whole" && !Firsts.ContainsKey(report.Screen))
+            {
+                Firsts[report.Screen] = report;
+            }
+
             Held.Add(report);
             if (Held.Count > 200)
             {

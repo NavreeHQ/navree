@@ -181,7 +181,7 @@ internal sealed partial class NodeRenderer
                 return false;
             }
 
-            if (!PageRules.Same(QueryNode(previous), QueryNode(next)) && !UpdateToolbar(toolbarRecords, next))
+            if (!PageRules.SameButFieldValues(QueryNode(previous), QueryNode(next)) && !UpdateToolbar(toolbarRecords, next))
             {
                 return false;
             }
@@ -226,12 +226,7 @@ internal sealed partial class NodeRenderer
 
         for (int at = 0; at < now.Count; at++)
         {
-            bool same = (records[at].Node, now[at]) switch
-            {
-                (Models.Field was, Models.Field is1) => PageRules.Same(BareField(was), BareField(is1)),
-                (var was, var is1) => PageRules.Same(was, is1),
-            };
-            if (!same)
+            if (!PageRules.SameButFieldValues(records[at].Node, now[at]))
             {
                 return false;
             }

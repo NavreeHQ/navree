@@ -217,7 +217,7 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
 
         // Line 9: what the answers drew.
         List<PageReport> passes = [.. PageReports.All.TakeLast(Math.Max(0, PageReports.Total - mark)).Where(report => report.Screen == screen)];
-        PageReport? first = PageReports.All.FirstOrDefault(report => report.Screen == screen && report.Kind == "whole");
+        PageReport? first = PageReports.FirstDrawings.GetValueOrDefault(screen);
         foreach (PageReport pass in passes)
         {
             Say("an answer: " + pass.Kind + ", drew " + pass.Rendered + " parts" + (pass.Kinds.Length > 0 ? " (" + pass.Kinds + ")" : string.Empty) + ", " + pass.Stood + " stood, " + pass.Updated + " brought up to date, " + pass.Replaced + " drawn again, " + pass.Lazy + " nodes drawn by the table's rows meanwhile");
@@ -231,7 +231,7 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
     }
 
     private string CoreSearch() =>
-        host.State.FrontScreen?.Forms.Values.SelectMany(form => form.Fields).Where(pair => pair.Value.Value is TextValue).Select(pair => pair.Key + "=" + ((TextValue)pair.Value.Value).Text).FirstOrDefault() ?? "nothing";
+        host.State.FrontScreen?.Forms.Values.SelectMany(form => form.Fields).Where(pair => pair.Value.Value is TextValue && pair.Key.Contains("search", StringComparison.OrdinalIgnoreCase)).Select(pair => pair.Key + "=" + ((TextValue)pair.Value.Value).Text).FirstOrDefault() ?? "nothing";
 
     // ---- line 2 (and why End brought no rows): the keys in the table -------------------------------------------
 
