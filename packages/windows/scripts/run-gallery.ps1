@@ -83,6 +83,11 @@ while (-not $app.HasExited -and ((Get-Date) - $started).TotalSeconds -lt $Second
             $app.Refresh()
             $how += ' printwindow: ' + [Probe]::PrintWindowTo($app.MainWindowHandle, $png)
         }
+        if ($winapp -and $id -like 'uia-*') {
+            $tree = Join-Path $OutDir ($id + '-inspect.txt')
+            & winapp ui inspect -a $app.Id 2>&1 | Out-File -FilePath $tree -Encoding utf8
+            $how += ' inspect exit ' + $LASTEXITCODE
+        }
         Say ("picture " + $id + ": " + $how + "; " + (Get-Content $ready.FullName -Raw).Trim())
         New-Item -ItemType File -Path $done -Force | Out-Null
         $taken++

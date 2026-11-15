@@ -14,6 +14,7 @@ public sealed class DataTableCheck : Control
     public DataTableCheck()
     {
         DefaultStyleKey = typeof(DataTableCheck);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(this, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
     }
 
     /// <summary>Whether none, every one or some of the rows it stands for are chosen.</summary>
@@ -75,6 +76,7 @@ public sealed class DataTableGlyph : Control
     public DataTableGlyph()
     {
         DefaultStyleKey = typeof(DataTableGlyph);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(this, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
     }
 
     /// <summary>The glyph, a character of the symbol font.</summary>

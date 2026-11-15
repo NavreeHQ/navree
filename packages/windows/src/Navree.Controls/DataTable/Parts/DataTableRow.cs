@@ -88,6 +88,10 @@ public sealed class DataTableRow : Control
     }
 
     /// <inheritdoc />
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer() =>
+        IsHeader ? new DataTableHeaderAutomationPeer(this) : new DataTableRowAutomationPeer(this);
+
+    /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();

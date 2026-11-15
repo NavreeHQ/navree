@@ -47,6 +47,9 @@ public sealed class DataTableCell : ContentControl
     }
 
     /// <inheritdoc />
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer() => new DataTableCellAutomationPeer(this);
+
+    /// <inheritdoc />
     protected override void OnGotFocus(RoutedEventArgs e)
     {
         base.OnGotFocus(e);
@@ -104,6 +107,17 @@ public sealed class DataTableHeaderCell : Control
 
     /// <summary>The strip that widens the column, or null before the template is made.</summary>
     internal ResizeGrip? Grip => grip;
+
+    /// <summary>The key of the column the heading is for.</summary>
+    internal string ColumnKey => Row?.Owner?.Model is { } model && ColumnIndex >= 0 && ColumnIndex < model.Columns.Count ? model.Columns[ColumnIndex].Key : string.Empty;
+
+    /// <summary>What the heading says of the sort, or null when it is not the sort.</summary>
+    internal string? SortWords => direction switch
+    {
+        DataTableSortDirection.Ascending => DataTableStrings.Get("DataTable_Status_Ascending"),
+        DataTableSortDirection.Descending => DataTableStrings.Get("DataTable_Status_Descending"),
+        _ => null,
+    };
 
     /// <summary>Whether a press on the heading asks for a sort.</summary>
     internal bool Sortable => sortable;
@@ -188,6 +202,9 @@ public sealed class DataTableHeaderCell : Control
             e.Handled = true;
         }
     }
+
+    /// <inheritdoc />
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer() => new DataTableHeaderItemAutomationPeer(this);
 
     /// <inheritdoc />
     protected override void OnRightTapped(RightTappedRoutedEventArgs e)

@@ -70,6 +70,11 @@ internal static class TableScenarios
         }
 
         await Handshake.StepAsync("table-" + tag, "the " + name + " table in " + theme);
+        if (name is "standard" or "chosen" or "detail" && theme == ElementTheme.Light)
+        {
+            // The accessibility tree is read while the table is on the screen.
+            await Handshake.StepAsync("uia-" + tag, "the accessibility tree of the " + name + " table");
+        }
     }
 
     private static DataTable Build(string name, MemoryLayoutStore store, out ListDataTableModel<Customer>? model)

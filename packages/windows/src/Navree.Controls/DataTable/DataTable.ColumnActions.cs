@@ -5,8 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Navree.Design.Tables;
 using Windows.Foundation;
-using Windows.System;
-using DispatcherQueuePriority = Microsoft.UI.Dispatching.DispatcherQueuePriority;
+using VirtualKey = Windows.System.VirtualKey;
 
 namespace Navree.Controls;
 
@@ -102,6 +101,15 @@ public sealed partial class DataTable
 
         personWidths.Add(key);
         ColumnsChangedByPerson(Announcements.ColumnWidth(ColumnAt(cell.ColumnIndex).Header, (int)Math.Round(widths[key])));
+    }
+
+    /// <summary>Gives a column a width, as assistive technology asks.</summary>
+    internal void ResizeTo(DataTableHeaderCell cell, double width)
+    {
+        DataTableColumn column = ColumnAt(cell.ColumnIndex);
+        widths[column.Key] = ColumnSizing.Clamp(column.Kind, width);
+        personWidths.Add(column.Key);
+        ColumnsChangedByPerson(Announcements.ColumnWidth(column.Header, (int)Math.Round(widths[column.Key])));
     }
 
     /// <summary>Makes a column as wide as what it holds needs.</summary>

@@ -17,6 +17,7 @@ public sealed class ResizeGrip : Control
     {
         DefaultStyleKey = typeof(ResizeGrip);
         ProtectedCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(this, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
     }
 
     /// <summary>Raised when a drag begins.</summary>
