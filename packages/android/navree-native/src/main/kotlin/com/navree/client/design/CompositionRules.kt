@@ -38,12 +38,14 @@ object CompositionRules {
     /**
      * Whether a part takes the room left in a horizontal stack: a stack or
      * layers that say so, and a grid, a carousel or a chart, which have no
-     * width of their own. A ring, a shape or an icon keeps its size.
+     * width of their own. A ring, a shape or an icon keeps its size. A part
+     * for each room fills the line, so it shares what is left with the others
+     * that grow: left to its own size it would take the whole line.
      */
     fun grows(node: Navree.Node): Boolean = when (node) {
         is Navree.Stack -> node.grow
         is Navree.Layers -> node.grow
-        is Navree.Grid, is Navree.Carousel, is Navree.Chart -> true
+        is Navree.Grid, is Navree.Carousel, is Navree.Chart, is Navree.Adaptive -> true
         else -> false
     }
 

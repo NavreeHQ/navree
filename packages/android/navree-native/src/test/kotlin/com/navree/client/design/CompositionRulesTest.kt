@@ -49,6 +49,14 @@ class CompositionRulesTest {
     }
 
     @Test
+    fun a_part_for_each_room_shares_a_line_with_the_stack_that_grows_beside_it() {
+        val adaptive = Navree.Adaptive()
+        assertTrue(CompositionRules.grows(adaptive))
+        // Beside one other part that grows it has half of what the line holds, not what is left over from nothing.
+        assertEquals(493f, CompositionRules.roomLeftDp(1000f, listOf(Navree.Stack(grow = true), adaptive), 14f, 1f), 0.01f)
+    }
+
+    @Test
     fun icons_take_fixed_sizes_by_the_style_they_match() {
         assertEquals(24, CompositionRules.iconDp(null))
         assertEquals(16, CompositionRules.iconDp(Navree.TextStyle.CAPTION))
