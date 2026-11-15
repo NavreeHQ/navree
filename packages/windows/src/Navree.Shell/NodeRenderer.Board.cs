@@ -225,6 +225,7 @@ internal sealed partial class NodeRenderer
         {
             bool alt = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
             bool shift = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+            PageReports.Note("a key on a card's handle: " + e.Key + ", alt " + alt + ", shift " + shift);
             if (!alt || !shift)
             {
                 return;
@@ -238,6 +239,7 @@ internal sealed partial class NodeRenderer
                 VirtualKey.Right => Beside(listId, rowId, 1),
                 _ => null,
             };
+            PageReports.Note("the step for it: " + (target is { } step ? step.Lane + " before " + step.Before : "none"));
             if (target is { } there)
             {
                 e.Handled = true;

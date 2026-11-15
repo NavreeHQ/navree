@@ -72,6 +72,8 @@ public partial class App : Application
         string? sheet = Option(arguments, "--sheet");
         IFetcher? fetcher = sheet is not null && CorpusFetcher.Folders() is var (corpus, sheets)
             ? new CorpusFetcher(corpus, sheets)
+            : live is null && Option(arguments, "--page") is not null && CorpusFetcher.Folders() is var (pageCorpus, _)
+                ? new PageFetcher(pageCorpus)
             : Array.IndexOf(arguments, "--offline") >= 0
                 ? new OfflineFetcher()
                 : answers is null ? null : new FixtureFetcher(answers, Array.IndexOf(arguments, "--search") >= 0);

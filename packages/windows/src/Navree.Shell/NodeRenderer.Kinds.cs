@@ -130,7 +130,7 @@ internal sealed partial class NodeRenderer
             case Models.Grid grid when WindowRules.IsLanes(grid.Children):
                 return DrawLanes(grid);
             case Models.Grid grid:
-                return Composed.Grid(grid, Render);
+                return DrawFlowGrid(grid);
             case Models.Carousel carousel:
                 return Composed.Carousel(carousel, Render);
             case Models.Adaptive adaptive:
@@ -146,6 +146,25 @@ internal sealed partial class NodeRenderer
             default:
                 return null;
         }
+    }
+
+    // A grid that flows its parts into as many columns as fit (the control draws it; its parts are drawn here so they can be brought up to date).
+    private UIElement DrawFlowGrid(Models.Grid grid)
+    {
+        // Figures stand with no surface of their own: they stand further apart and a hairline runs between their columns. Links, cards and the rest are left bare.
+        bool figures = grid.Children.Count > 0 && grid.Children.All(child => child is Models.Figure);
+        FlowGrid flow = new() { Cols = grid.Cols, Min = grid.Min, Gap = ComposeRules.GridGap(grid.Gap, cards: !figures), Hairlines = figures };
+        Group run = Run(grid.Children, new PanelHost(flow.Children), () => 0, (_, part, _) =>
+        {
+            // A link or a button that is a cell fills the cell (and centres what it holds), instead of standing at the cell's edge.
+            if (part is ButtonBase button)
+            {
+                button.HorizontalAlignment = HorizontalAlignment.Stretch;
+                button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+            }
+        });
+        UpdateRun<Models.Grid>(node => node with { Children = [] }, run, node => node.Children, node => !WindowRules.IsLanes(node.Children) && (node.Children.Count > 0 && node.Children.All(child => child is Models.Figure)) == figures);
+        return flow;
     }
 
     // The parts for a wide window, or for a compact one: they stand in a column, and the column is brought up to date with the answer.

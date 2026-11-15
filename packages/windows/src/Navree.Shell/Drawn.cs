@@ -314,6 +314,11 @@ internal sealed class Group
         }
 
         renderer.Structural += structural;
+        if (structural > 0)
+        {
+            PageReports.Note("a run changed: " + pairing.Gone.Count + " went (" + string.Join(", ", pairing.Gone.Select(at => old[at].GetType().Name + " " + Navree.Design.Tree.IdOf(old[at]))) + "), " + pairing.Old.Count(at => at < 0) + " came (" + string.Join(", ", Enumerable.Range(0, now.Count).Where(at => pairing.Old[at] < 0).Select(at => now[at].GetType().Name + " " + Navree.Design.Tree.IdOf(now[at]))) + "), " + pairing.Moved.Count(moved => moved) + " moved");
+        }
+
         int position = Start();
         for (int at = 0; at < desired.Count; at++)
         {

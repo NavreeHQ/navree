@@ -95,6 +95,7 @@ internal sealed class OverlayBodyView
             return true;
         }
 
+        PageReports.Note("an overlay body is drawn again: " + now.Node.GetType().Name + " " + now.Id + (renderer.Failed ? " (a part could not be put in its place)" : " (its own words or its parts changed beyond what can be brought up to date)"));
         return false;
     }
 

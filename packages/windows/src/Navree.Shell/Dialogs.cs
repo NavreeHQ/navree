@@ -180,6 +180,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 OverlayHolder holder = new();
                 UIElement Body()
                 {
+                    PageReports.Note("a body is drawn for the overlay " + overlay.Id + "; showing " + (showing?.Key ?? "nothing") + ", pane " + pane.IsShowing + ", dialog " + (dialog is not null));
                     holder.View = new OverlayBodyView(context, overlay);
                     return holder.View.Element;
                 }
@@ -260,6 +261,11 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                         // body that cannot be (the overlay is another kind, or the screen was drawn again) is drawn again, with the place in it put back.
                         OverlayBodyView? view = showing.Holder?.View;
                         bool kept = view is not null && ReferenceEquals(view.Context, want.Context) && want.Overlay is not null && view.Update(want.Overlay);
+                        if (!kept)
+                        {
+                            PageReports.Note("an overlay is drawn again: body held " + (view is not null) + ", same drawing " + (view is not null && ReferenceEquals(view.Context, want.Context)) + ", overlay known " + (want.Overlay is not null));
+                        }
+
                         if (kept)
                         {
                             want.Holder!.View = view;

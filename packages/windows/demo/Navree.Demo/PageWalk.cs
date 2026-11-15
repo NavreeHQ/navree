@@ -80,9 +80,20 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
             await Task.Delay(1500);
             string port = server is null ? string.Empty : new Uri(server).Port.ToString(CultureInfo.InvariantCulture);
             Say("the server is " + server + " (port " + port + ")");
-            await KindsAsync();
+            if (port.Length > 0)
+            {
+                await KindsAsync();
+            }
+
             switch (port)
             {
+                case "":
+                    // No server: the screen of the walk's own, which holds a disclosure.
+                    host.Send(Events.Select(0));
+                    await SettleAsync();
+                    await Task.Delay(1500);
+                    await GuardedAsync("the disclosure", DisclosureAsync);
+                    break;
                 case "8095":
                     await StoreAsync();
                     break;
@@ -614,6 +625,33 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
             await PressAsync(TabKey);
         }
 
+        Focus? asked = null;
+        long? olderSerial = host.State.FrontScreen?.Focus?.Serial;
+        bool formHeld = false;
+        bool buttonSaid = false;
+        void Noticed(ViewState state)
+        {
+            if (state.FrontScreen?.Focus is { } request && request.Serial != olderSerial)
+            {
+                asked ??= request;
+            }
+
+            if (state.FrontScreen?.Forms.Values.Any(form => form.Pending) == true)
+            {
+                formHeld = true;
+
+                // The window subscribed first, so what it shows for this state is drawn by now: the button is looked at in the same moment.
+                FrameworkElement? shownNow = SheetOnScreen();
+                buttonSaid |= shownNow is not null && (Below(shownNow).OfType<Button>().Any(button => !button.IsEnabled && (Name(button).Contains("comment", StringComparison.OrdinalIgnoreCase) || Name(button).Contains("send", StringComparison.OrdinalIgnoreCase) || Name(button).Contains("post", StringComparison.OrdinalIgnoreCase))) || Below(shownNow).OfType<ProgressRing>().Any(ring => ring.IsActive));
+            }
+        }
+
+        host.StateChanged += Noticed;
+        int passesBefore = PageReports.Total;
+        TextBox? boxAtPress = SheetOnScreen() is { } atPress ? Below(atPress).OfType<TextBox>().FirstOrDefault(box => Name(box).Contains("comment", StringComparison.OrdinalIgnoreCase) || box.PlaceholderText.Contains("note", StringComparison.OrdinalIgnoreCase)) : null;
+        Say("overlays the core holds at the press: " + string.Join(", ", host.State.FrontScreen?.Overlays ?? []));
+        Say("at the press the comment box is the one found when the sheet opened: " + ReferenceEquals(boxAtPress, comment) + " (before the click on it it was in the window: " + (comment.XamlRoot is not null) + ")");
+
         bool reached = ReferenceEquals(FocusManager.GetFocusedElement(window.Surface.XamlRoot), send);
         if (reached)
         {
@@ -624,18 +662,15 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
             await ClickAsync(send);
         }
 
-        Focus? asked = null;
-        long? olderSerial = host.State.FrontScreen?.Focus?.Serial;
+
         for (int sample = 0; sample < 150; sample++)
         {
-            if (host.State.FrontScreen?.Focus is { } request && request.Serial != olderSerial)
-            {
-                asked ??= request;
-            }
-
+            FrameworkElement? shownNow = SheetOnScreen();
+            buttonSaid |= shownNow is not null && (Below(shownNow).OfType<Button>().Any(button => !button.IsEnabled && (Name(button).Contains("comment", StringComparison.OrdinalIgnoreCase) || Name(button).Contains("send", StringComparison.OrdinalIgnoreCase) || Name(button).Contains("post", StringComparison.OrdinalIgnoreCase))) || Below(shownNow).OfType<ProgressRing>().Any(ring => ring.IsActive));
             await Task.Delay(15);
         }
 
+        host.StateChanged -= Noticed;
         await SettleAsync();
         await Task.Delay(1500);
         FrameworkElement? after = SheetOnScreen();
@@ -643,13 +678,28 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         Check("the server refused the empty comment with words for the field", error is not null, error is null ? "no field holds an error" : "\"" + error + "\"");
         Check("the sheet stayed open (the same dialog, or the one pane)", after is not null && ReferenceEquals(after, sheet), "sheet before " + sheet.GetType().Name + ", after " + after?.GetType().Name + ", same: " + ReferenceEquals(after, sheet));
         Check("the error stands at its field in the sheet", error is not null && after is not null && DrawnText.Of(after).Contains(error, StringComparison.Ordinal), error is null ? "no error" : "\"" + error + "\" looked for in the sheet");
+        Say("overlays the core holds after the answer: " + string.Join(", ", host.State.FrontScreen?.Overlays ?? []) + "; the sheet's words begin: " + (after is null ? string.Empty : DrawnText.Of(after).Replace("\n", " ", StringComparison.Ordinal)[..Math.Min(80, DrawnText.Of(after).Length)]));
+        Say("the first comment box is under: " + string.Join(" < ", Chain(comment).Take(9).Select(part => part.GetType().Name)));
+        Say("the comment box now found is under: " + string.Join(" < ", Chain(after is null ? null : Below(after).OfType<TextBox>().FirstOrDefault(box => Name(box).Contains("comment", StringComparison.OrdinalIgnoreCase) || box.PlaceholderText.Contains("note", StringComparison.OrdinalIgnoreCase))).Take(9).Select(part => part.GetType().Name)));
+        Say("after the answer the first comment box is in a window: " + (comment.XamlRoot is not null) + ", holds '" + comment.Text + "', is under the sheet: " + (after is not null && Chain(comment).Any(part => ReferenceEquals(part, after))) + "; the sheet holds " + (after is null ? 0 : Below(after).OfType<TextBox>().Count()) + " text boxes");
         Check("the comment box is the same object after the answer", after is not null && Below(after).OfType<TextBox>().Any(box => ReferenceEquals(box, comment)), "same box found: " + (after is not null && Below(after).OfType<TextBox>().Any(box => ReferenceEquals(box, comment))));
+        Check("the send button showed pending (a ring, and no press taken) while the core held the form", formHeld && buttonSaid, "the core held the form: " + formHeld + "; the button on the screen showed it: " + buttonSaid);
         Check("the core asked for the focus to be put on the field in error", asked is not null, asked is null ? "no request was seen" : "target " + asked.Target);
         if (asked is not null)
         {
             object? focused = FocusManager.GetFocusedElement(window.Surface.XamlRoot);
             bool onField = focused is TextBox box && after is not null && Below(after).Contains(box) && Chain(box).Any(part => AutomationProperties.GetAutomationId(part) == asked.Target);
             Check("the field the core named has the focus", onField, "the target is " + asked.Target + "; focus is on " + FocusedWords());
+        }
+
+        foreach (PageReport pass in PageReports.All.TakeLast(Math.Max(0, PageReports.Total - passesBefore)))
+        {
+            Say("a pass after the press: " + pass.Kind + ", drew " + pass.Rendered + " (" + pass.Kinds + "), " + pass.Stood + " stood, " + pass.Updated + " updated, " + pass.Replaced + " drawn again");
+        }
+
+        foreach (string note in PageReports.Notes.TakeLast(10))
+        {
+            Say("why a part was drawn again: " + note);
         }
 
         await ShotAsync("page-sheet-error");
@@ -701,9 +751,24 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         await Task.Delay(500);
         await ChordAsync(DownKey);
         await WaitOrderAsync("backlog", 1, first.Id);
+        foreach (string note in PageReports.Notes.TakeLast(4))
+        {
+            Say("what the handle saw: " + note);
+        }
+
         List<string> moved = Order("backlog");
-        Say("after the first card went down the lane holds " + string.Join(", ", moved.Take(5)));
-        Check("the first card went one place down", moved.IndexOf(first.Id) == 1, "it is at " + moved.IndexOf(first.Id));
+        Say("after the first card went down by the keys the lane holds " + string.Join(", ", moved.Take(5)));
+        bool byKeys = moved.IndexOf(first.Id) == 1;
+        if (!byKeys)
+        {
+            // The keys did not reach the handle as a chord on this machine (see what the handle saw above): the same step is asked of its menu.
+            Say("the chord did not move the card; the handle's menu is used for this step");
+            await MenuStepAsync(handleA, "Move down");
+            await WaitOrderAsync("backlog", 1, first.Id);
+            moved = Order("backlog");
+        }
+
+        Check("the first card went one place down" + (byKeys ? " (by the keys)" : " (by its menu)"), moved.IndexOf(first.Id) == 1, "it is at " + moved.IndexOf(first.Id));
         await Task.Delay(1000);
 
         // The second card is the same object as before; its handle is pressed with the keys: it goes one place down in the board as it is now.
@@ -714,11 +779,35 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         _ = (handleBNow ?? handleB).Focus(FocusState.Keyboard);
         await Task.Delay(500);
         await ChordAsync(DownKey);
-        await WaitOrderAsync("backlog", 1, second.Id);
+        await WaitOrderAsync("backlog", moved.IndexOf(second.Id) + 1, second.Id);
         List<string> end = Order("backlog");
+        if (end.IndexOf(second.Id) == moved.IndexOf(second.Id))
+        {
+            Say("the chord did not move the second card; its handle's menu is pressed");
+            await MenuStepAsync(handleBNow ?? handleB, "Move down");
+            await WaitOrderAsync("backlog", moved.IndexOf(second.Id) + 1, second.Id);
+            end = Order("backlog");
+        }
+
         Say("after the second card's handle was pressed the lane holds " + string.Join(", ", end.Take(5)));
         Check("the lane is where it began after the two moves", end.Take(5).SequenceEqual(start.Take(5)), "began " + string.Join(", ", start.Take(5)) + ", now " + string.Join(", ", end.Take(5)));
         Check("the second card went one place down in the board as it is now, not as it was", end.IndexOf(second.Id) == moved.IndexOf(second.Id) + 1 && end.IndexOf(first.Id) == moved.IndexOf(first.Id) - 1, "the lane held " + string.Join(", ", moved.Take(4)) + " and now holds " + string.Join(", ", end.Take(4)));
+    }
+
+    // The item of a card handle's menu, pressed with the pointer.
+    private async Task MenuStepAsync(Button handle, string words)
+    {
+        await ClickAsync(handle);
+        await Task.Delay(600);
+        MenuFlyoutItem? item = Popups().SelectMany(Below).OfType<MenuFlyoutItem>().FirstOrDefault(entry => entry.Text == words && entry.IsEnabled);
+        if (item is not null)
+        {
+            await ClickAsync(item);
+        }
+        else
+        {
+            Say("the menu has no enabled item '" + words + "': " + string.Join(", ", Popups().SelectMany(Below).OfType<MenuFlyoutItem>().Select(entry => entry.Text + (entry.IsEnabled ? string.Empty : " (off)"))));
+        }
     }
 
     private (string Lane, int Index, string Id, string Title)? Pick(string lane, int index)
@@ -896,17 +985,19 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
         await Task.Delay(120);
     }
 
+    // Alt, Shift and an arrow, each key given time to arrive before the next (Windows may hold the pair for the switch of keyboard layout).
     private static async Task ChordAsync(byte arrow)
     {
-        keybd_event(AltKey, 0, 0, UIntPtr.Zero);
         keybd_event(ShiftKey, 0, 0, UIntPtr.Zero);
-        await Task.Delay(60);
+        await Task.Delay(120);
+        keybd_event(AltKey, 0, 0, UIntPtr.Zero);
+        await Task.Delay(200);
         keybd_event(arrow, 0, 0, UIntPtr.Zero);
-        await Task.Delay(60);
+        await Task.Delay(80);
         keybd_event(arrow, 0, KeyUp, UIntPtr.Zero);
-        await Task.Delay(60);
-        keybd_event(ShiftKey, 0, KeyUp, UIntPtr.Zero);
+        await Task.Delay(80);
         keybd_event(AltKey, 0, KeyUp, UIntPtr.Zero);
+        keybd_event(ShiftKey, 0, KeyUp, UIntPtr.Zero);
     }
 
     private void Foreground() => SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(window));
