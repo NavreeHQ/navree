@@ -32,3 +32,9 @@ These hold for every app built on the library, with nothing to configure.
 - **The activity.** As the template does: `android:taskAffinity=""` so no other app's activity can join the app's task, `android:launchMode="singleTop"`, and an app-link filter (`android:autoVerify="true"`) for the app's host that names only the paths the app opens (`android:path`, `android:pathPrefix`) and the path the sign-in returns to.
 - **Pictures from another host.** Pictures load from the app's origins; a host that serves them (a CDN) is named in `NavreeConfig.pictureHosts` and is used only over `https`.
 - **Shrinking.** The library's consumer rules keep the core's native methods and the serializers; an app needs no rules of its own for them.
+
+## Checking the client on a device
+
+- **The device tests** (`navree-native/src/androidTest`) run on an emulator of a phone and of a tablet (on its side and upright), each in four looks (light, dark, the largest text, right to left). They draw the app through the activity's own host, against recorded answers and against the store, inbox and board demos, and photograph each screen. Beside every picture they write what a screen reader is told by the screen, in order, with the size of each control and the faults found (a control with no name, a touch area under 48 dp) as `.sem.txt`, and, for the light look, the screen's tree as `.tree.json`.
+- **The walk** (`scripts/walk.sh`, `scripts/ui.py`) drives the demo app itself on a phone with `adb`: a start second by second with and without a network, back, turning the device, a link from outside, a form, and the app ended by the system and opened again. It needs the store demo answering on the address the debug build is given (`10.0.2.2:8787`) and prints `PASS` or `FAIL` for each step.
+- Both run in the "Native clients" workflow (`android-screens`).
