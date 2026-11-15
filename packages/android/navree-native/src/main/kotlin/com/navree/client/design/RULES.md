@@ -205,7 +205,7 @@ With nothing opened, the list has the window.
   when it says nothing and the naming cell holds one control, the whole row
   takes that control's action. From 600 dp it is rows of cells under a header
   row; a sortable heading takes the table's region to its other address. A table with more columns than fit at
-  112 dp each (more at larger text sizes) is a list at any width. A column of
+  128 dp each (more at larger text sizes) is a list at any width. A column of
   words takes the room its longest cell needs, between a short status and a
   long place, so a place is not broken in the middle.
 - The lines under a row's title keep runs of badges (a status, a priority, who
