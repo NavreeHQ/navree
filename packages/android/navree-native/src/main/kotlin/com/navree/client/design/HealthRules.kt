@@ -284,7 +284,21 @@ object BidiRules {
 
     private val PHONE = Regex("""^\+?\d[\d\s().-]{5,}\d$""")
     private val EMAIL = Regex("""^[^\s@]+@[^\s@]+\.[^\s@]+$""")
-    private val DATE = Regex("""^(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})$""")
+    private val ISO_DATE = Regex("""^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$""")
+    private val DAY_FIRST_DATE = Regex("""^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$""")
+
+    /** Whether the text is a date: a year of four digits from 1000 on, a month 1 to 12 and a day 1 to 31, in either order; a phone number written like a date is not one. */
+    fun isDate(text: String): Boolean {
+        ISO_DATE.matchEntire(text)?.let { m ->
+            val (year, month, day) = m.destructured
+            return year.toInt() >= 1000 && month.toInt() in 1..12 && day.toInt() in 1..31
+        }
+        DAY_FIRST_DATE.matchEntire(text)?.let { m ->
+            val (day, month, _) = m.destructured
+            return day.toInt() in 1..31 && month.toInt() in 1..12
+        }
+        return false
+    }
 
     /**
      * A phone number or an e-mail address in a right to left line, read left to
@@ -295,7 +309,7 @@ object BidiRules {
      * phone number.
      */
     fun codes(text: String, rtl: Boolean): String =
-        if (rtl && !DATE.matches(text) && (PHONE.matches(text) || EMAIL.matches(text))) amount(text) else text
+        if (rtl && !isDate(text) && (PHONE.matches(text) || EMAIL.matches(text))) amount(text) else text
 }
 
 /** Parts of a whole: a meter's segments, a column's parts, a strip's cells. */

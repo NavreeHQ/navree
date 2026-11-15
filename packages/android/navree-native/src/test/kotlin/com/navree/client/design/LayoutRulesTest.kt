@@ -320,5 +320,7 @@ class BidiRulesTest {
         assertEquals("2026-11-13", BidiRules.codes("2026-11-13", rtl = true))
         assertEquals("13-11-2026", BidiRules.codes("13-11-2026", rtl = true))
         assertEquals("13/11/26", BidiRules.codes("13/11/26", rtl = true))
+        assertEquals("a phone number written like a date is isolated", "⁦0124-45-67⁩", BidiRules.codes("0124-45-67", rtl = true))
+        assertEquals("⁦98-45-1234⁩", BidiRules.codes("98-45-1234", rtl = true))
     }
 }
