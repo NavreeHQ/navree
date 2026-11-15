@@ -112,6 +112,11 @@ lowest_order() { ui texts | grep -o 'CS-[0-9]*' | sort | head -1 | tr -d 'CS-'; 
 
 # ---------------------------------------------------------------- starts
 
+# The screens' pictures run with animations off; a person's device has them on, and a spinner that waits is a moving one.
+for scale in window_animation_scale transition_animation_scale animator_duration_scale; do
+  "$ADB" shell settings put global "$scale" 1
+done
+
 say "== a start, second by second"
 "$ADB" shell pm clear "$PKG" > /dev/null
 rotate 0
