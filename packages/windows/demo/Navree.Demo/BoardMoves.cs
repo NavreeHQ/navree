@@ -169,7 +169,8 @@ internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, str
         ScrollViewer? page = null;
         for (DependencyObject? at = beforeScroll is null ? null : VisualTreeHelper.GetParent(beforeScroll); at is not null; at = VisualTreeHelper.GetParent(at))
         {
-            if (at is ScrollViewer found)
+            // The one that scrolls the page is the ancestor with the most to scroll down, not the outermost.
+            if (at is ScrollViewer found && (page is null || found.ScrollableHeight > page.ScrollableHeight))
             {
                 page = found;
             }
@@ -177,9 +178,15 @@ internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, str
 
         if (page is not null)
         {
-            _ = page.ChangeView(null, 0, null, true);
-            await Task.Delay(800);
+            Say("the page scrolls " + page.ScrollableHeight.ToString("0", CultureInfo.InvariantCulture) + " down and stood at " + page.VerticalOffset.ToString("0", CultureInfo.InvariantCulture) + ", across " + page.HorizontalOffset.ToString("0", CultureInfo.InvariantCulture));
+            for (int attempt = 0; attempt < 10 && (page.VerticalOffset > 1 || page.HorizontalOffset > 1); attempt++)
+            {
+                _ = page.ChangeView(0, 0, null, true);
+                await Task.Delay(400);
+            }
+
             await SettleAsync();
+            Say("the page now stands at " + page.VerticalOffset.ToString("0", CultureInfo.InvariantCulture) + ", across " + page.HorizontalOffset.ToString("0", CultureInfo.InvariantCulture));
         }
 
         Button? handle = HandleOf(picked.Title);
@@ -192,6 +199,10 @@ internal sealed partial class BoardMoves(ShellHost host, ShellWindow window, str
             Check("the card and the lane it is dragged to are on the screen", false, "card " + (cardElement is not null) + ", target " + (targetCard is not null));
             return;
         }
+
+        Windows.Foundation.Rect cardBox = cardElement.TransformToVisual(window.Surface).TransformBounds(new Windows.Foundation.Rect(0, 0, cardElement.ActualWidth, cardElement.ActualHeight));
+        Windows.Foundation.Rect targetBox = targetCard.TransformToVisual(window.Surface).TransformBounds(new Windows.Foundation.Rect(0, 0, targetCard.ActualWidth, targetCard.ActualHeight));
+        Say("in the window (" + window.Surface.ActualWidth.ToString("0", CultureInfo.InvariantCulture) + "x" + window.Surface.ActualHeight.ToString("0", CultureInfo.InvariantCulture) + ") the dragged card stands at [" + cardBox.Left.ToString("0", CultureInfo.InvariantCulture) + "," + cardBox.Top.ToString("0", CultureInfo.InvariantCulture) + " " + cardBox.Width.ToString("0", CultureInfo.InvariantCulture) + "x" + cardBox.Height.ToString("0", CultureInfo.InvariantCulture) + "] and the card it is dragged onto at [" + targetBox.Left.ToString("0", CultureInfo.InvariantCulture) + "," + targetBox.Top.ToString("0", CultureInfo.InvariantCulture) + " " + targetBox.Width.ToString("0", CultureInfo.InvariantCulture) + "x" + targetBox.Height.ToString("0", CultureInfo.InvariantCulture) + "]");
 
         // Pressed at the card's lower left, where the words and the buttons are not, and let go on the middle of a card of another lane.
         (int fromX, int fromY) = ScreenOf(cardElement, 12, cardElement.ActualHeight - 6);
