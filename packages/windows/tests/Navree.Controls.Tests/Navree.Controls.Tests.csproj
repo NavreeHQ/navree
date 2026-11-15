@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The controls' tests: the plain functions of the table, and what needs no window. -->
+  <!-- The controls' tests: the plain functions of the table, and the parts of the controls that need no window. -->
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <RootNamespace>Navree.Controls.Tests</RootNamespace>
@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Navree.Design\Navree.Design.csproj" />
+    <ProjectReference Include="..\..\src\Navree.Controls\Navree.Controls.csproj" />
   </ItemGroup>
 
   <ItemGroup>

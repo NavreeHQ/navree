@@ -167,14 +167,22 @@ public sealed partial class DataTable : Control
     public string? LayoutKey
     {
         get => layoutKey;
-        set => layoutKey = value;
+        set
+        {
+            layoutKey = value;
+            keeper.Forget();
+        }
     }
 
     /// <summary>Where a person's layout is kept.</summary>
     public IDataTableLayoutStore? LayoutStore
     {
         get => layoutStore;
-        set => layoutStore = value;
+        set
+        {
+            layoutStore = value;
+            keeper.Forget();
+        }
     }
 
     /// <summary>Whether the table is drawn as a table or as a list.</summary>

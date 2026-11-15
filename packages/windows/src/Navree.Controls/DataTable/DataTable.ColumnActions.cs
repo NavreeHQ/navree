@@ -14,10 +14,9 @@ public sealed partial class DataTable
     private readonly HashSet<string> personWidths = new(StringComparer.Ordinal);
     private List<string> columnOrder = [];
     private DispatcherQueueTimer? saveTimer;
-    private string? loadedFor;
+    private readonly LayoutKeeper keeper = new();
     private string? resizingKey;
     private double resizeStartWidth;
-    private int saveCounter;
     private double gripWidth = 8;
 
     // A touch needs a wider strip to take hold of than a pen, and a pen than a mouse.
@@ -406,13 +405,11 @@ public sealed partial class DataTable
             return;
         }
 
-        string signature = key + "|" + string.Join(',', columns.Select(c => c.Key));
-        if (loadedFor == signature)
+        if (!keeper.ShouldRead(key, columns.Select(c => c.Key).ToList()))
         {
             return;
         }
 
-        loadedFor = signature;
         if (!store.TryLoad(key, out string json) || LayoutText.Parse(json) is not { } stored)
         {
             return;
@@ -454,7 +451,7 @@ public sealed partial class DataTable
             }
         }
 
-        saveCounter = stored.Columns.Values.Select(c => c.Seen).DefaultIfEmpty(0).Max();
+        keeper.Resume(stored.Columns.Values.Select(c => c.Seen).DefaultIfEmpty(0).Max());
     }
 
     private void ScheduleSave()
@@ -464,6 +461,7 @@ public sealed partial class DataTable
             return;
         }
 
+        keeper.Changed();
         saveTimer ??= DispatcherQueue.CreateTimer();
         saveTimer.Stop();
         saveTimer.Interval = TimeSpan.FromMilliseconds(400);
@@ -475,28 +473,30 @@ public sealed partial class DataTable
 
     private void OnSaveTimer(DispatcherQueueTimer sender, object args) => SaveLayoutNow();
 
+    /// <summary>Writes what a person changed of the layout now, when there is a key and a store and the layout was read.</summary>
     internal void SaveLayoutNow()
     {
+        saveTimer?.Stop();
         if (layoutKey is not { } key || layoutStore is not { } store || Model is not { } model)
         {
             return;
         }
 
-        saveTimer?.Stop();
-        saveCounter++;
-        Dictionary<string, StoredColumn> columns = [];
-        foreach (DataTableColumn column in model.Columns)
+        keeper.TrySave(store, key, count =>
         {
-            double? width = personWidths.Contains(column.Key) && widths.TryGetValue(column.Key, out double w) ? w : null;
-            bool? hidden = hiddenKeys.Contains(column.Key) ? true : forcedShownKeys.Contains(column.Key) ? false : null;
-            if (width is not null || hidden is not null)
+            Dictionary<string, StoredColumn> columns = [];
+            foreach (DataTableColumn column in model.Columns)
             {
-                columns[column.Key] = new StoredColumn(column.Kind.ToString().ToLowerInvariant(), width, hidden, saveCounter);
+                double? width = personWidths.Contains(column.Key) && widths.TryGetValue(column.Key, out double w) ? w : null;
+                bool? hidden = hiddenKeys.Contains(column.Key) ? true : forcedShownKeys.Contains(column.Key) ? false : null;
+                if (width is not null || hidden is not null)
+                {
+                    columns[column.Key] = new StoredColumn(column.Kind.ToString().ToLowerInvariant(), width, hidden, count);
+                }
             }
-        }
 
-        int frozen = frozenWish ?? ColumnSet.DefaultFrozen(shown.Select(s => new ColInfo(s.Column.Key, s.Column.Kind, s.Column.Role, s.Column.Secondary)).ToList());
-        StoredLayout stored = new(LayoutText.CurrentVersion, density.ToString().ToLowerInvariant(), frozen, FullOrder(), columns);
-        store.Save(key, LayoutText.Serialize(stored));
+            int frozen = frozenWish ?? ColumnSet.DefaultFrozen(shown.Select(s => new ColInfo(s.Column.Key, s.Column.Kind, s.Column.Role, s.Column.Secondary)).ToList());
+            return new StoredLayout(LayoutText.CurrentVersion, density.ToString().ToLowerInvariant(), frozen, FullOrder(), columns);
+        });
     }
 }
