@@ -41,3 +41,23 @@ fn the_readme_says_exactly_what_a_snapshot_never_keeps() {
         assert!(readme.contains(words), "the README does not say: {words}");
     }
 }
+
+/// What an app's author runs into, said where they will look.
+#[test]
+fn the_readme_settles_what_an_app_will_run_into() {
+    let readme = read(README);
+    for words in [
+        // An equal value starts nothing, a table's query included.
+        "re-tapping the chosen segment is not a refresh",
+        // A change names no other address for its form.
+        "an apply needs a button",
+        // What a kept shell draws before the server names anybody.
+        "are drawn before the server names anybody",
+        // An unknown kind of text.
+        "an unknown kind of text is drawn as plain text",
+        // A write that never left the device.
+        "a write that never left the device is not a write",
+    ] {
+        assert!(readme.contains(words), "the README does not say: {words}");
+    }
+}
