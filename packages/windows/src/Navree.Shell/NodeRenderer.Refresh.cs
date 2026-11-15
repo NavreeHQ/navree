@@ -128,6 +128,13 @@ internal sealed partial class NodeRenderer
             old.Node = now;
             old.Screen = screen;
             Updated++;
+
+            // A part that is hidden by the screen is out of the way, and is back when it is not hidden any more.
+            if (Tree.IdOf(now) is { } id && old.Element is FrameworkElement shown)
+            {
+                shown.Visibility = screen.Has(id, Models.State.Hidden) ? Visibility.Collapsed : Visibility.Visible;
+            }
+
             return old;
         }
 

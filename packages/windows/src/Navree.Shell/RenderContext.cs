@@ -78,14 +78,6 @@ internal sealed class RenderContext
     /// <summary>The records of the parts of the screen's page that is drawn: the page itself, and the body in it.</summary>
     internal Drawn? Page { get; set; }
 
-    /// <summary>
-    /// A number that moves on when the sheets, dialogs and popovers of the tree changed (an overlay came, went, or holds something else), so what was
-    /// made from them knows to be drawn again. The fields of an overlay are not in it: they are shown in place.
-    /// </summary>
-    internal int Version { get; private set; }
-
-    private ScreenView? versionScreen;
-
     /// <summary>How many nodes were drawn by calls of the drawing since the count was last taken.</summary>
     internal int Rendered { get; set; }
 
@@ -98,7 +90,6 @@ internal sealed class RenderContext
     /// <summary>Makes the lists of what was found (overlays, fields, buttons) again from the records that stand.</summary>
     internal void Rebuild()
     {
-        List<OverlayRequest> before = [.. Overlays];
         Overlays.Clear();
         Fields.Clear();
         Triggers.Clear();
@@ -124,25 +115,6 @@ internal sealed class RenderContext
             {
                 Triggers[key] = element;
             }
-        }
-
-        bool changed = versionScreen is null || before.Count != Overlays.Count;
-        if (!changed)
-        {
-            ScreenFacts was = new(versionScreen!, fields: false);
-            ScreenFacts now = new(Screen, fields: false);
-            for (int at = 0; at < before.Count && !changed; at++)
-            {
-                changed = before[at].Id != Overlays[at].Id
-                    || !Design.Pages.PageRules.Same(before[at].Node, Overlays[at].Node)
-                    || !Design.Pages.PageRules.SameAround(Overlays[at].Node, was, now);
-            }
-        }
-
-        if (changed)
-        {
-            Version++;
-            versionScreen = Screen;
         }
     }
 
