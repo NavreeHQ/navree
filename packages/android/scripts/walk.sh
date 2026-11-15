@@ -24,18 +24,33 @@ check() {
   if "$@"; then say "PASS $name"; else say "FAIL $name"; fails=$((fails + 1)); fi
 }
 
-# What is on the screen, written to $OUT/window.xml; tried again when the device was not still.
+ui() { python3 -I "$HERE/ui.py" "$OUT/window.xml" "$@"; }
+
+# What is on the screen, written to $OUT/window.xml; tried again when the device was not still. The
+# file on the device and the one here are removed before each try, so a dump that fails leaves
+# nothing to read, never the screen before it, and what is written is checked to be a dump. Fails
+# when no try made one; every question asked of a screen with no dump fails too (`ui.py` exits 2).
 dump() {
   local try
+  rm -f "$OUT/window.xml"
   for try in 1 2 3; do
+    "$ADB" shell rm -f /sdcard/window.xml > /dev/null 2>&1
     "$ADB" shell uiautomator dump /sdcard/window.xml > /dev/null 2>&1
-    if "$ADB" pull /sdcard/window.xml "$OUT/window.xml" > /dev/null 2>&1; then return 0; fi
+    rm -f "$OUT/window.xml"
+    if "$ADB" pull /sdcard/window.xml "$OUT/window.xml" > /dev/null 2>&1 && ui parsed > /dev/null 2>&1; then return 0; fi
+    rm -f "$OUT/window.xml"
     sleep 1
   done
   return 1
 }
 
-ui() { python3 -I "$HERE/ui.py" "$OUT/window.xml" "$@"; }
+# A dump a step goes on to read from: when none could be made that is a failure of its own, in the record.
+look() {
+  dump && return 0
+  say "FAIL no dump of the screen was made${1:+ ($1)}"
+  fails=$((fails + 1))
+  return 1
+}
 
 # Waits up to $2 seconds for a node that says $1.
 wait_for() {
@@ -110,6 +125,9 @@ rotate() {
 # The smallest number among the orders (CS-nnnnnn) that are in the dump.
 lowest_order() { ui texts | grep -o 'CS-[0-9]*' | sort | head -1 | tr -d 'CS-'; }
 
+# The first screen shown and nothing of the place the app was in before.
+first_screen_only() { ui contains 'Revenue today' && ui absent-part 'Fulfilment'; }
+
 # Cold starts, timed: what the system says it took to show the first frame and to show the page
 # (the app reports when it is fully drawn), and the app's own marks of where the time went.
 timed_starts() {
@@ -127,6 +145,9 @@ timed_starts() {
     "$ADB" logcat -d | grep -E 'NavreeStart|Fully drawn' | sed 's/^.*\(NavreeStart\|ActivityTaskManager\)/\1/' | tee -a "$OUT/walk.txt"
   done
 }
+
+# Sourced, the script only defines its helpers (the tests of the script do).
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then return 0; fi
 
 if [ "${ONLY:-}" = starts ]; then
   timed_starts "${BUILD:-this build}"
@@ -171,8 +192,7 @@ say "offline with a page kept says: $(ui texts | tr '\n' '|' | cut -c1-300)"
 
 say "== the network comes back"
 check "the network is on" net on
-dump
-if ui has "Try again" > /dev/null 2>&1; then tap "Try again"; fi
+if look "after the network came back" && ui has "Try again" > /dev/null 2>&1; then tap "Try again"; fi
 check "the screen comes once the network is back" wait_for Dashboard 30
 
 say "== no network at start, nothing kept"
@@ -185,7 +205,7 @@ strip offline-clean 14
 dump
 shot offline-clean
 check "nothing is shown but the way to try again" ui has "Try again"
-check "no person is named with no server to say who" bash -c "! python3 -I '$HERE/ui.py' '$OUT/window.xml' contains 'Account,'"
+check "no person is named with no server to say who" ui absent-part 'Account,'
 check "the network is back" net on
 tap "Try again"
 check "trying again with the network on shows the first screen" wait_for Dashboard 30
@@ -237,7 +257,7 @@ tap Back
 sleep 2
 dump
 # What stays is the words in the bar: the view is closed when its own way back is gone.
-check "the search view is closed" bash -c "! python3 -I '$HERE/ui.py' '$OUT/window.xml' has Back"
+check "the search view is closed" ui absent Back
 
 say "== an order opens and closes"
 dump
@@ -296,8 +316,7 @@ say "== the app ended by the system, and opened again, with no network"
 # The restock left the keyboard up and the search view open (it takes the focus): back closes them.
 "$ADB" shell input keyevent KEYCODE_BACK
 sleep 1
-dump
-if ui has Back > /dev/null 2>&1; then tap Back; sleep 1; fi
+if look "after the restock" && ui has Back > /dev/null 2>&1; then tap Back; sleep 1; fi
 tap Orders
 check "Orders is the place it was in" wait_for Fulfilment 20
 "$ADB" shell input keyevent KEYCODE_HOME
@@ -312,7 +331,7 @@ dump
 shot returned-offline
 say "returned with no network says: $(ui texts | tr '\n' '|' | cut -c1-300)"
 check "it comes back with the way to try again" ui has "Try again"
-check "no person is named before the server has said who" bash -c "! python3 -I '$HERE/ui.py' '$OUT/window.xml' contains 'Account,'"
+check "no person is named before the server has said who" ui absent-part 'Account,'
 check "the network is back" net on
 tap "Try again" > /dev/null 2>&1
 sleep 6
@@ -323,7 +342,7 @@ say "after trying again it says: $(ui texts | tr '
 # The core puts a place back only for a person the server names by id; this demo names its visitor by a cookie
 # and does not tell the framework who it is, so after the system ended the app it starts at its first screen
 # and nothing of the earlier place is shown before the server has named the person.
-check "it starts at its first screen, with nothing of the earlier place" bash -c "python3 -I '$HERE/ui.py' '$OUT/window.xml' contains 'Revenue today' && ! python3 -I '$HERE/ui.py' '$OUT/window.xml' contains 'Fulfilment'"
+check "it starts at its first screen, with nothing of the earlier place" first_screen_only
 check "the person is named once the server has answered" wait_for_part "Account, " 20
 
 say "walk done: $fails failed"
