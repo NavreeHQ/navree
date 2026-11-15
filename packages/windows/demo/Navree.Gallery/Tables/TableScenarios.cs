@@ -82,7 +82,7 @@ internal static class TableScenarios
         }
     }
 
-    private static DataTable Build(string name, MemoryLayoutStore store, out ListDataTableModel<Customer>? model)
+    internal static DataTable Build(string name, MemoryLayoutStore store, out ListDataTableModel<Customer>? model)
     {
         model = DemoData.Model(sorted: name == "sorted" ? "amount" : null, descending: true);
         TextTablePresenter<Customer> presenter = new(model);
@@ -150,7 +150,7 @@ internal static class TableScenarios
         return table;
     }
 
-    private static async Task Prepare(string name, DataTable table, ListDataTableModel<Customer>? model)
+    internal static async Task Prepare(string name, DataTable table, ListDataTableModel<Customer>? model)
     {
         switch (name)
         {

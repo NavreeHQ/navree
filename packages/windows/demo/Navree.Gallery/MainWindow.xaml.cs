@@ -30,11 +30,8 @@ public sealed partial class MainWindow : Window
         Navree.Controls.DataTable.Watch(Report.Line);
         if (arguments.Run.Count == 0)
         {
-            Stage.Child = new Microsoft.UI.Xaml.Controls.TextBlock
-            {
-                Text = "The gallery runs scenarios: start it with --run stick,anchor --out <folder>.",
-                Margin = new Thickness(24),
-            };
+            // Started with nothing to run, the gallery is an app for a person.
+            GalleryBrowser.Show(this);
             return;
         }
 
