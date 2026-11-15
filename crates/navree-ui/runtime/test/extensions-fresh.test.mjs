@@ -1,4 +1,4 @@
-// A page that starts clean (it carries `data-ui-fresh`) never holds plugin code: should the extensions
+// A page that starts clean (it carries `data-ui-fresh-page`) never holds plugin code: should the extensions
 // module come to one (an op's reply can bring it), it imports nothing, seals nothing and links nothing.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -12,7 +12,7 @@ const EXT = "/_navree/ui/ext";
 install({
   url: "https://app.test/sign-in",
   observe: true,
-  html: `<!doctype html><html data-build="b1" data-ui-fresh><head></head><body data-ui-boost>
+  html: `<!doctype html><html data-build="b1" data-ui-fresh-page><head></head><body data-ui-boost>
     <main id="main">
       <h1>Sign in</h1>
       <div id="pad" data-slot="proof:pad" data-ui-ext="${EXT}/proof.pad-0123456789ab.js" data-ui-ext-sheet="${EXT}/proof.pad-0123456789ab.css"
