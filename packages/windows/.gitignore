@@ -7,3 +7,6 @@ TestResults/
 
 # The core's library, put here by the build before the solution is built.
 /native/
+
+# The demo package's logos, drawn by the workflow.
+/demo/Navree.Demo.Packaged/Assets/

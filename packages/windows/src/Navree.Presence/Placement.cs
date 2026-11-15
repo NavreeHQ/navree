@@ -7,6 +7,24 @@ public static class PlacementRules
     public const int Step = 32;
 
     /// <summary>
+    /// The narrowest a window may be made, in effective pixels: Windows' snap layouts need a window that can be 500 pixels wide or less
+    /// (330 is what the guidance recommends), so the smallest window is no wider than that.
+    /// </summary>
+    public const int SmallestWidth = 500;
+
+    /// <summary>The shortest a window may be made, in effective pixels.</summary>
+    public const int SmallestHeight = 320;
+
+    /// <summary>The smallest a window may be in device pixels at a scale, the way the system's presenter wants it.</summary>
+    /// <param name="scale">How many device pixels make one effective pixel.</param>
+    /// <returns>The smallest width and height.</returns>
+    public static (int Width, int Height) Smallest(double scale)
+    {
+        double safe = scale > 0 ? scale : 1.0;
+        return ((int)Math.Ceiling(SmallestWidth * safe), (int)Math.Ceiling(SmallestHeight * safe));
+    }
+
+    /// <summary>
     /// The place of a new window: a step down and across from the window before it, inside the work area, and back at its
     /// top left corner when the next step would not fit.
     /// </summary>

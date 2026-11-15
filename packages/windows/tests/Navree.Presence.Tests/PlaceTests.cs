@@ -352,6 +352,16 @@ public sealed class PlacementTests
     }
 
     [TestMethod]
+    public void TheSmallestWindowIsNoWiderThanSnapLayoutsAllowAtAnyScale()
+    {
+        Expect.That(PlacementRules.SmallestWidth <= 500, "the smallest window is no wider than 500 effective pixels");
+        Assert.AreEqual((500, 320), PlacementRules.Smallest(1.0));
+        Assert.AreEqual((750, 480), PlacementRules.Smallest(1.5));
+        Assert.AreEqual((1000, 640), PlacementRules.Smallest(2.0));
+        Assert.AreEqual((500, 320), PlacementRules.Smallest(0));
+    }
+
+    [TestMethod]
     public async Task ABuildWithNoAuthenticatorConfirmsNobody()
     {
         IDeviceAuthenticator none = new NoAuthenticator();

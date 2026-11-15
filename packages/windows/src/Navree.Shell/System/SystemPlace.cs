@@ -27,6 +27,7 @@ public sealed class SystemPlace : IDisposable
     private readonly StartupSurface startup;
     private readonly ShareSurface share;
     private readonly DispatcherQueueTimer timer;
+    private readonly DispatcherQueueTimer snapshotTimer;
     private readonly List<ScreenWindow> screens = [];
     private readonly List<string> log = [];
     private NotificationSchedule schedule = new();
@@ -37,6 +38,7 @@ public sealed class SystemPlace : IDisposable
     private string placesKey = string.Empty;
     private bool quitting;
     private LaunchRequest? deferred;
+    private bool changedSinceSnapshot;
 
     /// <summary>Makes the app's place for its main window.</summary>
     /// <param name="host">The app's host.</param>
@@ -60,6 +62,17 @@ public sealed class SystemPlace : IDisposable
         timer = dispatcher.CreateTimer();
         timer.IsRepeating = false;
         timer.Tick += (_, _) => Deliver();
+        snapshotTimer = dispatcher.CreateTimer();
+        snapshotTimer.Interval = TimeSpan.FromSeconds(30);
+        snapshotTimer.IsRepeating = true;
+        snapshotTimer.Tick += (_, _) =>
+        {
+            if (changedSinceSnapshot)
+            {
+                changedSinceSnapshot = false;
+                _ = host.KeepSnapshotAsync();
+            }
+        };
         host.Place = this;
     }
 
@@ -118,6 +131,7 @@ public sealed class SystemPlace : IDisposable
         Activation.Receive(request => dispatcher.TryEnqueue(() => Open(request)));
         main.AppWindow.Closing += OnClosing;
         host.StateChanged += OnState;
+        snapshotTimer.Start();
         host.CoreStopped += () => Say("the core stopped");
 
         schedule = NotificationSchedule.Read(host.Recall(PendingKey));
@@ -557,6 +571,7 @@ public sealed class SystemPlace : IDisposable
 
     private void OnState(ViewState state)
     {
+        changedSinceSnapshot = true;
         if (deferred is not null && state.Nav.Stage == Stage.Ready)
         {
             LaunchRequest waiting = deferred;
@@ -639,6 +654,7 @@ public sealed class SystemPlace : IDisposable
     public void Dispose()
     {
         timer.Stop();
+        snapshotTimer.Stop();
         tray?.Dispose();
         badge.Dispose();
         IconHandle.Destroy(trayIcon);

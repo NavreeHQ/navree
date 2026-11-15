@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The demo as an installed package, so the features that need package identity (the taskbar badge, the jump list, the
+       startup task, the package's own scheme) can be tried. It is the same program as the unpackaged demo: the code and the
+       app's definition are the unpackaged demo's own files, compiled here; only the package's manifest and its pictures are its own. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>Navree.Demo</RootNamespace>
+    <AssemblyName>Navree.Demo</AssemblyName>
+    <ApplicationManifest>..\Navree.Demo\app.manifest</ApplicationManifest>
+    <Platforms>x64;ARM64;x86</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\**" />
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Navree.Demo\*.cs" Link="Shared\%(Filename)%(Extension)" />
+    <ApplicationDefinition Include="..\Navree.Demo\App.xaml" Link="App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Navree.Shell\Navree.Shell.csproj" />
+    <ProjectReference Include="..\..\src\Navree.Core\Navree.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Lets a tool that knows packaged projects see this one as one. -->
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+
+</Project>

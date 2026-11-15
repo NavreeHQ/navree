@@ -69,18 +69,18 @@ internal sealed class SettingsCardPeer(SettingsCardView owner) : FrameworkElemen
 /// The settings page: what the app does in Windows (the icon in the notification area, opening at sign-in, the count on the taskbar,
 /// notifications), then About, last, with what this build can do here and what it cannot and why.
 /// </summary>
-internal sealed class SettingsPage : ScrollViewer
+internal sealed class SettingsPage : Grid
 {
     private readonly SystemPlace place;
     private readonly StackPanel panel = new() { Spacing = 4, MaxWidth = 1000, HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(36, 20, 36, 36) };
+    private readonly ScrollViewer scroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private bool refreshing;
 
     internal SettingsPage(SystemPlace place)
     {
         this.place = place;
-        VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-        Content = panel;
+        scroller.Content = panel;
+        Children.Add(scroller);
         AutomationProperties.SetName(this, "Settings");
         place.Changed += Refresh;
         Unloaded += (_, _) => place.Changed -= Refresh;

@@ -31,6 +31,15 @@ public sealed partial class ShellWindow
     {
         content.Children.Insert(2, settingsHost);
         navigation.IsSettingsVisible = true;
+
+        // The window may be made no smaller than snap layouts allow; the maximise button stays the system's.
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            (int smallestWidth, int smallestHeight) = PlacementRules.Smallest(WindowFrame.ScaleOf(WinRT.Interop.WindowNative.GetWindowHandle(this)));
+            presenter.PreferredMinimumWidth = smallestWidth;
+            presenter.PreferredMinimumHeight = smallestHeight;
+        }
+
         navigation.ItemInvoked += OnItemInvoked;
         root.KeyboardAccelerators.Add(Accelerator(VirtualKey.N, VirtualKeyModifiers.Control, () => host.Place?.OpenWindow()));
         root.KeyboardAccelerators.Add(Accelerator((VirtualKey)0xBC, VirtualKeyModifiers.Control, ShowSettings));
