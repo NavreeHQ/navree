@@ -25,6 +25,11 @@ internal static class CareScenarios
             ("reset-by-key", ResetByKeyAsync),
             ("prepend-top", PrependTopAsync),
             ("new-model-names", NewModelNamesAsync),
+            ("refresh-same-count", RefreshSameCountAsync),
+            ("detail-open", DetailOpenAsync),
+            ("density-kept", DensityKeptAsync),
+            ("late-shape", LateShapeAsync),
+            ("unloaded", UnloadedAsync),
         })
         {
             try
@@ -39,9 +44,10 @@ internal static class CareScenarios
         }
     }
 
-    private static async Task<DataTable> ShowAsync(MainWindow window, ListDataTableModel<Customer> model, IDataTablePresenter? presenter = null)
+    private static async Task<DataTable> ShowAsync(MainWindow window, ListDataTableModel<Customer> model, IDataTablePresenter? presenter = null, Action<DataTable>? before = null)
     {
         DataTable table = new() { Model = model, Presenter = presenter ?? new TextTablePresenter<Customer>(model), Culture = DemoData.Culture, Caption = "Customers", Margin = new Thickness(12) };
+        before?.Invoke(table);
         window.StageHost.Child = table;
         await Waiting.LoadedAsync(table);
         await Task.Delay(1200);
@@ -199,6 +205,140 @@ internal static class CareScenarios
         double top = (at * table.RowHeight) - scroll.VerticalOffset;
         Report.Line($"[care-prepend-top] 50 rows joined the start: the row that was first, {first}, is now row {at} and stands {top:0.#} from the top of the view; offset {scroll.VerticalOffset:0.#}");
         await Handshake.StepAsync("care-prepend-top", "the table after rows joined the start of a view that was at the very top");
+    }
+
+    // The end of the rows is near and the host was asked once; a refresh with the same count of rows asks again.
+    private static async Task RefreshSameCountAsync(MainWindow window)
+    {
+        ListDataTableModel<Customer> model = Rows(0, 50);
+        model.Later = new DataTableCursor(true, CursorState.Idle);
+        List<string> asked = [];
+        DataTable table = await ShowAsync(window, model, before: t => t.MoreRequested += (_, e) => asked.Add(e.Direction.ToString()));
+        await Task.Delay(1200);
+        Report.Line($"[care-refresh-same-count] 50 rows held, the end is near: asked {asked.Count} time(s): {string.Join(",", asked)}");
+        model.Reset(DemoData.Make(0, 50));
+        await Task.Delay(1500);
+        Report.Line($"[care-refresh-same-count] the rows were replaced by 50 others: asked {asked.Count} time(s) in all: {string.Join(",", asked)}; held {model.RowCount}; the view is at {table.Scroller?.VerticalOffset:0.#}");
+        await Handshake.StepAsync("care-refresh-same-count", "the table after a refresh with the same count of rows");
+    }
+
+    // A row the server sends with its detail open is drawn open, and stays as the person leaves it.
+    private static async Task DetailOpenAsync(MainWindow window)
+    {
+        ListDataTableModel<Customer> model = DemoData.Model();
+        model.HasDetailOf = _ => true;
+        model.DetailOpenOf = c => c.Id == "c00002";
+        model.Reset(DemoData.Make(0, 12));
+        TextTablePresenter<Customer> presenter = new(model)
+        {
+            Detail = c => new TextBlock { Text = $"{c.Name} wrote from {c.City}. Phone {c.Phone}, mail {c.Email}.", TextWrapping = TextWrapping.Wrap },
+        };
+        DataTable table = await ShowAsync(window, model, presenter);
+        await Task.Delay(800);
+        DataTableRow? row = table.RowsRepeater?.TryGetElement(2) as DataTableRow;
+        Report.Line($"[care-detail-open] row c00002 arrived with its detail open: detail made {row?.DetailContent is not null}, open {table.IsDetailOpen("c00002")}; row c00001 open {table.IsDetailOpen("c00001")}");
+        if (row is not null)
+        {
+            table.ToggleDetail(row);
+            await Task.Delay(300);
+            model.Replace(model.ItemAt(2));
+            await Task.Delay(900);
+            Report.Line($"[care-detail-open] the person shut it and the row was drawn again with the detail still said open: open {table.IsDetailOpen("c00002")}");
+        }
+
+        await Handshake.StepAsync("care-detail-open", "a row that arrived with its detail open");
+    }
+
+    // The density a person chose and kept is the density of the rows from the first draw.
+    private static async Task DensityKeptAsync(MainWindow window)
+    {
+        MemoryLayoutStore store = new();
+        Dictionary<string, StoredColumn> none = [];
+        store.Save("gallery/density", LayoutText.Serialize(new StoredLayout(LayoutText.CurrentVersion, "comfortable", 1, ["name", "city", "phone", "email", "plan", "amount", "status", "seen", "actions"], none)));
+        ListDataTableModel<Customer> plainModel = Rows(0, 40);
+        DataTable plain = await ShowAsync(window, plainModel);
+        double standard = plain.RowHeight;
+        ListDataTableModel<Customer> model = Rows(0, 40);
+        DataTable table = await ShowAsync(window, model, before: t =>
+        {
+            t.LayoutKey = "gallery/density";
+            t.LayoutStore = store;
+        });
+        Report.Line($"[care-density-kept] rows are {standard:0.##} tall with no kept layout and {table.RowHeight:0.##} tall when the person kept comfortable; a row made is {(table.RowsRepeater?.TryGetElement(0) as DataTableRow)?.ActualHeight:0.##} tall");
+        await Handshake.StepAsync("care-density-kept", "the table with the density the person kept");
+    }
+
+    // A page that arrives later needs a second line and a detail the first rows did not: the rows and the columns follow, the view stays.
+    private static async Task LateShapeAsync(MainWindow window)
+    {
+        ListDataTableModel<Customer> model = DemoData.Model();
+        model.HasDetailOf = c => string.CompareOrdinal(c.Id, "c00030") >= 0;
+        model.Reset(DemoData.Make(0, 30));
+        TextTablePresenter<Customer> presenter = new(model)
+        {
+            Second = c => string.CompareOrdinal(c.Id, "c00030") >= 0 ? c.Email : null,
+            Detail = c => new TextBlock { Text = c.Name + " wrote from " + c.City + ".", TextWrapping = TextWrapping.Wrap },
+        };
+        DataTable table = await ShowAsync(window, model, presenter);
+        ScrollView? scroll = table.Scroller;
+        if (scroll is null)
+        {
+            return;
+        }
+
+        Scroll(table, 440);
+        await Task.Delay(900);
+        double heightBefore = table.RowHeight;
+        int topBefore = (int)(scroll.VerticalOffset / heightBefore);
+        string key = model.GetRow(topBefore).Key ?? string.Empty;
+        double standsBefore = (topBefore * heightBefore) - scroll.VerticalOffset;
+        Report.Line($"[care-late-shape] 30 rows: row {heightBefore:0.##} tall, shape {table.Shape}, chevron column {table.HasChevronColumn}; the view is at {scroll.VerticalOffset:0.#} and row {key} stands {standsBefore:0.#} from its top");
+        model.Append(DemoData.Make(30, 30));
+        await Task.Delay(1800);
+        int at = model.IndexOfKey(key);
+        double stands = (at * table.RowHeight) - scroll.VerticalOffset;
+        Report.Line($"[care-late-shape] 30 more rows with a second line and a detail: row {table.RowHeight:0.##} tall, shape {table.Shape}, chevron column {table.HasChevronColumn}; the view is at {scroll.VerticalOffset:0.#} and row {key} (now {at}) stands {stands:0.#} from its top");
+        await Handshake.StepAsync("care-late-shape", "the table after a later page needed a second line and a detail");
+    }
+
+    private static async Task<WeakReference> ShowAndDropAsync(MainWindow window, ListDataTableModel<Customer> model)
+    {
+        DataTable table = new() { Model = model, Presenter = new TextTablePresenter<Customer>(model), Culture = DemoData.Culture, Margin = new Thickness(12) };
+        window.StageHost.Child = table;
+        await Waiting.LoadedAsync(table);
+        await Task.Delay(1000);
+        window.StageHost.Child = null;
+        return new WeakReference(table);
+    }
+
+    // A table out of the tree stops listening to its model and runs nothing; a model that outlives its table does not hold it.
+    private static async Task UnloadedAsync(MainWindow window)
+    {
+        ListDataTableModel<Customer> model = Rows(0, 100);
+        WeakReference weak = await ShowAndDropAsync(window, model);
+        for (int i = 0; i < 8; i++)
+        {
+            await Task.Delay(300);
+            model.Append(DemoData.Make(100 + (i * 10), 10));
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+
+        Report.Line($"[care-unloaded] the table was taken out of the tree and the model changed {8} times since; the table is {(weak.IsAlive ? "still held" : "collected")}");
+
+        ListDataTableModel<Customer> second = Rows(0, 100);
+        DataTable table = await ShowAsync(window, second);
+        window.StageHost.Child = null;
+        await Task.Delay(500);
+        second.Append(DemoData.Make(100, 40));
+        second.Later = new DataTableCursor(true, CursorState.Idle);
+        await Task.Delay(500);
+        Report.Line($"[care-unloaded] out of the tree: the model holds {second.RowCount} rows and the table lists {table.RowsList.Count}");
+        window.StageHost.Child = table;
+        await Waiting.LoadedAsync(table);
+        await Task.Delay(1200);
+        Report.Line($"[care-unloaded] in the tree again: the model holds {second.RowCount} rows and the table lists {table.RowsList.Count}; rows made {table.RowsLayout.LastRealized.Count}");
+        await Handshake.StepAsync("care-unloaded", "the table put back in the tree after its model changed");
     }
 
     // A new model: what is typed looks through the new model's names, not the old one's.
