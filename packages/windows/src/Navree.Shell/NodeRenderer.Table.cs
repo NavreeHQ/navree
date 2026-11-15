@@ -752,9 +752,12 @@ internal sealed class ProtocolTablePresenter(
                 combo.Header = null;
                 break;
             case Button button when ReferenceEquals(button.Style, Look.Ramp("TextBlockButtonStyle")):
-                button.Padding = new Thickness(0);
+                // The words stand where they would with no padding; the padding is taken back by the margin, so the button's own area is a
+                // line and a half tall (a pointer's target at least 24 pixels) and nothing moves.
+                button.Padding = new Thickness(0, 3, 0, 3);
+                button.Margin = new Thickness(0, -3, 0, -3);
                 button.MinWidth = 0;
-                button.MinHeight = 0;
+                button.MinHeight = 24;
                 button.HorizontalAlignment = HorizontalAlignment.Left;
                 button.HorizontalContentAlignment = HorizontalAlignment.Left;
                 break;

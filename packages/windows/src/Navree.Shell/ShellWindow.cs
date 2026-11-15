@@ -225,7 +225,8 @@ public sealed partial class ShellWindow : Window
         long? baseId = stack.Count > 0 ? stack[^1] : null;
         ScreenView? baseScreen = baseId is long b && state.Screens.TryGetValue(b, out ScreenView? held) ? held : null;
 
-        bool twoPanes = !modalInFront && WindowRules.TwoPanes(width, stack.Count);
+        ScreenView? firstScreen = stack.Count > 0 && state.Screens.TryGetValue(stack[0], out ScreenView? first) ? first : null;
+        bool twoPanes = !modalInFront && WindowRules.TwoPanes(width, stack.Count, firstScreen?.Screen?.Body);
         if (twoPanes)
         {
             long under = stack[^2];

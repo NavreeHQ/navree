@@ -32,6 +32,8 @@ public sealed partial class DataTable
 
         if (sortButton is not null)
         {
+            // Its content is an icon and a text block, which give a screen reader no name of their own.
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(sortButton, DataTableStrings.Get("DataTable_Sort_Button"));
             sortButton.Click -= OnSortButton;
             sortButton.Click += OnSortButton;
         }

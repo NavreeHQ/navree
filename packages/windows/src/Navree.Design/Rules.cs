@@ -54,6 +54,31 @@ public static class WindowRules
     public static bool TwoPanes(WidthClass width, int stackDepth) => width == WidthClass.Expanded && stackDepth >= 2;
 
     /// <summary>
+    /// Whether a list and the screen opened from it stand side by side: the window is wide, there is a screen opened, and the first screen of the
+    /// stack is a collection. A first screen that lays out panes of its own (a list with its thread and its customer) is drawn alone, as the
+    /// other clients draw it, or its panes would be set beside a copy of themselves.
+    /// </summary>
+    /// <param name="width">The window's class.</param>
+    /// <param name="stackDepth">How many screens the stack holds.</param>
+    /// <param name="firstBody">The body of the first screen of the stack.</param>
+    /// <returns>Whether there are two panes.</returns>
+    public static bool TwoPanes(WidthClass width, int stackDepth, Models.Node? firstBody) => TwoPanes(width, stackDepth) && IsCollection(firstBody);
+
+    /// <summary>Whether a body is, in the main, a list of things to open: a list, a table, a pane that says it is a list, or a region or stack that holds one and no form.</summary>
+    /// <param name="body">The body.</param>
+    /// <returns>Whether it is a collection.</returns>
+    public static bool IsCollection(Models.Node? body) =>
+        body switch
+        {
+            Models.List or Models.Table => true,
+            Models.Pane pane => pane.Role == Models.PaneRole.List,
+            Models.Region region => region.Children.Any(IsCollection),
+            Models.Stack stack => stack.Children.Any(child => child is Models.List or Models.Table || (child is Models.Region inner && IsCollection(inner)))
+                && !stack.Children.Any(child => child is Models.Form),
+            _ => false,
+        };
+
+    /// <summary>
     /// Whether a long form or a detail is a pane at the side of the window and not a dialog: the window is wide enough to
     /// keep what is behind it in view, and what it holds is more than a question or a short form.
     /// </summary>

@@ -86,7 +86,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
             Models.Popover popover => Overlay(popover, popover.Id),
             Models.Gauge gauge => DrawGauge(gauge),
             Models.Figure figure => DrawFigure(figure),
-            Models.Pane pane => Column(pane.Children),
+            Models.Pane pane => DrawPane(pane),
             Models.Adaptive adaptive => Column(context.Width == WidthClass.Expanded ? adaptive.Wide : adaptive.Compact),
             Models.NativeView native => native.Alt is null ? Empty() : Render(native.Alt),
             Models.NodeUnknown unknown => unknown.Alt is null ? Empty() : Render(unknown.Alt),
@@ -332,22 +332,41 @@ internal sealed partial class NodeRenderer(RenderContext context)
         return button;
     }
 
+    // Two panes: side by side where the room they are given is wide enough for both, one under the other where it is not (the pane the server
+    // says is in hand first). A split inside a pane of another split chooses by the room the pane leaves it.
     private UIElement DrawSplit(Models.Split split)
     {
-        if (context.Width != WidthClass.Expanded)
+        Navree.Controls.Composition.PaneRow row = new() { SecondFirstWhenStacked = HoldsCurrent(split.Detail) && !HoldsCurrent(split.Primary) };
+        row.Children.Add(Render(split.Primary));
+        row.Children.Add(Render(split.Detail));
+        return row;
+    }
+
+    private static bool HoldsCurrent(Models.Node node) =>
+        node switch
         {
-            return Column([split.Primary, split.Detail], 16);
+            Models.Pane pane => pane.Current,
+            Models.Split inner => HoldsCurrent(inner.Primary) || HoldsCurrent(inner.Detail),
+            _ => false,
+        };
+
+    // A pane is its parts in a column, under its title where it has one.
+    private UIElement DrawPane(Models.Pane pane)
+    {
+        StackPanel column = new() { Spacing = 8 };
+        if (!string.IsNullOrEmpty(pane.Title))
+        {
+            TextBlock title = Look.Label(pane.Title, "BodyStrongTextBlockStyle");
+            AutomationProperties.SetHeadingLevel(title, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
+            column.Children.Add(title);
         }
 
-        Grid grid = new() { ColumnSpacing = 24 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        UIElement primary = Render(split.Primary);
-        UIElement detail = Render(split.Detail);
-        Grid.SetColumn((FrameworkElement)detail, 1);
-        grid.Children.Add(primary);
-        grid.Children.Add(detail);
-        return grid;
+        foreach (Models.Node child in pane.Children)
+        {
+            column.Children.Add(Render(child));
+        }
+
+        return column;
     }
 
     private UIElement DrawDisclosure(Models.Disclosure disclosure)
