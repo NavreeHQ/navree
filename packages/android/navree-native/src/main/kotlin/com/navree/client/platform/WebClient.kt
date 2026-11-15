@@ -160,15 +160,26 @@ object WebRules {
  * by a redirect the web view's callbacks are never told of (a frame's, a
  * posted form's). Call before the first load. Where the system's web view
  * lacks the feature (`WebViewFeature.DOCUMENT_START_SCRIPT`), nothing is
- * added and the request checks of [OriginWebClient] are what holds. Answers
- * whether the script was added.
+ * added: the request checks of [OriginWebClient] are what holds, and neither
+ * the check of a frame reached by a redirect nor the one on sockets and
+ * workers exists. That is said once in the log. Answers whether the script
+ * was added.
  */
-fun guardDocuments(view: WebView, origins: Origins): Boolean {
-    if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return false
+fun guardDocuments(view: WebView, origins: Origins): Boolean = guardDocuments(view, origins, ClientLog.told)
+
+internal fun guardDocuments(view: WebView, origins: Origins, told: Told): Boolean {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+        told.once(
+            "documents",
+            "this system's web view cannot run a script at the start of a document: a frame reached by a redirect, a socket and a worker are not checked; the checks of each request hold",
+        )
+        return false
+    }
     return try {
         WebViewCompat.addDocumentStartJavaScript(view, WebRules.documentScript(origins.documentOrigins()), setOf("*"))
         true
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        told.once("documents", "the script at the start of a document could not be added ($e): a frame reached by a redirect, a socket and a worker are not checked")
         false
     }
 }
@@ -177,10 +188,10 @@ fun guardDocuments(view: WebView, origins: Origins): Boolean {
  * Puts the origin rules on the requests of service workers too: a page of the
  * app may register one, and its requests do not pass through the web view's
  * client. A worker's request to any origin but the app's (and its named web
- * hosts) is answered 403. The setting is the process's, made once at start.
- * Answers whether it was made.
+ * hosts) is answered 403. The setting is the process's. Throws when the
+ * system's web view cannot take it.
  */
-fun guardWorkers(origins: Origins): Boolean = try {
+internal fun setServiceWorkerRules(origins: Origins) {
     ServiceWorkerController.getInstance().setServiceWorkerClient(
         object : ServiceWorkerClient() {
             override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
@@ -192,44 +203,90 @@ fun guardWorkers(origins: Origins): Boolean = try {
             }
         },
     )
+}
+
+/** [setServiceWorkerRules], answering whether it was made. */
+fun guardWorkers(origins: Origins): Boolean = try {
+    setServiceWorkerRules(origins)
     true
 } catch (_: Throwable) {
     false
+}
+
+/** What the client could not do, said once for each thing in the log: a web page made again does not say it again. */
+internal class Told(private val log: (String) -> Unit) {
+    private val said = HashSet<String>()
+
+    fun once(what: String, why: String) {
+        val first = synchronized(said) { said.add(what) }
+        if (first) log(why)
+    }
+
+    /** Forgets that [what] was said, so that a failure of it is told again. */
+    fun again(what: String) {
+        synchronized(said) { said.remove(what) }
+    }
+}
+
+internal object ClientLog {
+    val told = Told { android.util.Log.w("Navree", it) }
+}
+
+/**
+ * The guard on service workers, as a state that can be tested: [make] sets the
+ * rules, and the guard counts as made only when it did. Every call of [ensure]
+ * until then tries again; a failure is told once.
+ */
+internal class WorkerRules(private val make: (Origins) -> Unit, private val told: Told) {
+    private var origins: Origins? = null
+    private var made = false
+
+    /** Says which origins the guard is for; a guard made before is made again for them. */
+    fun arm(origins: Origins) {
+        this.origins = origins
+        made = false
+        told.again("workers")
+    }
+
+    /** Whether the rules are in force: made now if they are not yet. False when nothing was armed or the system's web view cannot take them. */
+    fun ensure(): Boolean {
+        val wanted = origins ?: return false
+        if (made) return true
+        try {
+            make(wanted)
+            made = true
+        } catch (e: Throwable) {
+            told.once("workers", "the rules for a service worker's requests could not be set ($e): a page may register a worker whose requests are not checked; every web page made tries again")
+        }
+        return made
+    }
 }
 
 /**
  * The guard on service workers, made when it is needed, not at the start: it
  * starts the web view's engine, which takes a while, and an app whose first
  * screen is native does not need it before that screen is drawn. It is made
- * once, on the main thread, when the main thread is idle after the first
- * screen is drawn, and in any case before a web view is made (a page cannot
- * register a worker before it is in a web view).
+ * on the main thread when the main thread is idle after the first screen is
+ * drawn, and in any case before a web view is made (a page cannot register a
+ * worker before it is in a web view); where it could not be made, each web
+ * page made tries again, and the first failure is in the log.
  */
 object WorkerGuard {
-    private var origins: Origins? = null
-    private var made = false
+    private val rules = WorkerRules(::setServiceWorkerRules, ClientLog.told)
 
     /** Says which origins the guard is for. Call on the main thread. */
-    fun arm(origins: Origins) {
-        this.origins = origins
-        made = false
-    }
+    fun arm(origins: Origins) = rules.arm(origins)
 
     /** Makes the guard the next time the main thread has nothing to do. Call on the main thread. */
     fun whenIdle() {
         android.os.Looper.myQueue().addIdleHandler {
-            ensure()
+            rules.ensure()
             false
         }
     }
 
-    /** Makes the guard now if it is not made yet. Call on the main thread. */
-    fun ensure() {
-        val wanted = origins ?: return
-        if (made) return
-        made = true
-        guardWorkers(wanted)
-    }
+    /** Makes the guard now if it is not made yet, and says whether it is in force. Call on the main thread. */
+    fun ensure(): Boolean = rules.ensure()
 }
 
 /**
