@@ -64,7 +64,7 @@ public sealed partial class DayClockView : KindControl
             Ideal = side,
             Reads = true,
             AccessName = string.IsNullOrEmpty(name) ? said : SpeechRules.Fact(name, said),
-            AccessType = "day clock",
+            AccessType = KindStrings.TypeDayClock,
         };
         dial.Painter = Paint;
         stack.Children.Add(dial);
@@ -158,7 +158,7 @@ public sealed partial class DayClockView : KindControl
             canvas.Shapes.Put(Ink.Stroked(Ink.Lines([near, far]), Palette.Mark(colour, clock.Now == at ? 1 : opacity), width, PenLineCap.Round), 0, 0);
 
             string name = clock.Key.Count > 0 && hour.Category is long found && found >= 0 && found < clock.Key.Count ? clock.Key[(int)found].Name : string.Empty;
-            string words = (reach is null ? "No reading" : hour.Value is double value ? NumberWords.Amount(value, culture) : NumberWords.Amount((reach ?? 0) * 100, culture) + "%")
+            string words = (reach is null ? KindStrings.NoReading : hour.Value is double value ? NumberWords.Amount(value, culture) : NumberWords.Amount((reach ?? 0) * 100, culture) + "%")
                 + (name.Length > 0 ? ", " + name : string.Empty);
             string time = ClockRules.TimeLabel(at, Uses24, culture);
             canvas.Probes.Add(new Probe(far.X, far.Y, default, time, [new ProbeLine(reach is null ? null : colour, words)], time + ", " + words, Marks: [(new Windows.Foundation.Point(far.X, far.Y), colour)]));

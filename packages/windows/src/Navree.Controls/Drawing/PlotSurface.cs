@@ -157,7 +157,7 @@ internal sealed partial class PlotSurface : UserControl
     internal string AccessHelp { get; set; } = string.Empty;
 
     /// <summary>What kind of thing a screen reader says this is.</summary>
-    internal string AccessType { get; set; } = "chart";
+    internal string AccessType { get; set; } = KindStrings.TypeChart;
 
     /// <summary>A value the part holds against a range, for screen readers that ask for it.</summary>
     internal (double Min, double Max, double Value)? Range { get; set; }

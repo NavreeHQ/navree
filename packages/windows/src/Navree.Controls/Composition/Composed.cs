@@ -273,7 +273,7 @@ public static class Composed
                     Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
                     BorderThickness = new Thickness(0),
                 };
-                AutomationProperties.SetName(mark, "Page " + (page + 1) + " of " + parts.Count);
+                AutomationProperties.SetName(mark, KindStrings.PageOf(page + 1, parts.Count));
                 mark.Click += (_, _) => scroller.ChangeView(page * (scroller.ViewportWidth + gap), null, null);
                 marks.Add(mark);
                 row.Children.Add(mark);

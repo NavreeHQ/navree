@@ -101,7 +101,7 @@ public sealed partial class ChartView : KindControl
             Reads = !Spark,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(chart.Title) ? chart.Summary ?? Sentence() : SpeechRules.Fact(chart.Title, SpeechRules.Value(chart.Summary ?? Sentence(), chart.Title)),
-            AccessType = "chart",
+            AccessType = KindStrings.TypeChart,
         };
         plot.Painter = Paint;
         stack.Children.Add(plot);

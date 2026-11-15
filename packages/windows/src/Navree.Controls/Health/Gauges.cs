@@ -55,7 +55,7 @@ public sealed partial class GaugeView : KindControl
         if (aside)
         {
             double side = GaugeRules.Diameter(aside: true) * TextScale.Capped(1.3);
-            PlotSurface small = new() { Width = side, Height = side, AccessName = name, AccessType = "gauge", Range = range, HorizontalAlignment = HorizontalAlignment.Left };
+            PlotSurface small = new() { Width = side, Height = side, AccessName = name, AccessType = KindStrings.TypeGauge, Range = range, HorizontalAlignment = HorizontalAlignment.Left };
             small.Painter = PaintSmall;
             return small;
         }
@@ -68,7 +68,7 @@ public sealed partial class GaugeView : KindControl
             MaxWidth = diameter,
             Ideal = diameter,
             AccessName = name,
-            AccessType = "gauge",
+            AccessType = KindStrings.TypeGauge,
             Range = range,
         };
         plot.Painter = canvas => PaintOpen(canvas, diameter);
@@ -267,7 +267,7 @@ public sealed partial class RangeView : KindControl
         {
             Height = Math.Max(height + 10, 18),
             AccessName = string.IsNullOrEmpty(range.Title) ? said : SpeechRules.Fact(range.Title, said),
-            AccessType = "range",
+            AccessType = KindStrings.TypeRange,
             Range = range.Value is double at && RangeRules.Ends(range.Min, range.Max) is (double lowest, double highest) ? (lowest, highest, RangeRules.Value(at, lowest, highest)) : null,
         };
         line.Painter = canvas => PaintLine(canvas, height, current);

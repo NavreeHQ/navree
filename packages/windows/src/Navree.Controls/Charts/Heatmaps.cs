@@ -66,7 +66,7 @@ public sealed partial class CalendarHeatView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(heatmap.Title) ? said : SpeechRules.Fact(heatmap.Title, said),
-            AccessType = "calendar",
+            AccessType = KindStrings.TypeCalendar,
             HeightFor = width => Label + 6 + (Step(width) * 7),
         };
         plot.Painter = Paint;
@@ -140,7 +140,7 @@ public sealed partial class CalendarHeatView : KindControl
                 canvas.Shapes.Put(Ink.Box(cell, cell, null, cell * 0.22, Palette.Mark(palette.Of(Models.Hue.Neutral), 0.35), 1), x, y);
             }
 
-            string words = value is double found ? NumberWords.WithUnit(NumberWords.Amount(found, culture), heatmap.Unit) : "No reading";
+            string words = value is double found ? NumberWords.WithUnit(NumberWords.Amount(found, culture), heatmap.Unit) : KindStrings.NoReading;
             canvas.Probes.Add(new Probe(
                 canvas.Mx(x + (cell / 2)),
                 y,
@@ -192,7 +192,7 @@ public sealed partial class MatrixHeatView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(matrix.Title) ? said : SpeechRules.Fact(matrix.Title, said),
-            AccessType = "matrix",
+            AccessType = KindStrings.TypeMatrix,
             HeightFor = width => (Rows.Count * (CellFor(width) + 3)) + 22,
         };
         plot.Painter = Paint;
@@ -245,18 +245,18 @@ public sealed partial class MatrixHeatView : KindControl
                     Ink.Box(cell, cell, fill, 6, fill is null ? Palette.Mark(palette.Of(Models.Hue.Neutral), 0.35) : null, fill is null ? 1 : 0),
                     x,
                     y);
-                string words = relation?.Value is null ? "Not tested" : value.ToString("0.00", ClientCulture.Current);
+                string words = relation?.Value is null ? KindStrings.NotTested : value.ToString("0.00", ClientCulture.Current);
                 if (relation?.Value is not null && MatrixRules.HoldsNumber(cell))
                 {
                     Brush ink = strength > 0.55 && relation.Significant ? Palette.Mark(Microsoft.UI.Colors.White) : palette.Primary;
                     canvas.Text(Ink.Words(words, 11, ink, strong: true), x + (cell / 2), y + (cell / 2), Across.Middle, Down.Middle);
                 }
 
-                string pair = matrix.Measures[a] + " and " + matrix.Measures[b];
+                string pair = KindStrings.Pair(matrix.Measures[a], matrix.Measures[b]);
                 List<ProbeLine> lines = [new ProbeLine(null, words)];
                 if (relation is not null && !relation.Significant)
                 {
-                    lines.Add(new ProbeLine(null, "May be chance"));
+                    lines.Add(new ProbeLine(null, KindStrings.MayBeChance));
                 }
 
                 if (relation?.Note is string note)
@@ -313,7 +313,7 @@ public sealed partial class ScatterView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(scatter.Title) ? said : SpeechRules.Fact(scatter.Title, said),
-            AccessType = "scatter chart",
+            AccessType = KindStrings.TypeScatter,
             HeightFor = width => Math.Max(scatter.EqualAxes ? Math.Min(width, 380) : Math.Min(width / 1.4, 320), 160),
         };
         plot.Painter = Paint;
@@ -386,7 +386,7 @@ public sealed partial class ScatterView : KindControl
                 double px = X(point.X);
                 double py = Y(point.Y);
                 canvas.Shapes.Put(Ink.Disc(8, Palette.Mark(colour, 0.6)), px - 4, py - 4);
-                string words = (scatter.X?.Name ?? "x") + " " + NumberWords.Amount(point.X) + ", " + (scatter.Y?.Name ?? "y") + " " + NumberWords.Amount(point.Y);
+                string words = (scatter.X?.Name ?? KindStrings.AxisAcross) + " " + NumberWords.Amount(point.X) + ", " + (scatter.Y?.Name ?? KindStrings.AxisDown) + " " + NumberWords.Amount(point.Y);
                 canvas.Probes.Add(new Probe(
                     canvas.Mx(px),
                     py,

@@ -185,14 +185,14 @@ public sealed partial class DayPagerView : KindControl
         bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         bar.HorizontalAlignment = HorizontalAlignment.Left;
 
-        UIElement previous = Step(pager.Previous, "", pager.Words?.Previous ?? "Previous day");
+        UIElement previous = Step(pager.Previous, "", pager.Words?.Previous ?? KindStrings.PreviousDay);
         bar.Children.Add(previous);
 
         Button day = Day();
         Grid.SetColumn(day, 1);
         bar.Children.Add(day);
 
-        UIElement next = Step(pager.Next, "", pager.Words?.Next ?? "Next day");
+        UIElement next = Step(pager.Next, "", pager.Words?.Next ?? KindStrings.NextDay);
         if (next is FrameworkElement placed)
         {
             Grid.SetColumn(placed, 2);
@@ -202,7 +202,7 @@ public sealed partial class DayPagerView : KindControl
 
         if (pager.Today is string today)
         {
-            Button now = new() { Content = "Today", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+            Button now = new() { Content = KindStrings.Today, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
             now.Click += (_, _) => step(today);
             Grid.SetColumn(now, 3);
             bar.Children.Add(now);

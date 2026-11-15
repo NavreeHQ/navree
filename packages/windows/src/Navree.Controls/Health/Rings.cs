@@ -99,14 +99,14 @@ public sealed partial class RingView : KindControl
         double ideal = RingRules.Diameter(Prominence) * TextScale.Capped(RingRules.Growth(Prominence));
         StackPanel stack = new() { Spacing = Prominence == Models.Prominence.High ? 10 : 6 };
         string name = ring.Label ?? string.Empty;
-        string value = SpeechRules.Value(ring.Summary ?? (ring.Value is null ? "Not measured" : RingRules.Centre(ring)), ring.Label);
+        string value = SpeechRules.Value(ring.Summary ?? (ring.Value is null ? KindStrings.NotMeasured : RingRules.Centre(ring)), ring.Label);
         PlotSurface plot = new()
         {
             Height = ideal,
             MaxWidth = ideal,
             Ideal = ideal,
             AccessName = string.IsNullOrEmpty(name) ? value : SpeechRules.Fact(name, value),
-            AccessType = "ring",
+            AccessType = KindStrings.TypeRing,
             Range = ring.Value is double current ? (0, ring.Max, current) : null,
         };
         plot.Painter = Paint;
@@ -244,7 +244,7 @@ public sealed partial class RingsView : KindControl
             Width = diameter,
             Height = diameter,
             AccessName = string.IsNullOrEmpty(title) ? said : SpeechRules.Fact(title, said),
-            AccessType = "rings",
+            AccessType = KindStrings.TypeRings,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
         dial.Painter = Paint;

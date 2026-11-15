@@ -281,9 +281,9 @@ public static class TrendRules
     public static string Word(Models.Direction direction) =>
         direction switch
         {
-            Models.Direction.Up => "Up",
-            Models.Direction.Down => "Down",
-            _ => "Steady",
+            Models.Direction.Up => KindStrings.TrendUp,
+            Models.Direction.Down => KindStrings.TrendDown,
+            _ => KindStrings.TrendSteady,
         };
 }
 
@@ -291,7 +291,7 @@ public static class TrendRules
 public static class MessageRules
 {
     /// <summary>What an internal note says it is.</summary>
-    public const string NoteWords = "Internal note, not sent to the customer";
+    public static string NoteWords => KindStrings.NoteWords;
 
     /// <summary>The words and icon glyph for how far a message got; none for a delivery this client does not know.</summary>
     /// <param name="delivery">The delivery.</param>
@@ -299,11 +299,11 @@ public static class MessageRules
     public static (string Text, string Glyph)? Delivery(Models.Delivery delivery) =>
         delivery switch
         {
-            Models.Delivery.Sending => ("Sending", ""),
-            Models.Delivery.Sent => ("Sent", ""),
-            Models.Delivery.Delivered => ("Delivered", ""),
-            Models.Delivery.Read => ("Read", ""),
-            Models.Delivery.Failed => ("Not sent", ""),
+            Models.Delivery.Sending => (KindStrings.Sending, ""),
+            Models.Delivery.Sent => (KindStrings.Sent, ""),
+            Models.Delivery.Delivered => (KindStrings.Delivered, ""),
+            Models.Delivery.Read => (KindStrings.Read, ""),
+            Models.Delivery.Failed => (KindStrings.NotSent, ""),
             _ => null,
         };
 }
@@ -402,7 +402,7 @@ public static class HintRules
     public static string ActionName(Models.Hint hint)
     {
         string about = hint.About.Trim();
-        return about.Length == 0 ? "About" : "About " + about;
+        return about.Length == 0 ? KindStrings.About : KindStrings.AboutThing(about);
     }
 
     /// <summary>The words a chart's own title says: not when the screen has just said the same words over it.</summary>

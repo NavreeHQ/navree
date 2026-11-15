@@ -59,7 +59,7 @@ public sealed partial class MeterView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(meter.Title) ? said : SpeechRules.Fact(meter.Title, said),
-            AccessType = "meter",
+            AccessType = KindStrings.TypeMeter,
         };
         bar.Painter = Paint;
         stack.Children.Add(bar);
@@ -185,7 +185,7 @@ public sealed partial class ColumnsView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(columns.Title) ? said : SpeechRules.Fact(columns.Title, said),
-            AccessType = "chart",
+            AccessType = KindStrings.TypeChart,
         };
         plot.Painter = Paint;
         stack.Children.Add(plot);
@@ -294,7 +294,7 @@ public sealed partial class StripView : KindControl
             Reads = true,
             MirrorInRtl = true,
             AccessName = string.IsNullOrEmpty(strip.Title) ? said : SpeechRules.Fact(strip.Title, said),
-            AccessType = "strip",
+            AccessType = KindStrings.TypeStrip,
         };
         bar.Painter = Paint;
         stack.Children.Add(bar);
@@ -366,7 +366,7 @@ public sealed partial class StripView : KindControl
         {
             Models.StripCell cell = strip.Cells[at];
             int? kind = KindOf(cell);
-            string words = kind is int found ? KeyRules.Entry(strip.Key[found].Name, strip.Key[found].Detail) : "No reading";
+            string words = kind is int found ? KeyRules.Entry(strip.Key[found].Name, strip.Key[found].Detail) : KindStrings.NoReading;
             canvas.Probes.Add(new Probe(
                 canvas.Mx((at + 0.5) * width),
                 0,
