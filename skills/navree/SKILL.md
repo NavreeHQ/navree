@@ -92,8 +92,10 @@ navree migrate                              # pending migrations
 navree list                                 # every command of the app
 ```
 
-`navree <cmd>` runs `cargo run --quiet -- <cmd>` for anything that is not
-`new`, `make:*` or `dev`.
+`navree <cmd>` runs `cargo run --quiet -- <cmd>` for anything the CLI
+doesn't own: `new`, `make:*`, `dev`, `check`, `gate`, `dock*`, the Harbor
+commands, `mcp`, `skills:install`, `browser:install`, `openapi:client`,
+`native:coverage` and `native:doctor` run in the CLI itself.
 
 ## Which skill to load
 
