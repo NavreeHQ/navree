@@ -49,8 +49,11 @@ pub static OUTSIDE: UiExtension = UiExtension::new("app", "outside")
     .contract(1);
 
 /// A component of a stylesheet only, whose rules name forms and dialogs the page also has.
-pub static STYLED: UiExtension = UiExtension::new("app", "styled")
-    .sheet(extension_sheet!("extensions/styled.css", "app", 8 * 1024));
+pub static STYLED: UiExtension = UiExtension::new("app", "styled").sheet(extension_sheet!(
+    "extensions/styled.css",
+    "app",
+    8 * 1024
+));
 
 /// What the pad's script is given.
 #[derive(Serialize)]
@@ -152,13 +155,15 @@ fn delivery_form() -> Element {
         .attr("action", "/extensions/deliveries")
         .flag("data-ui-form", true)
         .uses(Uses::CORE)
-        .child(Stack::gap(3).children((
-            pad("vendor-pad", &vendor, Buttons::Nothing),
-            Field::new("recipient", "Recipient")
-                .control(Input::text("recipient").value("Harpreet Sandhu")),
-            Field::new("charge", "Charge in ₹").control(Input::number("charge").value("40")),
-            Button::primary("Add delivery").submit().id("add-delivery"),
-        )))
+        .child(
+            Stack::gap(3).children((
+                pad("vendor-pad", &vendor, Buttons::Nothing),
+                Field::new("recipient", "Recipient")
+                    .control(Input::text("recipient").value("Harpreet Sandhu")),
+                Field::new("charge", "Charge in ₹").control(Input::number("charge").value("40")),
+                Button::primary("Add delivery").submit().id("add-delivery"),
+            )),
+        )
 }
 
 /// `GET /extensions`.
@@ -207,14 +212,16 @@ fn index(shell: &AppShell, step: u32) -> AppPage {
 
 /// `GET /extensions/other`.
 fn other(shell: &AppShell) -> AppPage {
-    shell.page("Another pad").body(Stack::gap(6).children((
-        Heading::h1("Another pad"),
-        pad("other-pad", &props(1), Buttons::Nothing),
-        el("a")
-            .href("/extensions")
-            .attr("id", "to-index")
-            .child("Back to the pad"),
-    )))
+    shell.page("Another pad").body(
+        Stack::gap(6).children((
+            Heading::h1("Another pad"),
+            pad("other-pad", &props(1), Buttons::Nothing),
+            el("a")
+                .href("/extensions")
+                .attr("id", "to-index")
+                .child("Back to the pad"),
+        )),
+    )
 }
 
 /// `GET /extensions/outside`.
@@ -240,11 +247,13 @@ fn fresh() -> View {
                 el("form")
                     .attr("method", "post")
                     .attr("action", "/extensions/fresh")
-                    .child(Stack::gap(3).children((
-                        Field::new("password", "Password")
-                            .control(Input::password("password").required()),
-                        Button::primary("Confirm").submit(),
-                    ))),
+                    .child(
+                        Stack::gap(3).children((
+                            Field::new("password", "Password")
+                                .control(Input::password("password").required()),
+                            Button::primary("Confirm").submit(),
+                        )),
+                    ),
             )),
         ),
     )
@@ -306,16 +315,18 @@ fn deliveries(shell: &AppShell) -> AppPage {
             .collect()
     };
     let query = TableQuery::<DeliveryRow, NoFilter>::parse("/extensions/deliveries", "");
-    shell.page("Deliveries").body(
-        DataTable::new("deliveries", &query, &rows).cell("drop_at", |row| {
-            EditCell::control(
-                row.drop_at.clone(),
-                format!("/extensions/deliveries/{}/drop", row.id),
-                Control::new(&LOCATION),
-            )
-            .label("Drop point")
-        }),
-    )
+    shell
+        .page("Deliveries")
+        .body(
+            DataTable::new("deliveries", &query, &rows).cell("drop_at", |row| {
+                EditCell::control(
+                    row.drop_at.clone(),
+                    format!("/extensions/deliveries/{}/drop", row.id),
+                    Control::new(&LOCATION),
+                )
+                .label("Drop point")
+            }),
+        )
 }
 
 /// `POST /extensions/deliveries/{id}/drop`: a drop point edited in its cell, held to the delivery
@@ -466,9 +477,11 @@ impl Controller for ExtensionPages {
             )
             .public()
             .page(),
-            RouteDef::on(Method::GET, "!/extensions/other", |shell: AppShell| async move {
-                other(&shell)
-            })
+            RouteDef::on(
+                Method::GET,
+                "!/extensions/other",
+                |shell: AppShell| async move { other(&shell) },
+            )
             .public()
             .page(),
             RouteDef::on(
@@ -517,12 +530,17 @@ impl Controller for ExtensionPages {
                 "!/extensions/deliveries/{id}/drop",
                 |Path(id): Path<i64>,
                  Extension(ctx): Extension<AppContext>,
-                 edit: EditedValue<GeoPoint>| async move { drop_point(id, ctx, edit).await },
+                 edit: EditedValue<GeoPoint>| async move {
+                    drop_point(id, ctx, edit).await
+                },
             )
             .public(),
             RouteDef::on(Method::GET, "!/extensions/hits", || async { hits() }).public(),
             RouteDef::on(Method::POST, "!/extensions/reset", || async { reset() }).public(),
-            RouteDef::on(Method::GET, "!/proof/tiles/{z}/{x}/{y}", || async { tile() }).public(),
+            RouteDef::on(Method::GET, "!/proof/tiles/{z}/{x}/{y}", || async {
+                tile()
+            })
+            .public(),
         ]
     }
 }
