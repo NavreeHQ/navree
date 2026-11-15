@@ -80,9 +80,10 @@ impl Registry {
             warned.len() < WARNED_NAMES && warned.insert(name.to_owned())
         };
         if first {
+            // Quoted and escaped: the name may be built from request data.
             tracing::warn!(
                 target: "navree::telemetry",
-                "telemetry event name `{name}` is not lower-case words joined by `.`; the event was not delivered"
+                "telemetry event name {name:?} is not lower-case words joined by `.`; the event was not delivered"
             );
         }
     }

@@ -412,6 +412,6 @@ async fn an_unregistered_disk_driver_fails_the_boot_naming_m_disk_driver() {
     let error = Storage::new(&options, SIGNING_KEY).unwrap_err().to_string();
     assert_eq!(
         error,
-        "invalid storage options: disk `uploads`: the `godown` driver is registered by a module; StorageModule builds it at boot"
+        "invalid storage options: disk `uploads`: the `godown` driver is not built in, and only StorageModule builds a driver a module registers, at boot"
     );
 }

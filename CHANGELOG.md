@@ -224,8 +224,8 @@ every `@navree/*` package carries the same version.
   `notify.preferences.channels` and `notify.deferred.channels` name a channel a module adds only
   when written as a list: the comma-separated form of an environment variable reads the built-in
   channels only.
-- `Storage::new` refuses a disk whose driver a module registers: `StorageModule` builds that
-  driver at boot.
+- `Storage::new` refuses a disk whose driver is not built in: only `StorageModule` builds a driver
+  a module registers, at boot.
 - `Interest::ALL` now includes `EventKind::Custom`, so a sink that takes every kind receives a
   module's custom events. A 1.2 process cannot read a telemetry event of type `custom`, or a
   `notify.send` job whose `via` is `registered`, so during a rolling upgrade use neither until
