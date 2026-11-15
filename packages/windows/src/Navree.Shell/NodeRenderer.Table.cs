@@ -518,7 +518,7 @@ internal sealed class ProtocolTablePresenter(
 
     /// <inheritdoc />
     public string CellText(in DataTableRecord record, int columnIndex) =>
-        record.Data is Models.TableRow row && columnIndex < row.Cells.Count ? string.Join(" ", Lines(row.Cells[columnIndex])) : string.Empty;
+        record.Data is Models.TableRow row && columnIndex < row.Cells.Count ? string.Join(", ", Lines(row.Cells[columnIndex])) : string.Empty;
 
     /// <inheritdoc />
     public string? SecondLine(in DataTableRecord record)
@@ -640,7 +640,13 @@ internal sealed class ProtocolTablePresenter(
                 }
 
                 box.Header = null;
-                box.MinWidth = 80;
+                box.Width = 88;
+                break;
+            case TextBlock words:
+                // Words that do not fit are cut with an ellipsis and are all in a tooltip, never cut without a sign.
+                words.TextWrapping = TextWrapping.NoWrap;
+                words.TextTrimming = TextTrimming.CharacterEllipsis;
+                words.IsTextTrimmedChanged += (sender, _) => ToolTipService.SetToolTip(sender, sender.IsTextTrimmed ? sender.Text : null);
                 break;
             case ComboBox combo:
                 if (combo.Header is string named)

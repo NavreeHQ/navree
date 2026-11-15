@@ -92,6 +92,7 @@ internal static class HugeScenario
         watch.Restart();
         table.ChooseAllHeld();
         long chose = watch.ElapsedMilliseconds;
+        await Task.Delay(700);
         Report.Line($"[rows100k] choosing all took {chose} ms: {table.ChosenCount:N0} chosen, {events.Count} event(s) {string.Join(",", events)}; memory {memoryBeforeChoice:0} MB before and {Process.GetCurrentProcess().WorkingSet64 / 1048576.0:0} MB after; said: {table.LastAnnouncement}");
         table.ClearChoice();
 
