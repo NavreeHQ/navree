@@ -131,6 +131,13 @@ internal sealed class SystemWalker(ShellHost host, ShellWindow window, SystemPla
                 await Task.Delay(2000);
                 Say("the window takes the whole screen: " + window.IsFullScreen);
                 await Task.Delay(1500);
+                Say("the window's content is " + window.Surface.ActualWidth + " by " + window.Surface.ActualHeight + " effective pixels");
+                if (window.CurrentPage is Microsoft.UI.Xaml.FrameworkElement page)
+                {
+                    double left = page.TransformToVisual(window.Surface).TransformPoint(new Windows.Foundation.Point(0, 0)).X;
+                    Say("the page is " + page.ActualWidth + " wide, from " + left);
+                }
+
                 await Screen(prefix, "full-screen");
                 await Content(prefix, "full-screen-content");
                 window.ToggleFullScreen();

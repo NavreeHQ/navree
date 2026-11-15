@@ -24,6 +24,11 @@ function Say([string]$line) {
 }
 
 Add-Type -AssemblyName System.Windows.Forms
+if ($Packaged) {
+    # The unpackaged demo, run earlier on this machine, registered the scheme for this person; the package's own registration
+    # would then be shadowed by it, and an address on the scheme would start the unpackaged program.
+    Remove-Item -Path 'HKCU:\Software\Classes\navree-demo' -Recurse -Force -ErrorAction SilentlyContinue
+}
 Say ("== the session: user " + [Environment]::UserName + ", session " + (Get-Process -Id $PID).SessionId + ", " + $(if ($Packaged) { 'with package identity' } else { 'with no package' }))
 foreach ($size in @(@(1920, 1080), @(1600, 900), @(1366, 768))) {
     try {
@@ -39,6 +44,7 @@ foreach ($size in @(@(1920, 1080), @(1600, 900), @(1366, 768))) {
 function Start-Demo([string[]]$Arguments, [bool]$Build) {
     if (-not $Packaged) {
         $folder = Split-Path -Parent $Exe
+        if ($Arguments.Count -eq 0) { return Start-Process -FilePath $Exe -WorkingDirectory $folder -PassThru }
         return Start-Process -FilePath $Exe -ArgumentList $Arguments -WorkingDirectory $folder -PassThru
     }
     $call = @('run', $Project, '-c', 'Release', '--arch', 'x64', '--detach', '--json')
@@ -122,26 +128,29 @@ if ($null -ne $running) {
     Say "the first copy did not start"
 }
 
-# Windows shows no notification to an app that runs as an administrator, and a hosted runner runs everything as one. The
-# same walk is tried once more with the rights of an ordinary user (the system's own way of starting a program with less
-# than the person has), to see whether notifications are then offered and shown.
-if (-not $Packaged) {
-    Say ""
-    Say "== the walk, with an ordinary user's rights"
-    $plain = Join-Path $OutDir 'unelevated'
-    New-Item -ItemType Directory -Force -Path $plain | Out-Null
-    & icacls $plain /grant 'Everyone:(OI)(CI)F' | Out-Null
-    $wrapper = Join-Path $OutDir 'unelevated.cmd'
-    Set-Content -Path $wrapper -Value ('@echo off' + [Environment]::NewLine + '"' + $Exe + '" --system-walk "' + $plain + '" --light')
-    $started = Get-Date
-    $out = (& runas.exe /trustlevel:0x20000 $wrapper 2>&1 | Out-String)
-    Say ("runas: " + ($out -replace "`r?`n", ' | '))
-    for ($i = 0; $i -lt 40; $i++) {
-        Start-Sleep -Seconds 3
-        if (Test-Path (Join-Path $plain 'unelevated-light-system-walk.txt')) { break }
-        if (Test-Path (Join-Path $plain 'unpackaged-light-system-walk.txt')) { break }
+# Started at sign-in with the icon in the notification area, the app keeps its window hidden; a second start brings it.
+Say ""
+Say "== started at sign-in with the icon on: the window waits, and a second start brings it"
+$probeBackground = Join-Path $OutDir 'probe-background.txt'
+$hidden = Start-Demo @('--probe', $probeBackground, '--background', '--tray', '--light') $false
+if ($null -ne $hidden) {
+    Start-Sleep -Seconds 12
+    $hidden.Refresh()
+    Say ("after 12 seconds: running " + (-not $hidden.HasExited) + ", window handle " + $hidden.MainWindowHandle)
+    if ($Packaged) {
+        $family = (Get-AppxPackage -Name 'Navree.Demo' -ErrorAction SilentlyContinue | Select-Object -First 1).PackageFamilyName
+        if ($family) { Start-Process "shell:AppsFolder\$family!App" }
+        Start-Sleep -Seconds 8
+    } else {
+        $again = Start-Demo @() $false
+        Say ("a second start: " + (Wait-Demo $again 40))
+        Start-Sleep -Seconds 4
     }
-    Say ("the files of that walk: " + ((Get-ChildItem $plain -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) -join ', '))
+    $hidden.Refresh()
+    Say ("after the second start: window handle " + $hidden.MainWindowHandle)
+    Say ("the first copy then: " + (Wait-Demo $hidden 60))
+} else {
+    Say "the hidden copy did not start"
 }
 
 $log = if ($Packaged) { $null } else { Join-Path (Split-Path -Parent $Exe) 'navree-demo.log' }

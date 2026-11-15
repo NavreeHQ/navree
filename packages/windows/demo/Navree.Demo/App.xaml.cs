@@ -1,6 +1,7 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Navree.Platform;
+using Navree.Presence;
 using Navree.Shell;
 
 namespace Navree.Demo;
@@ -63,6 +64,12 @@ public partial class App : Application
                 KeptFolder = testing ? Path.Combine(Path.GetTempPath(), "navree-demo-kept-" + Environment.ProcessId) : null,
                 Place = placeOptions,
             };
+
+        // A run that is to start with the icon in the notification area has the person's choice for it made beforehand.
+        if (Array.IndexOf(arguments, "--tray") >= 0 && placeOptions.ChoicesFolder is string choicesFolder)
+        {
+            _ = new ChoicesFile(choicesFolder).Write(new Choices(true, true, true));
+        }
 
         try
         {
