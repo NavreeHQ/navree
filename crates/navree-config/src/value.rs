@@ -244,6 +244,27 @@ pub(crate) fn from_json(
     level: usize,
     max_depth: usize,
 ) -> Result<Value, TooDeep> {
+    json_value(value, Some(origin), level, max_depth)
+}
+
+/// Converts a JSON value that no configuration source gave (the settings a
+/// module holds for a driver), as [`from_json`] does, with no origin: an
+/// error about it names no source. A container nested deeper than
+/// `max_depth` is [`TooDeep`].
+pub(crate) fn from_held_json(
+    value: &serde_json::Value,
+    max_depth: usize,
+) -> Result<Value, TooDeep> {
+    json_value(value, None, 1, max_depth)
+}
+
+/// [`from_json`], with the origin every node gets.
+fn json_value(
+    value: &serde_json::Value,
+    origin: Option<&Origin>,
+    level: usize,
+    max_depth: usize,
+) -> Result<Value, TooDeep> {
     use serde_json::Value as Json;
     let kind = match value {
         Json::Null => Kind::Null,
@@ -259,7 +280,7 @@ pub(crate) fn from_json(
             Kind::Array(
                 items
                     .iter()
-                    .map(|v| from_json(v, origin, level + 1, max_depth))
+                    .map(|v| json_value(v, origin, level + 1, max_depth))
                     .collect::<Result<_, _>>()?,
             )
         }
@@ -267,12 +288,12 @@ pub(crate) fn from_json(
             check(level, max_depth)?;
             Kind::Table(
                 map.iter()
-                    .map(|(k, v)| Ok((k.clone(), from_json(v, origin, level + 1, max_depth)?)))
+                    .map(|(k, v)| Ok((k.clone(), json_value(v, origin, level + 1, max_depth)?)))
                     .collect::<Result<_, _>>()?,
             )
         }
     };
-    Ok(Value::new(Some(origin), kind))
+    Ok(Value::new(origin, kind))
 }
 
 fn check(level: usize, max_depth: usize) -> Result<(), TooDeep> {

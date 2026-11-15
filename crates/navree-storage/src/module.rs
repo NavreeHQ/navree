@@ -147,7 +147,8 @@ async fn signing_key(r: &Resolver) -> Result<Vec<u8>, BoxError> {
 
 /// Checks every registration of a disk driver, whichever disks use one,
 /// then builds the driver of each disk whose `driver` a module registers,
-/// by disk name: its settings are the disk's table, and a driver no module
+/// by disk name: its settings are the disk's table the module runs with
+/// (from the configuration or from `for_root`), and a driver no module
 /// registers fails the boot naming `m.disk_driver`.
 async fn registered_drivers(
     r: &Resolver,
@@ -167,6 +168,7 @@ async fn registered_drivers(
             table.driver(),
             format!("storage.disks.{disk}"),
             Some(disk.clone()),
+            Some(table.table()),
         )
         .await?;
         registered.insert(disk.clone(), driver);

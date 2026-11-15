@@ -31,9 +31,12 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Value as Json, json};
 
 use crate::check::CheckReport;
+use crate::de::{Sink, deserialize_tracked};
+use crate::error::redact_values;
+use crate::redact::{scrub, secret_values};
 use crate::schema::SectionSchema;
 use crate::usage::covers;
-use crate::value::{Kind, Value};
+use crate::value::{Kind, Value, from_held_json};
 use crate::{
     Config, ConfigError, ConfigRegistry, ConfigSources, ModuleBuilderConfigExt, SectionRegistration,
 };
@@ -281,6 +284,10 @@ pub struct DriverContext {
     settings_key: String,
     instance: Option<String>,
     config: Option<Arc<Config>>,
+    /// The table the driver kind's module holds for the driver (a disk's
+    /// table, a provider table given in code); `None` reads the
+    /// configuration at `settings_key`.
+    held: Option<Json>,
 }
 
 impl DriverContext {
@@ -302,6 +309,7 @@ impl DriverContext {
             settings_key,
             instance,
             config,
+            held: None,
         }
     }
 
@@ -327,10 +335,24 @@ impl DriverContext {
         self.instance.as_deref()
     }
 
-    /// The settings, typed. A missing table is `T::default()`. An error
-    /// names the key and never a value; so does the error of an app with
-    /// no `ConfigModule`.
+    /// The settings, typed: the table the driver kind's module runs with
+    /// when the module holds one (a disk's table without `driver`, a
+    /// provider table given to `AiModule::for_root` in code), else the
+    /// table at the settings key in the configuration. A missing table is
+    /// `T::default()`. Values convert as the configuration's do, so
+    /// `"2222"` from the environment fills a `u16`. An error names the key
+    /// and never a value; so does the error of an app with no
+    /// `ConfigModule`.
     pub fn settings<T: DeserializeOwned + Default>(&self) -> Result<T, BoxError> {
+        if let Some(held) = &self.held {
+            let table = from_held_json(held, ConfigSources::DEFAULT_MAX_DEPTH).map_err(|_| {
+                ConfigError::TooDeep {
+                    what: format!("`{}`", self.settings_key),
+                    limit: ConfigSources::DEFAULT_MAX_DEPTH,
+                }
+            })?;
+            return Ok(read_settings_at(&self.settings_key, &table)?);
+        }
         let Some(config) = &self.config else {
             return Err(format!(
                 "{}: the app has no ConfigModule, so driver `{}` cannot read its settings",
@@ -338,8 +360,72 @@ impl DriverContext {
             )
             .into());
         };
-        Ok(config.section_or_default::<T>(&self.settings_key)?)
+        match self.configured(config) {
+            Some(table) => Ok(read_settings_at(&self.settings_key, table)?),
+            None => Ok(T::default()),
+        }
     }
+
+    /// The table of the driver's settings in `config`: for a driver built
+    /// for an instance, that instance's own table in the table above it (so
+    /// a table whose name holds a dot is found), else the table at the
+    /// settings key.
+    fn configured<'c>(&self, config: &'c Config) -> Option<&'c Value> {
+        let below = self.instance.as_deref().and_then(|instance| {
+            self.settings_key
+                .strip_suffix(instance)
+                .and_then(|rest| rest.strip_suffix('.'))
+                .map(|parent| (parent, instance))
+        });
+        match below {
+            Some((parent, instance)) => match &config.lookup(parent)?.kind {
+                Kind::Table(tables) => tables.get(instance),
+                _ => None,
+            },
+            None => config.lookup(&self.settings_key),
+        }
+    }
+}
+
+/// Reads `table`, a driver's settings at `key`, as `T`: values convert as
+/// the configuration's do, and the error names `key` and the setting,
+/// never a value (see [`read_table`]).
+fn read_settings_at<T: DeserializeOwned>(key: &str, table: &Value) -> Result<T, ConfigError> {
+    read_table(table).map_err(|message| ConfigError::Section {
+        key: key.to_owned(),
+        message,
+    })
+}
+
+/// Reads `table`, a driver's settings, as `T`, with the configuration's
+/// reader: a string fills a number or a boolean. The error's message names
+/// the setting below the table and no value of it: numbers and booleans
+/// are masked as under a secret key, quoted strings are masked, and every
+/// value of the table is scrubbed from what is left.
+fn read_table<T: DeserializeOwned>(table: &Value) -> Result<T, String> {
+    deserialize_tracked(table, "", &Sink::default())
+        .map_err(|error| scrub(redact_values(&error.render(true)), &every_value(table)))
+}
+
+/// Every value of `table` as text (each string, number and boolean, and
+/// the password of a URL in a string): none may appear in an error about a
+/// driver's settings.
+fn every_value(table: &Value) -> Vec<String> {
+    let mut found = secret_values(table);
+    let mut pending = vec![table];
+    while let Some(value) = pending.pop() {
+        match &value.kind {
+            Kind::String(text) if !text.is_empty() => found.push(text.clone()),
+            Kind::Bool(b) => found.push(b.to_string()),
+            Kind::Int(i) => found.push(i.to_string()),
+            Kind::UInt(u) => found.push(u.to_string()),
+            Kind::Float(f) => found.push(f.to_string()),
+            Kind::Array(items) => pending.extend(items),
+            Kind::Table(map) => pending.extend(map.values()),
+            Kind::String(_) | Kind::Null => {}
+        }
+    }
+    found
 }
 
 /// The driver's name, its settings key and its instance; never a setting.
@@ -664,10 +750,13 @@ pub fn check_registrations(
 }
 
 /// Builds the driver registered as `name` for `slot`, with its settings at
-/// `settings_key` and for `instance`. No such registration is the error
-/// that names `key` (the selector's key, `storage.disks.uploads.driver`
-/// for a `*` slot) and the names that are known; a failing factory is an
-/// error naming the driver, the method and the module.
+/// `settings_key` and for `instance`. `settings` is the table the kind's
+/// module holds for the driver (a disk's table, a provider table given in
+/// code), which the factory reads in place of the configuration's. No such
+/// registration is the error that names `key` (the selector's key,
+/// `storage.disks.uploads.driver` for a `*` slot) and the names that are
+/// known; a failing factory is an error naming the driver, the method and
+/// the module.
 ///
 /// Not public API: what the driver kinds of Navree call.
 #[doc(hidden)]
@@ -678,6 +767,7 @@ pub async fn build_driver<X: ?Sized + Send + Sync + 'static>(
     name: DriverName,
     settings_key: String,
     instance: Option<String>,
+    settings: Option<Json>,
 ) -> Result<Arc<X>, BoxError> {
     let found = app
         .contributions::<DriverFactory<X>>()
@@ -687,7 +777,8 @@ pub async fn build_driver<X: ?Sized + Send + Sync + 'static>(
         let drivers = registered(app);
         return Err(unregistered(slot, key, name.as_str(), &drivers).into());
     };
-    let ctx = DriverContext::new(app, name, settings_key, instance).await;
+    let mut ctx = DriverContext::new(app, name, settings_key, instance).await;
+    ctx.held = settings;
     (found.value.build)(ctx)
         .await
         .map_err(|error| failed(slot, name.as_str(), found.module.name, &error).into())

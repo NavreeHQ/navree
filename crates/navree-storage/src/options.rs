@@ -267,6 +267,11 @@ impl RegisteredDisk {
         self.driver
     }
 
+    /// The disk's table without `driver`: the settings its driver reads.
+    pub(crate) fn table(&self) -> Json {
+        Json::Object(self.settings.clone())
+    }
+
     /// The disk's table without `driver`, typed. An error names the driver
     /// and never a value of the table.
     pub fn settings<T: DeserializeOwned>(&self) -> Result<T, StorageError> {

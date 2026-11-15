@@ -302,6 +302,30 @@ async fn a_registered_disk_driver_serves_a_disk_from_its_table() {
 }
 
 #[tokio::test]
+async fn a_disk_given_in_code_hands_its_driver_its_table() {
+    let module = SandukModule::default();
+    let seen = module.seen.clone();
+    // The options come from code (read from JSON here, as an app may), and
+    // the configuration has no `storage` section.
+    let options: StorageOptions = serde_json::from_value(json!({
+        "default": "invoices",
+        "disks": {"invoices": {"driver": "sanduk", "label": "Amritsar invoices"}},
+    }))
+    .unwrap();
+    let _app = TestApp::boot(
+        Navree::app()
+            .module(ConfigModule::for_root(ConfigSources::new()))
+            .module(StorageModule::for_root(options))
+            .module(module),
+    )
+    .await;
+    assert_eq!(
+        *seen.lock().unwrap(),
+        Some(("Amritsar invoices".to_owned(), Some("invoices".to_owned())))
+    );
+}
+
+#[tokio::test]
 async fn an_unregistered_disk_driver_fails_the_boot_naming_m_disk_driver() {
     let unregistered = "storage.disks.uploads.driver is `godown`, but no module registers a disk driver under that name with m.disk_driver (known: local, memory, s3, gcs, azure, sanduk)";
     let sources = || uploads(json!({"driver": "godown"}));

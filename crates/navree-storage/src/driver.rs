@@ -395,8 +395,8 @@ pub trait ModuleBuilderStorageExt {
     /// by up to 63 lower-case letters, digits or `_`): a disk with
     /// `driver = "{name}"` is served by it, and `factory` builds one driver
     /// per such disk at boot from its [`DriverContext`], whose settings are
-    /// the disk's table (`storage.disks.{disk}`, `driver` included, so a
-    /// settings type ignores the keys it does not know) and whose
+    /// the disk's table without `driver` (`storage.disks.{disk}`, as the
+    /// configuration or `StorageModule::for_root` gave it) and whose
     /// [`instance`](DriverContext::instance) is the disk's name.
     ///
     /// A name that is not such a word, a built-in driver (`local`,

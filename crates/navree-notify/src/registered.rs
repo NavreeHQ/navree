@@ -292,6 +292,7 @@ pub(crate) async fn registered_drivers(
                 name,
                 format!("notify.{name}"),
                 None,
+                None,
             )
             .await?,
         ),
@@ -305,6 +306,7 @@ pub(crate) async fn registered_drivers(
                 "notify.whatsapp.driver",
                 name,
                 format!("notify.{name}"),
+                None,
                 None,
             )
             .await?,

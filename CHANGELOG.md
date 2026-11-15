@@ -84,8 +84,9 @@ every `@navree/*` package carries the same version.
   list and in `mail.transports`), `storage.disks.{disk}.driver`, `notify.sms.driver`,
   `notify.whatsapp.driver`, `search.engine` and `ai.providers.{name}.driver`. The driver reads its
   own settings from the table named after it (`cache.{name}`), or, for a disk or an AI provider,
-  from that disk's or provider's table; a registered backplane needs `realtime.secret`, as Redis
-  does. `m.notification_channel`, from the same prelude, adds a delivery channel instead: a
+  from that disk's or provider's table as its module runs with it, whether the module read it from
+  the configuration or was given it in code; a registered backplane needs `realtime.secret`, as
+  Redis does. `m.notification_channel`, from the same prelude, adds a delivery channel instead: a
   notification lists it with `Channel::named("..")`, renders its message with `to_channel`, and
   the notifiable gives its address with `route_channel`. A name that is not a lower-case letter
   followed by up to 63 lower-case letters, digits or `_`, a registration under a built-in name,
