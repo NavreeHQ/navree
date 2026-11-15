@@ -6,14 +6,15 @@ namespace Navree.Controls.Tests.Tables;
 public sealed class ColumnSizingTests
 {
     [TestMethod]
-    [DataRow(ColumnKind.Title, 150.2, false, 0.0, 240.0)]
-    [DataRow(ColumnKind.Title, 300.0, false, 0.0, 324.0)]
-    [DataRow(ColumnKind.Words, 40.0, false, 0.0, 80.0)]
+    [DataRow(ColumnKind.Title, 150.2, false, 0.0, 175.0)]
+    [DataRow(ColumnKind.Title, 60.0, false, 0.0, 120.0)]
+    [DataRow(ColumnKind.Title, 700.0, false, 0.0, 240.0)]
+    [DataRow(ColumnKind.Words, 40.0, false, 0.0, 64.0)]
     [DataRow(ColumnKind.Words, 300.0, false, 0.0, 260.0)]
     [DataRow(ColumnKind.Number, 60.1, false, 0.0, 85.0)]
-    [DataRow(ColumnKind.Number, 10.0, true, 0.0, 64.0)]
+    [DataRow(ColumnKind.Number, 10.0, true, 0.0, 56.0)]
     [DataRow(ColumnKind.Number, 200.0, false, 0.0, 160.0)]
-    [DataRow(ColumnKind.Status, 50.0, false, 0.0, 90.0)]
+    [DataRow(ColumnKind.Status, 50.0, false, 0.0, 74.0)]
     [DataRow(ColumnKind.Status, 120.0, false, 0.0, 144.0)]
     [DataRow(ColumnKind.Status, 300.0, false, 0.0, 200.0)]
     [DataRow(ColumnKind.Controls, 0.0, false, 88.0, 112.0)]
@@ -228,6 +229,71 @@ public sealed class ColumnLayoutTests
         Same.Number(240, layout.Columns[0].Width);
         Same.Items([137.0, 105.0, 109.0], layout.Columns.Skip(1).Take(3).Select(c => c.Width));
         Same.Number(703, layout.RowWidth);
+    }
+
+    [TestMethod]
+    public void The_columns_of_the_sample_table_each_get_the_room_their_words_need_and_no_cell_is_cut()
+    {
+        // The words each column holds, as the table measures them at 100 percent for the sample's rows: the longest name is "Manpreet Sandhu".
+        (string Key, ColumnKind Kind, double Words, bool Sort)[] columns =
+        [
+            ("name", ColumnKind.Title, 105, true),
+            ("city", ColumnKind.Words, 72, true),
+            ("phone", ColumnKind.Words, 106, false),
+            ("plan", ColumnKind.Words, 55, false),
+            ("amount", ColumnKind.Number, 59, true),
+            ("status", ColumnKind.Status, 50, false),
+            ("seen", ColumnKind.Words, 107, false),
+        ];
+        double[] asks = [.. columns.Select(c => ColumnSizing.AutoWidth(c.Kind, c.Words, c.Sort))];
+        ColInfo[] infos = [.. columns.Select(c => new ColInfo(c.Key, c.Kind, c.Kind == ColumnKind.Title ? ColumnRole.Title : ColumnRole.None, false))];
+        IReadOnlyList<int> shown = ColumnSet.Shown(infos, new HashSet<string>(), new HashSet<string>(), asks, 958 - 80);
+        Same.Items(Enumerable.Range(0, 7), shown);
+        ColumnSpec[] specs = [.. columns.Select((c, i) => new ColumnSpec(c.Key, c.Kind, asks[i], c.Kind == ColumnKind.Title))];
+
+        // At the width of the gallery window with the check box and the chevron before the name, and the actions kept at the end.
+        ColumnLayout layout = ColumnLayoutBuilder.Build(specs, 1, Actions, 80, 958);
+        for (int i = 1; i < 7; i++)
+        {
+            Assert.IsTrue(layout.Columns[i].Width >= asks[i], $"{columns[i].Key} has {layout.Columns[i].Width} and its words need {asks[i]}");
+        }
+
+        Assert.IsTrue(layout.Columns[0].Width >= asks[0], "the name has what its words need too");
+        Same.Number(958, layout.RowWidth);
+        Assert.AreEqual(layout.Columns[0].Width, 958 - 80 - 72 - asks.Skip(1).Sum(), 1e-6, "what is left over goes to the name");
+    }
+
+    [TestMethod]
+    public void One_very_long_name_asks_for_no_more_than_a_name_needs_and_does_not_push_the_others_out()
+    {
+        double name = ColumnSizing.AutoWidth(ColumnKind.Title, 700, false);
+        Same.Number(ColumnSet.TitleNeed, name);
+        ColumnSpec[] specs =
+        [
+            new("name", ColumnKind.Title, name, true),
+            new("city", ColumnKind.Words, ColumnSizing.AutoWidth(ColumnKind.Words, 92, false), false),
+            new("phone", ColumnKind.Words, ColumnSizing.AutoWidth(ColumnKind.Words, 106, false), false),
+            new("amount", ColumnKind.Number, ColumnSizing.AutoWidth(ColumnKind.Number, 79, false), false),
+        ];
+        double[] asks = [.. specs.Select(s => s.Width)];
+        ColumnLayout layout = ColumnLayoutBuilder.Build(specs, 1, Actions, 40, 958);
+        for (int i = 1; i < 4; i++)
+        {
+            Same.Number(asks[i], layout.Columns[i].Width);
+        }
+
+        Assert.IsTrue(layout.Columns[0].Width >= ColumnSet.TitleNeed);
+        Same.Number(958, layout.RowWidth);
+    }
+
+    [TestMethod]
+    public void A_column_the_person_fits_takes_all_its_words_whatever_it_asks_for_by_itself()
+    {
+        Same.Number(724, ColumnSizing.FitWidth(ColumnKind.Title, 700, false));
+        Same.Number(800, ColumnSizing.FitWidth(ColumnKind.Title, 2000, true));
+        Same.Number(120, ColumnSizing.FitWidth(ColumnKind.Title, 10, false));
+        Same.Number(64, ColumnSizing.FitWidth(ColumnKind.Words, 10, false));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ColumnSizing.FitWidth(ColumnKind.Words, -1, false));
     }
 
     [TestMethod]

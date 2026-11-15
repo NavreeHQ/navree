@@ -60,6 +60,34 @@
                                         <Setter Target="PART_Glyph.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
+                                <VisualState x:Name="ContrastOnIndeterminate">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource SystemColorWindowTextColorBrush}" />
+                                        <Setter Target="PART_Glyph.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <!-- On a row that is the highlight the box is drawn in the highlight's text colour: an empty outline when it is not chosen, filled with a tick or a dash cut out of it when it is. -->
+                                <VisualState x:Name="OnHighlightOff">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="OnHighlightChecked">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_Glyph.Foreground" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="OnHighlightIndeterminate">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_Glyph.Foreground" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
                     </Grid>

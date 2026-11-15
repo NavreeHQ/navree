@@ -18,11 +18,26 @@ public sealed class DataTableListContent : Control
     private string stateText = string.Empty;
     private string trailingText = string.Empty;
     private bool hasMenu;
+    private bool highlightWanted;
 
     /// <summary>Makes the content.</summary>
     public DataTableListContent()
     {
         DefaultStyleKey = typeof(DataTableListContent);
+    }
+
+    /// <summary>Whether the row is the highlight in a contrast theme: the dots take the highlight's text colour.</summary>
+    internal bool OnHighlight
+    {
+        get => more?.OnHighlight ?? false;
+        set
+        {
+            highlightWanted = value;
+            if (more is not null)
+            {
+                more.OnHighlight = value;
+            }
+        }
     }
 
     /// <summary>Sets what the content says.</summary>
@@ -55,6 +70,7 @@ public sealed class DataTableListContent : Control
         if (more is not null)
         {
             more.Glyph = Glyphs.More;
+            more.OnHighlight = highlightWanted;
         }
 
         Refresh();

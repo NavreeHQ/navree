@@ -241,6 +241,7 @@ internal static class CareScenarios
         await Task.Delay(800);
         DataTableRow? row = table.RowsRepeater?.TryGetElement(2) as DataTableRow;
         Report.Line($"[care-detail-open] row c00002 arrived with its detail open: detail made {row?.DetailContent is not null}, open {table.IsDetailOpen("c00002")}; row c00001 open {table.IsDetailOpen("c00001")}");
+        await Handshake.StepAsync("care-detail-open-sent", "the table as the server sent it: the detail of the third row, Tarun Arora, is open");
         if (row is not null)
         {
             table.ToggleDetail(row);
@@ -250,7 +251,7 @@ internal static class CareScenarios
             Report.Line($"[care-detail-open] the person shut it and the row was drawn again with the detail still said open: open {table.IsDetailOpen("c00002")}");
         }
 
-        await Handshake.StepAsync("care-detail-open", "a row that arrived with its detail open");
+        await Handshake.StepAsync("care-detail-open-shut", "the same table after the person shut the detail and the row was drawn again with the detail still said open: it stays shut");
     }
 
     // The density a person chose and kept is the density of the rows from the first draw.
