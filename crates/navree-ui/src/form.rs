@@ -10,6 +10,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::marker::PhantomData;
+use std::panic::RefUnwindSafe;
 use std::sync::Arc;
 
 use chrono::{NaiveDate, NaiveTime};
@@ -133,6 +134,10 @@ impl Widget {
 /// [`Draft::read_for`](crate::Draft::read_for), a described form through [`check_controls`],
 /// and an inline edit through [`EditedValue::read`](crate::table::EditedValue::read).
 ///
+/// A control is one value for the life of the program, shared by every request, so it is
+/// `Send`, `Sync` and [`RefUnwindSafe`]: a form that holds one can cross a caught panic as a
+/// form without one can. A unit struct, as below, is all three.
+///
 /// ```
 /// use navree_ui::form::{Control, ControlCx, ControlField, FieldControl};
 /// use navree_ui::{Node, el};
@@ -171,7 +176,7 @@ impl Widget {
 /// assert!(control.check("141001", &cx).is_ok());
 /// assert_eq!(control.check("14100", &cx), Err("Enter a six-digit pin code".to_owned()));
 /// ```
-pub trait FieldControl: Send + Sync + 'static {
+pub trait FieldControl: Send + Sync + RefUnwindSafe + 'static {
     /// The control's name: the namespace of the plugin that ships it, a dot and a name of its
     /// own, like `geo.location`.
     fn name(&self) -> &'static str;

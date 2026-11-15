@@ -666,6 +666,20 @@ fn a_field_control_value_decodes_into_the_fields_type() {
     assert_eq!(errors["stars"], ["Stars is not valid."]);
 }
 
+// A form, a field and an editable cell can hold a control, and are as safe to carry across a
+// caught panic as they were before they could. A failure here is a compile error naming the type.
+#[test]
+fn what_can_hold_a_control_keeps_its_unwind_safety() {
+    fn unwind_safe<T: std::panic::UnwindSafe + std::panic::RefUnwindSafe>() {}
+    unwind_safe::<Control>();
+    unwind_safe::<Widget>();
+    unwind_safe::<FormField>();
+    unwind_safe::<FormView<Parcel>>();
+    unwind_safe::<EditCell>();
+    unwind_safe::<navree_ui::described::FieldSpec>();
+    unwind_safe::<navree_ui::described::DescribedForm>();
+}
+
 /// A count of seats whose check says what a count looks like.
 struct Seats;
 

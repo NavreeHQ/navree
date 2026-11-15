@@ -10,6 +10,8 @@ export async function mount(el, props, ui) {
   await Promise.resolve();
   const part = document.createElement("div");
   part.setAttribute("data-ui-own", "");
-  part.innerHTML = `<button id="late-planted" data-ui-click='[["toggle","menu"]]'>Jalandhar</button>`;
+  // A constant, written as markup on purpose: the test is what the seal does with it.
+  // nosemgrep: navree-raw-html
+  part.innerHTML =`<button id="late-planted" data-ui-click='[["toggle","menu"]]'>Jalandhar</button>`;
   ui.find('[data-slot="proof:late-body"]').append(part);
 }

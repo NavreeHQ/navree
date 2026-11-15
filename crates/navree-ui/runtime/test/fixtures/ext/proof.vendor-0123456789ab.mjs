@@ -6,6 +6,8 @@ export const contract = 1;
 /** @param {HTMLElement} el @param {any} props @param {any} ui */
 export function mount(el, props, ui) {
   const body = ui.find('[data-slot="proof:vendor-body"]');
+  // A constant, written as markup on purpose: the test is what the seal does with it.
+  // nosemgrep: navree-raw-html
   body.innerHTML =
     `<form data-ui-form method="post" action="/account/email"><input name="email" value="harpreet@ludhiana.example"><button id="vendor-send">Show on map</button></form>` +
     `<div data-ui-own><button id="planted" data-ui-click='[["toggle","menu"]]'>Open</button></div>` +

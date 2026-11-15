@@ -2,7 +2,7 @@
 //! way it can be widened.
 //!
 //! Every page loads scripts, styles and fonts from its own origin only, and nothing else:
-//! [`PAGE_CSP`](crate::PAGE_CSP). A component from a plugin that draws a map, plays a clip or
+//! [`PAGE_CSP`]. A component from a plugin that draws a map, plays a clip or
 //! reads a live feed needs a few sources beyond that, and the app decides whether it gets them:
 //! only the `ui.policy` section of the app's configuration widens the policy, never a plugin.
 //!
@@ -778,7 +778,7 @@ fn tell(
 }
 
 /// Puts the app's policy on `response` when the toolkit's own is on it: a header that is exactly
-/// [`PAGE_CSP`](crate::PAGE_CSP) is replaced, and any other policy, or none, is left as it is. A
+/// [`PAGE_CSP`] is replaced, and any other policy, or none, is left as it is. A
 /// page that starts clean keeps the toolkit's policy. Nothing is done when the app allowed
 /// nothing.
 pub(crate) fn apply(policy: &PagePolicy, response: &mut Response) {
