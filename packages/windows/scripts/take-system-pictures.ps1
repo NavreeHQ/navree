@@ -122,6 +122,28 @@ if ($null -ne $running) {
     Say "the first copy did not start"
 }
 
+# Windows shows no notification to an app that runs as an administrator, and a hosted runner runs everything as one. The
+# same walk is tried once more with the rights of an ordinary user (the system's own way of starting a program with less
+# than the person has), to see whether notifications are then offered and shown.
+if (-not $Packaged) {
+    Say ""
+    Say "== the walk, with an ordinary user's rights"
+    $plain = Join-Path $OutDir 'unelevated'
+    New-Item -ItemType Directory -Force -Path $plain | Out-Null
+    & icacls $plain /grant 'Everyone:(OI)(CI)F' | Out-Null
+    $wrapper = Join-Path $OutDir 'unelevated.cmd'
+    Set-Content -Path $wrapper -Value ('@echo off' + [Environment]::NewLine + '"' + $Exe + '" --system-walk "' + $plain + '" --light')
+    $started = Get-Date
+    $out = (& runas.exe /trustlevel:0x20000 $wrapper 2>&1 | Out-String)
+    Say ("runas: " + ($out -replace "`r?`n", ' | '))
+    for ($i = 0; $i -lt 40; $i++) {
+        Start-Sleep -Seconds 3
+        if (Test-Path (Join-Path $plain 'unelevated-light-system-walk.txt')) { break }
+        if (Test-Path (Join-Path $plain 'unpackaged-light-system-walk.txt')) { break }
+    }
+    Say ("the files of that walk: " + ((Get-ChildItem $plain -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) -join ', '))
+}
+
 $log = if ($Packaged) { $null } else { Join-Path (Split-Path -Parent $Exe) 'navree-demo.log' }
 if ($log -and (Test-Path $log)) { Copy-Item $log (Join-Path $OutDir 'navree-demo-log.txt') }
 

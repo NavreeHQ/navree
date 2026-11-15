@@ -14,9 +14,9 @@ namespace Navree.Shell;
 public static class Activation
 {
     private static readonly object Gate = new();
-    private static readonly List<LaunchRequest> Waiting = [];
+    private static readonly List<(LaunchRequest Request, string How)> Waiting = [];
     private static string? scheme;
-    private static Action<LaunchRequest>? sink;
+    private static Action<LaunchRequest, string>? sink;
 
     /// <summary>Whether Windows took the app's registration for notifications, which showing one needs.</summary>
     public static bool NotificationsRegistered { get; private set; }
@@ -49,7 +49,7 @@ public static class Activation
         }
 
         AppActivationArguments args = AppInstance.GetCurrent().GetActivatedEventArgs();
-        LaunchRequest request = Read(args);
+        LaunchRequest request = Read(args, own: true);
         if (!single)
         {
             Initial = request;
@@ -59,7 +59,7 @@ public static class Activation
         AppInstance instance = AppInstance.FindOrRegisterForKey(key);
         if (instance.IsCurrent)
         {
-            instance.Activated += (_, redirected) => Deliver(Read(redirected));
+            instance.Activated += (_, redirected) => Deliver(Read(redirected, own: false), Describe(redirected));
             Initial = request;
             return true;
         }
@@ -97,11 +97,11 @@ public static class Activation
     }
 
     /// <summary>Starts receiving what arrives while the app runs; what arrived before is handed over now.</summary>
-    /// <param name="receiver">Takes a request, on any thread.</param>
-    public static void Receive(Action<LaunchRequest> receiver)
+    /// <param name="receiver">Takes a request and a line saying how it came (never its address), on any thread.</param>
+    public static void Receive(Action<LaunchRequest, string> receiver)
     {
         ArgumentNullException.ThrowIfNull(receiver);
-        List<LaunchRequest> early;
+        List<(LaunchRequest Request, string How)> early;
         lock (Gate)
         {
             sink = receiver;
@@ -109,29 +109,29 @@ public static class Activation
             Waiting.Clear();
         }
 
-        foreach (LaunchRequest request in early)
+        foreach ((LaunchRequest request, string how) in early)
         {
-            receiver(request);
+            receiver(request, how);
         }
     }
 
-    private static void Deliver(LaunchRequest request)
+    private static void Deliver(LaunchRequest request, string how)
     {
-        Action<LaunchRequest>? receiver;
+        Action<LaunchRequest, string>? receiver;
         lock (Gate)
         {
             receiver = sink;
             if (receiver is null)
             {
-                Waiting.Add(request);
+                Waiting.Add((request, how));
             }
         }
 
-        receiver?.Invoke(request);
+        receiver?.Invoke(request, how);
     }
 
     private static void OnNotification(AppNotificationManager sender, AppNotificationActivatedEventArgs args) =>
-        Deliver(FromNotification(args));
+        Deliver(FromNotification(args), "a click on a notification");
 
     private static LaunchRequest FromNotification(AppNotificationActivatedEventArgs args)
     {
@@ -139,8 +139,13 @@ public static class Activation
         return new LaunchRequest(href, null, false, false);
     }
 
+    // How an activation came, for the log: its kind and the kind of what it carries, never an address (which can hold a code).
+    private static string Describe(AppActivationArguments args) =>
+        "activation " + args.Kind + " carrying " + (args.Data?.GetType().Name ?? "nothing");
+
     // What the system says started the app, as one request: a flag or a path on the command line, an address on the app's scheme, a click on a notification.
-    private static LaunchRequest Read(AppActivationArguments args)
+    // The command line is the process's own: it is read only for the start that made this process, never for an activation handed to it by another.
+    private static LaunchRequest Read(AppActivationArguments args, bool own)
     {
         try
         {
@@ -156,7 +161,7 @@ public static class Activation
                 case ExtendedActivationKind.Launch when args.Data is ILaunchActivatedEventArgs launch && !string.IsNullOrEmpty(launch.Arguments):
                     return LaunchArguments.Read(LaunchArguments.Split(launch.Arguments), scheme);
                 default:
-                    return LaunchArguments.Read([.. Environment.GetCommandLineArgs().Skip(1)], scheme);
+                    return own ? LaunchArguments.Read([.. Environment.GetCommandLineArgs().Skip(1)], scheme) : LaunchRequest.Plain;
             }
         }
         catch (Exception)

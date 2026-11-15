@@ -128,7 +128,11 @@ public sealed class SystemPlace : IDisposable
             Say("the app's scheme " + scheme + (registered ? " is registered" : " could not be registered"));
         }
 
-        Activation.Receive(request => dispatcher.TryEnqueue(() => Open(request)));
+        Activation.Receive((request, how) => dispatcher.TryEnqueue(() =>
+        {
+            Say("handed to the running app: " + how);
+            Open(request);
+        }));
         main.AppWindow.Closing += OnClosing;
         host.StateChanged += OnState;
         snapshotTimer.Start();
