@@ -1,0 +1,57 @@
+name: Windows table
+
+# The data table of the Windows client and its gallery: built and tested with the dotnet command
+# alone, then the gallery is started and pictured. It needs no Rust: the table does not call the core.
+
+on:
+  push:
+    branches: ["feat/native-windows-table"]
+    paths:
+      - "packages/windows/**"
+      - ".github/workflows/native-windows-table.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  table:
+    name: Table and gallery
+    runs-on: windows-2025
+    timeout-minutes: 40
+    concurrency:
+      group: native-windows-table-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Restore
+        shell: pwsh
+        working-directory: packages/windows
+        run: |
+          dotnet restore tests/Navree.Controls.Tests/Navree.Controls.Tests.csproj
+          dotnet restore demo/Navree.Gallery/Navree.Gallery.csproj
+
+      - name: Build
+        shell: pwsh
+        working-directory: packages/windows
+        run: |
+          dotnet build tests/Navree.Controls.Tests/Navree.Controls.Tests.csproj -c Release --no-restore
+          dotnet build demo/Navree.Gallery/Navree.Gallery.csproj -c Release --no-restore
+
+      - name: Unit tests
+        shell: pwsh
+        working-directory: packages/windows
+        run: dotnet test tests/Navree.Controls.Tests/Navree.Controls.Tests.csproj -c Release --no-build --logger "trx;LogFileName=controls.trx" --logger "console;verbosity=normal" --results-directory "$env:RUNNER_TEMP/trx"
+
+      - name: Keep the test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-table-test-reports
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/trx
+          retention-days: 14
