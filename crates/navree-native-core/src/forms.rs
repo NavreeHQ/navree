@@ -1308,6 +1308,11 @@ impl Core {
         let mut kept = false;
         match answer {
             Answer::Failed(failure) => {
+                // The server may have written before the answer failed or
+                // was too large to read: what is kept can't be trusted.
+                if write {
+                    self.wrote(id);
+                }
                 self.failed(failure, Some(id));
                 told = true;
             }
