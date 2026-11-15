@@ -26,7 +26,10 @@ public enum RowShape
 /// <summary>The heights of rows, and what follows from them.</summary>
 public static class RowGeometry
 {
-    /// <summary>The most a table may stand tall, in effective pixels: past it a single-precision position no longer holds every whole pixel.</summary>
+    /// <summary>
+    /// The most a table may stand tall, in physical pixels: past it a single-precision position no longer holds every whole pixel, and
+    /// layout rounding works in physical pixels, so a row past it would stand on the wrong one.
+    /// </summary>
     public const double MaxExtent = 16_000_000;
 
     /// <summary>The most rows a table holds, whatever their height.</summary>
@@ -83,17 +86,23 @@ public static class RowGeometry
     public static double HeaderHeight(Density density, bool hasControls, double lineHeight, double rasterizationScale) =>
         RowHeight(density, RowShape.OneLine, hasControls, lineHeight, 0, rasterizationScale);
 
-    /// <summary>The most rows a table holds at a row height.</summary>
-    /// <param name="rowHeight">The height of a row.</param>
+    /// <summary>The most rows a table holds at a row height on a display of a scale.</summary>
+    /// <param name="rowHeight">The height of a row, in effective pixels.</param>
+    /// <param name="rasterizationScale">Physical pixels for each effective pixel: the extent is held to <see cref="MaxExtent"/> in physical pixels.</param>
     /// <returns>The smaller of the ceiling and what fits in the greatest extent.</returns>
-    public static int MaxHeldRows(double rowHeight)
+    public static int MaxHeldRows(double rowHeight, double rasterizationScale = 1.0)
     {
         if (!(rowHeight > 0))
         {
             throw new ArgumentOutOfRangeException(nameof(rowHeight), rowHeight, "A row has a height.");
         }
 
-        return (int)Math.Min(HeldRowsCeiling, Math.Floor(MaxExtent / rowHeight));
+        if (!(rasterizationScale > 0))
+        {
+            throw new ArgumentOutOfRangeException(nameof(rasterizationScale), rasterizationScale, "The scale must be more than zero.");
+        }
+
+        return (int)Math.Min(HeldRowsCeiling, Math.Floor(MaxExtent / (rowHeight * rasterizationScale)));
     }
 }
 

@@ -605,7 +605,7 @@ public sealed partial class DataTable
             return;
         }
 
-        int limit = RowGeometry.MaxHeldRows(rowHeight);
+        int limit = RowGeometry.MaxHeldRows(rowHeight, XamlRoot?.RasterizationScale ?? 1.0);
         if (model.RowCount >= limit)
         {
             if (cursorWatch.LimitReached())
