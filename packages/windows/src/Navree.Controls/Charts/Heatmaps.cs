@@ -143,7 +143,9 @@ public sealed partial class CalendarHeatView : KindControl
 
         foreach ((int week, int month) in HeatRules.Months(start, weeks, FirstDay))
         {
-            canvas.Text(canvas.Caption(culture.DateTimeFormat.AbbreviatedMonthNames[month - 1]), gutter + (week * step), 0, Across.Start, Down.Top);
+            string monthName = culture.DateTimeFormat.AbbreviatedMonthNames[month - 1];
+            double monthWidth = Ink.Measure(monthName, 11).Width;
+            canvas.Text(canvas.Caption(monthName), AxisRules.LabelStart(gutter + (week * step) + (monthWidth / 2), monthWidth, canvas.Width), 0, Across.Start, Down.Top);
         }
 
         foreach (int row in new[] { 1, 3, 5 })
@@ -407,7 +409,8 @@ public sealed partial class ScatterView : KindControl
         foreach (double mark in xMarks)
         {
             canvas.Shapes.Put(Ink.Rule(X(mark), y0, X(mark), y1, palette.Divider), 0, 0);
-            canvas.Text(canvas.Caption(NumberWords.Amount(mark)), X(mark), y1 + 5, Across.Middle, Down.Top);
+            string words = NumberWords.Amount(mark);
+            canvas.Text(canvas.Caption(words), AxisRules.LabelStart(X(mark), Ink.Measure(words, 11).Width, canvas.Width), y1 + 5, Across.Start, Down.Top);
         }
 
         if (yName.Length > 0)

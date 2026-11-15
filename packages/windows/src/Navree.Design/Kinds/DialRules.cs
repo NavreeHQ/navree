@@ -211,6 +211,30 @@ public static class GaugeRules
     /// <summary>The share of its square an open arc needs in height: the foot holds the scale's end labels.</summary>
     public const double HeightShare = 0.84;
 
+    /// <summary>How far down the end labels of the scale reach, as a share of the diameter, before the label's own height: the arc's ends are at 30 degrees under the middle, and the arc is 0.085 of the diameter thick.</summary>
+    public const double FootShare = 0.77125;
+
+    /// <summary>The space between the arc's end and the label of the scale's end under it.</summary>
+    public const double FootGap = 10;
+
+    /// <summary>How high the surface of an open arc is: the share of its square the arc needs, and where that is not enough, the room for the labels of the scale's ends under the arc.</summary>
+    /// <param name="diameter">The arc's diameter.</param>
+    /// <param name="label">The height of an end label.</param>
+    /// <returns>The height.</returns>
+    public static double Height(double diameter, double label)
+    {
+        double d = Guard.Length(diameter);
+        return Math.Max(HeightShare * d, (FootShare * d) + FootGap + (Guard.Length(label) / 2) + 1);
+    }
+
+    /// <summary>The diameter an open arc is drawn at in a surface this big: the widest that fits across and down, the end labels included.</summary>
+    /// <param name="width">The surface's width.</param>
+    /// <param name="height">The surface's height.</param>
+    /// <param name="label">The height of an end label.</param>
+    /// <returns>The diameter.</returns>
+    public static double DiameterFor(double width, double height, double label) =>
+        Math.Max(Math.Min(Guard.Length(width), Math.Min(Guard.Length(height) / HeightShare, (Guard.Length(height) - FootGap - (Guard.Length(label) / 2) - 1) / FootShare)), 0);
+
     /// <summary>The angle a place along the scale stands at.</summary>
     /// <param name="position">0 to 1.</param>
     /// <returns>The angle, in degrees.</returns>
@@ -258,7 +282,8 @@ public static class ClockRules
     /// <param name="Moments">The line the day's moments stand on.</param>
     /// <param name="Outer">Where the hours' bars end at their longest.</param>
     /// <param name="Inner">Where they start.</param>
-    public sealed record Dial(double Labels, double Moments, double Outer, double Inner);
+    /// <param name="Edge">From the middle to the edge of the surface the dial stands in.</param>
+    public sealed record Dial(double Labels, double Moments, double Outer, double Inner, double Edge = 0);
 
     /// <summary>The angle in degrees (0 at three o'clock, clockwise) of a time of day in hours.</summary>
     /// <param name="hours">The hours past midnight.</param>
@@ -360,18 +385,37 @@ public static class ClockRules
         return result;
     }
 
-    /// <summary>The radii of a dial: the quarters' names at the edge, the line of the moments inside them, the hours' bars inside that, and the hole in the middle for the day's total.</summary>
+    /// <summary>
+    /// The radii of a dial: the quarters' names at the edge, the line of the moments inside them, the hours' bars inside that, and the hole
+    /// in the middle for the day's total. The names have a band of their own outside the line of the moments, as wide as the widest of them
+    /// is long (the names at the sides stand across the dial, so their width and not their height is what they take), so a mark on the line
+    /// never covers one.
+    /// </summary>
     /// <param name="half">From the middle to the edge.</param>
     /// <param name="label">The height of a quarter's name.</param>
     /// <param name="mark">The width of a moment's mark.</param>
+    /// <param name="labelWidth">The width of the widest quarter name; none when it is no wider than it is high.</param>
     /// <returns>The radii.</returns>
-    public static Dial DialOf(double half, double label, double mark)
+    public static Dial DialOf(double half, double label, double mark, double labelWidth = 0)
     {
+        double band = Math.Max(Guard.Length(label), Guard.Length(labelWidth));
         double labels = Guard.Length(half - (label / 2));
-        double moments = Guard.Length(labels - (label / 2) - 2 - (mark / 2));
+        double moments = Guard.Length(half - band - 2 - (mark / 2));
         double outer = Guard.Length(moments - (mark / 2) - 3);
-        return new Dial(labels, moments, outer, outer * 0.46);
+        return new Dial(labels, moments, outer, outer * 0.46, Guard.Length(half));
     }
+
+    /// <summary>
+    /// How far from the middle the middle of a quarter's name stands: the names at the top and the foot stand with their outer edge at the
+    /// dial's edge, and so do the names at the sides, whose outer edge is a half of their width further out.
+    /// </summary>
+    /// <param name="dial">The dial.</param>
+    /// <param name="quarter">The hour of the quarter (0, 6, 12 or 18).</param>
+    /// <param name="width">The name's width.</param>
+    /// <param name="height">The name's height.</param>
+    /// <returns>The distance from the middle.</returns>
+    public static double LabelRadius(Dial dial, int quarter, double width, double height) =>
+        Guard.Length(dial.Edge - (((quarter % 12) + 12) % 12 == 0 ? Guard.Length(height) : Guard.Length(width)) / 2);
 
     /// <summary>Whether a dial has the room to be drawn: its hours' bars need a little length between the hole and the edge.</summary>
     /// <param name="dial">The dial.</param>

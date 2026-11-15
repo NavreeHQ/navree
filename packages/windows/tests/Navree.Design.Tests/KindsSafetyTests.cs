@@ -620,4 +620,98 @@ public sealed class KindsSafetyTests
         Assert.AreEqual("00:00", ClockRules.TimeLabel(double.NaN, true, System.Globalization.CultureInfo.InvariantCulture));
         Assert.AreEqual("23:00", ClockRules.TimeLabel(-1, true, System.Globalization.CultureInfo.InvariantCulture));
     }
+
+    // ---- what is drawn at an edge is whole ----------------------------------------------------------------------------
+
+    [TestMethod]
+    public void The_four_names_round_a_day_clock_stand_whole_inside_its_surface_and_no_mark_on_the_rim_covers_one()
+    {
+        foreach (double half in new[] { 100.0, 150, 187.5, 230 })
+        {
+            foreach ((double width, double height) in new[] { (20.0, 15.0), (34.0, 16.5), (52.0, 20.0) })
+            {
+                double mark = half * 0.147;
+                ClockRules.Dial dial = ClockRules.DialOf(half, height, mark, width);
+                foreach (int quarter in ClockRules.Quarters)
+                {
+                    double radius = ClockRules.LabelRadius(dial, quarter, width, height);
+                    double angle = ClockRules.Angle(quarter) * Math.PI / 180;
+                    double x = radius * Math.Cos(angle);
+                    double y = radius * Math.Sin(angle);
+
+                    // Inside the surface, which reaches half from the middle each way.
+                    Assert.IsTrue(Math.Abs(x) + (width / 2) <= half + 1e-6, quarter + " across at " + half + ": " + (Math.Abs(x) + (width / 2)));
+                    Assert.IsTrue(Math.Abs(y) + (height / 2) <= half + 1e-6, quarter + " down at " + half);
+
+                    // The line the moments stand on, with their marks' width, stays clear of the name's box.
+                    double nearest = Math.Sqrt(Math.Pow(Math.Max(Math.Abs(x) - (width / 2), 0), 2) + Math.Pow(Math.Max(Math.Abs(y) - (height / 2), 0), 2));
+                    Assert.IsTrue(nearest >= dial.Moments + (mark / 2) + 1, quarter + " at " + half + " is " + nearest + " from the middle, the marks reach " + (dial.Moments + (mark / 2)));
+                }
+            }
+        }
+
+        // The side names are the ones that are wide: the old rule put their middle where only a name as thin as it is tall would fit.
+        ClockRules.Dial old = ClockRules.DialOf(187.5, 16.5, 27.5);
+        Assert.IsTrue(old.Labels + (34.0 / 2) > 187.5, "the old place for a name 34 wide reaches past the edge");
+        Assert.IsTrue(ClockRules.LabelRadius(ClockRules.DialOf(187.5, 16.5, 27.5, 34), 6, 34, 16.5) + 17 <= 187.5 + 1e-6);
+
+        // A name wider than it is high takes a band of that width; one no wider than it is high takes the height, as before.
+        Assert.AreEqual(ClockRules.DialOf(150, 15, 22).Moments, ClockRules.DialOf(150, 15, 22, 10).Moments);
+        Assert.IsTrue(ClockRules.DialOf(150, 15, 22, 40).Moments < ClockRules.DialOf(150, 15, 22).Moments);
+        foreach (double half in Hostile)
+        {
+            ClockRules.Dial dial = ClockRules.DialOf(half, 15, 22, 34);
+            Sound(ClockRules.LabelRadius(dial, 6, 34, 15), "label radius at " + half);
+        }
+    }
+
+    [TestMethod]
+    public void The_last_label_of_an_axis_stands_whole_at_the_edge_in_either_direction_across()
+    {
+        // 150 is about 20 wide, under a mark 3 from the surface's right edge (the plot leaves 6): it starts 17 from the edge, not 7.
+        Assert.AreEqual(380 - 20, AxisRules.LabelStart(377, 20, 380), 1e-9);
+        Assert.AreEqual(0, AxisRules.LabelStart(4, 20, 380), 1e-9, "at the other edge");
+        Assert.AreEqual(190 - 10, AxisRules.LabelStart(190, 20, 380), 1e-9, "in the middle it is centred");
+        Assert.AreEqual(0, AxisRules.LabelStart(10, 500, 380), "wider than the surface it starts at the edge");
+        foreach (double centre in Hostile)
+        {
+            foreach (double width in Hostile)
+            {
+                double start = AxisRules.LabelStart(centre, width, 380);
+                Assert.IsTrue(start >= 0 && (start + Guard.Length(width) <= 380 + 1e-9 || Guard.Length(width) >= 380), centre + " / " + width + " starts at " + start);
+            }
+        }
+
+        // Flipped across (right to left) the same start in the drawing's own frame is the mirror of it: [start, start + width] stays inside [0, room].
+        double room = 380;
+        double wide = 20;
+        double flippedStart = room - AxisRules.LabelStart(377, wide, room) - wide;
+        Assert.IsTrue(flippedStart >= 0 && flippedStart + wide <= room);
+    }
+
+    [TestMethod]
+    public void The_labels_of_a_gauges_scale_ends_stand_whole_inside_the_gauges_surface()
+    {
+        foreach (double diameter in new[] { 52.0, 120, 184, 230, 300 })
+        {
+            foreach (double label in new[] { 12.0, 14, 18 })
+            {
+                double height = GaugeRules.Height(diameter, label);
+                Assert.IsTrue(height >= GaugeRules.HeightShare * diameter - 1e-9);
+
+                // The scale's end labels reach (middle + 0.77125 of the diameter + gap + half the label) down: inside the surface.
+                Assert.IsTrue((GaugeRules.FootShare * diameter) + GaugeRules.FootGap + (label / 2) <= height, diameter + " / " + label);
+
+                // The diameter that the surface gives back is the one it was made for, and never more.
+                Assert.AreEqual(diameter, GaugeRules.DiameterFor(diameter, height, label), 1e-6);
+                Assert.IsTrue(GaugeRules.DiameterFor(diameter * 2, height, label) <= diameter + 1e-6);
+            }
+        }
+
+        foreach (double size in Hostile)
+        {
+            Sound(GaugeRules.Height(size, 14), "height for " + size);
+            Sound(GaugeRules.DiameterFor(size, size, 14), "diameter for " + size);
+        }
+    }
 }

@@ -16,23 +16,37 @@ public sealed partial class WrapPanel : Panel
     /// <summary>The space between two lines.</summary>
     public double VerticalSpacing { get; set; } = 6;
 
+    // A place that measures its child with no limit of width (a column that sizes itself) and then gives it what is left: the parts are
+    // laid out again for the width it was given, so the lines are counted for the room it really has and none is cut.
+    private bool measuredUnlimited;
+    private double measuredWidth;
+    private double arrangedLimit = -1;
+
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
-        double limit = double.IsInfinity(availableSize.Width) ? double.PositiveInfinity : availableSize.Width;
+        measuredUnlimited = double.IsInfinity(availableSize.Width);
+        double limit = measuredUnlimited ? (arrangedLimit > 0 ? arrangedLimit : double.PositiveInfinity) : availableSize.Width;
         foreach (UIElement child in Children)
         {
             child.Measure(new Size(limit, double.PositiveInfinity));
         }
 
         Size used = Place(limit, null);
-        return new Size(double.IsInfinity(limit) ? used.Width : Math.Min(limit, used.Width), used.Height);
+        measuredWidth = double.IsInfinity(limit) ? used.Width : Math.Min(limit, used.Width);
+        return new Size(measuredWidth, used.Height);
     }
 
     /// <inheritdoc />
     protected override Size ArrangeOverride(Size finalSize)
     {
         Place(finalSize.Width, (child, rect) => child.Arrange(rect));
+        if (measuredUnlimited && finalSize.Width + 0.5 < measuredWidth && Math.Abs(finalSize.Width - arrangedLimit) > 0.5)
+        {
+            arrangedLimit = finalSize.Width;
+            InvalidateMeasure();
+        }
+
         return finalSize;
     }
 

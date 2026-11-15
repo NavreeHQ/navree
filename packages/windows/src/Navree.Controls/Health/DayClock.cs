@@ -117,9 +117,13 @@ public sealed partial class DayClockView : KindControl
         double half = side / 2;
         double cx = canvas.Width / 2;
         double cy = canvas.Height / 2;
-        double label = 15 * scale;
         double mark = 22 * scale;
-        ClockRules.Dial dial = ClockRules.DialOf(half, label, mark);
+
+        // The quarters' names are measured: the ones at the sides stand across the dial, and their width is the room they need.
+        double nameSize = 11 * scale;
+        double nameHeight = Math.Max(15 * scale, Ink.Measure("0", nameSize, strong: true).Height);
+        double nameWidth = ClockRules.Quarters.Max(quarter => Ink.Measure(ClockRules.QuarterLabel(quarter, Uses24, culture), nameSize, strong: true).Width);
+        ClockRules.Dial dial = ClockRules.DialOf(half, nameHeight, mark, nameWidth);
         double? most = ClockRules.Most(clock);
         double width = ClockRules.BarWidth(dial.Inner);
         if (!ClockRules.Draws(dial))
@@ -167,8 +171,9 @@ public sealed partial class DayClockView : KindControl
 
         foreach (int quarter in ClockRules.Quarters)
         {
-            Pt at = Ink.Polar(cx, cy, dial.Labels, ClockRules.Angle(quarter));
-            canvas.Labels.Say(Ink.Words(ClockRules.QuarterLabel(quarter, Uses24, culture), 11 * scale, palette.Secondary, strong: true), at.X, at.Y, Across.Middle, Down.Middle);
+            string name = ClockRules.QuarterLabel(quarter, Uses24, culture);
+            Pt at = Ink.Polar(cx, cy, ClockRules.LabelRadius(dial, quarter, Ink.Measure(name, nameSize, strong: true).Width, nameHeight), ClockRules.Angle(quarter));
+            canvas.Labels.Say(Ink.Words(name, nameSize, palette.Secondary, strong: true), at.X, at.Y, Across.Middle, Down.Middle);
         }
 
         // Two marks never closer than their own width along the line.

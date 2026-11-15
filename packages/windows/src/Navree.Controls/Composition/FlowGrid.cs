@@ -34,6 +34,12 @@ public sealed partial class FlowGrid : Panel
     /// <summary>Whether a hairline runs between columns, in the colour of the theme the grid stands in.</summary>
     public bool Hairlines { get; set; }
 
+    // A place that measures its child with no limit of width (a column that sizes itself) and then gives it what is left: the grid is
+    // measured again for the width it was given, so its rows are counted for the columns it really has and none is cut.
+    private bool measuredUnlimited;
+    private int measuredColumns;
+    private double arrangedWidth = -1;
+
     private Brush? RuleFill => RuleBrush ?? (Hairlines ? new Drawing.Palette(this).Divider : null);
 
     /// <summary>Makes a grid.</summary>
@@ -60,8 +66,10 @@ public sealed partial class FlowGrid : Panel
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
-        double width = double.IsInfinity(availableSize.Width) ? 800 : availableSize.Width;
+        measuredUnlimited = double.IsInfinity(availableSize.Width);
+        double width = measuredUnlimited ? (arrangedWidth > 0 ? arrangedWidth : 800) : availableSize.Width;
         int columns = ColumnsFor(width);
+        measuredColumns = columns;
         double each = ComposeRules.ColumnWidth(width, columns, Gap);
         double height = 0;
         double rowHeight = 0;
@@ -101,6 +109,12 @@ public sealed partial class FlowGrid : Panel
     protected override Size ArrangeOverride(Size finalSize)
     {
         int columns = ColumnsFor(finalSize.Width);
+        if (measuredUnlimited && columns != measuredColumns && Math.Abs(finalSize.Width - arrangedWidth) > 0.5)
+        {
+            arrangedWidth = finalSize.Width;
+            InvalidateMeasure();
+        }
+
         double each = ComposeRules.ColumnWidth(finalSize.Width, columns, Gap);
         double y = 0;
         int rule = 0;
