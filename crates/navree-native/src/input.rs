@@ -3,7 +3,7 @@
 //! A client draws each with its system's own control and sends the value under
 //! the field's name, exactly as a browser's form would.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 
 use crate::node::{is_default, is_false, is_zero};
 
@@ -37,7 +37,7 @@ pub enum Input {
 }
 
 /// What typed text is, so a client shows the right keyboard and help.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum TextKind {
@@ -65,6 +65,55 @@ pub enum TextKind {
     Multiline,
     /// A code sent to the user, which a system can fill in.
     OneTimeCode,
+    /// A kind from a newer server, which this build does not know. It is drawn
+    /// and typed into as [`Plain`](Self::Plain) text is, and it is written as
+    /// plain text is, never as a word of its own; but unlike plain text it is
+    /// not kept where a person's words are kept, since it may be a password or
+    /// a code. A server never writes it, and a client reads none: the word of
+    /// a kind it does not know is read as this case by the field that holds
+    /// one.
+    #[serde(skip_deserializing)]
+    Unknown,
+}
+
+impl TextKind {
+    /// Whether it is written as nothing: the kind a field has when its kind
+    /// is left out, or one this build does not know.
+    pub(crate) fn is_plain(&self) -> bool {
+        matches!(self, Self::Plain | Self::Unknown)
+    }
+}
+
+/// Reads the `kind` of typed text: no word is plain, a word of the list is
+/// that kind, and a word this build does not know is [`TextKind::Unknown`].
+/// A value that is not a word at all is still an error.
+fn text_kind<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<TextKind, D::Error> {
+    use serde::de::IntoDeserializer;
+    use serde::de::value::{Error, StrDeserializer};
+
+    let Some(word) = Option::<String>::deserialize(deserializer)? else {
+        return Ok(TextKind::Plain);
+    };
+    let word: StrDeserializer<'_, Error> = word.as_str().into_deserializer();
+    Ok(TextKind::deserialize(word).unwrap_or(TextKind::Unknown))
+}
+
+impl Serialize for TextKind {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let (index, name) = match self {
+            Self::Plain | Self::Unknown => (0, "plain"),
+            Self::Email => (1, "email"),
+            Self::Password => (2, "password"),
+            Self::Number => (3, "number"),
+            Self::Decimal => (4, "decimal"),
+            Self::Phone => (5, "phone"),
+            Self::Url => (6, "url"),
+            Self::Search => (7, "search"),
+            Self::Multiline => (8, "multiline"),
+            Self::OneTimeCode => (9, "one_time_code"),
+        };
+        serializer.serialize_unit_variant("TextKind", index, name)
+    }
 }
 
 /// Typed text.
@@ -73,8 +122,8 @@ pub struct TextInput {
     /// What the text is.
     #[serde(
         default,
-        skip_serializing_if = "is_default",
-        deserialize_with = "crate::lenient::or_default"
+        skip_serializing_if = "TextKind::is_plain",
+        deserialize_with = "text_kind"
     )]
     pub kind: TextKind,
     /// What it holds now.
@@ -562,6 +611,41 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<Input>(&serde_json::to_string(&input).unwrap()).unwrap(),
             input
+        );
+    }
+
+    #[test]
+    fn a_text_kind_from_a_newer_server_is_its_own_case_and_written_as_plain_text_is() {
+        let input: TextInput = serde_json::from_str(r#"{"kind":"secret","value":"4821"}"#).unwrap();
+        assert_eq!(input.kind, TextKind::Unknown);
+        // It goes back out as the page left it out of a plain field: nothing
+        // names the kind, so a client draws plain text.
+        assert_eq!(
+            serde_json::to_string(&input).unwrap(),
+            r#"{"value":"4821"}"#
+        );
+        // A word of the list is still read as itself, and no kind is plain.
+        for (word, kind) in [
+            ("email", TextKind::Email),
+            ("one_time_code", TextKind::OneTimeCode),
+        ] {
+            let input: TextInput =
+                serde_json::from_str(&format!(r#"{{"kind":"{word}"}}"#)).unwrap();
+            assert_eq!(input.kind, kind);
+            assert_eq!(
+                serde_json::to_string(&input).unwrap(),
+                format!(r#"{{"kind":"{word}"}}"#)
+            );
+        }
+        assert_eq!(
+            serde_json::from_str::<TextInput>("{}").unwrap().kind,
+            TextKind::Plain
+        );
+        assert_eq!(
+            serde_json::from_str::<TextInput>(r#"{"kind":null}"#)
+                .unwrap()
+                .kind,
+            TextKind::Plain
         );
     }
 
