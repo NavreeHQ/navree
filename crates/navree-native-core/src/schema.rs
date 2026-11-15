@@ -411,6 +411,7 @@ pub fn schema() -> Value {
             ("selected?", string()),
             ("destinations?", list(object(&[("href", string()), ("stack", list(kept_screen.clone()))]))),
             ("modals?", list(object(&[("present", words(&["sheet", "full", "task"])), ("stack", list(kept_screen))]))),
+            ("person_unknown?", boolean()),
         ]),
         "Update": object(&[("changed", list(one("Change"))), ("effects", list(one("Effect")))]),
         "Change": forms("t", &change),

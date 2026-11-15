@@ -321,22 +321,68 @@
       }
     },
     {
-      "note": "The kept shell gives way to the blank one, and the snapshot is not used: nothing waits for a shell that did not come, and that is said.",
+      "note": "The shell can't be reached. The kept bars stay, the snapshot keeps waiting, and the first page is asked for.",
       "send": {"t":"response","request":1,"error":"offline"},
       "expect": {
         "changed": [
-          {"t":"app"},
           {"t":"nav"},
           {"t":"screen","id":1}
         ],
         "effects": [
-          {"t":"report","what":"snapshot","detail":"a snapshot is not used: this launch's shell did not give a shell"},
+          {"t":"timer","timer":1,"ms":2000},
           {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },
       "check": [
-        {"at":"/destinations/0/stack","is":[1]},
-        {"at":"/app/name","is":""}
+        {"at":"/app/name","is":"Charkha Supply Co."},
+        {"at":"/destinations/0/label","is":"Dashboard"},
+        {"at":"/app/user","is":null}
+      ]
+    },
+    {
+      "note": "The app goes to the background while the snapshot waits: the person's own snapshot is what the client stores, and not a visitor's.",
+      "send": {"t":"background"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      },
+      "snapshot": {"destinations":[{"href":"/","stack":[{"title":"Dashboard","url":"/"},{"fields":{"city":{"t":"text","text":"Ludhiana"},"gift":{"on":true,"t":"flag"},"note-text":{"t":"text","text":"Wrap the dupattas separately"}},"title":"Pay for CS-20481","url":"/orders/1/pay"}]}],"origin":"https://shop.example","person":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e","selected":"/","version":1}
+    },
+    {
+      "note": "The first page answers: a request of the app got through, so the shell is asked for again.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell answers and names her: her place comes back, over the first page that waited.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":2},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"cancel_timer","timer":1},
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1/pay","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/app/user/name","is":"Ravneet Kaur"},
+        {"at":"/app/context","is":"Store operations"},
+        {"at":"/destinations/0/stack","is":[2,3]},
+        {"at":"/screens/1","is":null},
+        {"at":"/screens/3/title","is":"Pay for CS-20481"}
       ]
     }
   ]

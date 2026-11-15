@@ -24,7 +24,9 @@
 //! not used, and the app starts as it does the first time. A person the
 //! server names without an id can't be told from another of the same name
 //! and email: nothing is kept in a snapshot for them, and nothing is put back
-//! for them from one.
+//! for them from one. Before this launch's shell has answered, a snapshot
+//! asked for is the waiting one, if there is one, and otherwise says that
+//! its person is not known (`person_unknown`): a client does not store it.
 
 use std::collections::BTreeMap;
 
@@ -103,6 +105,17 @@ pub struct Snapshot {
     /// What was presented over them, the last on top.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub modals: Vec<KeptModal>,
+    /// The core does not know who this is for: this launch's shell has not
+    /// answered yet, or the server names the person without an id. It holds
+    /// nothing, and a client does not store it: it must never replace what is
+    /// stored (a person's place) with it, nor label what it holds with a
+    /// person the server has not named in this launch.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub person_unknown: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// Who a snapshot is for.
@@ -268,6 +281,9 @@ impl Core {
             return waiting.clone();
         }
         let view: &ViewState = &self.view;
+        // Until this launch's shell has answered, who the person is, is the
+        // device's word (the shell it kept) and not the server's.
+        let answered = self.inner.has_shell && !self.inner.shell_kept;
         let screens = |stack: &[ScreenId]| -> Vec<KeptScreen> {
             stack
                 .iter()
@@ -276,6 +292,7 @@ impl Core {
                 .collect()
         };
         let (person, keeps) = match person_of(self.inner.user.as_ref()) {
+            _ if !answered => (None, false),
             Person::Nobody => (None, true),
             Person::Told(person) => (Some(person), true),
             // Nothing says which of the people of that name this is: nothing
@@ -311,6 +328,7 @@ impl Core {
                     stack: screens(&modal.stack),
                 })
                 .collect(),
+            person_unknown: !keeps,
         }
     }
 
@@ -321,6 +339,12 @@ impl Core {
             match serde_json::from_value::<Snapshot>(snapshot) {
                 Ok(snapshot) if snapshot.version != SNAPSHOT_VERSION => {
                     self.report("snapshot", format!("a snapshot of version {} is not used: this build reads version {SNAPSHOT_VERSION}", snapshot.version));
+                }
+                Ok(snapshot) if snapshot.person_unknown => {
+                    self.report(
+                        "snapshot",
+                        "a snapshot that does not know its person is not used".to_owned(),
+                    );
                 }
                 Ok(snapshot) if snapshot.origin != self.config.origin => {
                     self.report(
@@ -359,9 +383,31 @@ impl Core {
             self.report("snapshot", said.to_owned());
             return false;
         }
-        // Only onto a core that holds no screen yet.
+        // Only onto a core where the person has not moved on: with no screen,
+        // or with only the first page of the first destination, which was
+        // asked for while the shell could not be fetched, and which gives way.
         if !self.view.screens.is_empty() {
-            return false;
+            let untouched = self.view.modals.is_empty()
+                && self.view.selected == 0
+                && self
+                    .view
+                    .destinations
+                    .iter()
+                    .all(|destination| destination.stack.len() <= 1);
+            if !untouched {
+                self.report(
+                    "snapshot",
+                    "a snapshot is not used: the person had already moved on".to_owned(),
+                );
+                return false;
+            }
+            let ids: Vec<ScreenId> = self.view.screens.keys().copied().collect();
+            for id in ids {
+                self.close(id);
+            }
+            for destination in &mut self.view.destinations {
+                destination.stack.clear();
+            }
         }
         let mut any = false;
         let put = |core: &mut Core, screens: Vec<KeptScreen>| -> Vec<ScreenId> {

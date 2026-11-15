@@ -192,7 +192,10 @@ impl Core {
             }
             Event::Overlay { screen, id, open } => self.set_open(screen, &id, open),
             Event::Refresh { screen } => self.refresh(screen),
-            Event::RegionRetry { screen, region } => self.fetch_region(screen, &region, None),
+            Event::RegionRetry { screen, region } => {
+                self.shell_again();
+                self.fetch_region(screen, &region, None)
+            }
             Event::More {
                 screen,
                 id,
@@ -267,6 +270,7 @@ impl Core {
                 self.push_forget();
                 self.inner.has_shell = false;
                 self.inner.user = None;
+                self.shell_settled();
                 // A snapshot that waited for the shell was the one who left's.
                 self.inner.restore = None;
                 self.view.app = None;
@@ -302,6 +306,10 @@ impl Core {
                     field,
                 }) => self.options_fire(screen, &form, &field),
                 Some(TimerFor::Reopen { stream }) => self.reopen(stream),
+                Some(TimerFor::Shell) => {
+                    self.inner.shell_timer = None;
+                    self.shell_again();
+                }
                 None => {}
             },
             Event::Stream {
@@ -802,15 +810,59 @@ impl Core {
     }
 
     fn shell_failed(&mut self, failure: Failure) {
-        // This launch's shell did not come: the one kept on the device gives way.
+        // This launch's shell did not come while the one kept on the device is
+        // drawn. If the request did not get through, the kept bars stay and the
+        // shell is asked for again; an answer that is not a shell gives the
+        // blank one.
         if self.inner.shell_kept {
-            return self.no_shell();
+            return match failure {
+                Failure::Offline | Failure::Timeout | Failure::Server => self.shell_unreached(),
+                _ => self.no_shell(),
+            };
         }
         // A shell that is already drawn stays; only a first load can fail the app.
         if !self.inner.has_shell {
             self.view.stage = Stage::Failed;
             self.view.failure = Some(failure);
             self.touch(Change::Nav);
+        }
+    }
+
+    /// This launch's shell request did not get through (no network, a
+    /// timeout, a 5xx, a 429) and the kept shell is drawn: the bars stay, the
+    /// screens show what could not load, a waiting snapshot keeps waiting,
+    /// and the shell is asked for again after a pause that doubles up to a
+    /// minute (and when the person retries, when the app comes to the front,
+    /// and when a request of the app gets through).
+    fn shell_unreached(&mut self) {
+        self.inner.shell_wanted = true;
+        if self.inner.shell_timer.is_none() {
+            let pause = self
+                .inner
+                .shell_pause
+                .max(1_000)
+                .saturating_mul(2)
+                .min(60_000);
+            self.inner.shell_pause = pause;
+            let timer = self.timer(pause, TimerFor::Shell);
+            self.inner.shell_timer = Some(timer);
+        }
+    }
+
+    /// Asks for the shell again when it is wanted: it could not be fetched,
+    /// and nothing is asking now.
+    pub(crate) fn shell_again(&mut self) {
+        if self.inner.shell_wanted {
+            self.fetch_shell();
+        }
+    }
+
+    /// A shell has answered, or the person is gone: nothing is wanted again.
+    pub(crate) fn shell_settled(&mut self) {
+        self.inner.shell_wanted = false;
+        self.inner.shell_pause = 0;
+        if let Some(timer) = self.inner.shell_timer.take() {
+            self.cancel_timer(timer);
         }
     }
 
@@ -866,6 +918,10 @@ impl Core {
             .unwrap_or("")
             .trim()
             .to_ascii_lowercase();
+        // A server that asks to wait has not answered the question.
+        if response.status == 429 {
+            return self.shell_failed(Failure::Server);
+        }
         if !(200..300).contains(&response.status) || media != CONTENT_TYPE {
             return self.no_shell();
         }
@@ -963,6 +1019,7 @@ impl Core {
     /// menu. A snapshot waits for this launch's shell.
     fn install(&mut self, shell: Shell, from_device: bool) {
         // Who it names: by the id its answer said, else by name and email.
+        self.shell_settled();
         let naming = self.inner.naming.take();
         let user = shell.user.as_ref().map(|user| Who {
             id: naming.clone(),
@@ -1850,6 +1907,7 @@ impl Core {
     }
 
     fn refresh(&mut self, id: ScreenId) {
+        self.shell_again();
         self.fetch_page(id, true);
     }
 
@@ -2122,6 +2180,23 @@ impl Core {
     // Answers.
 
     fn answered(&mut self, response: Response) {
+        // A request of the app that got through, once it is dealt with, asks
+        // for a shell that could not be fetched again (unless it was asked
+        // for already).
+        let got_through =
+            response.error.is_none() && response.status < 500 && response.status != 429;
+        let not_the_shell = self
+            .inner
+            .pending
+            .get(&response.request)
+            .is_some_and(|asked| asked.purpose != Pending::Shell);
+        self.answered_once(response);
+        if got_through && not_the_shell {
+            self.shell_again();
+        }
+    }
+
+    fn answered_once(&mut self, response: Response) {
         // An answer nobody waits for any more changes nothing.
         let Some(asked) = self.inner.pending.remove(&response.request) else {
             return;
@@ -2508,7 +2583,7 @@ impl Core {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Config;
+    use crate::{Config, Query};
     use navree_native::{Client, FormFactor, Platform};
 
     #[test]
@@ -3165,7 +3240,7 @@ mod tests {
         };
         let answers = [
             ("a 404", shell_answer(404, "text/html", "<p>")),
-            ("a 503", shell_answer(503, "text/html", "<p>")),
+            ("a 401", shell_answer(401, "text/html", "<p>")),
             (
                 "an answer of another kind",
                 shell_answer(200, "text/html", "<p>"),
@@ -3181,22 +3256,6 @@ mod tests {
                     CONTENT_TYPE,
                     r#"{"navree":9,"build":"b","name":"x","home":"/"}"#,
                 ),
-            ),
-            (
-                "no network",
-                Response {
-                    request: 1,
-                    error: Some(TransportError::Offline),
-                    ..Response::default()
-                },
-            ),
-            (
-                "a timeout",
-                Response {
-                    request: 1,
-                    error: Some(TransportError::Timeout),
-                    ..Response::default()
-                },
             ),
         ];
         for (what, answer) in answers {
@@ -3223,6 +3282,189 @@ mod tests {
                 "{what}: {blank:?}"
             );
         }
+    }
+
+    /// A shell request that did not get through (no network, a timeout, a
+    /// 5xx, a 429) leaves the kept bars as they are and is asked for again,
+    /// after a pause that doubles up to a minute.
+    #[test]
+    fn the_kept_shell_stays_and_the_shell_is_asked_for_again_when_the_request_did_not_get_through()
+    {
+        let kept = include_str!("../transcripts/fixtures/made/kept-boot-workspace.json");
+        let started = || {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Start);
+            core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(kept.to_owned()),
+            });
+            core
+        };
+        let timer_of = |update: &Update| {
+            update.effects.iter().find_map(|effect| match effect {
+                Effect::Timer { timer, ms } => Some((*timer, *ms)),
+                _ => None,
+            })
+        };
+        let shell_of = |update: &Update| {
+            update.effects.iter().find_map(|effect| match effect {
+                Effect::Fetch(request) if request.url.ends_with(SHELL_PATH) => {
+                    Some(request.request)
+                }
+                _ => None,
+            })
+        };
+        let failures = [
+            (
+                "a 503",
+                Response {
+                    status: 503,
+                    content_type: Some("text/html".to_owned()),
+                    body: "<p>".to_owned(),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a 429",
+                Response {
+                    status: 429,
+                    ..Response::default()
+                },
+            ),
+            (
+                "no network",
+                Response {
+                    error: Some(TransportError::Offline),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a timeout",
+                Response {
+                    error: Some(TransportError::Timeout),
+                    ..Response::default()
+                },
+            ),
+        ];
+        for (what, failure) in failures {
+            let mut core = started();
+            let update = core.send(Event::Response(Response {
+                request: 1,
+                ..failure
+            }));
+            let view = core.view();
+            let app = view
+                .app
+                .as_ref()
+                .unwrap_or_else(|| panic!("{what}: no app"));
+            assert_eq!(app.name, "Charkha Supply Co.", "{what}: the kept bars stay");
+            assert_eq!(view.destinations.len(), 2, "{what}");
+            let (timer, ms) =
+                timer_of(&update).unwrap_or_else(|| panic!("{what}: no pause: {update:?}"));
+            assert_eq!(ms, 2_000, "{what}");
+            // The pause over, the shell is asked for again.
+            let again = core.send(Event::Timer { timer });
+            assert!(shell_of(&again).is_some(), "{what}: {again:?}");
+        }
+
+        // The pause doubles, up to a minute.
+        let mut core = started();
+        let mut update = core.send(Event::Response(Response {
+            request: 1,
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        }));
+        let mut pauses = Vec::new();
+        for _ in 0..8 {
+            let (timer, ms) = timer_of(&update).expect("a pause");
+            pauses.push(ms);
+            let again = core.send(Event::Timer { timer });
+            let request = shell_of(&again).expect("the shell is asked for");
+            update = core.send(Event::Response(Response {
+                request,
+                error: Some(TransportError::Timeout),
+                ..Response::default()
+            }));
+        }
+        assert_eq!(
+            pauses,
+            [2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000, 60_000]
+        );
+    }
+
+    /// A snapshot asked for before this launch's shell has answered names
+    /// nobody the server has not named in this launch, and is not a
+    /// visitor's: the client must not store it over a person's.
+    #[test]
+    fn a_snapshot_asked_for_before_this_launchs_shell_answers_says_its_person_is_not_known() {
+        let unknown = |core: &Core| core.part(&Query::Snapshot)["person_unknown"] == true;
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.cache.persist = true;
+        let mut core = Core::new(config);
+        core.send(Event::Start);
+        assert!(unknown(&core), "no shell yet");
+        core.send(Event::Cache {
+            key: "boot".to_owned(),
+            value: Some(
+                include_str!("../transcripts/fixtures/made/kept-boot-workspace.json").to_owned(),
+            ),
+        });
+        assert!(unknown(&core), "only the kept shell");
+        let snapshot = core.part(&Query::Snapshot);
+        assert!(
+            snapshot["destinations"].is_null() && snapshot["person"].is_null(),
+            "{snapshot}"
+        );
+        // The shell of this launch answers, and names her.
+        core.send(Event::Response(Response {
+            request: 1,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            headers: vec![(
+                "x-navree-person".to_owned(),
+                "0193a4b2-0000-7000-8000-00000000ra01".to_owned(),
+            )],
+            body: include_str!("../transcripts/fixtures/made/shell-workspace.json").to_owned(),
+            ..Response::default()
+        }));
+        assert!(!unknown(&core), "the shell named her");
+        assert!(core.part(&Query::Snapshot)["person"].is_string());
+        // A snapshot waiting for the shell is the one given back, as it was.
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.cache.persist = true;
+        let mut core = Core::new(config);
+        core.send(Event::Restore {
+            snapshot: serde_json::json!({"version": 1, "origin": "https://shop.example", "person": "abc"}),
+        });
+        let waiting = core.part(&Query::Snapshot);
+        assert_eq!(waiting["person"], "abc");
+        assert!(waiting["person_unknown"].is_null());
+        // And a snapshot that says its person is not known is not used.
+        let mut core = Core::new(Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        ));
+        let update = core.send(Event::Restore {
+            snapshot: serde_json::json!({"version": 1, "origin": "https://shop.example", "person_unknown": true}),
+        });
+        assert!(
+            update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "snapshot")),
+            "{update:?}"
+        );
     }
 
     /// Before the list is read, any read answered without the keep header

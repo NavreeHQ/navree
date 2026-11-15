@@ -1,0 +1,155 @@
+{
+  "about": "A shell that could not be fetched is asked for again. With the kept shell drawn and the network gone, the bars stay, the screens show what could not load, and the shell is asked for again after a pause that doubles up to a minute, when the person retries, and when a request of the app gets through. Only an answer that is not a shell (a 404) gives the blank shell.",
+  "config": {"cache":{"persist":true}},
+  "steps": [
+    {
+      "note": "The app starts the day after Ravneet Kaur used it, with no network.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"cache_read","key":"boot"},
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The kept shell is drawn, and the first page is asked for.",
+      "send": {"t":"cache","key":"boot"},
+      "body": "made/kept-boot-workspace.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell can't be reached: the bars stay, and it is asked for again after two seconds.",
+      "send": {"t":"response","request":1,"error":"offline"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"timer","timer":1,"ms":2000}
+        ]
+      },
+      "check": [
+        {"at":"/app/name","is":"Charkha Supply Co."},
+        {"at":"/destinations/1/label","is":"Orders"},
+        {"at":"/stage","is":"ready"}
+      ]
+    },
+    {
+      "note": "The first page can't be reached either: its screen shows what a screen that could not load shows.",
+      "send": {"t":"response","request":2,"error":"offline"},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/failure","is":"offline"}
+      ]
+    },
+    {
+      "note": "The pause is over: the shell is asked for again.",
+      "send": {"t":"timer","timer":1},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "And it can't be reached again: the next pause is twice as long.",
+      "send": {"t":"response","request":3,"error":"timeout"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"timer","timer":2,"ms":4000}
+        ]
+      },
+      "check": [
+        {"at":"/app/name","is":"Charkha Supply Co."}
+      ]
+    },
+    {
+      "note": "She pulls to try the first page again: the page is asked for, and so is the shell.",
+      "send": {"t":"refresh","screen":1},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell answers, and names her: everything it says is drawn, and the pause is called off.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "made/shell-workspace.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": [
+          {"t":"cancel_timer","timer":2},
+          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Acme Production\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"label\\\": \\\"Admin\\\",\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Dashboard\\\",\\n      \\\"icon\\\": {\\n       \\\"name\\\": \\\"layout-dashboard\\\",\\n       \\\"paths\\\": [\\n        \\\"M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z\\\"\\n       ]\\n      },\\n      \\\"href\\\": \\\"/\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Orders\\\",\\n      \\\"icon\\\": {\\n       \\\"name\\\": \\\"shopping-bag\\\",\\n       \\\"paths\\\": [\\n        \\\"M16 10a4 4 0 0 1-8 0\\\"\\n       ]\\n      },\\n      \\\"href\\\": \\\"/orders\\\",\\n      \\\"badge\\\": \\\"12\\\",\\n      \\\"items\\\": [\\n       {\\n        \\\"label\\\": \\\"Ravneet's orders\\\",\\n        \\\"href\\\": \\\"/orders/mine\\\",\\n        \\\"badge\\\": \\\"3\\\"\\n       }\\n      ]\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"user\\\": {\\n  \\\"name\\\": \\\"Ravneet Kaur\\\",\\n  \\\"email\\\": \\\"ravneet.kaur@example.com\\\",\\n  \\\"menu\\\": [\\n   {\\n    \\\"t\\\": \\\"button\\\",\\n    \\\"label\\\": \\\"Sign out\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"request\\\",\\n     \\\"method\\\": \\\"post\\\",\\n     \\\"href\\\": \\\"/sign-out\\\"\\n    }\\n   }\\n  ]\\n }\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"id\":\"0193a4b2-0000-7000-8000-00000000ra01\",\"name\":\"Ravneet Kaur\",\"email\":\"ravneet.kaur@example.com\"}},\"build\":\"152bd84abf4d\"}"}
+        ]
+      },
+      "check": [
+        {"at":"/app/context","is":"Acme Production"},
+        {"at":"/app/user/name","is":"Ravneet Kaur"}
+      ]
+    },
+    {
+      "note": "Another launch, where the shell answers with a 404: the blank shell, and it is not asked for again.",
+      "restart": true,
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"cache_read","key":"boot"},
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"cache","key":"boot"},
+      "body": "made/kept-boot-workspace.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"status":404,"content_type":"text/html"},
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/app/name","is":""},
+        {"at":"/destinations/1","is":null}
+      ]
+    }
+  ]
+}
