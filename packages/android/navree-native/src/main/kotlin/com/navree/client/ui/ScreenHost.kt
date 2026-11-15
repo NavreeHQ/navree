@@ -746,7 +746,8 @@ private fun AccountMenu(user: Navree.User, place: Place) {
         IconButton(onClick = { open = true }, modifier = Modifier.semantics { contentDescription = "$label, ${user.name}" }) {
             AvatarView(Navree.Avatar(name = user.name), size = 32)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        // The menu stands 8 dp in from the window's end edge, as Material's menus keep a margin, not 4.
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, offset = androidx.compose.ui.unit.DpOffset((-4).dp, 0.dp)) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Text(user.name, style = MaterialTheme.typography.titleSmall)
                 user.email?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }

@@ -528,7 +528,10 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
         } else {
             null
         },
-        colors = ListItemDefaults.colors(containerColor = if (selected || ticked) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent),
+        // A row that is chosen (ticked) and the row that is open beside the list are told apart: the open one is a neutral step above the page.
+        colors = ListItemDefaults.colors(
+            containerColor = if (ticked) MaterialTheme.colorScheme.secondaryContainer else if (selected) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent,
+        ),
         modifier = Modifier
             .then(
                 when {
