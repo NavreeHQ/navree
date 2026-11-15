@@ -24,8 +24,28 @@ public static class WindowRules
     /// <summary>The narrowest an expanded window is: the navigation pane's own breakpoint.</summary>
     public const double ExpandedLeast = 1008;
 
-    /// <summary>The smallest a window may be made: wide enough for snap layouts to keep working.</summary>
-    public const double SmallestWindow = 500;
+    /// <summary>The width the navigation pane takes beside the page when it is open at the side (a window of the expanded class).</summary>
+    public const double NavigationPane = 320;
+
+    /// <summary>The width the navigation pane takes beside the page when it shows only its icons (a window of the medium class).</summary>
+    public const double NavigationIcons = 48;
+
+    /// <summary>The width a pane at the side of the page takes (a long form or a detail beside what it was opened from).</summary>
+    public const double SidePane = 440;
+
+    /// <summary>The least width the page keeps beside a pane: a detail narrower than this is read better alone.</summary>
+    public const double DetailLeast = 480;
+
+    /// <summary>The width the page has in a window: what is left of the window beside the navigation pane.</summary>
+    /// <param name="window">The window's width in effective pixels.</param>
+    /// <returns>The page's room in effective pixels.</returns>
+    public static double PageRoom(double window) =>
+        Math.Max(0, window - ClassOf(window) switch
+        {
+            WidthClass.Compact => 0,
+            WidthClass.Medium => NavigationIcons,
+            _ => NavigationPane,
+        });
 
     /// <summary>
     /// A size in effective pixels as the device pixels the system sizes windows in at a display scale. Every size the client gives a window goes
@@ -80,6 +100,17 @@ public static class WindowRules
     /// <returns>Whether there are two panes.</returns>
     public static bool TwoPanes(WidthClass width, int stackDepth, Models.Node? firstBody) => TwoPanes(width, stackDepth) && IsCollection(firstBody);
 
+    /// <summary>
+    /// Whether a list and the screen opened from it stand side by side in a window of this width: what is left beside the navigation pane holds the
+    /// list and a detail that is still wide enough to read.
+    /// </summary>
+    /// <param name="window">The window's width in effective pixels.</param>
+    /// <param name="stackDepth">How many screens the stack holds.</param>
+    /// <param name="firstBody">The body of the first screen of the stack.</param>
+    /// <returns>Whether there are two panes.</returns>
+    public static bool TwoPanes(double window, int stackDepth, Models.Node? firstBody) =>
+        TwoPanes(ClassOf(window), stackDepth, firstBody) && PageRoom(window) >= ListPane + DetailLeast;
+
     /// <summary>Whether a body is, in the main, a list of things to open: a list, a table, a pane that says it is a list, or a region or stack that holds one and no form.</summary>
     /// <param name="body">The body.</param>
     /// <returns>Whether it is a collection.</returns>
@@ -102,6 +133,12 @@ public static class WindowRules
     /// <param name="large">Whether what it holds is a long form or a detail.</param>
     /// <returns>Whether it is a side pane.</returns>
     public static bool UsesSidePane(WidthClass width, bool large) => width == WidthClass.Expanded && large;
+
+    /// <summary>Whether a long form or a detail is a pane at the side in a window of this width: the page keeps room to be read beside the pane.</summary>
+    /// <param name="window">The window's width in effective pixels.</param>
+    /// <param name="large">Whether what it holds is a long form or a detail.</param>
+    /// <returns>Whether it is a side pane.</returns>
+    public static bool UsesSidePane(double window, bool large) => UsesSidePane(ClassOf(window), large) && PageRoom(window) >= SidePane + DetailLeast;
 
     /// <summary>
     /// Whether a stack the page lays out across is laid out down in a narrow window: it holds something that needs the width

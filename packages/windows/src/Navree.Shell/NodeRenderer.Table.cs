@@ -106,7 +106,7 @@ internal sealed partial class NodeRenderer
             else
             {
                 // A table with no id goes to the sorted address as the page itself.
-                Act(new Models.ActionNavigate { Href = sort.Address, Present = Models.Present.Replace }, null, null);
+                Act(new Models.ActionNavigate { Href = sort.Address, Present = Models.Present.Replace }, null, null, null, inOverlay);
             }
         };
         view.MoreRequested += (_, e) =>
@@ -537,6 +537,8 @@ internal sealed class ProtocolTablePresenter(
     private const double MarkWidth = 16;
 
     private readonly Dictionary<(Models.TableRow Row, int Column), UIElement> drawn = [];
+    private readonly Queue<(Models.TableRow Row, int Column)> drawnOrder = [];
+    private const int DrawnLeast = 600;
 
     /// <inheritdoc />
     public UIElement CreateCell(DataTableColumn definition, RowShape shape) =>
@@ -723,6 +725,13 @@ internal sealed class ProtocolTablePresenter(
             element = render(node);
             Settle(element, align);
             drawn[(row, index)] = element;
+            drawnOrder.Enqueue((row, index));
+
+            // The cells of the rows that went by long ago are drawn again if those rows come back: the table keeps the latest few hundred, not all.
+            while (drawn.Count > DrawnLeast && drawnOrder.TryDequeue(out (Models.TableRow Row, int Column) oldest))
+            {
+                _ = drawn.Remove(oldest);
+            }
         }
 
         return element;

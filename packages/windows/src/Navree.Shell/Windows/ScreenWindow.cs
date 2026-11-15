@@ -22,6 +22,7 @@ internal sealed class ScreenWindow : Window
     private readonly TitleBar titleBar = new() { IsBackButtonVisible = false, IsPaneToggleButtonVisible = false };
     private readonly Grid root = new();
     private readonly Action raiseMain;
+    private readonly Dialogs dialogs;
     private long? frontWas;
 
     internal ScreenWindow(ShellHost host, long screenId, Action raiseMain, bool rightToLeft = false)
@@ -30,6 +31,7 @@ internal sealed class ScreenWindow : Window
         this.screenId = screenId;
         this.raiseMain = raiseMain;
         presenter = new ScreenPresenter(host);
+        dialogs = new Dialogs(host, root, new SidePane()) { Own = screenId };
         Title = host.Options.AppName;
         SystemBackdrop = new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base };
         ExtendsContentIntoTitleBar = true;
@@ -69,7 +71,7 @@ internal sealed class ScreenWindow : Window
         if (AppWindow.Presenter is OverlappedPresenter overlapped)
         {
             double scale = root.XamlRoot?.RasterizationScale ?? WindowFrame.ScaleOf(Microsoft.UI.Win32Interop.GetWindowFromWindowId(AppWindow.Id));
-            overlapped.PreferredMinimumWidth = WindowRules.Raw(WindowRules.SmallestWindow, scale);
+            overlapped.PreferredMinimumWidth = WindowRules.Raw(Navree.Presence.PlacementRules.SmallestWidth, scale);
         }
     }
 
@@ -101,6 +103,9 @@ internal sealed class ScreenWindow : Window
         Title = title is null ? host.Options.AppName : title + " - " + host.Options.AppName;
         double width = root.ActualWidth > 0 ? root.ActualWidth : 840;
         presenter.Show(screen, WindowRules.ClassOf(width));
+
+        // The questions and sheets of this window's screen are shown in this window, not left waiting for an answer nobody can see.
+        dialogs.Update(state, presenter.Context, modalInFront: false);
 
         // A link followed in this window leads the app's one stack somewhere else, which the main window shows.
         if (frontWas is not null && state.Nav.Front != frontWas && state.Nav.Front != screenId)

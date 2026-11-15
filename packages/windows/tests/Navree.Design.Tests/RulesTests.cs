@@ -97,13 +97,34 @@ public sealed class RulesTests
     }
 
     [TestMethod]
-    public void The_core_is_told_the_class_by_its_own_words_and_the_smallest_window_leaves_snap_layouts_working()
+    public void The_core_is_told_the_class_by_its_own_words()
     {
         Assert.AreEqual("compact", WindowRules.Word(WidthClass.Compact));
         Assert.AreEqual("medium", WindowRules.Word(WidthClass.Medium));
         Assert.AreEqual("expanded", WindowRules.Word(WidthClass.Expanded));
-        Expect.That(WindowRules.SmallestWindow <= 500, "the smallest window is at most 500 effective pixels wide");
         Assert.AreEqual(8.0, WindowRules.Space(2));
+    }
+
+    [TestMethod]
+    public void The_room_a_page_has_is_what_is_left_beside_the_navigation_pane_and_decides_the_panes()
+    {
+        Assert.AreEqual(500.0, WindowRules.PageRoom(500));
+        Assert.AreEqual(792.0, WindowRules.PageRoom(840));
+        Assert.AreEqual(688.0, WindowRules.PageRoom(1008));
+        Assert.AreEqual(960.0, WindowRules.PageRoom(1280));
+        Models.Node list = new Models.List { Children = [] };
+
+        // At 1008 the detail would be 308 wide beside the list: the screen opened is shown alone. From 1180 the two stand side by side.
+        Assert.IsFalse(WindowRules.TwoPanes(1008.0, 2, list));
+        Assert.IsFalse(WindowRules.TwoPanes(1179.0, 2, list));
+        Assert.IsTrue(WindowRules.TwoPanes(1180.0, 2, list));
+        Assert.IsTrue(WindowRules.TwoPanes(1280.0, 2, list));
+        Assert.IsFalse(WindowRules.TwoPanes(1400.0, 1, list));
+
+        // A pane at the side of the page leaves the page 480: a window of 1240 or more.
+        Assert.IsFalse(WindowRules.UsesSidePane(1239.0, true));
+        Assert.IsTrue(WindowRules.UsesSidePane(1240.0, true));
+        Assert.IsFalse(WindowRules.UsesSidePane(1600.0, false));
     }
 
     [TestMethod]

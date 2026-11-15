@@ -42,11 +42,21 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
     /// <summary>What is over the window now, by name; null when nothing is.</summary>
     internal string? ShowingKey => showing?.Key;
 
+    /// <summary>The screen a window of one screen shows, or none for the main window, which follows the screen in front.</summary>
+    internal long? Own { get; init; }
+
     private WidthClass Width => WindowRules.ClassOf(root.ActualWidth);
+
+    // A window of one screen has no pane at its side: what would be a pane is a dialog there.
+    private bool AsPane(bool large) => Own is null && WindowRules.UsesSidePane(root.ActualWidth, large);
 
     private Wanted? Decide(ViewState state, RenderContext? context, bool modalInFront)
     {
-        ScreenView? front = state.FrontScreen;
+        // The main window shows the questions and sheets of the screen in front; a window of one screen shows those of its own screen (unless the
+        // main window is showing that same screen, which would be two dialogs for one question).
+        ScreenView? front = Own is long own
+            ? (state.FrontScreen?.Id != own && state.Screens.TryGetValue(own, out ScreenView? ownScreen) ? ownScreen : null)
+            : state.FrontScreen;
         if (front?.Question is ScreenQuestion question)
         {
             return new Wanted(
@@ -86,7 +96,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
             }
 
             return new Wanted(
-                "screen:" + id + (WindowRules.UsesSidePane(Width, large) ? ":pane" : ":dialog"),
+                "screen:" + id + (AsPane(large) ? ":pane" : ":dialog"),
                 () => new ContentDialog { Title = heading, Content = PresenterOf(false), CloseButtonText = "Close", MinWidth = 520 },
                 new PaneBody(heading, () => PresenterOf(true)),
                 () =>
@@ -138,7 +148,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 }
 
                 return new Wanted(
-                    "overlay:" + screen.Id + ":" + overlay.Id + (WindowRules.UsesSidePane(Width, large) ? ":pane" : ":dialog"),
+                    "overlay:" + screen.Id + ":" + overlay.Id + (AsPane(large) ? ":pane" : ":dialog"),
                     () => OverlayDialog(overlay, context),
                     new PaneBody(Titled(overlay), () => OverlayBody(overlay, context)),
                     null,
@@ -345,7 +355,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                     return;
                 }
 
-                if (want.Pane is PaneBody body && WindowRules.UsesSidePane(Width, want.Large))
+                if (want.Pane is PaneBody body && AsPane(want.Large))
                 {
                     showing = want;
                     pane.Show(body.Title, body.Build(), () =>

@@ -19,7 +19,7 @@ internal sealed class SidePane : Grid
     internal SidePane()
     {
         HorizontalAlignment = HorizontalAlignment.Right;
-        Width = 440;
+        Width = Navree.Design.WindowRules.SidePane;
         Visibility = Visibility.Collapsed;
         Background = Look.Resource("SolidBackgroundFillColorBaseBrush");
         BorderBrush = Look.Resource("DividerStrokeColorDefaultBrush");

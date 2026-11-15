@@ -124,6 +124,13 @@ internal sealed class ScreenPresenter : Grid
         foreach (long gone in offsets.Keys.Where(id => !host.State.Screens.ContainsKey(id)).ToList())
         {
             _ = offsets.Remove(gone);
+            NodeRenderer.Forget(gone);
+        }
+
+        // A web screen that has left the app is not kept here (the web view's own closing is the web page's, which is not this file's).
+        foreach (long gone in webs.Keys.Where(id => !host.State.Screens.ContainsKey(id)).ToList())
+        {
+            _ = webs.Remove(gone);
         }
 
         double offset = offsets.TryGetValue(screen.Id, out double kept1) ? kept1 : 0;

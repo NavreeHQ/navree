@@ -82,9 +82,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
         node switch
         {
             Models.Stack stack => DrawStack(stack),
-            Models.Grid grid => DrawGrid(grid),
             Models.Section section => DrawSection(section),
-            Models.Card card => DrawCard(card),
             Models.List list => DrawList(list),
             Models.Row row => DrawRow(row),
             Models.Split split => DrawSplit(split),
@@ -93,13 +91,11 @@ internal sealed partial class NodeRenderer(RenderContext context)
             Models.Divider => Divider(),
             Models.Spacer => new Microsoft.UI.Xaml.Controls.Border { Height = WindowRules.Space(2) },
             Models.Region region => DrawRegion(region),
-            Models.Text text => DrawText(text),
             Models.Rich rich => DrawRich(rich),
             Models.Image image => DrawImage(image),
             Models.Icon icon => DrawIcon(icon, 20, null),
             Models.Avatar avatar => DrawAvatar(avatar),
             Models.Badge badge => DrawBadge(badge),
-            Models.Progress progress => DrawProgress(progress),
             Models.Banner banner => DrawBanner(banner),
             Models.Empty empty => DrawEmpty(empty),
             Models.Facts facts => DrawFacts(facts),
@@ -113,10 +109,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
             Models.Sheet sheet => Overlay(sheet, sheet.Id),
             Models.Dialog dialog => Overlay(dialog, dialog.Id),
             Models.Popover popover => Overlay(popover, popover.Id),
-            Models.Gauge gauge => DrawGauge(gauge),
-            Models.Figure figure => DrawFigure(figure),
             Models.Pane pane => DrawPane(pane),
-            Models.Adaptive adaptive => Column(context.Width == WidthClass.Expanded ? adaptive.Wide : adaptive.Compact),
             Models.NativeView native => native.Alt is null ? Empty() : Render(native.Alt),
             Models.NodeUnknown unknown => unknown.Alt is null ? Empty() : Render(unknown.Alt),
             _ => NotDrawn(node),
@@ -282,22 +275,6 @@ internal sealed partial class NodeRenderer(RenderContext context)
         return scroller;
     }
 
-    private UIElement DrawGrid(Models.Grid grid)
-    {
-        double gap = WindowRules.Space(grid.Gap);
-        ItemsRepeater repeater = new()
-        {
-            Layout = new UniformGridLayout
-            {
-                MinItemWidth = grid.Min is int min ? Math.Max(min, 80) : 200,
-                MinColumnSpacing = gap,
-                MinRowSpacing = gap,
-                ItemsStretch = UniformGridLayoutItemsStretch.Fill,
-            },
-            ItemsSource = grid.Children.Select(Render).ToList(),
-        };
-        return repeater;
-    }
 
     private UIElement DrawSection(Models.Section section)
     {
@@ -365,39 +342,6 @@ internal sealed partial class NodeRenderer(RenderContext context)
             BorderBrush = Look.Resource("CardStrokeColorDefaultBrush"),
         };
 
-    private UIElement DrawCard(Models.Card card)
-    {
-        StackPanel body = new() { Spacing = 8 };
-        if (card.Label is not null)
-        {
-            body.Children.Add(Look.Label(card.Label, "BodyStrongTextBlockStyle"));
-        }
-
-        foreach (Models.Node child in card.Children)
-        {
-            body.Children.Add(Render(child));
-        }
-
-        UIElement shown = Cardlike(body, card.Pad is int pad ? WindowRules.Space(pad) : 16);
-        if (card.Action is null)
-        {
-            return shown;
-        }
-
-        Button button = new()
-        {
-            Content = shown,
-            Padding = new Thickness(0),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            BorderThickness = new Thickness(0),
-        };
-        AutomationProperties.SetName(button, card.Label ?? string.Empty);
-        string? from = card.Id;
-        button.Click += (_, _) => Act(card.Action, null, from);
-        return button;
-    }
 
     // Two panes: side by side where the room they are given is wide enough for both, one under the other where it is not (the pane the server
     // says is in hand first). A split inside a pane of another split chooses by the room the pane leaves it.
@@ -457,6 +401,8 @@ internal sealed partial class NodeRenderer(RenderContext context)
 
     private UIElement DrawTabs(Models.Tabs tabs)
     {
+        string? tabsForm = currentForm;
+        string? tabsOverlay = currentOverlay;
         StackPanel panel = new() { Spacing = 12 };
         SelectorBar bar = new();
         ContentControl host = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
@@ -479,7 +425,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
                 Models.Tab tab = tabs.Items[index];
                 if (tab.Href is not null)
                 {
-                    Act(new Models.ActionNavigate { Href = tab.Href }, null, tabs.Id);
+                    Act(new Models.ActionNavigate { Href = tab.Href }, null, tabs.Id, tabsForm, tabsOverlay);
                     return;
                 }
 
@@ -559,8 +505,10 @@ internal sealed partial class NodeRenderer(RenderContext context)
             panel.Children.Add(Inlines(rich.Runs, ramp, rich.Muted));
         }
 
+        int number = 0;
         foreach (Models.Block block in rich.Blocks)
         {
+            number = block.Kind == Models.BlockKind.Numbered ? number + 1 : 0;
             string blockRamp = block.Kind == Models.BlockKind.Heading ? (block.Level <= 1 ? "TitleTextBlockStyle" : block.Level == 2 ? "SubtitleTextBlockStyle" : "BodyStrongTextBlockStyle") : ramp;
             TextBlock paragraph = Inlines(block.Runs, blockRamp, rich.Muted || block.Kind == Models.BlockKind.Quote);
             if (block.Kind is Models.BlockKind.Bullet or Models.BlockKind.Numbered)
@@ -568,7 +516,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
                 Grid item = new() { ColumnSpacing = 8 };
                 item.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 item.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                item.Children.Add(new TextBlock { Text = block.Kind == Models.BlockKind.Bullet ? "•" : "–" });
+                item.Children.Add(new TextBlock { Text = block.Kind == Models.BlockKind.Bullet ? "•" : number.ToString(System.Globalization.CultureInfo.CurrentCulture) + "." });
                 Grid.SetColumn(paragraph, 1);
                 item.Children.Add(paragraph);
                 panel.Children.Add(item);
@@ -589,6 +537,8 @@ internal sealed partial class NodeRenderer(RenderContext context)
 
     private TextBlock Inlines(IReadOnlyList<Models.Run> runs, string ramp, bool muted)
     {
+        string? richForm = currentForm;
+        string? richOverlay = currentOverlay;
         TextBlock block = Look.Label(string.Empty, ramp, muted);
         foreach (Models.Run run in runs)
         {
@@ -597,7 +547,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
             {
                 Hyperlink link = new();
                 link.Inlines.Add(new Run { Text = run.Text });
-                link.Click += (_, _) => Act(new Models.ActionNavigate { Href = href }, null, null);
+                link.Click += (_, _) => Act(new Models.ActionNavigate { Href = href }, null, null, richForm, richOverlay);
                 inline = link;
             }
             else
@@ -645,24 +595,6 @@ internal sealed partial class NodeRenderer(RenderContext context)
         return text;
     }
 
-    private static UIElement DrawProgress(Models.Progress progress)
-    {
-        StackPanel panel = new() { Spacing = 4 };
-        if (progress.Label is not null)
-        {
-            panel.Children.Add(Look.Label(progress.Label, "CaptionTextBlockStyle", muted: true));
-        }
-
-        ProgressBar bar = new() { Minimum = 0, Maximum = 100, IsIndeterminate = progress.Value is null };
-        if (progress.Value is int value)
-        {
-            bar.Value = Math.Clamp(value, 0, 100);
-        }
-
-        AutomationProperties.SetName(bar, progress.Label ?? string.Empty);
-        panel.Children.Add(bar);
-        return panel;
-    }
 
     private UIElement DrawBanner(Models.Banner banner)
     {
@@ -677,6 +609,18 @@ internal sealed partial class NodeRenderer(RenderContext context)
         if (banner.Actions.Count > 0 && Render(banner.Actions[0]) is Button action)
         {
             bar.ActionButton = action;
+        }
+
+        if (banner.Actions.Count > 1)
+        {
+            // The banner's other actions stand under its words, beside each other.
+            StackPanel more = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
+            foreach (Models.Node other in banner.Actions.Skip(1))
+            {
+                more.Children.Add(Render(other));
+            }
+
+            bar.Content = more;
         }
 
         return bar;
@@ -749,60 +693,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
         return grid;
     }
 
-    private UIElement DrawGauge(Models.Gauge gauge)
-    {
-        StackPanel panel = new() { Spacing = 4 };
-        if (gauge.Label is not null)
-        {
-            panel.Children.Add(Look.Label(gauge.Label, "CaptionTextBlockStyle", muted: true));
-        }
 
-        double span = Math.Max(gauge.Max - gauge.Min, double.Epsilon);
-        ProgressBar bar = new() { Minimum = 0, Maximum = 100, Value = Math.Clamp((gauge.Value - gauge.Min) / span * 100, 0, 100) };
-        AutomationProperties.SetName(bar, gauge.Label ?? string.Empty);
-        panel.Children.Add(bar);
-        if (gauge.Shown is not null)
-        {
-            panel.Children.Add(Look.Label(gauge.Shown, "BodyStrongTextBlockStyle", tone: gauge.Tone));
-        }
-
-        if (gauge.Summary is not null)
-        {
-            panel.Children.Add(Look.Label(gauge.Summary, "CaptionTextBlockStyle", muted: true));
-        }
-
-        return panel;
-    }
-
-    private UIElement DrawFigure(Models.Figure figure)
-    {
-        StackPanel panel = new() { Spacing = 2 };
-        panel.Children.Add(Look.Label(figure.Label, "CaptionTextBlockStyle", muted: true));
-        StackPanel line = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
-        line.Children.Add(Look.Label(figure.Value, "TitleTextBlockStyle", tone: figure.Tone));
-        if (figure.Unit is not null)
-        {
-            TextBlock unit = Look.Label(figure.Unit, "BodyTextBlockStyle", muted: true);
-            unit.VerticalAlignment = VerticalAlignment.Bottom;
-            line.Children.Add(unit);
-        }
-
-        panel.Children.Add(line);
-        if (figure.Detail is not null)
-        {
-            panel.Children.Add(Look.Label(figure.Detail, "CaptionTextBlockStyle", muted: true));
-        }
-
-        if (figure.Action is null)
-        {
-            return panel;
-        }
-
-        Button button = new() { Content = panel, HorizontalContentAlignment = HorizontalAlignment.Left, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0) };
-        string? from = figure.Id;
-        button.Click += (_, _) => Act(figure.Action, null, from);
-        return button;
-    }
 
     private UIElement DrawHint(Models.Hint hint)
     {
@@ -932,23 +823,12 @@ internal sealed partial class NodeRenderer(RenderContext context)
     {
         try
         {
-            byte[]? bytes = await context.Pictures!(image.Src);
-            if (bytes is null)
+            Microsoft.UI.Xaml.Media.Imaging.BitmapImage? bitmap = await PictureCache.GetAsync(image.Src, context.Pictures!);
+            if (bitmap is null)
             {
                 return;
             }
 
-            Microsoft.UI.Xaml.Media.Imaging.BitmapImage bitmap = new();
-            using Windows.Storage.Streams.InMemoryRandomAccessStream stream = new();
-            using (Windows.Storage.Streams.DataWriter writer = new(stream))
-            {
-                writer.WriteBytes(bytes);
-                await writer.StoreAsync();
-                writer.DetachStream();
-            }
-
-            stream.Seek(0);
-            await bitmap.SetSourceAsync(stream);
             frame.Child = new Microsoft.UI.Xaml.Controls.Image
             {
                 Source = bitmap,

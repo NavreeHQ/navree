@@ -35,6 +35,7 @@ public sealed partial class ShellWindow : Window
     private string destinationsKey = string.Empty;
     private WidthClass width = WidthClass.Expanded;
     private bool widthKnown;
+    private int roomBand;
 
     /// <summary>Makes the window for an app's host.</summary>
     /// <param name="host">The app's host.</param>
@@ -161,13 +162,19 @@ public sealed partial class ShellWindow : Window
     private void OnWidth(double effective)
     {
         WidthClass now = WindowRules.ClassOf(effective);
-        if (widthKnown && now == width)
+
+        // What the page has beside the navigation pane decides whether a detail stands beside its list and whether a form is a pane: those are
+        // laid out again when the window is made wider or narrower across the line, not only across a class.
+        double room = WindowRules.PageRoom(effective);
+        int band = (room >= WindowRules.ListPane + WindowRules.DetailLeast ? 1 : 0) | (room >= WindowRules.SidePane + WindowRules.DetailLeast ? 2 : 0);
+        if (widthKnown && now == width && band == roomBand)
         {
             return;
         }
 
         widthKnown = true;
         width = now;
+        roomBand = band;
 
         // The navigation follows the window's width by our own rule, at the breakpoints the system's own pane has: open at the
         // side when wide, icons when in between, a button that opens it over the content when narrow. (Left to the pane's own
@@ -224,7 +231,7 @@ public sealed partial class ShellWindow : Window
         ScreenView? baseScreen = baseId is long b && state.Screens.TryGetValue(b, out ScreenView? held) ? held : null;
 
         ScreenView? firstScreen = stack.Count > 0 && state.Screens.TryGetValue(stack[0], out ScreenView? first) ? first : null;
-        bool twoPanes = !modalInFront && WindowRules.TwoPanes(width, stack.Count, firstScreen?.Screen?.Body);
+        bool twoPanes = !modalInFront && WindowRules.TwoPanes(root.ActualWidth, stack.Count, firstScreen?.Screen?.Body);
         if (twoPanes)
         {
             long under = stack[^2];
@@ -332,7 +339,7 @@ public sealed partial class ShellWindow : Window
     // The destinations are made again only when what they are changed.
     private void ShowDestinations(NavPart nav)
     {
-        string key = string.Join("|", nav.Destinations.Select(destination => destination.Label + "\u001f" + destination.Href + "\u001f" + destination.Badge));
+        string key = string.Join("|", nav.Destinations.Select(destination => destination.Label + "\u001f" + destination.Href + "\u001f" + destination.Icon?.Name));
         updatingSelection = true;
         try
         {
@@ -349,12 +356,16 @@ public sealed partial class ShellWindow : Window
                         Icon = Look.Glyph(SystemGlyphs.For(destination.Icon?.Name, destination.Label)),
                         Tag = at,
                     };
-                    if (destination.Badge is not null)
-                    {
-                        item.InfoBadge = new InfoBadge { Value = int.TryParse(destination.Badge, out int count) ? count : 0, Visibility = int.TryParse(destination.Badge, out _) ? Visibility.Visible : Visibility.Collapsed };
-                    }
-
                     navigation.MenuItems.Add(item);
+                }
+            }
+
+            // A badge that changes is changed where it stands: the items, the selection and a keyboard person's place are left as they are.
+            for (int at = 0; at < nav.Destinations.Count && at < navigation.MenuItems.Count; at++)
+            {
+                if (navigation.MenuItems[at] is NavigationViewItem shown)
+                {
+                    ShowBadge(shown, nav.Destinations[at]);
                 }
             }
 
@@ -367,6 +378,23 @@ public sealed partial class ShellWindow : Window
         {
             updatingSelection = false;
         }
+    }
+
+    // A number is shown as a number; any other word ("9+", "New") is shown as a dot and said in the item's name, so it is not lost.
+    private static void ShowBadge(NavigationViewItem item, Destination destination)
+    {
+        if (destination.Badge is null)
+        {
+            item.InfoBadge = null;
+            AutomationProperties.SetName(item, destination.Label);
+            return;
+        }
+
+        bool number = int.TryParse(destination.Badge, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int count);
+        InfoBadge badge = item.InfoBadge ?? new InfoBadge();
+        badge.Value = number ? count : -1;
+        item.InfoBadge = badge;
+        AutomationProperties.SetName(item, destination.Label + ", " + destination.Badge);
     }
 
     // ---- messages and announcements -------------------------------------------------------------------
@@ -393,8 +421,10 @@ public sealed partial class ShellWindow : Window
             bar.ActionButton = action;
         }
 
+        DispatcherTimer? goesBy = null;
         bar.Closed += (_, _) =>
         {
+            goesBy?.Stop();
             messages.Children.Remove(bar);
             host.Send(Events.MessageShown(message.Id));
         };
@@ -409,6 +439,7 @@ public sealed partial class ShellWindow : Window
                 timer.Stop();
                 bar.IsOpen = false;
             };
+            goesBy = timer;
             timer.Start();
         }
 

@@ -105,15 +105,24 @@ internal sealed partial class NodeRenderer
     /// <summary>The items of a menu, as the system's own menu draws them.</summary>
     private MenuFlyout MenuFor(IEnumerable<Models.Node> items)
     {
-        string? inForm = currentForm;
-        string? inOverlay = currentOverlay;
         MenuFlyout flyout = new();
+        FillMenu(flyout.Items, items, currentForm, currentOverlay);
+        return flyout;
+    }
+
+    // The items of a menu or of a sub-menu: a press is sent with the form and the overlay the menu stood in when it was drawn, however deep the item is.
+    private void FillMenu(IList<MenuFlyoutItemBase> into, IEnumerable<Models.Node> items, string? inForm, string? inOverlay)
+    {
         foreach (Models.Node node in items)
         {
             switch (node)
             {
                 case Models.Button entry:
-                    MenuFlyoutItem item = new() { Text = entry.Label, IsEnabled = !entry.Disabled };
+                    MenuFlyoutItem item = new()
+                    {
+                        Text = entry.Label,
+                        IsEnabled = !(entry.Disabled || entry.Pending || context.Screen.Has(entry.Id, Models.State.Disabled)),
+                    };
                     if (entry.Standard is Models.Standard standard)
                     {
                         item.Icon = Look.Glyph(SystemGlyphs.Of(standard));
@@ -123,40 +132,15 @@ internal sealed partial class NodeRenderer
                     Models.Question? ask = entry.Ask;
                     string? from = entry.Id;
                     item.Click += (_, _) => Act(action, ask, from, inForm, inOverlay);
-                    flyout.Items.Add(item);
+                    into.Add(item);
                     break;
                 case Models.Divider:
-                    flyout.Items.Add(new MenuFlyoutSeparator());
+                    into.Add(new MenuFlyoutSeparator());
                     break;
                 case Models.Menu nested:
                     MenuFlyoutSubItem sub = new() { Text = nested.Label };
-                    FillSub(sub, nested.Items);
-                    flyout.Items.Add(sub);
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        return flyout;
-    }
-
-    private void FillSub(MenuFlyoutSubItem sub, IEnumerable<Models.Node> items)
-    {
-        foreach (Models.Node node in items)
-        {
-            switch (node)
-            {
-                case Models.Button entry:
-                    MenuFlyoutItem item = new() { Text = entry.Label, IsEnabled = !entry.Disabled };
-                    Models.Action? action = entry.Action;
-                    Models.Question? ask = entry.Ask;
-                    string? from = entry.Id;
-                    item.Click += (_, _) => Act(action, ask, from);
-                    sub.Items.Add(item);
-                    break;
-                case Models.Divider:
-                    sub.Items.Add(new MenuFlyoutSeparator());
+                    FillMenu(sub.Items, nested.Items, inForm, inOverlay);
+                    into.Add(sub);
                     break;
                 default:
                     break;
@@ -169,6 +153,23 @@ internal sealed partial class NodeRenderer
     private UIElement DrawList(Models.List list)
     {
         StackPanel panel = new() { Spacing = 0 };
+        if (list.Id is string beforeId && list.Before is not null)
+        {
+            // Older rows are above the first (a conversation's earlier messages): they are asked for by a press, not by reaching the top, or a
+            // list that starts at its top would load all of its history one page after another.
+            ListState? older = context.Screen.Lists.TryGetValue(beforeId, out ListState? olderState) ? olderState : null;
+            if (older?.LoadingBefore == true)
+            {
+                panel.Children.Add(new ProgressRing { IsActive = true, Width = 24, Height = 24, Margin = new Thickness(12), HorizontalAlignment = HorizontalAlignment.Center });
+            }
+            else
+            {
+                Button earlier = new() { Content = older?.FailedBefore == true ? "Try loading earlier again" : "Show earlier", HorizontalAlignment = HorizontalAlignment.Center };
+                earlier.Click += (_, _) => context.Send(Events.More(context.Screen.Id, beforeId, before: true));
+                panel.Children.Add(earlier);
+            }
+        }
+
         if (HoldsCards(list))
         {
             // The cards of a board: each a card with what it holds, moved by dragging, by the keys or by its handle's menu.
@@ -183,16 +184,37 @@ internal sealed partial class NodeRenderer
             };
             ScrollViewer.SetVerticalScrollMode(view, ScrollMode.Disabled);
             ScrollViewer.SetVerticalScrollBarVisibility(view, ScrollBarVisibility.Disabled);
+            int place = 0;
             foreach (Models.Node child in list.Children)
             {
-                view.Items.Add(Render(child));
+                UIElement drawn = Render(child);
+                if (list.Ordered && child is Models.Row && drawn is FrameworkElement rowElement)
+                {
+                    // A numbered list says its numbers; the row's tap and its name stay the row's.
+                    place++;
+                    Grid numbered = new() { ColumnSpacing = 8, Tag = rowElement.Tag };
+                    numbered.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    numbered.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                    TextBlock number = Look.Label(place.ToString(System.Globalization.CultureInfo.CurrentCulture) + ".", "BodyTextBlockStyle", muted: true);
+                    number.VerticalAlignment = VerticalAlignment.Center;
+                    number.MinWidth = 24;
+                    AutomationProperties.SetAccessibilityView(number, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+                    Grid.SetColumn(rowElement, 1);
+                    numbered.Children.Add(number);
+                    numbered.Children.Add(rowElement);
+                    drawn = numbered;
+                }
+
+                view.Items.Add(drawn);
             }
 
+            string? tapForm = currentForm;
+            string? tapOverlay = currentOverlay;
             view.ItemClick += (_, e) =>
             {
                 if (e.ClickedItem is FrameworkElement { Tag: RowAction tap })
                 {
-                    Act(tap.Action, null, tap.From);
+                    Act(tap.Action, null, tap.From, tapForm, tapOverlay);
                 }
             };
             panel.Children.Add(view);
@@ -297,132 +319,50 @@ internal sealed partial class NodeRenderer
             grid.Tag = new RowAction(row.Action, row.Id);
         }
 
-        if (row.Menu.Count > 0)
+        if (row.Menu.Count > 0 || row.Swipe.Count > 0)
         {
-            grid.ContextFlyout = MenuFor(row.Menu);
+            // What a swipe offers is also in the row's menu, so a pointer or a keyboard person has it too.
+            MenuFlyout menu = MenuFor(row.Menu);
+            if (row.Swipe.Count > 0)
+            {
+                if (menu.Items.Count > 0)
+                {
+                    menu.Items.Add(new MenuFlyoutSeparator());
+                }
+
+                FillMenu(menu.Items, row.Swipe, currentForm, currentOverlay);
+            }
+
+            grid.ContextFlyout = menu;
         }
 
         AutomationProperties.SetName(grid, row.Title + (row.Subtitle is null ? string.Empty : ", " + row.Subtitle));
+        if (row.Swipe.Count > 0)
+        {
+            // On touch, a swipe across the row offers the same.
+            SwipeItems items = new() { Mode = SwipeMode.Reveal };
+            string? swipeForm = currentForm;
+            string? swipeOverlay = currentOverlay;
+            foreach (Models.Button entry in row.Swipe)
+            {
+                SwipeItem item = new()
+                {
+                    Text = entry.Label,
+                    Background = entry.Role == Models.Role.Destructive ? Look.ToneBrush(Models.Tone.Danger) : Look.Resource("AccentFillColorDefaultBrush"),
+                };
+                Models.Action? swipeAction = entry.Action;
+                Models.Question? swipeAsk = entry.Ask;
+                string? swipeFrom = entry.Id;
+                item.Invoked += (_, _) => Act(swipeAction, swipeAsk, swipeFrom, swipeForm, swipeOverlay);
+                items.Add(item);
+            }
+
+            return new SwipeControl { Content = grid, RightItems = items, Tag = grid.Tag };
+        }
+
         return grid;
     }
 
-    // A table drawn as a list of folded rows, as the other clients fold a table when there is no room for columns.
-    // The table of our own (NodeRenderer.Table.cs) draws every table; this stays for a table that cannot be given a table's room.
-    private UIElement DrawTableAsList(Models.Table table)
-    {
-        StackPanel panel = new() { Spacing = 4 };
-        if (table.Caption is not null)
-        {
-            panel.Children.Add(Look.Label(table.Caption, "BodyStrongTextBlockStyle"));
-        }
-
-        if (table.Query is not null)
-        {
-            panel.Children.Add(Render(table.Query));
-        }
-
-        if (table.Rows.Count == 0 && table.Empty is not null)
-        {
-            panel.Children.Add(Render(table.Empty));
-        }
-
-        int lead = ColumnWith(table, Models.ColumnRole.Title, 0);
-        int sub = ColumnWith(table, Models.ColumnRole.Subtitle, -1);
-        List<int> end = [];
-        for (int at = 0; at < table.Columns.Count; at++)
-        {
-            if (at != lead && at != sub && (table.Columns[at].Role is Models.ColumnRole.Status or Models.ColumnRole.Trailing || table.Columns[at].Numeric))
-            {
-                end.Add(at);
-            }
-        }
-
-        ListView view = new() { SelectionMode = ListViewSelectionMode.None, IsItemClickEnabled = table.Rows.Any(row => row.Action is not null) };
-        ScrollViewer.SetVerticalScrollMode(view, ScrollMode.Disabled);
-        ScrollViewer.SetVerticalScrollBarVisibility(view, ScrollBarVisibility.Disabled);
-        foreach (Models.TableRow row in table.Rows)
-        {
-            Grid grid = new() { ColumnSpacing = 12, RowSpacing = 6, Padding = new Thickness(0, 6, 0, 6), MinHeight = 40 };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            // What the person does to a row (a form, a button, a menu) goes under what the row says, across its whole width.
-            StackPanel doing = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
-            StackPanel text = new() { VerticalAlignment = VerticalAlignment.Center };
-            if (lead < row.Cells.Count)
-            {
-                text.Children.Add(Render(row.Cells[lead]));
-            }
-
-            StackPanel secondary = new() { Orientation = context.Width == WidthClass.Compact ? Orientation.Vertical : Orientation.Horizontal, Spacing = context.Width == WidthClass.Compact ? 2 : 8 };
-            for (int at = 0; at < row.Cells.Count && at < table.Columns.Count; at++)
-            {
-                if (at == lead || end.Contains(at))
-                {
-                    continue;
-                }
-
-                if (row.Cells[at] is Models.Form or Models.Button or Models.Menu or Models.Field)
-                {
-                    doing.Children.Add(Render(row.Cells[at]));
-                }
-                else if (at == sub || table.Columns[at].Secondary || table.Columns[at].Role is null)
-                {
-                    secondary.Children.Add(Render(row.Cells[at]));
-                }
-            }
-
-            foreach (Models.Node action in row.Actions)
-            {
-                doing.Children.Add(Render(action));
-            }
-
-            if (secondary.Children.Count > 0)
-            {
-                text.Children.Add(secondary);
-            }
-
-            grid.Children.Add(text);
-            StackPanel trailing = new() { Orientation = Orientation.Horizontal, Spacing = 12, VerticalAlignment = VerticalAlignment.Center };
-            foreach (int column in end.Where(index => index < row.Cells.Count))
-            {
-                trailing.Children.Add(Render(row.Cells[column]));
-            }
-
-            Grid.SetColumn(trailing, 1);
-            grid.Children.Add(trailing);
-            if (doing.Children.Count > 0)
-            {
-                Grid.SetRow(doing, 1);
-                Grid.SetColumnSpan(doing, 2);
-                grid.Children.Add(doing);
-            }
-
-            if (row.Action is not null)
-            {
-                grid.Tag = new RowAction(row.Action, row.Id);
-            }
-
-            view.Items.Add(grid);
-        }
-
-        view.ItemClick += (_, e) =>
-        {
-            if (e.ClickedItem is FrameworkElement { Tag: RowAction tap })
-            {
-                Act(tap.Action, null, tap.From);
-            }
-        };
-        panel.Children.Add(view);
-        if (table.Summary is not null)
-        {
-            panel.Children.Add(Look.Label(table.Summary, "CaptionTextBlockStyle", muted: true));
-        }
-
-        return panel;
-    }
 
     private static int ColumnWith(Models.Table table, Models.ColumnRole role, int fallback)
     {
@@ -463,9 +403,31 @@ internal sealed partial class NodeRenderer
                 if (text.Kind == Models.TextKind.Password)
                 {
                     PasswordBox password = new() { Header = header, PlaceholderText = text.Placeholder ?? string.Empty, Password = start, IsEnabled = !field.Disabled };
-                    password.PasswordChanged += (_, _) => send(new TextValue(password.Password));
+                    bool passwordApplying = false;
+                    password.PasswordChanged += (_, _) =>
+                    {
+                        if (!passwordApplying)
+                        {
+                            send(new TextValue(password.Password));
+                        }
+                    };
                     control = password;
-                    show = view => password.IsEnabled = !field.Disabled;
+                    show = view =>
+                    {
+                        password.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
+                        if (view?.Value is TextValue echoed && echoed.Text != password.Password && password.FocusState == FocusState.Unfocused)
+                        {
+                            passwordApplying = true;
+                            try
+                            {
+                                password.Password = echoed.Text;
+                            }
+                            finally
+                            {
+                                passwordApplying = false;
+                            }
+                        }
+                    };
                 }
                 else
                 {
@@ -485,6 +447,39 @@ internal sealed partial class NodeRenderer
                         box.MaxLength = (int)most;
                     }
 
+                    // The keyboard a touch or pen person is given, and the words a screen reader says, follow the kind of the field.
+                    Microsoft.UI.Xaml.Input.InputScopeNameValue? scope = text.Kind switch
+                    {
+                        Models.TextKind.Email => Microsoft.UI.Xaml.Input.InputScopeNameValue.EmailSmtpAddress,
+                        Models.TextKind.Number or Models.TextKind.Decimal => Microsoft.UI.Xaml.Input.InputScopeNameValue.Number,
+                        Models.TextKind.Phone => Microsoft.UI.Xaml.Input.InputScopeNameValue.TelephoneNumber,
+                        Models.TextKind.Url => Microsoft.UI.Xaml.Input.InputScopeNameValue.Url,
+                        Models.TextKind.Search => Microsoft.UI.Xaml.Input.InputScopeNameValue.Search,
+                        Models.TextKind.OneTimeCode => Microsoft.UI.Xaml.Input.InputScopeNameValue.NumericPin,
+                        _ => null,
+                    };
+                    if (scope is { } named)
+                    {
+                        Microsoft.UI.Xaml.Input.InputScope inputScope = new();
+                        inputScope.Names.Add(new Microsoft.UI.Xaml.Input.InputScopeName(named));
+                        box.InputScope = inputScope;
+                    }
+
+                    // Enter in a one-line field sends its form, as it does in every form of the system.
+                    string? enterForm = currentForm;
+                    string? enterOverlay = currentOverlay;
+                    if (text.Kind != Models.TextKind.Multiline)
+                    {
+                        box.KeyDown += (_, e) =>
+                        {
+                            if (e.Key == Windows.System.VirtualKey.Enter && enterForm is not null && SubmitButtonOf(enterForm) is { } submit)
+                            {
+                                e.Handled = true;
+                                Act(submit.Action, submit.Ask, submit.Id, enterForm, enterOverlay);
+                            }
+                        };
+                    }
+
                     // Every change the person makes is sent: the client holds no copy of the text to compare with (the page it was drawn from
                     // is not the core's state any more), and the core ignores a value it already holds. What the core itself sets in the box is not sent back.
                     bool applying = false;
@@ -496,8 +491,45 @@ internal sealed partial class NodeRenderer
                         }
                     };
                     control = box;
+                    if (text.Prefix is { Length: > 0 } || text.Suffix is { Length: > 0 })
+                    {
+                        // The rupee sign or the unit stands beside the box, inside the field's own row, and the label stays above the row.
+                        Grid row = new() { ColumnSpacing = 6 };
+                        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                        box.Header = null;
+                        Grid.SetColumn(box, 1);
+                        if (text.Prefix is { Length: > 0 } prefix)
+                        {
+                            TextBlock before = Look.Label(prefix, "BodyTextBlockStyle", muted: true);
+                            before.VerticalAlignment = VerticalAlignment.Center;
+                            row.Children.Add(before);
+                        }
+
+                        row.Children.Add(box);
+                        if (text.Suffix is { Length: > 0 } suffix)
+                        {
+                            TextBlock after = Look.Label(suffix, "BodyTextBlockStyle", muted: true);
+                            after.VerticalAlignment = VerticalAlignment.Center;
+                            Grid.SetColumn(after, 2);
+                            row.Children.Add(after);
+                        }
+
+                        StackPanel labelled = new() { Spacing = 4 };
+                        if (header.Length > 0)
+                        {
+                            labelled.Children.Add(Look.Label(header, "BodyTextBlockStyle"));
+                        }
+
+                        labelled.Children.Add(row);
+                        AutomationProperties.SetName(box, field.Label ?? field.Name);
+                        control = labelled;
+                    }
+
                     show = view =>
                     {
+                        box.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
                         if (view?.Value is TextValue echoed && echoed.Text != box.Text && box.FocusState == FocusState.Unfocused)
                         {
                             applying = true;
@@ -521,12 +553,43 @@ internal sealed partial class NodeRenderer
                     CheckBox check = new() { Content = field.Label ?? string.Empty, IsChecked = on, IsEnabled = !field.Disabled };
                     check.Click += (_, _) => send(new FlagValue(check.IsChecked == true));
                     control = check;
+                    show = view =>
+                    {
+                        check.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
+                        if (view?.Value is FlagValue now && check.IsChecked != now.On)
+                        {
+                            check.IsChecked = now.On;
+                        }
+                    };
                 }
                 else
                 {
                     ToggleSwitch sw = new() { Header = field.Label, IsOn = on, IsEnabled = !field.Disabled };
-                    sw.Toggled += (_, _) => send(new FlagValue(sw.IsOn));
+                    bool switching = false;
+                    sw.Toggled += (_, _) =>
+                    {
+                        if (!switching)
+                        {
+                            send(new FlagValue(sw.IsOn));
+                        }
+                    };
                     control = sw;
+                    show = view =>
+                    {
+                        sw.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
+                        if (view?.Value is FlagValue now && sw.IsOn != now.On)
+                        {
+                            switching = true;
+                            try
+                            {
+                                sw.IsOn = now.On;
+                            }
+                            finally
+                            {
+                                switching = false;
+                            }
+                        }
+                    };
                 }
 
                 break;
@@ -542,14 +605,31 @@ internal sealed partial class NodeRenderer
                     }
 
                     radios.SelectedIndex = IndexOfValue(options, chosen);
+                    bool radiosApplying = false;
                     radios.SelectionChanged += (_, _) =>
                     {
-                        if (radios.SelectedIndex >= 0 && radios.SelectedIndex < options.Count)
+                        if (!radiosApplying && radios.SelectedIndex >= 0 && radios.SelectedIndex < options.Count)
                         {
                             send(new TextValue(options[radios.SelectedIndex].Value));
                         }
                     };
                     control = radios;
+                    show = view =>
+                    {
+                        radios.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
+                        if (view?.Value is TextValue now && IndexOfValue(options, now.Text) is int at && at != radios.SelectedIndex)
+                        {
+                            radiosApplying = true;
+                            try
+                            {
+                                radios.SelectedIndex = at;
+                            }
+                            finally
+                            {
+                                radiosApplying = false;
+                            }
+                        }
+                    };
                 }
                 else
                 {
@@ -560,14 +640,42 @@ internal sealed partial class NodeRenderer
                     }
 
                     combo.SelectedIndex = IndexOfValue(options, chosen);
+                    bool comboApplying = false;
                     combo.SelectionChanged += (_, _) =>
                     {
-                        if (combo.SelectedIndex >= 0 && combo.SelectedIndex < options.Count)
+                        if (!comboApplying && combo.SelectedIndex >= 0 && combo.SelectedIndex < options.Count)
                         {
                             send(new TextValue(options[combo.SelectedIndex].Value));
                         }
                     };
                     control = combo;
+                    show = view =>
+                    {
+                        combo.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
+                        comboApplying = true;
+                        try
+                        {
+                            IReadOnlyList<Models.ChoiceOption> latest = view?.Options ?? options;
+                            if (latest.Count != combo.Items.Count || latest.Select((option, at) => combo.Items[at] as string != option.Label).Any(different => different))
+                            {
+                                options = latest;
+                                combo.Items.Clear();
+                                foreach (Models.ChoiceOption option in latest)
+                                {
+                                    combo.Items.Add(option.Label);
+                                }
+                            }
+
+                            if (view?.Value is TextValue now && IndexOfValue(latest, now.Text) is int at && at != combo.SelectedIndex)
+                            {
+                                combo.SelectedIndex = at;
+                            }
+                        }
+                        finally
+                        {
+                            comboApplying = false;
+                        }
+                    };
                 }
 
                 break;
@@ -616,6 +724,7 @@ internal sealed partial class NodeRenderer
                         }
                     };
                     control = clock;
+                    show = view => clock.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
                     break;
                 }
 
@@ -655,6 +764,15 @@ internal sealed partial class NodeRenderer
                     }
                 };
                 control = picker;
+                show = view =>
+                {
+                    picker.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
+                    if (view?.Value is TextValue now && DateTimeOffset.TryParse(now.Text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out DateTimeOffset shown)
+                        && picker.Date?.Date != shown.Date)
+                    {
+                        picker.Date = shown;
+                    }
+                };
                 break;
             case Models.SliderInput slider:
                 string number = held?.Value is TextValue held5 ? held5.Text : slider.Value;
@@ -662,8 +780,31 @@ internal sealed partial class NodeRenderer
                 double.TryParse(slider.Max, System.Globalization.CultureInfo.InvariantCulture, out double high);
                 double.TryParse(number, System.Globalization.CultureInfo.InvariantCulture, out double current);
                 Slider bar = new() { Header = header, Minimum = low, Maximum = high > low ? high : low + 1, Value = current, IsEnabled = !field.Disabled };
-                bar.ValueChanged += (_, e) => send(new TextValue(e.NewValue.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                bool sliding = false;
+                bar.ValueChanged += (_, e) =>
+                {
+                    if (!sliding)
+                    {
+                        send(new TextValue(e.NewValue.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                    }
+                };
                 control = bar;
+                show = view =>
+                {
+                    bar.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
+                    if (view?.Value is TextValue now && double.TryParse(now.Text, System.Globalization.CultureInfo.InvariantCulture, out double set) && set != bar.Value)
+                    {
+                        sliding = true;
+                        try
+                        {
+                            bar.Value = set;
+                        }
+                        finally
+                        {
+                            sliding = false;
+                        }
+                    }
+                };
                 break;
             default:
                 // A kind of input this build does not draw: the name of the field and what it holds, said plainly.
@@ -699,6 +840,20 @@ internal sealed partial class NodeRenderer
         ShowErrors(held);
         context.Fields[(form, id)] = new FieldHandle { Show = view => { show(view); ShowErrors(view); } };
         return panel;
+    }
+
+    // The button that sends a form: the first with an action that sends, in the form's own parts.
+    private Models.Button? SubmitButtonOf(string formId)
+    {
+        if (context.Screen.Screen is not Models.Screen screen)
+        {
+            return null;
+        }
+
+        Models.Form? form = Tree.Nodes(screen).OfType<Models.Form>().FirstOrDefault(candidate => Tree.FormId(candidate) == formId);
+        return form is null
+            ? null
+            : Tree.Walk(form).OfType<Models.Button>().FirstOrDefault(button => button.Action is Models.ActionSubmit && !button.Disabled && !button.Pending);
     }
 
     private static int IndexOfValue(IReadOnlyList<Models.ChoiceOption> options, string value)

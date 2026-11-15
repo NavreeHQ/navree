@@ -39,6 +39,14 @@ internal sealed partial class NodeRenderer
     private static readonly ConditionalWeakTable<RenderContext, PassKnown> Passes = new();
     private static readonly Dictionary<long, HashSet<string>> Known = new();
 
+    /// <summary>Lets go of what is kept for a screen that has left the app (the parts it had seen, a filter flyout it had open).</summary>
+    /// <param name="screen">The screen's id.</param>
+    internal static void Forget(long screen)
+    {
+        _ = Known.Remove(screen);
+        _ = FiltersOpen.RemoveWhere(key => key.Screen == screen);
+    }
+
     private sealed class PassKnown
     {
         internal bool First { get; init; }
@@ -107,7 +115,7 @@ internal sealed partial class NodeRenderer
             case Models.Timeline timeline:
                 return new TimelineView(timeline, Render);
             case Models.Figure figure:
-                return new FigureView(figure, Render, figure.Action is null ? null : () => Act(figure.Action, null, figure.Id));
+                return new FigureView(figure, Render, figure.Action is null ? null : PressOf(figure.Action, figure.Id));
             case Models.DayPager pager:
                 return DrawPager(pager);
             case Models.Progress progress:
@@ -317,9 +325,48 @@ internal sealed partial class NodeRenderer
         return Finish(surface, card);
     }
 
+    // What a press does, with the form and the overlay the part stands in as it is drawn (it is pressed long after).
+    private Action PressOf(Models.Action action, string? from)
+    {
+        string? inForm = currentForm;
+        string? inOverlay = currentOverlay;
+        return () => Act(action, null, from, inForm, inOverlay);
+    }
+
+    // The words under a button are not selectable: a press on them is the button's.
+    private static void NotSelectable(DependencyObject at)
+    {
+        switch (at)
+        {
+            case TextBlock words:
+                words.IsTextSelectionEnabled = false;
+                break;
+            case Panel panel:
+                foreach (UIElement child in panel.Children)
+                {
+                    NotSelectable(child);
+                }
+
+                break;
+            case Microsoft.UI.Xaml.Controls.Border { Child: not null } border:
+                NotSelectable(border.Child);
+                break;
+            case ContentControl { Content: DependencyObject inner }:
+                NotSelectable(inner);
+                break;
+            default:
+                break;
+        }
+    }
+
     private UIElement Finish(FrameworkElement shown, Models.Card card)
     {
         FrameworkElement result = shown;
+        if (card.Action is not null)
+        {
+            NotSelectable(shown);
+        }
+
         if (card.Action is not null)
         {
             Button button = new()
@@ -335,7 +382,9 @@ internal sealed partial class NodeRenderer
             AutomationProperties.SetName(button, card.Label ?? string.Empty);
             Models.Action action = card.Action;
             string? from = card.Id;
-            button.Click += (_, _) => Act(action, null, from);
+            string? cardForm = currentForm;
+            string? cardOverlay = currentOverlay;
+            button.Click += (_, _) => Act(action, null, from, cardForm, cardOverlay);
             result = button;
         }
 
@@ -422,7 +471,9 @@ internal sealed partial class NodeRenderer
         AutomationProperties.SetName(button, string.Concat(row.Runs.Select(run => run.Text)) + (row.Time is null ? string.Empty : ", " + row.Time));
         Models.Action action = row.Action;
         string? from = row.Id;
-        button.Click += (_, _) => Act(action, null, from);
+        string? feedForm = currentForm;
+        string? feedOverlay = currentOverlay;
+        button.Click += (_, _) => Act(action, null, from, feedForm, feedOverlay);
         return button;
     }
 
@@ -512,7 +563,9 @@ internal sealed partial class NodeRenderer
                 Models.Action? action = item.Action;
                 Models.Question? ask = item.Ask;
                 string? from = item.Id;
-                button.Click += (_, _) => Act(action, ask, from);
+                string? barForm = currentForm;
+                string? barOverlay = currentOverlay;
+                button.Click += (_, _) => Act(action, ask, from, barForm, barOverlay);
             }
 
             if (item.Prominence == Models.Prominence.Low)
