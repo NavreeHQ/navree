@@ -48,7 +48,7 @@ navree dev                                  # serve on http://127.0.0.1:8080, re
 cargo test                                  # every test; each gets its own SQLite database
 cargo clippy --all-targets -- -D warnings   # must pass
 cargo fmt                                   # must leave nothing to change
-navree check                                # validate the module graph without booting
+navree check                                # the module graph, then the conformity checks (boots the app once)
 navree routes                               # every route with its access rule
 navree migrate                              # run pending migrations
 navree list                                 # every command of the app

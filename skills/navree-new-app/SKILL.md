@@ -229,7 +229,7 @@ fn main() -> Result<(), BoxError> {
 
 ```sh
 cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test
-navree check                         # the module graph, without booting
+navree check                         # the module graph, then the conformity checks (boots once)
 ```
 
 For a kit, also:

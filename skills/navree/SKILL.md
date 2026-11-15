@@ -86,7 +86,7 @@ are not in the prelude. Name the error type when it is not `AppError`:
 navree dev                                  # serve on 127.0.0.1:8080 and rebuild on save
 cargo test                                  # each test gets its own SQLite database
 cargo clippy --all-targets -- -D warnings
-navree check                                # validate the module graph (no boot)
+navree check                                # the module graph, then the conformity checks (boots once)
 navree routes                               # every route with its access rule
 navree migrate                              # pending migrations
 navree list                                 # every command of the app

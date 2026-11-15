@@ -680,7 +680,7 @@ phone width) belongs to `navree-browser-testing`.
 cargo fmt
 cargo clippy --all-targets -- -D warnings
 cargo test
-navree check          # the module graph
+navree check          # the module graph, then the conformity checks
 navree routes         # every route with its access rule
 navree dev            # then open the page, at 1440 and at 390 pixels wide
 ```
