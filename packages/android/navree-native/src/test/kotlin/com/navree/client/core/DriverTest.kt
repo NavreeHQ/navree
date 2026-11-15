@@ -299,6 +299,12 @@ class ConfigTest {
     }
 
     @Test
+    fun the_most_a_file_may_have_is_the_apps_to_set_and_is_a_hundred_mebibytes_unless_it_does() {
+        assertEquals(100L * 1024 * 1024, NavreeConfig(origin = "https://store.example.in", name = "Store", seed = null).mostFileBytes)
+        assertEquals(5_000_000L, NavreeConfig(origin = "https://store.example.in", name = "Store", seed = null, mostFileBytes = 5_000_000).mostFileBytes)
+    }
+
+    @Test
     fun the_package_name_is_the_apps_id() {
         val config = coreConfig(NavreeConfig(origin = "https://store.example.in", name = "Store", seed = null), device, emptyList(), "in.example.store")
         assertEquals("in.example.store", config["app_id"]!!.jsonPrimitive.content)

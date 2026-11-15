@@ -104,6 +104,7 @@ private class PickFiles(private val plan: FileRules.Plan) : ActivityResultContra
 /** The client's words for a file that was not taken. */
 private fun words(context: Context, why: FileRules.Refusal): String = when (why) {
     is FileRules.Refusal.TooLarge -> context.getString(R.string.navree_file_too_large, why.name, Formatter.formatShortFileSize(context, why.most))
+    is FileRules.Refusal.TooLargeTogether -> context.getString(R.string.navree_file_too_large_together, why.name, Formatter.formatShortFileSize(context, why.most))
     is FileRules.Refusal.WrongType -> context.getString(R.string.navree_file_wrong_type, why.name, why.accepted)
     is FileRules.Refusal.Unreadable -> context.getString(R.string.navree_file_unreadable, why.name)
     is FileRules.Refusal.WithLocation -> context.getString(R.string.navree_file_with_location, why.name)
@@ -143,7 +144,11 @@ internal fun FileFieldView(field: Navree.Field, input: Navree.FileInput, place: 
             scope.launch {
                 busy = true
                 val results = try {
-                    uris.map { store.keep(context.contentResolver, it, input.accept, input.keepLocation) }
+                    // With several files the total obeys the limit too: each is checked against what the field holds and what came before it.
+                    var total = if (input.multiple) latestHeld.sumOf { it.size } else 0L
+                    uris.map { uri ->
+                        store.keep(context.contentResolver, uri, input.accept, input.keepLocation, total).also { if (it is PickedFiles.Result.Kept) total += it.file.size }
+                    }
                 } finally {
                     busy = false
                 }

@@ -76,6 +76,13 @@ class FileRulesTest {
     }
 
     @Test
+    fun the_files_of_one_field_obey_the_most_together() {
+        assertNull(FileRules.refusal(null, "b.pdf", "application/pdf", 60, most = 100, held = 40))
+        assertEquals(FileRules.Refusal.TooLargeTogether("b.pdf", 100), FileRules.refusal(null, "b.pdf", "application/pdf", 61, most = 100, held = 40))
+        assertEquals("a file that is too large alone is said so, whatever is held", FileRules.Refusal.TooLarge("b.pdf", 100), FileRules.refusal(null, "b.pdf", "application/pdf", 101, most = 100, held = 40))
+    }
+
+    @Test
     fun a_name_is_never_a_path_and_is_never_empty() {
         assertEquals("Receipt Ludhiana.pdf", FileRules.displayName("Receipt Ludhiana.pdf"))
         assertEquals("passwd", FileRules.displayName("../../etc/passwd"))

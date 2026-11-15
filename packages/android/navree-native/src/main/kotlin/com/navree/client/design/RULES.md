@@ -279,7 +279,10 @@ With nothing opened, the list has the window.
   against the end of the name, a family (every picture) against the start of
   the type, any other kind against the whole type. A file that does not fit is
   said so at the field, with what the field takes, and is not added. The
-  protocol gives a file field no largest size; the client's own is 100 MiB.
+  protocol gives a file field no largest size; the app's configuration does
+  (`NavreeConfig.mostFileBytes`, 100 MiB by default, a guard on the device's
+  storage and not the server's limit). It holds for one file and for all the
+  files of one field together; the words of the refusal say it.
 - Each file is copied at once, off the main thread and as a stream, into the
   app's cache folder (no backup takes it) under a token the client makes; the
   core holds the token, name, type and size. The form's request streams the copy
@@ -291,7 +294,8 @@ With nothing opened, the list has the window.
   out of the copy (JPEG, PNG, WebP); a picture of another kind that holds one is
   refused. The place in a video is not taken out.
 - While the form is on its way the field cannot be changed. A field that takes
-  one file replaces it; one that takes several adds.
+  one file replaces it (a second choice replaces the first); one that takes
+  several adds, with no limit on the count.
 
 ### Type, colour, space
 

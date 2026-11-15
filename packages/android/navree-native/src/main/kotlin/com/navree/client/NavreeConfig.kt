@@ -4,6 +4,7 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
+import com.navree.client.design.FileRules
 import com.navree.client.platform.PushProvider
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -81,6 +82,16 @@ data class NavreeConfig(
      * so a window drawn over it cannot make the person tap something unseen.
      */
     val filterObscuredTouches: Boolean = true,
+    /**
+     * The most bytes a file chosen for a file field may have, and that all the
+     * files of one field may have together (one field that takes several files
+     * is held to it as a whole). It guards the device's storage: each file
+     * chosen is copied into the app's cache to be sent from there. It is not the
+     * server's limit, which is the server's: the protocol's file field carries
+     * no largest size, so a server cannot tell the client its own. A file over it
+     * is refused at the field, in words that say the limit. 100 MiB by default.
+     */
+    val mostFileBytes: Long = FileRules.MOST_BYTES,
 ) {
     companion object {
         /**

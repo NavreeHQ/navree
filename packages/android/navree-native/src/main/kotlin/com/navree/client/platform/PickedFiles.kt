@@ -39,7 +39,7 @@ import java.util.concurrent.ConcurrentHashMap
  * left (the core's own state did not outlive it) is removed when a session starts.
  */
 class PickedFiles internal constructor(private val folder: File) {
-    /** The most bytes one file may have. A test lowers it. */
+    /** The most bytes one file may have, and all the files of one field together: `NavreeConfig.mostFileBytes`. */
     @Volatile
     internal var mostBytes: Long = FileRules.MOST_BYTES
 
@@ -55,27 +55,28 @@ class PickedFiles internal constructor(private val folder: File) {
 
     /**
      * Copies the document at [uri] and keeps it, or says why it was not taken:
-     * larger than the most (told from the provider's size at once, and again
-     * while it is copied, since a provider may not know its size), not a kind
+     * larger than the most, alone or with the [held] bytes the field's other
+     * files have (told from the provider's size at once, and again while it is
+     * copied, since a provider may not know its size), not a kind
      * the field takes ([accept]), or not readable. Unless [keepLocation], the
      * place a picture was taken is taken out of the copy first. Runs on a
      * background thread and stops when the caller's job is cancelled.
      */
-    suspend fun keep(resolver: ContentResolver, uri: Uri, accept: String?, keepLocation: Boolean): Result = withContext(Dispatchers.IO) {
+    suspend fun keep(resolver: ContentResolver, uri: Uri, accept: String?, keepLocation: Boolean, held: Long = 0): Result = withContext(Dispatchers.IO) {
         val (shownName, knownSize) = describe(resolver, uri)
         val name = FileRules.displayName(shownName ?: uri.lastPathSegment)
         val mime = mimeOf(resolver, uri, name)
-        FileRules.refusal(accept, name, mime, knownSize, mostBytes)?.let { return@withContext Result.Refused(it) }
+        FileRules.refusal(accept, name, mime, knownSize, mostBytes, held)?.let { return@withContext Result.Refused(it) }
         folder.mkdirs()
         sweep()
         val token = UUID.randomUUID().toString().replace("-", "")
         val copy = File(folder, token)
         try {
             val input = resolver.openInputStream(uri) ?: return@withContext Result.Refused(FileRules.Refusal.Unreadable(name))
-            val copied = input.use { source -> copy.outputStream().use { sink -> copyUpTo(source, sink, mostBytes) } }
+            val copied = input.use { source -> copy.outputStream().use { sink -> copyUpTo(source, sink, mostBytes - held) } }
             if (!copied) {
                 copy.delete()
-                return@withContext Result.Refused(FileRules.Refusal.TooLarge(name, mostBytes))
+                return@withContext Result.Refused(if (held > 0) FileRules.Refusal.TooLargeTogether(name, mostBytes) else FileRules.Refusal.TooLarge(name, mostBytes))
             }
             if (!keepLocation && FileRules.mayHoldLocation(mime) && !withoutLocation(copy, mime)) {
                 copy.delete()

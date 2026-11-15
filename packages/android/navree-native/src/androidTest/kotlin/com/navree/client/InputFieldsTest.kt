@@ -468,6 +468,26 @@ class InputFieldsTest {
         pick("Papers", "Choose files", document("Rasid Jalandhar.pdf", pdf, randomBytes(3_000, seed = 9)))
         waitFor("the good file to reach the core") { heldFiles("f-papers").size == 1 }
         compose.onNode(hasText("not a kind of file this field takes", substring = true)).assertDoesNotExist()
+        // A field that takes several holds them to the most together: the 3 000 bytes held and 8 000 more are over 10 000.
+        PickedFiles.of(context).mostBytes = 10_000
+        pick("Papers", "Add files", document("Bill Jalandhar.pdf", pdf, randomBytes(8_000, seed = 13)))
+        reveal(compose.onNode(hasText("would take the files of this field over", substring = true))).assertExists()
+        assertEquals("the file that would be over together is not added", 1, heldFiles("f-papers").size)
+        pick("Papers", "Add files", document("Bill Moga.pdf", pdf, randomBytes(6_000, seed = 14)))
+        waitFor("the file that fits to be added") { heldFiles("f-papers").size == 2 }
+    }
+
+    /** A field that takes one file: a second choice replaces the first, and the first one's copy goes. */
+    @Test
+    fun aFieldThatTakesOneFileHoldsTheLastChosen() {
+        startOnTheClaimsForm()
+        pick("Photo", "Choose a file", document("Gurpreet.png", "image/png", randomBytes(2_000, seed = 21)))
+        waitFor("the first photo to reach the core") { heldFiles("f-photo").size == 1 }
+        val first = heldFiles("f-photo").single()
+        compose.onNode(hasContentDescription("Replace file, Photo")).assertExists()
+        pick("Photo", "Replace file", document("Harpreet.png", "image/png", randomBytes(3_000, seed = 22)))
+        waitFor("the second photo to replace the first") { heldFiles("f-photo").singleOrNull()?.name == "Harpreet.png" }
+        waitFor("the first photo's copy to go") { PickedFiles.of(context).file(first.token) == null }
     }
 
     /** Sending the form delivers each file's bytes to the server exactly, under the field's name, with its name and type. */

@@ -10,10 +10,11 @@ package com.navree.client.design
  */
 object FileRules {
     /**
-     * The most bytes one file may have: 100 MiB. The protocol gives a file
-     * field no largest size, so this is the client's own limit: a file is
-     * copied into the app's cache to be sent from there, and a phone's
-     * photographs and short videos fit well inside it.
+     * The default for the most bytes one file may have, and the most all the
+     * files of one field may have together: 100 MiB. The protocol gives a file
+     * field no largest size; an app sets its own with
+     * `NavreeConfig.mostFileBytes`. It guards the device's storage, since each
+     * file chosen is copied into the app's cache to be sent from there.
      */
     const val MOST_BYTES: Long = 100L * 1024 * 1024
 
@@ -54,6 +55,9 @@ object FileRules {
 
         /** The file has more bytes than the most. */
         data class TooLarge(override val name: String, val most: Long) : Refusal
+
+        /** The file alone fits, but with the files the field already holds it would have more bytes than the most. */
+        data class TooLargeTogether(override val name: String, val most: Long) : Refusal
 
         /** The file is not one of the kinds the field takes; [accepted] is the field's own list. */
         data class WrongType(override val name: String, val accepted: String) : Refusal
@@ -138,9 +142,14 @@ object FileRules {
         }
     }
 
-    /** Why a file with this name, media type and size (when it is known) is not taken, or null when it is. */
-    fun refusal(accept: String?, name: String, mime: String?, size: Long?, most: Long = MOST_BYTES): Refusal? = when {
+    /**
+     * Why a file with this name, media type and size (when it is known) is not
+     * taken, or null when it is. [held] is how many bytes the other files of the
+     * field have already: with several files the total obeys [most] as well.
+     */
+    fun refusal(accept: String?, name: String, mime: String?, size: Long?, most: Long = MOST_BYTES, held: Long = 0): Refusal? = when {
         size != null && size > most -> Refusal.TooLarge(name, most)
+        size != null && held + size > most -> Refusal.TooLargeTogether(name, most)
         !accepts(accept, name, mime) -> Refusal.WrongType(name, kinds(accept).joinToString(", "))
         else -> null
     }
