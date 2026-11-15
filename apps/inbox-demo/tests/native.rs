@@ -138,3 +138,120 @@ async fn an_open_conversation_is_panes_with_the_one_a_narrow_screen_shows_and_it
     // The customer wrote some of them.
     assert!(messages.iter().any(|message| !message.mine));
 }
+
+/// The inbox with the hand-written conversations only, which is all these tests read.
+async fn boot_desk() -> (TestApp, TempDirGuard) {
+    let (url, dir) = temp_sqlite_url();
+    let settings = Settings {
+        simulate_every: None,
+        tick_every: None,
+        test_hooks: false,
+        scale: 0,
+    };
+    (TestApp::from_builder(app(0, url, settings)).await, dir)
+}
+
+/// The header that names the person a native answer is for.
+const PERSON: &str = "x-navree-person";
+
+/// The person a native client is told the answer for `path` is for, when it carries `cookie`.
+async fn person_of(app: &TestApp, path: &str, cookie: Option<&str>) -> Option<String> {
+    let client = app.client();
+    if let Some(value) = cookie {
+        client.set_cookie("inbox_agent", value);
+    }
+    client
+        .get(path)
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .send()
+        .await
+        .header(PERSON)
+        .map(str::to_owned)
+}
+
+#[tokio::test]
+async fn the_shell_names_the_default_agent_every_time() {
+    let (app, _dir) = boot_desk().await;
+    let first = person_of(&app, "/_navree/native/shell", None).await;
+    let second = person_of(&app, "/_navree/native/shell", None).await;
+    assert_eq!(
+        first,
+        Some(inbox_demo::person::person_of(inbox_demo::data::DEFAULT_AGENT).to_string())
+    );
+    assert_eq!(first, second);
+}
+
+#[tokio::test]
+async fn every_native_page_names_the_same_person_as_the_shell() {
+    let (app, _dir) = boot_desk().await;
+    let shell = person_of(&app, "/_navree/native/shell", None).await;
+    assert!(shell.is_some());
+    for path in ["/inbox", "/inbox/1", "/inbox/rows", "/inbox/1/messages"] {
+        assert_eq!(person_of(&app, path, None).await, shell, "{path}");
+    }
+}
+
+#[tokio::test]
+async fn an_agent_the_visitor_switched_to_is_another_person() {
+    let (app, _dir) = boot_desk().await;
+    let signer = app.get::<navree::http::UrlSigner>().await;
+    let cookie = inbox_demo::pages::agent_cookie(&signer, 2, chrono::Utc::now());
+    let other = person_of(&app, "/_navree/native/shell", Some(&cookie)).await;
+    assert_eq!(other, Some(inbox_demo::person::person_of(2).to_string()));
+    assert_ne!(other, person_of(&app, "/_navree/native/shell", None).await);
+    // A cookie the app did not sign names nobody: the default agent.
+    let forged = person_of(&app, "/_navree/native/shell", Some("2.4102444800.00ff")).await;
+    assert_eq!(
+        forged,
+        Some(inbox_demo::person::person_of(inbox_demo::data::DEFAULT_AGENT).to_string())
+    );
+}
+
+#[tokio::test]
+async fn a_browser_gets_the_page_with_no_person_named() {
+    let (app, _dir) = boot_desk().await;
+    let page = app.client().get("/inbox").send().await;
+    assert_eq!(page.status().as_u16(), 200);
+    assert!(
+        page.header("content-type")
+            .is_some_and(|kind| kind.starts_with("text/html")),
+        "{:?}",
+        page.header("content-type")
+    );
+    assert_eq!(page.header(PERSON), None);
+    assert!(page.header("set-cookie").is_none());
+}
+
+#[tokio::test]
+async fn the_visitors_may_hold_more_live_streams_than_one_person_is_given_by_default() {
+    let (app, _dir) = boot_desk().await;
+    // Everyone working as one agent is one person: sixteen open tabs, the framework's
+    // default for a person, are not all of the desk's visitors.
+    let mut open = Vec::new();
+    for count in 1..=20 {
+        let stream = app
+            .client()
+            .get("/broadcasting/stream?topics=conversations")
+            .header("accept", "text/event-stream")
+            .send_stream()
+            .await;
+        assert_eq!(stream.status().as_u16(), 200, "stream {count}");
+        open.push(stream);
+    }
+}
+
+#[tokio::test]
+async fn a_browser_asking_for_an_address_that_does_not_exist_gets_the_404_in_the_app_shell() {
+    let (app, _dir) = boot_desk().await;
+    let page = app
+        .client()
+        .get("/no-such-page")
+        .header("accept", "text/html")
+        .send()
+        .await;
+    assert_eq!(page.status().as_u16(), 404);
+    let html = page.text();
+    // The account the shell shows is there, as on every other page.
+    assert!(html.contains("@support.example.com"), "{html:.600}");
+}

@@ -41,13 +41,15 @@
 //! **There is no sign-in.** A visitor works as one of the team, named by a cookie the
 //! server signs, and can switch to another from the account menu. A real app puts the
 //! inbox behind navree-auth and checks on every route that the person may see the
-//! conversation it names.
+//! conversation it names. To the framework each agent is a person, named in [`person`]
+//! on every request, so a native client keeps its place for the agent it works as.
 #![forbid(unsafe_code)]
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use navree::db::{DatabaseModule, Db};
+use navree::http::{Authenticator, UrlSigner};
 use navree::kernel::Lifecycle;
 use navree::prelude::*;
 use navree::realtime::Live;
@@ -57,6 +59,7 @@ use navree::{BoxFuture, ProviderKey};
 pub mod data;
 pub mod live;
 pub mod pages;
+pub mod person;
 pub mod queries;
 pub mod scale;
 pub mod views;
@@ -190,6 +193,16 @@ impl Module for InboxModule {
             })
             .deps(vec![ProviderKey::of::<Live>()]),
         );
+        // Every request is the agent's it works as, so the framework has a person to keep a
+        // native client's place for.
+        m.factory(
+            Factory::<dyn Authenticator>::new(|r: Resolver| async move {
+                let signer = r.get::<UrlSigner>().await?;
+                Ok(Arc::new(person::Agents::new(signer)) as Arc<dyn Authenticator>)
+            })
+            .deps(vec![ProviderKey::of::<UrlSigner>()]),
+        )
+        .exports::<dyn Authenticator>();
         // The shell of a page of an error, for the agent the visitor works as.
         m.contribute(ErrorShell::new(pages::error_shell));
         m.value(self.settings.clone());
@@ -205,6 +218,13 @@ pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
     let mut config = vec![
         ("APP_HTTP__ADDR".to_owned(), format!("127.0.0.1:{port}")),
         ("APP_DATABASE__URL".to_owned(), database_url),
+        // The framework limits one person's live streams (16 by default, one per open
+        // tab), and the visitors working as one agent are one person: their tabs would
+        // share those.
+        (
+            "APP_REALTIME__STREAMS__PER_USER".to_owned(),
+            "10000".to_owned(),
+        ),
     ];
     if settings.test_hooks {
         config.push((
