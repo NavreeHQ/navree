@@ -156,10 +156,12 @@ public sealed partial class DataTable
         try
         {
             peer.RaisePropertyChangedEvent(GridPatternIdentifiers.RowCountProperty, before, rowCount);
+            Note($"[assistive] the grid's row count was told: {before} to {rowCount}");
         }
-        catch (System.Runtime.InteropServices.COMException)
+        catch (System.Runtime.InteropServices.COMException problem)
         {
             // A client went away between asking whether it listens and being told.
+            Note($"[assistive] the grid's row count could not be told: {problem.Message}");
         }
     }
 
