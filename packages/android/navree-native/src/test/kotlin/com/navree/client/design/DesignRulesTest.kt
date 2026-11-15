@@ -461,6 +461,25 @@ class FormRulesTest {
     }
 }
 
+class NavigationLabelTest {
+    @Test
+    fun five_labels_on_a_phone_keep_to_the_size_their_longest_word_fits() {
+        val labels = listOf("All open", "Assigned to me", "Unassigned", "Snoozed", "Closed")
+        val scale = NavigationRules.labelScale(2.0f, 412, labels)
+        assertTrue("no word of five labels fits at twice the size: $scale", scale < 1.3f && scale >= 1f)
+    }
+
+    @Test
+    fun three_short_labels_follow_the_setting_all_the_way() {
+        assertEquals(2.0f, NavigationRules.labelScale(2.0f, 412, listOf("Dashboard", "Orders", "Inventory")), 0.001f)
+    }
+
+    @Test
+    fun text_smaller_than_the_default_is_kept() {
+        assertEquals(0.85f, NavigationRules.labelScale(0.85f, 412, listOf("A", "B")), 0.001f)
+    }
+}
+
 class TaskActionsTest {
     private fun action(label: String, role: Navree.Role) = Navree.Button(action = Navree.Action.Navigate("/x"), label = label, role = role)
 

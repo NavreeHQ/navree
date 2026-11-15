@@ -54,6 +54,25 @@ object NavigationRules {
     const val BAR_MOST = 5
     const val RAIL_MOST = 7
 
+    /** The width of an average glyph of a navigation label (12 sp at the default text size), in dp. */
+    private const val LABEL_GLYPH_DP = 6.5f
+
+    /** What an item of the bar keeps free at its sides, in dp. */
+    private const val ITEM_SIDES_DP = 8f
+
+    /**
+     * The text size a bar's labels grow to. They follow the person's setting as
+     * far as the longest word of any label still fits in its item's share of the
+     * width, so no word is broken in the middle; never below the default size.
+     */
+    fun labelScale(fontScale: Float, widthDp: Int, labels: List<String>): Float {
+        val longest = labels.maxOfOrNull { label -> label.split(' ').maxOfOrNull { it.length } ?: 0 } ?: 0
+        if (longest == 0) return fontScale
+        val room = widthDp / labels.size - ITEM_SIDES_DP
+        val fits = room / (longest * LABEL_GLYPH_DP)
+        return minOf(fontScale, maxOf(1f, fits))
+    }
+
     /** `groups` is how many destinations each group of the shell holds. */
     fun plan(window: WindowInfo, groups: List<Int>): NavigationPlan {
         val total = groups.sum()

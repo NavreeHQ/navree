@@ -325,6 +325,14 @@ private fun NavIcon(destination: Destination, selected: Boolean) {
     }
 }
 
+/** The content drawn with the text size held at most to `scale` times the default; the person's setting is the one it is held to. */
+@Composable
+private fun WithTextScale(scale: Float, content: @Composable () -> Unit) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val held = androidx.compose.ui.unit.Density(density.density, minOf(density.fontScale, scale))
+    CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides held, content = content)
+}
+
 @Composable
 private fun NavLabel(text: String, plan: NavigationPlan) {
     // A label is never cut: at the largest text it takes a second line.
@@ -336,14 +344,16 @@ private fun BottomBar(destinations: List<Destination>, plan: NavigationPlan, sel
     val window = LocalUi.current.window
     // In a wider window the bar's items sit side by side with their icons, in the middle.
     val beside = window.width >= WidthClass.Medium
+    // Equal items share the width: the labels grow with the text setting only as far as their longest word fits.
+    val scale = if (beside) window.fontScale else NavigationRules.labelScale(window.fontScale, window.widthDp, plan.shown.mapNotNull { destinations.getOrNull(it)?.label })
     ShortNavigationBar(arrangement = if (beside) ShortNavigationBarArrangement.Centered else ShortNavigationBarArrangement.EqualWeight) {
         for (index in plan.shown) {
             val destination = destinations.getOrNull(index) ?: continue
             ShortNavigationBarItem(
                 selected = index == selected,
                 onClick = { choose(index) },
-                icon = { NavIcon(destination, index == selected) },
-                label = { NavLabel(destination.label, plan) },
+                icon = { WithTextScale(scale) { NavIcon(destination, index == selected) } },
+                label = { WithTextScale(scale) { NavLabel(destination.label, plan) } },
                 iconPosition = if (beside) NavigationItemIconPosition.Start else NavigationItemIconPosition.Top,
             )
         }
