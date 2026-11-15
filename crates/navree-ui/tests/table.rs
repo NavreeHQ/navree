@@ -1543,7 +1543,10 @@ fn the_toolbar_draws_the_columns_picker_and_the_density_switch_unless_one_is_lef
     assert!(html.contains(r#"name="cols" value="stage""#), "{html}");
     assert!(html.contains("Hide column"), "{html}");
     assert!(html.contains("data-ui-col-drag"), "{html}");
-    assert!(html.contains("Compact") && html.contains("Spacious"), "{html}");
+    assert!(
+        html.contains("Compact") && html.contains("Spacious"),
+        "{html}"
+    );
 }
 
 #[test]
@@ -1556,7 +1559,9 @@ fn a_table_without_the_columns_picker_draws_its_columns_whatever_cols_says() {
     // The columns it starts with: the hidden one stays hidden.
     assert_eq!(
         heads(&html),
-        ["title", "stage", "amount", "closed", "hot", "notes", "owner"],
+        [
+            "title", "stage", "amount", "closed", "hot", "notes", "owner"
+        ],
         "{html}"
     );
     for gone in [
@@ -1581,7 +1586,9 @@ fn a_table_without_the_columns_picker_draws_its_columns_whatever_cols_says() {
 #[test]
 fn a_column_taken_away_stays_away_from_a_table_without_the_picker() {
     let query = q("cols=title,amount,company").without_columns(["amount", "company"]);
-    let html = drawn_with(&query, &[deal(1)], 1, |table| table.without_columns_picker());
+    let html = drawn_with(&query, &[deal(1)], 1, |table| {
+        table.without_columns_picker()
+    });
     assert_eq!(
         heads(&html),
         ["title", "stage", "closed", "hot", "notes", "owner"],
@@ -1599,7 +1606,10 @@ fn a_table_without_the_density_switch_keeps_the_default_density_whatever_density
     );
     let html = drawn_with(&query, &rows, 1, |table| table.without_density_switch());
     assert!(!html.contains("ensity"), "{html}");
-    assert!(!html.contains("Compact") && !html.contains("Spacious"), "{html}");
+    assert!(
+        !html.contains("Compact") && !html.contains("Spacious"),
+        "{html}"
+    );
     // The columns picker is as it was, and its parameter still rides in the links.
     assert!(html.contains("deals-columns"), "{html}");
     assert_eq!(heads(&html), ["title", "owner"], "{html}");
@@ -1712,13 +1722,19 @@ fn the_retry_and_clear_links_of_such_a_table_name_neither() {
     // No row matches: the clear link.
     let html = drawn_with(&query, &[], 0, bare);
     assert!(html.contains("No results match"), "{html}");
-    assert!(!html.contains("cols=") && !html.contains("ensity"), "{html}");
+    assert!(
+        !html.contains("cols=") && !html.contains("ensity"),
+        "{html}"
+    );
     // The rows did not load: the retry links.
     let page = TablePage::new(vec![deal(1)], 1);
     let failed = DataTable::new("deals", &query, &page).failed("Could not load");
     let html = render(&bare(failed).into());
     assert!(html.contains("Could not load"), "{html}");
-    assert!(!html.contains("cols=") && !html.contains("ensity"), "{html}");
+    assert!(
+        !html.contains("cols=") && !html.contains("ensity"),
+        "{html}"
+    );
 }
 
 #[test]
