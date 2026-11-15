@@ -248,7 +248,12 @@ fn mail_config_of_today_reads_as_before() {
     assert_eq!(TransportConfig::Log.to_json(), json!({"type": "log"}));
 
     // A bare name no module registers keeps today's text, and so does a
-    // bare built-in type that is not a short form.
+    // bare built-in type that is not a short form, even registered as a
+    // mail transport (which the boot refuses): registered here, so the rule
+    // is tested whatever ran before.
+    for name in ["smtp", "ses", "failover"] {
+        register_in("mail.transport", name).unwrap();
+    }
     for bare in ["kabutar_dak", "smtp", "ses", "failover"] {
         let error = read(json!(bare)).unwrap_err().to_string();
         assert!(

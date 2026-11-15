@@ -167,14 +167,41 @@ mod tests {
 
     #[test]
     fn driver_errors_name_the_key() {
-        let error = super::ConfigError::Driver {
-            key: "cache.store".into(),
-            message: "cache store `two_tier` is registered by both `A` and `B`; register it once"
-                .into(),
-        };
-        assert_eq!(
-            error.to_string(),
-            "cache.store: cache store `two_tier` is registered by both `A` and `B`; register it once"
+        use crate::check::{CheckOptions, CheckReport};
+        use crate::{ConfigSources, DriverSlot};
+
+        // What `config:check` holds for a setting that names no driver
+        // carries the setting's key, in its `Display` too: the selector's
+        // own, and a table's for a selector of a table of tables.
+        let kind = DriverSlot::new("vault.kind", &["memory"], "m.vault_kind", "vault kind");
+        let boxes = DriverSlot::new(
+            "vault.boxes.*.driver",
+            &["memory"],
+            "m.vault_box",
+            "vault box",
         );
+        let sources = ConfigSources::new().set(
+            "vault",
+            serde_json::json!({"kind": "tijori", "boxes": {"almari": {"driver": "tijori"}}}),
+        );
+        let report = CheckReport::run(&sources, &[], &CheckOptions::default())
+            .unwrap()
+            .with_drivers(&sources, &[kind, boxes], &[]);
+        let errors: Vec<(String, String)> = report
+            .errors
+            .iter()
+            .filter_map(|error| match error {
+                super::ConfigError::Driver { key, .. } => Some((key.clone(), error.to_string())),
+                _ => None,
+            })
+            .collect();
+        let keys: Vec<&str> = errors.iter().map(|(key, _)| key.as_str()).collect();
+        assert_eq!(keys, ["vault.kind", "vault.boxes.almari.driver"]);
+        for (key, text) in &errors {
+            assert!(
+                text.starts_with(&format!("{key}: {key} does not name a built-in vault ")),
+                "{text}"
+            );
+        }
     }
 }
