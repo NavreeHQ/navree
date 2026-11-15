@@ -124,7 +124,10 @@ class ScreensTest {
 
     /** Runs one step of a walk; a step that finds nothing to touch is said in the log and the walk goes on. */
     private fun step(what: String, block: () -> Unit) {
-        runCatching(block).onFailure { android.util.Log.w("NavreeShots", "$what: $it") }
+        runCatching(block).onFailure {
+            if (it is Shots.WindowDirectionError) throw it
+            android.util.Log.w("NavreeShots", "$what: $it")
+        }
     }
 
     /**
@@ -149,6 +152,7 @@ class ScreensTest {
             Thread.sleep(700)
             compose.waitForIdle()
             Shots.take("menu-account")
+            Shots.requireWindowsFollowTheScreen("the account's menu")
             Shots.shell("input keyevent 4")
             Thread.sleep(500)
             compose.waitForIdle()
@@ -160,6 +164,7 @@ class ScreensTest {
             Thread.sleep(700)
             compose.waitForIdle()
             Shots.take("menu-sort")
+            Shots.requireWindowsFollowTheScreen("a sort's menu")
             Shots.shell("input keyevent 4")
             Thread.sleep(500)
             compose.waitForIdle()
@@ -171,6 +176,7 @@ class ScreensTest {
             Thread.sleep(700)
             compose.waitForIdle()
             Shots.take("question-cancel-order")
+            Shots.requireWindowsFollowTheScreen("the question")
         }
     }
 }

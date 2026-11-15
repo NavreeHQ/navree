@@ -161,6 +161,10 @@ open class NavreeActivity : ComponentActivity() {
         // The app draws behind the system bars; each screen pads itself by the insets.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // A window of its own (a dialog, a menu, a picker) lays itself out right to left only for an app that says it supports it.
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_SUPPORTS_RTL == 0) {
+            android.util.Log.w("Navree", "the app does not declare android:supportsRtl=\"true\": its dialogs and menus stay left to right in a right to left language")
+        }
         val config = config()
         guard(config)
         val origin = config.origin.toHttpUrlOrNull()?.takeIf { Origins(config.origin, loopbackHttp = config.loopbackHttp).usable }

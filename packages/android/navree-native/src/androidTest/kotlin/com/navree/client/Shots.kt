@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.platform.app.InstrumentationRegistry
@@ -130,6 +131,29 @@ object Shots {
     /** The tree of the screen in front, as the server sent it, written beside each picture. */
     var tree: (() -> String?)? = null
 
+    /** A window opened over the screen laid itself out by another direction than the screen's. */
+    class WindowDirectionError(message: String) : AssertionError(message)
+
+    /**
+     * The layout direction each window the test can see has, as the system
+     * resolved it: the screen's own, and every dialog's, menu's and sheet's.
+     */
+    fun windows(): List<Int> {
+        val provider = rule ?: return emptyList()
+        return provider.onAllNodes(isRoot()).fetchSemanticsNodes().map { node -> (node.root as? android.view.View)?.layoutDirection ?: -1 }
+    }
+
+    /** What the look wants every window to have: right to left for the right to left look, left to right for the others. */
+    val wantedDirection: Int get() = if (look == "rtl") android.view.View.LAYOUT_DIRECTION_RTL else android.view.View.LAYOUT_DIRECTION_LTR
+
+    /** Fails when a window open now has another direction than the look's: everything opened over a screen has the screen's direction. */
+    fun requireWindowsFollowTheScreen(what: String) {
+        val found = windows()
+        if (found.isEmpty() || found.any { it != wantedDirection }) {
+            throw WindowDirectionError("$what: the windows have the directions $found, the look wants $wantedDirection")
+        }
+    }
+
     fun take(name: String) {
         demoStatusBar()
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
@@ -140,6 +164,11 @@ object Shots {
             if (look == "light") tree?.invoke()?.let { put("$device-$look-$name.tree.json", it) }
         } catch (_: Throwable) {
             // As above: an extra.
+        }
+        try {
+            put("$device-$look-$name.windows.txt", "directions of the windows: ${windows()}; the look wants $wantedDirection\n")
+        } catch (_: Throwable) {
+            // An extra, as above.
         }
         rule?.let { provider ->
             try {

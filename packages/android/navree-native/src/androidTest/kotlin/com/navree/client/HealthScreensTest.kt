@@ -235,6 +235,7 @@ class HealthScreensTest {
         Thread.sleep(800)
         compose.waitForIdle()
         Shots.take("health-today-picker")
+        Shots.requireWindowsFollowTheScreen("the day picker")
         Shots.shell("input keyevent 4")
         Thread.sleep(600)
         compose.waitForIdle()
