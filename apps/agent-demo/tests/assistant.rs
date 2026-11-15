@@ -179,6 +179,13 @@ async fn upi_this_week_is_a_donut_of_the_readers_own_payments() {
         .into_iter()
         .filter(|order| order.placed_at >= since)
         .collect();
+    if orders.is_empty() {
+        // The shop's newest order is two hours old, so for the first two hours of a
+        // week (it starts on Monday in IST) no order is in it yet: the donut says
+        // there is nothing to show.
+        assert!(html.contains(r#"data-state="empty""#), "{html}");
+        return;
+    }
     assert!(html.contains(&format!("{} orders", orders.len())), "{html}");
     let total: i64 = orders.iter().map(Order::left).sum();
     assert!(html.contains(&rupees(total)), "{} in {html}", rupees(total));
