@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
 
-use navree_config::__private::selector_error;
+use navree_config::__private::{read_settings, selector_error};
 use navree_config::{ConfigSection, DriverName, DriverNameError, DriverSlot};
 use navree_contracts::Secret;
 use serde::de::{self, DeserializeOwned};
@@ -272,14 +272,16 @@ impl RegisteredDisk {
         Json::Object(self.settings.clone())
     }
 
-    /// The disk's table without `driver`, typed. An error names the driver
-    /// and never a value of the table.
+    /// The disk's table without `driver`, typed, read as its driver's
+    /// `DriverContext::settings` reads it: values convert as configuration
+    /// values do (`"2222"` from the environment fills a `u16`, `"true"` a
+    /// `bool`). An error names the driver and the setting, never a value of
+    /// the table.
     pub fn settings<T: DeserializeOwned>(&self) -> Result<T, StorageError> {
-        serde_json::from_value(Json::Object(self.settings.clone())).map_err(|error| {
+        read_settings(&self.table()).map_err(|message| {
             StorageError::InvalidOptions(format!(
-                "the settings of a `{}` disk do not read: {}",
-                self.driver,
-                redact_values(&error.to_string())
+                "the settings of a `{}` disk do not read: {message}",
+                self.driver
             ))
         })
     }
@@ -295,40 +297,6 @@ impl fmt::Debug for RegisteredDisk {
             .field("keys", &keys)
             .finish()
     }
-}
-
-/// Masks the strings a `Deserialize` implementation quotes in its errors
-/// (`invalid type: string "…"`), keeping keys and expected types.
-fn redact_values(message: &str) -> String {
-    const MARKER: &str = "string \"";
-    let mut out = String::with_capacity(message.len());
-    let mut rest = message;
-    while let Some(start) = rest.find(MARKER) {
-        out.push_str(&rest[..start]);
-        out.push_str("string [redacted]");
-        let quoted = &rest[start + MARKER.len()..];
-        rest = match closing_quote(quoted) {
-            Some(end) => &quoted[end + 1..],
-            None => "",
-        };
-    }
-    out.push_str(rest);
-    out
-}
-
-/// The byte index of the closing `"` in `text`; `\"` does not close it.
-fn closing_quote(text: &str) -> Option<usize> {
-    let mut escaped = false;
-    for (i, c) in text.char_indices() {
-        if escaped {
-            escaped = false;
-        } else if c == '\\' {
-            escaped = true;
-        } else if c == '"' {
-            return Some(i);
-        }
-    }
-    None
 }
 
 impl From<S3Config> for DiskConfig {
@@ -668,7 +636,7 @@ fn is_http_url(url: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use navree_config::FieldType;
+    use navree_config::{Config, ConfigSources, FieldType};
     use serde::Deserialize;
 
     use super::*;
@@ -797,6 +765,73 @@ mod tests {
             "the driver must be `local`, `memory`, `s3`, `gcs`, `azure` or the name of a disk driver registered with m.disk_driver (a lower-case letter, then lower-case letters, digits or _)"
         );
         assert!(single_disk_options(disk).validate().is_ok());
+    }
+
+    #[test]
+    fn registered_disk_settings_read_as_the_configuration_reads_them() {
+        // Every value of the disk comes from the environment, as a string.
+        let sources = ConfigSources::new().env_vars(
+            "APP_",
+            [
+                ("APP_STORAGE__DEFAULT", "invoices"),
+                ("APP_STORAGE__DISKS__INVOICES__DRIVER", "sanduk"),
+                ("APP_STORAGE__DISKS__INVOICES__PORT", "2222"),
+                ("APP_STORAGE__DISKS__INVOICES__PASSIVE", "true"),
+            ],
+        );
+        let options: StorageOptions = Config::load(&sources).unwrap().typed().unwrap();
+        let DiskConfig::Registered(disk) = &options.disks["invoices"] else {
+            panic!("a disk of a registered driver: {options:?}");
+        };
+        #[derive(Debug, PartialEq, Deserialize)]
+        struct Sftp {
+            port: u16,
+            passive: bool,
+        }
+        assert_eq!(
+            disk.settings::<Sftp>().unwrap(),
+            Sftp {
+                port: 2222,
+                passive: true
+            }
+        );
+
+        // An error names the setting and holds no value: neither a string
+        // nor a number.
+        let disk: DiskConfig = serde_json::from_value(serde_json::json!({
+            "driver": "sanduk",
+            "pin": 4321,
+            "port": "22x",
+        }))
+        .unwrap();
+        let DiskConfig::Registered(disk) = &disk else {
+            panic!("a disk of a registered driver: {disk:?}");
+        };
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        struct Pins {
+            pin: Vec<String>,
+        }
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        struct Port {
+            port: u16,
+        }
+        let error = disk.settings::<Pins>().unwrap_err().to_string();
+        assert!(
+            error.starts_with(
+                "invalid storage options: the settings of a `sanduk` disk do not read: invalid type: integer "
+            ),
+            "{error}"
+        );
+        assert!(error.contains("for key `pin`"), "{error}");
+        assert!(!error.contains("4321"), "{error}");
+        let error = disk.settings::<Port>().unwrap_err().to_string();
+        assert!(
+            error.contains("invalid type: string [redacted], expected an integer for key `port`"),
+            "{error}"
+        );
+        assert!(!error.contains("22x"), "{error}");
     }
 
     /// Options with the single disk `uploads`.
