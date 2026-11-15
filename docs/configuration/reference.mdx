@@ -1353,7 +1353,7 @@ More: [/docs/digging-deeper/storage/](/docs/digging-deeper/storage/).
 | Key | Type | Default | Environment variable | Description |
 |---|---|---|---|---|
 | `default` | string | `"local"` | `APP_STORAGE__DEFAULT` | The name of the default disk (default `local`). |
-| `disks` | table of DiskConfig | `"{\"local\": Local { root: \"storage/app\", public_url: None }}"` | `APP_STORAGE__DISKS` | The disks, by name (`[A-Za-z0-9_-]`). Each has a `driver`: `local`, `memory`, `s3`, `gcs` or `azure`. |
+| `disks` | table of DiskConfig | `"{\"local\": Local { root: \"storage/app\", public_url: None }}"` | `APP_STORAGE__DISKS` | The disks, by name (`[A-Za-z0-9_-]`). Each has a `driver`: `local`, `memory`, `s3`, `gcs`, `azure` or the name of a driver a module registers with `m.disk_driver`. |
 | `base_url` | string |  | `APP_STORAGE__BASE_URL` | An absolute base URL (`https://api.example.com`) prepended to the links the app serves itself (temporary URLs and presigned uploads of local and memory disks); without one they are path-only (`/storage/<disk>/<path>?expires=...&signature=...`). |
 
 ## `time`
