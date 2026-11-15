@@ -796,6 +796,18 @@ class TooltipRulesTest {
     }
 }
 
+class GridOfStacksTest {
+    private val stacks = listOf<Navree.Node>(Navree.Stack(), Navree.Stack())
+
+    @Test
+    fun the_stacks_of_a_grid_are_one_column_in_a_narrow_window_and_stay_columns_in_a_wide_one() {
+        assertTrue(ListRules.stacksAreOneColumn(stacks, null, 412))
+        assertFalse(ListRules.stacksAreOneColumn(stacks, null, 900))
+        assertFalse("a grid that says its own least width", ListRules.stacksAreOneColumn(stacks, 160, 412))
+        assertFalse("cards stay as many across as fit", ListRules.stacksAreOneColumn(listOf(Navree.Card(), Navree.Card()), null, 412))
+    }
+}
+
 class LanesTest {
     private val lanes = listOf<Navree.Node>(Navree.Section(title = "Backlog"), Navree.Section(title = "Ready"), Navree.Section(title = "Done"))
 

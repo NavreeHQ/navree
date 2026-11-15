@@ -559,6 +559,13 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
         shown.size,
         controls = shown.any { it is Navree.Field },
     )
+    if (ListRules.stacksAreOneColumn(shown, node.min, widthDp.toInt())) {
+        // The columns of a page's own layout stand one under another in a narrow window.
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(gap.dp)) {
+            for (child in shown) CompositionLocalProvider(LocalInLine provides false) { Roomed(widthDp) { NodeView(child, place) } }
+        }
+        return
+    }
     if (ListRules.oneLaneAtATime(shown, columns)) {
         OneLane(node.id, shown.filterIsInstance<Navree.Section>(), place, modifier)
         return

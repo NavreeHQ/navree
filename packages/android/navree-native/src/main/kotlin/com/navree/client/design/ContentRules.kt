@@ -46,6 +46,15 @@ object ListRules {
     fun gridLeast(least: Int?, parts: List<Navree.Node>): Int? =
         least ?: if (parts.size > 1 && parts.all { it is Navree.Section }) LANE_LEAST_DP else null
 
+    /**
+     * Whether a grid whose parts are stacks (a main column and an aside, say)
+     * is one column where the window is narrow: such parts are columns of words
+     * and fields, which two or three across squeeze to a few letters a line.
+     * A grid with a least width of its own keeps what it says.
+     */
+    fun stacksAreOneColumn(parts: List<Navree.Node>, least: Int?, widthDp: Int): Boolean =
+        least == null && parts.size > 1 && parts.all { it is Navree.Stack } && widthDp < TABLE_FROM_DP
+
     /** Whether a grid's parts are lanes: several sections side by side, each a group of its own. */
     fun areLanes(parts: List<Navree.Node>): Boolean = parts.size > 1 && parts.all { it is Navree.Section }
 
