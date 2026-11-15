@@ -96,7 +96,7 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (dev tool)
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel  navree-bounded  navree-pdf  navree-glob  navree-markdown  navree-openapi    navree-macros  navree-orm-macros  navree-i18n-macros  navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
+L0  navree-kernel  navree-bounded  navree-pdf  navree-glob  navree-markdown  navree-openapi    navree-macros  navree-orm-macros  navree-i18n-macros  navree-ui-ext-macros  navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
@@ -112,6 +112,7 @@ L0  navree-kernel  navree-bounded  navree-pdf  navree-glob  navree-markdown  nav
 | L0 | `navree-orm-macros` | `#[derive(Model)]` and `#[scopes]` (re-exported by `navree-orm`) |
 | L0 | `navree-validation-macros` | `#[derive(Validate)]` and `#[validate(...)]` (re-exported by `navree-validation`) |
 | L0 | `navree-i18n-macros` | `embed_locales!`: Fluent files embedded in the binary, their syntax checked at compile time (used through navree-i18n, and re-exported by the facade as `navree::embed_locales!` for any crate) |
+| L0 | `navree-ui-ext-macros` | `extension_script!` and `extension_sheet!`: a UI extension's files read, its stylesheet scoped to its namespace on `cssparser`, and both hashed when a plugin compiles (through navree-ui's `extension-files`, the facade's `ui-extension-files`) |
 | L0 | `navree-dock` | Dock: `dock.toml`, local PostgreSQL, Redis, Meilisearch, Mailpit, MinIO and NATS through `docker compose` or `podman compose`, the app's `.env` settings (behind `navree dock`; opt-in facade feature `dock`) |
 | L0 | `navree-harbor` | Harbor: `harbor.toml`, Ubuntu provisioning over SSH (Caddy with TLS, PostgreSQL, Redis, ufw, a deploy user, systemd units), blue-green releases with health checks and automatic rollback, AES-256-GCM secrets, several servers and roles, `build:image` and a GitHub Actions workflow (behind `navree harbor:*`, `navree deploy*` and `navree build:image`; opt-in facade feature `harbor`) |
 | L1 | `navree-contracts` | Shared traits and types: `Secret<T>`, `RequestId`, `Principal`, `AuthState`, sinks, `Broadcaster`, jobs with progress and cancellation, permission checks, `Clock`, conformity checks (`conformity:check`) |

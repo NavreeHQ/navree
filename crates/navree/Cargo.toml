@@ -257,6 +257,8 @@ ui-native-preview = ["ui", "navree-ui/native-preview"]
 ## (`navree::ui::image`), for home-screen widgets, emails and Open Graph
 ## cards. resvg on tiny-skia, pure Rust, with the toolkit's typeface built in.
 ui-image = ["ui", "navree-ui/image"]
+## UI (opt-in, not in `full`): a plugin's own component files, read, scoped and hashed when its crate compiles (`navree::ui::extension_script!` and `extension_sheet!`, on cssparser). A plugin crate that ships a component turns it on in its own `navree` dependency.
+ui-extension-files = ["ui", "navree-ui/extension-files"]
 ## The ORM: `#[derive(Model)]` models, the query builder, records,
 ## collections and pagination on navree-db's pool and unit of work; model
 ## events and observers, soft deletes, strict modes and pruning (`OrmModule`);
