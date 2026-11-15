@@ -32,12 +32,38 @@ internal sealed class PageFetcher(string corpus) : IFetcher
           {"t":"disclosure","id":"more","label":"More about this order","children":[{"t":"text","value":"Placed on a Tuesday, to be sent by road to Ludhiana, Punjab."}]},
           {"t":"form","id":"note","action":"/note","children":[{"t":"field","name":"note","id":"note-field","label":"A note","input":{"t":"text","value":""}}]},
           {"t":"text","value":"Rs 1,00,000 in all."},
-          {"t":"button","label":"New customer","action":{"t":"navigate","href":"/customers/new"}}]}}}
+          {"t":"button","label":"New customer","action":{"t":"navigate","href":"/customers/new"}},
+          {"t":"button","label":"A slow order","action":{"t":"navigate","href":"/orders/slow","present":"sheet"}},
+          {"t":"button","label":"An order beside","action":{"t":"navigate","href":"/orders/beside"}}]}}}
         """;
 
     private static readonly Navree.Design.Origins Origin = new("https://charkha.example", [], false);
 
+    private const string Slow = """
+        {"navree":1,"build":"3f9a1c07b2de","vocab":0,"screen":{"title":"Order","body":{"t":"stack","gap":3,"children":[
+          {"t":"text","value":"Order CS-220481 for Gurpreet Singh, Amritsar."},
+          {"t":"text","value":"Rs 24,500 in all, to be sent by road."}]}}}
+        """;
+
+    // A page that opens a sheet with nothing in it, as a server does that fills the sheet with the answer that follows; the second time it is asked for the sheet holds the order.
+    private const string BesideEmpty = """
+        {"navree":1,"build":"3f9a1c07b2de","vocab":0,"screen":{"title":"Orders","body":{"t":"stack","gap":3,"children":[
+          {"t":"text","value":"Orders of Charkha Supply Co."},
+          {"t":"sheet","id":"beside","title":"Order","open":true,"size":"large"}]}}}
+        """;
+
+    private const string BesideFilled = """
+        {"navree":1,"build":"3f9a1c07b2de","vocab":0,"screen":{"title":"Orders","body":{"t":"stack","gap":3,"children":[
+          {"t":"text","value":"Orders of Charkha Supply Co."},
+          {"t":"sheet","id":"beside","title":"Order","open":true,"size":"large","children":[{"t":"text","value":"Order CS-220482 for Jaspreet Kaur, Patiala."}]}]}}}
+        """;
+
+    private int besideAsked;
+
     private HttpFetcher? writer;
+
+    /// <summary>How long the walk's slow order takes to come, so a pane that is waiting for it can be looked at.</summary>
+    internal TimeSpan SlowOrder { get; set; } = TimeSpan.FromSeconds(3);
 
     /// <summary>How long the server takes to answer a form, so a walk can read what the page shows while it is on its way.</summary>
     internal TimeSpan Delay { get; set; }
@@ -58,6 +84,18 @@ internal sealed class PageFetcher(string corpus) : IFetcher
         if (effect.Method.Equals("post", StringComparison.OrdinalIgnoreCase) && path == "/customers")
         {
             return await ReceiveAsync(effect);
+        }
+
+        if (path == "/orders/beside")
+        {
+            besideAsked++;
+            return new FetchResult(200, "application/vnd.navree.native+json", null, [], besideAsked == 1 ? BesideEmpty : BesideFilled, null);
+        }
+
+        if (path == "/orders/slow")
+        {
+            await Task.Delay(SlowOrder, cancel);
+            return new FetchResult(200, "application/vnd.navree.native+json", null, [], Slow, null);
         }
 
         string? body = path.EndsWith("/_navree/native/shell", StringComparison.Ordinal) ? File.ReadAllText(Path.Combine(corpus, "shell.json"))

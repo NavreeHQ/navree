@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Navree.Design.Pages;
 using Navree.Protocol;
@@ -16,6 +17,8 @@ internal sealed class OverlayBodyView
     private readonly StackPanel body = new() { Spacing = 12 };
     private readonly Group children;
     private readonly Group? actions;
+    private ProgressBar? waiting;
+    private int lead;
 
     /// <summary>Draws the body of an overlay.</summary>
     /// <param name="context">The drawing of the screen it is an overlay of.</param>
@@ -33,7 +36,15 @@ internal sealed class OverlayBodyView
                     body.Children.Add(Look.Label(sheet.Subtitle, muted: true));
                 }
 
-                int lead = body.Children.Count;
+                // A sheet that holds nothing yet is waiting for its body: it says so as a page that is loading does.
+                if (PaneRules.WaitsForItsBody(sheet.Children.Count, sheet.Actions.Count))
+                {
+                    waiting = new ProgressBar { IsIndeterminate = true };
+                    AutomationProperties.SetName(waiting, "Loading");
+                    body.Children.Add(waiting);
+                }
+
+                lead = body.Children.Count;
                 children = renderer.DrawRun(Owner, sheet.Children, new PanelHost(body.Children), () => lead, request.Id);
                 actions = renderer.DrawRun(Owner, sheet.Actions, new PanelHost(body.Children), () => lead + children.Records.Count, request.Id);
                 break;
@@ -80,6 +91,14 @@ internal sealed class OverlayBodyView
         }
 
         renderer.Failed = false;
+
+        // The body came: the indication that it was waited for goes.
+        if (waiting is not null && now.Node is Models.Sheet filled && !PaneRules.WaitsForItsBody(filled.Children.Count, filled.Actions.Count))
+        {
+            _ = body.Children.Remove(waiting);
+            waiting = null;
+            lead--;
+        }
 
         bool done = (Owner.Node, now.Node) switch
         {

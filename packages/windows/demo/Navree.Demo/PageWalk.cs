@@ -93,6 +93,7 @@ internal sealed partial class PageWalk(ShellHost host, ShellWindow window, strin
                     await SettleAsync();
                     await Task.Delay(1500);
                     await GuardedAsync("the disclosure", DisclosureAsync);
+                    await GuardedAsync("a pane that waits for its page", PaneAsync);
                     await GuardedAsync("the colour field and the file field", InputsAsync);
                     break;
                 case "8095":
