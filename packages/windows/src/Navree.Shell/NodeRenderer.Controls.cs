@@ -1081,6 +1081,25 @@ internal sealed partial class NodeRenderer
                     }
                 };
                 break;
+            case Models.ColourInput colour:
+                string colourNow = held?.Value is TextValue held6 ? held6.Text : colour.Value;
+                ColourFieldView colourView = new(header, field.Label ?? field.Name, colourNow, () => !(field.Disabled || context.Screen.Has(id, Models.State.Disabled)), send);
+                control = colourView.Root;
+                show = colourView.Show;
+                break;
+            case Models.FileInput files:
+                FileFieldView fileView = new(
+                    context,
+                    files,
+                    header,
+                    field.Label ?? field.Name,
+                    held,
+                    () => field.Disabled || context.Screen.Has(id, Models.State.Disabled),
+                    () => context.Screen.Forms.TryGetValue(form, out FormView? pending) && pending.Pending,
+                    send);
+                control = fileView.Root;
+                show = fileView.Show;
+                break;
             default:
                 // A kind of input this build does not draw: the name of the field and what it holds, said plainly.
                 control = Look.Label((field.Label ?? field.Name) + " (this kind of field is not drawn in this build yet)", "CaptionTextBlockStyle", muted: true);
@@ -1144,6 +1163,7 @@ internal sealed partial class NodeRenderer
                 Models.ChoicesInput many => many with { Values = [] },
                 Models.DateInput date => date with { Value = string.Empty },
                 Models.SliderInput slider => slider with { Value = string.Empty },
+                Models.ColourInput colour => colour with { Value = string.Empty },
                 _ => field.Input,
             },
         };

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Navree.Design;
 using Navree.Protocol;
@@ -82,13 +83,18 @@ public sealed class UndrawableTests
         Assert.AreEqual("navree-demo", root.GetProperty("sign_in").GetProperty("callback").GetString());
     }
 
-    // The core, given that configuration, shows a page that holds a file field in the web view and not with a hole.
+    // The core, given that configuration, shows a page that holds a range field in the web view and not with a hole.
     [TestMethod]
     public async Task The_core_shows_a_page_with_a_part_the_client_cannot_draw_in_the_web_view()
     {
         string made = Path.Combine(Repository.Root, "crates", "navree-native-core", "transcripts", "fixtures");
         string shell = File.ReadAllText(Path.Combine(made, "store", "shell.json"));
-        string page = File.ReadAllText(Path.Combine(made, "made", "return-new.json"));
+
+        // The protocol's own page with a form, its photos field made a kind that this client still cannot draw.
+        JsonNode page = JsonNode.Parse(File.ReadAllText(Path.Combine(made, "made", "return-new.json")))!;
+        JsonArray fields = page["screen"]!["body"]!["children"]!.AsArray();
+        fields[1]!["input"] = JsonNode.Parse("""{"t":"range","from":{"name":"from"},"to":{"name":"to"}}""");
+        string pageText = page.ToJsonString();
         foreach (bool listed in new[] { true, false })
         {
             ClientSettings settings = new(false, false, 100, "en-IN", null);
@@ -98,17 +104,37 @@ public sealed class UndrawableTests
             await client.SendAsync(Events.Start);
             await client.SendAsync(Events.Response(1, 200, "application/vnd.navree.native+json", null, [], shell));
             FetchEffect first = effects.OfType<FetchEffect>().Last(fetch => fetch.Request == 2);
-            Update shown = await client.SendAsync(Events.Response(first.Request, 200, "application/vnd.navree.native+json", null, [], page));
+            Update shown = await client.SendAsync(Events.Response(first.Request, 200, "application/vnd.navree.native+json", null, [], pageText));
             ScreenContent? content = shown.State.FrontScreen?.Content;
             if (listed)
             {
                 WebContent web = content as WebContent ?? throw new AssertFailedException("the page was drawn, not shown in the web view: " + content?.GetType().Name);
-                Expect.That(web.Why.Any(why => why.Contains("input:file", StringComparison.Ordinal)), "why: " + string.Join(", ", web.Why));
+                Expect.That(web.Why.Any(why => why.Contains("input:range", StringComparison.Ordinal)), "why: " + string.Join(", ", web.Why));
             }
             else
             {
                 Expect.That(content is not WebContent, "without the list the page is drawn by the client");
             }
         }
+    }
+
+    // The protocol's own form example holds a colour field and a file field; this client draws both, so the core does not send it to the web view.
+    [TestMethod]
+    public async Task The_protocols_form_example_with_a_colour_field_and_a_file_field_is_drawn_by_the_client()
+    {
+        CollectionAssert.DoesNotContain(Undrawable.Kinds.ToArray(), "input:colour");
+        CollectionAssert.DoesNotContain(Undrawable.Kinds.ToArray(), "input:file");
+        string shell = File.ReadAllText(Path.Combine(Repository.Root, "crates", "navree-native-core", "transcripts", "fixtures", "store", "shell.json"));
+        string form = File.ReadAllText(Path.Combine(Repository.Root, "crates", "navree-native", "corpus", "screen-form.json"));
+        byte[] config = ClientConfig.Json("https://shop.example", [], null, new ClientSettings(false, false, 100, "en-IN", null), "10.0", "1.0.0", Caps, null, false, Undrawable.Kinds);
+        List<Effect> effects = [];
+        using CoreClient client = new(config, update => effects.AddRange(update.Effects));
+        await client.SendAsync(Events.Start);
+        await client.SendAsync(Events.Response(1, 200, "application/vnd.navree.native+json", null, [], shell));
+        FetchEffect first = effects.OfType<FetchEffect>().Last(fetch => fetch.Request == 2);
+        Update shown = await client.SendAsync(Events.Response(first.Request, 200, "application/vnd.navree.native+json", null, [], form));
+        Models.Screen screen = shown.State.FrontScreen?.Content is NativeContent native ? native.Screen : throw new AssertFailedException("the form was not drawn: " + shown.State.FrontScreen?.Content?.GetType().Name);
+        Expect.That(Navree.Design.Tree.Nodes(screen).OfType<Models.Field>().Select(field => field.Input).OfType<Models.ColourInput>().Any(), "the colour field is in the tree");
+        Expect.That(Navree.Design.Tree.Nodes(screen).OfType<Models.Field>().Select(field => field.Input).OfType<Models.FileInput>().Any(), "the file field is in the tree");
     }
 }

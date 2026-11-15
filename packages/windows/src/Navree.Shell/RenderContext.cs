@@ -26,6 +26,9 @@ internal sealed class RenderContext
     /// <summary>How wide the window is.</summary>
     internal WidthClass Width { get; init; } = WidthClass.Expanded;
 
+    /// <summary>The host the screen is shown by: what the file fields choose through and hold their files in.</summary>
+    internal ShellHost? Host { get; init; }
+
     /// <summary>Loads a picture's bytes by a whole address the core made, or null.</summary>
     internal Func<string, Task<byte[]?>>? Pictures { get; init; }
 

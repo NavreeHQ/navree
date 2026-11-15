@@ -319,6 +319,7 @@ internal sealed class ScreenPresenter : Grid
             Send = host.Send,
             Width = width,
             Pictures = host.LoadPictureAsync,
+            Host = host,
             Layouts = layouts,
             Settled = NodeRenderer.Seen(screen.Id),
         };

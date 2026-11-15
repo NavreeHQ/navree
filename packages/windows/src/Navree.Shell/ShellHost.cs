@@ -42,9 +42,12 @@ public sealed partial class ShellHost : IDisposable
         Origins = new Origins(options.Origin, options.Also, options.LoopbackHttp);
         cookies = new CookieStore(Origins);
         kept = new KeptStore(options.KeptFolder ?? KeptStore.DefaultFolder(options.AppName), options.AppName);
+        Files = new PickedFiles(Path.Combine(options.KeptFolder ?? KeptStore.DefaultFolder(options.AppName), "files"));
+        FilePicker = options.FilePicker ?? new SystemFilePicker();
+        Files.WentMissing += tokens => _ = dispatcher.TryEnqueue(() => FilesWentMissing?.Invoke(tokens));
         if (options.Fetcher is null)
         {
-            network = new HttpFetcher(Origins, cookies);
+            network = new HttpFetcher(Origins, cookies, files: Files.Open);
         }
 
         IFetcher answering = options.Fetcher ?? network!;
@@ -66,6 +69,15 @@ public sealed partial class ShellHost : IDisposable
 
     /// <summary>What the app says.</summary>
     public ShellOptions Options { get; }
+
+    /// <summary>The files the person chose for forms, held under the tokens the core knows them by.</summary>
+    public PickedFiles Files { get; }
+
+    /// <summary>What opens when a person chooses files for a field. A run that must not open the system's own picker replaces it.</summary>
+    public IFilePicker FilePicker { get; set; }
+
+    /// <summary>Raised on the UI thread with the tokens of files that could not be read when a request was written.</summary>
+    public event Action<IReadOnlyList<string>>? FilesWentMissing;
 
     /// <summary>The app's origins.</summary>
     public Origins Origins { get; }
@@ -487,6 +499,11 @@ public sealed partial class ShellHost : IDisposable
                 new WipeStep("what is kept on the device", () =>
                 {
                     kept.Clear();
+                    return Task.CompletedTask;
+                }),
+                new WipeStep("the files chosen for forms", () =>
+                {
+                    Files.Clear();
                     return Task.CompletedTask;
                 }),
                 new WipeStep("what the web view keeps", OnUiAsync(() => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName), what => ReportProblem("web wipe " + what)))),

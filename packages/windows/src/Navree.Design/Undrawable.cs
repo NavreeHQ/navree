@@ -13,8 +13,6 @@ public static class Undrawable
     public static IReadOnlyDictionary<Type, string> Named { get; } = new Dictionary<Type, string>
     {
         [typeof(Models.WebRegion)] = "web",
-        [typeof(Models.ColourInput)] = "input:colour",
-        [typeof(Models.FileInput)] = "input:file",
         [typeof(Models.RangeInput)] = "input:range",
     };
 
