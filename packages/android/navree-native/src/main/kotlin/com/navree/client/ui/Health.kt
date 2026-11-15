@@ -567,7 +567,8 @@ internal fun DayClockView(node: Navree.DayClock, modifier: Modifier = Modifier) 
                 }
                 // The day's total in the hole, as large as it can be without touching the bars.
                 node.shown?.let { shown ->
-                    val hole = 2f * (inner - width * 0.9f) / density
+                    // Two lines stand in the hole (the total, and its unit under it): each has the chord of the circle at its own height, narrower than the hole, so both are held to less of it.
+                    val hole = 2f * (inner - width * 0.9f) / density * (if ((node.unit ?: node.label) != null) 0.74f else 1f)
                     val value = measurer.measure(shown, valueStyle.copy(color = scheme.onSurface, fontSize = ClockRules.centreSp(hole, shown.length, valueStyle.fontSize.value, scale).sp))
                     val unit = (node.unit ?: node.label)?.let {
                         measurer.measure(it, unitStyle.copy(color = words, fontSize = ClockRules.centreSp(hole, it.length + 2, unitStyle.fontSize.value, scale).sp))
