@@ -151,7 +151,7 @@ public sealed partial class DataTable
     internal void ChooseAllHeld()
     {
         choice = new ChoiceState(new HashSet<string>(ChoosableHeldKeys(), StringComparer.Ordinal), false);
-        ChoiceChanged(announce: true);
+        ChoiceChanged(announce: true, wholeSet: true);
         RaiseChoiceRequested([], true, true, false);
     }
 
@@ -165,7 +165,7 @@ public sealed partial class DataTable
 
         choice = new ChoiceState(new HashSet<string>(StringComparer.Ordinal), false);
         anchorKey = null;
-        ChoiceChanged(announce: true);
+        ChoiceChanged(announce: true, wholeSet: true);
         RaiseChoiceRequested([], false, true, false);
     }
 
@@ -173,7 +173,7 @@ public sealed partial class DataTable
     internal void ChooseAcross()
     {
         choice = new ChoiceState(new HashSet<string>(StringComparer.Ordinal), true);
-        ChoiceChanged(announce: true);
+        ChoiceChanged(announce: true, wholeSet: true);
         RaiseChoiceRequested([], true, false, true);
     }
 
@@ -207,11 +207,15 @@ public sealed partial class DataTable
         }
     }
 
-    private void ChoiceChanged(bool announce)
+    private void ChoiceChanged(bool announce, bool wholeSet = false)
     {
+        List<DataTableRow> changed = [];
         foreach (DataTableRow row in liveRows)
         {
-            row.RefreshChoice();
+            if (row.RefreshChoice())
+            {
+                changed.Add(row);
+            }
         }
 
         if (header is not null && header.HasParts)
@@ -220,6 +224,7 @@ public sealed partial class DataTable
         }
 
         UpdateBulkBar();
+        RaiseChoiceEvents(changed, wholeSet);
         if (announce)
         {
             AnnounceChoice();

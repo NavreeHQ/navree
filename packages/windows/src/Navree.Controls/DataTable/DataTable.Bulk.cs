@@ -102,8 +102,7 @@ public sealed partial class DataTable
     {
         (_, int chosen) = CountChoice();
         long? total = Model?.Choice.AcrossTotal;
-        Announcement announcement = Announcements.Chosen(chosen, total, choice.Across);
-        Announce(DataTableStrings.Get(announcement, Culture));
+        Say(Announcements.Chosen(chosen, total, choice.Across));
     }
 
     // Rows that join while focus is in the table are said once, a second after the last.
@@ -136,12 +135,12 @@ public sealed partial class DataTable
     {
         if (addedLater > 0)
         {
-            Announce(DataTableStrings.Get(Announcements.RowsAdded(addedLater, earlier: false), Culture));
+            Say(Announcements.RowsAdded(addedLater, earlier: false));
         }
 
         if (addedEarlier > 0)
         {
-            Announce(DataTableStrings.Get(Announcements.RowsAdded(addedEarlier, earlier: true), Culture));
+            Say(Announcements.RowsAdded(addedEarlier, earlier: true));
         }
 
         addedLater = 0;
@@ -193,10 +192,17 @@ public sealed partial class DataTable
         ReleasePinSoon(PinOwner.Assistive);
     }
 
-    private void Announce(string words)
+    // Says a message the rules gave, in the table's culture, as the kind and the activity the rules give it.
+    private void Say(Announcement announcement)
+    {
+        (AnnouncementKind kind, string activity) = Announcements.Describe(announcement.Id);
+        Announce(DataTableStrings.Get(announcement, Culture), kind, activity);
+    }
+
+    private void Announce(string words, AnnouncementKind kind = AnnouncementKind.Other, string activity = "DataTable")
     {
         lastAnnouncement = words;
-        RaiseNotification(words);
+        RaiseNotification(words, kind, activity);
     }
 
     /// <summary>The last words the table said to assistive technology; a test reads them.</summary>

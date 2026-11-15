@@ -86,7 +86,7 @@ public sealed class DataTableGlyph : Control
         nameof(Glyph),
         typeof(string),
         typeof(DataTableGlyph),
-        new PropertyMetadata(string.Empty));
+        new PropertyMetadata(string.Empty, (d, _) => ((DataTableGlyph)d).GlyphChanged()));
 
     private bool over;
     private bool pressed;
@@ -104,6 +104,15 @@ public sealed class DataTableGlyph : Control
         get => (string)GetValue(GlyphProperty);
         set => SetValue(GlyphProperty, value);
     }
+
+    /// <inheritdoc />
+    protected override Microsoft.UI.Xaml.Automation.Peers.AutomationPeer OnCreateAutomationPeer() => new DataTableGlyphAutomationPeer(this);
+
+    // The dots of a row's menu are a button to assistive technology; the chevron is reached through the row's expand and collapse.
+    private void GlyphChanged() =>
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(
+            this,
+            Glyph == Glyphs.More ? Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Control : Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
 
     /// <inheritdoc />
     protected override void OnApplyTemplate()

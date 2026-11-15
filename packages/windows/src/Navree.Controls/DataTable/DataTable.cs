@@ -210,7 +210,7 @@ public sealed partial class DataTable : Control
     public void ApplyChoice(IEnumerable<string> keys, bool across)
     {
         choice = new ChoiceState(new HashSet<string>(keys, StringComparer.Ordinal), across);
-        ChoiceChanged(announce: false);
+        ChoiceChanged(announce: false, wholeSet: true);
     }
 
     /// <summary>Gives focus to a row, and to one of its cells.</summary>

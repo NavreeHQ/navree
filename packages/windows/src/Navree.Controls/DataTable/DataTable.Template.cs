@@ -168,6 +168,7 @@ public sealed partial class DataTable
     {
         choiceTimer?.Stop();
         addedTimer?.Stop();
+        structureTimer?.Stop();
         anchorPinTimer?.Stop();
         assistivePinTimer?.Stop();
         addedLater = 0;
@@ -228,6 +229,7 @@ public sealed partial class DataTable
         {
             liveRows.Add(row);
             row.Bind(this, args.Index);
+            QueueStructureEvent();
         }
     }
 
@@ -240,6 +242,7 @@ public sealed partial class DataTable
             bool heldFocus = row.Index >= 0 && row.Index == activeRow && FocusIsInside(row);
             row.Unbind();
             liveRows.Remove(row);
+            QueueStructureEvent();
             if (heldFocus)
             {
                 FocusActiveSoon();

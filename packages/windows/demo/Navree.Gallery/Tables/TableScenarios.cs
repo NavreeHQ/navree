@@ -196,7 +196,7 @@ internal static class TableScenarios
             case "rowmenu":
                 if (table.RowsRepeater?.TryGetElement(2) is DataTableRow target && target.Cells.Count > 1)
                 {
-                    table.ShowRowMenuForRun(target, target.Cells[1]);
+                    table.OpenRowMenu(target, target.Cells[1]);
                     await Task.Delay(700);
                 }
 

@@ -39,6 +39,7 @@ public sealed class ListDataTableModel<T> : IDataTableModel
     private DataTableCursor earlier;
     private string? summary;
     private DataTableChoiceOptions choice;
+    private long? total;
 
     /// <summary>Makes a model.</summary>
     /// <param name="columns">The columns.</param>
@@ -131,6 +132,17 @@ public sealed class ListDataTableModel<T> : IDataTableModel
         set
         {
             summary = value;
+            Raise(DataTableChangeKind.Summary);
+        }
+    }
+
+    /// <inheritdoc />
+    public long? TotalCount
+    {
+        get => total;
+        set
+        {
+            total = value;
             Raise(DataTableChangeKind.Summary);
         }
     }

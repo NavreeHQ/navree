@@ -225,6 +225,9 @@ public interface IDataTableModel
     /// <summary>How the rows may be chosen.</summary>
     DataTableChoiceOptions Choice { get; }
 
+    /// <summary>How many records there are in all, when the server counts them: what assistive technology is told the table holds. Null when it does not say.</summary>
+    long? TotalCount => null;
+
     /// <summary>Tells the control something changed.</summary>
     event EventHandler<DataTableModelChangedEventArgs>? Changed;
 

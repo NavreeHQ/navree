@@ -134,10 +134,10 @@ public sealed partial class DataTable
                 break;
             case DataTableChangeKind.Columns:
                 RebuildColumns(remeasure: false);
-                if (sortAsked && SortStatus() is { } sorted)
+                if (sortAsked && SortedBy() is { } sorted)
                 {
                     sortAsked = false;
-                    Announce(sorted);
+                    Say(sorted);
                 }
 
                 break;
@@ -150,11 +150,11 @@ public sealed partial class DataTable
                     lastLoadState = stated.State;
                     if (stated.State == DataTableLoadState.Loading)
                     {
-                        Announce(DataTableStrings.Get("DataTable_Loading"));
+                        Say(new Announcement("DataTable_Loading", []));
                     }
                     else if (stated.State == DataTableLoadState.Failed && stated.FailureMessage is { } why)
                     {
-                        Announce(why);
+                        Announce(why, AnnouncementKind.Other, "DataTable.State");
                     }
                 }
 
@@ -179,6 +179,12 @@ public sealed partial class DataTable
         if (Model is { } current)
         {
             modelStamp = StampOf(current);
+            RaiseCountChanged(current.RowCount);
+        }
+
+        if (e.Kind is DataTableChangeKind.Reset or DataTableChangeKind.Insert or DataTableChangeKind.Remove)
+        {
+            QueueStructureEvent();
         }
     }
 
@@ -380,7 +386,7 @@ public sealed partial class DataTable
             SetActiveRow(next?.Row ?? -1);
             if (activeRemoved)
             {
-                Announce(DataTableStrings.Get("DataTable_RowRemoved"));
+                Say(new Announcement("DataTable_RowRemoved", []));
                 if (hadFocus)
                 {
                     // Focus goes where the rule for a removed row says: the row now at the place, the one before it, or the heading.
@@ -559,6 +565,8 @@ public sealed partial class DataTable
 
         UpdateGeometry();
         row.Refresh();
+        RaiseExpandState(row, open);
+        Say(Announcements.Detail(open));
         RaiseDetailToggled(key, open);
     }
 
@@ -599,7 +607,7 @@ public sealed partial class DataTable
             if (cursorWatch.LimitReached())
             {
                 RaiseHeldLimitReached();
-                Announce(DataTableStrings.Get("DataTable_HeldLimit", Choosing.FormatCount(limit, Culture)));
+                Say(new Announcement("DataTable_HeldLimit", [limit]));
                 UpdateFooter();
             }
 
@@ -694,7 +702,7 @@ public sealed partial class DataTable
     /// <summary>Opens a row's menu beside a cell, as a key does.</summary>
     /// <param name="row">The row.</param>
     /// <param name="cell">The cell.</param>
-    internal void ShowRowMenuForRun(DataTableRow row, FrameworkElement cell) => ShowRowMenu(row, cell, null);
+    internal void OpenRowMenu(DataTableRow row, FrameworkElement cell) => ShowRowMenu(row, cell, null);
 
     // The row's menu, at a point when the pointer asked and beside the cell when a key did.
     private bool ShowRowMenu(DataTableRow row, FrameworkElement? target, Windows.Foundation.Point? position)

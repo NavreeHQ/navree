@@ -158,6 +158,28 @@ public static class Announcements
     public static Announcement ColumnVisibility(string label, bool shown) =>
         new(shown ? "DataTable_ColumnShown" : "DataTable_ColumnHidden", [label]);
 
+    /// <summary>How an announcement is told to assistive technology: its kind, and the activity it belongs to, so a newer one of an activity replaces an older.</summary>
+    /// <param name="id">The announcement's resource id.</param>
+    /// <returns>The kind and the activity.</returns>
+    public static (AnnouncementKind Kind, string Activity) Describe(string id)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        return id switch
+        {
+            "DataTable_Sorted_Ascending" or "DataTable_Sorted_Descending" => (AnnouncementKind.Completed, "DataTable.Sorted"),
+            "DataTable_RowsAdded_Later" or "DataTable_RowsAdded_Earlier" => (AnnouncementKind.Added, "DataTable.Added"),
+            "DataTable_Chosen_None" or "DataTable_Chosen_Count" or "DataTable_Chosen_All" or "DataTable_Chosen_AllUnknown" => (AnnouncementKind.Other, "DataTable.Chosen"),
+            "DataTable_RowRemoved" => (AnnouncementKind.Removed, "DataTable.Removed"),
+            "DataTable_Details_Shown" or "DataTable_Details_Hidden" => (AnnouncementKind.Completed, "DataTable.Detail"),
+            "DataTable_ColumnWidth" => (AnnouncementKind.Other, "DataTable.Width"),
+            "DataTable_ColumnMoved" => (AnnouncementKind.Completed, "DataTable.Moved"),
+            "DataTable_ColumnShown" or "DataTable_ColumnHidden" => (AnnouncementKind.Completed, "DataTable.Columns"),
+            "DataTable_Loading" => (AnnouncementKind.Other, "DataTable.State"),
+            "DataTable_HeldLimit" => (AnnouncementKind.Other, "DataTable.Limit"),
+            _ => (AnnouncementKind.Other, "DataTable"),
+        };
+    }
+
     /// <summary>A row's detail opened or shut.</summary>
     /// <param name="open">Whether it is open now.</param>
     /// <returns>The message.</returns>

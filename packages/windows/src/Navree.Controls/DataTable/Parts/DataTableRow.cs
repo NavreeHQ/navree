@@ -222,15 +222,20 @@ public sealed class DataTableRow : Control
         UpdateState();
     }
 
+    /// <summary>Whether the row is drawn chosen.</summary>
+    internal bool IsChosen => chosen;
+
     /// <summary>Draws the choice again without binding the cells.</summary>
-    internal void RefreshChoice()
+    /// <returns>True when the row was not chosen and is now, or was and is not.</returns>
+    internal bool RefreshChoice()
     {
         DataTable? table = Owner;
         if (table is null || IsHeader || Key is null)
         {
-            return;
+            return false;
         }
 
+        bool before = chosen;
         chosen = table.IsChosen(Key, Record.Choosable);
         if (check is not null)
         {
@@ -238,6 +243,7 @@ public sealed class DataTableRow : Control
         }
 
         UpdateState();
+        return before != chosen;
     }
 
     /// <summary>Sets the cells' positions and sizes from the table's layout.</summary>
