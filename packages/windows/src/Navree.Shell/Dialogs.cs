@@ -27,6 +27,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
     private bool closedByUs;
     private bool pumping;
     private bool hooked;
+    private readonly Dictionary<string, int> failedShows = [];
 
     // Escape takes away a popover that is open, wherever the focus is: in the popover or still on the button that opened it.
     private void CloseFlyoutOnEscape(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
@@ -465,16 +466,18 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
 
     private async Task ShowAsync(ContentDialog shown, Wanted want)
     {
-        ContentDialogResult result;
+        ContentDialogResult result = ContentDialogResult.None;
+        bool couldNotBeShown = false;
         try
         {
             result = await shown.ShowAsync();
         }
         catch (Exception problem)
         {
-            // A dialog that could not be shown (another is open on the window, the window is not laid out yet) is not shown; the ones after it still are.
-            System.Diagnostics.Debug.WriteLine("a dialog could not be shown: " + problem.Message);
-            result = ContentDialogResult.None;
+            // A dialog that could not be shown (another is open on the window, the window is not laid out yet) has had no person to answer it: it is
+            // reported, the question stays open, and it is shown again in a moment. It is never reported as closed with nothing chosen, which is an answer of no.
+            couldNotBeShown = true;
+            host.ReportProblem("a dialog could not be shown: " + problem.Message);
         }
 
         bool byUs = closedByUs;
@@ -482,9 +485,29 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
         showing = null;
         closedByUs = false;
         closing.TrySetResult();
-        if (!byUs)
+        int failed = couldNotBeShown ? failedShows.GetValueOrDefault(want.Key) + 1 : 0;
+        if (couldNotBeShown)
+        {
+            failedShows[want.Key] = failed;
+        }
+        else
+        {
+            _ = failedShows.Remove(want.Key);
+        }
+
+        DialogDecision decision = DialogRules.AfterShow(couldNotBeShown, byUs, failed);
+        if (decision.TellTheCore)
         {
             want.OnClosed(result);
+        }
+
+        if (decision.ShowAgain)
+        {
+            await Task.Delay(400);
+            if (!pumping && showing is null && dialog is null)
+            {
+                _ = PumpAsync();
+            }
         }
     }
 
