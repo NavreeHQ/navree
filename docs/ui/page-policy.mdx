@@ -1,0 +1,191 @@
+---
+title: "The page policy"
+description: "The content security policy every Navree UI page carries, the sources an app can allow for a plugin's components, the pages that start from a clean document, and what can never be allowed."
+---
+
+Every page Navree UI draws carries a strict content security policy. A component from a plugin, a map, a clip or a live feed, can need a few sources beyond the page's own origin. The app decides whether it gets them, in its configuration and nowhere else: a plugin can ask, and never allows itself anything. This page says what a page allows, how an app allows more, and which pages never get plugin code at all.
+
+## What every page allows
+
+A page carries `PAGE_CSP`, a constant in `navree::ui`:
+
+```text
+default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'
+```
+
+Scripts, styles, fonts and requests come from the page's own origin only. Images may also be `data:` addresses. No inline script or style runs, a form posts only to this site, no page can be framed, and a page has no `base` element that repoints its links. Nothing is allowed beyond this until the app's configuration says so, and a page with nothing allowed carries this header byte for byte.
+
+## Allowing a source
+
+The `ui.policy` section of the configuration allows more. A file `config/ui.policy.toml` holds its keys without the `[ui.policy]` header (see [Environments and files](/docs/configuration/environments-and-files/)), and `config/app.toml` holds them under `[ui.policy]`:
+
+```toml title="config/ui.policy.toml"
+wasm = false
+
+[allow.geo]                                   # a plugin's namespace, or app for the app's own
+img_src = ["https://tile.openstreetmap.org"]  # map tiles
+```
+
+`allow` is a table by namespace. Each namespace has up to four lists, `img_src`, `media_src`, `connect_src` and `font_src`, of at most 32 sources each. The keys, their types and defaults are in the [configuration reference](/docs/configuration/reference/). A source is one of a short list of forms, written in lower case:
+
+| Key | Takes |
+|---|---|
+| `img_src`, `media_src` | `'self'`, `data:`, `blob:` and an https origin |
+| `connect_src` | `'self'`, an https origin and a `wss` origin |
+| `font_src` | `'self'`, `data:` and an https origin |
+| every key | `http://localhost` and `http://127.0.0.1`, with a port or without, outside production and staging |
+
+An https origin is a host of at least two labels, in lower case, with an optional port: `https://tile.openstreetmap.org`, `https://tiles.example:8443`. A leading `*.` stands for one label or more in front of a name (`https://*.tiles.example`), and the name after it has two labels or more. An allowed `font_src` host serves a font only to a script's `FontFace`, because a plugin's sheet takes `data:` fonts only.
+
+The allowed sources are added to the toolkit's own in the header, after them. The keys are taken in name order with `app` first, and `media-src` comes after `connect-src`. With `ui.policy.allow.geo.img_src` set as above, a page carries:
+
+```text
+default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'
+```
+
+A key that is not a namespace or `app`, a source outside the forms above, a source that points at this machine in production or staging, and more than 32 sources for a directive stop the boot. Each problem is a line of its own, and names the key without repeating the value:
+
+```text
+ui.policy.allow.Geo: `Geo` is neither a namespace nor app
+ui.policy.allow.geo.img_src[0] is not a source the page policy takes for img_src: 'self', data:, blob: or an https origin such as https://tile.openstreetmap.org
+ui.policy.allow.geo.img_src lists more than 32 sources
+ui.policy.allow.geo.img_src[0] points at this machine (localhost), which is refused in production and staging
+```
+
+## What a plugin asks for
+
+A plugin says what its components need with `PageSources`, which its module contributes. Asking allows nothing: the app's `ui.policy` decides, and the boot says in its log what each plugin asked for and what the app allowed.
+
+```rust
+use navree::prelude::ModuleBuilder;
+use navree::ui::{Directive, PageSources};
+
+// In the plugin's module.
+fn register(m: &mut ModuleBuilder) {
+    m.contribute(
+        PageSources::new()
+            .ask(Directive::ImgSrc, "https://tile.openstreetmap.org", "map tiles")
+            .wasm("barcode decoder"),
+    );
+}
+```
+
+`ask` takes the directive (`ImgSrc`, `MediaSrc`, `ConnectSrc` or `FontSrc`), the source and a few words on what needs it, which the boot says back. A source outside the forms above stops the boot, and the message names the plugin that asked. A module of the app that names no plugin asks under the namespace `app`.
+
+The boot says, one line each:
+
+```text
+page policy: plugin `geo` asks for img-src https://tile.openstreetmap.org (map tiles): allowed
+page policy: plugin `geo` asks for img-src https://tile.openstreetmap.org (map tiles), which the app does not allow; what needs it shows its fallback (allow it with ui.policy.allow.geo.img_src)
+page policy: plugin `geo` asks for WebAssembly (barcode decoder), which the app does not allow (allow it with ui.policy.wasm = true, which opens it for every script)
+page policy: WebAssembly is allowed for every script on every page (ui.policy.wasm); asked for by: geo
+page policy: ui.policy.allow.geo allows img-src https://tiles.example, which plugin `geo` does not ask for
+page policy: ui.policy.allow.shop names no plugin of this app; its sources are allowed on every page all the same
+page policy: ui.policy.allow.geo.img_src allows the wildcard https://*.tiles.example: anyone who can hold a name under it can receive what a page sends there
+page policy: every page but the fresh ones is served with: default-src 'none'; script-src 'self'; ...
+```
+
+What was asked and not allowed, an allowance a plugin did not ask for, an allowance under a namespace no plugin has and each wildcard source are warnings. The last line is said only when the header differs from the toolkit's. To allow what a plugin asked for, copy its source into `ui.policy.allow` under the plugin's namespace.
+
+## One policy for every page
+
+The policy the app composes goes on every page and fragment the toolkit answers with its own: a `View`, the answer to a region's fetch, a lazy list's page, and the toolkit's error pages. The error pages get it from the toolkit's error renderer, because the app's pipeline draws an error outside every layer of the app.
+
+A response that carries a policy of its own keeps it: a picture of the app's (`AppImage`), a route that writes its own header, and the pages of Helm, which carry the panel's own policy. A header is replaced only when it is exactly one `Content-Security-Policy` value, equal to `PAGE_CSP`; a response with no policy is given none. A fresh page keeps the toolkit's policy too (see the next section).
+
+## Fresh pages
+
+A page that takes a password, a code or a PIN must not share a document with a plugin's code. `View::fresh()` and `AppPage::fresh()` mark such a page:
+
+```rust
+use navree::ui::{AppPage, AppShell, View, el};
+
+/// A page of its own that takes a PIN: it starts from a clean document.
+fn pin_page() -> View {
+    View::new("Enter your PIN")
+        .fresh()
+        .body(el("p").child("Enter your six-digit PIN."))
+}
+
+async fn confirm(shell: AppShell) -> AppPage {
+    shell
+        .page("Confirm your password")
+        .fresh()
+        .body(el("p").child("Confirm your password to continue."))
+}
+```
+
+The mark acts in an app where plugin code can reach a page: the app contributes a `UiExtension`, contributes a plugin's island script (one built with a namespace, or one from a module of a plugin that is not one of the framework's own), or has a policy other than the toolkit's, because it allowed a source or WebAssembly. In any other app it changes nothing, and the page is the page it always was. Where it acts, a fresh page:
+
+- is entered and left by a full page load. A swap between a fresh page and a plain one, in either direction, loads the new page in full. Two fresh pages boost between each other.
+- keeps the toolkit's own policy (`PAGE_CSP`), whatever the app allowed.
+- links no extension file and loads no `extensions` module, so no component of your own mounts on it, and a plugin's island script isn't imported.
+- says so with `data-ui-fresh-page` on its `<html>` element and the header `x-navree-fresh: 1` on its answer. A view written outside a request writes neither.
+- is never drawn into a page that is not fresh, by any fetch of the runtime:
+
+| A fetch of the runtime | When the answer is a fresh page's and the page is not fresh |
+|---|---|
+| A boosted link, back and forward, a prefetched answer, a form's HTML answer (the redirect after signing out too), a link aimed at a region | the address is loaded in full |
+| A region's own fetch: lazy, polled, `ui:refresh`, a table's fetch | not drawn: the region shows its failed state |
+| A feed | not drawn: the region shows its failed state |
+| Tree children | refused: the branch shows its failed note |
+| `ui.call` and `ui.get` of a component's script | a failure |
+| A form's ops (`morph`, `replace`, `append`, `prepend`) | not covered: ops carry markup, not documents |
+
+The sign-in and account pages of `navree-auth`, the consent page of `navree-oauth`, the panel pages of Helm and the pages of Lighthouse are fresh. An app marks its own pages the same way.
+
+An app marks its own sign-in, re-authentication and PIN pages with `.fresh()`, and any page that holds a password field; in an app with extensions the boot names each route that does not.
+
+The log says it the first time such a route answers, once for each route and for at most 256 routes. A page holds a password field when its tree has an `input` of type `password`, or one whose `autocomplete` is `current-password`, `new-password` or `one-time-code`:
+
+```text
+page /account/confirm holds a password field and is not fresh: call .fresh() on its View or AppPage
+route /account/confirm sends a password field as ops into a page that may hold plugin code: draw it on a fresh page and answer with a redirect to it
+```
+
+The second line is for ops (`Reply::morph` and the other ops built from a node): a password field sent that way lands in a page that may hold plugin code, and the browser can't refuse it. Draw the field on a fresh page and answer with a redirect to it. Only elements are read: a field inside markup written as a string is not seen.
+
+A fresh page answers a post from another page with a redirect to it, not with the page itself. A direct HTML answer would make the full load ask for the post's address again with a `GET`. The sign-out of `navree-auth` answers this way.
+
+Being fresh costs a full page load into and out of the page, in an app where it acts. A region or a lazy part whose source is a fresh page shows its failed state, and a plugin's component on a fresh page shows its fallback.
+
+`Tab::fresh` is another thing: it marks a lazy tab panel that loads again each time its tab is shown.
+
+## When a source is not allowed
+
+A source the app has not allowed stays refused by the browser. A component that needs one shows what it shows without it: a map draws its list of places, not tiles the browser would block. Ask the policy before drawing:
+
+```rust
+use navree::prelude::AppContext;
+use navree::ui::{Directive, PagePolicy};
+
+/// Whether this app lets its pages load map tiles.
+async fn tiles_allowed(ctx: AppContext) -> bool {
+    let policy = ctx.get::<PagePolicy>().await.expect("the toolkit's page policy");
+    policy.allows(Directive::ImgSrc, "https://tile.openstreetmap.org/15/23500/13700.png")
+}
+```
+
+`PagePolicy::allows(directive, source)` answers as the header does. A keyword is matched as it is written, `data:` and `blob:` by scheme, and an origin by scheme, host and port, with a leading `*.` standing for one label or more. A path or a query in `source` is left out of the match. The toolkit's own sources count: pictures may be `'self'` and `data:`, fonts and requests `'self'`, and media nothing. `header()` is the whole header, `allows_wasm()` says whether the app allowed WebAssembly, and `is_the_toolkits()` whether the app allowed nothing. There is no way to build a `PagePolicy`: the boot does.
+
+A browser test of the component, with the source not allowed, calls `Page::assert_no_policy_violations`, which fails when the page reported a policy violation.
+
+## What can never be allowed
+
+`ui.policy` has no key for the sources of scripts, styles, workers or frames, nor for objects, form targets, the base address or the pages that may frame a page. A key under a namespace that is not one of the four stops the boot:
+
+```text
+ui.policy.allow.geo: unknown key `script_src` (known: img_src, media_src, connect_src, font_src); a page's scripts, styles, workers and frames come from this app only
+```
+
+A source never takes a path, `*`, a bare scheme (`https:`), an `http:` or `ws:` origin outside localhost, a capital letter, `'none'`, any `'unsafe-*'` keyword, `'wasm-unsafe-eval'`, `'strict-dynamic'`, a nonce or a hash.
+
+## WebAssembly
+
+`ui.policy.wasm = true` adds `'wasm-unsafe-eval'` to `script-src`, on every page but the fresh ones, and changes nothing else. It is one switch for the whole app. It opens WebAssembly for every script of every plugin, so the boot says which plugins asked for it. A plugin asks with `PageSources::wasm(why)`:
+
+```text
+default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'
+```
+
+A plugin that asks for WebAssembly and finds the switch off gets the warning above, and its component shows its fallback. Navree UI itself ships no WebAssembly.

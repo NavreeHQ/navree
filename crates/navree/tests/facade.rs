@@ -2179,3 +2179,31 @@ fn the_plugin_module_brings_the_driver_names_and_every_registration_method() {
         .expect("registering a driver of every kind passes the graph check");
     assert!(report.plugins.is_empty(), "{:?}", report.plugins);
 }
+
+/// `navree::plugin` names what a plugin's UI components are made of, and each name is the one
+/// `navree::ui` has (`cargo test -p navree --test facade`).
+#[cfg(feature = "ui")]
+#[test]
+fn the_plugin_module_brings_the_ui_extension_names() {
+    assert!(same::<navree::plugin::UiExtension, navree::ui::UiExtension>());
+    assert!(same::<
+        navree::plugin::ExtensionFile,
+        navree::ui::ExtensionFile,
+    >());
+    assert!(same::<navree::plugin::PageSources, navree::ui::PageSources>());
+    assert!(same::<navree::plugin::Directive, navree::ui::Directive>());
+    assert!(same::<navree::plugin::PagePolicy, navree::ui::PagePolicy>());
+    assert!(same::<
+        dyn navree::plugin::FieldControl,
+        dyn navree::ui::FieldControl,
+    >());
+    assert!(same::<
+        navree::plugin::ControlCx<'static>,
+        navree::ui::ControlCx<'static>,
+    >());
+    assert!(same::<navree::plugin::Control, navree::ui::Control>());
+    assert!(same::<
+        navree::plugin::EditedValue<String>,
+        navree::ui::EditedValue<String>,
+    >());
+}

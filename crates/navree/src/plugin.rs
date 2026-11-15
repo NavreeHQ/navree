@@ -32,6 +32,12 @@ pub use navree_contracts::Permission;
 pub use navree_kernel::{
     PluginInfo, PluginModuleReport, PluginReport, PluginsReport, PublishTag, Publishable,
 };
+/// What a plugin's UI components name: their files, their form field and the page sources they ask for.
+#[cfg(feature = "ui")]
+pub use navree_ui::{
+    Control, ControlCx, Directive, EditedValue, ExtensionFile, FieldControl, PagePolicy,
+    PageSources, UiExtension,
+};
 #[cfg(feature = "view")]
 pub use navree_view::TemplateDir;
 
