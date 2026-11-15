@@ -51,8 +51,8 @@ public sealed class RulesTests
     [TestMethod]
     public void Three_parts_that_each_hold_a_list_are_lanes_that_lie_down_in_a_compact_window_and_scroll_in_a_narrow_one()
     {
-        Models.Node lane = new Models.Stack { Children = [new Models.Text { Text = "Backlog" }, new Models.List()] };
-        Models.Node plain = new Models.Stack { Children = [new Models.Text { Text = "Name" }] };
+        Models.Node lane = new Models.Stack { Children = [new Models.Text { Value = "Backlog" }, new Models.List()] };
+        Models.Node plain = new Models.Stack { Children = [new Models.Text { Value = "Name" }] };
 
         Assert.IsTrue(WindowRules.IsLanes([lane, lane, lane]));
         Assert.IsFalse(WindowRules.IsLanes([lane, lane]));
