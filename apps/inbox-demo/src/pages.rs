@@ -59,10 +59,10 @@ use crate::views::thread::{
     SnoozeForm, composer, message_item,
 };
 use crate::views::web_only;
-use crate::views::{Filters, View, ViewCounts, shell, views_src};
+use crate::views::{Filters, View, ViewCounts, shell, shell_without_counts, views_src};
 
 /// The cookie that says which agent a visitor works as.
-const AGENT_COOKIE: &str = "inbox_agent";
+pub(crate) const AGENT_COOKIE: &str = "inbox_agent";
 /// The longest message the composer takes, in characters.
 const LONGEST: usize = 5000;
 /// The team, searched by name or team, for the assign combobox.
@@ -136,7 +136,7 @@ struct StepQuery {
 }
 
 /// The value of the cookie `name`.
-fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+pub(crate) fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers
         .get_all(COOKIE)
         .iter()
@@ -313,13 +313,33 @@ async fn who(
 /// The shell of a page of an error (a missing page, a refused request): the one every
 /// page draws, for the agent the visitor works as, so a native client has the app's
 /// destinations to draw its chrome from. `None` leaves the page on its own.
+///
+/// The views carry no counts, but for the shell a native client fetches, which is where it
+/// draws them from: an address that does not exist can be asked for by anyone, any number
+/// of times, and must not make the desk count its conversations each time.
 pub async fn error_shell(request: navree::http::ErrorContext) -> Option<Shell> {
     let db = request.ctx.get::<Db>().await.ok()?;
     let signer = request.ctx.get::<UrlSigner>().await.ok()?;
     let me = who(&*db, &signer, &request.headers).await.ok()?;
     let team = team(&*db).await.ok()?;
+    if !asks_for_the_native_shell(&request) {
+        return Some(shell_without_counts(&me, &team));
+    }
     let counts = counts(&*db, me.id).await.ok()?;
     Some(shell(&me, &team, counts, View::All, None))
+}
+
+/// Whether the request is a native client's for the shell it draws its navigation from.
+fn asks_for_the_native_shell(request: &navree::http::ErrorContext) -> bool {
+    #[cfg(feature = "native-preview")]
+    {
+        request.uri.path() == navree::native::SHELL_PATH
+    }
+    #[cfg(not(feature = "native-preview"))]
+    {
+        let _ = request;
+        false
+    }
 }
 
 async fn team(uow: &(impl Executor + ?Sized)) -> Result<Vec<Agent>> {

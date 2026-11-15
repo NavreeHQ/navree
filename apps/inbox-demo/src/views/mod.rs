@@ -211,6 +211,23 @@ pub fn shell(
     current: View,
     stream: Option<&str>,
 ) -> Shell {
+    shell_of(me, team, Some(counts), current, stream)
+}
+
+/// The app's shell for the agent `me` with no counts on its views: for a page that is not one
+/// of the inbox's, which would not count the conversations to say how many there are.
+pub fn shell_without_counts(me: &Agent, team: &[Agent]) -> Shell {
+    shell_of(me, team, None, View::All, None)
+}
+
+fn shell_of(
+    me: &Agent,
+    team: &[Agent],
+    counts: Option<ViewCounts>,
+    current: View,
+    stream: Option<&str>,
+) -> Shell {
+    let count = |of: fn(&ViewCounts) -> u64| counts.as_ref().map(of);
     let item = |view: View, count: Option<u64>| {
         let item = NavItem::new(view.label(), Filters::with_view(view).href("/inbox"))
             .icon(view.icon())
@@ -233,10 +250,10 @@ pub fn shell(
         );
     }
     let mut group = NavGroup::new("Inbox")
-        .item(item(View::All, Some(counts.all)))
-        .item(item(View::Mine, Some(counts.mine)))
-        .item(item(View::Unassigned, Some(counts.unassigned)))
-        .item(item(View::Snoozed, Some(counts.snoozed)))
+        .item(item(View::All, count(|counts| counts.all)))
+        .item(item(View::Mine, count(|counts| counts.mine)))
+        .item(item(View::Unassigned, count(|counts| counts.unassigned)))
+        .item(item(View::Snoozed, count(|counts| counts.snoozed)))
         .item(item(View::Closed, None));
     if let Some(stream) = stream {
         group = group.live(

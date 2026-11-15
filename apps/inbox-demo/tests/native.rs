@@ -138,3 +138,238 @@ async fn an_open_conversation_is_panes_with_the_one_a_narrow_screen_shows_and_it
     // The customer wrote some of them.
     assert!(messages.iter().any(|message| !message.mine));
 }
+
+/// The inbox with the hand-written conversations only, which is all these tests read.
+async fn boot_desk() -> (TestApp, TempDirGuard) {
+    let (url, dir) = temp_sqlite_url();
+    let settings = Settings {
+        simulate_every: None,
+        tick_every: None,
+        test_hooks: false,
+        scale: 0,
+    };
+    (TestApp::from_builder(app(0, url, settings)).await, dir)
+}
+
+/// The header that names the person a native answer is for.
+const PERSON: &str = "x-navree-person";
+
+/// The person a native client is told the answer for `path` is for, when it carries `cookie`.
+async fn person_of(app: &TestApp, path: &str, cookie: Option<&str>) -> Option<String> {
+    let client = app.client();
+    if let Some(value) = cookie {
+        client.set_cookie("inbox_agent", value);
+    }
+    client
+        .get(path)
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .send()
+        .await
+        .header(PERSON)
+        .map(str::to_owned)
+}
+
+#[tokio::test]
+async fn the_shell_names_the_default_agent_every_time() {
+    let (app, _dir) = boot_desk().await;
+    let first = person_of(&app, "/_navree/native/shell", None).await;
+    let second = person_of(&app, "/_navree/native/shell", None).await;
+    assert_eq!(
+        first,
+        Some(inbox_demo::person::person_of(inbox_demo::data::DEFAULT_AGENT).to_string())
+    );
+    assert_eq!(first, second);
+}
+
+#[tokio::test]
+async fn every_native_page_names_the_same_person_as_the_shell() {
+    let (app, _dir) = boot_desk().await;
+    let shell = person_of(&app, "/_navree/native/shell", None).await;
+    assert!(shell.is_some());
+    for path in ["/inbox", "/inbox/1", "/inbox/rows", "/inbox/1/messages"] {
+        assert_eq!(person_of(&app, path, None).await, shell, "{path}");
+    }
+}
+
+#[tokio::test]
+async fn an_agent_the_visitor_switched_to_is_another_person() {
+    let (app, _dir) = boot_desk().await;
+    let signer = app.get::<navree::http::UrlSigner>().await;
+    let cookie = inbox_demo::pages::agent_cookie(&signer, 2, chrono::Utc::now());
+    let other = person_of(&app, "/_navree/native/shell", Some(&cookie)).await;
+    assert_eq!(other, Some(inbox_demo::person::person_of(2).to_string()));
+    assert_ne!(other, person_of(&app, "/_navree/native/shell", None).await);
+    // A cookie the app did not sign names nobody: the default agent.
+    let forged = person_of(&app, "/_navree/native/shell", Some("2.4102444800.00ff")).await;
+    assert_eq!(
+        forged,
+        Some(inbox_demo::person::person_of(inbox_demo::data::DEFAULT_AGENT).to_string())
+    );
+}
+
+#[tokio::test]
+async fn a_browser_gets_the_page_with_no_person_named() {
+    let (app, _dir) = boot_desk().await;
+    let page = app.client().get("/inbox").send().await;
+    assert_eq!(page.status().as_u16(), 200);
+    assert!(
+        page.header("content-type")
+            .is_some_and(|kind| kind.starts_with("text/html")),
+        "{:?}",
+        page.header("content-type")
+    );
+    assert_eq!(page.header(PERSON), None);
+    assert!(page.header("set-cookie").is_none());
+}
+
+#[tokio::test]
+async fn the_visitors_may_hold_more_live_streams_than_one_person_is_given_by_default() {
+    let (app, _dir) = boot_desk().await;
+    // Everyone working as one agent is one person: sixteen open tabs, the framework's
+    // default for a person, are not all of the desk's visitors.
+    let mut open = Vec::new();
+    for count in 1..=20 {
+        let stream = app
+            .client()
+            .get("/broadcasting/stream?topics=conversations")
+            .header("accept", "text/event-stream")
+            .send_stream()
+            .await;
+        assert_eq!(stream.status().as_u16(), 200, "stream {count}");
+        open.push(stream);
+    }
+}
+
+#[tokio::test]
+async fn a_browser_asking_for_an_address_that_does_not_exist_gets_the_404_in_the_app_shell() {
+    let (app, _dir) = boot_desk().await;
+    let page = app
+        .client()
+        .get("/no-such-page")
+        .header("accept", "text/html")
+        .send()
+        .await;
+    assert_eq!(page.status().as_u16(), 404);
+    let html = page.text();
+    // The account the shell shows is there, as on every other page.
+    assert!(html.contains("@support.example.com"), "{html:.600}");
+}
+
+/// Runs `ask`, and says the statements it ran (and not those of the app's clocks, which
+/// run beside it).
+async fn statements_of(
+    ask: impl std::future::Future<Output = navree::testing::TestResponse>,
+) -> (navree::testing::TestResponse, Vec<String>) {
+    let (response, ran) = navree::db::QueryLog::capture(ask).await;
+    (response, ran.into_iter().map(|query| query.sql).collect())
+}
+
+#[tokio::test]
+async fn a_page_that_is_not_found_runs_no_query_on_the_conversations() {
+    let (app, _dir) = boot_desk().await;
+    let (page, ran) = statements_of(
+        app.client()
+            .get("/no-such-page")
+            .header("accept", "text/html")
+            .send(),
+    )
+    .await;
+    assert_eq!(page.status().as_u16(), 404);
+    assert!(page.text().contains("@support.example.com"));
+    // The shell it is drawn in is read (the agent, the team): the log sees the app's statements.
+    assert!(!ran.is_empty());
+    assert!(
+        ran.iter().all(|sql| !sql.contains("conversations")),
+        "{ran:?}"
+    );
+    // The inbox's own page counts them, as it did.
+    let (_, ran) = statements_of(
+        app.client()
+            .get("/inbox")
+            .header("accept", "text/html")
+            .send(),
+    )
+    .await;
+    assert!(ran.iter().any(|sql| sql.contains("conversations")));
+}
+
+#[tokio::test]
+async fn the_shell_a_native_client_draws_its_navigation_from_keeps_its_counts() {
+    let (app, _dir) = boot_desk().await;
+    let (shell, ran) = statements_of(
+        app.client()
+            .get("/_navree/native/shell")
+            .header("x-navree-native", "1")
+            .header("x-navree-client", PHONE)
+            .send(),
+    )
+    .await;
+    assert!(ran.iter().any(|sql| sql.contains("conversations")));
+    assert!(shell.text().contains("\"badge\""), "{:.400}", shell.text());
+}
+
+#[tokio::test]
+async fn the_live_streams_one_person_may_hold_are_the_number_the_app_is_built_with() {
+    let (app, _dir) = boot_desk().await;
+    let options = app.get::<navree::realtime::RealtimeOptions>().await;
+    assert_eq!(options.streams.per_user, 10_000);
+}
+
+#[tokio::test]
+async fn a_cookie_that_is_not_the_one_the_app_signed_for_an_agent_names_the_default_agent() {
+    let (app, _dir) = boot_desk().await;
+    let default = Some(inbox_demo::person::person_of(inbox_demo::data::DEFAULT_AGENT).to_string());
+    let signer = app.get::<navree::http::UrlSigner>().await;
+    let now = chrono::Utc::now();
+    // What the app signs for agent 2: `2.<expires>.<signature>`.
+    let good = inbox_demo::pages::agent_cookie(&signer, 2, now);
+    let [agent, expires, signature] = good.splitn(3, '.').collect::<Vec<_>>()[..] else {
+        panic!("{good}");
+    };
+    assert_eq!(agent, "2");
+    assert_eq!(
+        person_of(&app, "/_navree/native/shell", Some(&good)).await,
+        Some(inbox_demo::person::person_of(2).to_string())
+    );
+    let long = "a".repeat(10_000);
+    let digits = "7".repeat(10_000);
+    let expired = inbox_demo::pages::agent_cookie(&signer, 2, now - chrono::Duration::days(400));
+    let bad = [
+        // Signed for agent 2, with the number changed to 3.
+        ("another agent's number", format!("3.{expires}.{signature}")),
+        // Good while it lasted.
+        ("expired", expired),
+        (
+            "not hex",
+            format!("2.{expires}.{}", "z".repeat(signature.len())),
+        ),
+        (
+            "a later expiry",
+            format!("2.{}.{signature}", expires.parse::<i64>().unwrap_or(0) + 1),
+        ),
+        ("a signature far too long", format!("2.{expires}.{long}")),
+        (
+            "a number far too long",
+            format!("{digits}.{expires}.{signature}"),
+        ),
+        ("an expiry far too long", format!("2.{digits}.{signature}")),
+        ("no signature", format!("2.{expires}.")),
+        ("no parts", "2".to_owned()),
+        ("empty", String::new()),
+        ("a sign", format!("-2.{expires}.{signature}")),
+    ];
+    for (what, cookie) in bad {
+        assert_eq!(
+            person_of(&app, "/_navree/native/shell", Some(&cookie)).await,
+            default,
+            "{what}"
+        );
+        // The page answers too: nothing in its way of reading the cookie panics.
+        assert_eq!(
+            person_of(&app, "/inbox", Some(&cookie)).await,
+            default,
+            "{what}"
+        );
+    }
+}

@@ -30,6 +30,7 @@ http = { workspace = true }
 navree = { path = "../../crates/navree", default-features = false, features = ["ui", "orm", "db", "sqlite", "log", "realtime"] }
 serde = { workspace = true }
 tokio = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 navree = { path = "../../crates/navree", default-features = false, features = ["ui", "orm", "db", "sqlite", "log", "realtime", "testing"] }

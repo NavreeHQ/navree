@@ -77,3 +77,207 @@ async fn the_board_answers_a_native_client() {
         "{coverage}"
     );
 }
+
+/// The header that names the person a native answer is for.
+const PERSON: &str = "x-navree-person";
+
+/// The person a native client is told the answer for `path` is for.
+async fn person_of(app: &TestApp, path: &str) -> Option<String> {
+    app.client()
+        .get(path)
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .send()
+        .await
+        .header(PERSON)
+        .map(str::to_owned)
+}
+
+#[tokio::test]
+async fn the_shell_names_the_first_member_every_time() {
+    let (app, _dir) = boot().await;
+    let first = person_of(&app, "/_navree/native/shell").await;
+    let second = person_of(&app, "/_navree/native/shell").await;
+    let member = board_demo::data::viewer_number(None);
+    assert_eq!(
+        first,
+        Some(board_demo::person::person_of(member).to_string())
+    );
+    assert_eq!(first, second);
+}
+
+#[tokio::test]
+async fn every_native_page_names_the_same_person_as_the_shell() {
+    let (app, _dir) = boot().await;
+    let shell = person_of(&app, "/_navree/native/shell").await;
+    assert!(shell.is_some());
+    for path in ["/", "/fragments/board", "/cards/1", "/columns/doing"] {
+        assert_eq!(person_of(&app, path).await, shell, "{path}");
+    }
+}
+
+#[tokio::test]
+async fn a_browser_gets_the_page_with_no_person_named() {
+    let (app, _dir) = boot().await;
+    let page = app.client().get("/").send().await;
+    assert_eq!(page.status().as_u16(), 200);
+    assert!(
+        page.header("content-type")
+            .is_some_and(|kind| kind.starts_with("text/html")),
+        "{:?}",
+        page.header("content-type")
+    );
+    assert_eq!(page.header(PERSON), None);
+    assert!(page.header("set-cookie").is_none());
+}
+
+#[tokio::test]
+async fn the_visitors_may_hold_more_live_streams_than_one_person_is_given_by_default() {
+    let (app, _dir) = boot().await;
+    // Everyone viewing the board as one member is one person: sixteen open tabs, the
+    // framework's default for a person, are not all of the board's visitors.
+    let mut open = Vec::new();
+    for count in 1..=20 {
+        let stream = app
+            .client()
+            .get("/broadcasting/stream?topics=board")
+            .header("accept", "text/event-stream")
+            .send_stream()
+            .await;
+        assert_eq!(stream.status().as_u16(), 200, "stream {count}");
+        open.push(stream);
+    }
+}
+
+#[tokio::test]
+async fn a_browser_asking_for_an_address_that_does_not_exist_gets_the_404_in_the_app_shell() {
+    let (app, _dir) = boot().await;
+    let page = app
+        .client()
+        .get("/no-such-page")
+        .header("accept", "text/html")
+        .send()
+        .await;
+    assert_eq!(page.status().as_u16(), 404);
+    let html = page.text();
+    // The account the shell shows is there, as on every other page.
+    assert!(html.contains("team@example.com"), "{html:.600}");
+}
+
+/// The person a native client is told the answer for `path` is for, on the way `client` has
+/// (its cookies stay).
+async fn person_on(client: &navree::testing::TestClient, path: &str) -> Option<String> {
+    client
+        .get(path)
+        .header("x-navree-native", "1")
+        .header("x-navree-client", PHONE)
+        .send()
+        .await
+        .header(PERSON)
+        .map(str::to_owned)
+}
+
+#[tokio::test]
+async fn a_visitor_who_switches_viewer_is_another_person_on_the_next_native_answer() {
+    let (app, _dir) = boot().await;
+    let client = app.client();
+    let first = person_on(&client, "/").await;
+    assert!(first.is_some());
+    // The cookie the board's own switch sets.
+    client.set_cookie("board_as", "3");
+    let third = person_on(&client, "/").await;
+    assert!(third.is_some());
+    assert_ne!(third, first);
+    // The shell and every page name the same person for the viewer.
+    assert_eq!(person_on(&client, "/_navree/native/shell").await, third);
+    assert_eq!(person_on(&client, "/cards/1").await, third);
+    // Another viewer, another person; the same viewer, the same person.
+    client.set_cookie("board_as", "1");
+    let lead = person_on(&client, "/").await;
+    assert_ne!(lead, third);
+    assert_ne!(lead, first);
+    client.set_cookie("board_as", "3");
+    assert_eq!(person_on(&client, "/").await, third);
+}
+
+#[tokio::test]
+async fn a_cookie_that_names_nobody_is_the_default_viewer() {
+    let (app, _dir) = boot().await;
+    let fresh = person_on(&app.client(), "/").await;
+    assert!(fresh.is_some());
+    for named in [
+        "99",
+        "0",
+        "-1",
+        "abc",
+        "",
+        "3.5",
+        "9999999999999999999999999",
+    ] {
+        let client = app.client();
+        client.set_cookie("board_as", named);
+        assert_eq!(person_on(&client, "/").await, fresh, "{named:?}");
+    }
+    // The default viewer is the first member, the person a cookie for them names too.
+    let client = app.client();
+    client.set_cookie("board_as", "2");
+    assert_eq!(person_on(&client, "/").await, fresh);
+}
+
+#[tokio::test]
+async fn the_person_is_the_viewer_the_pages_show_the_board_as() {
+    let (app, _dir) = boot().await;
+    let db = app.get::<navree::db::Db>().await;
+    let uow = db.uow(None, None).await;
+    // Whatever a cookie says, the person is the one the pages' own rule makes the viewer.
+    for named in [
+        None,
+        Some("1"),
+        Some("2"),
+        Some("8"),
+        Some("9"),
+        Some("0"),
+        Some("-3"),
+        Some("+4"),
+        Some("x"),
+    ] {
+        let shown = board_demo::store::viewer(&uow, named.and_then(|text| text.parse().ok()))
+            .await
+            .expect("the team")
+            .id;
+        let client = app.client();
+        if let Some(value) = named {
+            client.set_cookie("board_as", value);
+        }
+        assert_eq!(
+            person_on(&client, "/").await,
+            Some(board_demo::person::person_of(shown).to_string()),
+            "{named:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_page_that_is_not_found_runs_no_statement_at_all() {
+    let (app, _dir) = boot().await;
+    let (page, ran) = navree::db::QueryLog::capture(
+        app.client()
+            .get("/no-such-page")
+            .header("accept", "text/html")
+            .send(),
+    )
+    .await;
+    assert_eq!(page.status().as_u16(), 404);
+    assert!(
+        ran.is_empty(),
+        "{:?}",
+        ran.iter().map(|q| &q.sql).collect::<Vec<_>>()
+    );
+}
+
+#[tokio::test]
+async fn the_live_streams_one_person_may_hold_are_the_number_the_app_is_built_with() {
+    let (app, _dir) = boot().await;
+    let options = app.get::<navree::realtime::RealtimeOptions>().await;
+    assert_eq!(options.streams.per_user, 10_000);
+}
