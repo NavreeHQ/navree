@@ -207,6 +207,15 @@
       ]
     },
     {
+      "note": "While the snapshot waits for this launch's shell, the app goes to the background and the client asks for the snapshot again. It is given the one that waits, as it was, and not an empty one made of the bars alone.",
+      "send": {"t":"background"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      },
+      "snapshot": {"destinations":[{"href":"/","stack":[{"title":"Dashboard","url":"/"},{"fields":{"city":{"t":"text","text":"Ludhiana"},"gift":{"on":true,"t":"flag"},"note-text":{"t":"text","text":"Wrap the dupattas separately"}},"title":"Pay for CS-20481","url":"/orders/1/pay"}]}],"origin":"https://shop.example","person":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e","selected":"/","version":1}
+    },
+    {
       "note": "This launch's shell names her: now the stacks are put back, and the screen in front is asked for.",
       "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "store/shell.json",
@@ -285,6 +294,49 @@
       "check": [
         {"at":"/screens/2","is":null},
         {"at":"/destinations/0/stack","is":[1]}
+      ]
+    },
+    {
+      "note": "A last launch from the same snapshot, with no network: the kept shell is drawn, and then the shell can't be reached.",
+      "restart": true,
+      "last": true,
+      "send": {"t":"restore","snapshot":{"destinations":[{"href":"/","stack":[{"title":"Dashboard","url":"/"},{"fields":{"city":{"t":"text","text":"Ludhiana"},"gift":{"on":true,"t":"flag"},"note-text":{"t":"text","text":"Wrap the dupattas separately"}},"title":"Pay for CS-20481","url":"/orders/1/pay"}]}],"origin":"https://shop.example","person":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e","selected":"/","version":1}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"cache_read","key":"boot"},
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"cache","key":"boot"},
+      "body": "made/kept-boot.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The kept shell gives way to the blank one, and the snapshot is not used: nothing waits for a shell that did not come, and that is said.",
+      "send": {"t":"response","request":1,"error":"offline"},
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"report","what":"snapshot","detail":"a snapshot is not used: this launch's shell did not give a shell"},
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/destinations/0/stack","is":[1]},
+        {"at":"/app/name","is":""}
       ]
     }
   ]
