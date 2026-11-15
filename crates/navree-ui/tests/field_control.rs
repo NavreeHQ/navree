@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 
 use http::{Method, StatusCode};
 use navree_http::response::{IntoResponse, Response};
-use navree_http::{Controller, HttpModule, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{Controller, Extension, HttpModule, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
-    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
+    AppContext, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_testing::{TestApp, TestAppBuilder, TestResponse};
 use navree_ui::flow::{Draft, Wizard, WizardOutcome, WizardStep};
@@ -16,7 +16,11 @@ use navree_ui::form::{
     Control, ControlCx, ControlField, FieldControl, FormField, Language, Rejected, Widget,
     check_controls, decode, decode_for, decode_with,
 };
-use navree_ui::{Form, FormView, Node, Options, Submit, UiModule, Validate, el, kit, render};
+use navree_ui::table::EditCell;
+use navree_ui::{
+    EditedValue, Form, FormView, Node, Options, Reply, Submit, UiModule, Validate, assets, el, kit,
+    render,
+};
 use navree_validation::{AppMessages, ValidationModule};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -214,6 +218,33 @@ async fn parcels(submit: Result<Submit<Parcel>, Rejected<Parcel>>) -> Response {
     }
 }
 
+/// An inline edit of a delivery's pin code: the value is held to the pin code control's check.
+async fn pin_edit(Extension(ctx): Extension<AppContext>, edit: EditedValue<String>) -> Reply {
+    let language = Language::of(Some(&ctx)).await;
+    match edit.read(Control::new(&PIN_CODE), &language) {
+        Ok(_) => Reply::ops(vec![]),
+        Err(refused) => refused.reply("/deliveries"),
+    }
+}
+
+/// An inline edit of a delivery's note, in a built-in editor: nothing to check but the type.
+async fn note_edit(Extension(ctx): Extension<AppContext>, edit: EditedValue<String>) -> Reply {
+    let language = Language::of(Some(&ctx)).await;
+    match edit.read_built_in(&language) {
+        Ok(_) => Reply::ops(vec![]),
+        Err(refused) => refused.reply("/deliveries"),
+    }
+}
+
+/// An inline edit of a rating: a control that checks nothing, so only the type can refuse.
+async fn seats_edit(Extension(ctx): Extension<AppContext>, edit: EditedValue<u8>) -> Reply {
+    let language = Language::of(Some(&ctx)).await;
+    match edit.read(Control::new(&STARS), &language) {
+        Ok(_) => Reply::ops(vec![]),
+        Err(refused) => refused.reply("/deliveries"),
+    }
+}
+
 struct Pages;
 
 impl Injectable for Pages {
@@ -232,7 +263,12 @@ impl Controller for Pages {
     }
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
-        vec![RouteDef::on(Method::POST, "!/parcels", parcels).public()]
+        vec![
+            RouteDef::on(Method::POST, "!/parcels", parcels).public(),
+            RouteDef::on(Method::POST, "!/deliveries/{id}/pin", pin_edit).public(),
+            RouteDef::on(Method::POST, "!/deliveries/{id}/note", note_edit).public(),
+            RouteDef::on(Method::POST, "!/deliveries/{id}/seats", seats_edit).public(),
+        ]
     }
 }
 
@@ -739,4 +775,172 @@ fn assert_control_refuses_an_unlabelled_hidden_control_one_that_ignores_disabled
 
     kit::assert_control(&PIN_CODE);
     kit::assert_control(&DELIVERY_PIN);
+}
+
+// An inline edit is held to the control's check before the app stores anything: refused with a
+// toast the cell shows and no navigation, or with a redirect when JavaScript is off.
+#[tokio::test]
+async fn an_inline_edit_through_a_control_is_refused_by_the_controls_check() {
+    let app = boot().await;
+
+    let response = post(&app, "/deliveries/42/pin", "value=110001", true).await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = response.json_value();
+    let ops = body["ops"].as_array().expect("the ops");
+    assert_eq!(ops.len(), 1, "{ops:?}");
+    assert_eq!(ops[0]["op"], "toast");
+    assert_eq!(ops[0]["tone"], "danger");
+    assert_eq!(ops[0]["text"], "We deliver to Ludhiana and Jalandhar only");
+    assert!(
+        ops.iter().all(|op| op["op"] != "navigate"),
+        "the runtime only puts the cell back: {ops:?}"
+    );
+
+    // With JavaScript off the person goes back with the message as a flash.
+    let response = post(&app, "/deliveries/42/pin", "value=110001", false).await;
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.header("location"), Some("/deliveries"));
+    assert!(
+        response
+            .headers()
+            .get_all("set-cookie")
+            .iter()
+            .any(|cookie| cookie
+                .to_str()
+                .unwrap_or_default()
+                .starts_with("navree_ui_flash=")),
+        "the flash cookie: {:?}",
+        response.headers()
+    );
+
+    let response = post(&app, "/deliveries/42/pin", "value=141001", true).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // A post with no `value` is no edit.
+    let response = post(&app, "/deliveries/42/pin", "other=141001", true).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // The built-in editors have no control to check, and read the value as its type only.
+    let response = post(&app, "/deliveries/42/note", "value=110001", true).await;
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+// A value that is not of the field's type is refused in the form's own words, with no check of
+// a control's to say so.
+#[tokio::test]
+async fn an_edited_value_the_type_cannot_read_is_refused_in_the_forms_words() {
+    let app = boot().await;
+    let response = post(&app, "/deliveries/42/seats", "value=x", true).await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.json_value()["ops"][0]["text"], "Value is not valid.");
+    let response = post(&app, "/deliveries/42/seats", "value=4", true).await;
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+/// What `Recording` was last drawn for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Drawn {
+    name: String,
+    id: String,
+    label: String,
+    label_id: Option<String>,
+    value: Option<String>,
+    disabled: bool,
+}
+
+static DRAWN: Mutex<Option<Drawn>> = Mutex::new(None);
+
+/// Accepts everything, and records what it was drawn for.
+struct Recording;
+
+impl FieldControl for Recording {
+    fn name(&self) -> &'static str {
+        "app.recording"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        *DRAWN.lock().expect("the record") = Some(Drawn {
+            name: field.name.to_owned(),
+            id: field.id.to_owned(),
+            label: field.label.to_owned(),
+            label_id: field.label_id.map(str::to_owned),
+            value: field.value.map(str::to_owned),
+            disabled: field.disabled,
+        });
+        el("input")
+            .attr("name", field.name.to_owned())
+            .attr("aria-label", field.label.to_owned())
+            .flag("disabled", field.disabled)
+            .into()
+    }
+}
+
+static RECORDING: Recording = Recording;
+
+/// What the control of `cell` was drawn for.
+fn drawn_for(cell: EditCell) -> Drawn {
+    *DRAWN.lock().expect("the record") = None;
+    let _ = Node::from(cell);
+    DRAWN
+        .lock()
+        .expect("the record")
+        .clone()
+        .expect("the control was drawn")
+}
+
+// A cell's control is drawn for the field `value`, with an id of its own for each row, the
+// label as its `aria-label` and no label id; the editors of today are drawn as before.
+#[test]
+fn an_edit_cell_control_gets_an_id_of_its_own_no_label_id_and_its_disabled() {
+    let cell = EditCell::control("141001", "/deliveries/42/pin", Control::new(&RECORDING))
+        .label("Pin code")
+        .disabled(true);
+    let drawn = drawn_for(cell);
+    let id = format!("edit-{}", assets::content_hash(b"/deliveries/42/pin"));
+    assert_eq!(
+        drawn,
+        Drawn {
+            name: "value".to_owned(),
+            id: id.clone(),
+            label: "Pin code".to_owned(),
+            label_id: None,
+            value: Some("141001".to_owned()),
+            disabled: true,
+        }
+    );
+
+    let other = drawn_for(EditCell::control(
+        "144001",
+        "/deliveries/43/pin",
+        Control::new(&RECORDING),
+    ));
+    assert_ne!(other.id, id, "no two rows share an id");
+    assert_eq!(
+        other.id,
+        format!("edit-{}", assets::content_hash(b"/deliveries/43/pin"))
+    );
+    assert_eq!(other.label, "Edit");
+    assert!(!other.disabled);
+
+    // The control sits inside the same cell form as the built-in editors.
+    let html = render(
+        &EditCell::control("141001", "/deliveries/42/pin", Control::new(&PIN_CODE))
+            .label("Pin code")
+            .into(),
+    );
+    assert!(
+        html.starts_with(
+            r#"<form data-slot="edit-cell" method="post" action="/deliveries/42/pin" data-ui-form data-ui-edit>"#
+        ),
+        "{html}"
+    );
+    assert!(html.contains(r#"name="value""#), "{html}");
+    assert!(html.contains(r#"value="141001""#), "{html}");
+    assert!(html.ends_with("</noscript></form>"), "{html}");
+
+    // The editors of today are unchanged.
+    assert_eq!(
+        render(&EditCell::text("Kesar", "/deals/1/title").into()),
+        r#"<form data-slot="edit-cell" method="post" action="/deals/1/title" data-ui-form data-ui-edit><input data-slot="input" data-size="sm" type="text" name="value" value="Kesar" aria-label="Edit"><noscript><button data-slot="button" data-variant="outline" data-size="xs" type="submit">Save</button></noscript></form>"#
+    );
 }
