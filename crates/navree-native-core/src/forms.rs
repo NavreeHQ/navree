@@ -314,6 +314,14 @@ impl Core {
             Some(Action::Submit {
                 form: Some(other), ..
             }) if !self.is_own_form(id, &handle, &other) => self.refused_on_change("another form"),
+            // The form's data goes where the form says, never to an endpoint
+            // a change names for it.
+            Some(Action::Submit {
+                href: Some(address),
+                ..
+            }) if !self.is_forms_address(id, &handle, &address) => {
+                self.refused_on_change("another address")
+            }
             Some(action @ Action::Submit { .. }) if typed => {
                 let timer = self.timer(
                     TYPING_PAUSE,
@@ -376,6 +384,28 @@ impl Core {
                 .is_some_and(|server| server.as_deref() == Some(named))
     }
 
+    /// Whether `address` is where the form `handle` sends its data anyway:
+    /// its own `action`, or the screen's address when it has none, read as a
+    /// browser reads it.
+    fn is_forms_address(&self, screen: ScreenId, handle: &str, address: &str) -> bool {
+        let Some(view) = self.view.screens.get(&screen) else {
+            return false;
+        };
+        let Some(form) = view.screen().and_then(|tree| form_of(tree, handle)) else {
+            return false;
+        };
+        let own = if form.action.is_empty() {
+            view.url.as_str()
+        } else {
+            form.action.as_str()
+        };
+        let origin = &self.inner.origin;
+        matches!(
+            (origin.resolve(address, &view.url), origin.resolve(own, &view.url)),
+            (Target::Inside(address), Target::Inside(own)) if address == own
+        )
+    }
+
     /// The handle of the form an action or a command means. `named` is what
     /// it writes (a form's id), and `own` the form the control stands in, by
     /// its handle, when it stands in one: with no name it is the control's
@@ -411,6 +441,9 @@ impl Core {
             && form
                 .as_deref()
                 .is_none_or(|named| self.is_own_form(id, handle, named))
+            && href
+                .as_deref()
+                .is_none_or(|address| self.is_forms_address(id, handle, address))
         {
             self.send_form(id, handle.to_owned(), href, with);
         }

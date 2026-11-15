@@ -135,6 +135,32 @@
         "method": "post",
         "href": "/orders/pay"
        }
+      },
+      {
+       "t": "field",
+       "id": "export",
+       "name": "export",
+       "label": "Export",
+       "input": {
+        "t": "toggle"
+       },
+       "changed": {
+        "t": "submit",
+        "href": "/orders/export"
+       }
+      },
+      {
+       "t": "field",
+       "id": "again",
+       "name": "again",
+       "label": "Again",
+       "input": {
+        "t": "toggle"
+       },
+       "changed": {
+        "t": "submit",
+        "href": "/orders"
+       }
       }
      ]
     },
