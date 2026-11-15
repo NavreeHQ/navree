@@ -143,6 +143,64 @@ public sealed class HttpFetcher : IFetcher, IDisposable
     /// <inheritdoc />
     public void Dispose() => client.Dispose();
 
+    /// <summary>The most bytes a picture may have: 10 MiB.</summary>
+    public const long MostPictureBytes = 10L * 1024 * 1024;
+
+    /// <summary>
+    /// Fetches a picture from a whole address of the app's origins, with the app's cookies, following no redirect.
+    /// A picture on another host is the client's to allow by its own list, and is never fetched here.
+    /// </summary>
+    /// <param name="url">The whole address the core wrote.</param>
+    /// <param name="cancel">Cancelled when the picture is no longer wanted.</param>
+    /// <returns>The bytes, or null when it may not be fetched, did not come, or is not a picture.</returns>
+    public async Task<byte[]?> GetPictureAsync(string url, CancellationToken cancel)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        if (!origins.Ours(url))
+        {
+            return null;
+        }
+
+        try
+        {
+            using HttpRequestMessage request = new(HttpMethod.Get, url);
+            if (cookies.Header(url, clock()) is string cookie)
+            {
+                request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            }
+
+            using HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel).ConfigureAwait(false);
+            string? type = response.Content.Headers.ContentType?.MediaType;
+            if (!response.IsSuccessStatusCode || type is null || !type.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            await using Stream stream = await response.Content.ReadAsStreamAsync(cancel).ConfigureAwait(false);
+            using MemoryStream bytes = new();
+            byte[] buffer = new byte[16 * 1024];
+            while (true)
+            {
+                int read = await stream.ReadAsync(buffer, cancel).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    return bytes.ToArray();
+                }
+
+                if (bytes.Length + read > MostPictureBytes)
+                {
+                    return null;
+                }
+
+                bytes.Write(buffer, 0, read);
+            }
+        }
+        catch (Exception problem) when (problem is HttpRequestException or IOException or OperationCanceledException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// The request a <c>fetch</c> effect asks for, with the store's cookies as they are now, or null when it cannot
     /// be sent: an address that is not one of the app's origins, a header HTTP cannot carry, a body of a kind that

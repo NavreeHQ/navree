@@ -301,7 +301,7 @@ public sealed record FormView
 public sealed record RegionView(bool Loading, Failure? Failure);
 
 /// <summary>The state of a list or table that loads more by cursor, at its end and before its first row.</summary>
-public sealed record ListView
+public sealed record ListState
 {
     /// <summary>Rows are being asked for at the end.</summary>
     public bool Loading { get; init; }
@@ -376,7 +376,7 @@ public sealed record ScreenView
     public IReadOnlyDictionary<string, RegionView> Regions { get; init; } = ImmutableDictionary<string, RegionView>.Empty;
 
     /// <summary>The state of each list, by id.</summary>
-    public IReadOnlyDictionary<string, ListView> Lists { get; init; } = ImmutableDictionary<string, ListView>.Empty;
+    public IReadOnlyDictionary<string, ListState> Lists { get; init; } = ImmutableDictionary<string, ListState>.Empty;
 
     /// <summary>A request to move the focus.</summary>
     public Focus? Focus { get; init; }

@@ -296,7 +296,7 @@ public static class ViewWriting
         w.WriteStartObject("lists");
         foreach (string id in screen.Lists.Keys.Order(StringComparer.Ordinal))
         {
-            ListView list = screen.Lists[id];
+            ListState list = screen.Lists[id];
             w.WriteStartObject(id);
             w.WriteBoolean("loading", list.Loading);
             w.WriteBoolean("failed", list.Failed);

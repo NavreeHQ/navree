@@ -74,7 +74,7 @@ public static class ViewReading
                 ImmutableDictionary<string, IReadOnlyList<Models.State>>.Empty),
             Forms = Reading.Or<IReadOnlyDictionary<string, FormView>>(json, "forms", static element => Reading.MapOf<FormView>(element, ReadForm), ImmutableDictionary<string, FormView>.Empty),
             Regions = Reading.Or<IReadOnlyDictionary<string, RegionView>>(json, "regions", static element => Reading.MapOf<RegionView>(element, ReadRegion), ImmutableDictionary<string, RegionView>.Empty),
-            Lists = Reading.Or<IReadOnlyDictionary<string, ListView>>(json, "lists", static element => Reading.MapOf<ListView>(element, ReadList), ImmutableDictionary<string, ListView>.Empty),
+            Lists = Reading.Or<IReadOnlyDictionary<string, ListState>>(json, "lists", static element => Reading.MapOf<ListState>(element, ReadList), ImmutableDictionary<string, ListState>.Empty),
             Focus = Reading.Opt<Focus>(json, "focus", ReadFocus),
             Question = Reading.Opt<ScreenQuestion>(json, "question", ReadQuestion),
             Title = Reading.Opt<string>(json, "title", Reading.Text),
@@ -206,10 +206,10 @@ public static class ViewReading
             Reading.OptWord<Failure>(json, "failure", ReadFailure));
     }
 
-    private static ListView ReadList(JsonElement json)
+    private static ListState ReadList(JsonElement json)
     {
         Reading.ExpectObject(json);
-        return new ListView
+        return new ListState
         {
             Loading = Reading.Or<bool>(json, "loading", Reading.Flag, false),
             Failed = Reading.Or<bool>(json, "failed", Reading.Flag, false),
