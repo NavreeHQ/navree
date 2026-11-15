@@ -202,6 +202,12 @@ class LiveDemosTest {
         openFirstRow(app, "board-card")
     }
 
+    /**
+     * What a person does next, as opposed to a screen to look at, is walked in two looks (the plain one and
+     * the right to left one, whose windows and menus mirror): the other looks only draw screens.
+     */
+    private fun walkedHere() = assumeTrue("walked in the light and right to left looks only", Shots.look == "light" || Shots.look == "rtl")
+
     /** The cards of every lane of a board, as the tree says. */
     private fun cards(screen: Navree.Screen?): List<Navree.Row> =
         screen?.body.let { body -> body?.walk().orEmpty() }.filterIsInstance<Navree.List>().filter { it.reorder != null }
@@ -217,6 +223,7 @@ class LiveDemosTest {
 
     @Test
     fun theBoardsFiltersNarrowTheBoardAndClearAgain() {
+        walkedHere()
         val origin = arguments.getString("board")
         assumeTrue("no board demo was named", origin != null)
         val app = start(origin!!)
@@ -242,6 +249,7 @@ class LiveDemosTest {
 
     @Test
     fun aCardMovesToAnotherLaneByItsHandle() {
+        walkedHere()
         val origin = arguments.getString("board")
         assumeTrue("no board demo was named", origin != null)
         val app = start(origin!!)
@@ -267,6 +275,7 @@ class LiveDemosTest {
 
     @Test
     fun aFormThatIsRefusedShowsWhatIsWrongAndTheFirstFieldTakesTheFocus() {
+        walkedHere()
         val origin = arguments.getString("board")
         assumeTrue("no board demo was named", origin != null)
         val app = start(origin!!)
@@ -286,6 +295,7 @@ class LiveDemosTest {
 
     @Test
     fun aFieldThatIsDoneWithLetsGoOfTheFocusWithoutTheSearchTakingIt() {
+        walkedHere()
         val origin = arguments.getString("store")
         assumeTrue("no store demo was named", origin != null)
         val app = start(origin!!)
@@ -311,6 +321,7 @@ class LiveDemosTest {
 
     @Test
     fun theBoardIsShownAsAnotherPersonAndAsTheFirstAgain() {
+        walkedHere()
         val origin = arguments.getString("board")
         assumeTrue("no board demo was named", origin != null)
         val app = start(origin!!)
