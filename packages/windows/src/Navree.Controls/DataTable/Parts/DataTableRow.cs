@@ -245,6 +245,11 @@ public sealed class DataTableRow : Control
         double height = IsHeader ? table.HeaderHeight : table.RowHeight;
         root.RowDefinitions[0].Height = new GridLength(height);
         root.Width = table.IsList ? layout.Viewport : layout.RowWidth;
+        if (IsHeader)
+        {
+            // The row of headings is as wide as the rows: arranged narrower it would cut off what is kept in place beyond its edge.
+            Width = root.Width;
+        }
         if (chrome is not null)
         {
             chrome.Width = Math.Max(layout.Viewport, 0);

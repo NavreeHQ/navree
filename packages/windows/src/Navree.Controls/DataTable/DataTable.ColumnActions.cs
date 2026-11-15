@@ -18,6 +18,34 @@ public sealed partial class DataTable
     private string? resizingKey;
     private double resizeStartWidth;
     private int saveCounter;
+    private double gripWidth = 8;
+
+    // A touch needs a wider strip to take hold of than a pen, and a pen than a mouse.
+    private void PointerKindSeen(Microsoft.UI.Input.PointerDeviceType kind)
+    {
+        double width = kind switch
+        {
+            Microsoft.UI.Input.PointerDeviceType.Touch => 24,
+            Microsoft.UI.Input.PointerDeviceType.Pen => 12,
+            _ => 8,
+        };
+        if (header is null || Math.Abs(gripWidth - width) < 0.5)
+        {
+            return;
+        }
+
+        gripWidth = width;
+        foreach (DataTableHeaderCell cell in header.Headers)
+        {
+            if (cell.Grip is { } grip)
+            {
+                grip.Width = width;
+            }
+        }
+    }
+
+    /// <summary>The width a resize strip has for the pointer last seen.</summary>
+    internal double GripWidth => gripWidth;
 
     private string KeyOf(DataTableHeaderCell cell) => ColumnAt(cell.ColumnIndex).Key;
 

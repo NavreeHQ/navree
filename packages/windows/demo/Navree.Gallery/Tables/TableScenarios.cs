@@ -12,7 +12,7 @@ namespace Navree.Gallery;
 internal static class TableScenarios
 {
     private static readonly string[] Standard =
-        ["standard", "chosen", "sorted", "loading", "empty", "failed", "scrolled", "detail", "cursor", "menu", "rowmenu", "layout", "narrow", "more", "keys"];
+        ["standard", "chosen", "sorted", "loading", "empty", "failed", "scrolled", "detail", "cursor", "menu", "rowmenu", "layout", "narrow", "rtl", "rtlscrolled", "more", "keys"];
 
     /// <summary>The scenarios a run of "table" covers.</summary>
     internal static IReadOnlyList<string> All => Standard;
@@ -106,6 +106,11 @@ internal static class TableScenarios
         }
 
         DataTable table = new() { Model = model, Presenter = presenter, Culture = DemoData.Culture, Caption = "Customers" };
+        if (name.StartsWith("rtl", StringComparison.Ordinal))
+        {
+            table.FlowDirection = FlowDirection.RightToLeft;
+        }
+
         if (name == "narrow")
         {
             table.Width = 520;
@@ -154,6 +159,10 @@ internal static class TableScenarios
                 break;
             case "narrow":
                 table.ApplyChoice(["c00001"], false);
+                break;
+            case "rtlscrolled":
+                table.Scroller?.ScrollTo(44, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
+                await Task.Delay(800);
                 break;
             case "scrolled":
                 table.Scroller?.ScrollTo(420, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
@@ -300,7 +309,7 @@ internal static class TableScenarios
         Keys.Foreground(window);
         table.RestoreFocus();
         await Task.Delay(500);
-        string Where() => $"active {table.ActiveCell?.RowKey}/{table.ActiveCell?.ColumnKey}, chosen {table.ChosenCount}, focus on {FocusName(table)}";
+        string Where() => $"active {table.ActiveCell?.RowKey}/{table.ActiveCell?.ColumnKey}, chosen {table.ChosenCount}, sideways {table.Scroller?.HorizontalOffset:0.#}, focus on {FocusName(table)}";
         Report.Line($"[{tag}] start: {Where()}");
 
         async Task Step(string said, VirtualKey key, params VirtualKey[] with)
@@ -323,6 +332,7 @@ internal static class TableScenarios
         await Step("Ctrl+A", VirtualKey.A, VirtualKey.Control);
         await Step("Escape", VirtualKey.Escape);
         await Step("End", VirtualKey.End);
+        await Step("Left", VirtualKey.Left);
         await Step("Home", VirtualKey.Home);
         await Step("PageDown", VirtualKey.PageDown);
         await Step("Ctrl+End", VirtualKey.End, VirtualKey.Control);
@@ -333,6 +343,8 @@ internal static class TableScenarios
         await Step("Down", VirtualKey.Down);
         await Step("Space", VirtualKey.Space);
         await Step("Space", VirtualKey.Space);
+        await Step("G typed to find a name", VirtualKey.G);
+        await Step("A typed to go on", VirtualKey.A);
     }
 
     private static string FocusName(DataTable table)

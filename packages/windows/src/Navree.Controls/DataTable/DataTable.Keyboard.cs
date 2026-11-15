@@ -15,6 +15,9 @@ public sealed partial class DataTable
     private bool activeSet;
     private bool lastInputWasKeyboard;
     private Control? activeElement;
+    private string typed = string.Empty;
+    private DateTime typedAt = DateTime.MinValue;
+    private List<string>? rowNames;
 
     /// <summary>Whether a cell of a body row is the active one.</summary>
     /// <param name="row">The row's place.</param>
@@ -305,6 +308,37 @@ public sealed partial class DataTable
                 e.Handled = true;
                 RaiseRefreshRequested();
                 return;
+        }
+    }
+
+    // Typing the start of a name moves to the next row whose name starts so; a pause of 800 ms starts again.
+    private void OnCharacterReceivedCore(UIElement sender, CharacterReceivedRoutedEventArgs e)
+    {
+        if (e.Handled || Model is not { } model || Presenter is not { } presenter)
+        {
+            return;
+        }
+
+        if (FindCell(e.OriginalSource as DependencyObject) is not { Role: CellRole.Data, Row.Index: >= 0 } cell)
+        {
+            return;
+        }
+
+        char character = e.Character;
+        if (char.IsControl(character) || (char.IsWhiteSpace(character) && typed.Length == 0))
+        {
+            return;
+        }
+
+        DateTime now = DateTime.UtcNow;
+        typed = (now - typedAt).TotalMilliseconds > 800 ? character.ToString() : typed + character;
+        typedAt = now;
+        rowNames ??= Enumerable.Range(0, model.RowCount).Select(i => presenter.RowName(model.GetRow(i))).ToList();
+        int next = TypeAhead.Next(rowNames, cell.Row!.Index, typed, Culture);
+        if (next >= 0)
+        {
+            SetActive(new Cell(next, Math.Max(activeColumn, 0)), focus: true);
+            e.Handled = true;
         }
     }
 

@@ -63,6 +63,8 @@ public sealed partial class DataTable : Control
         Unloaded += (_, _) => OnUnloaded();
         SizeChanged += (_, _) => OnSizeChanged();
         PreviewKeyDown += OnPreviewKeyDownCore;
+        CharacterReceived += OnCharacterReceivedCore;
+        PointerEntered += (_, e) => PointerKindSeen(e.Pointer.PointerDeviceType);
     }
 
     /// <summary>A person asked for a column to be sorted.</summary>
@@ -245,7 +247,11 @@ public sealed partial class DataTable : Control
     /// <summary>Forgets what a person kept of the columns.</summary>
     public void ResetLayout() => ForgetLayout();
 
-    private void RaiseSortRequested(DataTableColumn column) => SortRequested?.Invoke(this, new DataTableSortRequestedEventArgs(column));
+    private void RaiseSortRequested(DataTableColumn column)
+    {
+        sortAsked = true;
+        SortRequested?.Invoke(this, new DataTableSortRequestedEventArgs(column));
+    }
 
     private void RaiseRowInvoked(string key) => RowInvoked?.Invoke(this, new DataTableRowEventArgs(key));
 

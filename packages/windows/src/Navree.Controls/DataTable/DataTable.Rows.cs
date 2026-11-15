@@ -17,6 +17,7 @@ public sealed partial class DataTable
     private double rowHeight = 40;
     private double headerHeight = 40;
     private RowShape shape = RowShape.OneLine;
+    private bool sortAsked;
     private int askedAfterAt = -1;
     private int askedBeforeAt = -1;
     private bool heldLimitRaised;
@@ -84,6 +85,11 @@ public sealed partial class DataTable
             return;
         }
 
+        if (e.Kind is DataTableChangeKind.Reset or DataTableChangeKind.Insert or DataTableChangeKind.Remove or DataTableChangeKind.Replace)
+        {
+            rowNames = null;
+        }
+
         switch (e.Kind)
         {
             case DataTableChangeKind.Reset:
@@ -106,6 +112,12 @@ public sealed partial class DataTable
                 break;
             case DataTableChangeKind.Columns:
                 RebuildColumns(remeasure: false);
+                if (sortAsked && SortStatus() is { } sorted)
+                {
+                    sortAsked = false;
+                    Announce(sorted);
+                }
+
                 break;
             case DataTableChangeKind.State:
                 RebuildColumns(remeasure: false);
@@ -221,13 +233,16 @@ public sealed partial class DataTable
             rowsLayout.PinnedIndex = top - count;
         }
 
+        bool activeRemoved = activeSet && activeRow >= index && activeRow < index + count;
         if (activeRow >= index + count)
         {
             activeRow -= count;
         }
-        else if (activeRow >= index)
+        else if (activeRemoved)
         {
-            activeRow = Math.Min(index, (Model?.RowCount ?? 0) - 1);
+            Cell? next = GridNavigation.FocusAfterRemoval(index, Model?.RowCount ?? 0, activeColumn, !IsList);
+            activeRow = next?.Row ?? -1;
+            Announce(DataTableStrings.Get("DataTable_RowRemoved"));
         }
 
         UpdateGeometry();

@@ -196,6 +196,13 @@ public sealed class DataTableHeaderCell : Control
     protected override void OnTapped(TappedRoutedEventArgs e)
     {
         base.OnTapped(e);
+        if (menuAvailable && e.OriginalSource is FrameworkElement { Name: "PART_Options" })
+        {
+            Row?.Owner?.ShowColumnMenu(this, null);
+            e.Handled = true;
+            return;
+        }
+
         if (sortable)
         {
             Row?.Owner?.SortPressed(this);
@@ -251,6 +258,7 @@ public sealed class DataTableHeaderCell : Control
         if (grip is not null)
         {
             grip.Visibility = resizable ? Visibility.Visible : Visibility.Collapsed;
+            grip.Width = Row?.Owner?.GripWidth ?? 8;
         }
 
         if (options is not null)
