@@ -347,6 +347,16 @@ private fun NavLabel(text: String, plan: NavigationPlan, badge: String? = null) 
     }
 }
 
+/** The width of a word of a navigation label at the default text size, in dp, as the label's own style lays it out. */
+@Composable
+private fun labelWidths(): (String) -> Float {
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val style = MaterialTheme.typography.labelMedium
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val plain = remember(density.density) { androidx.compose.ui.unit.Density(density.density, fontScale = 1f) }
+    return { word -> measurer.measure(word, style, density = plain).size.width / plain.density }
+}
+
 @Composable
 private fun BottomBar(destinations: List<Destination>, plan: NavigationPlan, selected: Int, choose: (Int) -> Unit) {
     val window = LocalUi.current.window
@@ -354,8 +364,9 @@ private fun BottomBar(destinations: List<Destination>, plan: NavigationPlan, sel
     val beside = window.width >= WidthClass.Medium
     // Equal items share the width: the labels grow with the text setting only as far as their longest word fits.
     val labels = plan.shown.mapNotNull { destinations.getOrNull(it)?.label }
-    val scale = if (beside) window.fontScale else NavigationRules.labelScale(window.fontScale, window.widthDp, labels)
-    val lines = if (beside) plan.labelLines else NavigationRules.labelLines(window.widthDp, labels, plan.labelLines)
+    val measured = labelWidths()
+    val scale = if (beside) window.fontScale else NavigationRules.labelScale(window.fontScale, window.widthDp, labels, measured)
+    val lines = if (beside) plan.labelLines else NavigationRules.labelLines(window.widthDp, labels, plan.labelLines, measured)
     ShortNavigationBar(arrangement = if (beside) ShortNavigationBarArrangement.Centered else ShortNavigationBarArrangement.EqualWeight) {
         for (index in plan.shown) {
             val destination = destinations.getOrNull(index) ?: continue
@@ -385,7 +396,7 @@ private fun SideRail(
     // A collapsed rail's label stands under its icon in 80 dp: it grows with the text setting only as far as its longest word fits.
     val window = LocalUi.current.window
     val labels = destinations.map { it.label }
-    val railScale = if (open) window.fontScale else NavigationRules.labelScale(window.fontScale, NavigationRules.RAIL_ITEM_DP * labels.size.coerceAtLeast(1), labels)
+    val railScale = if (open) window.fontScale else NavigationRules.labelScale(window.fontScale, NavigationRules.RAIL_ITEM_DP * labels.size.coerceAtLeast(1), labels, labelWidths())
     WideNavigationRail(
         state = state,
         header = {

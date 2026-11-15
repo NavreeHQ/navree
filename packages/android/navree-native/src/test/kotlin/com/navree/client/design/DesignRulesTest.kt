@@ -714,6 +714,26 @@ class NavigationLabelTest {
     }
 
     @Test
+    fun a_label_of_one_long_word_is_told_by_its_measure_and_not_by_a_count_of_letters() {
+        // Ten glyphs of 13 dp (wider than the 6.5 dp the estimate takes a glyph to be), with no space to break at.
+        val wide: (String) -> Float = { word -> word.length * 13f }
+        val labels = listOf("\u0a21\u0a48\u0a38\u0a3c\u0a2c\u0a4b\u0a30\u0a21\u0a21\u0a21", "Orders", "Inventory")
+        assertTrue("the estimate lets it grow almost to twice the size", NavigationRules.labelScale(2.0f, 412, labels) > 1.9f)
+        val measured = NavigationRules.labelScale(2.0f, 412, labels, wide)
+        assertTrue("measured, ten glyphs of 13 dp do not fit twice the size in a third of the bar: $measured", measured < 1.1f)
+        assertEquals(2, NavigationRules.labelLines(412, labels, 1, wide))
+    }
+
+    @Test
+    fun a_label_in_devanagari_follows_the_setting_as_far_as_its_measure_allows() {
+        val labels = listOf("\u0921\u0948\u0936\u092c\u094b\u0930\u094d\u0921", "\u0911\u0930\u094d\u0921\u0930", "\u0907\u0928\u094d\u0935\u0947\u0902\u091f\u0930\u0940")
+        val narrow: (String) -> Float = { 5f }
+        assertEquals("measured narrow: the setting is followed", 2.0f, NavigationRules.labelScale(2.0f, 412, labels, narrow), 0.001f)
+        val broad: (String) -> Float = { 100f }
+        assertTrue("measured broad: held to what fits", NavigationRules.labelScale(2.0f, 412, labels, broad) < 1.6f)
+    }
+
+    @Test
     fun text_smaller_than_the_default_is_kept() {
         assertEquals(0.85f, NavigationRules.labelScale(0.85f, 412, listOf("A", "B")), 0.001f)
     }
