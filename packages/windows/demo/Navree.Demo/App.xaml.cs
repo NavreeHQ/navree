@@ -62,7 +62,7 @@ public partial class App : Application
 
         string? answers = Option(arguments, "--answers") ?? FixtureFetcher.Recorded();
         string? live = Option(arguments, "--server");
-        bool testing = Option(arguments, "--walk") is not null || Option(arguments, "--system-walk") is not null || Option(arguments, "--probe") is not null || Option(arguments, "--run") is not null || Option(arguments, "--full") is not null || Option(arguments, "--checks") is not null || Option(arguments, "--moves") is not null || Option(arguments, "--popover") is not null || Option(arguments, "--hands") is not null || Option(arguments, "--wipe") is not null || Option(arguments, "--sheet") is not null;
+        bool testing = Option(arguments, "--walk") is not null || Option(arguments, "--system-walk") is not null || Option(arguments, "--probe") is not null || Option(arguments, "--run") is not null || Option(arguments, "--full") is not null || Option(arguments, "--checks") is not null || Option(arguments, "--moves") is not null || Option(arguments, "--popover") is not null || Option(arguments, "--hands") is not null || Option(arguments, "--wipe") is not null || Option(arguments, "--sheet") is not null || Option(arguments, "--page") is not null;
         PlaceOptions placeOptions = new()
         {
             Scheme = Scheme,
@@ -125,7 +125,11 @@ public partial class App : Application
             throw;
         }
 
-        if (Option(arguments, "--walk") is string folder)
+        if (Option(arguments, "--page") is string pageFolder)
+        {
+            _ = new PageWalk(host, window, pageFolder, live).RunAsync();
+        }
+        else if (Option(arguments, "--walk") is string folder)
         {
             _ = new Walker(host, window, folder, place).RunAsync();
         }
