@@ -8,7 +8,8 @@
 //! - A new screen shows the kept tree of its address at once and fetches a
 //!   fresh one. A build the core has not seen empties what is kept.
 //! - A write makes every other screen out of date; each is fetched again when
-//!   it comes to the front.
+//!   it comes to the front. So does a write whose answer failed or was too
+//!   large to read: the server may have written before it did.
 //! - What can't be read is never a crash: the web view for a page, a fresh
 //!   fetch for a change to one.
 
@@ -2753,6 +2754,77 @@ mod tests {
             ..Response::default()
         }));
         core
+    }
+
+    /// An answer to a write that failed, or that is larger than any answer
+    /// may be, still counts as a write for what is kept and for the other
+    /// screens: the server may have written before it failed.
+    #[test]
+    fn a_write_answered_with_a_failure_still_counts_as_a_write() {
+        let page = r#"{"navree":1,"build":"b1","vocab":0,"screen":{"title":"Order","body":{"t":"form","id":"note","method":"post","action":"/orders/1/note","children":[{"t":"field","id":"text","name":"text","input":{"t":"text"}},{"t":"button","label":"Save","action":{"t":"submit"}}]}}}"#;
+        let too_large = format!("{page}{}", " ".repeat(navree_native::MAX_BODY));
+        let failures = [
+            (
+                "no network",
+                Response {
+                    error: Some(TransportError::Offline),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a 503",
+                Response {
+                    status: 503,
+                    content_type: Some("text/html".to_owned()),
+                    body: "<p>".to_owned(),
+                    ..Response::default()
+                },
+            ),
+            (
+                "an answer too large",
+                Response {
+                    status: 200,
+                    content_type: Some(CONTENT_TYPE.to_owned()),
+                    body: too_large,
+                    ..Response::default()
+                },
+            ),
+        ];
+        for (what, failure) in failures {
+            let mut core = started();
+            core.send(Event::Response(Response {
+                request: 2,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: page.to_owned(),
+                ..Response::default()
+            }));
+            let epoch = core.inner.epoch;
+            let sent = core.send(Event::Act {
+                screen: Some(1),
+                action: serde_json::from_value(serde_json::json!({"t": "submit"}))
+                    .expect("an action"),
+                form: Some("note".to_owned()),
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            });
+            let request = sent
+                .effects
+                .iter()
+                .find_map(|effect| match effect {
+                    Effect::Fetch(request) if request.method == Verb::Post => Some(request.request),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{what}: the form is sent: {sent:?}"));
+            core.send(Event::Response(Response { request, ..failure }));
+            assert!(
+                core.inner.epoch > epoch,
+                "{what}: it was not counted as a write"
+            );
+        }
     }
 
     #[test]
