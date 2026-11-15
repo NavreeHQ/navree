@@ -89,6 +89,46 @@ internal static class Ink
         return disc;
     }
 
+    /// <summary>
+    /// The mark that stands for a series: a shape of a side, in a brush. A disc, a square, a diamond or a triangle is solid and a ring is
+    /// not; a plus and a cross are lines. The element is a square of that side, so it is put by its corner like any other.
+    /// </summary>
+    internal static UIElement Marker(MarkShape shape, double side, Brush ink)
+    {
+        double size = Math.Max(Guard.Length(side), 1);
+        switch (shape)
+        {
+            case MarkShape.Square:
+                return Box(size, size, ink);
+            case MarkShape.Ring:
+                return Disc(size - 2, null, ink, 2);
+            case MarkShape.Plus:
+            case MarkShape.Cross:
+                Canvas lines = new() { Width = size, Height = size, IsHitTestVisible = false };
+                if (shape == MarkShape.Plus)
+                {
+                    lines.Put(Rule(size / 2, 0, size / 2, size, ink, 2), 0, 0);
+                    lines.Put(Rule(0, size / 2, size, size / 2, ink, 2), 0, 0);
+                }
+                else
+                {
+                    lines.Put(Rule(0.5, 0.5, size - 0.5, size - 0.5, ink, 2), 0, 0);
+                    lines.Put(Rule(size - 0.5, 0.5, 0.5, size - 0.5, ink, 2), 0, 0);
+                }
+
+                return lines;
+            case MarkShape.Diamond:
+            case MarkShape.TriangleUp:
+            case MarkShape.TriangleDown:
+                Canvas corners = new() { Width = size, Height = size, IsHitTestVisible = false };
+                IReadOnlyList<Pt> points = [.. SeriesLooks.Corners(shape, size).Select(corner => new Pt(corner.X + (size / 2), corner.Y + (size / 2)))];
+                corners.Put(Filled(Lines(points, closed: true), ink), 0, 0);
+                return corners;
+            default:
+                return Disc(size, ink);
+        }
+    }
+
     /// <summary>A line drawn along a geometry.</summary>
     internal static ShapePath Stroked(Geometry geometry, Brush stroke, double width, PenLineCap cap = PenLineCap.Flat, double[]? dash = null)
     {
@@ -301,7 +341,7 @@ internal static class Ink
     /// Parts of a whole laid end to end in a bar with rounded ends and a hair between them: along the bar (across, or up from the foot).
     /// Each part's share of the length is given; a part with no share is not drawn.
     /// </summary>
-    internal static void StackedBar(Canvas canvas, bool across, double x, double y, double width, double height, IReadOnlyList<(double Share, Brush Fill)> parts, double hair, double radius)
+    internal static void StackedBar(Canvas canvas, bool across, double x, double y, double width, double height, IReadOnlyList<(double Share, Brush Fill, Brush? Edge)> parts, double hair, double radius)
     {
         IReadOnlyList<(int Index, double Start, double Size)> slots = BarRules.Slots(across ? width : height, [.. parts.Select(part => part.Share)], hair);
         for (int at = 0; at < slots.Count; at++)
@@ -314,8 +354,14 @@ internal static class Ink
             double w = across ? size : width;
             double h = across ? height : size;
             Brush fill = parts[index].Fill;
+            Brush? edge = parts[index].Edge;
             double corner = Math.Min(Guard.Length(radius), Math.Min(w, h) / 2);
-            if (first && last)
+            if (edge is not null)
+            {
+                // A part that is an outline (in a contrast theme) is one shape with its edge all round.
+                canvas.Put(Box(w, h, fill, corner, edge, 2), px, py);
+            }
+            else if (first && last)
             {
                 canvas.Put(Box(w, h, fill, corner), px, py);
             }

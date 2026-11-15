@@ -97,7 +97,7 @@ public sealed partial class GaugeView : KindControl
 
         if (gauge.Zones.Any(zone => zone.Label is not null))
         {
-            UIElement key = HealthParts.Key(palette, gauge.Zones.Select(zone => (palette.Of(zone.Colour, Models.Hue.Neutral), zone.Label ?? string.Empty, (string?)null)), Current);
+            UIElement key = HealthParts.Key(palette, gauge.Zones.Select((zone, at) => (palette.Category(zone.Colour, Models.Hue.Neutral, at), zone.Label ?? string.Empty, (string?)null)), Current);
             if (key is FrameworkElement placed)
             {
                 placed.HorizontalAlignment = HorizontalAlignment.Center;
@@ -153,7 +153,7 @@ public sealed partial class GaugeView : KindControl
         else
         {
             // A hair between zones, as a share of the whole arc.
-            const double hair = 0.008;
+            double hair = palette.Contrast ? 0.02 : 0.008;
             for (int at = 0; at < gauge.Zones.Count; at++)
             {
                 Models.Zone zone = gauge.Zones[at];
@@ -163,7 +163,7 @@ public sealed partial class GaugeView : KindControl
                 double end = at == gauge.Zones.Count - 1 ? high : high - hair;
                 if (end > begin)
                 {
-                    canvas.Shapes.Put(Ink.Stroked(Ink.Arc(cx, cy, radius, GaugeRules.Angle(begin), GaugeRules.Sweep * (end - begin)), Palette.Mark(palette.Of(zone.Colour, Models.Hue.Neutral)), stroke), 0, 0);
+                    canvas.Shapes.Put(Ink.Stroked(Ink.Arc(cx, cy, radius, GaugeRules.Angle(begin), GaugeRules.Sweep * (end - begin)), Palette.Mark(palette.Category(zone.Colour, Models.Hue.Neutral, at)), stroke), 0, 0);
                 }
             }
         }
@@ -300,18 +300,20 @@ public sealed partial class RangeView : KindControl
         Palette palette = canvas.Palette;
         double middle = canvas.Height / 2;
         double width = canvas.Width;
-        canvas.Shapes.Put(Ink.Box(width, height, palette.Track(Palette.Resource("TextFillColorSecondaryBrush") is SolidColorBrush ink ? ink.Color : Microsoft.UI.Colors.Gray), height / 2), 0, middle - (height / 2));
-        foreach (Models.Zone zone in range.Zones)
+        canvas.Shapes.Put(Ink.Box(width, height, palette.Track(palette.ColourOf("TextFillColorSecondaryBrush")), height / 2), 0, middle - (height / 2));
+        for (int at = 0; at < range.Zones.Count; at++)
         {
+            Models.Zone zone = range.Zones[at];
             double low = AxisRules.Position(Math.Min(zone.From, zone.To), range.Min, range.Max);
             double high = AxisRules.Position(Math.Max(zone.From, zone.To), range.Min, range.Max);
             (double start, double size) = RangeRules.Band(low, high, width, height);
-            canvas.Shapes.Put(Ink.Box(size, height, palette.Fill(zone.Colour, Models.Hue.Neutral, 0.55), height / 2), start, middle - (height / 2));
+            (Brush fill, Brush? edge, double edgeWidth) = palette.Surface(zone.Colour, Models.Hue.Neutral, at, 0.55);
+            canvas.Shapes.Put(Ink.Box(size, height, fill, height / 2, edge, edgeWidth), start, middle - (height / 2));
         }
 
         if (range.Value is double value)
         {
-            Windows.UI.Color colour = current is int zone ? palette.Of(range.Zones[zone].Colour, Models.Hue.Neutral) : ((SolidColorBrush)palette.Primary).Color;
+            Windows.UI.Color colour = current is int zone ? palette.Category(range.Zones[zone].Colour, Models.Hue.Neutral, zone) : palette.ColourOf("TextFillColorPrimaryBrush");
             double marker = height + 10;
             double x = RangeRules.MarkerAt(AxisRules.Position(value, range.Min, range.Max), width, marker);
             canvas.Shapes.Put(Ink.Disc(marker, Palette.Mark(colour), palette.Card, 3), x - (marker / 2), middle - (marker / 2));

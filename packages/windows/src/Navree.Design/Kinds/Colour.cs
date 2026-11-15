@@ -191,6 +191,26 @@ public static class ContrastRules
         return 1;
     }
 
+    /// <summary>The ink that reads on a ground: white or black, whichever stands further from it.</summary>
+    /// <param name="ground">The ground's colour.</param>
+    /// <returns>White or black.</returns>
+    public static Rgb Ink(Rgb ground) =>
+        Contrast(ground, new Rgb(1, 1, 1)) >= Contrast(ground, new Rgb(0, 0, 0)) ? new Rgb(1, 1, 1) : new Rgb(0, 0, 0);
+
+    /// <summary>A colour laid over a ground at an opacity: what a person sees.</summary>
+    /// <param name="colour">The colour on top.</param>
+    /// <param name="ground">The colour under it.</param>
+    /// <param name="opacity">How much of the top colour shows, 0 to 1.</param>
+    /// <returns>The blended colour.</returns>
+    public static Rgb Over(Rgb colour, Rgb ground, double opacity)
+    {
+        double t = Math.Clamp(Guard.Finite(opacity), 0, 1);
+        return new Rgb(
+            ground.Red + ((colour.Red - ground.Red) * t),
+            ground.Green + ((colour.Green - ground.Green) * t),
+            ground.Blue + ((colour.Blue - ground.Blue) * t));
+    }
+
     /// <summary>The colour words take: darkened as little as reads on a light ground, as it is on a dark one.</summary>
     /// <param name="colour">The hue's colour for the ground.</param>
     /// <param name="dark">Whether the ground is dark.</param>

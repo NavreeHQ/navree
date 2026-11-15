@@ -12,17 +12,25 @@ using Border = Microsoft.UI.Xaml.Controls.Border;
 namespace Navree.Controls.Health;
 
 /// <summary>
-/// A control built from the theme it stands in: it builds its content when it is made, and again when the theme it stands in changes,
-/// so the hues of its marks follow light, dark and the contrast themes.
+/// A control built from the theme it stands in: it builds its content when it is made, and again when what its colours come from changes
+/// (the theme it stands in, a contrast theme turned on or off, the accent the person chose, the size of their text), so the hues of its
+/// marks, its key and its words follow all of them.
 /// </summary>
 public abstract partial class KindControl : UserControl
 {
-    private bool? builtDark;
+    private string? builtFor;
+    private bool watching;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? settle;
 
     /// <summary>Starts a control; the derived control calls <see cref="Start"/> once it holds what it draws.</summary>
     protected KindControl()
     {
-        Loaded += (_, _) => Refresh();
+        Loaded += (_, _) =>
+        {
+            Watch();
+            Refresh();
+        };
+        Unloaded += (_, _) => Unwatch();
         ActualThemeChanged += (_, _) => Refresh();
     }
 
@@ -32,9 +40,53 @@ public abstract partial class KindControl : UserControl
     /// <summary>Builds the content for the first time.</summary>
     protected void Start() => Rebuild();
 
+    // While the control is in the tree it listens for a change of the system's settings; out of the tree it does not, so the system holds no reference to it.
+    private void Watch()
+    {
+        if (!watching)
+        {
+            watching = true;
+            ThemeState.Changed += OnSystemChanged;
+        }
+    }
+
+    private void Unwatch()
+    {
+        if (watching)
+        {
+            watching = false;
+            ThemeState.Changed -= OnSystemChanged;
+        }
+
+        settle?.Stop();
+    }
+
+    private void OnSystemChanged() => ThemeState.OnThreadOf(this, () =>
+    {
+        Refresh();
+
+        // The system's own resources (the accent's brushes) are brought up to date by the framework in its own time; asked again a moment later, they are.
+        settle ??= DispatcherQueue.CreateTimer();
+        settle.Interval = TimeSpan.FromMilliseconds(400);
+        settle.IsRepeating = false;
+        settle.Tick -= OnSettled;
+        settle.Tick += OnSettled;
+        settle.Stop();
+        settle.Start();
+    });
+
+    private void OnSettled(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        if (watching)
+        {
+            Rebuild();
+        }
+    }
+
     private void Refresh()
     {
-        if (builtDark != new Palette(this).Dark)
+        if (builtFor != new Palette(this).Signature)
         {
             Rebuild();
         }
@@ -43,7 +95,7 @@ public abstract partial class KindControl : UserControl
     private void Rebuild()
     {
         Palette palette = new(this);
-        builtDark = palette.Dark;
+        builtFor = palette.Signature;
         Content = Build(palette);
     }
 }
@@ -149,7 +201,11 @@ public static class HealthParts
             Child = line,
             Padding = new Thickness(10, 2, 10, 3),
             CornerRadius = new CornerRadius(12),
-            Background = palette.Fill(hue, 0.15),
+
+            // A contrast theme has no tint: the capsule is an outline in the text colour.
+            Background = palette.Contrast ? null : palette.Fill(hue, 0.15),
+            BorderBrush = palette.Contrast ? palette.Primary : null,
+            BorderThickness = new Thickness(palette.Contrast ? 1 : 0),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
         AutomationProperties.SetName(tinted, badge.Text);
@@ -200,11 +256,25 @@ public static class HealthParts
         return line;
     }
 
+    /// <summary>The dot of a key or a list, in the colour of the part at a place; in a contrast theme the mark of that part's look, so it can be told from the others without its colour.</summary>
+    internal static FrameworkElement Dot(Palette palette, Windows.UI.Color colour, int index, double size = 8)
+    {
+        if (palette.Look(index) is SeriesLook look)
+        {
+            Brush ink = Palette.Mark(palette.InkOf(look));
+            FrameworkElement marker = (FrameworkElement)Ink.Marker(look.Shape, size + 2, ink);
+            marker.VerticalAlignment = VerticalAlignment.Center;
+            return marker;
+        }
+
+        return new Microsoft.UI.Xaml.Shapes.Ellipse { Width = size, Height = size, Fill = Palette.Mark(colour), VerticalAlignment = VerticalAlignment.Center };
+    }
+
     /// <summary>One entry of a key: a dot in its colour, its name, and the page's words of its share or total.</summary>
-    internal static UIElement KeyEntry(Palette palette, Windows.UI.Color colour, string name, string? detail, bool emphasised = true)
+    internal static UIElement KeyEntry(Palette palette, Windows.UI.Color colour, string name, string? detail, bool emphasised = true, int index = 0)
     {
         StackPanel entry = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
-        entry.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse { Width = 8, Height = 8, Fill = Palette.Mark(colour), VerticalAlignment = VerticalAlignment.Center });
+        entry.Children.Add(Dot(palette, colour, index));
         TextBlock words = Ink.Words(name, 12, emphasised ? palette.Primary : palette.Secondary);
         entry.Children.Add(words);
         if (!string.IsNullOrEmpty(detail))
@@ -222,7 +292,7 @@ public static class HealthParts
         int at = 0;
         foreach ((Windows.UI.Color colour, string name, string? detail) in entries)
         {
-            flow.Children.Add(KeyEntry(palette, colour, name, detail, current is null || current == at));
+            flow.Children.Add(KeyEntry(palette, colour, name, detail, current is null || current == at, at));
             at++;
         }
 

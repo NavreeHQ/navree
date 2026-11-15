@@ -28,8 +28,30 @@ public sealed partial class FlowGrid : Panel
     /// <summary>The space between parts, across and down.</summary>
     public double Gap { get; set; } = 12;
 
-    /// <summary>The brush of a hairline between columns, or none for no hairline.</summary>
+    /// <summary>The brush of a hairline between columns, or none for the theme's own hairline when <see cref="Hairlines"/> is on.</summary>
     public Brush? RuleBrush { get; set; }
+
+    /// <summary>Whether a hairline runs between columns, in the colour of the theme the grid stands in.</summary>
+    public bool Hairlines { get; set; }
+
+    private Brush? RuleFill => RuleBrush ?? (Hairlines ? new Drawing.Palette(this).Divider : null);
+
+    /// <summary>Makes a grid.</summary>
+    public FlowGrid()
+    {
+        // The hairlines are in the grid's own theme, which is known once it is in the tree and changes with it.
+        Loaded += (_, _) => Recolour();
+        ActualThemeChanged += (_, _) => Recolour();
+    }
+
+    private void Recolour()
+    {
+        Brush? fill = RuleFill;
+        foreach (Rectangle rule in rules)
+        {
+            rule.Fill = fill;
+        }
+    }
 
     private int Parts => Children.Count - rules.Count;
 
@@ -57,10 +79,10 @@ public sealed partial class FlowGrid : Panel
             }
         }
 
-        int needed = RuleBrush is null ? 0 : rows * Math.Max(columns - 1, 0);
+        int needed = RuleFill is null ? 0 : rows * Math.Max(columns - 1, 0);
         while (rules.Count < needed)
         {
-            Rectangle rule = new() { Width = 1, Fill = RuleBrush, IsHitTestVisible = false };
+            Rectangle rule = new() { Width = 1, Fill = RuleFill, IsHitTestVisible = false };
             AutomationProperties.SetAccessibilityView(rule, AccessibilityView.Raw);
             rules.Add(rule);
             Children.Add(rule);

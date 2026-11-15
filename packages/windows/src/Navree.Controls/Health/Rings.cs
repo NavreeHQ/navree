@@ -19,16 +19,18 @@ public static class KindHooks
     /// <param name="colour">The page's colour.</param>
     /// <param name="fallback">The hue to take when there is none.</param>
     /// <param name="opacity">How strong the brush is.</param>
+    /// <param name="owner">The element the brush is for, whose theme it follows; the application's theme when none is given.</param>
     /// <returns>The brush.</returns>
-    public static Brush HueBrush(Models.Colour? colour, Models.Hue fallback, double opacity = 1) =>
-        new Palette(new Microsoft.UI.Xaml.Controls.Border()).Fill(colour, fallback, opacity);
+    public static Brush HueBrush(Models.Colour? colour, Models.Hue fallback, double opacity = 1, FrameworkElement? owner = null) =>
+        new Palette(owner ?? new Microsoft.UI.Xaml.Controls.Border()).Fill(colour, fallback, opacity);
 
     /// <summary>A brush for words in a part's colour, as dark as they need to be to read on a light ground.</summary>
     /// <param name="colour">The page's colour.</param>
     /// <param name="fallback">The hue to take when there is none.</param>
+    /// <param name="owner">The element the brush is for, whose theme it follows; the application's theme when none is given.</param>
     /// <returns>The brush.</returns>
-    public static Brush HueWords(Models.Colour? colour, Models.Hue fallback) =>
-        new Palette(new Microsoft.UI.Xaml.Controls.Border()).Words(colour, fallback);
+    public static Brush HueWords(Models.Colour? colour, Models.Hue fallback, FrameworkElement? owner = null) =>
+        new Palette(owner ?? new Microsoft.UI.Xaml.Controls.Border()).Words(colour, fallback);
 
     internal static UIElement DrawIcon(Models.Icon icon, double size, Windows.UI.Color colour) =>
         Icon?.Invoke(icon, size, colour)
@@ -63,7 +65,7 @@ internal static class RingArcs
             }
 
             Navree.Design.Pt tip = Ink.Polar(cx, cy, radius, -90 + (360 * sweep.Part));
-            Microsoft.UI.Xaml.Shapes.Ellipse head = Ink.Disc(stroke, Palette.Mark(end), Palette.Mark(Microsoft.UI.Colors.Black, 0.35), 1);
+            Microsoft.UI.Xaml.Shapes.Ellipse head = Ink.Disc(stroke, Palette.Mark(end), canvas.Palette.Card, 1);
             canvas.Shapes.Put(head, tip.X - (stroke / 2), tip.Y - (stroke / 2));
         }
         else if (sweep.Part > 0)
@@ -297,14 +299,14 @@ public sealed partial class RingsView : KindControl
                 radius,
                 stroke,
                 RingRules.SweepOf(item.Value, item.Max),
-                canvas.Palette.Of(item.Colour, HueRules.SeriesHue(at)),
-                canvas.Palette.End(item.Colour, HueRules.SeriesHue(at)));
+                canvas.Palette.Series(item.Colour, at),
+                canvas.Palette.Contrast ? canvas.Palette.Series(item.Colour, at) : canvas.Palette.End(item.Colour, HueRules.SeriesHue(at)));
         }
 
         if (rings.Centre == Models.RingsCentre.Icon && rings.Icon is not null)
         {
             double side = diameter * 0.16;
-            canvas.Labels.Put(KindHooks.DrawIcon(rings.Icon, side, Microsoft.UI.Colors.Gray), cx - (side / 2), cy - (side / 2));
+            canvas.Labels.Put(KindHooks.DrawIcon(rings.Icon, side, canvas.Palette.ColourOf("TextFillColorSecondaryBrush")), cx - (side / 2), cy - (side / 2));
         }
     }
 }
