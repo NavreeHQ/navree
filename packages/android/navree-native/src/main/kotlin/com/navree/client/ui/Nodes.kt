@@ -190,7 +190,7 @@ private fun fontWeight(weight: Navree.Weight): FontWeight = when (weight) {
 /** Draws any node. What has its own place on the screen's frame (sheets, dialogs, toolbars) draws nothing here. */
 @Composable
 internal fun NodeView(node: Navree.Node, place: Place, modifier: Modifier = Modifier) {
-    if (node === place.omit || !inFlow(node, place.screen)) return
+    if (node === place.omit || !inFlow(node, place.screen, place.titleInBar)) return
     when (node) {
         is Navree.Text -> TextView(node, modifier)
         is Navree.Rich -> RichView(node, place, modifier)
@@ -275,7 +275,7 @@ internal fun NodeView(node: Navree.Node, place: Place, modifier: Modifier = Modi
 private fun RegionView(node: Navree.Region, place: Place, modifier: Modifier) {
     val ui = LocalUi.current
     val state = place.screen.regions[node.id]
-    val shown = node.children.filter { inFlow(it, place.screen) }
+    val shown = node.children.filter { inFlow(it, place.screen, place.titleInBar) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         when {
             shown.isEmpty() && (node.lazy || state?.loading == true) && state?.failure == null ->
@@ -550,7 +550,7 @@ private fun GridView(node: Navree.Grid, place: Place, modifier: Modifier) {
 @Composable
 private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthDp: Float) {
     val gap = ContentRules.gap(node.gap)
-    val shown = node.children.filter { inFlow(it, place.screen) }
+    val shown = node.children.filter { inFlow(it, place.screen, place.titleInBar) }
     val columns = ListRules.gridColumns(
         widthDp.toInt(),
         ListRules.gridLeast(node.min, shown),
@@ -667,7 +667,7 @@ private fun OneLane(id: String?, lanes: List<Navree.Section>, place: Place, modi
  */
 @Composable
 private fun StackView(node: Navree.Stack, place: Place, modifier: Modifier) {
-    val shown = node.children.filter { it !== place.omit && inFlow(it, place.screen) }
+    val shown = node.children.filter { it !== place.omit && inFlow(it, place.screen, place.titleInBar) }
     if (shown.isEmpty()) return
     val padded = if (node.pad > 0) modifier.padding((node.pad * CompositionRules.STEP_DP).dp) else modifier
     val fontScale = LocalUi.current.window.fontScale

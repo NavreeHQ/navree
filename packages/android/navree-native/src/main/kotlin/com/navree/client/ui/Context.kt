@@ -73,6 +73,8 @@ internal data class Place(
     val omit: Navree.Node? = null,
     /** Drawn in a cell of a wide table, whose column heading already names what is in it. */
     val inCell: Boolean = false,
+    /** The screen's bar says its title: a heading that says it again is not drawn. */
+    val titleInBar: Boolean = false,
 ) {
     val id: Long get() = screen.id
 

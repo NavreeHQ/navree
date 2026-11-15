@@ -851,14 +851,32 @@ class LanesTest {
 }
 
 class RepeatedTitleTest {
+    private val heading = Navree.Text(value = "All open", heading = 2, style = Navree.TextStyle.TITLE)
+
     @Test
     fun a_heading_that_says_the_bars_title_is_not_said_again() {
-        val heading = Navree.Text(value = "All open", heading = 2, style = Navree.TextStyle.TITLE)
-        assertTrue(ScreenRules.repeatsTitle(heading, "All open"))
-        assertTrue("case and spaces do not matter", ScreenRules.repeatsTitle(heading, " all open "))
-        assertFalse("another title", ScreenRules.repeatsTitle(heading, "Closed"))
-        assertFalse("words that are no heading", ScreenRules.repeatsTitle(Navree.Text(value = "All open"), "All open"))
-        assertFalse("a screen with no title", ScreenRules.repeatsTitle(heading, null))
+        assertTrue(ScreenRules.repeatsTitle(heading, "All open", titleInBar = true))
+        assertTrue("case and spaces do not matter", ScreenRules.repeatsTitle(heading, " all open ", titleInBar = true))
+        assertFalse("another title", ScreenRules.repeatsTitle(heading, "Closed", titleInBar = true))
+        assertFalse("words that are no heading", ScreenRules.repeatsTitle(Navree.Text(value = "All open"), "All open", titleInBar = true))
+        assertFalse("a screen with no title", ScreenRules.repeatsTitle(heading, null, titleInBar = true))
+    }
+
+    @Test
+    fun a_heading_stays_where_the_bar_does_not_say_the_title() {
+        assertFalse(ScreenRules.repeatsTitle(heading, "All open", titleInBar = false))
+    }
+
+    @Test
+    fun the_plan_says_whether_the_bar_draws_the_title() {
+        val body = Navree.Text(value = "Sign in", heading = 1)
+        val plain = Navree.Screen(title = "Sign in", body = body)
+        assertTrue("a plain bar", ScreenRules.plan(plain, ScreenContext(root = true), WindowInfo.Phone).titleInBar)
+        assertFalse("a screen without the app's chrome has no bar", ScreenRules.plan(plain, ScreenContext(chrome = false), WindowInfo.Phone).titleInBar)
+        val searching = Navree.Screen(title = "Orders", body = body, search = Navree.Search(name = "q"))
+        assertFalse("the search bar shows the field", ScreenRules.plan(searching, ScreenContext(root = true), WindowInfo.Phone).titleInBar)
+        val days = Navree.Screen(title = "Sleep", body = body, pager = Navree.DayPager(date = "2026-11-13", day = "Friday"))
+        assertFalse("a bar that holds the day pager shows the day", ScreenRules.plan(days, ScreenContext(root = true), WindowInfo.Phone).titleInBar)
     }
 }
 

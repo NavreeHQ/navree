@@ -265,7 +265,7 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     val context = info.context.copy(toolbar = bars.isNotEmpty())
     val plan = remember(arranged, context, window) { ScreenRules.plan(arranged, context, window) }
     // The row that leads to the page shown beside the list is marked; a screen that holds its own list marks the row of its own page.
-    val place = Place(view, selectedUrl = info.selectedUrl ?: view.url.ifEmpty { null })
+    val place = Place(view, selectedUrl = info.selectedUrl ?: view.url.ifEmpty { null }, titleInBar = plan.titleInBar)
     val list = rememberLazyListState()
     var searching by rememberSaveable { mutableStateOf(false) }
     val pinned = TopAppBarDefaults.pinnedScrollBehavior()
@@ -327,7 +327,7 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
                 // Where the focus goes when a field is done: out of sight, and not for a screen reader to stop at.
                 Box(Modifier.size(1.dp).focusRequester(sink).focusable().clearAndSetSemantics {})
                 val items = remember(screen.body, view, maxWidth, barSubmit, hoisted, window.fontScale) {
-                    blocks(screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted, fontScale = window.fontScale)
+                    blocks(screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted, fontScale = window.fontScale, titleInBar = plan.titleInBar)
                 }
                 val floating = (fab != null && plan.fabPlace == FabPlace.BottomEnd) || bars.isNotEmpty()
                 val bottom = padding.calculateBottomPadding() + if (floating) 88.dp else 16.dp
