@@ -599,9 +599,10 @@ Say these plainly to the owner; do not build around them.
 - **The app on the device** (the Rust server running inside the app, offline).
   Not built; it needs a trust design of its own.
 - **Project scaffolding.** There is no `navree native:init`, `native:run` or
-  `native:build`. The clients are packages in the repository
-  (`packages/android`, `packages/apple`, each with a demo app); a store build
-  of your own app is not packaged yet.
+  `native:build`. The Android client is a package in the repository
+  (`packages/android`, with a demo app). The Apple client is in development
+  and is not in the repository yet. A store build of your own app is not
+  packaged yet.
 
 ## 8. Which skill next
 

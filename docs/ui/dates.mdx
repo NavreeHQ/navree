@@ -3,7 +3,7 @@ title: "Dates and times"
 description: "How Navree UI treats a day, a time and a window: what is stored, who decides, how languages and week starts work, and what clock changes do."
 ---
 
-Four components choose dates and times: [Calendar](/docs/components/calendar/), [DatePicker](/docs/components/date-picker/), [DateRangePicker](/docs/components/date-range-picker/) and [TimePicker](/docs/components/time-picker/). This page is what they share.
+Five components choose dates and times: [Calendar](/docs/components/calendar/), [DatePicker](/docs/components/date-picker/), [DateRangePicker](/docs/components/date-range-picker/), [TimePicker](/docs/components/time-picker/) and, for a day and a time in one control, [DateTimePicker](/docs/components/date-time-picker/). This page is what they share.
 
 <UiChoose name="date-time" current="DatePicker" />
 
@@ -94,4 +94,3 @@ A page with no picker ships nothing for dates. A page with a Calendar or a picke
 - A rule function limits navigation to about three years around the month it opens on. The server checks every date regardless.
 - The browser is sent at most 1,000 runs of days that are off. The server keeps them all.
 - A step of the time list has to divide a day. Below five minutes there is no list.
-- A date and a time together are two fields in one form. A single control for both is not built yet.
