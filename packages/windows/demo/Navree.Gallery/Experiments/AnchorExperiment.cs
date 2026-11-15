@@ -97,13 +97,22 @@ internal static class AnchorExperiment
         await Waiting.LoadedAsync(page);
         await Task.Delay(1200);
 
-        await CaseAsync(page, "25 rows join the start", () => page.Source.Prepend(AnchorPage.Make("p", 25)), picture: true);
-        await CaseAsync(page, "500 rows join the start", () => page.Source.Prepend(AnchorPage.Make("q", 500)), picture: false);
-        await CaseAsync(page, "10 rows above are removed", () => page.Source.RemoveRange(0, 10), picture: false);
+        await CaseAsync(page, "25 rows join the start", _ => page.Source.Prepend(AnchorPage.Make("p", 25)), picture: true);
+        await CaseAsync(page, "500 rows join the start", _ => page.Source.Prepend(AnchorPage.Make("q", 500)), picture: false);
+        await CaseAsync(
+            page,
+            "500 rows join the start and the row the view is on is kept made",
+            index =>
+            {
+                page.Layout.PinnedIndex = index + 500;
+                page.Source.Prepend(AnchorPage.Make("s", 500));
+            },
+            picture: false);
+        await CaseAsync(page, "10 rows above are removed", _ => page.Source.RemoveRange(0, 10), picture: false);
         await CaseAsync(
             page,
             "a row far above opens its detail (120 more)",
-            () =>
+            _ =>
             {
                 page.Layout.Geometry = new Geometry(AnchorPage.RowHeight, [(100, 120)]);
                 page.Layout.Reflow();
@@ -112,7 +121,7 @@ internal static class AnchorExperiment
         await CaseAsync(
             page,
             "it shuts again",
-            () =>
+            _ =>
             {
                 page.Layout.Geometry = new Geometry(AnchorPage.RowHeight, []);
                 page.Layout.Reflow();
@@ -120,7 +129,7 @@ internal static class AnchorExperiment
             picture: false);
     }
 
-    private static async Task CaseAsync(AnchorPage page, string name, Action change, bool picture)
+    private static async Task CaseAsync(AnchorPage page, string name, Action<int> change, bool picture)
     {
         ScrollView scroll = page.Scroll;
         await Waiting.ScrollToAsync(scroll, 0, (5000 * AnchorPage.RowHeight) + 10);
@@ -138,9 +147,10 @@ internal static class AnchorExperiment
         List<double> samples = [];
         void Sample(object? sender, object e) => samples.Add(page.TopOf(key));
         CompositionTarget.Rendering += Sample;
-        change();
+        change(index);
         await Task.Delay(900);
         CompositionTarget.Rendering -= Sample;
+        page.Layout.PinnedIndex = -1;
 
         double after = page.TopOf(key);
         double worst = samples.Where(s => !double.IsNaN(s)).Select(s => Math.Abs(s - before)).DefaultIfEmpty(double.NaN).Max();

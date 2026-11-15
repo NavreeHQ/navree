@@ -65,6 +65,8 @@ internal sealed class StickyCoordinator
     private double fs;
     private double fe;
     private bool animating;
+    private bool built;
+    private bool attached;
 
     /// <summary>Makes a coordinator for a scroll view.</summary>
     /// <param name="scroll">The scroll view the rows are in.</param>
@@ -76,8 +78,11 @@ internal sealed class StickyCoordinator
     /// <summary>How the parts are moved.</summary>
     internal StickyMode Mode { get; set; } = StickyMode.Compositor;
 
-    /// <summary>What went wrong, in words, for a run to print.</summary>
-    internal List<string> Problems { get; } = [];
+    /// <summary>What happened that a run may want to print: when the animations could first be made.</summary>
+    internal List<string> Notes { get; } = [];
+
+    /// <summary>Whether the animations have been made.</summary>
+    internal bool Built => built;
 
     /// <summary>The number of parts being kept in place.</summary>
     internal int Count => parts.Count;
@@ -88,17 +93,29 @@ internal sealed class StickyCoordinator
     {
         compositor = ElementCompositionPreview.GetElementVisual(scroll).Compositor;
         layoutProperties = compositor.CreatePropertySet();
-        layoutProperties.InsertScalar("Fs", 0f);
-        layoutProperties.InsertScalar("Fe", 0f);
-        scroll.ViewChanged += (_, _) => Mirror();
-        scroll.StateChanged += (_, _) => OnStateChanged();
+        layoutProperties.InsertScalar("Fs", (float)fs);
+        layoutProperties.InsertScalar("Fe", (float)fe);
         rtl = rightToLeft;
-        BuildAnimations();
-        animating = Mode == StickyMode.Compositor;
+        attached = true;
+        scroll.ViewChanged += (_, _) => Mirror();
+        scroll.ExtentChanged += (_, _) => OnExtentChanged();
+        scroll.SizeChanged += (_, _) => OnExtentChanged();
+        scroll.StateChanged += (_, _) => OnStateChanged();
         foreach ((UIElement element, StickyRole role) in parts)
         {
-            Begin(element, role);
+            PrepareClip(element, role);
         }
+
+        if (TryBuild())
+        {
+            Notes.Add("the animations were made when the coordinator was attached");
+        }
+        else
+        {
+            Notes.Add("the scroll view had no property set when the coordinator was attached; it is asked again at every change of its size and extent");
+        }
+
+        Mirror();
     }
 
     /// <summary>Tells the coordinator the widths kept at the start and at the end.</summary>
@@ -178,6 +195,39 @@ internal sealed class StickyCoordinator
         }
     }
 
+    private void OnExtentChanged()
+    {
+        if (!built && TryBuild())
+        {
+            Notes.Add("the animations were made when the scroll view's size or extent changed, at width " + scroll.ExtentWidth.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        Mirror();
+    }
+
+    // Makes the animations once the scroll view has its property set, and starts them on every part kept.
+    private bool TryBuild()
+    {
+        if (built)
+        {
+            return true;
+        }
+
+        if (!attached || !BuildAnimations())
+        {
+            return false;
+        }
+
+        built = true;
+        animating = Mode == StickyMode.Compositor;
+        foreach ((UIElement element, StickyRole role) in parts)
+        {
+            Begin(element, role);
+        }
+
+        return true;
+    }
+
     private void OnStateChanged()
     {
         if (Mode != StickyMode.Static)
@@ -206,15 +256,14 @@ internal sealed class StickyCoordinator
         }
     }
 
-    private void BuildAnimations()
+    private bool BuildAnimations()
     {
         CompositionPropertySet? sources = scroll.ExpressionAnimationSources;
         Compositor? maker = compositor;
         CompositionPropertySet? own = layoutProperties;
         if (sources is null || maker is null || own is null)
         {
-            Problems.Add("the scroll view gave no property set of its own");
-            return;
+            return false;
         }
 
         ExpressionAnimation Make(string expression)
@@ -234,6 +283,7 @@ internal sealed class StickyCoordinator
         (string edgeStart, string edgeEnd) = StickyMath.EdgeExpressions(rtl);
         edgeStartAnimation = Make(edgeStart);
         edgeEndAnimation = Make(edgeEnd);
+        return true;
     }
 
     private void Begin(UIElement element, StickyRole role)

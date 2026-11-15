@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -140,9 +141,10 @@ internal static class StickExperiment
 
         ScrollView scroll = page.Scroll;
         Report.Line($"[{tag}] extent width {scroll.ExtentWidth}, viewport width {scroll.ViewportWidth}, scrollable width {scroll.ScrollableWidth}, parts kept {page.Sticky.Count}");
-        foreach (string problem in page.Sticky.Problems)
+        Report.Line($"[{tag}] animations made: {page.Sticky.Built}");
+        foreach (string note in page.Sticky.Notes)
         {
-            Report.Line($"[{tag}] problem: {problem}");
+            Report.Line($"[{tag}] note: {note}");
         }
 
         double reach = scroll.ScrollableWidth;
@@ -155,13 +157,40 @@ internal static class StickExperiment
             await Handshake.StepAsync($"stick-{tag}-{offset:00000}", $"offset={offset:0} horizontalOffset={scroll.HorizontalOffset:0.##}");
         }
 
-        await Waiting.ScrollToAsync(scroll, 0, 0);
-        scroll.AddScrollVelocity(new Vector2(3000, 0), new Vector2(0.99f, 0.99f));
-        await Task.Delay(60);
-        Report.Line($"[{tag}] moving: horizontal offset {scroll.HorizontalOffset:0.##}");
-        await Handshake.StepAsync($"stick-{tag}-moving", $"horizontalOffset={scroll.HorizontalOffset:0.##}");
-        await Task.Delay(1500);
-        Report.Line($"[{tag}] after the motion: horizontal offset {scroll.HorizontalOffset:0.##}; {HitTests(page)}");
+        // The view is kept moving from end to end while pictures are taken, each a single frame, so
+        // the header can be compared with the rows in every one.
+        if (!rtl)
+        {
+            await Waiting.ScrollToAsync(scroll, 0, 0);
+            DispatcherQueueTimer timer = scroll.DispatcherQueue.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(30);
+            float direction = 1;
+            timer.Tick += (_, _) =>
+            {
+                if (scroll.HorizontalOffset > reach - 500)
+                {
+                    direction = -1;
+                }
+                else if (scroll.HorizontalOffset < 500)
+                {
+                    direction = 1;
+                }
+
+                scroll.AddScrollVelocity(new Vector2(direction * 600, 0), new Vector2(0.95f, 0.95f));
+            };
+            timer.Start();
+            await Task.Delay(400);
+            for (int k = 0; k < 6; k++)
+            {
+                Report.Line($"[{tag}] moving {k}: horizontal offset {scroll.HorizontalOffset:0.##}, state {scroll.State}");
+                await Handshake.StepAsync($"stick-{tag}-moving-{k}", $"horizontalOffset={scroll.HorizontalOffset:0.##} state={scroll.State}");
+                await Task.Delay(150);
+            }
+
+            timer.Stop();
+            await Waiting.IdleAsync(scroll);
+            Report.Line($"[{tag}] at rest after the motion: horizontal offset {scroll.HorizontalOffset:0.##}; {HitTests(page)}");
+        }
     }
 
     // What the XAML hit test finds where a frozen cell, a scrolling cell and the end cell are drawn.
@@ -225,6 +254,16 @@ internal static class Waiting
         element.Loaded += Handler;
         await done.Task;
         element.Loaded -= Handler;
+    }
+
+    internal static async Task IdleAsync(ScrollView scroll)
+    {
+        for (int i = 0; i < 100 && scroll.State != ScrollingInteractionState.Idle; i++)
+        {
+            await Task.Delay(50);
+        }
+
+        await Task.Delay(500);
     }
 
     internal static async Task ScrollToAsync(ScrollView scroll, double x, double y)

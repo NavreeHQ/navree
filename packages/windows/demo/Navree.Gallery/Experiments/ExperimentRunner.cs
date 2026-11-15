@@ -12,6 +12,9 @@ internal static class ExperimentRunner
         {
             switch (name)
             {
+                case "values":
+                    await ValuesExperiment.RunAsync(window);
+                    break;
                 case "stick":
                     await StickExperiment.RunAsync(window, StickyMode.Compositor, rtl: false);
                     await StickExperiment.RunAsync(window, StickyMode.Compositor, rtl: true);
