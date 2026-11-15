@@ -129,7 +129,7 @@ A table reads and writes the same list-query names as the API, so a link to a ta
 
 - **Search and order.** `search=text` is the box above the table. `sort=-amount,title` sorts by up to four columns, and `-` means descending. `sort=` with nothing after it asks for no order.
 - **Pages.** A numbered table reads `page` and `per_page`; a `#[table(cursor)]` table reads `cursor`, `before` and `limit`. Each table ignores the other's names. The page size is always one the table offers. A cursor table's `cursor` and `before` are its own page state in the page's URL, written by its paging links: they are not the `next_cursor` and `prev_cursor` of a JSON `CursorPage`, and the two need not match.
-- **Its own state.** `cols`, `w`, `fb`, `density`, `open` and `count` belong to the table and are not part of the list query.
+- **Its own state.** `cols`, `w`, `fb`, `density`, `open` and `count` belong to the table and are not part of the list query. A table with no Columns picker or no Density switch [ignores](#a-toolbar-with-a-search-box-only) `cols` or `density`.
 - **Forgiving.** A table shows a page whatever the URL says. A value of the wrong kind, a column the definition doesn't list, or an operator a filter doesn't take is left out. The API answers the same mistakes with a 400 that names the parameter.
 
 ## Selection and bulk actions
@@ -171,6 +171,18 @@ DataTable::new("deals", &query, &page).labels(&labels)
 `density=compact` in the URL, set from the table's view options, makes rows shorter.
 
 <UiPreview example="data-table/compact" />
+
+## A toolbar with a search box only
+
+The toolbar draws a Columns picker and a Density switch. A small table, with five columns and one density, wants neither: it is a search box and the rows. `.without_columns_picker()` and `.without_density_switch()` leave them out:
+
+```rust
+DataTable::new("customers", &query, &page)
+    .without_columns_picker()
+    .without_density_switch()
+```
+
+Without the picker the table draws the columns it starts with (every one that is not `#[col(hidden)]` and not [taken away](#columns-a-person-may-not-use)) and ignores a `cols` in the address. It has no "Hide column" in a heading's menu and no dragging a heading to a new place either, since each would write `cols`. Without the switch it draws the default density and ignores `density`. No link, form, export link or saved view the table makes names a parameter it leaves out, so a sort or a page link is as short as the state it holds. Widths, the search, the filters and the paging are as they were. The `TableQuery` still reads what the address says, so a handler that asks `query.visible_columns()` or `query.density()` sees it: it is the table that does not draw from them.
 
 ## Empty, loading and failed
 
@@ -214,6 +226,7 @@ A tick in a filter's list, a radio and a select apply at once. The search box an
 | `.views(&views, url)`, `.export(url)`, `.foot(col, cell)` | stored views, CSV export of the current filter, a footer row |
 | `.debounce(wait)` | how long typing in the search or a text filter waits for a pause: 100 ms unless this says otherwise |
 | `.prefetch()` | fetches the table's own links (sort, page, filter chips, details) when the pointer rests on one, so the next state is often there before the click; off unless asked |
+| `.without_columns_picker()`, `.without_density_switch()` | leave the Columns picker or the Density switch out of the toolbar, and with it the `cols` or the `density` parameter |
 
 ## Saved views
 

@@ -37,7 +37,7 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
         if !crate::native::Client::current().is_native() {
             return None;
         }
-        let state = &self.query.state;
+        let state = self.state();
         let roles = R::column_roles();
         let role_of = |name: &str| {
             roles

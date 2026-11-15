@@ -601,6 +601,15 @@ pub struct DataTable<'a, R, F = NoFilter> {
     toolbar: Vec<Node>,
     can_reorder: bool,
     can_resize: bool,
+    /// Whether the toolbar has the Columns picker, and with it the `cols` parameter.
+    columns_picker: bool,
+    /// Whether the toolbar has the Density switch, and with it the `density` parameter.
+    density_switch: bool,
+    /// The query's state without what the table leaves out: the columns it starts with in
+    /// the place of `cols`, the default density in the place of `density`. `None` when it
+    /// leaves nothing out. Every link and every control reads the state through
+    /// [`state`](Self::state), so neither parameter is read or written.
+    own_state: Option<State>,
     cells: Vec<(&'static str, RowFn<'a, R, Node>)>,
     live: Option<Duration>,
     live_from: Option<Href>,
@@ -655,6 +664,9 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             toolbar: Vec::new(),
             can_reorder: true,
             can_resize: true,
+            columns_picker: true,
+            density_switch: true,
+            own_state: None,
             cells: Vec::new(),
             live: None,
             live_from: None,
@@ -937,6 +949,120 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         self
     }
 
+    /// Leaves the Columns picker out of the toolbar, for a small table whose columns are all
+    /// shown. The table then draws the columns it starts with (every one not marked `hidden`
+    /// and not taken away with [`TableQuery::without_columns`]) whatever `cols` the address
+    /// names, and writes no `cols` into a link, a form or a saved view. It has no way to hide
+    /// or move a column either, since both would write `cols`: no "Hide column" in a heading's
+    /// menu and no dragging a heading to a new place. Widths are their own, and
+    /// [`fixed_widths`](Self::fixed_widths) turns them off. The query is not changed:
+    /// [`TableQuery::visible_columns`] still says what the address named.
+    ///
+    /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: this is its path.
+    /// # use navree_ui::table;
+    /// use navree_ui::{DataTable, TableQuery, TableRow, render};
+    ///
+    /// #[derive(Clone, TableRow)]
+    /// struct Customer {
+    ///     #[col(skip)]
+    ///     id: i64,
+    ///     #[col(sortable, search)]
+    ///     name: String,
+    ///     #[col(sortable)]
+    ///     city: String,
+    /// }
+    ///
+    /// # fn main() {
+    /// let rows = vec![Customer {
+    ///     id: 1,
+    ///     name: "Harpreet Sandhu".to_owned(),
+    ///     city: "Ludhiana".to_owned(),
+    /// }];
+    /// // `cols=name` names one column: a table with no picker draws both.
+    /// let query = TableQuery::<Customer>::parse("/customers", "cols=name");
+    /// let table = DataTable::new("customers", &query, &rows).without_columns_picker();
+    /// let html = render(&table.into());
+    /// assert!(html.contains("Ludhiana"));
+    /// assert!(!html.contains("cols=") && !html.contains(r#"name="cols""#));
+    /// # }
+    /// ```
+    pub fn without_columns_picker(mut self) -> Self {
+        self.columns_picker = false;
+        let mut state = self
+            .own_state
+            .take()
+            .unwrap_or_else(|| self.query.state.clone());
+        state.start_columns(&self.query.shape);
+        self.own_state = Some(state);
+        self
+    }
+
+    /// Leaves the Density switch out of the toolbar, for a table with the one density. The
+    /// table then draws the default density whatever `density` the address names, and writes
+    /// no `density` into a link, a form or a saved view. The query is not changed:
+    /// [`TableQuery::density`] still says what the address named.
+    ///
+    /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: this is its path.
+    /// # use navree_ui::table;
+    /// use navree_ui::{DataTable, TableQuery, TableRow, render};
+    ///
+    /// #[derive(Clone, TableRow)]
+    /// struct Customer {
+    ///     #[col(skip)]
+    ///     id: i64,
+    ///     #[col(sortable, search)]
+    ///     name: String,
+    /// }
+    ///
+    /// # fn main() {
+    /// let rows = vec![Customer {
+    ///     id: 1,
+    ///     name: "Meera Sharma".to_owned(),
+    /// }];
+    /// let query = TableQuery::<Customer>::parse("/customers", "density=compact");
+    /// let table = DataTable::new("customers", &query, &rows).without_density_switch();
+    /// let html = render(&table.into());
+    /// assert!(!html.contains("data-density") && !html.contains("Density"));
+    /// # }
+    /// ```
+    pub fn without_density_switch(mut self) -> Self {
+        self.density_switch = false;
+        let mut state = self
+            .own_state
+            .take()
+            .unwrap_or_else(|| self.query.state.clone());
+        state.density = TableDensity::Default;
+        self.own_state = Some(state);
+        self
+    }
+
+    /// The state the table draws and links from: the query's, less what the table leaves out.
+    fn state(&self) -> &State {
+        self.own_state.as_ref().unwrap_or(&self.query.state)
+    }
+
+    /// The URL with something changed, written from [`state`](Self::state): a link the table
+    /// makes never names what it leaves out.
+    fn href_with(&self, edit: impl FnOnce(&mut State)) -> String {
+        let mut state = self.state().clone();
+        edit(&mut state);
+        self.query.write_href(&state)
+    }
+
+    /// The URL of the state the table draws.
+    fn href(&self) -> String {
+        self.query.write_href(self.state())
+    }
+
+    /// The query string of the state the table draws, alone.
+    fn query_string(&self) -> String {
+        self.href()
+            .split_once('?')
+            .map_or(String::new(), |(_, query)| query.to_owned())
+    }
+
     fn form_id(&self) -> String {
         format!("{}-f", self.id)
     }
@@ -957,7 +1083,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// after it. Then the browser can sort the rows itself, and the server's answer to
     /// the same link only confirms the order.
     fn holds_all(&self) -> bool {
-        let state = &self.query.state;
+        let state = self.state();
         if self.loading || self.failed.is_some() || self.data.rows.is_empty() {
             return false;
         }
@@ -1033,7 +1159,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
 
     /// How many body columns there are, with the extras.
     fn span(&self) -> usize {
-        self.query.state.cols.len()
+        self.state().cols.len()
             + usize::from(self.selectable())
             + usize::from(self.has_actions())
             + usize::from(self.has_detail())
@@ -1047,7 +1173,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// This table's URL, with the page shown rather than the page asked for.
     fn canonical(&self) -> String {
         let page = self.page();
-        self.query.href_with(|state| state.page = page)
+        self.href_with(|state| state.page = page)
     }
 
     fn region_link(&self, href: String) -> Element {
@@ -1301,7 +1427,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
 
     /// The URL with `at`'s place in the sort set to `direction`, alone or added.
     fn sort_href(&self, at: usize, direction: Direction, add: bool) -> String {
-        self.query.href_with(|state| {
+        self.href_with(|state| {
             state.page = 1;
             state.after = None;
             state.before = None;
@@ -1326,13 +1452,14 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// The header menu of a column: its sort, its filter, hiding it.
     fn column_menu(&self, at: usize, column: &'static Column) -> Option<Node> {
         let labels = &self.labels;
-        let state = &self.query.state;
+        let state = self.state();
         let current = state
             .sort
             .iter()
             .find(|term| term.column == at)
             .map(|term| term.direction);
-        let can_hide = !column.locked && state.cols.len() > 1;
+        // Hiding a column is the Columns picker's: it writes `cols`.
+        let can_hide = self.columns_picker && !column.locked && state.cols.len() > 1;
         let filter_here = column.filter != FilterKind::None && self.mode == FilterMode::Popover;
         if !column.sortable && !filter_here && !can_hide {
             return None;
@@ -1369,7 +1496,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 ));
             }
             if current.is_some() {
-                let clear = self.query.href_with(|state| {
+                let clear = self.href_with(|state| {
                     state.sort.retain(|term| term.column != at);
                     state.page = 1;
                     state.after = None;
@@ -1379,9 +1506,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             }
         }
         if can_hide {
-            let hide = self
-                .query
-                .href_with(|state| state.cols.retain(|column| *column != at));
+            let hide = self.href_with(|state| state.cols.retain(|column| *column != at));
             links.push(item(&labels.hide_column, icons::EYE_OFF, hide, false));
         }
         let filter = filter_here.then(|| {
@@ -1418,7 +1543,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// A `<th>` for column `at`.
     fn head_cell(&self, at: usize, column: &'static Column, sticky_at: Option<&str>) -> Element {
         let labels = &self.labels;
-        let state = &self.query.state;
+        let state = self.state();
         let rank = state.sort.iter().position(|term| term.column == at);
         let sorted = rank.map(|rank| state.sort[rank].direction);
         let mut th = el("th")
@@ -1465,7 +1590,8 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         } else {
             el("span").slot("th-label").child(column.label).into()
         };
-        let drag = self.can_reorder && state.cols.len() > 1;
+        // Dragging a heading to a new place writes `cols`, so it goes with the picker.
+        let drag = self.columns_picker && self.can_reorder && state.cols.len() > 1;
         let box_ = el("div")
             .slot("th")
             .flag("data-ui-col-drag", drag)
@@ -1497,7 +1623,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
 
     /// The header rows: group headings, column headings, the filter row.
     fn head(&self, sticky: &[Option<String>]) -> Element {
-        let state = &self.query.state;
+        let state = self.state();
         let columns: Vec<(usize, &'static Column)> = state
             .cols
             .iter()
@@ -1633,7 +1759,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
 
     /// Hidden inputs for all the state the form's controls don't hold.
     fn state_inputs(&self) -> Vec<Element> {
-        let state = &self.query.state;
+        let state = self.state();
         let mut inputs = Vec::new();
         let hidden = |name: String, value: String| {
             el("input")
@@ -1667,24 +1793,12 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         inputs
     }
 
-    fn toolbar_node(&self) -> Element {
+    /// The Columns picker: a tick and links that move each column, and the way back to the
+    /// columns the table starts with.
+    fn columns_picker_node(&self) -> Node {
         let labels = &self.labels;
-        let state = &self.query.state;
+        let state = self.state();
         let form = self.form_id();
-        let searchable = self.query.searchable();
-        let search = searchable.then(|| {
-            let input = Input::search("search")
-                .placeholder(labels.search.to_string())
-                .attr("aria-label", labels.search.to_string());
-            let input = match &state.q {
-                Some(q) => input.value(q.clone()),
-                None => input,
-            };
-            el("div")
-                .slot("table-search")
-                .children((icon(icons::SEARCH), input))
-        });
-        let controls = self.query.filter().controls();
         let tool = |glyph: Icon, text: String| {
             el("button")
                 .slot("button")
@@ -1714,7 +1828,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                         .child(icon(glyph));
                     match (place, to) {
                         (Some(from), Some(to)) => link
-                            .href(self.query.href_with(|state| state.cols.swap(from, to)))
+                            .href(self.href_with(|state| state.cols.swap(from, to)))
                             .flag("data-ui-in-region", true),
                         _ => link.attr("role", "link").attr("aria-disabled", "true"),
                     }
@@ -1767,7 +1881,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .iter()
             .any(|(name, _)| name == "cols" || name == "w"))
         .then(|| {
-            self.region_link(self.query.href_with(|state| {
+            self.region_link(self.href_with(|state| {
                 state.cols = self
                     .query
                     .columns()
@@ -1781,21 +1895,26 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .slot("menu-link")
             .children((icon(icons::ROTATE_CCW), labels.reset_columns.to_string()))
         });
-        let columns = self.popover(
+        self.popover(
             format!("{}-columns", self.id),
             tool(icons::COLUMNS_3, labels.columns.to_string()),
             labels.columns.to_string(),
             (el("div").slot("column-list").child(column_rows), reset),
-        );
-        // Density.
+        )
+    }
+
+    /// The Density switch: compact, default and spacious rows, each a link.
+    fn density_switch_node(&self) -> Node {
+        let labels = &self.labels;
+        let state = self.state();
         let density_link = |density: super::TableDensity, text: &Cow<'static, str>| -> Element {
-            self.region_link(self.query.href_with(|state| state.density = density))
+            self.region_link(self.href_with(|state| state.density = density))
                 .slot("menu-link")
                 .flag("data-active", state.density == density)
                 .attr_opt("aria-current", (state.density == density).then_some("true"))
                 .child(text.to_string())
         };
-        let view = self.popover(
+        self.popover(
             format!("{}-view", self.id),
             el("button")
                 .slot("button")
@@ -1810,11 +1929,33 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 density_link(TableDensity::Default, &labels.default_density),
                 density_link(TableDensity::Spacious, &labels.spacious),
             )),
-        );
+        )
+    }
+
+    fn toolbar_node(&self) -> Element {
+        let labels = &self.labels;
+        let state = self.state();
+        let form = self.form_id();
+        let searchable = self.query.searchable();
+        let search = searchable.then(|| {
+            let input = Input::search("search")
+                .placeholder(labels.search.to_string())
+                .attr("aria-label", labels.search.to_string());
+            let input = match &state.q {
+                Some(q) => input.value(q.clone()),
+                None => input,
+            };
+            el("div")
+                .slot("table-search")
+                .children((icon(icons::SEARCH), input))
+        });
+        let controls = self.query.filter().controls();
+        let columns = self.columns_picker.then(|| self.columns_picker_node());
+        let view = self.density_switch.then(|| self.density_switch_node());
         let views = self.views.as_ref().map(|(views, url)| {
             super::saved::menu(
                 self.id,
-                &self.query.query_string(),
+                &self.query_string(),
                 views,
                 url,
                 self.query.path(),
@@ -1824,7 +1965,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             )
         });
         let export = self.export.as_ref().map(|url| {
-            let query = self.query.href_with(|state| {
+            let query = self.href_with(|state| {
                 state.page = 1;
                 state.open.clear();
             });
@@ -1904,7 +2045,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let filterable = |at: &usize| {
             self.query.column(*at).filter != FilterKind::None && !self.query.is_withdrawn(*at)
         };
-        match &self.query.state.bar {
+        match &self.state().bar {
             Some(bar) => bar.clone(),
             None => (0..self.query.columns().len()).filter(filterable).collect(),
         }
@@ -1915,7 +2056,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         if self.mode != FilterMode::Bar {
             return None;
         }
-        let state = &self.query.state;
+        let state = self.state();
         let mut shown = self.bar_columns();
         for filter in &state.filters {
             if !shown.contains(&filter.column) {
@@ -1979,7 +2120,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                         (Some(from), Some(to)) => {
                             let mut next = shown.clone();
                             next.swap(from, to);
-                            link.href(self.query.href_with(|state| state.bar = Some(next)))
+                            link.href(self.href_with(|state| state.bar = Some(next)))
                                 .flag("data-ui-in-region", true)
                         }
                         _ => link.attr("role", "link").attr("aria-disabled", "true"),
@@ -2042,7 +2183,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// Active filters and sort terms, each with a way off, and Clear filters.
     fn chips(&self) -> Option<Element> {
         let labels = &self.labels;
-        let state = &self.query.state;
+        let state = self.state();
         // A sort the user asked for, of more than one column, needs a way off; the
         // table's own default doesn't.
         let many_sorts = state.sort.len() > 1 && !state.is_default_sort_in(&self.query.shape);
@@ -2052,7 +2193,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         let mut chips: Vec<Element> = Vec::new();
         if let Some(q) = &state.q {
             let text = format!("{}: {q}", labels.search);
-            let href = self.query.href_with(|state| {
+            let href = self.href_with(|state| {
                 state.q = None;
                 state.page = 1;
                 state.after = None;
@@ -2067,7 +2208,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
         for filter in &state.filters {
             let column = self.query.column(filter.column);
             let text = self.chip_text(column, &filter.value);
-            let href = self.query.href_with(|state| {
+            let href = self.href_with(|state| {
                 state.filters.retain(|other| other.column != filter.column);
                 state.page = 1;
                 state.after = None;
@@ -2087,7 +2228,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 } else {
                     "↓"
                 };
-                let href = self.query.href_with(|state| {
+                let href = self.href_with(|state| {
                     state.sort.retain(|other| other.column != term.column);
                     state.page = 1;
                     state.after = None;
@@ -2118,7 +2259,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
 
     /// The URL with no search and no filter.
     fn clear_href(&self) -> String {
-        self.query.href_with(|state| {
+        self.href_with(|state| {
             state.q = None;
             state.filters.clear();
             state.page = 1;
@@ -2177,7 +2318,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
             .children((
                 hidden("_table", self.id.to_owned()),
                 hidden("_path", self.query.path.clone()),
-                hidden("_q", self.query.query_string()),
+                hidden("_q", self.query_string()),
                 self.csrf
                     .as_ref()
                     .map(|token| crate::form::csrf_field(token.clone())),
@@ -2242,7 +2383,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
 
     fn toggle_cell(&self, key: &str, open: bool, out: &mut String) {
         let labels = &self.labels;
-        let href = self.query.href_with(|state| {
+        let href = self.href_with(|state| {
             if open {
                 state.open.retain(|other| other != key);
             } else if state.open.len() < super::MAX_OPEN_ROWS {
@@ -2372,7 +2513,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     /// Rows are the bulk of a page, so they skip the tree: each writes straight to
     /// one buffer, sized from the first, through the same escaping as everything else.
     fn body_rows(&self, sticky: &[Option<String>]) -> String {
-        let state = &self.query.state;
+        let state = self.state();
         let opens: Vec<(usize, String)> = state
             .cols
             .iter()
@@ -2518,7 +2659,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                         .slot("button")
                         .attr("data-variant", "outline")
                         .attr("data-size", "sm")
-                        .href(self.query.href())
+                        .href(self.href())
                         .flag("data-ui-in-region", true)
                         .child(labels.retry.to_string()),
                 )
@@ -2549,7 +2690,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     }
 
     fn colgroup(&self) -> Option<Element> {
-        let state = &self.query.state;
+        let state = self.state();
         let any = self.can_resize
             || !state.widths.is_empty()
             || state
@@ -2589,7 +2730,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
 
     fn summary(&self, shown: usize) -> Element {
         let labels = &self.labels;
-        let state = &self.query.state;
+        let state = self.state();
         let per = u64::from(state.per);
         let from = if self.query.config().cursor {
             0
@@ -2605,7 +2746,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 .replace("{total}", &total)
         };
         let count_link = |text: &str| -> Element {
-            self.region_link(self.query.href_with(|state| state.count = true))
+            self.region_link(self.href_with(|state| state.count = true))
                 .slot("count-link")
                 .child(text.to_owned())
         };
@@ -2646,7 +2787,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
     fn page_size(&self) -> Option<Element> {
         let config = self.query.config();
         let labels = &self.labels;
-        let state = &self.query.state;
+        let state = self.state();
         if config.per_pages.len() < 2 {
             return None;
         }
@@ -2692,7 +2833,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 return None;
             }
             let goto = |after: Option<&str>, before: Option<&str>| {
-                self.query.href_with(|state| {
+                self.href_with(|state| {
                     state.after = after.map(str::to_owned);
                     state.before = before.map(str::to_owned);
                 })
@@ -2712,14 +2853,14 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                     .into(),
             );
         }
-        let per = u64::from(self.query.state.per);
+        let per = u64::from(self.state().per);
         match self.data.total {
             Total::Exact(total) => {
                 let pages = u32::try_from(total.div_ceil(per).max(1)).unwrap_or(u32::MAX);
                 (pages > 1).then(|| {
                     in_region(
                         Pagination::new(page, pages, |page| {
-                            self.query.href_with(|state| state.page = page)
+                            self.href_with(|state| state.page = page)
                         })
                         .into(),
                     )
@@ -2729,11 +2870,11 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
                 if page == 1 && !self.data.has_more {
                     return None;
                 }
-                let prev = (page > 1).then(|| self.query.href_with(|state| state.page = page - 1));
+                let prev = (page > 1).then(|| self.href_with(|state| state.page = page - 1));
                 let next = self
                     .data
                     .has_more
-                    .then(|| self.query.href_with(|state| state.page = page + 1));
+                    .then(|| self.href_with(|state| state.page = page + 1));
                 Some(
                     el("nav")
                         .slot("pagination")
@@ -2771,7 +2912,7 @@ impl<'a, R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'a, R
 
     fn into_node(mut self) -> Node {
         self.local = self.local_columns();
-        let state = &self.query.state;
+        let state = self.state();
         // Sticky start columns are numbered from the start, and sticky end columns from the
         // end, so the stylesheet can place each by its own offset variable. The row's menu,
         // when there is one, is the last of the end columns (`e`): the one before it is `e1`.

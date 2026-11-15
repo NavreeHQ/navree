@@ -504,6 +504,7 @@ checks bulk actions.
 |---|---|
 | Sort, several columns at once | `#[col(sortable)]`; the address holds `sort=-amount,title` |
 | Search box | `#[col(search)]` on the searched columns |
+| A toolbar of the search box only | `.without_columns_picker()` and `.without_density_switch()`: the table draws its starting columns and the default density, and ignores `cols` and `density` |
 | Filter per column | `#[col(filter = text \| range \| date \| select \| multi \| boolean \| relation)]`, choices from `options = LIST` or `.options(col, Vec<FilterOption>)` |
 | Filters under the headers or in a bar | `.filter_row()` or `.filter_bar()` |
 | Page size | `#[table(per = 25, per_pages(10, 25, 50, 100))]` |
