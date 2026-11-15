@@ -656,7 +656,7 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
         Column(
             modifier = if (fills) modifier.fillMaxWidth() else modifier,
             verticalArrangement = Arrangement.spacedBy(gap),
-            horizontalAlignment = when (node.align) {
+            horizontalAlignment = when (CompositionRules.columnAlign(node)) {
                 Navree.Align.CENTER -> Alignment.CenterHorizontally
                 Navree.Align.END -> Alignment.End
                 else -> Alignment.Start

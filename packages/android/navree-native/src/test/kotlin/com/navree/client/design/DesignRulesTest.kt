@@ -506,6 +506,18 @@ class BoardRulesTest {
     }
 }
 
+class ColumnAlignTest {
+    @Test
+    fun a_stack_that_turns_starts_its_parts_at_the_start_when_it_is_a_column() {
+        val card = Navree.Stack(align = Navree.Align.CENTER, wide = Navree.Axis.HORIZONTAL)
+        assertEquals(Navree.Align.START, CompositionRules.columnAlign(card))
+        assertFalse(CompositionRules.fillsWidth(card, Navree.Axis.VERTICAL, inLine = false))
+        val plain = Navree.Stack(align = Navree.Align.CENTER)
+        assertEquals(Navree.Align.CENTER, CompositionRules.columnAlign(plain))
+        assertTrue(CompositionRules.fillsWidth(plain, Navree.Axis.VERTICAL, inLine = false))
+    }
+}
+
 class FactColumnsTest {
     @Test
     fun facts_stand_in_two_columns_only_where_the_room_holds_two() {

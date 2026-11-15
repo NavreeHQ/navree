@@ -58,7 +58,17 @@ object CompositionRules {
      * (where the column is one part of a line) keeps the width it needs.
      */
     fun fillsWidth(stack: Navree.Stack, axis: Navree.Axis, inLine: Boolean): Boolean =
-        axis == Navree.Axis.VERTICAL && !inLine && (stack.align == Navree.Align.CENTER || stack.align == Navree.Align.END)
+        axis == Navree.Axis.VERTICAL && !inLine && (columnAlign(stack) == Navree.Align.CENTER || columnAlign(stack) == Navree.Align.END)
+
+    /**
+     * How a stack laid as a column places its parts across. A stack that turns
+     * (it has a wide axis) says its alignment for the line it makes in a wide
+     * room, where it centres its parts up and down; laid as a column it would
+     * centre a block of words left aligned inside it, so they would start part
+     * of the way in. Such a stack's column starts its parts at the start.
+     */
+    fun columnAlign(stack: Navree.Stack): Navree.Align? =
+        if (stack.wide != null && stack.wide != stack.axis) Navree.Align.START else stack.align
 
     /** The room a ring's legend needs beside its dial, and the space between the two, in dp. */
     private const val LEGEND_DP = 96f
