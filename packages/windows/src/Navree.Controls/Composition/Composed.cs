@@ -203,7 +203,7 @@ public static class Composed
     public static UIElement Grid(Models.Grid grid, Func<Models.Node, UIElement> render)
     {
         bool cards = grid.Children.All(child => child is Models.Card);
-        FlowGrid flow = new() { Cols = grid.Cols, Min = grid.Min, Gap = ComposeRules.GridGap(grid.Gap, cards) };
+        FlowGrid flow = new() { Cols = grid.Cols, Min = grid.Min, Gap = ComposeRules.GridGap(grid.Gap, cards), RuleBrush = cards ? null : Palette.Resource("DividerStrokeColorDefaultBrush") };
         foreach (Models.Node child in grid.Children)
         {
             UIElement part = render(child);

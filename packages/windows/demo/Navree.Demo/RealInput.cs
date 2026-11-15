@@ -30,6 +30,29 @@ internal static class RealInput
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr window);
 
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out Spot spot);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
+
+    private const uint MouseAbsolute = 0x8000;
+
+    /// <summary>Where the pointer is on the screen now, in pixels.</summary>
+    internal static (int X, int Y) Where()
+    {
+        GetCursorPos(out Spot spot);
+        return (spot.X, spot.Y);
+    }
+
+    // A move to a place on the whole screen, sent as the mouse itself would send it.
+    private static void Absolute(int x, int y)
+    {
+        int width = Math.Max(GetSystemMetrics(0), 1);
+        int height = Math.Max(GetSystemMetrics(1), 1);
+        mouse_event(MouseMove | MouseAbsolute, (int)(x * 65535L / width), (int)(y * 65535L / height), 0, UIntPtr.Zero);
+    }
+
     /// <summary>Brings the window forward, so input reaches it.</summary>
     internal static void Forward(IntPtr window) => SetForegroundWindow(window);
 
@@ -38,9 +61,12 @@ internal static class RealInput
     {
         Spot origin = default;
         ClientToScreen(window, ref origin);
-        SetCursorPos(origin.X + (int)Math.Round(x), origin.Y + (int)Math.Round(y));
-        mouse_event(MouseMove, 1, 0, 0, UIntPtr.Zero);
-        mouse_event(MouseMove, -1, 0, 0, UIntPtr.Zero);
+        int at = origin.X + (int)Math.Round(x);
+        int down = origin.Y + (int)Math.Round(y);
+        SetCursorPos(at - 20, down);
+        Absolute(at - 20, down);
+        Absolute(at - 8, down);
+        Absolute(at, down);
     }
 
     /// <summary>Presses and lets go of a key (a virtual key code).</summary>

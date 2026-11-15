@@ -166,7 +166,11 @@ internal sealed partial class PlotSurface : UserControl
     internal void Repaint() => Paint(force: true);
 
     /// <summary>Takes the read-out away.</summary>
-    internal void Dismiss() => Hide();
+    internal void Dismiss()
+    {
+        Hide();
+        current = -1;
+    }
 
     /// <summary>Reads out the place at an index, as the keys do.</summary>
     internal void Reach(int index, bool speak = true)

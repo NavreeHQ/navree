@@ -109,7 +109,8 @@ internal sealed class KindsWalker(Window window, string folder)
             {
                 RealInput.PointerTo(handle, found.X * scale, found.Y * scale);
                 await Task.Delay(500);
-                Say(name + ": the pointer was put on place 3 of the first chart; it reads out place " + Navree.Controls.Drawing.FirstDrawing.Current(page));
+                (int px, int py) = RealInput.Where();
+                Say(name + ": the pointer was put on place 3 of the first chart (the content point " + (int)found.X + "," + (int)found.Y + ", the screen point " + px + "," + py + "); it reads out place " + Navree.Controls.Drawing.FirstDrawing.Current(page));
                 await SaveAsync(page, Path.Combine(folder, prefix + name + "-w840-pointer.png"), 1, name);
             }
             else
