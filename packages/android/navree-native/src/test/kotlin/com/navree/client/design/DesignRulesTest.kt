@@ -562,6 +562,7 @@ class BoardRulesTest {
         assertEquals("five lanes of a tablet's pane do not fit at the least: the row scrolls", 240f, ListRules.laneWidthDp(1100f, 5), 0.001f)
         assertEquals("three lanes share what is there", (1100f - 32f) / 3, ListRules.laneWidthDp(1100f, 3), 0.001f)
         assertEquals("two lanes in a very wide room stay together", 360f, ListRules.laneWidthDp(1400f, 2), 0.001f)
+        assertEquals("at the largest text a lane is twice as wide", 480f, ListRules.laneWidthDp(1100f, 5, fontScale = 2f), 0.001f)
     }
 
     @Test

@@ -603,7 +603,7 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
 @Composable
 private fun Lanes(lanes: List<Navree.Node>, place: Place, modifier: Modifier, widthDp: Float) {
     val margin = ContentRules.marginDp(LocalUi.current.window)
-    val laneDp = ListRules.laneWidthDp(widthDp, lanes.size)
+    val laneDp = ListRules.laneWidthDp(widthDp, lanes.size, fontScale = LocalUi.current.window.fontScale)
     val scroll = rememberScrollState()
     Row(
         modifier

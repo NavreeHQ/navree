@@ -93,12 +93,14 @@ object ListRules {
     /**
      * The width of each of `count` lanes in a room this wide: what fits them
      * all, held between the least a card reads in and the most a lane stretches
-     * to. Where even the least does not fit them all, the row of lanes scrolls
+     * to, both grown with the text size. Where even the least does not fit them all, the row of lanes scrolls
      * along and the next lane shows at the edge, so none waits under the others.
      */
-    fun laneWidthDp(roomDp: Float, count: Int, gapDp: Int = LANE_GAP_DP): Float {
+    fun laneWidthDp(roomDp: Float, count: Int, gapDp: Int = LANE_GAP_DP, fontScale: Float = 1f): Float {
         val fit = (roomDp - gapDp * (count - 1).coerceAtLeast(0)) / count.coerceAtLeast(1)
-        return fit.coerceIn(LANE_LEAST_DP.toFloat(), LANE_MOST_DP.toFloat())
+        // The words in a card grow with the text size, so does the lane they stand in.
+        val scale = fontScale.coerceAtLeast(1f)
+        return fit.coerceIn(LANE_LEAST_DP * scale, LANE_MOST_DP * scale)
     }
 
     /** A button, and the form of its own it sends. */
