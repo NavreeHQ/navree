@@ -44,9 +44,9 @@ class WebOriginsTest {
     private val named = MockWebServer()
 
     /** Every request each server was asked, as `METHOD path`. */
-    private val appAsked = Collections.synchronizedList(ArrayList<String>())
-    private val otherAsked = Collections.synchronizedList(ArrayList<String>())
-    private val namedAsked = Collections.synchronizedList(ArrayList<String>())
+    private val appAsked = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val otherAsked = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val namedAsked = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     @After
     fun stop() {
@@ -131,9 +131,9 @@ class WebOriginsTest {
         val base = app.url("/").toString().trimEnd('/')
         val namedHost = "localhost:" + named.port
         val origins = Origins(base, loopbackHttp = true, webHosts = listOf(namedHost))
-        val links = Collections.synchronizedList(ArrayList<String>())
+        val links = java.util.concurrent.CopyOnWriteArrayList<String>()
         val left = AtomicBoolean(false)
-        val finished = Collections.synchronizedList(ArrayList<String>())
+        val finished = java.util.concurrent.CopyOnWriteArrayList<String>()
         var web: WebView? = null
         var guarded = false
         compose.setContent {

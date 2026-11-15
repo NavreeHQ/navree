@@ -41,8 +41,8 @@ class WebWorkersTest {
 
     private val app = MockWebServer()
     private val other = MockWebServer()
-    private val appAsked = Collections.synchronizedList(ArrayList<String>())
-    private val otherAsked = Collections.synchronizedList(ArrayList<String>())
+    private val appAsked = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val otherAsked = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     @After
     fun stop() {
@@ -126,8 +126,8 @@ class WebWorkersTest {
         other.start()
         val base = app.url("/").toString().trimEnd('/')
         val origins = Origins(base, loopbackHttp = true)
-        val reached = Collections.synchronizedList(ArrayList<String>())
-        val ours = Collections.synchronizedList(ArrayList<String>())
+        val reached = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val ours = java.util.concurrent.CopyOnWriteArrayList<String>()
         other.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 otherAsked += request.method + " " + request.url.encodedPath + " upgrade=" + request.headers["Upgrade"]
