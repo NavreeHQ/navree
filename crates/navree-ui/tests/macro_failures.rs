@@ -189,9 +189,7 @@ fn cases() -> Vec<Case> {
         Case {
             name: "the_derive_with_control_needs_no_options_for_the_fields_type",
             code: r#"
-                use navree_ui::form::{
-                    ControlField, FieldControl, FieldRules, FieldValue, Form as _, RuleTable,
-                };
+                use navree_ui::form::{ControlField, FieldControl, FieldRules, FieldValue, RuleTable};
                 use navree_ui::{Form, Node, el};
 
                 // A type with no `Options` and no input of its own: only its control draws it.
@@ -216,7 +214,8 @@ fn cases() -> Vec<Case> {
                 }
                 impl RuleTable for Visit { const FIELDS: &'static [FieldRules] = &[]; }
 
-                fn main() { let _ = Visit::FIELDS.len(); }
+                // `Form` and `RuleTable` each have a `FIELDS`: name the form's.
+                fn main() { let _ = <Visit as navree_ui::form::Form>::FIELDS.len(); }
             "#,
             files: &[],
             expect: Expect::Builds,
