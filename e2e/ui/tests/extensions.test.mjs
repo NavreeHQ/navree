@@ -266,18 +266,22 @@ for (const name of NAMES) {
     });
 
     test("a script that imports another origin fails and keeps its fallback", async () => {
-      const { page, requests, expected, close } = await open("/extensions/outside", {
+      // What leaves the page for the other site would pass through this route. A browser can announce a
+      // request its own policy then stops (Chromium does), so the page's request events do not say it.
+      const sent = [];
+      const { page, expected, close } = await open("/extensions/outside", {
         errors: [/could not be loaded/, /Refused to load|Content[- ]Security[- ]Policy|script-src/i],
         csp: /script-src.*cdn\.example/,
+        prepare: (page) =>
+          page.route("https://cdn.example/**", (route) => {
+            sent.push(route.request().url());
+            return route.abort();
+          }),
       });
       await page.locator("#outside[data-ui-failed]").waitFor();
       assert.equal((await page.textContent("#outside")).trim(), "Map unavailable", "the server's fallback stays");
       assert.equal(await page.getAttribute("#outside", "data-ui-mounted"), null);
-      assert.deepEqual(
-        requests.filter((r) => r.includes("cdn.example")),
-        [],
-        "nothing was asked of the other site",
-      );
+      assert.deepEqual(sent, [], "nothing was sent to the other site");
       assert.ok(
         expected.some((line) => /navree-ui: \/_navree\/ui\/ext\/app\.outside-[0-9a-f]{12}\.js could not be loaded/.test(line)),
         `the runtime says which script could not be loaded: ${expected.join(" | ")}`,
@@ -377,7 +381,8 @@ for (const name of NAMES) {
     test("a lazy tab whose source is a fresh page draws no field into a page with an extension", async () => {
       const { page, close } = await open("/extensions/security");
       await mounted(page, "security-pad");
-      await page.locator('#security[data-ui-failed="403"]').waitFor();
+      // The region draws nothing when it is refused, so it is in the page and has no size.
+      await page.locator('#security[data-ui-failed="403"]').waitFor({ state: "attached" });
       assert.equal(await page.locator("input[type=password]").count(), 0, "no password field was drawn into the page");
       assert.ok(!(await page.locator("body").innerText()).includes("Confirm it is you"), "nothing of the fresh page was drawn");
       await close();
