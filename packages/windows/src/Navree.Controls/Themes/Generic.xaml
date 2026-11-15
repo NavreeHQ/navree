@@ -195,7 +195,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="local:DataTableHeaderCell">
                     <Grid x:Name="PART_Root" Background="Transparent">
-                        <Grid Padding="12,0,12,0" ColumnSpacing="4">
+                        <Grid Padding="12,0,12,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -208,6 +208,7 @@
                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                             <FontIcon x:Name="PART_SortGlyph"
                                       Grid.Column="1"
+                                      Margin="4,0,0,0"
                                       FontFamily="{ThemeResource SymbolThemeFontFamily}"
                                       FontSize="12"
                                       IsTextScaleFactorEnabled="False"

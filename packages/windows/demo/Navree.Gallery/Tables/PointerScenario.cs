@@ -9,8 +9,10 @@ namespace Navree.Gallery;
 /// <summary>Moves the real pointer over the window and presses its button, as a person at a mouse would.</summary>
 internal static class Mouse
 {
+    private const uint MoveTo = 0x0001;
     private const uint LeftDown = 0x0002;
     private const uint LeftUp = 0x0004;
+    private const uint Absolute = 0x8000;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Point32
@@ -20,7 +22,7 @@ internal static class Mouse
     }
 
     [DllImport("user32.dll")]
-    private static extern bool SetCursorPos(int x, int y);
+    private static extern int GetSystemMetrics(int index);
 
     [DllImport("user32.dll")]
     private static extern void mouse_event(uint flags, int dx, int dy, uint data, UIntPtr extra);
@@ -42,11 +44,20 @@ internal static class Mouse
         return (origin.X + (int)Math.Round(inWindow.X * scale), origin.Y + (int)Math.Round(inWindow.Y * scale));
     }
 
+    // The pointer is moved as the hardware moves it: an absolute move over the whole screen, from 0 to 65535 each way,
+    // which the system turns into the pointer messages a window reads (setting the cursor's place does not).
+    private static void Put((int X, int Y) to)
+    {
+        int width = Math.Max(2, GetSystemMetrics(0));
+        int height = Math.Max(2, GetSystemMetrics(1));
+        mouse_event(MoveTo | Absolute, (int)((long)to.X * 65535 / (width - 1)), (int)((long)to.Y * 65535 / (height - 1)), 0, UIntPtr.Zero);
+    }
+
     /// <summary>Moves the pointer to a place.</summary>
     internal static async Task MoveAsync((int X, int Y) to)
     {
-        SetCursorPos(to.X, to.Y);
-        await Task.Delay(120);
+        Put(to);
+        await Task.Delay(150);
     }
 
     /// <summary>Presses and lets go of the left button where the pointer is.</summary>
@@ -67,7 +78,7 @@ internal static class Mouse
         const int steps = 8;
         for (int i = 1; i <= steps; i++)
         {
-            SetCursorPos(from.X + ((to.X - from.X) * i / steps), from.Y + ((to.Y - from.Y) * i / steps));
+            Put((from.X + ((to.X - from.X) * i / steps), from.Y + ((to.Y - from.Y) * i / steps)));
             await Task.Delay(60);
         }
 
