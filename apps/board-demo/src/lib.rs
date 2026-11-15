@@ -126,10 +126,10 @@ impl Module for BoardModule {
             Ok(Arc::new(views::shell()))
         }))
         .exports::<Shell>();
-        // Every request is the team account's, so the framework has a person to keep a
-        // native client's place for.
+        // Every request is the team member's the visitor views the board as, so the framework
+        // has a person to keep a native client's place for.
         m.factory(Factory::<dyn Authenticator>::new(|_| async {
-            Ok(Arc::new(person::Team) as Arc<dyn Authenticator>)
+            Ok(Arc::new(person::Viewers) as Arc<dyn Authenticator>)
         }))
         .exports::<dyn Authenticator>();
         // The hub tells the pages through the app's live hub.
@@ -161,7 +161,7 @@ pub fn app(port: u16, database_url: String, settings: Settings) -> AppBuilder {
             "10000".to_owned(),
         ),
         // The framework limits one account's live streams (16 by default, one per open
-        // tab), and everyone here is the one team account: the tabs of every visitor
+        // tab), and the visitors viewing the board as one member are one person: their tabs
         // would share those.
         (
             "APP_REALTIME__STREAMS__PER_USER".to_owned(),
