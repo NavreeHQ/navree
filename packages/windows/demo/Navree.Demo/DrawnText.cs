@@ -23,6 +23,20 @@ internal static class DrawnText
         return words.ToString();
     }
 
+    /// <summary>All the text in the window and in what is open over it (a dialog or a flyout is not in the window's own tree).</summary>
+    /// <param name="window">The window.</param>
+    /// <returns>The words.</returns>
+    internal static string Everything(Navree.Shell.ShellWindow window)
+    {
+        StringBuilder words = new(Of(window.Content));
+        foreach (Microsoft.UI.Xaml.Controls.Primitives.Popup popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot))
+        {
+            words.Append(Of(popup.Child));
+        }
+
+        return words.ToString();
+    }
+
     private static void Visit(DependencyObject node, StringBuilder words)
     {
         switch (node)
