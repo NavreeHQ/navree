@@ -314,5 +314,11 @@ With nothing opened, the list has the window.
   touch slop, is the chart's: it reads each mark it passes and does not also
   turn the day of a screen of days; a day is turned by a swipe that starts
   off a chart, or by the pager's arrows.
+- Everything the client opens over a screen (a menu, a question, a picker, a
+  sheet) has the layout direction of the screen under it. The app declares
+  `android:supportsRtl="true"` (a window of its own resolves its direction only
+  for an app that does; the client logs a warning at start when it is missing),
+  and a dialog or a popup takes its direction from the composition it is opened
+  from.
 - A service worker a page registers is held to the origins the web view is:
   its requests to any other origin are answered 403.
