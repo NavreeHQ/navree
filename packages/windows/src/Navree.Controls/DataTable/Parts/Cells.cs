@@ -310,7 +310,7 @@ public sealed class DataTableHeaderCell : Control
     }
 
     private void UpdateState() =>
-        VisualStateManager.GoToState(this, pressed ? "Pressed" : over ? "PointerOver" : "Normal", false);
+        VisualStateManager.GoToState(this, pressed || over ? (ContrastColours.IsOn ? "Highlighted" : pressed ? "Pressed" : "PointerOver") : "Normal", false);
 
     private void Refresh()
     {

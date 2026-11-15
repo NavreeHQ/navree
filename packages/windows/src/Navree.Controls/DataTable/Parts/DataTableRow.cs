@@ -18,6 +18,7 @@ public sealed class DataTableRow : Control
     private Canvas? frozenStart;
     private Canvas? frozenEnd;
     private Border? detailCard;
+    private Border? textOnHighlight;
     private readonly List<DataTableCell> cells = [];
     private readonly List<DataTableHeaderCell> headers = [];
     private DataTableCell? checkCell;
@@ -118,6 +119,7 @@ public sealed class DataTableRow : Control
         frozenStart = GetTemplateChild("PART_FrozenStart") as Canvas;
         frozenEnd = GetTemplateChild("PART_FrozenEnd") as Canvas;
         detailCard = GetTemplateChild("PART_DetailCard") as Border;
+        textOnHighlight = GetTemplateChild("PART_TextOnHighlight") as Border;
         builtVersion = -1;
         Owner?.RowPartsMade(this);
         UpdateState();
@@ -384,16 +386,18 @@ public sealed class DataTableRow : Control
 
     private void UpdateState()
     {
-        string state = (chosen, pressed, over) switch
-        {
-            (true, true, _) => "ChosenPressed",
-            (true, false, true) => "ChosenPointerOver",
-            (true, false, false) => "Chosen",
-            (false, true, _) => "Pressed",
-            (false, false, true) => "PointerOver",
-            _ => "Normal",
-        };
+        string state = RowVisual.State(chosen, pressed, over, ContrastColours.IsOn && !IsHeader);
         VisualStateManager.GoToState(this, state, false);
+
+        // The words of a row that is the highlight take the highlight's text colour; any other row's words take what the style gives.
+        if (RowVisual.TextOnHighlight(state) && textOnHighlight?.Background is { } brush)
+        {
+            Foreground = brush;
+        }
+        else
+        {
+            ClearValue(ForegroundProperty);
+        }
     }
 
     private void Place(DataTableCell cell, int columnIndex, ColumnLayout layout, DataTable table, double height)

@@ -208,6 +208,12 @@ public sealed partial class DataTable
             // The setting cannot be watched here; the metrics are read again at the next reset.
         }
 
+        if (ContrastColours.Settings is { } colours)
+        {
+            colours.HighContrastChanged -= OnHighContrastChanged;
+            colours.HighContrastChanged += OnHighContrastChanged;
+        }
+
         if (XamlRoot is { } root)
         {
             root.Changed -= OnXamlRootChanged;
@@ -223,6 +229,11 @@ public sealed partial class DataTable
             uiSettings.TextScaleFactorChanged -= OnTextScaleChanged;
         }
 
+        if (ContrastColours.Settings is { } colours)
+        {
+            colours.HighContrastChanged -= OnHighContrastChanged;
+        }
+
         if (watchedRoot is not null)
         {
             watchedRoot.Changed -= OnXamlRootChanged;
@@ -233,6 +244,16 @@ public sealed partial class DataTable
     // The text scale changes on a thread of the system's own.
     private void OnTextScaleChanged(Windows.UI.ViewManagement.UISettings sender, object args) =>
         DispatcherQueue.TryEnqueue(MetricsMayHaveChanged);
+
+    // The contrast colours were turned on or off while the table is in the tree: every part is drawn in the state it is in again.
+    private void OnHighContrastChanged(Windows.UI.ViewManagement.AccessibilitySettings sender, object args) =>
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (loaded && templateWired)
+            {
+                RefreshAllRows(numbersOnly: false);
+            }
+        });
 
     private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => MetricsMayHaveChanged();
 

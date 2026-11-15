@@ -14,16 +14,6 @@ internal static class PartsScenario
     internal static async Task RunAsync(MainWindow window)
     {
         Report.Line("== parts");
-        try
-        {
-            ResourceDictionary brushes = new() { Source = new Uri("ms-appx:///Navree.Controls/Themes/DataTable.Resources.xaml") };
-            Report.Line($"[parts] the brush dictionary loaded with {brushes.ThemeDictionaries.Count} theme dictionaries");
-        }
-        catch (Exception problem)
-        {
-            Report.Line("[parts] the brush dictionary did not load: " + problem);
-        }
-
         (string Name, Func<Control> Make)[] parts =
         [
             ("DataTableCheck", () => new DataTableCheck()),

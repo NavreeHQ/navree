@@ -96,6 +96,12 @@
                                         <Setter Target="PART_Root.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
+                                <VisualState x:Name="Highlighted">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Icon.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
                     </Grid>
@@ -254,6 +260,15 @@
                                         <Setter Target="PART_Options.Opacity" Value="1" />
                                     </VisualState.Setters>
                                 </VisualState>
+                                <VisualState x:Name="Highlighted">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Options.Opacity" Value="1" />
+                                        <Setter Target="PART_Options.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_Text.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_SortGlyph.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
                     </Grid>
@@ -293,6 +308,8 @@
                         <Canvas x:Name="PART_ScrollCells" />
                         <Canvas x:Name="PART_FrozenStart" />
                         <Canvas x:Name="PART_FrozenEnd" />
+                        <!-- What a row's words take when the row is the highlight in a contrast theme: its brush is read by the row. -->
+                        <Border x:Name="PART_TextOnHighlight" Width="0" Height="0" Visibility="Collapsed" Background="{ThemeResource SystemColorHighlightTextColorBrush}" />
                         <Border x:Name="PART_DetailCard"
                                 Grid.Row="1"
                                 HorizontalAlignment="Left"
@@ -329,6 +346,19 @@
                                 <VisualState x:Name="ChosenPressed">
                                     <VisualState.Setters>
                                         <Setter Target="PART_Fill.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                        <Setter Target="PART_Pill.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <!-- In a contrast theme a row that is chosen, pressed or pointed at is the highlight with the highlight's text. -->
+                                <VisualState x:Name="Highlighted">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="HighlightedChosen">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Pill.Background" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
                                         <Setter Target="PART_Pill.Visibility" Value="Visible" />
                                     </VisualState.Setters>
                                 </VisualState>

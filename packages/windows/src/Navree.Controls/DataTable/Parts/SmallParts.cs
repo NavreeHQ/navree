@@ -7,7 +7,6 @@ namespace Navree.Controls;
 /// <summary>The box that chooses a row, drawn from the table's own brushes.</summary>
 public sealed class DataTableCheck : Control
 {
-    private static Windows.UI.ViewManagement.AccessibilitySettings? access;
     private HeaderBoxState state;
     private bool available = true;
 
@@ -57,24 +56,7 @@ public sealed class DataTableCheck : Control
         };
         VisualStateManager.GoToState(this, check, false);
         VisualStateManager.GoToState(this, available ? "Enabled" : "Unavailable", false);
-        VisualStateManager.GoToState(this, HighContrast && state != HeaderBoxState.Off ? "ContrastOn" : "ContrastOff", false);
-    }
-
-    // Whether the system's high contrast colours are on: read each time, as a person may turn them on while the table is open.
-    private static bool HighContrast
-    {
-        get
-        {
-            try
-            {
-                access ??= new Windows.UI.ViewManagement.AccessibilitySettings();
-                return access.HighContrast;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
+        VisualStateManager.GoToState(this, ContrastColours.IsOn && state != HeaderBoxState.Off ? "ContrastOn" : "ContrastOff", false);
     }
 }
 
@@ -155,5 +137,44 @@ public sealed class DataTableGlyph : Control
     }
 
     private void UpdateState() =>
-        VisualStateManager.GoToState(this, pressed ? "Pressed" : over ? "PointerOver" : "Normal", false);
+        VisualStateManager.GoToState(this, pressed || over ? (ContrastColours.IsOn ? "Highlighted" : pressed ? "Pressed" : "PointerOver") : "Normal", false);
+}
+
+/// <summary>Whether the system's contrast colours are on.</summary>
+internal static class ContrastColours
+{
+    private static Windows.UI.ViewManagement.AccessibilitySettings? access;
+
+    /// <summary>Whether they are on: read each time, as a person may turn them on while the table is open.</summary>
+    internal static bool IsOn
+    {
+        get
+        {
+            try
+            {
+                access ??= new Windows.UI.ViewManagement.AccessibilitySettings();
+                return access.HighContrast;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>The settings, to hear of a change.</summary>
+    internal static Windows.UI.ViewManagement.AccessibilitySettings? Settings
+    {
+        get
+        {
+            try
+            {
+                return access ??= new Windows.UI.ViewManagement.AccessibilitySettings();
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+    }
 }

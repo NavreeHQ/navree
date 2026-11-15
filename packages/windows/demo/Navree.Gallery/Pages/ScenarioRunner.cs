@@ -50,9 +50,6 @@ internal static class ScenarioRunner
             case "contrast-states":
                 await ContrastScenario.RunAsync(window, "states");
                 break;
-            case "contrast-dictionary":
-                await ContrastScenario.RunAsync(window, "dictionary");
-                break;
             case "rows100k":
                 await HugeScenario.RunAsync(window);
                 break;
