@@ -438,7 +438,7 @@ default_region = "IN"
 sender_id = "NAVREE"
 ```
 
-The channel reads numbers, skips opted-out ones and records each delivery as it does for the built-in drivers, with the `provider` the driver's `SentMessage` names. An app's own `dyn SmsDriver` (a fake in a test) still wins over the configured driver. A name is a lower-case letter followed by lower-case letters, digits or `_`; a registration under a built-in name (`twilio`, `vonage`, `sns`, `aws_sns`, `log`) or a key of `[notify]` (`slack`, `meta`, `push`), one name registered by two modules, a `notify.sms.driver` naming a driver no module registers and a factory that fails each fail the boot, naming `m.sms_driver`; `config:check` reports the same.
+The channel reads numbers, skips opted-out ones and records each delivery as it does for the built-in drivers, with the `provider` the driver's `SentMessage` names. An app's own `dyn SmsDriver` (a fake in a test) still wins over the configured driver. A name is a lower-case letter followed by lower-case letters, digits or `_`; a registration under a built-in name (`twilio`, `vonage`, `sns`, `aws_sns`, `log`) or a key of `[notify]` (`slack`, `meta`, `push`), one name registered by two modules, a `notify.sms.driver` naming a driver no module registers and a factory that fails each fail the boot, naming `m.sms_driver`; `config:check` reports the same. A factory's error is shown in the boot error as written, so it must not contain a secret from the driver's settings.
 
 ### Opt-outs
 
