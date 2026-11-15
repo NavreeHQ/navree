@@ -16,6 +16,14 @@ include = ["src/**", "README.md", "LICENSE-*"]
 features = ["ui"]
 targets = ["x86_64-unknown-linux-gnu"]
 
+# `Channel`, `SmsDriverKind` and `WhatsAppDriverKind` each gained
+# `Registered`, which names a driver a plugin registers. The enums are
+# `#[non_exhaustive]`, so a new variant is not a breaking change
+# (docs/prologue/versioning-and-support.mdx). What stops compiling is a cast
+# of a variant to a number (`Channel::Mail as u8`), which nothing documents.
+[package.metadata.cargo-semver-checks.lints]
+enum_discriminants_undefined_non_unit_variant = "allow"
+
 [lints]
 workspace = true
 
