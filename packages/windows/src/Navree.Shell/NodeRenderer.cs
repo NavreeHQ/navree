@@ -154,7 +154,8 @@ internal sealed partial class NodeRenderer(RenderContext context)
                 UIElement element = Render(child);
                 if (stack.Align is Models.Align align && element is FrameworkElement placed)
                 {
-                    placed.HorizontalAlignment = Across(align);
+                    // A chart has no width of its own: put in the middle it would be as wide as nothing, so it takes the width of the stack.
+                    placed.HorizontalAlignment = child is Models.Chart ? HorizontalAlignment.Stretch : Across(align);
                 }
 
                 panel.Children.Add(element);
@@ -168,7 +169,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
         int at = 0;
         foreach (Models.Node child in stack.Children)
         {
-            bool grows = child is Models.Stack { Grow: true };
+            bool grows = child is Models.Stack { Grow: true } or Models.Chart;
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = grows ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
             UIElement element = Render(child);
             if (element is FrameworkElement placed)

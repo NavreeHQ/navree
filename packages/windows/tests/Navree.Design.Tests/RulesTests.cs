@@ -109,7 +109,8 @@ public sealed class RulesTests
     {
         Assert.AreEqual("", SystemGlyphs.For("home"));
         Assert.AreEqual("", SystemGlyphs.For("Orders"));
-        Assert.AreEqual("", SystemGlyphs.For("unheard-of", "Inventory and stock"));
+        Assert.AreEqual("", SystemGlyphs.For("unheard-of", "Inventory and stock"));
+        Assert.AreEqual("", SystemGlyphs.For("boxes", "Inventory"));
         Assert.AreEqual("", SystemGlyphs.For("unheard-of", "Zebra"));
         Assert.AreEqual("", SystemGlyphs.Of(Models.Standard.Share));
     }

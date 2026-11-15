@@ -173,7 +173,7 @@ public static class SystemGlyphs
     {
         ["home"] = "", ["house"] = "", ["dashboard"] = "", ["overview"] = "", ["today"] = "",
         ["orders"] = "", ["order"] = "", ["receipt"] = "", ["sales"] = "", ["invoice"] = "",
-        ["inventory"] = "", ["stock"] = "", ["package"] = "", ["box"] = "", ["warehouse"] = "",
+        ["inventory"] = "", ["stock"] = "", ["package"] = "", ["box"] = "", ["boxes"] = "", ["layout-dashboard"] = "", ["warehouse"] = "",
         ["products"] = "", ["shopping-bag"] = "", ["shopping_bag"] = "", ["cart"] = "", ["tag"] = "",
         ["customers"] = "", ["users"] = "", ["people"] = "", ["team"] = "", ["contacts"] = "", ["user"] = "",
         ["inbox"] = "", ["mail"] = "", ["messages"] = "", ["chat"] = "", ["message"] = "", ["support"] = "",
