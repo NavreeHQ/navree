@@ -548,7 +548,15 @@ private fun GridView(node: Navree.Grid, place: Place, modifier: Modifier) {
 private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthDp: Float) {
     val gap = ContentRules.gap(node.gap)
     val shown = node.children.filter { inFlow(it, place.screen) }
-    val columns = ListRules.gridColumns(widthDp.toInt(), node.min, gap, node.cols, LocalUi.current.window.fontScale, shown.size)
+    val columns = ListRules.gridColumns(
+        widthDp.toInt(),
+        ListRules.gridLeast(node.min, shown),
+        gap,
+        node.cols,
+        LocalUi.current.window.fontScale,
+        shown.size,
+        controls = shown.any { it is Navree.Field },
+    )
     val cell = ContentRules.cardWidthDp(widthDp, columns, gap)
     val stretch = ListRules.stretchesLastLine(shown)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(gap.dp)) {

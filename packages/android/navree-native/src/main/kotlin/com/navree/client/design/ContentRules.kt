@@ -35,6 +35,47 @@ object ListRules {
     /** The least a column gets, in dp. A table with more columns than fit is a list at any width. */
     const val COLUMN_LEAST_DP = 112
 
+    /** The least a lane of a board stands in, in dp: a card's title and its choices read in it. */
+    const val LANE_LEAST_DP = 240
+
+    /**
+     * The least width of a grid's columns when the page gives none: lanes (every
+     * part a section) keep a width a card can be read in, so a phone shows one
+     * at a time and a wide window as many as fit; other grids keep their own.
+     */
+    fun gridLeast(least: Int?, parts: List<Navree.Node>): Int? =
+        least ?: if (parts.size > 1 && parts.all { it is Navree.Section }) LANE_LEAST_DP else null
+
+    /** A button, and the form of its own it sends. */
+    data class TitleButton(val form: Navree.Form, val button: Navree.Button)
+
+    /**
+     * The button of a row that only says the row's title: a form of one button,
+     * in the row's detail, whose label is the title. A row with no action of its
+     * own takes the button's: the whole row is the touch target, and the title
+     * is not said a second time under itself.
+     */
+    fun titleButton(row: Navree.Row): TitleButton? {
+        fun find(node: Navree.Node): TitleButton? {
+            if (node is Navree.Form) {
+                val only = node.children.singleOrNull() as? Navree.Button
+                return if (only != null && only.action is Navree.Action.Submit && only.label == row.title) TitleButton(node, only) else null
+            }
+            return if (node is Navree.Stack) node.children.firstNotNullOfOrNull(::find) else null
+        }
+        return row.detail.firstNotNullOfOrNull(::find)
+    }
+
+    /** The row with the form of its title button taken out of its detail. */
+    fun withoutTitleButton(row: Navree.Row, form: Navree.Form): Navree.Row {
+        fun prune(node: Navree.Node): Navree.Node? = when {
+            node === form -> null
+            node is Navree.Stack -> node.children.mapNotNull(::prune).let { kept -> if (kept.isEmpty()) null else node.copy(children = kept) }
+            else -> node
+        }
+        return row.copy(detail = row.detail.mapNotNull(::prune))
+    }
+
     /**
      * The lines under a row's title, with runs of badges (a status, a priority,
      * who has it) gathered into one line that wraps, as a table's statuses are:
@@ -145,9 +186,10 @@ object ListRules {
      * at least one. The least width grows with the person's text size, so a
      * number is never broken across lines to keep a column.
      */
-    fun gridColumns(contentWidthDp: Int, minColumnDp: Int?, gapDp: Int, most: Int? = null, fontScale: Float = 1f, count: Int = Int.MAX_VALUE): Int {
-        // A grid that gives a count and no least width is that many columns: nothing makes it give one up.
-        if (minColumnDp == null && most != null && most > 0) return minOf(most, count.coerceAtLeast(1))
+    fun gridColumns(contentWidthDp: Int, minColumnDp: Int?, gapDp: Int, most: Int? = null, fontScale: Float = 1f, count: Int = Int.MAX_VALUE, controls: Boolean = false): Int {
+        // A grid that gives a count and no least width is that many columns: nothing makes it give one up,
+        // unless its parts are controls (fields), which are not squeezed to a few letters.
+        if (minColumnDp == null && most != null && most > 0 && !controls) return minOf(most, count.coerceAtLeast(1))
         val least = ((minColumnDp ?: 160) * fontScale.coerceAtLeast(1f)).toInt().coerceAtLeast(48)
         val fit = ((contentWidthDp + gapDp) / (least + gapDp)).coerceAtLeast(1)
         return if (most != null && most > 0) minOf(fit, most) else fit

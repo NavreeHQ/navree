@@ -46,6 +46,8 @@ object CompositionRules {
         is Navree.Stack -> node.grow
         is Navree.Layers -> node.grow
         is Navree.Grid, is Navree.Carousel, is Navree.Chart, is Navree.Adaptive -> true
+        // A field takes what is left of the line beside a button that keeps its size.
+        is Navree.Field -> true
         else -> false
     }
 
@@ -61,6 +63,9 @@ object CompositionRules {
     /** The room a ring's legend needs beside its dial, and the space between the two, in dp. */
     private const val LEGEND_DP = 96f
     private const val LEGEND_GAP_DP = 24f
+
+    /** The least a field keeps in a line, in dp: a label and a few characters can be read in it. */
+    private const val FIELD_LEAST_DP = 144f
 
     /** The least a chart keeps beside other parts of a line, in dp. */
     private const val CHART_LEAST_DP = 160f
@@ -82,6 +87,7 @@ object CompositionRules {
         is Navree.Grid -> ((node.min ?: 160) * fontScale.coerceAtLeast(1f)).toInt().coerceAtLeast(48).toFloat()
         is Navree.Carousel -> (node.min ?: 0).toFloat()
         is Navree.Chart -> CHART_LEAST_DP
+        is Navree.Field -> FIELD_LEAST_DP
         else -> 0f
     }
 

@@ -461,6 +461,51 @@ class FormRulesTest {
     }
 }
 
+class BoardRulesTest {
+    private fun section(title: String) = Navree.Section(title = title)
+
+    @Test
+    fun lanes_keep_a_width_a_card_reads_in_and_other_grids_keep_their_own() {
+        val lanes = listOf(section("Backlog"), section("Ready"), section("Review"))
+        assertEquals(240, ListRules.gridLeast(null, lanes))
+        assertNull("a grid of figures", ListRules.gridLeast(null, listOf(Navree.Text(value = "1"), Navree.Text(value = "2"))))
+        assertEquals("the page's own least width", 104, ListRules.gridLeast(104, lanes))
+        assertEquals("a phone shows one lane", 1, ListRules.gridColumns(380, 240, 8))
+        assertEquals("a tablet shows four", 4, ListRules.gridColumns(1100, 240, 8))
+    }
+
+    @Test
+    fun a_grid_of_fields_gives_up_columns_a_grid_of_figures_does_not() {
+        assertEquals(2, ListRules.gridColumns(379, null, 8, most = 4, controls = true))
+        assertEquals(4, ListRules.gridColumns(379, null, 8, most = 4, controls = false))
+    }
+
+    @Test
+    fun a_button_that_says_the_rows_title_is_the_rows_own_tap() {
+        val button = Navree.Button(action = Navree.Action.Submit(), label = "Offline order sheets")
+        val form = Navree.Form(id = "peek", children = listOf(button))
+        val badge = Navree.Badge(text = "Feature")
+        val row = Navree.Row(title = "Offline order sheets", detail = listOf(Navree.Stack(children = listOf(badge, form))))
+        val found = ListRules.titleButton(row)
+        assertEquals(button, found?.button)
+        val pruned = ListRules.withoutTitleButton(row, found!!.form)
+        assertEquals(listOf<Navree.Node>(Navree.Stack(children = listOf(badge))), pruned.detail)
+        assertNull("a button that says something else", ListRules.titleButton(row.copy(title = "Another")))
+    }
+
+    @Test
+    fun a_field_takes_what_is_left_of_a_line_beside_a_button() {
+        val field = Navree.Field(name = "quantity", input = Navree.TextInput())
+        val button = Navree.Button(action = Navree.Action.Submit(), label = "Restock")
+        assertTrue(CompositionRules.grows(field))
+        assertFalse(CompositionRules.grows(button))
+        assertEquals(144f, CompositionRules.leastAcrossDp(field, 1f), 0.001f)
+        val line = Navree.Stack(axis = Navree.Axis.HORIZONTAL, children = listOf(field, button))
+        assertEquals(Navree.Axis.HORIZONTAL, CompositionRules.laidAxis(line, line.children, 380f, 8f, 1f))
+        assertEquals("three fields do not fit in a line of a phone", Navree.Axis.VERTICAL, CompositionRules.laidAxis(line.copy(children = listOf(field, field, field)), listOf(field, field, field), 380f, 8f, 1f))
+    }
+}
+
 class FactColumnsTest {
     @Test
     fun facts_stand_in_two_columns_only_where_the_room_holds_two() {

@@ -183,6 +183,9 @@ internal fun RowView(
 ) {
     val ui = LocalUi.current
     val window = ui.window
+    // A button that only says the row's title is the row's own tap, not a second line under it.
+    val titled = remember(row) { if (row.action == null) ListRules.titleButton(row) else null }
+    val shown = if (titled != null) ListRules.withoutTitleButton(row, titled.form) else row
     val action = row.action
     val menu = row.menu
     val swipe = row.swipe.firstOrNull()
@@ -192,7 +195,7 @@ internal fun RowView(
     val selected = isSelected(row.action, place) || place.screen.has(row.id, Navree.State.SELECTED)
     val state = row.state
     val extra = (if (swipe != null) listOf(CustomAccessibilityAction(swipe.label) { ui.press(place, swipe); true }) else emptyList()) + rowActions(menu, place) + moves
-    val under = row.subtitle != null || row.detail.isNotEmpty() || (below && (badge != null || row.trailing != null))
+    val under = row.subtitle != null || shown.detail.isNotEmpty() || (below && (badge != null || row.trailing != null))
 
     val item: @Composable () -> Unit = {
         ListItem(
@@ -201,7 +204,7 @@ internal fun RowView(
                 {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         row.subtitle?.let { Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis) }
-                        for (run in ListRules.detailRuns(row.detail)) {
+                        for (run in ListRules.detailRuns(shown.detail)) {
                             if (run.size > 1) {
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     for (part in run) NodeView(part, place)
@@ -256,6 +259,7 @@ internal fun RowView(
                             onClick = { ui.act(place, action, from = row.id) },
                         )
                         action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action, from = row.id) }
+                        titled != null -> Modifier.clickable(role = Role.Button) { ui.press(place.copy(form = titled.form.id), titled.button) }
                         else -> Modifier
                     },
                 )
