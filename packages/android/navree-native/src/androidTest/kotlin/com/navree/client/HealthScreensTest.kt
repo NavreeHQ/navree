@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.onFirst
@@ -15,6 +16,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import com.navree.client.core.Content
 import com.navree.client.core.Events
 import com.navree.client.core.Stage
@@ -164,15 +167,15 @@ class HealthScreensTest {
     /**
      * The zoom from a card into the screen it opens, caught while it moves: the
      * test clock is held and let on a few frames at a time, a picture taken
-     * between. A device that does not let the clock be held leaves no picture.
+     * between; the screen the card leads to must be the one in front at the end.
      */
     @Test
     fun aCardZoomIsDrawnWhileItMoves() {
         val app = start(designedAtRoot = true)
         front(app, "Today")
         compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasContentDescription("Heart, 20% of score"))
-        runCatching {
-            compose.mainClock.autoAdvance = false
+        compose.mainClock.autoAdvance = false
+        try {
             compose.onNodeWithContentDescription("Heart, 20% of score").performClick()
             val end = System.currentTimeMillis() + 15_000
             while (System.currentTimeMillis() < end) {
@@ -185,9 +188,12 @@ class HealthScreensTest {
                 compose.mainClock.advanceTimeBy(70)
                 Shots.take("designed-health-zoom-$step")
             }
-        }.onFailure { android.util.Log.w("NavreeShots", "the zoom was not caught: $it") }
-        compose.mainClock.autoAdvance = true
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
         compose.waitForIdle()
+        val front = app.driver.nav.front?.let { app.driver.screens[it] }
+        assertEquals("the card opened the screen it leads to", "Shelves", (front?.content as? Content.Native)?.screen?.title)
     }
 
     /** A screen of days turns to the day before or after when it is swiped along, the way the page moves with the finger. */
@@ -206,9 +212,15 @@ class HealthScreensTest {
         Shots.take("health-sleep-swiped")
     }
 
+    private fun readOutOf(description: String): String? =
+        compose.onAllNodes(hasContentDescription(description, substring = true) and hasScrollAction().not()).onFirst()
+            .fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription)
+
     /**
      * A chart read out where it is touched: a finger held on the first chart of
-     * the fitness screen's week, a picture taken while it stays there.
+     * the fitness screen's week reads a mark out (said to a screen reader as the
+     * chart's state), a picture is taken while it stays there, and when the
+     * finger goes up the reading goes.
      */
     @Test
     fun aChartReadsOutWhereItIsTouched() {
@@ -216,15 +228,68 @@ class HealthScreensTest {
         front(app, "Today")
         send(app, Events.openLink("${server.url("/fitness")}"))
         front(app, "Fitness")
-        runCatching {
-            val chart = hasContentDescription("Active minutes by intensity, last 7 days:", substring = true) and hasScrollAction().not()
-            compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(chart)
-            compose.onAllNodes(chart).onFirst().performTouchInput { down(Offset(width * 0.6f, height * 0.5f)) }
-            Thread.sleep(500)
-            compose.waitForIdle()
-            Shots.take("health-fitness-readout")
-            compose.onAllNodes(chart).onFirst().performTouchInput { up() }
-        }.onFailure { android.util.Log.w("NavreeShots", "the chart was not touched: $it") }
+        val said = "Active minutes by intensity, last 7 days:"
+        val chart = hasContentDescription(said, substring = true) and hasScrollAction().not()
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(chart)
+        compose.onAllNodes(chart).onFirst().performTouchInput { down(Offset(width * 0.6f, height * 0.5f)) }
+        compose.mainClock.advanceTimeBy(600)
+        Thread.sleep(500)
+        compose.waitForIdle()
+        val reading = readOutOf(said)
+        Shots.take("health-fitness-readout")
+        compose.onAllNodes(chart).onFirst().performTouchInput { up() }
+        compose.waitForIdle()
+        assertTrue("a finger held on the chart reads a mark out, got $reading", !reading.isNullOrEmpty())
+        assertEquals("the reading goes when the finger does", null, readOutOf(said))
+    }
+
+    /**
+     * On a screen of days, a finger slid along a chart reads the chart out and
+     * does not turn the day; a day is turned by a swipe that starts off a chart.
+     */
+    @Test
+    fun aSlideAlongAChartReadsItAndDoesNotTurnTheDay() {
+        val app = start()
+        front(app, "Today")
+        send(app, Events.openLink("${server.url("/sleep")}"))
+        front(app, "Sleep")
+        val said = "Hours asleep, last 7 nights:"
+        val chart = hasContentDescription(said, substring = true) and hasScrollAction().not()
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(chart)
+        compose.onAllNodes(chart).onFirst().performTouchInput {
+            down(Offset(width * 0.3f, height * 0.5f))
+            moveTo(Offset(width * 0.85f, height * 0.5f))
+        }
+        compose.waitForIdle()
+        val reading = readOutOf(said)
+        Shots.take("health-sleep-chart-slide")
+        compose.onAllNodes(chart).onFirst().performTouchInput { up() }
+        Thread.sleep(1500)
+        compose.waitForIdle()
+        assertTrue("a slide along the chart reads it out, got $reading", !reading.isNullOrEmpty())
+        val turned = recorded.asked.filter { it.startsWith("GET /sleep?date=") }
+        assertTrue("the slide along the chart turned the day: $turned", turned.isEmpty())
+    }
+
+    /** A finger that scrolls the page from a chart reads nothing, and the page moves. */
+    @Test
+    fun aScrollThatStartsOnAChartReadsNothing() {
+        val app = start()
+        front(app, "Today")
+        send(app, Events.openLink("${server.url("/fitness")}"))
+        front(app, "Fitness")
+        val said = "Active minutes by intensity, last 7 days:"
+        val chart = hasContentDescription(said, substring = true) and hasScrollAction().not()
+        compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(chart)
+        compose.onAllNodes(chart).onFirst().performTouchInput {
+            down(Offset(width * 0.5f, height * 0.6f))
+            for (step in 1..6) moveBy(Offset(0f, -40f), delayMillis = 16)
+        }
+        compose.mainClock.advanceTimeBy(600)
+        compose.waitForIdle()
+        val reading = readOutOf(said)
+        compose.onAllNodes(chart).onFirst().performTouchInput { up() }
+        assertEquals("the chart read out while the page scrolled", null, reading)
     }
 
     @Test

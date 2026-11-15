@@ -3,6 +3,14 @@ package com.navree.client
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.performKeyInput
+import org.junit.Assert.assertTrue
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onFirst
@@ -122,14 +130,6 @@ class ScreensTest {
         Shots.take("examples-inventory-empty")
     }
 
-    /** Runs one step of a walk; a step that finds nothing to touch is said in the log and the walk goes on. */
-    private fun step(what: String, block: () -> Unit) {
-        runCatching(block).onFailure {
-            if (it is Shots.WindowDirectionError) throw it
-            android.util.Log.w("NavreeShots", "$what: $it")
-        }
-    }
-
     /**
      * The menus and a question: the account's menu, a filter's choices, the
      * question a destructive action asks, each pictured open.
@@ -147,36 +147,61 @@ class ScreensTest {
             ),
         )
         front(app, "Today")
-        step("the account menu") {
-            compose.onAllNodes(hasContentDescription("Account", substring = true)).onFirst().performClick()
-            Thread.sleep(700)
-            compose.waitForIdle()
-            Shots.take("menu-account")
-            Shots.requireWindowsFollowTheScreen("the account's menu")
-            Shots.shell("input keyevent 4")
-            Thread.sleep(500)
-            compose.waitForIdle()
-        }
+        compose.onAllNodes(hasContentDescription("Account", substring = true)).onFirst().performClick()
+        Thread.sleep(700)
+        compose.waitForIdle()
+        Shots.take("menu-account")
+        Shots.requireWindowsFollowTheScreen("the account's menu")
+        Shots.shell("input keyevent 4")
+        Thread.sleep(500)
+        compose.waitForIdle()
         send(app, Events.select(1))
         front(app, "Orders")
-        step("the sort menu") {
-            compose.onNodeWithText("Newest first").performClick()
-            Thread.sleep(700)
-            compose.waitForIdle()
-            Shots.take("menu-sort")
-            Shots.requireWindowsFollowTheScreen("a sort's menu")
-            Shots.shell("input keyevent 4")
-            Thread.sleep(500)
-            compose.waitForIdle()
-        }
+        compose.onNodeWithText("Newest first").performClick()
+        Thread.sleep(700)
+        compose.waitForIdle()
+        Shots.take("menu-sort")
+        Shots.requireWindowsFollowTheScreen("a sort's menu")
+        Shots.shell("input keyevent 4")
+        Thread.sleep(500)
+        compose.waitForIdle()
         send(app, Events.openLink("${server.url("/orders/1042")}"))
         front(app, "Order CH-1042")
-        step("the question") {
-            compose.onNodeWithText("Cancel order").performClick()
-            Thread.sleep(700)
+        compose.onNodeWithText("Cancel order").performClick()
+        Thread.sleep(700)
+        compose.waitForIdle()
+        Shots.take("question-cancel-order")
+        Shots.requireWindowsFollowTheScreen("the question")
+    }
+
+    /**
+     * A hardware keyboard's Tab through a form stops only where something can be
+     * seen and said: every stop is a control with a name and a bound a finger
+     * could hit, and the field that is picked, not typed, is one stop.
+     */
+    @Test
+    fun aTabWalkThroughAFormStopsOnlyWhereSomethingCanBeSeenAndSaid() {
+        val app = start("", routes = mapOf("/_navree/native/shell" to "shell", "/" to "screen-form"))
+        front(app, "New customer")
+        val stops = ArrayList<String>()
+        repeat(40) { press ->
+            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
             compose.waitForIdle()
-            Shots.take("question-cancel-order")
-            Shots.requireWindowsFollowTheScreen("the question")
+            val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
+            assertTrue("press ${press + 1} of Tab landed on nothing that can be seen or said; the stops so far: $stops", focused.size == 1)
+            val node = focused.single()
+            val density = node.layoutInfo.density.density
+            val config = node.config
+            val named = listOfNotNull(
+                config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", "),
+                config.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text },
+                config.getOrNull(SemanticsProperties.EditableText)?.text,
+            ).filter { it.isNotEmpty() }.joinToString(" | ")
+            assertTrue("press ${press + 1}: the stop has no name; the stops so far: $stops", named.isNotEmpty())
+            assertTrue("press ${press + 1}: \"$named\" is ${node.size.width / density}x${node.size.height / density} dp, too small to see", node.size.width / density >= 8f && node.size.height / density >= 8f)
+            stops += named.take(40)
         }
+        // A field picked from a list (a city, a tier) is one stop: no stop has the same name as the one before it.
+        stops.zipWithNext().forEach { (before, after) -> assertTrue("the stop \"$after\" came twice running", before != after) }
     }
 }

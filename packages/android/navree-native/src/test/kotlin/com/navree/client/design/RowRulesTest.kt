@@ -134,6 +134,29 @@ class ReorderRulesTest {
     }
 
     @Test
+    fun a_disclosure_of_the_move_form_and_something_else_keeps_the_something_else() {
+        val moveForm = Navree.Form(id = "move", action = "/cards/move", method = Navree.Method.POST, children = listOf(Navree.Button(label = "Move", action = Navree.Action.Submit())))
+        val deleteForm = Navree.Form(id = "delete", action = "/cards/7/delete", method = Navree.Method.POST, children = listOf(Navree.Button(label = "Delete", action = Navree.Action.Submit())))
+        val row = Navree.Row(id = "c-7", title = "Card c-7", detail = listOf(Navree.Disclosure(label = "More", children = listOf(moveForm, deleteForm))))
+        val todo = list("todo", "board", null).copy(children = listOf(row))
+        assertEquals(
+            listOf<Navree.Node>(Navree.Disclosure(label = "More", children = listOf(deleteForm))),
+            ReorderRules.withoutMoveForm(todo, row).detail,
+        )
+        val nested = row.copy(detail = listOf(Navree.Disclosure(label = "More", children = listOf(Navree.Stack(children = listOf(moveForm))))))
+        assertEquals("a disclosure left empty goes", emptyList<Navree.Node>(), ReorderRules.withoutMoveForm(todo, nested).detail)
+    }
+
+    @Test
+    fun a_row_that_is_its_title_button_is_as_usable_as_the_button() {
+        val button = Navree.Button(label = "Open", action = Navree.Action.Submit())
+        assertEquals(ListRules.TitleUse(enabled = true, busy = false), ListRules.titleUse(button, formPending = false))
+        assertEquals("disabled", ListRules.TitleUse(enabled = false, busy = false), ListRules.titleUse(button.copy(disabled = true), formPending = false))
+        assertEquals("pending", ListRules.TitleUse(enabled = false, busy = true), ListRules.titleUse(button.copy(pending = true), formPending = false))
+        assertEquals("its form's request is on its way", ListRules.TitleUse(enabled = false, busy = true), ListRules.titleUse(button, formPending = true))
+    }
+
+    @Test
     fun the_lists_a_row_may_go_to_are_named_by_their_sections() {
         val todo = list("todo", "board", null, "c-7")
         val done = list("done", "board", null, "c-2")

@@ -63,6 +63,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -159,7 +161,7 @@ private fun TextView(node: Navree.Text, modifier: Modifier) {
     val shaped = (if (align != null) modifier.fillMaxWidth() else modifier).then(if (heading) Modifier.semantics { heading() } else Modifier)
     val draw: @Composable (String) -> Unit = { words ->
         Text(
-            text = com.navree.client.design.BidiRules.codes(words),
+            text = com.navree.client.design.BidiRules.codes(words, LocalLayoutDirection.current == LayoutDirection.Rtl),
             modifier = shaped,
             style = style,
             color = colour,
@@ -242,7 +244,8 @@ internal fun NodeView(node: Navree.Node, place: Place, modifier: Modifier = Modi
         is Navree.Gauge -> HealthGaugeView(node, modifier)
         is Navree.Figure -> HealthFigureView(node, place, modifier)
         is Navree.Ring -> RingView(node, modifier)
-        is Navree.Rings -> RingsView(node, modifier)
+        // In a card wider than the rings and their legend need, the group stands in the card's middle, not at its start with the rest empty.
+        is Navree.Rings -> RingsView(node, if (LocalInCard.current) modifier.fillMaxWidth().centredWhenShort() else modifier)
         is Navree.DayClock -> DayClockView(node, modifier)
         is Navree.DayPager -> DayPagerView(node, place, modifier)
         is Navree.Meter -> MeterView(node, modifier)
@@ -481,7 +484,7 @@ private fun FactsView(node: Navree.Facts, place: Place, modifier: Modifier) {
                             Text(fact.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             for (value in fact.value) NodeView(value, place)
                             for (detail in fact.details) {
-                                Text(com.navree.client.design.BidiRules.codes(detail), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(com.navree.client.design.BidiRules.codes(detail, LocalLayoutDirection.current == LayoutDirection.Rtl), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -612,8 +615,14 @@ private fun Lanes(lanes: List<Navree.Node>, place: Place, modifier: Modifier, wi
             .layout { measurable, constraints ->
                 // The row runs out to the edges of the column's box, past its margins.
                 val bleed = (margin * 2).dp.roundToPx()
-                val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = constraints.maxWidth + bleed))
-                layout(constraints.maxWidth, placeable.height) { placeable.placeRelative(-(bleed / 2), 0) }
+                if (!constraints.hasBoundedWidth) {
+                    // Inside a part that scrolls along there is no room to run out of: the lanes are as wide as they are.
+                    val placeable = measurable.measure(constraints.copy(minWidth = 0))
+                    layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+                } else {
+                    val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = ListRules.bledWidthPx(constraints.maxWidth, bleed)))
+                    layout(constraints.maxWidth, placeable.height) { placeable.placeRelative(-(bleed / 2), 0) }
+                }
             }
             .horizontalScroll(scroll)
             .padding(horizontal = margin.dp),
@@ -751,13 +760,7 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
         ) {
             CompositionLocalProvider(LocalInLine provides false) {
                 Roomed(room) {
-                    for (child in shown) {
-                        if (CompositionRules.centresInColumn(node, child)) {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { NodeView(child, place) }
-                        } else {
-                            NodeView(child, place)
-                        }
-                    }
+                    for (child in shown) NodeView(child, place)
                 }
             }
         }

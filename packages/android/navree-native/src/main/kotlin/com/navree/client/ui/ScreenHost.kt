@@ -68,7 +68,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -286,7 +288,15 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     // What the screen showed at its first drawing comes in without motion; a part an op adds later may.
     val shown = remember(view.id) { Shown().apply { screen.body.walk().mapNotNull { it.nodeId }.forEach { ids.add(it) } } }
     LaunchedEffect(view.id) { shown.first = false }
-    val sink = remember { androidx.compose.ui.focus.FocusRequester() }
+    val sink = remember { FocusSink() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    // The sink is asked for when a field is done: once it can take the focus, the focus is put on it, and where that fails it is cleared.
+    LaunchedEffect(sink.armed) {
+        if (sink.armed && runCatching { sink.requester.requestFocus() }.isFailure) {
+            focusManager.clearFocus()
+            sink.release()
+        }
+    }
     Row(Modifier.fillMaxSize()) {
         CompositionLocalProvider(LocalShown provides shown, LocalFocusSink provides sink) {
         Scaffold(
@@ -327,7 +337,15 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
                     ),
             ) {
                 // Where the focus goes when a field is done: out of sight, and not for a screen reader to stop at.
-                Box(Modifier.size(1.dp).focusRequester(sink).focusable().clearAndSetSemantics {})
+                Box(
+                    Modifier
+                        .size(1.dp)
+                        .focusProperties { canFocus = sink.armed }
+                        .focusRequester(sink.requester)
+                        .onFocusChanged { if (!it.isFocused && sink.armed) sink.release() }
+                        .focusable()
+                        .clearAndSetSemantics {},
+                )
                 val items = remember(screen.body, view, maxWidth, barSubmit, hoisted, window.fontScale) {
                     blocks(screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted, fontScale = window.fontScale, titleInBar = plan.titleInBar)
                 }
@@ -728,7 +746,8 @@ private fun AccountMenu(user: Navree.User, place: Place) {
         IconButton(onClick = { open = true }, modifier = Modifier.semantics { contentDescription = "$label, ${user.name}" }) {
             AvatarView(Navree.Avatar(name = user.name), size = 32)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        // The menu stands 8 dp in from the window's end edge, as Material's menus keep a margin, not 4.
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, offset = androidx.compose.ui.unit.DpOffset((-4).dp, 0.dp)) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Text(user.name, style = MaterialTheme.typography.titleSmall)
                 user.email?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }

@@ -65,6 +65,10 @@ object ListRules {
         least == null && parts.size > 1 && parts.all { it is Navree.Stack } && widthDp < EXPANDED_FROM_DP
 
     /** Whether a grid's parts are lanes: several sections side by side, each a group of its own. */
+    /** The most the row of lanes may measure to: the room it has and the margins it runs out into; no limit stays none (the room of a part that scrolls along). */
+    fun bledWidthPx(roomPx: Int, bleedPx: Int, noLimit: Int = Int.MAX_VALUE): Int =
+        if (roomPx >= noLimit) noLimit else (roomPx.toLong() + bleedPx).coerceAtMost((noLimit - 1).toLong()).toInt()
+
     fun areLanes(parts: List<Navree.Node>): Boolean = parts.size > 1 && parts.all { it is Navree.Section }
 
     /**
@@ -176,6 +180,19 @@ object ListRules {
             return if (node is Navree.Stack) node.children.firstNotNullOfOrNull(::find) else null
         }
         return row.detail.firstNotNullOfOrNull(::find)
+    }
+
+    /** What a row that is its title button can do now: tapped (`enabled`), or waiting for its request's answer (`busy`). */
+    data class TitleUse(val enabled: Boolean, val busy: Boolean)
+
+    /**
+     * A row that is its title button is as usable as the button is: not while the
+     * button is disabled, or pending, or its form's request is on its way; and it
+     * shows that it waits when the button is pending or its request is on its way.
+     */
+    fun titleUse(button: Navree.Button, formPending: Boolean): TitleUse {
+        val busy = button.pending || formPending
+        return TitleUse(enabled = !button.disabled && !busy, busy = busy)
     }
 
     /**

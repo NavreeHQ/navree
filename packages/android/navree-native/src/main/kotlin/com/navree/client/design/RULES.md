@@ -205,7 +205,7 @@ With nothing opened, the list has the window.
   when it says nothing and the naming cell holds one control, the whole row
   takes that control's action. From 600 dp it is rows of cells under a header
   row; a sortable heading takes the table's region to its other address. A table with more columns than fit at
-  112 dp each (more at larger text sizes) is a list at any width. A column of
+  128 dp each (more at larger text sizes) is a list at any width. A column of
   words takes the room its longest cell needs, between a short status and a
   long place, so a place is not broken in the middle.
 - The lines under a row's title keep runs of badges (a status, a priority, who
@@ -308,7 +308,18 @@ With nothing opened, the list has the window.
   left, the other way round. The chevrons and the date picker do the same.
 - A chart says its marks to a finger as well as to TalkBack: a finger held on
   a bar or a line draws a rule down the mark and a small card with its label
-  and values. A drag that scrolls the page is the page's.
+  and values (and says them to a screen reader as the chart's state). A
+  finger that goes up, or that the page takes to scroll, reads nothing: a
+  drag that scrolls the page is the page's. A slide along a chart, past the
+  touch slop, is the chart's: it reads each mark it passes and does not also
+  turn the day of a screen of days; a day is turned by a swipe that starts
+  off a chart, or by the pager's arrows.
+- Everything the client opens over a screen (a menu, a question, a picker, a
+  sheet) has the layout direction of the screen under it. The app declares
+  `android:supportsRtl="true"` (a window of its own resolves its direction only
+  for an app that does; the client logs a warning at start when it is missing),
+  and a dialog or a popup takes its direction from the composition it is opened
+  from.
 - A service worker a page registers is held to the origins the web view is:
   its requests to any other origin are answered 403. A page's own scripts open
   a socket or start a worker only for an address on the app's origins. What a

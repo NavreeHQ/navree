@@ -44,54 +44,6 @@ object Shots {
     private var demo = false
 
     /**
-     * Gives the device the language of the look, as a person's settings do: one
-     * that runs right to left (a pseudo-locale, English words laid out from the
-     * right, and Arabic itself) for the right to left look, English for the
-     * others. The system then lays out every window an app opens, a dialog, a
-     * menu and a picker among them. Each way of asking is tried until the
-     * system holds the direction the look wants; what each answered is
-     * returned, and written beside the pictures.
-     */
-    fun language(): String {
-        val rtl = look == "rtl"
-        val wanted = if (rtl) android.view.View.LAYOUT_DIRECTION_RTL else android.view.View.LAYOUT_DIRECTION_LTR
-        val report = StringBuilder()
-        fun direction() = android.content.res.Resources.getSystem().configuration.layoutDirection
-        fun appDirection() = InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.layoutDirection
-        val tags = if (rtl) listOf("ar-XB", "ar") else listOf("en-US")
-        for (tag in tags) {
-            if (direction() == wanted && (!rtl || report.isNotEmpty())) break
-            val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-            try {
-                automation.adoptShellPermissionIdentity("android.permission.CHANGE_CONFIGURATION")
-                try {
-                    Class.forName("com.android.internal.app.LocalePicker")
-                        .getMethod("updateLocales", android.os.LocaleList::class.java)
-                        .invoke(null, android.os.LocaleList.forLanguageTags(tag))
-                } finally {
-                    automation.dropShellPermissionIdentity()
-                }
-                Thread.sleep(3000)
-                report.append("the system asked for $tag: it holds ${android.content.res.Resources.getSystem().configuration.locales}, direction ${direction()}\n")
-            } catch (e: Throwable) {
-                report.append("the system asked for $tag: not given: $e, cause ${e.cause}\n")
-            }
-            if (direction() == wanted) break
-        }
-        if (direction() != wanted) {
-            for (tag in tags) {
-                val said = shell("cmd locale set-app-locales com.navree.client.test --locales $tag").trim()
-                Thread.sleep(2000)
-                val held = shell("cmd locale get-app-locales com.navree.client.test").trim()
-                report.append("the app asked for $tag: $said | $held | the app's direction ${appDirection()}\n")
-                if (appDirection() == wanted) break
-            }
-        }
-        report.append("the system's direction ${direction()}, the app's ${appDirection()}, wanted $wanted\n")
-        return report.toString()
-    }
-
-    /**
      * Puts the system bar in the system's own demo mode, as pictures that are
      * shown to people want it: a fixed time, full battery, full signal and
      * wifi, no notification icons. Once for the process; a device that does
@@ -136,21 +88,31 @@ object Shots {
 
     /**
      * The layout direction each window the test can see has, as the system
-     * resolved it: the screen's own, and every dialog's, menu's and sheet's.
+     * resolved it, with whether it is the activity's own window (the screen,
+     * which the right to left look lays out right to left by its composition)
+     * or one opened over it: a dialog, a menu, a picker, a sheet.
      */
-    fun windows(): List<Int> {
+    fun windows(): List<Pair<Boolean, Int>> {
         val provider = rule ?: return emptyList()
-        return provider.onAllNodes(isRoot()).fetchSemanticsNodes().map { node -> (node.root as? android.view.View)?.layoutDirection ?: -1 }
+        val decor = ((provider as? androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>)?.activity as? android.app.Activity)?.window?.decorView
+        return provider.onAllNodes(isRoot()).fetchSemanticsNodes().map { node ->
+            val view = node.root as? android.view.View
+            (view != null && view.rootView === decor) to (view?.layoutDirection ?: -1)
+        }
     }
 
-    /** What the look wants every window to have: right to left for the right to left look, left to right for the others. */
+    /** What the look wants every window opened over the screen to have: right to left for the right to left look, left to right for the others. */
     val wantedDirection: Int get() = if (look == "rtl") android.view.View.LAYOUT_DIRECTION_RTL else android.view.View.LAYOUT_DIRECTION_LTR
 
-    /** Fails when a window open now has another direction than the look's: everything opened over a screen has the screen's direction. */
+    /**
+     * Fails when a window opened over the screen has another direction than the
+     * look's, or when none is open: everything opened over a screen has the
+     * direction of the screen under it.
+     */
     fun requireWindowsFollowTheScreen(what: String) {
-        val found = windows()
-        if (found.isEmpty() || found.any { it != wantedDirection }) {
-            throw WindowDirectionError("$what: the windows have the directions $found, the look wants $wantedDirection")
+        val over = windows().filter { !it.first }.map { it.second }
+        if (over.isEmpty() || over.any { it != wantedDirection }) {
+            throw WindowDirectionError("$what: the windows opened over the screen have the directions $over, the look wants $wantedDirection")
         }
     }
 
@@ -166,17 +128,19 @@ object Shots {
             // As above: an extra.
         }
         try {
-            put("$device-$look-$name.windows.txt", "directions of the windows: ${windows()}; the look wants $wantedDirection\n")
+            put("$device-$look-$name.windows.txt", "windows (is it the activity's own, its direction): ${windows()}; over the screen the look wants $wantedDirection\n")
         } catch (_: Throwable) {
             // An extra, as above.
         }
         rule?.let { provider ->
+            val roots = provider.onAllNodes(isRoot()).fetchSemanticsNodes()
             try {
-                val report = Audit.report(provider.onRoot().fetchSemanticsNode())
-                put("$device-$look-$name.sem.txt", report)
+                put("$device-$look-$name.sem.txt", Audit.report(roots))
             } catch (_: Throwable) {
                 // The picture is what was asked for; the reading list is an extra.
             }
+            // A picture taken while a screen moves (a zoom caught between frames) has controls the size of the frame it is in.
+            if (!name.contains("zoom")) Audit.require("$device-$look-$name", Audit.faults(roots))
         }
     }
 

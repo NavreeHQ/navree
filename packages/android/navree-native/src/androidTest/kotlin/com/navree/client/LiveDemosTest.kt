@@ -35,6 +35,7 @@ import com.navree.protocol.Navree
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotNull
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -127,8 +128,8 @@ class LiveDemosTest {
 
     /** Opens the first row of the screen in front and photographs what it opened. */
     private fun openFirstRow(app: NavreeSession, shot: String) {
-        val screen = front(app)?.screen ?: return
-        val words = firstRowWords(screen) ?: return
+        val screen = requireNotNull(front(app)?.screen) { "$shot: no screen is in front" }
+        val words = requireNotNull(firstRowWords(screen)) { "$shot: the screen in front has no row to open" }
         val before = front(app)?.id
         compose.onAllNodesWithText(words).onFirst().performClick()
         // What a row opens is the server's to say: a screen, a cover, or a sheet over the list.
@@ -143,15 +144,14 @@ class LiveDemosTest {
     /** Opens the search view of the screen in front and types, then photographs it. */
     private fun search(app: NavreeSession, words: String, shot: String) {
         val field = compose.onAllNodes(hasSetTextAction()).onFirst()
-        runCatching {
-            field.performClick()
-            // The search view opens as a field of its own: the words go to the one that has the focus, once it has it.
-            compose.waitForIdle()
-            val focused = compose.onAllNodes(hasSetTextAction() and isFocused())
-            runCatching { compose.waitUntil(8_000) { focused.fetchSemanticsNodes().isNotEmpty() } }
-            Thread.sleep(300)
-            if (focused.fetchSemanticsNodes().isNotEmpty()) focused.onFirst().performTextInput(words) else compose.onAllNodes(hasSetTextAction()).onLast().performTextInput(words)
-        }.onFailure { return }
+        field.performClick()
+        // The search view opens as a field of its own: the words go to the one that has the focus, once it has it.
+        compose.waitForIdle()
+        val focused = compose.onAllNodes(hasSetTextAction() and isFocused())
+        waitFor("the search field has the focus", 8_000) { focused.fetchSemanticsNodes().isNotEmpty() }
+        Thread.sleep(300)
+        focused.onFirst().performTextInput(words)
+        waitFor("the words are in the field", 8_000) { compose.onAllNodes(hasSetTextAction() and hasText(words)).fetchSemanticsNodes().isNotEmpty() }
         Thread.sleep(2500)
         compose.waitForIdle()
         Shots.take(shot)
@@ -167,17 +167,16 @@ class LiveDemosTest {
         send(app, Events.select(1))
         settled(app)
         // A row held down starts choosing rows, where the table lets them be chosen.
-        val screen = front(app)?.screen
-        val table = screen?.let { ScreenRules.mainTable(it.body) }
-        val words = screen?.let(::firstRowWords)
-        if (table?.select != null && words != null) {
-            compose.onAllNodesWithText(words).onFirst().performTouchInput { longClick() }
-            waitFor("a row chosen", 15_000) { ScreenRules.mainTable(front(app)?.screen?.body)?.rows?.any { it.selected } == true }
-            Thread.sleep(800)
-            Shots.take("store-orders-selecting")
-            send(app, Events.choose(front(app)!!.id, table.id ?: "", null, false))
-            settled(app)
-        }
+        val screen = requireNotNull(front(app)?.screen) { "the orders screen is not in front" }
+        val table = requireNotNull(ScreenRules.mainTable(screen.body)) { "the orders screen has no table" }
+        val words = requireNotNull(firstRowWords(screen)) { "the orders table has no row" }
+        assertNotNull("the orders table lets rows be chosen", table.select)
+        compose.onAllNodesWithText(words).onFirst().performTouchInput { longClick() }
+        waitFor("a row chosen", 15_000) { ScreenRules.mainTable(front(app)?.screen?.body)?.rows?.any { it.selected } == true }
+        Thread.sleep(800)
+        Shots.take("store-orders-selecting")
+        send(app, Events.choose(front(app)!!.id, table.id ?: "", null, false))
+        settled(app)
         openFirstRow(app, "store-order")
         send(app, Events.back)
         settled(app)

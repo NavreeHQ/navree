@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -192,6 +193,7 @@ internal fun RowView(
     // A button that only says the row's title is the row's own tap, not a second line under it.
     val titled = if (row.action == null) ListRules.titleButton(row) else null
     val shown = if (titled != null) ListRules.withoutTitleButton(row, titled.form) else row
+    val titleUse = titled?.let { ListRules.titleUse(it.button, place.pending) }
     val action = row.action
     val menu = row.menu
     val swipe = row.swipe.firstOrNull()
@@ -237,9 +239,10 @@ internal fun RowView(
                 }
                 else -> null
             },
-            trailingContent = if ((!below && (row.trailing != null || badge != null)) || menu.isNotEmpty() || handle != null) {
+            trailingContent = if ((!below && (row.trailing != null || badge != null)) || menu.isNotEmpty() || handle != null || titleUse?.busy == true) {
                 {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (titleUse?.busy == true) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         if (!below) {
                             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 row.trailing?.let { trailing ->
@@ -265,7 +268,7 @@ internal fun RowView(
                             onClick = { ui.act(place, action, from = row.id) },
                         )
                         action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action, from = row.id) }
-                        titled != null -> Modifier.clickable(role = Role.Button) { ui.press(place.copy(form = titled.form.id), titled.button) }
+                        titled != null -> Modifier.clickable(enabled = titleUse?.enabled == true, role = Role.Button) { ui.press(place.copy(form = titled.form.id), titled.button) }
                         else -> Modifier
                     },
                 )
@@ -303,6 +306,9 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
     val downWords = stringResource(R.string.navree_move_down)
     val toWords = targets.map { (_, name) -> stringResource(R.string.navree_move_to, name) }
 
+    // Where each card stands, asked once per answer and not once per card (a lane of thousands would search its ids for each).
+    val places = remember(ids) { ids.withIndex().associate { it.value to it.index } }
+
     fun move(item: String, to: Navree.List, before: String?) {
         val from = listId ?: return
         val target = to.id ?: return
@@ -310,7 +316,7 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
     }
 
     fun step(item: String, steps: Int) {
-        val landing = ReorderRules.landing(ids, ids.indexOf(item), steps) ?: return
+        val landing = ReorderRules.landing(ids, places[item] ?: -1, steps) ?: return
         move(item, node, landing.before)
     }
 
@@ -325,7 +331,7 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
                 continue
             }
             val id = child.id ?: continue
-            val index = ids.indexOf(id)
+            val index = places[id] ?: -1
             val up = index > 0
             val down = index in 0 until ids.lastIndex
             val moves = buildList {
@@ -525,7 +531,10 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
         } else {
             null
         },
-        colors = ListItemDefaults.colors(containerColor = if (selected || ticked) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent),
+        // A row that is chosen (ticked) and the row that is open beside the list are told apart: the open one is a neutral step above the page.
+        colors = ListItemDefaults.colors(
+            containerColor = if (ticked) MaterialTheme.colorScheme.secondaryContainer else if (selected) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent,
+        ),
         modifier = Modifier
             .then(
                 when {

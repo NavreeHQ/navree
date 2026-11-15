@@ -605,10 +605,13 @@ class BoardRulesTest {
 
 class ColumnAlignTest {
     @Test
-    fun a_stack_that_turns_starts_its_parts_at_the_start_when_it_is_a_column() {
+    fun a_stack_that_turns_places_its_parts_by_its_align_when_it_is_a_column() {
         val card = Navree.Stack(align = Navree.Align.CENTER, wide = Navree.Axis.HORIZONTAL)
-        assertEquals(Navree.Align.START, CompositionRules.columnAlign(card))
-        assertFalse(CompositionRules.fillsWidth(card, Navree.Axis.VERTICAL, inLine = false))
+        assertEquals(Navree.Align.CENTER, CompositionRules.columnAlign(card))
+        assertTrue(CompositionRules.fillsWidth(card, Navree.Axis.VERTICAL, inLine = false))
+        assertEquals(Navree.Align.END, CompositionRules.columnAlign(card.copy(align = Navree.Align.END)))
+        assertEquals(Navree.Align.START, CompositionRules.columnAlign(card.copy(align = Navree.Align.START)))
+        assertNull("no align: the start", CompositionRules.columnAlign(card.copy(align = null)))
         val plain = Navree.Stack(align = Navree.Align.CENTER)
         assertEquals(Navree.Align.CENTER, CompositionRules.columnAlign(plain))
         assertTrue(CompositionRules.fillsWidth(plain, Navree.Axis.VERTICAL, inLine = false))
@@ -708,6 +711,26 @@ class NavigationLabelTest {
     @Test
     fun three_short_labels_follow_the_setting_all_the_way() {
         assertEquals(2.0f, NavigationRules.labelScale(2.0f, 412, listOf("Dashboard", "Orders", "Inventory")), 0.001f)
+    }
+
+    @Test
+    fun a_label_of_one_long_word_is_told_by_its_measure_and_not_by_a_count_of_letters() {
+        // Ten glyphs of 13 dp (wider than the 6.5 dp the estimate takes a glyph to be), with no space to break at.
+        val wide: (String) -> Float = { word -> word.length * 13f }
+        val labels = listOf("\u0a21\u0a48\u0a38\u0a3c\u0a2c\u0a4b\u0a30\u0a21\u0a21\u0a21", "Orders", "Inventory")
+        assertTrue("the estimate lets it grow almost to twice the size", NavigationRules.labelScale(2.0f, 412, labels) > 1.9f)
+        val measured = NavigationRules.labelScale(2.0f, 412, labels, wide)
+        assertTrue("measured, ten glyphs of 13 dp do not fit twice the size in a third of the bar: $measured", measured < 1.1f)
+        assertEquals(2, NavigationRules.labelLines(412, labels, 1, wide))
+    }
+
+    @Test
+    fun a_label_in_devanagari_follows_the_setting_as_far_as_its_measure_allows() {
+        val labels = listOf("\u0921\u0948\u0936\u092c\u094b\u0930\u094d\u0921", "\u0911\u0930\u094d\u0921\u0930", "\u0907\u0928\u094d\u0935\u0947\u0902\u091f\u0930\u0940")
+        val narrow: (String) -> Float = { 5f }
+        assertEquals("measured narrow: the setting is followed", 2.0f, NavigationRules.labelScale(2.0f, 412, labels, narrow), 0.001f)
+        val broad: (String) -> Float = { 100f }
+        assertTrue("measured broad: held to what fits", NavigationRules.labelScale(2.0f, 412, labels, broad) < 1.6f)
     }
 
     @Test
@@ -962,6 +985,7 @@ class ShortLineTest {
         assertTrue(CompositionRules.holdsDial(listOf(Navree.Ring(max = 100.0, value = 83.0), Navree.Text(value = "words"))))
         assertFalse(CompositionRules.holdsDial(listOf(Navree.Text(value = "words"))))
         assertTrue(CompositionRules.centresShortLine(usedPx = 550, roomPx = 1265))
+        assertTrue("the health score: a ring and a line fill 1,140 of 1,912 px", CompositionRules.centresShortLine(usedPx = 1140, roomPx = 1912))
         assertFalse("a line that fills most of its card stays at the start", CompositionRules.centresShortLine(usedPx = 900, roomPx = 1265))
         assertFalse("no room known", CompositionRules.centresShortLine(usedPx = 100, roomPx = 0))
     }
@@ -998,5 +1022,14 @@ class ActionsInALineTest {
         assertFalse(MenuRules.showsLabel("ellipsis", "Actions"))
         assertFalse("no icon: a labelled button already", MenuRules.showsLabel(null, "Sort"))
         assertFalse(MenuRules.showsLabel("circle-dot", " "))
+    }
+}
+
+class LaneBleedTest {
+    @Test
+    fun a_row_of_lanes_runs_out_into_the_margins_and_never_overflows_where_it_has_no_limit() {
+        assertEquals(432, ListRules.bledWidthPx(400, 32))
+        assertEquals("no limit stays none", Int.MAX_VALUE, ListRules.bledWidthPx(Int.MAX_VALUE, 32))
+        assertTrue("near the limit it does not wrap round", ListRules.bledWidthPx(Int.MAX_VALUE - 10, 32) in 1 until Int.MAX_VALUE)
     }
 }

@@ -61,30 +61,18 @@ object CompositionRules {
         axis == Navree.Axis.VERTICAL && !inLine && (columnAlign(stack) == Navree.Align.CENTER || columnAlign(stack) == Navree.Align.END)
 
     /**
-     * How a stack laid as a column places its parts across. A stack that turns
-     * (it has a wide axis) says its alignment for the line it makes in a wide
-     * room, where it centres its parts up and down; laid as a column it would
-     * centre a block of words left aligned inside it, so they would start part
-     * of the way in. Such a stack's column starts its parts at the start.
+     * How a stack laid as a column places its parts across: by the stack's own
+     * `align`, whether or not it turns (the protocol: where parts sit across
+     * the axis; a stack that turns is a column in a narrow room and a line in a
+     * wide one, and says the same of both).
      */
-    fun columnAlign(stack: Navree.Stack): Navree.Align? =
-        if (stack.wide != null && stack.wide != stack.axis) Navree.Align.START else stack.align
-
-    /**
-     * Whether a part of a stack that turns, laid as a column, stands in the
-     * middle of the column: a dial (a ring or a gauge) of a stack that says its
-     * parts are centred. Words of such a stack start at the start (see
-     * [columnAlign]); a dial with a fixed size does not stand at the start of
-     * the card with half its width empty beside it.
-     */
-    fun centresInColumn(stack: Navree.Stack, part: Navree.Node): Boolean =
-        stack.wide != null && stack.wide != stack.axis && stack.align == Navree.Align.CENTER && (part is Navree.Ring || part is Navree.Gauge)
+    fun columnAlign(stack: Navree.Stack): Navree.Align? = stack.align
 
     /** Whether a line of parts holds a dial: a ring, a ring set or a gauge. */
     fun holdsDial(parts: List<Navree.Node>): Boolean = parts.any { it is Navree.Ring || it is Navree.Rings || it is Navree.Gauge }
 
     /** The share of a card's width a line of parts may fill and still be put in the middle of the card, not at its start. */
-    const val SHORT_LINE = 0.6f
+    const val SHORT_LINE = 0.7f
 
     /**
      * Whether a line of parts that fills `usedPx` of a room `roomPx` wide is

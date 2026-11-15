@@ -16,14 +16,27 @@ object ReorderRules {
     /**
      * The row without the form that moves it by its fields (a list, a position
      * and a button, in a disclosure), which a page with no handle falls back
-     * to: where a row has a handle, the handle is the one way to move it.
+     * to: where a row has a handle, the handle is the one way to move it. Only
+     * the move form goes: a disclosure that holds something else beside it
+     * (a delete form, say) stays with that, and one left empty goes.
      */
     fun withoutMoveForm(list: Navree.List, row: Navree.Row): Navree.Row {
         val href = list.reorder?.href?.substringBefore('?') ?: return row
-        val kept = row.detail.filterNot { part ->
-            part is Navree.Disclosure && part.walk().any { it is Navree.Form && it.action.substringBefore('?') == href }
+        val kept = row.detail.mapNotNull { without(it, href) }
+        return if (kept == row.detail) row else row.copy(detail = kept)
+    }
+
+    private fun without(node: Navree.Node, href: String): Navree.Node? = when (node) {
+        is Navree.Form -> if (node.action.substringBefore('?') == href) null else node
+        is Navree.Disclosure -> {
+            val inner = node.children.mapNotNull { without(it, href) }
+            if (inner == node.children) node else if (inner.isEmpty()) null else node.copy(children = inner)
         }
-        return if (kept.size == row.detail.size) row else row.copy(detail = kept)
+        is Navree.Stack -> {
+            val inner = node.children.mapNotNull { without(it, href) }
+            if (inner == node.children) node else if (inner.isEmpty()) null else node.copy(children = inner)
+        }
+        else -> node
     }
 
     /** How many rows a drag of `offsetPx` crossed, for rows `rowPx` tall: half a row counts as one. */
