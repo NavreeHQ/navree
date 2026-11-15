@@ -124,10 +124,7 @@ async fn a_registered_session_store_keeps_sessions() {
         .unwrap()
         .expect("saved in the registered store");
     assert_eq!(record.data["city"], json!("Ludhiana"));
-    assert_eq!(
-        support::get(&client, "city").await,
-        (id, json!("Ludhiana"))
-    );
+    assert_eq!(support::get(&client, "city").await, (id, json!("Ludhiana")));
     assert_eq!(
         *seen.lock().unwrap(),
         Some(("Doaba".to_owned(), "session.tijori".to_owned()))

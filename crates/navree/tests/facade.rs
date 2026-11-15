@@ -2032,10 +2032,8 @@ impl navree::storage::DiskDriver for UnreachableDisk {
         &'a self,
         _: &'a str,
         _: Option<std::ops::Range<u64>>,
-    ) -> navree::BoxFuture<
-        'a,
-        Result<navree::http::body::Bytes, navree::storage::DiskDriverError>,
-    > {
+    ) -> navree::BoxFuture<'a, Result<navree::http::body::Bytes, navree::storage::DiskDriverError>>
+    {
         unreachable!()
     }
 
@@ -2084,10 +2082,8 @@ impl navree::notify::ChannelDriver for UnreachableChannel {
         &'a self,
         _: &'a str,
         _: &'a Value,
-    ) -> navree::BoxFuture<
-        'a,
-        Result<navree::notify::SentMessage, navree::notify::ChannelError>,
-    > {
+    ) -> navree::BoxFuture<'a, Result<navree::notify::SentMessage, navree::notify::ChannelError>>
+    {
         unreachable!()
     }
 }
@@ -2125,7 +2121,10 @@ fn the_plugin_module_brings_the_driver_names_and_every_registration_method() {
     use navree::plugin::prelude::*;
 
     assert!(same::<navree::plugin::DriverName, navree::config::DriverName>());
-    assert!(same::<navree::plugin::DriverContext, navree::config::DriverContext>());
+    assert!(same::<
+        navree::plugin::DriverContext,
+        navree::config::DriverContext,
+    >());
 
     struct EveryDriverModule;
 

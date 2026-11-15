@@ -22,10 +22,10 @@ use navree_kernel::{
 };
 use navree_mail::{MailModule, MailOptions, TemplateMail, TransportConfig};
 use navree_notify::{
-    Channel, ChannelDriver, ChannelError, ModuleBuilderNotifyChannelsExt, Notifiable,
-    Notification, NotificationPreference, NotificationPreferences, Notifier, NotifyModule,
-    NotifyOptions, PreferenceOptions, PreferenceOwner, SendNotificationJob, SentMessage, SmsDriver,
-    SmsMessage, WhatsAppDriver, WhatsAppMessage,
+    Channel, ChannelDriver, ChannelError, ModuleBuilderNotifyChannelsExt, Notifiable, Notification,
+    NotificationPreference, NotificationPreferences, Notifier, NotifyModule, NotifyOptions,
+    PreferenceOptions, PreferenceOwner, SendNotificationJob, SentMessage, SmsDriver, SmsMessage,
+    WhatsAppDriver, WhatsAppMessage,
 };
 use navree_orm::Model as _;
 use navree_testing::{TestApp, TestAppBuilder, principal};
@@ -164,7 +164,10 @@ async fn registered_sms_and_whatsapp_drivers_are_selected_by_name() {
     let text = "Harpreet Sandhu paid ₹1,00,000";
     app.get::<Notifier>()
         .await
-        .send(&member, Alert::via(&[Channel::Sms, Channel::WhatsApp], text))
+        .send(
+            &member,
+            Alert::via(&[Channel::Sms, Channel::WhatsApp], text),
+        )
         .await
         .unwrap();
     let expected = vec![("+919814012345".to_owned(), text.to_owned())];
@@ -428,7 +431,10 @@ async fn a_via_naming_an_unregistered_channel_fails_that_delivery() {
         .await
         .send(
             &Customer::new("@meera"),
-            InvoicePaid::via(&[Channel::Database, Channel::named("patang")], "Meera Sharma"),
+            InvoicePaid::via(
+                &[Channel::Database, Channel::named("patang")],
+                "Meera Sharma",
+            ),
         )
         .await
         .unwrap_err()
@@ -447,7 +453,11 @@ async fn a_via_naming_an_unregistered_channel_fails_that_delivery() {
     assert_eq!(rows[0].channel, "patang");
     assert_eq!(rows[0].recipient.as_deref(), Some("@meera"));
     assert_eq!(rows[0].status, "failed");
-    assert_eq!(DriverName::lookup("patang"), None, "naming a channel adds no name");
+    assert_eq!(
+        DriverName::lookup("patang"),
+        None,
+        "naming a channel adds no name"
+    );
 }
 
 #[tokio::test]
@@ -478,7 +488,9 @@ async fn made_up_channel_names_from_requests_leave_registered_channels_readable(
             .assert_status(400)
             .json_value();
         if i == 7 {
-            let message = refused["errors"]["preferences"][0].as_str().unwrap_or_default();
+            let message = refused["errors"]["preferences"][0]
+                .as_str()
+                .unwrap_or_default();
             assert_eq!(message, "unknown notification channel `made_up_7`");
         }
     }
@@ -493,7 +505,10 @@ async fn made_up_channel_names_from_requests_leave_registered_channels_readable(
         .await
         .unwrap();
     let stored = preferences.of(&owner).await.unwrap();
-    assert_eq!(stored.channel("billing", Channel::named("doot")), Some(false));
+    assert_eq!(
+        stored.channel("billing", Channel::named("doot")),
+        Some(false)
+    );
     assert_eq!(stored.channel("billing", Channel::Mail), Some(true));
 
     // and in a queued payload; a payload naming a channel the process does

@@ -3,8 +3,8 @@
 use std::fmt;
 use std::str::FromStr;
 
-use navree_config::DriverName;
 use navree_config::__private::selector_name;
+use navree_config::DriverName;
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -327,8 +327,10 @@ mod tests {
         assert_eq!(Channel::named("whatsapp"), Channel::WhatsApp);
         assert_eq!(Channel::from_name("web_push"), Some(Channel::WebPush));
         assert_eq!(
-            serde_json::from_value::<Channel>(serde_json::to_value(Channel::named("mail")).unwrap())
-                .unwrap(),
+            serde_json::from_value::<Channel>(
+                serde_json::to_value(Channel::named("mail")).unwrap()
+            )
+            .unwrap(),
             Channel::Mail
         );
         assert_eq!(

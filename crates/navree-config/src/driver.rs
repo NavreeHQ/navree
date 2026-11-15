@@ -645,7 +645,9 @@ pub fn check_registrations(
             let registered = app.contributions::<SectionRegistration>();
             keys.extend(nested_section_keys(
                 section_of(slot.key()),
-                registered.iter().map(|registration| registration.value.key()),
+                registered
+                    .iter()
+                    .map(|registration| registration.value.key()),
             ));
             keys
         }
@@ -1384,7 +1386,10 @@ mod tests {
             ],
         );
         let vault = &document["properties"]["vault"]["properties"];
-        assert_eq!(vault["kind"]["enum"], serde_json::json!(["memory", "chest"]));
+        assert_eq!(
+            vault["kind"]["enum"],
+            serde_json::json!(["memory", "chest"])
+        );
         assert_eq!(vault["kind"].get("anyOf"), None, "the choice is closed");
         assert_eq!(vault["transport"], transport, "a free setting stays free");
     }

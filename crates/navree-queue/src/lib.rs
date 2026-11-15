@@ -151,6 +151,7 @@ pub mod ui;
 mod worker;
 
 pub use batch::{Batch, JobBatch};
+pub use drivers::ModuleBuilderQueueExt;
 pub use error::QueueError;
 pub use fake::{QueueFake, RecordedBatch};
 pub use migration::{FAILED_JOBS_TABLE, JOB_BATCHES_TABLE, JOBS_TABLE, OPERATIONS_TABLE};
@@ -167,7 +168,6 @@ pub use record::{
     PendingState, QueueStatus, ReservedJob, RetryTarget,
 };
 pub use store::QueueStore;
-pub use drivers::ModuleBuilderQueueExt;
 /// The cancellation token [`Supervision::stop`] takes (tokio-util's).
 pub use tokio_util::sync::CancellationToken;
 pub use worker::{

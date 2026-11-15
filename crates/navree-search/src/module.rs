@@ -3,8 +3,8 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use navree_config::ModuleBuilderConfigExt;
 use navree_config::__private::contribute_slot;
+use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;

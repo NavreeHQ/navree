@@ -492,7 +492,10 @@ mod tests {
         assert_eq!(BackplaneKind::default(), BackplaneKind::None);
         let defaults = RealtimeOptions::defaults().expect("defaults");
         assert_eq!(defaults["backplane"], "none");
-        assert_eq!(load(ConfigSources::new()).unwrap().backplane, BackplaneKind::None);
+        assert_eq!(
+            load(ConfigSources::new()).unwrap().backplane,
+            BackplaneKind::None
+        );
 
         // A lower-case word reads as a backplane a module registers.
         let read: BackplaneKind =
@@ -516,9 +519,15 @@ mod tests {
         for (table, kind) in [
             (serde_json::json!({"redis": {}}), BackplaneKind::Redis),
             (serde_json::json!({"none": null}), BackplaneKind::None),
-            (serde_json::json!({"redis": {"channel": "crm"}}), BackplaneKind::Redis),
+            (
+                serde_json::json!({"redis": {"channel": "crm"}}),
+                BackplaneKind::Redis,
+            ),
         ] {
-            assert_eq!(serde_json::from_value::<BackplaneKind>(table).unwrap(), kind);
+            assert_eq!(
+                serde_json::from_value::<BackplaneKind>(table).unwrap(),
+                kind
+            );
         }
         let options = load(ConfigSources::new().set(
             "realtime",

@@ -490,11 +490,23 @@ mod tests {
     #[test]
     fn session_store_written_as_a_one_key_table_reads_as_before() {
         for (table, kind) in [
-            (serde_json::json!({"database": {}}), SessionStoreKind::Database),
-            (serde_json::json!({"memory": null}), SessionStoreKind::Memory),
-            (serde_json::json!({"redis": {"db": 2}}), SessionStoreKind::Redis),
+            (
+                serde_json::json!({"database": {}}),
+                SessionStoreKind::Database,
+            ),
+            (
+                serde_json::json!({"memory": null}),
+                SessionStoreKind::Memory,
+            ),
+            (
+                serde_json::json!({"redis": {"db": 2}}),
+                SessionStoreKind::Redis,
+            ),
         ] {
-            assert_eq!(serde_json::from_value::<SessionStoreKind>(table).unwrap(), kind);
+            assert_eq!(
+                serde_json::from_value::<SessionStoreKind>(table).unwrap(),
+                kind
+            );
         }
         let options = from(ConfigSources::new().set(
             "session",
@@ -509,7 +521,10 @@ mod tests {
         let refused = "the store must be `memory`, `database`, `redis` or the name of a session store registered with m.session_store (a lower-case letter, then lower-case letters, digits or _)";
         for (table, name) in [
             (serde_json::json!({"tijori": {}}), "tijori"),
-            (serde_json::json!({"almirah_vault": {"ttl": 4}}), "almirah_vault"),
+            (
+                serde_json::json!({"almirah_vault": {"ttl": 4}}),
+                "almirah_vault",
+            ),
         ] {
             let error = serde_json::from_value::<SessionStoreKind>(table)
                 .unwrap_err()

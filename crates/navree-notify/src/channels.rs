@@ -68,9 +68,7 @@ impl ChannelDrivers {
                     &options.twilio,
                     &options.whatsapp,
                 )?)),
-                Some(WhatsAppDriverKind::Meta) => {
-                    Some(Arc::new(MetaWhatsApp::new(&options.meta)?))
-                }
+                Some(WhatsAppDriverKind::Meta) => Some(Arc::new(MetaWhatsApp::new(&options.meta)?)),
                 Some(WhatsAppDriverKind::Log) => Some(Arc::new(LogWhatsApp::new())),
             };
         let web_push = if options.web_push.is_configured() {

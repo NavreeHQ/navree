@@ -19,7 +19,14 @@ use crate::provider::public::{AiDriver, PublicDriver};
 /// method that registers more.
 pub(crate) const SLOT: DriverSlot = DriverSlot::new(
     "ai.providers.*.driver",
-    &["anthropic", "openai", "gemini", "mistral", "ollama", "bedrock"],
+    &[
+        "anthropic",
+        "openai",
+        "gemini",
+        "mistral",
+        "ollama",
+        "bedrock",
+    ],
     "m.ai_provider",
     "AI provider driver",
 )
@@ -154,7 +161,10 @@ pub(crate) async fn registered_drivers(
             Some(table.clone()),
         )
         .await?;
-        drivers.insert(table.clone(), Arc::new(PublicDriver(built)) as Arc<dyn Driver>);
+        drivers.insert(
+            table.clone(),
+            Arc::new(PublicDriver(built)) as Arc<dyn Driver>,
+        );
     }
     Ok(drivers)
 }

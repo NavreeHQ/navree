@@ -7,8 +7,8 @@ use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
-use navree_config::ConfigSection;
 use navree_config::__private::{build_driver, check_registrations};
+use navree_config::ConfigSection;
 use navree_contracts::{Dispatcher, JobEnvelope, JobOptions};
 use navree_db::{Backend, Db, Uow};
 use navree_kernel::{AppContext, BoxError, BoxFuture, Lifecycle, WeakAppContext};
@@ -875,7 +875,9 @@ fn make_engine(
         Engine::Memory => Arc::new(MemoryEngine::new()),
         Engine::Custom(engine) => engine.clone(),
         Engine::Registered(_) => {
-            return Err("a search engine a module registers is built by SearchModule at boot".into());
+            return Err(
+                "a search engine a module registers is built by SearchModule at boot".into(),
+            );
         }
     })
 }

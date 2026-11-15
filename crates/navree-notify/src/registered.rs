@@ -218,14 +218,13 @@ impl ModuleBuilderNotifyChannelsExt for ModuleBuilder {
     fn notification_channel<C: ChannelDriver + Injectable>(&mut self) -> &mut Self {
         self.provider::<C>();
         match DriverName::register(C::NAME) {
-            Ok(name) => {
-                self.contribute(DriverRecord::new(CHANNEL_SLOT.key(), C::NAME, None))
-                    .contribute(ChannelRegistration {
-                        name,
-                        resolve: resolve_channel::<C>,
-                    })
-                    .config_claim(&format!("notify.{}", C::NAME))
-            }
+            Ok(name) => self
+                .contribute(DriverRecord::new(CHANNEL_SLOT.key(), C::NAME, None))
+                .contribute(ChannelRegistration {
+                    name,
+                    resolve: resolve_channel::<C>,
+                })
+                .config_claim(&format!("notify.{}", C::NAME)),
             Err(error) => {
                 self.contribute(DriverRecord::new(CHANNEL_SLOT.key(), C::NAME, Some(error)))
             }

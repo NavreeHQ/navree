@@ -4,7 +4,6 @@
 //! only normalised paths.
 
 #[path = "storage/support.rs"]
-#[allow(dead_code)]
 mod support;
 
 #[path = "storage/conformance.rs"]
@@ -195,8 +194,11 @@ struct SandukSettings {
 #[derive(Default)]
 struct SandukModule {
     driver: Sanduk,
-    seen: Arc<Mutex<Option<(String, Option<String>)>>>,
+    seen: Seen,
 }
+
+/// The label and the disk a factory was given, once it has run.
+type Seen = Arc<Mutex<Option<(String, Option<String>)>>>;
 
 impl Module for SandukModule {
     fn register(&self, m: &mut ModuleBuilder) {
@@ -270,10 +272,7 @@ async fn a_registered_disk_driver_serves_a_disk_from_its_table() {
     assert_eq!((disk.name(), disk.driver()), ("uploads", "sanduk"));
     assert_eq!(
         *seen.lock().unwrap(),
-        Some((
-            "Ludhiana invoices".to_owned(),
-            Some("uploads".to_owned())
-        ))
+        Some(("Ludhiana invoices".to_owned(), Some("uploads".to_owned())))
     );
 
     // Normalisation, traversal refusal, ranges, streams, uploads, listing,

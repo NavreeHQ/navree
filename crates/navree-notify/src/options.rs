@@ -425,9 +425,9 @@ impl<'de> Deserialize<'de> for SmsDriverKind {
             "log" => Ok(SmsDriverKind::Log),
             other => match DriverName::new(other) {
                 Ok(name) => Ok(SmsDriverKind::Registered(name)),
-                Err(DriverNameError::Invalid) => {
-                    Err(serde::de::Error::custom(selector_error("driver", &SMS_SLOT)))
-                }
+                Err(DriverNameError::Invalid) => Err(serde::de::Error::custom(selector_error(
+                    "driver", &SMS_SLOT,
+                ))),
                 Err(error) => Err(serde::de::Error::custom(error)),
             },
         }
@@ -439,7 +439,10 @@ impl<'de> Deserialize<'de> for SmsDriverKind {
 #[serde(default)]
 pub struct SmsOptions {
     /// The driver; without one the SMS channel is unavailable.
-    #[config(driver = "twilio, vonage, sns, aws_sns, log", register = "m.sms_driver")]
+    #[config(
+        driver = "twilio, vonage, sns, aws_sns, log",
+        register = "m.sms_driver"
+    )]
     pub driver: Option<SmsDriverKind>,
     /// The default sender: a number in E.164, an alphanumeric sender id, or
     /// a Twilio messaging service (`MG...`).
@@ -1390,7 +1393,8 @@ mod tests {
             assert_eq!(sms(serde_json::json!(text)).unwrap(), kind, "{text}");
             assert_eq!(serde_json::to_value(kind).unwrap(), written);
         }
-        let whatsapp = |value: serde_json::Value| serde_json::from_value::<WhatsAppDriverKind>(value);
+        let whatsapp =
+            |value: serde_json::Value| serde_json::from_value::<WhatsAppDriverKind>(value);
         for (text, kind) in [
             ("twilio", WhatsAppDriverKind::Twilio),
             ("meta", WhatsAppDriverKind::Meta),
@@ -1415,7 +1419,10 @@ mod tests {
         // Any other lower-case name is a driver a module registers; anything
         // else is the selector's error, which never repeats the value.
         let read = sms(serde_json::json!("sandesh")).unwrap();
-        assert_eq!(read, SmsDriverKind::Registered(DriverName::from_static("sandesh")));
+        assert_eq!(
+            read,
+            SmsDriverKind::Registered(DriverName::from_static("sandesh"))
+        );
         assert_eq!(serde_json::to_value(read).unwrap(), "sandesh");
         assert_eq!(
             SmsDriverKind::Registered(DriverName::from_static("aws_sns")).resolved(),
@@ -1435,13 +1442,12 @@ mod tests {
 
     #[test]
     fn sms_and_whatsapp_drivers_written_as_a_one_key_table_read_as_before() {
-        let read = serde_json::from_value::<SmsDriverKind>(serde_json::json!({"aws_sns": {}}))
-            .unwrap();
+        let read =
+            serde_json::from_value::<SmsDriverKind>(serde_json::json!({"aws_sns": {}})).unwrap();
         assert_eq!(read, SmsDriverKind::Sns);
         assert_eq!(serde_json::to_value(read).unwrap(), "sns");
-        let read =
-            serde_json::from_value::<WhatsAppDriverKind>(serde_json::json!({"meta": null}))
-                .unwrap();
+        let read = serde_json::from_value::<WhatsAppDriverKind>(serde_json::json!({"meta": null}))
+            .unwrap();
         assert_eq!(read, WhatsAppDriverKind::Meta);
         assert_eq!(serde_json::to_value(read).unwrap(), "meta");
 

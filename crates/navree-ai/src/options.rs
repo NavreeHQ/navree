@@ -809,9 +809,11 @@ mod tests {
         assert_eq!(defaults["max_retries"], 2);
 
         // `Ai::new`'s texts are unchanged.
-        let error = crate::Ai::new(options(json!({ "providers": { "weird": { "driver": "cohere" } } })))
-            .unwrap_err()
-            .to_string();
+        let error = crate::Ai::new(options(
+            json!({ "providers": { "weird": { "driver": "cohere" } } }),
+        ))
+        .unwrap_err()
+        .to_string();
         assert_eq!(
             error,
             "AI configuration error: ai.providers.weird.driver: unknown driver `cohere` (expected one of anthropic, openai, gemini, mistral, ollama, bedrock)"
@@ -823,7 +825,9 @@ mod tests {
         let o = options(json!({ "providers": { "backup": { "driver": "vaani" } } }));
         assert_eq!(
             o.check(),
-            ["ai.providers.backup.driver: unknown driver `vaani` (expected one of anthropic, openai, gemini, mistral, ollama, bedrock)"]
+            [
+                "ai.providers.backup.driver: unknown driver `vaani` (expected one of anthropic, openai, gemini, mistral, ollama, bedrock)"
+            ]
         );
         // The section's validation, which the configuration runs.
         assert_eq!(o.validate(), Ok(()));

@@ -91,19 +91,13 @@ impl ModuleBuilderSessionExt for ModuleBuilder {
         F: Fn(DriverContext) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<S, BoxError>> + Send + 'static,
     {
-        register_driver::<dyn SessionStore, _, _>(
-            self,
-            &SLOT,
-            Some("session"),
-            name,
-            move |ctx| {
-                let built = factory(ctx);
-                async move {
-                    built
-                        .await
-                        .map(|store| Arc::new(store) as Arc<dyn SessionStore>)
-                }
-            },
-        )
+        register_driver::<dyn SessionStore, _, _>(self, &SLOT, Some("session"), name, move |ctx| {
+            let built = factory(ctx);
+            async move {
+                built
+                    .await
+                    .map(|store| Arc::new(store) as Arc<dyn SessionStore>)
+            }
+        })
     }
 }
