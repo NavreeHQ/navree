@@ -1,0 +1,14 @@
+{
+  "name": "navree-plugin-geo-assets",
+  "private": true,
+  "type": "module",
+  "description": "Builds the map's committed browser files, map.js and map.css. Contributors only: cargo build needs none of this.",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "leaflet": "1.9.4"
+  }
+}

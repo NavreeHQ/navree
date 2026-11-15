@@ -589,6 +589,8 @@ const HIERARCHY: &[Rule] = &[
     // The toolkit's proof pages: one binary on the `navree` facade.
     rule("ui-proof", 9, &["navree"]),
     rule("ui-table-proof", 9, &["navree"]),
+    // The worked example of a plugin's own UI components (plugins/geo): one crate on the facade.
+    rule("navree-plugin-geo", 9, &["navree"]),
     // The example apps on the `navree` facade: a store's operations, a support inbox
     // and a product team's board.
     rule("store-demo", 9, &["navree"]),
