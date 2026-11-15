@@ -166,15 +166,15 @@ class HealthScreensTest {
     /**
      * The zoom from a card into the screen it opens, caught while it moves: the
      * test clock is held and let on a few frames at a time, a picture taken
-     * between. A device that does not let the clock be held leaves no picture.
+     * between; the screen the card leads to must be the one in front at the end.
      */
     @Test
     fun aCardZoomIsDrawnWhileItMoves() {
         val app = start(designedAtRoot = true)
         front(app, "Today")
         compose.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasContentDescription("Heart, 20% of score"))
-        runCatching {
-            compose.mainClock.autoAdvance = false
+        compose.mainClock.autoAdvance = false
+        try {
             compose.onNodeWithContentDescription("Heart, 20% of score").performClick()
             val end = System.currentTimeMillis() + 15_000
             while (System.currentTimeMillis() < end) {
@@ -187,9 +187,12 @@ class HealthScreensTest {
                 compose.mainClock.advanceTimeBy(70)
                 Shots.take("designed-health-zoom-$step")
             }
-        }.onFailure { android.util.Log.w("NavreeShots", "the zoom was not caught: $it") }
-        compose.mainClock.autoAdvance = true
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
         compose.waitForIdle()
+        val front = app.driver.nav.front?.let { app.driver.screens[it] }
+        assertEquals("the card opened the screen it leads to", "Shelves", (front?.content as? Content.Native)?.screen?.title)
     }
 
     /** A screen of days turns to the day before or after when it is swiped along, the way the page moves with the finger. */

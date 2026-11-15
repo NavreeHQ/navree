@@ -122,14 +122,6 @@ class ScreensTest {
         Shots.take("examples-inventory-empty")
     }
 
-    /** Runs one step of a walk; a step that finds nothing to touch is said in the log and the walk goes on. */
-    private fun step(what: String, block: () -> Unit) {
-        runCatching(block).onFailure {
-            if (it is Shots.WindowDirectionError) throw it
-            android.util.Log.w("NavreeShots", "$what: $it")
-        }
-    }
-
     /**
      * The menus and a question: the account's menu, a filter's choices, the
      * question a destructive action asks, each pictured open.
@@ -147,36 +139,30 @@ class ScreensTest {
             ),
         )
         front(app, "Today")
-        step("the account menu") {
-            compose.onAllNodes(hasContentDescription("Account", substring = true)).onFirst().performClick()
-            Thread.sleep(700)
-            compose.waitForIdle()
-            Shots.take("menu-account")
-            Shots.requireWindowsFollowTheScreen("the account's menu")
-            Shots.shell("input keyevent 4")
-            Thread.sleep(500)
-            compose.waitForIdle()
-        }
+        compose.onAllNodes(hasContentDescription("Account", substring = true)).onFirst().performClick()
+        Thread.sleep(700)
+        compose.waitForIdle()
+        Shots.take("menu-account")
+        Shots.requireWindowsFollowTheScreen("the account's menu")
+        Shots.shell("input keyevent 4")
+        Thread.sleep(500)
+        compose.waitForIdle()
         send(app, Events.select(1))
         front(app, "Orders")
-        step("the sort menu") {
-            compose.onNodeWithText("Newest first").performClick()
-            Thread.sleep(700)
-            compose.waitForIdle()
-            Shots.take("menu-sort")
-            Shots.requireWindowsFollowTheScreen("a sort's menu")
-            Shots.shell("input keyevent 4")
-            Thread.sleep(500)
-            compose.waitForIdle()
-        }
+        compose.onNodeWithText("Newest first").performClick()
+        Thread.sleep(700)
+        compose.waitForIdle()
+        Shots.take("menu-sort")
+        Shots.requireWindowsFollowTheScreen("a sort's menu")
+        Shots.shell("input keyevent 4")
+        Thread.sleep(500)
+        compose.waitForIdle()
         send(app, Events.openLink("${server.url("/orders/1042")}"))
         front(app, "Order CH-1042")
-        step("the question") {
-            compose.onNodeWithText("Cancel order").performClick()
-            Thread.sleep(700)
-            compose.waitForIdle()
-            Shots.take("question-cancel-order")
-            Shots.requireWindowsFollowTheScreen("the question")
-        }
+        compose.onNodeWithText("Cancel order").performClick()
+        Thread.sleep(700)
+        compose.waitForIdle()
+        Shots.take("question-cancel-order")
+        Shots.requireWindowsFollowTheScreen("the question")
     }
 }
