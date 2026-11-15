@@ -76,13 +76,23 @@ class WebWorkersTest {
         other.close()
     }
 
+    /** The `Content-Security-Policy` the app's server sends with its page and with its worker scripts, when a test names one. */
+    private var pagePolicy: String? = null
+    private var scriptPolicy: String? = null
+
     private fun page(body: String) = MockResponse.Builder()
         .code(200)
         .addHeader("Content-Type", "text/html; charset=utf-8")
+        .apply { pagePolicy?.let { addHeader("Content-Security-Policy", it) } }
         .body("<!doctype html><html><head><meta charset=\"utf-8\"></head><body>$body</body></html>")
         .build()
 
-    private fun script(body: String) = MockResponse.Builder().code(200).addHeader("Content-Type", "text/javascript").body(body).build()
+    private fun script(body: String) = MockResponse.Builder()
+        .code(200)
+        .addHeader("Content-Type", "text/javascript")
+        .apply { scriptPolicy?.let { addHeader("Content-Security-Policy", it) } }
+        .body(body)
+        .build()
 
     /**
      * The two servers. The app's answers `/` with [home] and a path of [files] with its script;
@@ -381,5 +391,49 @@ class WebWorkersTest {
         assertEquals("the worker's socket opened", listOf("socket opened"), said.toList())
         assertTrue("the socket reached the other origin: $otherAsked", otherAsked.any { it.startsWith("UPGRADE") })
         assertEquals("the client was not asked about the socket: $seen", emptyList<String>(), seen.filter { it.startsWith(elsewhere) })
+    }
+
+    // The page's own policy and a worker loaded from an address: per MDN ("Using web workers", the section on
+    // content security policy) a worker is governed by the policy sent with its own script, and only a worker
+    // from a blob: or data: address inherits the page's. So a page that says connect-src 'self' does not close a
+    // socket inside a worker whose script came without a header. The system's own client is used: nothing of the
+    // client's is in play, so the policies are all that is tested.
+    private fun pageWithASocketWorker() =
+        "<p>ours</p><script>var w = new Worker('/socket-worker.js'); w.onmessage = function(e){ new Image().src = '/says?m=' + encodeURIComponent(e.data) }</script>"
+
+    private fun socketWorker() =
+        "var s = new WebSocket('ws://localhost:${other.port}/socket'); s.onopen = function(){ postMessage('socket opened') }; s.onerror = function(){ postMessage('socket failed') }; s.onclose = function(){ postMessage('socket failed') }"
+
+    @Test
+    fun aPagePolicyDoesNotHoldASocketInsideAWorkerLoadedFromAnAddress() {
+        pagePolicy = "connect-src 'self'"
+        serve({ pageWithASocketWorker() }, { mapOf("/socket-worker.js" to socketWorker()) })
+        openedBy(Origins(base, loopbackHttp = true), documents = false, rules = false)
+        waitForSaid()
+        settle("socket-in-worker-page-policy.txt", "connect-src 'self' on the page, none on the worker's script")
+        assertEquals("the worker's socket opened in spite of the page's policy", listOf("socket opened"), said.toList())
+        assertTrue("the socket reached the other origin: $otherAsked", otherAsked.any { it.startsWith("UPGRADE") })
+    }
+
+    @Test
+    fun aPolicySentWithTheWorkersScriptHoldsItsSocket() {
+        pagePolicy = "connect-src 'self'"
+        scriptPolicy = "connect-src 'self'"
+        serve({ pageWithASocketWorker() }, { mapOf("/socket-worker.js" to socketWorker()) })
+        openedBy(Origins(base, loopbackHttp = true), documents = false, rules = false)
+        waitForSaid()
+        settle("socket-in-worker-script-policy.txt", "connect-src 'self' on the worker's script")
+        assertTrue("the socket was stopped: $said", said.isNotEmpty() && said.all { it == "socket failed" })
+        assertEquals("nothing reached the other origin: $otherAsked", emptyList<String>(), otherAsked.toList())
+    }
+
+    @Test
+    fun aWorkerSrcPolicyOnThePageStopsWorkersFromBlobAndDataAddresses() {
+        pagePolicy = "worker-src 'self'"
+        serve({ workersOfTheirOwnAddress() }, { mapOf("/own.js" to "1;") })
+        openedBy(Origins(base, loopbackHttp = true), documents = false, rules = false)
+        waitForSaid(5)
+        settle("workers-from-addresses-worker-src.txt", "worker-src 'self' on the page, with the system's own client and no document script")
+        assertEquals("a blob and a data worker did not run: $otherAsked", emptyList<String>(), otherAsked.toList())
     }
 }
