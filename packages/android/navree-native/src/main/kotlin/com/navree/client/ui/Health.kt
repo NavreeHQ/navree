@@ -832,7 +832,7 @@ internal fun DayPagerView(node: Navree.DayPager, place: Place, modifier: Modifie
             // The step back points to the start of the line: the forward chevron, turned.
             Icon(Glyphs.ChevronRight, contentDescription = previous, modifier = Modifier.scale(-1f, 1f))
         }
-        TextButton(onClick = { if (node.pick != null) choosing = true }, enabled = node.pick != null, modifier = Modifier.semantics { contentDescription = "${node.day}. $choose" }) {
+        TextButton(onClick = { if (node.pick != null) choosing = true }, enabled = node.pick != null, modifier = Modifier.weight(1f, fill = false).semantics { contentDescription = "${node.day}. $choose" }) {
             Text(node.day, style = if (inBar) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onClick = { go(node.next) }, enabled = node.next != null) {
