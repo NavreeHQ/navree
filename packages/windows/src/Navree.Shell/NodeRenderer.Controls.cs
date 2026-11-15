@@ -64,7 +64,16 @@ internal sealed partial class NodeRenderer
         string? inForm = currentForm;
         string? inOverlay = currentOverlay;
         string trigger = TriggerKey(button);
-        context.Triggers[trigger] = control;
+        if (current is not null)
+        {
+            current.Triggers.Add((trigger, control));
+        }
+        else
+        {
+            context.LooseTriggers[trigger] = control;
+            context.Triggers[trigger] = control;
+        }
+
         control.Click += (_, _) =>
         {
             Triggers.Last = trigger;
@@ -954,7 +963,17 @@ internal sealed partial class NodeRenderer
         }
 
         ShowErrors(held);
-        context.Fields[(form, id)] = new FieldHandle { Show = view => { show(view); ShowErrors(view); } };
+        FieldHandle handle = new() { Show = view => { show(view); ShowErrors(view); } };
+        if (current is not null)
+        {
+            current.Fields.Add(((form, id), handle));
+        }
+        else
+        {
+            context.LooseFields[(form, id)] = handle;
+            context.Fields[(form, id)] = handle;
+        }
+
         return panel;
     }
 

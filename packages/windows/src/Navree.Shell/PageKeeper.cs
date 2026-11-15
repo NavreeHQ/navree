@@ -202,6 +202,12 @@ internal sealed class PageKeeper
         return null;
     }
 
+    /// <summary>Whether the focus is in the page now.</summary>
+    /// <param name="page">The page.</param>
+    /// <returns>True when what has the focus is the page or in it.</returns>
+    internal static bool HoldsFocus(FrameworkElement page) =>
+        page.XamlRoot is not null && FocusManager.GetFocusedElement(page.XamlRoot) is DependencyObject focused && Inside(page, focused);
+
     private static bool Inside(DependencyObject page, DependencyObject element)
     {
         for (DependencyObject? up = element; up is not null; up = VisualTreeHelper.GetParent(up))

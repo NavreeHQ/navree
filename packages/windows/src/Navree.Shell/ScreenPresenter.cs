@@ -2,15 +2,16 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Navree.Design;
+using Navree.Design.Pages;
 using Navree.Protocol;
 using Navree.Runtime;
 
 namespace Navree.Shell;
 
 /// <summary>
-/// Shows one screen of the view state. When the screen is the same and only what its forms hold changed, the fields
-/// show their new state in place and nothing is drawn again, so a person typing keeps their place; otherwise the
-/// screen is drawn again from the tree, the scroll position kept.
+/// Shows one screen of the view state. When an answer changes the screen, the page that is drawn is brought up to date in place: a part stands if what
+/// it was drawn from did not change, a part that holds the person's own (a box with the focus, a table with its place) is given what changed and keeps
+/// the rest, and only a part that cannot be is drawn again, alone. The whole page is drawn again only for another screen or another width.
 /// </summary>
 internal sealed class ScreenPresenter : Grid
 {
@@ -22,6 +23,8 @@ internal sealed class ScreenPresenter : Grid
     private readonly TableLayouts layouts;
     private ScreenView? shown;
     private WidthClass shownWidth;
+    private NodeRenderer? renderer;
+    private PageParts? parts;
 
     internal ScreenPresenter(ShellHost host)
     {
@@ -55,6 +58,26 @@ internal sealed class ScreenPresenter : Grid
     /// <summary>What drawing the screen found and drew; null while nothing is shown.</summary>
     internal RenderContext? Context { get; private set; }
 
+    /// <summary>The parts of the page that is drawn: the element they are all in, and the record of the body.</summary>
+    private sealed class PageParts
+    {
+        internal required StackPanel Panel { get; init; }
+
+        internal required Drawn Record { get; init; }
+
+        internal ProgressBar? Progress { get; set; }
+
+        internal UIElement Header { get; set; } = null!;
+
+        internal List<Drawn> HeaderRecords { get; } = [];
+
+        internal UIElement? FailureBar { get; set; }
+
+        internal Failure? FailureShown { get; set; }
+
+        internal Drawn Body { get; set; } = null!;
+    }
+
     /// <summary>Shows a screen, or nothing.</summary>
     internal void Show(ScreenView? screen, WidthClass width)
     {
@@ -62,6 +85,8 @@ internal sealed class ScreenPresenter : Grid
         {
             shown = null;
             Context = null;
+            renderer = null;
+            parts = null;
             scroller.Content = null;
             Present(scroller);
             return;
@@ -77,6 +102,8 @@ internal sealed class ScreenPresenter : Grid
 
             shown = screen;
             Context = null;
+            renderer = null;
+            parts = null;
             Present(page);
             _ = page.ShowAsync(web);
             return;
@@ -84,36 +111,164 @@ internal sealed class ScreenPresenter : Grid
 
         Present(scroller);
 
-        bool sameDrawing = shown is not null
-            && shown.Id == screen.Id
-            && ReferenceEquals(shown.Content, screen.Content)
-            && ReferenceEquals(shown.States, screen.States)
-            && ReferenceEquals(shown.Overlays, screen.Overlays)
-            && ReferenceEquals(shown.Regions, screen.Regions)
-            && ReferenceEquals(shown.Lists, screen.Lists)
-            && shown.Loading == screen.Loading
-            && shown.Refreshing == screen.Refreshing
-            && shown.Failure == screen.Failure
-            && shownWidth == width;
-        if (sameDrawing && Context is not null)
+        if (shown is not null && shown.Id == screen.Id && shownWidth == width && BringUpToDate(screen))
         {
-            if (!ReferenceEquals(shown!.Forms, screen.Forms))
-            {
-                foreach (((string form, string field), FieldHandle handle) in Context.Fields)
-                {
-                    handle.Show(screen.FieldOf(form, field));
-                }
-            }
-
             shown = screen;
-            if (scroller.Content is FrameworkElement kept)
-            {
-                keeper.Serve(kept, screen, host.Send);
-            }
-
             return;
         }
 
+        DrawWhole(screen, width);
+    }
+
+    // The screen is the one on the screen at the width it is drawn for: what changed is brought up to date in the page that stands; false when the page
+    // has to be drawn again (the screen shows something else than a native page, or a part could not be put in its place).
+    private bool BringUpToDate(ScreenView screen)
+    {
+        if (renderer is null || Context is not { } context || parts is not { } page
+            || screen.Content is not NativeContent native || shown?.Content is not NativeContent before || before.Screen is not { } was)
+        {
+            return false;
+        }
+
+        (int lazy, _) = context.TakeCount();
+        PageKeeper.Held? held = PageKeeper.Capture(page.Panel);
+        double offset = scroller.VerticalOffset;
+        double extentBefore = scroller.ExtentHeight;
+        bool earlierArrived = EarlierArrived(shown, screen);
+        context.Screen = screen;
+        renderer.Stood = 0;
+        renderer.Updated = 0;
+        renderer.Replaced = 0;
+        renderer.Failed = false;
+        Models.Screen now = native.Screen;
+        bool pageChanged = false;
+
+        bool wantsProgress = screen.Loading || screen.Refreshing;
+        if (wantsProgress != (page.Progress is not null))
+        {
+            if (wantsProgress)
+            {
+                page.Progress = new ProgressBar { IsIndeterminate = true };
+                page.Panel.Children.Insert(0, page.Progress);
+            }
+            else
+            {
+                _ = page.Panel.Children.Remove(page.Progress!);
+                page.Progress = null;
+            }
+
+            pageChanged = true;
+        }
+
+        if (!HeaderStands(page, was, now, shown!, screen))
+        {
+            int at = page.Panel.Children.IndexOf(page.Header);
+            foreach (Drawn gone in page.HeaderRecords)
+            {
+                _ = page.Record.Children.Remove(gone);
+            }
+
+            page.HeaderRecords.Clear();
+            page.Header = Header(now, context, node => HeaderPart(page, node));
+            if (at >= 0)
+            {
+                page.Panel.Children[at] = page.Header;
+            }
+
+            pageChanged = true;
+        }
+
+        if (screen.Failure != page.FailureShown)
+        {
+            if (page.FailureBar is not null)
+            {
+                _ = page.Panel.Children.Remove(page.FailureBar);
+            }
+
+            page.FailureShown = screen.Failure;
+            page.FailureBar = screen.Failure is Failure failure ? FailureBar(failure, screen.Id, retry: true) : null;
+            if (page.FailureBar is not null)
+            {
+                page.Panel.Children.Insert(page.Panel.Children.IndexOf(page.Header) + 1, page.FailureBar);
+            }
+
+            pageChanged = true;
+        }
+
+        // The words of the title decide which first heading is left out: when the title changes, the body is drawn again.
+        _ = was.Title == now.Title
+            ? renderer.Refresh(page.Body, now.Body)
+            : renderer.Redraw(page.Body, now.Body);
+        if (renderer.Failed)
+        {
+            return false;
+        }
+
+        context.Rebuild();
+        context.ShowFields();
+        (int rendered, string kinds) = context.TakeCount();
+        PageReports.Add(new PageReport(screen.Id, "update", rendered, renderer.Stood, renderer.Updated, renderer.Replaced, kinds, lazy));
+        bool replaced = pageChanged || renderer.Replaced > 0;
+        if (replaced || earlierArrived)
+        {
+            scroller.UpdateLayout();
+            if (earlierArrived)
+            {
+                offset += Math.Max(0, scroller.ExtentHeight - extentBefore);
+                offsets[screen.Id] = offset;
+            }
+
+            scroller.ChangeView(null, offset, null, disableAnimation: true);
+        }
+
+        // Where the focus was is carried to the same part of what was drawn again, when what held it was.
+        if (held is not null && replaced && !PageKeeper.HoldsFocus(page.Panel))
+        {
+            PageKeeper.Restore(page.Panel, held);
+        }
+
+        keeper.Serve(page.Panel, screen, host.Send);
+        return true;
+    }
+
+    private UIElement HeaderPart(PageParts page, Models.Node node)
+    {
+        Drawn record = renderer!.RenderUnder(page.Record, node);
+        page.HeaderRecords.Add(record);
+        return record.Element;
+    }
+
+    // The title, the words under it and the actions are the same, and each action stands.
+    private static bool HeaderStands(PageParts page, Models.Screen was, Models.Screen now, ScreenView before, ScreenView after)
+    {
+        if (was.Title != now.Title || was.Subtitle != now.Subtitle || page.HeaderRecords.Count != now.Actions.Count)
+        {
+            return false;
+        }
+
+        ScreenFacts oldFacts = new(before, fields: false);
+        ScreenFacts newFacts = new(after, fields: false);
+        for (int at = 0; at < now.Actions.Count; at++)
+        {
+            Drawn record = page.HeaderRecords[at];
+            if (!PageRules.Same(record.Node, now.Actions[at]) || !PageRules.SameAround(now.Actions[at], oldFacts, newFacts))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // Earlier rows that have just arrived above a list push what the person was reading down: the view is moved by what they added, so the
+    // same rows stay where they were under the eye.
+    private static bool EarlierArrived(ScreenView? previous, ScreenView screen) =>
+        previous is not null && previous.Id == screen.Id
+        && previous.Lists.Any(pair => pair.Value.LoadingBefore && screen.Lists.TryGetValue(pair.Key, out ListState? now) && !now.LoadingBefore && !now.FailedBefore);
+
+    // The screen is drawn from its tree, all of it, the scroll position kept.
+    private void DrawWhole(ScreenView screen, WidthClass width)
+    {
         // Where the person was on this page, before it is replaced: the focus and what it holds, and the place of each screen's scroll.
         PageKeeper.Held? held = shown is not null && shown.Id == screen.Id ? PageKeeper.Capture(scroller.Content as FrameworkElement) : null;
         if (shown is not null)
@@ -137,13 +292,8 @@ internal sealed class ScreenPresenter : Grid
         }
 
         double offset = offsets.TryGetValue(screen.Id, out double kept1) ? kept1 : 0;
-
-        // Earlier rows that have just arrived above a list push what the person was reading down: the view is moved by what they added, so the
-        // same rows stay where they were under the eye.
         double extentBefore = scroller.ExtentHeight;
-        ScreenView? previous = shown;
-        bool earlierArrived = previous is not null && previous.Id == screen.Id
-            && previous.Lists.Any(pair => pair.Value.LoadingBefore && screen.Lists.TryGetValue(pair.Key, out ListState? now) && !now.LoadingBefore && !now.FailedBefore);
+        bool earlierArrived = EarlierArrived(shown, screen);
         shown = screen;
         shownWidth = width;
         RenderContext context = new()
@@ -153,11 +303,18 @@ internal sealed class ScreenPresenter : Grid
             Width = width,
             Pictures = host.LoadPictureAsync,
             Layouts = layouts,
+            Settled = NodeRenderer.Seen(screen.Id),
         };
         Context = context;
-        UIElement drawn = Page(context);
+        renderer = new NodeRenderer(context);
+        parts = null;
+        UIElement drawn = Page(context, renderer);
         FrameworkElement built = (FrameworkElement)drawn;
         scroller.Content = drawn;
+        context.Settled = true;
+        context.Rebuild();
+        (int rendered, string kinds) = context.TakeCount();
+        PageReports.Add(new PageReport(screen.Id, "whole", rendered, 0, 0, 0, kinds, 0));
         FitPage();
         if (offset > 0 || earlierArrived)
         {
@@ -189,27 +346,48 @@ internal sealed class ScreenPresenter : Grid
         }
     }
 
-    private UIElement Page(RenderContext context)
+    private UIElement Page(RenderContext context, NodeRenderer renderer)
     {
         ScreenView screen = context.Screen;
         double side = context.Width == WidthClass.Compact ? 16 : 32;
         StackPanel page = new() { Spacing = 16, Padding = new Thickness(side, 16, side, 32), MaxWidth = WindowRules.ReadingMeasure + 2 * side + 400, HorizontalAlignment = HorizontalAlignment.Left };
+        ProgressBar? progress = null;
         if (screen.Loading || screen.Refreshing)
         {
-            page.Children.Add(new ProgressBar { IsIndeterminate = true });
+            progress = new ProgressBar { IsIndeterminate = true };
+            page.Children.Add(progress);
         }
 
         switch (screen.Content)
         {
             case NativeContent native:
-                NodeRenderer renderer = new(context);
-                page.Children.Add(Header(native.Screen, renderer, context));
+                Drawn record = new(native.Screen.Body) { Screen = screen, Element = page };
+                PageParts held = new() { Panel = page, Record = record, Progress = progress };
+                parts = held;
+                held.Header = Header(native.Screen, context, node => HeaderPart(held, node));
+                page.Children.Add(held.Header);
                 if (screen.Failure is Failure failure)
                 {
-                    page.Children.Add(FailureBar(failure, screen.Id, retry: true));
+                    held.FailureShown = failure;
+                    held.FailureBar = FailureBar(failure, screen.Id, retry: true);
+                    page.Children.Add(held.FailureBar);
                 }
 
-                page.Children.Add(renderer.Render(native.Screen.Body));
+                held.Body = renderer.RenderUnder(record, native.Screen.Body);
+                page.Children.Add(held.Body.Element);
+                record.SwapOwn = (old, fresh) =>
+                {
+                    int at = ReferenceEquals(old, held.Body) ? page.Children.IndexOf(old.Element) : -1;
+                    if (at < 0)
+                    {
+                        return false;
+                    }
+
+                    page.Children[at] = fresh.Element;
+                    held.Body = fresh;
+                    return true;
+                };
+                context.Page = record;
                 break;
             case WebContent web:
                 page.Children.Add(Look.Label(web.Title ?? "Web page", "TitleTextBlockStyle"));
@@ -249,7 +427,7 @@ internal sealed class ScreenPresenter : Grid
         return bar;
     }
 
-    private static UIElement Header(Models.Screen screen, NodeRenderer renderer, RenderContext context)
+    private static UIElement Header(Models.Screen screen, RenderContext context, Func<Models.Node, UIElement> render)
     {
         Grid header = new() { ColumnSpacing = 16 };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -269,7 +447,7 @@ internal sealed class ScreenPresenter : Grid
             StackPanel actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Top };
             foreach (Models.Node action in screen.Actions)
             {
-                actions.Children.Add(renderer.Render(action));
+                actions.Children.Add(render(action));
             }
 
             if (context.Width == WidthClass.Compact)

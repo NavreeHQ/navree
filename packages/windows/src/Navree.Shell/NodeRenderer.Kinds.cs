@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -36,7 +35,6 @@ internal sealed partial class NodeRenderer
 
     // Which parts of a screen have been drawn already: a part that joins a screen already drawn comes in as it says, and a screen's
     // first drawing is never animated part by part.
-    private static readonly ConditionalWeakTable<RenderContext, PassKnown> Passes = new();
     private static readonly Dictionary<long, HashSet<string>> Known = new();
 
     /// <summary>Lets go of what is kept for a screen that has left the app (the parts it had seen, a filter flyout it had open).</summary>
@@ -47,21 +45,11 @@ internal sealed partial class NodeRenderer
         _ = FiltersOpen.RemoveWhere(key => key.Screen == screen);
     }
 
-    private sealed class PassKnown
-    {
-        internal bool First { get; init; }
-    }
-
     private bool ArrivesNew(string? id)
     {
-        if (!Passes.TryGetValue(context, out PassKnown? pass))
+        if (!Known.ContainsKey(context.Screen.Id))
         {
-            pass = new PassKnown { First = !Known.ContainsKey(context.Screen.Id) };
-            Passes.Add(context, pass);
-            if (!Known.ContainsKey(context.Screen.Id))
-            {
-                Known[context.Screen.Id] = new HashSet<string>();
-            }
+            Known[context.Screen.Id] = new HashSet<string>();
         }
 
         if (id is null)
@@ -69,9 +57,15 @@ internal sealed partial class NodeRenderer
             return false;
         }
 
+        // A part not seen on the screen before comes in as it says, once the screen's first drawing is done.
         bool fresh = Known[context.Screen.Id].Add(id);
-        return fresh && !pass.First;
+        return fresh && context.Settled;
     }
+
+    /// <summary>Whether any part of the screen has been drawn before: its first drawing is never animated part by part.</summary>
+    /// <param name="screen">The screen's id.</param>
+    /// <returns>Whether it has.</returns>
+    internal static bool Seen(long screen) => Known.ContainsKey(screen);
 
     private UIElement Arrive(UIElement shown, string? id, Models.Appear? appear)
     {

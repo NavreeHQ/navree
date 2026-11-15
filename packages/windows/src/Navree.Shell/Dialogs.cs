@@ -161,6 +161,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                         Anchor = anchor,
                         Rebuild = () => OverlayBody(overlay, context),
                         Context = context,
+                        Version = context.Version,
                     };
                 }
 
@@ -174,6 +175,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 {
                     Rebuild = () => OverlayBody(overlay, context),
                     Context = context,
+                    Version = context.Version,
                 };
             }
         }
@@ -266,7 +268,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 if (want is not null && showing is not null && want.Key == showing.Key)
                 {
                     want.Refresh?.Invoke();
-                    if (want.Rebuild is not null && !ReferenceEquals(want.Context, showing.Context))
+                    if (want.Rebuild is not null && (want.Version != showing.Version || !ReferenceEquals(want.Anchor, showing.Anchor)))
                     {
                         // The page was drawn again (an answer changed it): what a sheet, dialog or popover of the page holds is drawn from the new
                         // tree, so a server's error stands at its field and a button that is busy says so; where the person was in it is put back.
@@ -484,6 +486,9 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
 
         /// <summary>The page's drawing the body was drawn from.</summary>
         internal RenderContext? Context { get; init; }
+
+        /// <summary>What the overlays of the page were when this wish was made: the body is drawn again when they are another.</summary>
+        internal int Version { get; init; }
     }
 }
 

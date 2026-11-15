@@ -21,9 +21,30 @@ internal sealed partial class NodeRenderer(RenderContext context)
     private string? currentForm;
     private string? currentOverlay;
 
+    // The record of the part being drawn: the one a part drawn inside it is a child of.
+    private Drawn? current;
+
     /// <summary>Draws a node.</summary>
-    internal UIElement Render(Models.Node node)
+    internal UIElement Render(Models.Node node) => current is null ? RenderLoose(node) : RenderRecord(node).Element;
+
+    /// <summary>Draws a node and keeps what is needed to bring it up to date later; the record is a child of the part being drawn, if there is one.</summary>
+    internal Drawn RenderRecord(Models.Node node)
     {
+        Drawn record = new(node)
+        {
+            Parent = current,
+            Screen = context.Screen,
+            Form = currentForm,
+            Overlay = currentOverlay,
+            CoveredBefore = titleCovered,
+            WordsBefore = wordsAbove,
+        };
+        current?.Children.Add(record);
+        Drawn? outer = current;
+        current = record;
+        context.Rendered++;
+        string kind = node.GetType().Name;
+        context.RenderedKinds[kind] = context.RenderedKinds.GetValueOrDefault(kind) + 1;
         UIElement element;
         try
         {
@@ -34,8 +55,15 @@ internal sealed partial class NodeRenderer(RenderContext context)
             // A part that cannot be drawn (a path that is not path data, two rows with one id, a control that throws) is that part's state, not the app's end.
             System.Diagnostics.Debug.WriteLine("a part could not be drawn: " + node.GetType().Name + ": " + problem.Message);
             element = CouldNotShow(node);
+            record.Update = null;
+            record.Groups.Clear();
+        }
+        finally
+        {
+            current = outer;
         }
 
+        record.Element = element;
         string? id = Tree.IdOf(node);
         if (id is not null && element is FrameworkElement shown)
         {
@@ -48,7 +76,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
             }
         }
 
-        return element;
+        return record;
     }
 
     /// <summary>Draws a list of nodes into a vertical stack.</summary>
@@ -138,7 +166,14 @@ internal sealed partial class NodeRenderer(RenderContext context)
     {
         if (id is not null)
         {
-            context.Overlays.Add(new OverlayRequest(node, id));
+            if (current is not null)
+            {
+                current.Overlays.Add(new OverlayRequest(node, id));
+            }
+            else
+            {
+                context.Overlays.Add(new OverlayRequest(node, id));
+            }
         }
 
         return Empty();
