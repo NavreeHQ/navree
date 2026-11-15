@@ -67,7 +67,10 @@ struct Entry {
 
 /// The smallest form there is.
 #[derive(Debug, Deserialize, Validate, Form)]
-#[allow(dead_code, reason = "the form is drawn and read back, its field is not used")]
+#[allow(
+    dead_code,
+    reason = "the form is drawn and read back, its field is not used"
+)]
 struct Note {
     /// Title
     #[validate(length(min = 1))]
@@ -192,7 +195,9 @@ fn a_fields_help_and_error_are_tied_to_it_by_prefixed_ids() {
         "{html}"
     );
     assert!(
-        html.contains(r#"<p data-slot="field-error" id="edit-note-title-error">Give it a title.</p>"#),
+        html.contains(
+            r#"<p data-slot="field-error" id="edit-note-title-error">Give it a title.</p>"#
+        ),
         "{html}"
     );
 }
