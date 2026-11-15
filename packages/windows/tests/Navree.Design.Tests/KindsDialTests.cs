@@ -142,8 +142,12 @@ public sealed class KindsDialTests
         Assert.AreEqual("7:07 AM", ClockRules.TimeLabel(sevenOhSeven, uses24: false, Invariant));
         Assert.AreEqual("07:07", ClockRules.TimeLabel(sevenOhSeven, uses24: true, Invariant));
         Assert.AreEqual("12:00 AM", ClockRules.TimeLabel(24, uses24: false, Invariant));
-        Assert.IsTrue(ClockRules.Uses24(new CultureInfo("de-DE")));
-        Assert.IsFalse(ClockRules.Uses24(new CultureInfo("en-US")));
+        CultureInfo twentyFour = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        twentyFour.DateTimeFormat.ShortTimePattern = "HH:mm";
+        CultureInfo twelve = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        twelve.DateTimeFormat.ShortTimePattern = "h:mm tt";
+        Assert.IsTrue(ClockRules.Uses24(twentyFour));
+        Assert.IsFalse(ClockRules.Uses24(twelve));
 
         Assert.IsTrue(ClockRules.HoldsTime("Bedtime 10:30 pm"));
         Assert.IsFalse(ClockRules.HoldsTime("Bedtime"));

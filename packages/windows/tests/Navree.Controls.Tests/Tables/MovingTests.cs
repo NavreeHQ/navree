@@ -246,11 +246,15 @@ public sealed class ChoosingTests
     [TestMethod]
     public void Counts_are_written_by_the_persons_culture()
     {
-        Assert.AreEqual("100,000", Choosing.FormatCount(100_000, CultureInfo.GetCultureInfo("en-US")));
-        Assert.AreEqual("0", Choosing.FormatCount(0, CultureInfo.GetCultureInfo("en-US")));
+        // The cultures carry the grouping the test assumes: a machine's own data for a region is not what is tested.
+        CultureInfo america = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        america.NumberFormat.NumberGroupSizes = [3];
+        Assert.AreEqual("100,000", Choosing.FormatCount(100_000, america));
+        Assert.AreEqual("0", Choosing.FormatCount(0, america));
 
-        // Indian English groups in lakhs when the system's culture data has it, which the first run confirms.
-        CultureInfo india = CultureInfo.GetCultureInfo("en-IN");
+        // Indian English groups in lakhs: the last three digits, then twos.
+        CultureInfo india = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        india.NumberFormat.NumberGroupSizes = [3, 2];
         Assert.AreEqual("1,00,000", Choosing.FormatCount(100_000, india));
         Assert.AreEqual("12,34,567", Choosing.FormatCount(1_234_567, india));
         Assert.AreEqual("1,204", Choosing.FormatCount(1204, india));

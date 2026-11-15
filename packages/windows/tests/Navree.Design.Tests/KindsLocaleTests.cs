@@ -2,33 +2,72 @@ using System.Globalization;
 
 namespace Navree.Design.Tests;
 
-/// <summary>What the client writes itself (a day, a time of day, a number) follows the locale it was started with.</summary>
+/// <summary>
+/// What the client writes itself (a day, a time of day, a number) follows the locale it was started with. The cultures here carry the patterns the
+/// tests assume (a machine's own data for a region differs: Windows' English (India) has no weekday in its long date, a 24 hour clock, another
+/// grouping), so the tests say what the client does with a culture and not what a machine knows of a region.
+/// </summary>
 [TestClass]
 public sealed class KindsLocaleTests
 {
-    private static readonly CultureInfo India = new("en-IN");
-    private static readonly CultureInfo America = new("en-US");
-    private static readonly CultureInfo Hindi = new("hi-IN");
+    private static CultureInfo Culture(string longDate, string shortTime, string am, string pm, params int[] groups)
+    {
+        CultureInfo culture = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        culture.DateTimeFormat.LongDatePattern = longDate;
+        culture.DateTimeFormat.ShortTimePattern = shortTime;
+        culture.DateTimeFormat.AMDesignator = am;
+        culture.DateTimeFormat.PMDesignator = pm;
+        culture.NumberFormat.NumberGroupSizes = groups;
+        culture.NumberFormat.NumberGroupSeparator = ",";
+        culture.NumberFormat.NumberDecimalSeparator = ".";
+        return culture;
+    }
+
+    // Day first, the twelve hour clock in lower case, groups of three and then two.
+    private static readonly CultureInfo India = Culture("dddd, d MMMM yyyy", "h:mm tt", "am", "pm", 3, 2);
+
+    // The same, with the comma some machines' data put before the year.
+    private static readonly CultureInfo IndiaWithComma = Culture("dddd, d MMMM, yyyy", "h:mm tt", "am", "pm", 3, 2);
+
+    // Month first, the twelve hour clock in capitals, groups of three.
+    private static readonly CultureInfo America = Culture("dddd, MMMM d, yyyy", "h:mm tt", "AM", "PM", 3);
+
+    // The twenty-four hour clock.
+    private static readonly CultureInfo Europe = Culture("dddd d MMMM yyyy", "HH:mm", string.Empty, string.Empty, 3);
 
     [TestMethod]
     public void A_day_is_written_the_way_the_locale_writes_it()
     {
         Assert.AreEqual("Friday, 13 November 2026", PagerRules.Words("2026-11-13", India));
         Assert.AreEqual("Friday, November 13, 2026", PagerRules.Words("2026-11-13", America));
-        string hindi = PagerRules.Words("2026-11-13", Hindi);
-        Assert.IsFalse(hindi.Contains("Friday", StringComparison.Ordinal), hindi);
-        Assert.IsTrue(hindi.Contains("2026", StringComparison.Ordinal), hindi);
+        Assert.AreEqual("Friday 13 November 2026", PagerRules.Words("2026-11-13", Europe));
+    }
+
+    [TestMethod]
+    public void A_day_written_day_first_has_no_comma_before_its_year_and_a_day_written_month_first_keeps_it()
+    {
+        Assert.AreEqual("Friday, 13 November 2026", PagerRules.Words("2026-11-13", IndiaWithComma));
+        Assert.AreEqual("dddd, d MMMM yyyy", PagerRules.LongPattern(IndiaWithComma));
+        Assert.AreEqual("dddd, MMMM d, yyyy", PagerRules.LongPattern(America));
+    }
+
+    [TestMethod]
+    public void Text_that_is_not_a_day_is_given_back_as_it_came()
+    {
+        Assert.AreEqual("last Tuesday", PagerRules.Words("last Tuesday", India));
     }
 
     [TestMethod]
     public void A_time_of_day_is_written_as_the_locales_clock_writes_it()
     {
         double quarterPastSeven = 7.25;
+        Assert.IsFalse(ClockRules.Uses24(India));
+        Assert.IsTrue(ClockRules.Uses24(Europe));
         Assert.AreEqual("7:15 am", ClockRules.TimeLabel(quarterPastSeven, ClockRules.Uses24(India), India));
         Assert.AreEqual("7:15 AM", ClockRules.TimeLabel(quarterPastSeven, ClockRules.Uses24(America), America));
+        Assert.AreEqual("07:15", ClockRules.TimeLabel(quarterPastSeven, ClockRules.Uses24(Europe), Europe));
         Assert.AreEqual("6 pm", ClockRules.QuarterLabel(18, ClockRules.Uses24(India), India));
-        string hindi = ClockRules.TimeLabel(quarterPastSeven, ClockRules.Uses24(Hindi), Hindi);
-        Assert.IsTrue(hindi.StartsWith("7:15", StringComparison.Ordinal) || hindi.StartsWith("07:15", StringComparison.Ordinal), hindi);
+        Assert.AreEqual("18", ClockRules.QuarterLabel(18, ClockRules.Uses24(Europe), Europe));
     }
 
     [TestMethod]

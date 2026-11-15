@@ -390,7 +390,7 @@ public sealed class LayoutTextTests
 public sealed class SmallRulesTests
 {
     private static readonly string[] Cities = ["Amritsar", "Bathinda", "Barnala", "Chandigarh"];
-    private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en-US");
+    private static readonly CultureInfo English = CultureInfo.InvariantCulture;
 
     [TestMethod]
     public void Typing_finds_the_next_name_that_starts_so()
@@ -401,7 +401,7 @@ public sealed class SmallRulesTests
         Assert.AreEqual(1, TypeAhead.Next(Cities, 2, "b", English));
         Assert.AreEqual(-1, TypeAhead.Next(Cities, 0, "z", English));
         Assert.AreEqual(-1, TypeAhead.Next(Cities, 0, string.Empty, English));
-        Assert.AreEqual(2, TypeAhead.Next(["ਅੰਮ੍ਰਿਤਸਰ", "ਬਠਿੰਡਾ", "ਬਰਨਾਲਾ"], 1, "ਬ", CultureInfo.GetCultureInfo("pa-IN")));
+        Assert.AreEqual(2, TypeAhead.Next(["ਅੰਮ੍ਰਿਤਸਰ", "ਬਠਿੰਡਾ", "ਬਰਨਾਲਾ"], 1, "ਬ", CultureInfo.InvariantCulture));
     }
 
     [TestMethod]

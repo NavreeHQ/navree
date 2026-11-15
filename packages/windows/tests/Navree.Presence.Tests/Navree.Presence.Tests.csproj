@@ -28,4 +28,8 @@
     <Using Include="Navree.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\TestCulture.cs" Link="TestCulture.cs" />
+  </ItemGroup>
+
 </Project>
