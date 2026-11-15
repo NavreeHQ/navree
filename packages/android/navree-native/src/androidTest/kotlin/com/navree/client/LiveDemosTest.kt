@@ -181,17 +181,29 @@ class LiveDemosTest {
     /** One stop of a keyboard's Tab: the node's id, its name, and where it stands in the window. */
     private class Stop(val id: Int, val name: String, val inside: Boolean, val widthDp: Float, val heightDp: Float)
 
+    /** What a screen reader says of a node: its description, its words, what is typed in it. */
+    private fun nameOf(node: androidx.compose.ui.semantics.SemanticsNode): String {
+        val config = node.config
+        return listOfNotNull(
+            config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", "),
+            config.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text },
+            config.getOrNull(SemanticsProperties.EditableText)?.text,
+        ).filter { it.isNotEmpty() }.joinToString(" | ")
+    }
+
+    /** Everything on the screen that can take the focus (the nodes that say whether they have it), as `name@top` in dp, in the order they stand from the top. */
+    private fun focusableThings(): List<String> =
+        compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.Focused)).fetchSemanticsNodes()
+            .filter { it.size.width > 0 && it.size.height > 0 }
+            .sortedWith(compareBy({ it.boundsInRoot.top }, { it.boundsInRoot.left }))
+            .map { node -> "${nameOf(node).take(24)}@${(node.boundsInRoot.top / node.layoutInfo.density.density).toInt()}" }
+
     private fun focusedStop(): Stop? {
         val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
         if (focused.size != 1) return null
         val node = focused.single()
         val density = node.layoutInfo.density.density
-        val config = node.config
-        val named = listOfNotNull(
-            config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", "),
-            config.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text },
-            config.getOrNull(SemanticsProperties.EditableText)?.text,
-        ).filter { it.isNotEmpty() }.joinToString(" | ")
+        val named = nameOf(node)
         val window = compose.onRoot().fetchSemanticsNode().boundsInRoot
         val box = node.boundsInRoot
         val inside = box.left >= window.left - 1f && box.top >= window.top - 1f && box.right <= window.right + 1f && box.bottom <= window.bottom + 1f
@@ -231,6 +243,36 @@ class LiveDemosTest {
         }
         val missed = fields.filter { id -> seen.none { it.id == id } }
         assertTrue("fields that were in view at the start and were never a stop in ${seen.size} presses: ${missed.size} of ${fields.size}: ${missed.map { named[it] }}; the stops were ${seen.map { it.name.take(24) }}", missed.isEmpty())
+    }
+
+    /**
+     * With the focus nowhere, a keyboard's Tab reaches the screen's search
+     * within as many presses as the screen has things that can take the focus:
+     * the search stands at the top of the screen and Tab goes by where things
+     * stand. When it does not, the message names every focusable thing and every
+     * stop.
+     */
+    @Test
+    fun aKeyboardReachesTheSearchOfAScreenWithinTheNumberOfFocusableThingsOnIt() {
+        val origin = arguments.getString("store")
+        assumeTrue("no store demo was named", origin != null)
+        val app = start(origin!!)
+        send(app, Events.select(2))
+        settled(app)
+        val things = focusableThings()
+        assertTrue("the inventory has things that can take the focus", things.isNotEmpty())
+        val stops = ArrayList<String>()
+        var reached = false
+        repeat(things.size + 2) {
+            if (reached) return@repeat
+            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+            compose.waitForIdle()
+            val node = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
+            val named = node.joinToString(" + ") { nameOf(it).take(28) + "#" + it.id }
+            stops += named
+            if (node.any { nameOf(it).contains("Search", ignoreCase = true) }) reached = true
+        }
+        assertTrue("Search was never a stop in ${stops.size} presses (the screen has ${things.size} things that can take the focus: $things); the stops were $stops", reached)
     }
 
     /** After a field's keyboard action ends the typing, the out-of-sight place that takes the focus is not a stop of the next Tab. */
