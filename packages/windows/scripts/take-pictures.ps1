@@ -187,19 +187,24 @@ $log = Join-Path $folder 'navree-demo.log'
 if (Test-Path $log) { Copy-Item $log (Join-Path $OutDir 'navree-demo.log'); Say "the demo wrote navree-demo.log" }
 
 Say ""
-Say "== the app's own picture of its content"
-$own = Join-Path $OutDir 'content-own.png'
-$second = Start-Process -FilePath $Exe -ArgumentList @('--picture', $own) -WorkingDirectory $folder -PassThru
-if ($second.WaitForExit(90000)) {
-    Say ("the app ended by itself, exit code " + $second.ExitCode)
-} else {
-    Say "the app did not end in 90 seconds"
-    Stop-Process -Id $second.Id -Force -ErrorAction SilentlyContinue
+Say "== the app's own pictures of its content, walked through its screens at three widths"
+$walk = Join-Path $OutDir 'walk'
+New-Item -ItemType Directory -Force -Path $walk | Out-Null
+foreach ($look in @(@('--light'), @('--dark'), @('--light', '--rtl'))) {
+    $arguments = @('--walk', $walk) + $look
+    $walker = Start-Process -FilePath $Exe -ArgumentList $arguments -WorkingDirectory $folder -PassThru
+    if ($walker.WaitForExit(240000)) {
+        Say ("the walk " + ($look -join ' ') + " ended by itself, exit code " + $walker.ExitCode)
+    } else {
+        Say ("the walk " + ($look -join ' ') + " did not end in 240 seconds")
+        Stop-Process -Id $walker.Id -Force -ErrorAction SilentlyContinue
+    }
 }
-if (Test-Path $own) { Say ("content-own.png: " + (Get-Item $own).Length + " bytes") } else { Say "content-own.png: not written" }
-Get-ChildItem $OutDir -Filter '*.error.txt' -ErrorAction SilentlyContinue | ForEach-Object { Say ("error file " + $_.Name + ": " + (Get-Content $_.FullName -Raw)) }
+Get-ChildItem $walk -Filter '*.txt' -ErrorAction SilentlyContinue | ForEach-Object { Say ("--- " + $_.Name); Get-Content $_.FullName | ForEach-Object { Say ("    " + $_) } }
+$log = Join-Path $folder 'navree-demo.log'
+if (Test-Path $log) { Copy-Item $log (Join-Path $OutDir 'navree-demo-after-walks.log'); Say "the demo wrote navree-demo.log" }
 
 Say ""
 Say "== what was written"
-Get-ChildItem $OutDir -Filter '*.png' | ForEach-Object { Say ($_.Name + " " + $_.Length) }
+Get-ChildItem $OutDir -Recurse -Filter '*.png' | ForEach-Object { Say ($_.Name + " " + $_.Length) }
 exit 0

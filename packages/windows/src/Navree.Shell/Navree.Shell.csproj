@@ -19,6 +19,7 @@
     <ProjectReference Include="..\Navree.Core\Navree.Core.csproj" />
     <ProjectReference Include="..\Navree.Runtime\Navree.Runtime.csproj" />
     <ProjectReference Include="..\Navree.Design\Navree.Design.csproj" />
+    <ProjectReference Include="..\Navree.Platform\Navree.Platform.csproj" />
   </ItemGroup>
 
 </Project>
