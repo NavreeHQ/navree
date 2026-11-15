@@ -651,6 +651,13 @@ jobs:
               $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--checks', $out, '--name', $app[0], '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
               if (-not $run.WaitForExit(600000)) { "the checks of $($app[0]) did not end in 600 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
               else { "the checks of $($app[0]) ended" }
+              # The store's orders table under a hand: the wheel and the keys to the end of the rows held, a right click on a row and its menu.
+              if ($app[0] -eq 'store') {
+                $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--hands', $out, '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+                if (-not $run.WaitForExit(300000)) { "the hands on the table did not end in 300 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+                else { "the hands on the table ended" }
+                if (Test-Path "$out\hands.txt") { Get-Content "$out\hands.txt" }
+              }
               # A popover of the inbox opened with the real pointer and taken away with Escape.
               if ($app[0] -eq 'inbox') {
                 $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--popover', $out, '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru

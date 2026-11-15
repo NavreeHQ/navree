@@ -62,7 +62,7 @@ public partial class App : Application
 
         string? answers = Option(arguments, "--answers") ?? FixtureFetcher.Recorded();
         string? live = Option(arguments, "--server");
-        bool testing = Option(arguments, "--walk") is not null || Option(arguments, "--system-walk") is not null || Option(arguments, "--probe") is not null || Option(arguments, "--run") is not null || Option(arguments, "--full") is not null || Option(arguments, "--checks") is not null || Option(arguments, "--moves") is not null || Option(arguments, "--popover") is not null;
+        bool testing = Option(arguments, "--walk") is not null || Option(arguments, "--system-walk") is not null || Option(arguments, "--probe") is not null || Option(arguments, "--run") is not null || Option(arguments, "--full") is not null || Option(arguments, "--checks") is not null || Option(arguments, "--moves") is not null || Option(arguments, "--popover") is not null || Option(arguments, "--hands") is not null;
         PlaceOptions placeOptions = new()
         {
             Scheme = Scheme,
@@ -131,6 +131,10 @@ public partial class App : Application
         else if (Option(arguments, "--full") is string fullFolder)
         {
             _ = new FullWalker(host, window, fullFolder, Option(arguments, "--name") ?? "app", place).RunAsync();
+        }
+        else if (Option(arguments, "--hands") is string handsFolder)
+        {
+            _ = new TableHands(host, window, handsFolder).RunAsync();
         }
         else if (Option(arguments, "--popover") is string popoverFolder)
         {
