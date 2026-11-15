@@ -344,7 +344,9 @@
       "send": {"t":"background"},
       "expect": {
         "changed": [],
-        "effects": []
+        "effects": [
+          {"t":"cancel_timer","timer":1}
+        ]
       },
       "snapshot": {"destinations":[{"href":"/","stack":[{"title":"Dashboard","url":"/"},{"fields":{"city":{"t":"text","text":"Ludhiana"},"gift":{"on":true,"t":"flag"},"note-text":{"t":"text","text":"Wrap the dupattas separately"}},"title":"Pay for CS-20481","url":"/orders/1/pay"}]}],"origin":"https://shop.example","person":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e","selected":"/","version":1}
     },
@@ -373,7 +375,6 @@
           {"t":"screen","id":3}
         ],
         "effects": [
-          {"t":"cancel_timer","timer":1},
           {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders/1/pay","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },

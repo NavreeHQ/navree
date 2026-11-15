@@ -261,6 +261,10 @@ impl Core {
             }
             Event::Background => {
                 self.inner.background = true;
+                // The pause is not kept while the app is away: coming back asks.
+                if let Some(timer) = self.inner.shell_timer.take() {
+                    self.cancel_timer(timer);
+                }
                 // A hidden app holds no stream; what its regions miss is fetched when it is back.
                 if let Some(inner) = self
                     .front()
@@ -315,7 +319,9 @@ impl Core {
                 }) => self.options_fire(screen, &form, &field),
                 Some(TimerFor::Reopen { stream }) => self.reopen(stream),
                 Some(TimerFor::Shell) => {
+                    // A new pause: a request that gets through may ask once more.
                     self.inner.shell_timer = None;
+                    self.inner.shell_nudged = false;
                     self.shell_again();
                 }
                 None => {}
@@ -866,10 +872,28 @@ impl Core {
         }
     }
 
+    /// A request of the app got through. When the shell could not be fetched
+    /// because the network was gone, it is asked for again, once in each
+    /// pause; when the shell route itself answered with an error, only the
+    /// pause asks.
+    fn shell_nudge(&mut self) {
+        if self.inner.shell_wanted
+            && !self.inner.shell_nudged
+            && matches!(
+                self.inner.shell_failure,
+                Some(Failure::Offline | Failure::Timeout)
+            )
+        {
+            self.inner.shell_nudged = true;
+            self.fetch_shell();
+        }
+    }
+
     /// A shell has answered, or the person is gone: nothing is wanted again.
     pub(crate) fn shell_settled(&mut self) {
         self.inner.shell_wanted = false;
         self.inner.shell_pause = 0;
+        self.inner.shell_nudged = false;
         self.inner.shell_failure = None;
         if let Some(timer) = self.inner.shell_timer.take() {
             self.cancel_timer(timer);
@@ -951,6 +975,8 @@ impl Core {
         {
             self.view.upgrade = Some(newer_app(upgrade));
             self.view.stage = Stage::Upgrade;
+            // An app too old for its server is not waiting for a shell.
+            self.shell_settled();
             return self.touch(Change::Nav);
         }
         match decode::with_room(move || serde_json::from_value::<Shell>(value))
@@ -2234,7 +2260,7 @@ impl Core {
             .is_some_and(|asked| asked.purpose != Pending::Shell);
         self.answered_once(response);
         if got_through && not_the_shell {
-            self.shell_again();
+            self.shell_nudge();
         }
     }
 
@@ -3529,6 +3555,200 @@ mod tests {
                 "{what}: {again:?}"
             );
         }
+    }
+
+    /// The retry keeps its pace: a request that got through asks for the shell
+    /// again at most once in each pause, and only while the shell's own last
+    /// failure was the network's or a timeout; the pause is not kept while
+    /// the app is away, and an upgrade ends it.
+    #[test]
+    fn the_shell_retry_keeps_its_pace() {
+        let kept = include_str!("../transcripts/fixtures/made/kept-boot-workspace.json");
+        let started = |failure: Response| {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Start);
+            core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(kept.to_owned()),
+            });
+            let failed = core.send(Event::Response(Response {
+                request: 1,
+                ..failure
+            }));
+            (core, failed)
+        };
+        let fetches = |update: &Update| -> Vec<(u64, bool)> {
+            update
+                .effects
+                .iter()
+                .filter_map(|effect| match effect {
+                    Effect::Fetch(request) => {
+                        Some((request.request, request.url.ends_with(SHELL_PATH)))
+                    }
+                    _ => None,
+                })
+                .collect()
+        };
+        let unreached = |request: u64| Response {
+            request,
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        };
+        let overloaded = |request: u64| Response {
+            request,
+            status: 503,
+            content_type: Some("text/html".to_owned()),
+            ..Response::default()
+        };
+        // A request of the app that got through: the shells it asks for.
+        let got_through = |core: &mut Core, no_shell: &dyn Fn(u64) -> Response| -> usize {
+            core.fetch(
+                Pending::Send {
+                    screen: 1,
+                    visit: 0,
+                    key: "search".to_owned(),
+                    write: false,
+                    in_place: true,
+                },
+                Method::Get,
+                "/orders",
+                None,
+                PAGE_LIMIT,
+            );
+            let request = core.inner.next.request;
+            core.settle();
+            let update = core.send(Event::Response(Response {
+                request,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: include_str!("../transcripts/fixtures/store/orders.json").to_owned(),
+                ..Response::default()
+            }));
+            let asked: Vec<u64> = fetches(&update)
+                .into_iter()
+                .filter(|(_, shell)| *shell)
+                .map(|(request, _)| request)
+                .collect();
+            for request in &asked {
+                core.send(Event::Response(no_shell(*request)));
+            }
+            asked.len()
+        };
+        let timer_of = |update: &Update| {
+            update.effects.iter().find_map(|effect| match effect {
+                Effect::Timer { timer, .. } => Some(*timer),
+                _ => None,
+            })
+        };
+
+        // The network: a request that got through asks for the shell once in
+        // the pause, and not again until the pause is over.
+        let (mut core, failed) = started(Response {
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        });
+        let timer = timer_of(&failed).expect("a pause");
+        assert_eq!(got_through(&mut core, &unreached), 1, "the first asks");
+        assert_eq!(got_through(&mut core, &unreached), 0, "once in the pause");
+        assert_eq!(got_through(&mut core, &unreached), 0, "once in the pause");
+        // The pause is over: the shell is asked for by the timer, fails, and
+        // the next pause has one more request's worth of asking.
+        let ended = core.send(Event::Timer { timer });
+        let (request, _) = fetches(&ended)
+            .into_iter()
+            .find(|(_, shell)| *shell)
+            .expect("the timer asks");
+        let failed = core.send(Event::Response(unreached(request)));
+        assert!(timer_of(&failed).is_some(), "the next pause");
+        assert_eq!(
+            got_through(&mut core, &unreached),
+            1,
+            "the next pause's one"
+        );
+
+        // The shell route itself answers with an error: only the timer asks.
+        let (mut core, _) = started(Response {
+            status: 503,
+            content_type: Some("text/html".to_owned()),
+            ..Response::default()
+        });
+        for _ in 0..3 {
+            assert_eq!(
+                got_through(&mut core, &overloaded),
+                0,
+                "a shell that answers 503 is not asked for by every request that got through"
+            );
+        }
+
+        // The app goes away: the pause is called off. It comes back: the
+        // shell is asked for, and the pause starts again if that fails.
+        let (mut core, failed) = started(Response {
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        });
+        let timer = failed
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Timer { timer, .. } => Some(*timer),
+                _ => None,
+            })
+            .expect("a pause");
+        let away = core.send(Event::Background);
+        assert!(
+            away.effects.iter().any(
+                |effect| matches!(effect, Effect::CancelTimer { timer: gone } if *gone == timer)
+            ),
+            "{away:?}"
+        );
+        let back = core.send(Event::Foreground);
+        let (request, _) = *fetches(&back)
+            .iter()
+            .find(|(_, shell)| *shell)
+            .expect("the shell is asked for");
+        let again = core.send(Event::Response(unreached(request)));
+        assert!(
+            again
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Timer { .. })),
+            "{again:?}"
+        );
+
+        // An upgrade ends the wanting: the pause is called off.
+        let (mut core, failed) = started(Response {
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        });
+        let timer = failed
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Timer { timer, .. } => Some(*timer),
+                _ => None,
+            })
+            .expect("a pause");
+        let asked = core.send(Event::Timer { timer });
+        let (request, _) = *fetches(&asked)
+            .iter()
+            .find(|(_, shell)| *shell)
+            .expect("the shell is asked for");
+        let upgrade = core.send(Event::Response(Response {
+            request,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: r#"{"upgrade":{"min_app":"9.0.0","url":"https://shop.example/app"}}"#.to_owned(),
+            ..Response::default()
+        }));
+        assert!(
+            !core.inner.shell_wanted && core.inner.shell_timer.is_none(),
+            "an upgrade ends the wanting: {upgrade:?}"
+        );
     }
 
     /// A snapshot asked for before this launch's shell has answered names

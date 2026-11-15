@@ -1091,6 +1091,8 @@ pub(crate) struct Inner {
     pub shell_pause: u32,
     /// The timer of that pause, while one runs.
     pub shell_timer: Option<u64>,
+    /// A request that got through has asked for the shell in this pause.
+    pub shell_nudged: bool,
     /// How this launch's last shell request failed, until a shell answers:
     /// it may fail before the kept shell has been read.
     pub shell_failure: Option<Failure>,
