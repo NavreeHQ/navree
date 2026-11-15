@@ -209,13 +209,15 @@ jobs:
             :demo:assembleDebug
 
       # The scripts' own tests: the walk's helpers (a screen is never read from an older dump, and what is
-      # absent is said only of a dump that was made), the reading of a run of the device tests, and the script
-      # put at the start of every document of the web view, run in node against a page's tricks.
+      # absent is said only of a dump that was made), the reading of a run of the device tests, the script
+      # put at the start of every document of the web view, run in node against a page's tricks, and the
+      # check that the pictures of a device are pictures.
       - name: The scripts' own tests
         run: |
           python3 -I scripts/ui_test.py
           python3 -I scripts/read_run_test.py
           python3 -I scripts/document_script_test.py
+          python3 -I scripts/pictures_check_test.py
           bash scripts/walk_test.sh
 
       # The demo as a store ships it (not debuggable), signed with a key made here, to time a start on.
@@ -495,6 +497,11 @@ jobs:
           "$adb" logcat -d > "$RUNNER_TEMP/screens/logcat.txt" || echo "::warning title=Screens::The device's log was not read."
           cp "$RUNNER_TEMP"/demo/*.log "$RUNNER_TEMP/screens/" || echo "::warning title=Screens::The demos' logs were not found."
           ls -R "$RUNNER_TEMP/screens"
+
+      # The pictures are part of what this job proves: a device whose frames came out black (the same size, one colour) is an error, with the host image said.
+      - name: The pictures are pictures
+        if: always()
+        run: python3 -I packages/android/scripts/pictures_check.py "$RUNNER_TEMP/screens/navree-screens"
 
       # The demo app itself, on the phone: a start second by second with and without a network,
       # back, turning, a link, a form, the app ended by the system and opened again.
