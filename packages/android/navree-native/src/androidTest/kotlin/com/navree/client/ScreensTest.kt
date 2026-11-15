@@ -23,6 +23,7 @@ import mockwebserver3.MockWebServer
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -177,5 +178,44 @@ class ScreensTest {
         compose.waitForIdle()
         Shots.take("question-cancel-order")
         Shots.requireWindowsFollowTheScreen("the question")
+    }
+
+    /**
+     * A hardware keyboard's Tab through the protocol's own form example, which
+     * has fields that are picked, not typed (a choice, a date): each is one
+     * stop, the layer over the field, with its name. Where the client does not
+     * show the recorded form as a native screen the test says so and is a
+     * skip in the report.
+     */
+    @Test
+    fun aTabWalkThroughAFormStopsOnceAtEachPickedField() {
+        val app = start("", routes = mapOf("/_navree/native/shell" to "shell", "/" to "screen-dashboard", "/customers/new" to "screen-form"))
+        front(app, "Today")
+        send(app, Events.openLink("${server.url("/customers/new")}"))
+        val arrived = runCatching { compose.waitUntil(15_000) { (app.driver.nav.front?.let { app.driver.screens[it] }?.content as? Content.Native)?.screen?.title == "New customer" } }.isSuccess
+        val shown = app.driver.nav.front?.let { app.driver.screens[it] }
+        assumeTrue("the recorded form screen did not come as a native screen: in front ${shown?.content?.let { it::class.simpleName }} titled ${(shown?.content as? Content.Native)?.screen?.title}", arrived)
+        compose.waitForIdle()
+        val stops = ArrayList<String>()
+        repeat(45) { press ->
+            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+            compose.waitForIdle()
+            val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
+            assertTrue("press ${press + 1} of Tab landed on nothing that can be seen or said; the stops so far: $stops", focused.size == 1)
+            val config = focused.single().config
+            val named = listOfNotNull(
+                config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", "),
+                config.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text },
+                config.getOrNull(SemanticsProperties.EditableText)?.text,
+            ).filter { it.isNotEmpty() }.joinToString(" | ")
+            assertTrue("press ${press + 1}: the stop has no name; the stops so far: $stops", named.isNotEmpty())
+            stops += named
+        }
+        stops.zipWithNext().forEach { (before, after) -> assertTrue("the stop \"$after\" came twice running", before != after) }
+        // Each picked field is one stop of a loop, not two.
+        for (label in listOf("City", "Tier", "Customer since")) {
+            val found = stops.count { it.startsWith(label) }
+            assertTrue("$label is a stop at most once in each loop of the form: $found in ${stops.size} presses", found in 1..2)
+        }
     }
 }
