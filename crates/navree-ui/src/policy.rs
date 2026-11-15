@@ -8,7 +8,7 @@
 //!
 //! ```toml
 //! [ui.policy]
-//! # wasm = true                              # 'wasm-unsafe-eval' on every page's scripts
+//! # wasm = true                              # 'wasm-unsafe-eval' on every page but the fresh ones
 //!
 //! [ui.policy.allow.geo]                      # a plugin's namespace, or app for the app's own
 //! img_src = ["https://tile.openstreetmap.org"]
@@ -38,17 +38,36 @@
 //! page, and the toolkit's error pages. The error pages get the composed policy from the toolkit's
 //! error renderer, because the app's pipeline draws an error outside every layer of the app, so no
 //! layer ever sees one. A response that sets a policy of its own (a picture of the app's, a route
-//! that writes its own header) keeps it. With nothing allowed in `ui.policy`, nothing is touched:
-//! every response keeps the toolkit's policy exactly.
+//! that writes its own header) keeps it, and so does a page that starts clean (below). With
+//! nothing allowed in `ui.policy`, nothing is touched: every response keeps the toolkit's policy
+//! exactly.
+//!
+//! # Pages that start clean
+//!
+//! A page that takes a password, a code or a PIN must not share a document with a plugin's code.
+//! [`View::fresh`](crate::View::fresh) and [`AppPage::fresh`](crate::AppPage::fresh) mark such a
+//! page: in an app with a UI extension, a plugin's island script, or a policy the app widened,
+//! it is entered and left by a full page load, no answer it gives is drawn into a page that is not
+//! fresh, it keeps the toolkit's own policy whatever the app allows, and no extension mounts on
+//! it. In any other app the mark changes nothing. The boot names, in its log and once for each
+//! route, a page that holds a password field and is not fresh, and a reply that sends one as
+//! operations; a password field inside markup written as a string is not seen, only the elements
+//! of a page's tree and of a reply's operations are read.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 
-use http::header::{CONTENT_SECURITY_POLICY, HeaderValue};
+use http::header::{CONTENT_SECURITY_POLICY, HeaderName, HeaderValue};
 use navree_config::{Config, ConfigSection};
+use navree_http::RouteMeta;
+use navree_http::extract::Request;
+use navree_http::middleware::Next;
 use navree_http::response::Response;
 use navree_kernel::{AppContext, BoxError};
 use serde::Deserialize;
 
+use crate::node::{AttrValue, Element, Node};
 use crate::view::PAGE_CSP;
 
 /// The most sources one directive of one key lists.
@@ -759,10 +778,11 @@ fn tell(
 }
 
 /// Puts the app's policy on `response` when the toolkit's own is on it: a header that is exactly
-/// [`PAGE_CSP`](crate::PAGE_CSP) is replaced, and any other policy, or none, is left as it is.
-/// Nothing is done when the app allowed nothing.
+/// [`PAGE_CSP`](crate::PAGE_CSP) is replaced, and any other policy, or none, is left as it is. A
+/// page that starts clean keeps the toolkit's policy. Nothing is done when the app allowed
+/// nothing.
 pub(crate) fn apply(policy: &PagePolicy, response: &mut Response) {
-    if policy.is_the_toolkits() {
+    if policy.is_the_toolkits() || is_fresh_answer(response) {
         return;
     }
     let headers = response.headers_mut();
@@ -776,4 +796,151 @@ pub(crate) fn apply(policy: &PagePolicy, response: &mut Response) {
     if toolkits {
         headers.insert(CONTENT_SECURITY_POLICY, policy.value.clone());
     }
+}
+
+/// The header on the answer of a page that starts clean: the runtime refuses to draw such an
+/// answer into a page that does not, whatever it holds.
+pub(crate) const FRESH_HEADER: HeaderName = HeaderName::from_static("x-navree-fresh");
+
+/// On the response of a page that starts clean, so the layer that composes the app's policy keeps
+/// the toolkit's.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FreshAnswer;
+
+/// Says on `response` that it is the answer of a page that starts clean: the header the runtime
+/// reads, and the mark the layer that composes the app's policy reads.
+pub(crate) fn mark_fresh(response: &mut Response) {
+    response
+        .headers_mut()
+        .insert(FRESH_HEADER, HeaderValue::from_static("1"));
+    response.extensions_mut().insert(FreshAnswer);
+}
+
+/// Whether `response` is the answer of a page that starts clean: it carries the mark, or the
+/// header the mark's page writes.
+fn is_fresh_answer(response: &Response) -> bool {
+    response.extensions().get::<FreshAnswer>().is_some()
+        || response.headers().contains_key(FRESH_HEADER)
+}
+
+/// The most routes each of the two password warnings names, so the log stays short.
+const MOST_ROUTES: usize = 256;
+
+/// The deepest a walk of a tree goes, as the renderer's: what is below is left out.
+const MAX_DEPTH: u32 = 512;
+
+tokio::task_local! {
+    /// What the handlers of the request in hand say of the password fields they send.
+    static FRESH: Arc<Scope>;
+}
+
+/// What the handlers of one request noted: a page that holds a password field and is not fresh,
+/// and operations that carry one.
+#[derive(Default)]
+struct Scope {
+    page_password: AtomicBool,
+    ops_password: AtomicBool,
+}
+
+/// Whether the current task runs the handler of a request in an app where pages that start clean
+/// are on. A page is marked fresh, and a password field is noted, only there: a page written
+/// outside a request, or in an app of today, writes and notes nothing.
+pub(crate) fn in_scope() -> bool {
+    FRESH.try_with(|_| ()).is_ok()
+}
+
+/// Notes that the page being answered holds a password field and is not fresh.
+pub(crate) fn note_page_password() {
+    let _ = FRESH.try_with(|scope| scope.page_password.store(true, Ordering::Relaxed));
+}
+
+/// Notes that the operations being answered carry a password field.
+pub(crate) fn note_ops_password() {
+    let _ = FRESH.try_with(|scope| scope.ops_password.store(true, Ordering::Relaxed));
+}
+
+/// Whether `node` holds an input that takes a password (type `password`) or whose `autocomplete`
+/// names a password or a one-time code (`current-password`, `new-password` or `one-time-code`).
+/// Only elements are read: a field inside markup written as a string is not seen.
+pub(crate) fn holds_password(node: &Node) -> bool {
+    holds(node, 0)
+}
+
+/// One step of [`holds_password`].
+fn holds(node: &Node, depth: u32) -> bool {
+    if depth > MAX_DEPTH {
+        return false;
+    }
+    match node {
+        Node::Element(element) => {
+            takes_password(element)
+                || element
+                    .children
+                    .iter()
+                    .any(|child| holds(child, depth + 1))
+        }
+        Node::Fragment(nodes) => nodes.iter().any(|child| holds(child, depth + 1)),
+        _ => false,
+    }
+}
+
+/// Whether `element` is an input for a password or a code that signs a person in.
+fn takes_password(element: &Element) -> bool {
+    if !element.tag.eq_ignore_ascii_case("input") {
+        return false;
+    }
+    let text = |name: &str| element.get(name).and_then(AttrValue::as_text);
+    text("type").is_some_and(|kind| kind.eq_ignore_ascii_case("password"))
+        || text("autocomplete").is_some_and(|hints| {
+            hints.split_ascii_whitespace().any(|hint| {
+                ["current-password", "new-password", "one-time-code"]
+                    .iter()
+                    .any(|credential| hint.eq_ignore_ascii_case(credential))
+            })
+        })
+}
+
+/// The routes the log has named, for each of the two password warnings, at most 256 of each.
+#[derive(Default)]
+pub(crate) struct Warned {
+    pages: Mutex<BTreeSet<String>>,
+    ops: Mutex<BTreeSet<String>>,
+}
+
+impl Warned {
+    /// Whether `path` is the first to be named in `routes`, which then keeps it: never once
+    /// `routes` holds as many as the log will name.
+    fn first(routes: &Mutex<BTreeSet<String>>, path: &str) -> bool {
+        let mut routes = routes.lock().unwrap_or_else(PoisonError::into_inner);
+        routes.len() < MOST_ROUTES && routes.insert(path.to_owned())
+    }
+}
+
+/// The layer around the handlers of an app where pages that start clean are on: it makes the
+/// request's scope current for them, and when a page that is not fresh held a password field, or
+/// a reply sent one as operations, names the route in the log, once. The route is the pattern the
+/// request matched, never the address asked for.
+pub(crate) async fn fresh_layer(warned: Arc<Warned>, request: Request, next: Next) -> Response {
+    let scope = Arc::new(Scope::default());
+    let response = FRESH.scope(scope.clone(), next.run(request)).await;
+    let page = scope.page_password.load(Ordering::Relaxed);
+    let ops = scope.ops_password.load(Ordering::Relaxed);
+    if (page || ops)
+        && let Some(route) = response.extensions().get::<Arc<RouteMeta>>()
+    {
+        let path = route.full_path.as_str();
+        if page && Warned::first(&warned.pages, path) {
+            tracing::warn!(
+                target: "navree::ui",
+                "page {path} holds a password field and is not fresh: call .fresh() on its View or AppPage"
+            );
+        }
+        if ops && Warned::first(&warned.ops, path) {
+            tracing::warn!(
+                target: "navree::ui",
+                "route {path} sends a password field as ops into a page that may hold plugin code: draw it on a fresh page and answer with a redirect to it"
+            );
+        }
+    }
+    response
 }

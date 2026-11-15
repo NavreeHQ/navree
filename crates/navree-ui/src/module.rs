@@ -216,6 +216,7 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     }));
     #[cfg(feature = "native-preview")]
     let for_context = slot.clone();
+    let for_fresh = slot.clone();
     m.http_layer(GlobalLayer::new(
         LayerSlot::Session,
         "ui.reply",
@@ -244,6 +245,27 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         move |_, router| {
             if for_context.get().copied().unwrap_or(false) {
                 Ok(router.layer(middleware::from_fn(crate::native::swap::context_layer)))
+            } else {
+                Ok(router)
+            }
+        },
+    ));
+    // Pages that start clean: where they are on (the app has a UI extension, a plugin's island
+    // script or a widened page policy), the handlers of a request run in a scope that lets a fresh
+    // page write its mark and header, and that notes a password field a page that is not fresh
+    // or a reply sends. Elsewhere the router is as it was.
+    let warned = Arc::new(crate::policy::Warned::default());
+    m.http_layer(GlobalLayer::new(
+        LayerSlot::Context,
+        "ui.fresh",
+        move |_, router| {
+            if for_fresh.get().copied().unwrap_or(false) && fresh.get().copied().unwrap_or(false) {
+                let warned = warned.clone();
+                Ok(
+                    router.layer(middleware::from_fn(move |request: Request, next: Next| {
+                        crate::policy::fresh_layer(warned.clone(), request, next)
+                    })),
+                )
             } else {
                 Ok(router)
             }
