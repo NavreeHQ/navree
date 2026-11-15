@@ -1,0 +1,81 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Orders to flag",
+  "body": {
+   "t": "list",
+   "id": "rows",
+   "children": [
+    {
+     "t": "stack",
+     "id": "r1",
+     "children": [
+      {
+       "t": "text",
+       "value": "CS-20481, Ravneet Kaur"
+      },
+      {
+       "t": "form",
+       "id": "f",
+       "method": "post",
+       "action": "/orders/1/flag",
+       "hidden": [
+        {
+         "name": "order",
+         "value": "1"
+        }
+       ],
+       "children": [
+        {
+         "t": "field",
+         "id": "paid",
+         "name": "paid",
+         "label": "Paid",
+         "input": {
+          "t": "toggle"
+         },
+         "changed": {
+          "t": "submit"
+         }
+        },
+        {
+         "t": "field",
+         "id": "urgent",
+         "name": "urgent",
+         "label": "Urgent",
+         "input": {
+          "t": "toggle"
+         },
+         "changed": {
+          "t": "submit",
+          "form": "f"
+         }
+        },
+        {
+         "t": "field",
+         "id": "rush",
+         "name": "rush",
+         "label": "Rush",
+         "input": {
+          "t": "toggle"
+         },
+         "changed": {
+          "t": "commands",
+          "list": [
+           {
+            "c": "submit",
+            "id": "f"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

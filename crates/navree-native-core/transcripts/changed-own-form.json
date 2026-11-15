@@ -1,0 +1,131 @@
+{
+  "about": "A change of a field sends the form the field stands in, found by its handle, never looked up again by the id the server gave the form. Two rows of a list each hold a form the server calls `f`, and a row arrives later and stands first: the switch of the row that was there first sends that row's form, and a field of the later row whose change names its form by the server's id (`f`) sends its own, not the form of the row that stands first.",
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell arrives; the first screen is asked for.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "One row of orders to flag, with a form of its own: `f`.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/flag-rows.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The page is asked for again, and the answer is one op: a newer row joins the start of the list. Its form is the server's `f` again, and is named apart here.",
+      "send": {"t":"act","screen":1,"action":{"t":"refresh"}},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/flag-rows-newer.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/forms/f/pending","is":false},
+        {"at":"/screens/1/forms/f~r2/pending","is":false}
+      ]
+    },
+    {
+      "note": "The person flips the switch of the row that was there first. Its form is sent, and not the form of the row that now stands first, which the server calls the same.",
+      "send": {"t":"field","screen":1,"form":"f","field":"paid","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"f"}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"post","url":"https://shop.example/orders/1/flag","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"order=1&paid=on"},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/forms/f/pending","is":true},
+        {"at":"/screens/1/forms/f~r2/pending","is":false}
+      ]
+    },
+    {
+      "note": "A field of the newer row whose change names its form by the server's id, `f`: that is the form it stands in, and it is sent.",
+      "send": {"t":"field","screen":1,"form":"f~r2","field":"f~r2.urgent","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"f~r2"}
+        ],
+        "effects": [
+          {"t":"fetch","request":5,"method":"post","url":"https://shop.example/orders/2/flag","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"order=2&urgent=on"},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/forms/f/pending","is":true},
+        {"at":"/screens/1/forms/f~r2/pending","is":true}
+      ]
+    },
+    {
+      "note": "The same when the change runs commands, one of which sends the form by the server's id. The newer row's form is answered first, so it can be sent again; its rush switch sends the newer row's form.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/flag-rows-saved.json",
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"f~r2"},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"neutral","text":"Flagged"}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/forms/f~r2/pending","is":false}
+      ]
+    },
+    {
+      "send": {"t":"field","screen":1,"form":"f~r2","field":"f~r2.rush","value":{"t":"flag","on":true}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":1,"form":"f~r2"}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"post","url":"https://shop.example/orders/2/flag","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["content-type","application/x-www-form-urlencoded"]],"body":{"t":"form","text":"order=2&urgent=on&rush=on"},"timeout_ms":60000,"xsrf":true}
+        ]
+      },
+      "check": [
+        {"at":"/screens/1/forms/f/pending","is":true},
+        {"at":"/screens/1/forms/f~r2/pending","is":true}
+      ]
+    }
+  ]
+}
