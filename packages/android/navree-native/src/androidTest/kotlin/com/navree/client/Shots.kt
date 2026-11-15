@@ -43,6 +43,33 @@ object Shots {
     private var demo = false
 
     /**
+     * Gives the whole system the language of the look, as a person's settings
+     * do: one that runs right to left (a pseudo-locale, English words laid out
+     * from the right) for the right to left look, English for the others. The
+     * system then lays out every window it opens, a dialog, a menu and a picker
+     * among them, by that language. Returns what the system holds afterwards.
+     */
+    fun language(): String {
+        val tags = if (look == "rtl") "ar-XB" else "en-US"
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        return try {
+            automation.adoptShellPermissionIdentity("android.permission.CHANGE_CONFIGURATION")
+            try {
+                Class.forName("com.android.internal.app.LocalePicker")
+                    .getMethod("updateLocales", android.os.LocaleList::class.java)
+                    .invoke(null, android.os.LocaleList.forLanguageTags(tags))
+            } finally {
+                automation.dropShellPermissionIdentity()
+            }
+            Thread.sleep(3000)
+            val configuration = android.content.res.Resources.getSystem().configuration
+            "asked for $tags; the system holds ${configuration.locales} and layout direction ${configuration.layoutDirection}"
+        } catch (e: Throwable) {
+            "asked for $tags; not given: $e"
+        }
+    }
+
+    /**
      * Puts the system bar in the system's own demo mode, as pictures that are
      * shown to people want it: a fixed time, full battery, full signal and
      * wifi, no notification icons. Once for the process; a device that does

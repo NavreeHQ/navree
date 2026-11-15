@@ -402,41 +402,18 @@ jobs:
             esac
             "$adb" shell cmd uimode night "$night"
             "$adb" shell settings put system font_scale "$scale"
-            # Right to left as a person's phone has it: the system's language is one that runs right to left
-            # (a pseudo-locale, English words laid out from the right), so every window an app opens,
-            # a dialog, a menu or a picker among them, is laid out that way by the system itself.
-            if [ "$rtl" = 1 ]; then
-              for _ in 1 2 3; do "$adb" root && break; sleep 5; done
-              "$adb" wait-for-device
-              # The system keeps the language it was given in two places: the property, and the setting the
-              # system writes when its configuration last changed (the text size just above). Both are set.
-              "$adb" shell setprop persist.sys.locale ar-XB
-              "$adb" shell settings put system system_locales ar-XB
-              "$adb" shell setprop ctl.restart zygote
-              sleep 15
-              for _ in $(seq 1 60); do
-                if [ "$("$adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then break; fi
-                sleep 3
-              done
-              sleep 10
-              echo "system language: $("$adb" shell getprop persist.sys.locale) $("$adb" shell settings get system system_locales)"
-              echo "system configuration: $("$adb" shell am get-config | tr '\n' ' ' | cut -c1-400)"
-              "$adb" shell cmd locale get-app-locales com.navree.client.test || true
-            fi
+            # The system is given the look's language (a right to left one for the right to left look, English
+            # for the others) by a test of its own before the run, so every window an app opens, a dialog, a
+            # menu or a picker among them, is laid out by the system itself as it is on a person's phone.
+            "$adb" shell pm grant com.navree.client.test android.permission.CHANGE_CONFIGURATION || true
+            "$adb" shell settings put global hidden_api_policy 1 || true
+            "$adb" shell am instrument -w -e class com.navree.client.LanguageTest -e look "$look" -e device "$name" \
+              com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$name-$look-language.txt"
+            echo "system configuration: $("$adb" shell am get-config | tr '\n' ' ' | cut -c1-300)"
             "$adb" shell am instrument -w -e look "$look" -e device "$name" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
               com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$name-$look.txt"
             if ! grep -q '^OK (' "$RUNNER_TEMP/instrument-$name-$look.txt"; then status=1; fi
           done
-          # The next way up starts from left to right.
-          "$adb" shell setprop persist.sys.locale en-US
-          "$adb" shell settings put system system_locales en-US
-          "$adb" shell setprop ctl.restart zygote
-          sleep 15
-          for _ in $(seq 1 60); do
-            if [ "$("$adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then break; fi
-            sleep 3
-          done
-          sleep 10
           done
           "$adb" shell wm size reset
           mkdir -p "$RUNNER_TEMP/screens"
