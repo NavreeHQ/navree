@@ -1,6 +1,9 @@
 # Starts the demo from its build folder, and takes a picture of its window every
-# way there is, writing what each way did to report.txt. A way that fails is a
-# result, not an error: the run goes on and the report says which ways worked.
+# way there is, writing what each way did to report.txt. A way of taking a picture
+# that fails is a result, not an error: the run goes on and the report says which
+# ways worked. What is an error, and ends the script with exit code 1 after the
+# rest has run, is the demo not starting, showing no window, or a walk of its
+# screens that does not end or makes no picture of the app's own content.
 #
 #   powershell -File take-pictures.ps1 -Exe <Navree.Demo.exe> -OutDir <folder>
 param(
@@ -11,6 +14,7 @@ param(
 $ErrorActionPreference = 'Continue'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $report = Join-Path $OutDir 'report.txt'
+$failures = New-Object System.Collections.Generic.List[string]
 function Say([string]$line) {
     Write-Host $line
     Add-Content -Path $report -Value $line
@@ -148,10 +152,12 @@ for ($i = 0; $i -lt 90; $i++) {
     if ($app.MainWindowHandle -ne [IntPtr]::Zero) { $window = $app.MainWindowHandle; break }
 }
 if ($app.HasExited) {
+    $failures.Add("the demo ended by itself, exit code " + $app.ExitCode)
     Say ("the demo ended by itself, exit code " + $app.ExitCode)
     Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $started } -MaxEvents 8 -ErrorAction SilentlyContinue |
         ForEach-Object { Say ("event " + $_.ProviderName + ": " + (($_.Message -split "`n")[0..6] -join ' | ')) }
 } elseif ($window -eq [IntPtr]::Zero) {
+    $failures.Add("the demo is running but no window came in 90 seconds")
     Say "the demo is running but no window came in 90 seconds"
 } else {
     Say ("a window came after about " + $i + " seconds: handle " + $window + ", title '" + $app.MainWindowTitle + "', responding " + $app.Responding)
@@ -196,6 +202,7 @@ foreach ($look in @(@('--light'), @('--dark'), @('--light', '--rtl'))) {
     if ($walker.WaitForExit(240000)) {
         Say ("the walk " + ($look -join ' ') + " ended by itself, exit code " + $walker.ExitCode)
     } else {
+        $failures.Add("the walk " + ($look -join ' ') + " did not end in 240 seconds")
         Say ("the walk " + ($look -join ' ') + " did not end in 240 seconds")
         Stop-Process -Id $walker.Id -Force -ErrorAction SilentlyContinue
     }
@@ -207,4 +214,11 @@ if (Test-Path $log) { Copy-Item $log (Join-Path $OutDir 'navree-demo-after-walks
 Say ""
 Say "== what was written"
 Get-ChildItem $OutDir -Recurse -Filter '*.png' | ForEach-Object { Say ($_.Name + " " + $_.Length) }
+if (-not (Get-ChildItem $walk -Filter '*.png' -ErrorAction SilentlyContinue)) { $failures.Add("the walks made no picture of the app's own content") }
+if ($failures.Count -gt 0) {
+    Say ""
+    Say "== what failed"
+    $failures | ForEach-Object { Say ("FAILED: " + $_) }
+    exit 1
+}
 exit 0

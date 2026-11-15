@@ -104,6 +104,7 @@ while (-not $app.HasExited -and ((Get-Date) - $started).TotalSeconds -lt $Second
 }
 if (-not $app.HasExited) {
     Say "the gallery was still running after $Seconds seconds and was stopped by its process id"
+    $stopped = $true
     Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
 } else {
     Say ("the gallery ended, exit code " + $app.ExitCode + "; " + $taken + " pictures")
@@ -114,4 +115,7 @@ if (Test-Path $crash) { Copy-Item $crash (Join-Path $OutDir 'navree-gallery.log'
 # The scenarios that mark their parts have their pictures read: where the frozen parts stood, whether
 # the header and the rows agreed, and what the scroll view's own numbers were.
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'read-gallery-pictures.ps1') -OutDir $OutDir
+
+# A run that had to be stopped for taking too long did not finish what it was asked to do.
+if ($stopped) { exit 1 }
 exit 0
