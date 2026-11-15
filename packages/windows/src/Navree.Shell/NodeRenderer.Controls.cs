@@ -161,26 +161,34 @@ internal sealed partial class NodeRenderer
     private UIElement DrawList(Models.List list)
     {
         StackPanel panel = new() { Spacing = 0 };
-        ListView view = new()
+        if (HoldsCards(list))
         {
-            SelectionMode = ListViewSelectionMode.None,
-            IsItemClickEnabled = list.Children.OfType<Models.Row>().Any(row => row.Action is not null),
-        };
-        ScrollViewer.SetVerticalScrollMode(view, ScrollMode.Disabled);
-        ScrollViewer.SetVerticalScrollBarVisibility(view, ScrollBarVisibility.Disabled);
-        foreach (Models.Node child in list.Children)
-        {
-            view.Items.Add(Render(child));
+            // The cards of a board: each a card with what it holds, moved by dragging, by the keys or by its handle's menu.
+            panel.Children.Add(CardsOf(list));
         }
-
-        view.ItemClick += (_, e) =>
+        else
         {
-            if (e.ClickedItem is FrameworkElement { Tag: RowAction tap })
+            ListView view = new()
             {
-                Act(tap.Action, null, tap.From);
+                SelectionMode = ListViewSelectionMode.None,
+                IsItemClickEnabled = list.Children.OfType<Models.Row>().Any(row => row.Action is not null),
+            };
+            ScrollViewer.SetVerticalScrollMode(view, ScrollMode.Disabled);
+            ScrollViewer.SetVerticalScrollBarVisibility(view, ScrollBarVisibility.Disabled);
+            foreach (Models.Node child in list.Children)
+            {
+                view.Items.Add(Render(child));
             }
-        };
-        panel.Children.Add(view);
+
+            view.ItemClick += (_, e) =>
+            {
+                if (e.ClickedItem is FrameworkElement { Tag: RowAction tap })
+                {
+                    Act(tap.Action, null, tap.From);
+                }
+            };
+            panel.Children.Add(view);
+        }
 
         if (list.Id is string id && list.More is not null)
         {
