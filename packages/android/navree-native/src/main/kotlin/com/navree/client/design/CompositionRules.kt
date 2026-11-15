@@ -72,7 +72,7 @@ object CompositionRules {
     fun holdsDial(parts: List<Navree.Node>): Boolean = parts.any { it is Navree.Ring || it is Navree.Rings || it is Navree.Gauge }
 
     /** The share of a card's width a line of parts may fill and still be put in the middle of the card, not at its start. */
-    const val SHORT_LINE = 0.6f
+    const val SHORT_LINE = 0.7f
 
     /**
      * Whether a line of parts that fills `usedPx` of a room `roomPx` wide is

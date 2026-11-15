@@ -985,6 +985,7 @@ class ShortLineTest {
         assertTrue(CompositionRules.holdsDial(listOf(Navree.Ring(max = 100.0, value = 83.0), Navree.Text(value = "words"))))
         assertFalse(CompositionRules.holdsDial(listOf(Navree.Text(value = "words"))))
         assertTrue(CompositionRules.centresShortLine(usedPx = 550, roomPx = 1265))
+        assertTrue("the health score: a ring and a line fill 1,140 of 1,912 px", CompositionRules.centresShortLine(usedPx = 1140, roomPx = 1912))
         assertFalse("a line that fills most of its card stays at the start", CompositionRules.centresShortLine(usedPx = 900, roomPx = 1265))
         assertFalse("no room known", CompositionRules.centresShortLine(usedPx = 100, roomPx = 0))
     }
