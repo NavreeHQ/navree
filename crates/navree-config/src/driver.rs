@@ -393,7 +393,7 @@ impl DriverContext {
             )
             .into());
         };
-        match self.configured(config) {
+        match self.configured_table(config) {
             Some(table) => read_table(table).map_err(|message| self.unreadable(message)),
             None => Ok(T::default()),
         }
@@ -412,7 +412,7 @@ impl DriverContext {
     /// for an instance, that instance's own table in the table above it (so
     /// a table whose name holds a dot is found), else the table at the
     /// settings key.
-    fn configured<'c>(&self, config: &'c Config) -> Option<&'c Value> {
+    fn configured_table<'c>(&self, config: &'c Config) -> Option<&'c Value> {
         let below = self.instance.as_deref().and_then(|instance| {
             self.settings_key
                 .strip_suffix(instance)
