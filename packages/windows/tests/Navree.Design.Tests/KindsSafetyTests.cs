@@ -519,4 +519,41 @@ public sealed class KindsSafetyTests
         Assert.IsTrue(PlotRules.Repaints(-1, -1, 400, 180, painted: false, forced: false));
         Assert.IsTrue(PlotRules.Repaints(400, 180, 400, double.NaN, painted: true, forced: false), "a size that is not a number is painted again, not skipped");
     }
+
+    [TestMethod]
+    public void A_slice_of_a_donut_is_read_out_wherever_the_pointer_is_on_its_arc_and_not_only_near_its_middle()
+    {
+        DonutRules.Ring ring = DonutRules.Of(176, 176);
+        double middle = ring.Middle;
+        double[] halves = [1, 1];
+
+        // On the ring at three oclock and at nine: the right half is the first slice (it runs clockwise from twelve) and the left half the second.
+        Assert.AreEqual(0, DonutRules.SliceAt(halves, ring, ring.Cx + middle, ring.Cy, 6, mirrored: false));
+        Assert.AreEqual(1, DonutRules.SliceAt(halves, ring, ring.Cx - middle, ring.Cy, 6, mirrored: false));
+
+        // At the boundary of the two, six oclock, about 100 pixels from both slices middles: a pixel either side of it is each ones.
+        Assert.AreEqual(0, DonutRules.SliceAt(halves, ring, ring.Cx + 1, ring.Cy + middle, 6, mirrored: false));
+        Assert.AreEqual(1, DonutRules.SliceAt(halves, ring, ring.Cx - 1, ring.Cy + middle, 6, mirrored: false));
+        Assert.AreEqual(1, DonutRules.SliceAt(halves, ring, ring.Cx - 1, ring.Cy - middle, 6, mirrored: false));
+        Assert.AreEqual(0, DonutRules.SliceAt(halves, ring, ring.Cx + 1, ring.Cy - middle, 6, mirrored: false));
+
+        // Flipped across (right to left): the right half is the second slice.
+        Assert.AreEqual(1, DonutRules.SliceAt(halves, ring, ring.Cx + middle, ring.Cy, 6, mirrored: true));
+        Assert.AreEqual(0, DonutRules.SliceAt(halves, ring, ring.Cx - middle, ring.Cy, 6, mirrored: true));
+
+        // A big slice is read out all along it: a quarter, a half and a quarter.
+        double[] parts = [1, 2, 1];
+        Assert.AreEqual(0, DonutRules.SliceAt(parts, ring, ring.Cx + middle, ring.Cy - 5, 6, mirrored: false));
+        Assert.AreEqual(1, DonutRules.SliceAt(parts, ring, ring.Cx, ring.Cy + middle, 6, mirrored: false));
+        Assert.AreEqual(1, DonutRules.SliceAt(parts, ring, ring.Cx + (middle * 0.5), ring.Cy + (middle * 0.87), 6, mirrored: false));
+        Assert.AreEqual(2, DonutRules.SliceAt(parts, ring, ring.Cx - middle, ring.Cy - 5, 6, mirrored: false));
+
+        // Not on the ring: the hole, past the rim.
+        Assert.AreEqual(-1, DonutRules.SliceAt(halves, ring, ring.Cx, ring.Cy, 6, mirrored: false));
+        Assert.AreEqual(-1, DonutRules.SliceAt(halves, ring, ring.Cx + ring.Outer + 20, ring.Cy, 6, mirrored: false));
+        Assert.AreEqual(0, DonutRules.SliceAt(halves, ring, ring.Cx + ring.Outer + 3, ring.Cy, 6, mirrored: false), "a few pixels past the rim still counts");
+
+        // Slices with nothing in them are never read out.
+        Assert.AreEqual(1, DonutRules.SliceAt([0, 5], ring, ring.Cx + middle, ring.Cy, 6, mirrored: false));
+    }
 }

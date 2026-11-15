@@ -696,7 +696,8 @@ public sealed partial class ChartView : KindControl
         double cy = ring.Cy;
         Palette palette = canvas.Palette;
         double gap = parts.Count > 1 ? (palette.Contrast ? 3 : 1.5) : 0;
-        IReadOnlyList<DonutRules.Slice> slices = DonutRules.Slices([.. parts.Select(part => part.Value)]);
+        double[] values = [.. parts.Select(part => part.Value)];
+        IReadOnlyList<DonutRules.Slice> slices = DonutRules.Slices(values);
         for (int at = 0; at < parts.Count; at++)
         {
             DonutRules.Slice slice = slices[at];
@@ -712,7 +713,18 @@ public sealed partial class ChartView : KindControl
 
             Pt mid = Ink.Polar(cx, cy, middle, slice.Start + (slice.Sweep / 2));
             string words = NumberWords.Amount(parts[at].Value) + " (" + ShareRules.Percent(parts[at].Value / total).ToString(CultureInfo.InvariantCulture) + "%)";
-            canvas.Probes.Add(new Probe(canvas.Mx(mid.X), mid.Y, default, parts[at].Label, [new ProbeLine(colour, words)], parts[at].Label + ", " + words));
+            int slot = at;
+            bool mirrored = canvas.Mirror;
+
+            // The pointer reads a slice out wherever it is on the slice's arc, by the angle it is at from the middle.
+            canvas.Probes.Add(new Probe(
+                canvas.Mx(mid.X),
+                mid.Y,
+                default,
+                parts[at].Label,
+                [new ProbeLine(colour, words)],
+                parts[at].Label + ", " + words,
+                Covers: point => DonutRules.SliceAt(values, ring, point.X, point.Y, 6, mirrored) == slot));
         }
     }
 

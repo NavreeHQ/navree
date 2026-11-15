@@ -26,6 +26,7 @@ internal sealed record ProbeLine(Windows.UI.Color? Colour, string Text);
 /// <param name="Spoken">What a screen reader is told when the place is reached.</param>
 /// <param name="Guide">Whether a line is drawn down through the place.</param>
 /// <param name="Marks">Discs to draw on the place: where, and in what colour.</param>
+/// <param name="Covers">Whether a point of the drawing is on the place, for a place that is not a rectangle (a slice of a ring); the pointer reads it out wherever it is on the place.</param>
 internal sealed record Probe(
     double X,
     double Y,
@@ -34,7 +35,8 @@ internal sealed record Probe(
     IReadOnlyList<ProbeLine> Lines,
     string Spoken,
     bool Guide = false,
-    IReadOnlyList<(Point At, Windows.UI.Color Colour)>? Marks = null);
+    IReadOnlyList<(Point At, Windows.UI.Color Colour)>? Marks = null,
+    Func<Point, bool>? Covers = null);
 
 /// <summary>What a drawing is painted on: two layers (shapes, which flip across in right to left, and texts), and the places it can be read out.</summary>
 internal sealed class PlotCanvas
@@ -337,7 +339,11 @@ internal sealed partial class PlotSurface : UserControl
         {
             Probe probe = probes[index];
             double distance;
-            if (probe.Hit.Width > 0 && probe.Hit.Height > 0)
+            if (probe.Covers is not null)
+            {
+                distance = probe.Covers(at) ? 0 : double.MaxValue;
+            }
+            else if (probe.Hit.Width > 0 && probe.Hit.Height > 0)
             {
                 // A place with an area of its own is read out while the pointer is inside it.
                 bool inside = at.X >= probe.Hit.X && at.X <= probe.Hit.X + probe.Hit.Width && at.Y >= probe.Hit.Y && at.Y <= probe.Hit.Y + probe.Hit.Height;
