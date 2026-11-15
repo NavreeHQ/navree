@@ -40,6 +40,9 @@ import org.junit.runner.RunWith
  * giving `"shots": 0`); each screen is opened by its address, waited for by
  * its `title`, and photographed from its top `shots` times a window apart, as
  * `<device>-<look>-<name>-<n>.png` beside the other tests' shots.
+ *
+ * The cloud job names no folder, so this test is skipped there in every look;
+ * it runs only where `-e answers` is given, on a machine of its own.
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
