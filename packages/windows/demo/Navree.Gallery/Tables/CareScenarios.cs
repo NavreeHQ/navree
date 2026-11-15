@@ -33,6 +33,7 @@ internal static class CareScenarios
             ("assistive", AssistiveAsync),
             ("tap-in-field", TapInFieldAsync),
             ("edge-drag", EdgeDragAsync),
+            ("row-menu", RowMenuAsync),
         })
         {
             try
@@ -520,6 +521,120 @@ internal static class CareScenarios
         await Task.Delay(500);
         Report.Line($"[care-edge-drag] after holding the Plan heading near the end edge: the view is at {scroll.HorizontalOffset:0.#} of {scroll.ScrollableWidth:0.#}; columns {order()}");
         await Handshake.StepAsync("care-edge-drag", "after a heading was held near the end edge of the view");
+    }
+
+    // A row's menu from a right click, the menu key, Shift and F10, and the dots of the row: each opens the menu the row has, with its
+    // items, and what a client of the accessibility tree is told of the open menu is read in process and by the system's tool.
+    private static async Task RowMenuAsync(MainWindow window)
+    {
+        ListDataTableModel<Customer> model = DemoData.Model();
+        model.Reset(DemoData.Make(0, 12));
+        MenuFlyout? last = null;
+        int made = 0;
+        TextTablePresenter<Customer> presenter = new(model)
+        {
+            Menu = c =>
+            {
+                made++;
+                MenuFlyout menu = new();
+                menu.Items.Add(new MenuFlyoutItem { Text = "Open " + c.Name });
+                menu.Items.Add(new MenuFlyoutItem { Text = "Send reminder" });
+                menu.Items.Add(new MenuFlyoutSeparator());
+                menu.Items.Add(new MenuFlyoutItem { Text = "Delete" });
+                last = menu;
+                return menu;
+            },
+        };
+        DataTable table = await ShowAsync(window, model, presenter);
+        Keys.Foreground(window);
+        DataTableRow? row = table.RowsRepeater?.TryGetElement(3) as DataTableRow;
+        if (row is null || row.Cells.Count < 2)
+        {
+            Report.Line("[care-row-menu] row 3 is not made");
+            return;
+        }
+
+        async Task Look(string how, Func<Task> open, (int X, int Y)? pointer, bool picture)
+        {
+            last = null;
+            bool opened = false;
+            int before = made;
+            await open();
+            for (int i = 0; i < 10 && last is null; i++)
+            {
+                await Task.Delay(100);
+            }
+
+            if (last is null)
+            {
+                Report.Line($"[care-row-menu] {how}: no menu was asked for (the presenter made {made - before})");
+                return;
+            }
+
+            MenuFlyout menu = last;
+            opened = menu.IsOpen;
+            await Task.Delay(500);
+            IReadOnlyList<Microsoft.UI.Xaml.Controls.Primitives.Popup> popups = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetOpenPopupsForXamlRoot(table.XamlRoot);
+            FrameworkElement? shown = popups.Select(p => p.Child).OfType<FrameworkElement>().FirstOrDefault(c => c is MenuFlyoutPresenter || c.GetType().Name.Contains("Flyout", StringComparison.Ordinal));
+            string where = "no popup";
+            if (shown is not null)
+            {
+                Windows.Foundation.Point at = shown.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(0, 0));
+                where = $"popup at {at.X:0},{at.Y:0}, {shown.ActualWidth:0} by {shown.ActualHeight:0}";
+            }
+
+            string items = string.Join(" / ", menu.Items.Select(i => i switch
+            {
+                MenuFlyoutItem item => $"'{item.Text}' (client sees '{Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(item)?.GetName()}')",
+                MenuFlyoutSeparator => "separator",
+                _ => i.GetType().Name,
+            }));
+            Report.Line($"[care-row-menu] {how}: open {opened || menu.IsOpen}, {menu.Items.Count} items: {items}; {where}; pointer {(pointer is { } p2 ? $"{p2.X},{p2.Y}" : "none")}");
+            if (picture)
+            {
+                await Handshake.StepAsync("uia-care-row-menu-" + how.Split(' ')[0].ToLowerInvariant(), "the accessibility tree and the window with a row's menu open: " + how);
+            }
+
+            menu.Hide();
+            await Task.Delay(500);
+        }
+
+        DataTableCell cell = row.Cells[0];
+        (int X, int Y) cellAt = Mouse.ScreenOf(window, cell, new Windows.Foundation.Point(Math.Min(60, cell.ActualWidth / 2), cell.ActualHeight / 2));
+        await Look("right click on the name", async () =>
+        {
+            await Mouse.MoveAsync(cellAt);
+            await Mouse.RightClickAsync();
+        }, cellAt, picture: true);
+
+        await Look("menu key on the active cell", async () =>
+        {
+            table.FocusRow("c00003");
+            await Task.Delay(500);
+            await Keys.PressAsync(VirtualKey.Application);
+        }, null, picture: false);
+
+        await Look("Shift and F10 on the active cell", async () =>
+        {
+            table.FocusRow("c00003");
+            await Task.Delay(500);
+            await Keys.PressAsync(VirtualKey.F10, VirtualKey.Shift);
+        }, null, picture: false);
+
+        DataTableGlyph? dots = row.Cells.Select(c => c.Content).OfType<DataTableGlyph>().FirstOrDefault();
+        if (dots is not null)
+        {
+            (int X, int Y) dotsAt = Mouse.ScreenOf(window, dots, new Windows.Foundation.Point(dots.ActualWidth / 2, dots.ActualHeight / 2));
+            await Look("dots of the row", async () =>
+            {
+                await Mouse.MoveAsync(dotsAt);
+                await Mouse.ClickAsync();
+            }, dotsAt, picture: false);
+        }
+        else
+        {
+            Report.Line("[care-row-menu] the row has no dots");
+        }
     }
 
     // A new model: what is typed looks through the new model's names, not the old one's.

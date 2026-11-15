@@ -449,5 +449,5 @@ internal static class Keys
 
     private static bool IsExtended(VirtualKey key) =>
         key is VirtualKey.Left or VirtualKey.Right or VirtualKey.Up or VirtualKey.Down or VirtualKey.Home or VirtualKey.End
-            or VirtualKey.PageUp or VirtualKey.PageDown or VirtualKey.Insert or VirtualKey.Delete;
+            or VirtualKey.PageUp or VirtualKey.PageDown or VirtualKey.Insert or VirtualKey.Delete or VirtualKey.Application;
 }

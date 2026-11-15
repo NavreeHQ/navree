@@ -12,6 +12,8 @@ internal static class Mouse
     private const uint MoveTo = 0x0001;
     private const uint LeftDown = 0x0002;
     private const uint LeftUp = 0x0004;
+    private const uint RightDown = 0x0008;
+    private const uint RightUp = 0x0010;
     private const uint Absolute = 0x8000;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -67,6 +69,15 @@ internal static class Mouse
         await Task.Delay(60);
         mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero);
         await Task.Delay(300);
+    }
+
+    /// <summary>Presses and lets go of the right button where the pointer is.</summary>
+    internal static async Task RightClickAsync()
+    {
+        mouse_event(RightDown, 0, 0, 0, UIntPtr.Zero);
+        await Task.Delay(60);
+        mouse_event(RightUp, 0, 0, 0, UIntPtr.Zero);
+        await Task.Delay(500);
     }
 
     /// <summary>Presses the left button where the pointer is, and keeps it down.</summary>
