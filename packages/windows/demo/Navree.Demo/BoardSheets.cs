@@ -10,9 +10,9 @@ using Navree.Runtime;
 
 namespace Navree.Demo;
 
-// What a person does in a sheet of the live board and with a disclosure, with the real keys: a comment sent empty is refused by the server and
-// the refusal is read where it must be (in the sheet that is on screen), the core's own request to put the focus on the field in error is read
-// and answered, and a disclosure opened and closed with the keyboard keeps the focus.
+// What a person does in a sheet of the live board, with the real keys: a comment sent empty is refused by the server and the refusal is read where
+// it must be (in the sheet that is on screen), and the core's own request to put the focus on the field in error is read and answered. The board
+// draws no disclosure on its screen, so the disclosure is walked on the screen of the page walk's own that holds one.
 internal sealed partial class BoardMoves
 {
     private const byte TabKey = 0x09;
@@ -25,10 +25,6 @@ internal sealed partial class BoardMoves
         await SettleAsync();
         await Task.Delay(1500);
         await SheetErrorAsync();
-        host.Send(Events.Select(0));
-        await SettleAsync();
-        await Task.Delay(1500);
-        await DisclosureAsync();
     }
 
     // ---- a server's error inside a sheet ----------------------------------------------------------------------
@@ -154,63 +150,6 @@ internal sealed partial class BoardMoves
         }
 
         return Popups().SelectMany(Below).OfType<ContentDialog>().FirstOrDefault();
-    }
-
-    // ---- a disclosure opened by the keyboard ------------------------------------------------------------------
-
-    private async Task DisclosureAsync()
-    {
-        Say("== a disclosure opened and closed by the keyboard");
-        Expander? first = Below(window.Surface).OfType<Expander>().FirstOrDefault(candidate => candidate.ActualHeight > 0);
-        Check("a disclosure is on the board screen", first is not null, first is null ? "no Expander is on the screen" : "found: " + (first.Header as string));
-        if (first is null)
-        {
-            return;
-        }
-
-        // The keyboard starts at the first card's handle and goes with Tab until it stands in the header of a disclosure.
-        Button? start = Below(window.Surface).OfType<Button>().FirstOrDefault(button => Name(button).StartsWith("Move ", StringComparison.Ordinal));
-        Foreground();
-        _ = start?.Focus(FocusState.Keyboard);
-        await Task.Delay(400);
-        string? header = null;
-        for (int step = 0; step < 160 && header is null; step++)
-        {
-            await PressAsync(TabKey);
-            header = DisclosureHeaderWithFocus();
-        }
-
-        Check("Tab reaches a disclosure", header is not null, header is null ? "the focus did not stand in a disclosure's header in 160 presses; it is on " + FocusManager.GetFocusedElement(window.Surface.XamlRoot)?.GetType().Name : "\"" + header + "\"");
-        if (header is null)
-        {
-            return;
-        }
-
-        await PressAsync(SpaceKey);
-        await SettleAsync();
-        await Task.Delay(1500);
-        string? opened = DisclosureHeaderWithFocus();
-        Check("after the disclosure is opened with Space the focus is still on it", opened == header, "the focus is in " + (opened is null ? "no disclosure's header (on " + FocusManager.GetFocusedElement(window.Surface.XamlRoot)?.GetType().Name + ")" : "\"" + opened + "\"") + ", it was in \"" + header + "\"");
-        await ShotAsync("moves-disclosure-open");
-        await PressAsync(SpaceKey);
-        await SettleAsync();
-        await Task.Delay(1500);
-        string? closed = DisclosureHeaderWithFocus();
-        Check("after it is closed with Space the focus is still on it", closed == header, "the focus is in " + (closed is null ? "no disclosure's header (on " + FocusManager.GetFocusedElement(window.Surface.XamlRoot)?.GetType().Name + ")" : "\"" + closed + "\"") + ", it was in \"" + header + "\"");
-    }
-
-    // The label of the disclosure whose header holds the keyboard focus, or none.
-    private string? DisclosureHeaderWithFocus()
-    {
-        foreach (DependencyObject part in Chain(FocusManager.GetFocusedElement(window.Surface.XamlRoot) as DependencyObject))
-        {
-            if (part is Expander expander)
-            {
-                return expander.Header as string ?? Name(expander);
-            }
-        }
-
-        return null;
     }
 
     // ---- real keys --------------------------------------------------------------------------------------------
