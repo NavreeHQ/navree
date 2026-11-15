@@ -255,6 +255,22 @@ every `@navree/*` package carries the same version.
 - Helm reports the real error when the app's templates cannot be built. It used to stop the boot
   saying the app needs `ViewModule`, although the app had it.
 
+## [1.2.4] - 2026-11-15
+
+### Fixed
+
+- A live list the server drew while what it shows was still changing, such as an assistant's
+  conversation drawn while the answer was being written, could stay as it was drawn when the list's
+  script arrived after the live stream had opened: the finished answer never showed until something
+  else changed. The live module now asks a list nobody has answered for yet again every 0.3 seconds
+  for about six seconds, so the list fetches what it missed as soon as its script is there.
+- Navree Native (preview): the store, inbox and board example apps name their person to the
+  framework on every request (the board the team member a visitor views it as, the inbox the agent
+  a visitor works as), so a native client keeps and restores a person's place on them. Before,
+  their answers named nobody and a client restored nothing.
+- The store, inbox and board example apps draw a not-found page inside the app's shell; the
+  inbox's does so without counting its conversations.
+
 ## [1.2.3] - 2026-11-15
 
 ### Upgrading
