@@ -382,11 +382,16 @@ jobs:
           if [ "${{ matrix.device }}" = tablet ]; then orientations="landscape portrait"; fi
           "$adb" shell settings put system accelerometer_rotation 0
           for orientation in $orientations; do
-          # The pixel tablet's own orientation is the wide one; turned a quarter it stands upright.
-          rotation=0
+          # The tablet's image does not turn when the system is told to rotate (its display stays wide),
+          # so upright is the display made 1600 wide and 2560 tall: the window a tablet held upright has.
           name="${{ matrix.device }}"
-          if [ "${{ matrix.device }}" = tablet ] && [ "$orientation" = portrait ]; then rotation=1; name=tablet-portrait; fi
-          "$adb" shell settings put system user_rotation "$rotation"
+          "$adb" shell settings put system user_rotation 0
+          if [ "${{ matrix.device }}" = tablet ] && [ "$orientation" = portrait ]; then
+            name=tablet-portrait
+            "$adb" shell wm size 1600x2560
+          else
+            "$adb" shell wm size reset
+          fi
           sleep 3
           for look in light dark large rtl; do
             night=no; scale=1.0; rtl=0
@@ -421,6 +426,7 @@ jobs:
           "$adb" shell settings put system font_scale 1.0
           sleep 3
           done
+          "$adb" shell wm size reset
           mkdir -p "$RUNNER_TEMP/screens"
           "$adb" pull /data/local/tmp/navree-screens "$RUNNER_TEMP/screens/" || true
           cp "$RUNNER_TEMP"/instrument-*.txt "$RUNNER_TEMP/screens/"
