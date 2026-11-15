@@ -747,21 +747,17 @@ workspace per request: clone the registered `Shell`, set
 .link("Profile", "/profile").action("Sign out", "/sign-out"))`, and apply it
 with `shell.for_request(path, &headers)`. An app made by `navree new` does this
 in one extractor, `Desk` (`src/ui/shell.rs`): take `Desk` where this skill says
-`AppShell`.
+`AppShell`. On the `AppShell` itself, `user_menu(menu)` sets the person at the
+foot for this request, `header_slot(node)` puts a workspace switcher under
+the app's name (`Shell::header_slot` for every page) and `csrf(token)` gives
+the shell's own forms the session's token.
 
 ## What is not shipped
 
 Do not write code for these, and do not stand in for them with raw elements.
 Tell the owner they are coming.
 
-- **A workspace switcher in the shell's sidebar header.**
-  `navree_workspace::WorkspaceSwitcher` draws one; put it beside the page
-  heading (`AppPage::actions`) or in the shell's search slot, and show the
-  workspace's name under the app's with `Shell::context`.
-- **A user menu that follows the request.** `Shell::user` is the same for
-  every request: build the shell per request (see above).
-- **Rich text editing and islands** (a part of a page with its own
-  JavaScript component).
+- **Rich text editing.**
 - **Static files past the app's own stylesheet, fonts and pictures.** The
   content security policy loads styles, scripts, fonts and images only from
   the app's own origin: an `AppSheet`, `AppFont` or `AppImage` is compiled in
@@ -798,7 +794,7 @@ come from the component catalog of the docs
 | Sign-in pages | `AuthPages` (navree-auth): sign-in, sign-up, two-factor and password pages in the app's look, in an `AuthLayout` |
 | Assistant | `Conversation`, `ChatMessage`, `PromptInput`, `ToolCallCard` and `Reasoning`, `ApprovalCard`, `SurfaceFrame`, `Suggestions`, `Sources` and `Citation`, `ThreadList` (the parts of a page where people talk with an assistant; see https://navree.com/docs/ai/generative-ui/) |
 | Charts | the line chart, area chart and bar chart (`Chart::line`, `area`, `bar`), the donut chart (`Donut`, and a pie), `Funnel`, `Sparkline`, and Reports (`Report`, for a date window); radial: `Ring`, `Rings`, `Gauge`, the day clock (`DayClock`); linear: `Meter`, mini columns (`MiniColumns`), a colour strip (`ColorStrip`), a range scale (`RangeScale`); grids: the calendar heat map (`CalendarHeatmap`), the matrix heat map (`MatrixHeatmap`), the relation list (`RelationList`), the scatter chart (`Scatter`); in `navree::ui::charts`. Chart pictures (`ChartImage`, `Tile`, `Block`): a chart drawn as a PNG on the server; the `ui-image` feature, in `navree::ui::image` |
-| Foundations | Foundations (tokens, sizes), Themes, the Theme builder, Icons, Flags, Commands (`Cmd`, `Reply`, `Op`), Regions, Errors and states |
+| Foundations | Foundations (tokens, sizes), Themes, the Theme builder, Icons, Flags, Commands (`Cmd`, `Reply`, `Op`), Regions, Islands (`Island`, `IslandScript`), Errors and states |
 
 Notes on a few: `Tabs` panels can load on first show with `Tab::lazy(src)`;
 `Toast` has four tones, a title and one action; `Message` and `Bubble` draw
@@ -834,7 +830,11 @@ an image (a home-screen widget, an email, a link preview): `ChartImage` draws
 a ring, rings, a gauge, a sparkline or a `Tile` of blocks as a PNG in the
 theme's colours and answers with an `ETag` and `Cache-Control: private,
 no-cache` (`.cache_control(..)` says another); it is the `ui-image` feature of
-`navree`, off by default (https://navree.com/docs/components/chart-image/). The
+`navree`, off by default (https://navree.com/docs/components/chart-image/). An
+`Island` is a part of a page that a script of your own draws in the browser (a
+map, an editor): the script is an `IslandScript` compiled into the app with a
+size ceiling the compiler checks, and the server writes the island's props
+and what shows before the script runs (https://navree.com/docs/ui/islands/). The
 marketing blocks draw a public site from the same app with no script, and
 `View::seo` writes its head
 ([`references/app-and-site-blocks.md`](references/app-and-site-blocks.md)).
