@@ -19,6 +19,13 @@
   min-block-size: 1.5rem;
 }
 
+/* A button a library writes into the body takes the browser's own button colours, in either colour scheme:
+   the page gives a button the colour of the text around it, which is not chosen for a button's own face. */
+[data-slot="app:pad-body"] button {
+  color: ButtonText;
+  background: ButtonFace;
+}
+
 [data-slot="app:pad-line"] {
   margin: 0;
   color: var(--fg-2);
