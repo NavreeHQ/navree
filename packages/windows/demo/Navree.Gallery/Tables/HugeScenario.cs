@@ -147,7 +147,7 @@ internal static class HugeScenario
     {
         Report.Line("== rows100k sideways");
         ListDataTableModel<Customer> model = DemoData.Model();
-        DataTable table = new() { Model = model, Presenter = new TextTablePresenter<Customer>(model), Culture = DemoData.Culture, Caption = "Customers", Margin = new Thickness(12), Width = 640, HorizontalAlignment = HorizontalAlignment.Left };
+        DataTable table = new() { Model = model, Presenter = new TextTablePresenter<Customer>(model), Culture = DemoData.Culture, Caption = "Customers", Margin = new Thickness(12), Width = 820, HorizontalAlignment = HorizontalAlignment.Left };
         window.StageHost.Child = table;
         await Waiting.LoadedAsync(table);
         await Task.Delay(800);

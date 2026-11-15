@@ -214,15 +214,15 @@ internal static class CareScenarios
     // The end of the rows is near and the host was asked once; a refresh with the same count of rows asks again.
     private static async Task RefreshSameCountAsync(MainWindow window)
     {
-        ListDataTableModel<Customer> model = Rows(0, 50);
+        ListDataTableModel<Customer> model = Rows(0, 18);
         model.Later = new DataTableCursor(true, CursorState.Idle);
         List<string> asked = [];
         DataTable table = await ShowAsync(window, model, before: t => t.MoreRequested += (_, e) => asked.Add(e.Direction.ToString()));
         await Task.Delay(1200);
-        Report.Line($"[care-refresh-same-count] 50 rows held, the end is near: asked {asked.Count} time(s): {string.Join(",", asked)}");
-        model.Reset(DemoData.Make(0, 50));
+        Report.Line($"[care-refresh-same-count] 18 rows held, the end is near: asked {asked.Count} time(s): {string.Join(",", asked)}");
+        model.Reset(DemoData.Make(0, 18));
         await Task.Delay(1500);
-        Report.Line($"[care-refresh-same-count] the rows were replaced by 50 others: asked {asked.Count} time(s) in all: {string.Join(",", asked)}; held {model.RowCount}; the view is at {table.Scroller?.VerticalOffset:0.#}");
+        Report.Line($"[care-refresh-same-count] the rows were replaced by 18 others: asked {asked.Count} time(s) in all: {string.Join(",", asked)}; held {model.RowCount}; the view is at {table.Scroller?.VerticalOffset:0.#}");
         await Handshake.StepAsync("care-refresh-same-count", "the table after a refresh with the same count of rows");
     }
 
@@ -302,7 +302,9 @@ internal static class CareScenarios
         int at = model.IndexOfKey(key);
         double stands = (at * table.RowHeight) - scroll.VerticalOffset;
         Report.Line($"[care-late-shape] 30 more rows with a second line and a detail: row {table.RowHeight:0.##} tall, shape {table.Shape}, chevron column {table.HasChevronColumn}; the view is at {scroll.VerticalOffset:0.#} and row {key} (now {at}) stands {stands:0.#} from its top");
-        await Handshake.StepAsync("care-late-shape", "the table after a later page needed a second line and a detail");
+        Scroll(table, (30 * table.RowHeight) - 120);
+        await Task.Delay(900);
+        await Handshake.StepAsync("care-late-shape", "the table after a later page needed a second line and a detail, scrolled to the rows of that page");
     }
 
     private static async Task<WeakReference> ShowAndDropAsync(MainWindow window, ListDataTableModel<Customer> model)
@@ -495,7 +497,7 @@ internal static class CareScenarios
         ListDataTableModel<Customer> model = Rows(0, 100);
         DataTable table = await ShowAsync(window, model, before: t =>
         {
-            t.Width = 640;
+            t.Width = 820;
             t.HorizontalAlignment = HorizontalAlignment.Left;
         });
         Keys.Foreground(window);

@@ -101,6 +101,7 @@ public sealed partial class DataTable
         if (Model is { } attached)
         {
             modelStamp = StampOf(attached);
+            reportedRowCount = attached.RowCount;
         }
     }
 
