@@ -560,7 +560,8 @@ fn list_rows(core: &Core, screen: u64) -> Vec<Value> {
 
 /// An answer's changes are applied whole or not at all: one that would take
 /// the screen past its largest size leaves it as it was, marks it out of date
-/// (it is fetched again), and says so.
+/// (it is fetched again), and says so. What it said that changes nothing on
+/// the screen (its toast) is still said.
 #[test]
 fn an_answer_that_would_pass_the_largest_screen_changes_nothing() {
     let (mut core, screen) = full_screen(None);
@@ -601,10 +602,18 @@ fn an_answer_that_would_pass_the_largest_screen_changes_nothing() {
         "{:?}",
         update.effects
     );
-    // And the toast of an answer that failed is not shown beside its failure.
+    // The toast costs nothing on the screen, so it is shown; what is said of
+    // the screen is that it is loading, not that the write failed.
+    assert!(
+        update.effects.iter().any(
+            |effect| matches!(effect, Effect::Message(message) if message.text.as_deref() == Some("Saved"))
+        ),
+        "{:?}",
+        update.effects
+    );
     assert!(
         !update.effects.iter().any(
-            |effect| matches!(effect, Effect::Message(message) if message.text.as_deref() == Some("Saved"))
+            |effect| matches!(effect, Effect::Message(message) if message.notice == Some(navree_native_core::Notice::Failed))
         ),
         "{:?}",
         update.effects
