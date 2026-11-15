@@ -32,6 +32,6 @@ public sealed record ShellOptions
     /// <summary>What the app says about its place in Windows: its own scheme, its instance key, what its jump list holds.</summary>
     public PlaceOptions Place { get; init; } = new();
 
-    /// <summary>The names of the kinds this build does not draw, which the core then shows in the web view.</summary>
-    public IReadOnlyList<string> Undrawable { get; init; } = [];
+    /// <summary>The names of the kinds this build does not draw, which the core then shows in the web view: the kinds the renderer has no drawing for, unless the app says otherwise.</summary>
+    public IReadOnlyList<string> Undrawable { get; init; } = Navree.Design.Undrawable.Kinds;
 }
