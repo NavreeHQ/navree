@@ -137,6 +137,7 @@ public sealed partial class FigureView : KindControl
             Content = stack,
             Padding = new Thickness(8),
             HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             VerticalContentAlignment = VerticalAlignment.Top,
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
