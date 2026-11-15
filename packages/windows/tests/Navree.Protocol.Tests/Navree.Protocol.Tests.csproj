@@ -20,7 +20,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Shared\Repository.cs" Link="Repository.cs" />
+    <Compile Include="..\Shared\Expect.cs" Link="Expect.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+    <Using Include="Navree.Tests" />
   </ItemGroup>
 
 </Project>

@@ -3,12 +3,6 @@ using System.Text.Json;
 
 namespace Navree.Protocol.Tests;
 
-/// <summary>Always true or false, said where the condition is not a comparison the test framework has a method for.</summary>
-internal static class Expect
-{
-    internal static void That(bool condition, string because) => Assert.IsTrue(condition, because);
-}
-
 /// <summary>
 /// The generated models read every example answer the protocol keeps and every
 /// answer recorded from the store demo, and an answer from a newer server, as an

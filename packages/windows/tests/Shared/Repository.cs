@@ -1,13 +1,13 @@
-namespace Navree.Protocol.Tests;
+namespace Navree.Tests;
 
 /// <summary>Finds the files the protocol and the other clients keep in the repository: examples, recorded answers, vectors.</summary>
-internal static class Repository
+public static class Repository
 {
     /// <summary>The repository's root: the folder above <c>packages</c> that holds the workspace's <c>Cargo.toml</c>.</summary>
-    internal static string Root { get; } = FindRoot();
+    public static string Root { get; } = FindRoot();
 
     /// <summary>The JSON files in a folder of the repository, by path.</summary>
-    internal static string[] Json(string folder)
+    public static string[] Json(string folder)
     {
         string[] files = Directory.GetFiles(Path.Combine(Root, folder), "*.json");
         Array.Sort(files, StringComparer.Ordinal);
