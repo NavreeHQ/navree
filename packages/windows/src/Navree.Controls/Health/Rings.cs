@@ -99,7 +99,7 @@ public sealed partial class RingView : KindControl
         double ideal = RingRules.Diameter(Prominence) * TextScale.Capped(RingRules.Growth(Prominence));
         StackPanel stack = new() { Spacing = Prominence == Models.Prominence.High ? 10 : 6 };
         string name = ring.Label ?? string.Empty;
-        string value = SpeechRules.Value(ring.Summary ?? (ring.Value is null ? "No reading" : RingRules.Centre(ring)), ring.Label);
+        string value = SpeechRules.Value(ring.Summary ?? (ring.Value is null ? "Not measured" : RingRules.Centre(ring)), ring.Label);
         PlotSurface plot = new()
         {
             Height = ideal,

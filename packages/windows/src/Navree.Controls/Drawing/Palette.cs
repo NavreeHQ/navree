@@ -46,8 +46,8 @@ internal sealed class Palette
     /// <summary>A faint wash of the text colour, to lay over what is being read out.</summary>
     internal Brush Wash =>
         Application.Current.Resources.TryGetValue("TextFillColorPrimaryBrush", out object? value) && value is SolidColorBrush found
-            ? new SolidColorBrush(found.Color) { Opacity = 0.1 }
-            : new SolidColorBrush(Microsoft.UI.Colors.Gray) { Opacity = 0.1 };
+            ? new SolidColorBrush(found.Color) { Opacity = 0.06 }
+            : new SolidColorBrush(Microsoft.UI.Colors.Gray) { Opacity = 0.06 };
 
     /// <summary>The surface of a card.</summary>
     internal Brush Card => Resource("CardBackgroundFillColorDefaultBrush");
