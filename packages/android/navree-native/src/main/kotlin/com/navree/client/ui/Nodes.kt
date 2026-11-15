@@ -759,13 +759,7 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
         ) {
             CompositionLocalProvider(LocalInLine provides false) {
                 Roomed(room) {
-                    for (child in shown) {
-                        if (CompositionRules.centresInColumn(node, child)) {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { NodeView(child, place) }
-                        } else {
-                            NodeView(child, place)
-                        }
-                    }
+                    for (child in shown) NodeView(child, place)
                 }
             }
         }

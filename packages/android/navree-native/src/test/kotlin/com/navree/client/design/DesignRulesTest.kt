@@ -605,10 +605,13 @@ class BoardRulesTest {
 
 class ColumnAlignTest {
     @Test
-    fun a_stack_that_turns_starts_its_parts_at_the_start_when_it_is_a_column() {
+    fun a_stack_that_turns_places_its_parts_by_its_align_when_it_is_a_column() {
         val card = Navree.Stack(align = Navree.Align.CENTER, wide = Navree.Axis.HORIZONTAL)
-        assertEquals(Navree.Align.START, CompositionRules.columnAlign(card))
-        assertFalse(CompositionRules.fillsWidth(card, Navree.Axis.VERTICAL, inLine = false))
+        assertEquals(Navree.Align.CENTER, CompositionRules.columnAlign(card))
+        assertTrue(CompositionRules.fillsWidth(card, Navree.Axis.VERTICAL, inLine = false))
+        assertEquals(Navree.Align.END, CompositionRules.columnAlign(card.copy(align = Navree.Align.END)))
+        assertEquals(Navree.Align.START, CompositionRules.columnAlign(card.copy(align = Navree.Align.START)))
+        assertNull("no align: the start", CompositionRules.columnAlign(card.copy(align = null)))
         val plain = Navree.Stack(align = Navree.Align.CENTER)
         assertEquals(Navree.Align.CENTER, CompositionRules.columnAlign(plain))
         assertTrue(CompositionRules.fillsWidth(plain, Navree.Axis.VERTICAL, inLine = false))

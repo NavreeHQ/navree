@@ -25,16 +25,6 @@ class CompositionRulesTest {
     }
 
     @Test
-    fun a_dial_of_a_stack_that_turns_stands_in_the_middle_of_its_column_and_words_do_not() {
-        val turning = Navree.Stack(axis = Navree.Axis.VERTICAL, wide = Navree.Axis.HORIZONTAL, align = Navree.Align.CENTER)
-        val ring = Navree.Ring(max = 100.0, value = 83.0)
-        assertTrue(CompositionRules.centresInColumn(turning, ring))
-        assertFalse("words start at the start", CompositionRules.centresInColumn(turning, Navree.Text(value = "Five pillars")))
-        assertFalse("a stack that does not turn centres by its own rule", CompositionRules.centresInColumn(turning.copy(wide = null), ring))
-        assertFalse("not asked to centre", CompositionRules.centresInColumn(turning.copy(align = null), ring))
-    }
-
-    @Test
     fun a_card_has_the_systems_padding_unless_the_page_gives_steps() {
         assertEquals(16, CompositionRules.cardPadDp(null))
         assertEquals(24, CompositionRules.cardPadDp(6))
