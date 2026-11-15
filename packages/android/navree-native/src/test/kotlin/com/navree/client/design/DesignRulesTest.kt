@@ -523,10 +523,10 @@ class BoardRulesTest {
         val button = Navree.Button(action = Navree.Action.Submit(), label = "Restock")
         assertTrue(CompositionRules.grows(field))
         assertFalse(CompositionRules.grows(button))
-        assertEquals(144f, CompositionRules.leastAcrossDp(field, 1f), 0.001f)
+        // A line with a field in it is not turned (that would measure it twice before the room is known).
         val line = Navree.Stack(axis = Navree.Axis.HORIZONTAL, children = listOf(field, button))
-        assertEquals(Navree.Axis.HORIZONTAL, CompositionRules.laidAxis(line, line.children, 380f, 8f, 1f))
-        assertEquals("three fields do not fit in a line of a phone", Navree.Axis.VERTICAL, CompositionRules.laidAxis(line.copy(children = listOf(field, field, field)), listOf(field, field, field), 380f, 8f, 1f))
+        assertFalse(CompositionRules.turns(line))
+        assertEquals(380f - 8f, CompositionRules.roomLeftDp(380f, line.children, 8f, 1f), 0.001f)
     }
 }
 
