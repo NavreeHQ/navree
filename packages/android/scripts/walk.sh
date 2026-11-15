@@ -205,10 +205,13 @@ dump
 shot search-turned
 check "the typed words stay when the device is turned" ui contains Kaur
 rotate 0
+# The keyboard goes with the first back, the search view with the bar's own.
 "$ADB" shell input keyevent KEYCODE_BACK
 sleep 1
-"$ADB" shell input keyevent KEYCODE_BACK
-sleep 1
+tap Back
+sleep 2
+dump
+check "the search view is closed" bash -c "! python3 -I '$HERE/ui.py' '$OUT/window.xml' has Kaur"
 
 say "== an order opens and closes"
 dump
@@ -264,6 +267,11 @@ fi
 # ---------------------------------------------------------------- the system ends the app
 
 say "== the app ended by the system, and opened again, with no network"
+# The restock left the keyboard up and the search view open (it takes the focus): back closes them.
+"$ADB" shell input keyevent KEYCODE_BACK
+sleep 1
+dump
+if ui has Back > /dev/null 2>&1; then tap Back; sleep 1; fi
 tap Orders
 check "Orders is the place it was in" wait_for Fulfilment 20
 "$ADB" shell input keyevent KEYCODE_HOME
