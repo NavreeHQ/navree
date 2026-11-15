@@ -1,0 +1,114 @@
+{
+  "about": "The shell kept on the device draws the app, not a person. Before this launch's shell has answered, the app's name and its top-level destinations (label and icon) are drawn, and nothing else the shell said: not the context line, not the group labels, not the items below the top level, not the counts, not the person or their menu. When this launch's shell request does not give a shell (a 404, a 5xx, an answer that does not read, no network), the kept shell is replaced by the blank one and stays so until a real shell answers; when it answers with one, everything it says is drawn.",
+  "config": {"cache":{"persist":true}},
+  "steps": [
+    {
+      "note": "The app starts, the day after Ravneet Kaur used it.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"cache_read","key":"boot"},
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell kept on the device is drawn at once: the app's name and its two top-level destinations, and nothing of her or of what the shell said for her.",
+      "send": {"t":"cache","key":"boot"},
+      "body": "made/kept-boot-workspace.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/app/name","is":"Charkha Supply Co."},
+        {"at":"/app/context","is":null},
+        {"at":"/app/user","is":null},
+        {"at":"/destinations/0/label","is":"Dashboard"},
+        {"at":"/destinations/0/icon/name","is":"layout-dashboard"},
+        {"at":"/destinations/1/label","is":"Orders"},
+        {"at":"/destinations/0/group","is":null},
+        {"at":"/destinations/1/group","is":null},
+        {"at":"/destinations/1/badge","is":null},
+        {"at":"/destinations/1/items","is":[]}
+      ]
+    },
+    {
+      "note": "This launch's shell request is answered with a 404: the kept shell is replaced by the blank one, which has no context line and one destination, the app's first page.",
+      "send": {"t":"response","request":1,"status":404,"content_type":"text/html"},
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/app/name","is":""},
+        {"at":"/app/context","is":null},
+        {"at":"/app/user","is":null},
+        {"at":"/destinations/0/label","is":""},
+        {"at":"/destinations/0/items","is":[]},
+        {"at":"/destinations/1","is":null}
+      ]
+    },
+    {
+      "note": "Another launch: the same kept shell is drawn again, the same way.",
+      "restart": true,
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"cache_read","key":"boot"},
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"cache","key":"boot"},
+      "body": "made/kept-boot-workspace.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/app/context","is":null},
+        {"at":"/destinations/1/items","is":[]}
+      ]
+    },
+    {
+      "note": "This launch's shell answers with a shell, and names her: everything it says is drawn, the context line, the group, the count, the item below the top level, her menu.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "made/shell-workspace.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": [
+          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Acme Production\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"label\\\": \\\"Admin\\\",\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Dashboard\\\",\\n      \\\"icon\\\": {\\n       \\\"name\\\": \\\"layout-dashboard\\\",\\n       \\\"paths\\\": [\\n        \\\"M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z\\\"\\n       ]\\n      },\\n      \\\"href\\\": \\\"/\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Orders\\\",\\n      \\\"icon\\\": {\\n       \\\"name\\\": \\\"shopping-bag\\\",\\n       \\\"paths\\\": [\\n        \\\"M16 10a4 4 0 0 1-8 0\\\"\\n       ]\\n      },\\n      \\\"href\\\": \\\"/orders\\\",\\n      \\\"badge\\\": \\\"12\\\",\\n      \\\"items\\\": [\\n       {\\n        \\\"label\\\": \\\"Ravneet's orders\\\",\\n        \\\"href\\\": \\\"/orders/mine\\\",\\n        \\\"badge\\\": \\\"3\\\"\\n       }\\n      ]\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"user\\\": {\\n  \\\"name\\\": \\\"Ravneet Kaur\\\",\\n  \\\"email\\\": \\\"ravneet.kaur@example.com\\\",\\n  \\\"menu\\\": [\\n   {\\n    \\\"t\\\": \\\"button\\\",\\n    \\\"label\\\": \\\"Sign out\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"request\\\",\\n     \\\"method\\\": \\\"post\\\",\\n     \\\"href\\\": \\\"/sign-out\\\"\\n    }\\n   }\\n  ]\\n }\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"id\":\"0193a4b2-0000-7000-8000-00000000ra01\",\"name\":\"Ravneet Kaur\",\"email\":\"ravneet.kaur@example.com\"}},\"build\":\"152bd84abf4d\"}"}
+        ]
+      },
+      "check": [
+        {"at":"/app/context","is":"Acme Production"},
+        {"at":"/app/user/name","is":"Ravneet Kaur"},
+        {"at":"/destinations/0/group","is":"Admin"},
+        {"at":"/destinations/1/badge","is":"12"},
+        {"at":"/destinations/1/items/0/label","is":"Ravneet's orders"}
+      ]
+    }
+  ]
+}

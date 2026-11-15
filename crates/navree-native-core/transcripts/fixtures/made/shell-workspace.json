@@ -1,0 +1,59 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "name": "Charkha Supply Co.",
+ "context": "Acme Production",
+ "home": "/",
+ "nav": {
+  "groups": [
+   {
+    "label": "Admin",
+    "items": [
+     {
+      "label": "Dashboard",
+      "icon": {
+       "name": "layout-dashboard",
+       "paths": [
+        "M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z"
+       ]
+      },
+      "href": "/"
+     },
+     {
+      "label": "Orders",
+      "icon": {
+       "name": "shopping-bag",
+       "paths": [
+        "M16 10a4 4 0 0 1-8 0"
+       ]
+      },
+      "href": "/orders",
+      "badge": "12",
+      "items": [
+       {
+        "label": "Ravneet's orders",
+        "href": "/orders/mine",
+        "badge": "3"
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "user": {
+  "name": "Ravneet Kaur",
+  "email": "ravneet.kaur@example.com",
+  "menu": [
+   {
+    "t": "button",
+    "label": "Sign out",
+    "action": {
+     "t": "request",
+     "method": "post",
+     "href": "/sign-out"
+    }
+   }
+  ]
+ }
+}
