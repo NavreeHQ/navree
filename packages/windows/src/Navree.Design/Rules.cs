@@ -222,6 +222,16 @@ public static class Words
 /// <summary>Which of Windows' own icons (Segoe Fluent Icons) stands for an icon a page names.</summary>
 public static class SystemGlyphs
 {
+    // Names the web's icon set has more than one of for the same thing: each is drawn as the one it is another name for.
+    private static readonly Dictionary<string, string> Aliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["bar-chart-3"] = "bar-chart", ["chart-bar"] = "bar-chart", ["chart-column"] = "bar-chart",
+        ["line-chart"] = "chart", ["chart-line"] = "chart",
+        ["check-check"] = "check", ["check-circle"] = "check", ["circle-check"] = "check", ["circle-plus"] = "plus",
+        ["dumbbell"] = "fitness", ["receipt-text"] = "receipt", ["share-2"] = "share", ["square-kanban"] = "kanban",
+        ["trash-2"] = "trash", ["bed"] = "sleep", ["search-x"] = "search",
+    };
+
     private static readonly Dictionary<string, string> Names = new(StringComparer.OrdinalIgnoreCase)
     {
         ["home"] = "", ["house"] = "", ["dashboard"] = "", ["overview"] = "", ["today"] = "",
@@ -238,6 +248,148 @@ public static class SystemGlyphs
         ["heart"] = "", ["activity"] = "", ["moon"] = "", ["sleep"] = "", ["fitness"] = "",
         ["check"] = "", ["close"] = "", ["x"] = "", ["more"] = "", ["menu"] = "", ["filter"] = "",
         ["info"] = "", ["alert"] = "", ["warning"] = "", ["lock"] = "", ["key"] = "", ["globe"] = "",
+        // Names a page sends beyond the first rows, each with the symbol of the same meaning (looked at in the font's own sheet).
+        ["footprints"] = "\uE726",
+        ["person-standing"] = "\uE726",
+        ["bike"] = "\uE726",
+        ["walk"] = "\uE726",
+        ["run"] = "\uE726",
+        ["sunrise"] = "\uE706",
+        ["sun"] = "\uE706",
+        ["zap"] = "\uE945",
+        ["flame"] = "\uECAD",
+        ["droplet"] = "\uEB42",
+        ["droplets"] = "\uEB42",
+        ["flask-round"] = "\uEB42",
+        ["thermometer"] = "\uE9CA",
+        ["mountain"] = "\uE9D2",
+        ["waves"] = "\uE9D2",
+        ["waves-horizontal"] = "\uE9D2",
+        ["wind"] = "\uE753",
+        ["cloud"] = "\uE753",
+        ["heart-pulse"] = "\uE95E",
+        ["brain"] = "\uE9D9",
+        ["timer"] = "\uE916",
+        ["stopwatch"] = "\uE916",
+        ["hourglass"] = "\uE823",
+        ["clock-4"] = "\uE917",
+        ["clock-3"] = "\uE917",
+        ["radio"] = "\uEC44",
+        ["volume-2"] = "\uE767",
+        ["volume"] = "\uE767",
+        ["sparkles"] = "\uE794",
+        ["shield-check"] = "\uE705",
+        ["shield"] = "\uE705",
+        ["camera"] = "\uE722",
+        ["image"] = "\uE91B",
+        ["truck"] = "\uE7EC",
+        ["car"] = "\uE7EC",
+        ["map"] = "\uE800",
+        ["map-pin"] = "\uE707",
+        ["route"] = "\uE816",
+        ["layout-grid"] = "\uE8A9",
+        ["list"] = "\uE8FD",
+        ["folder"] = "\uE8B7",
+        ["file"] = "\uE7C3",
+        ["form"] = "\uE7C3",
+        ["file-text"] = "\uE8A5",
+        ["store"] = "\uE719",
+        ["gift"] = "\uE719",
+        ["candy"] = "\uE719",
+        ["building"] = "\uE731",
+        ["building-2"] = "\uEC0B",
+        ["credit-card"] = "\uE8C7",
+        ["wallet"] = "\uE8C7",
+        ["banknote"] = "\uE8C7",
+        ["indian-rupee"] = "\uE8C7",
+        ["key"] = "\uE8D7",
+        ["eye"] = "\uE7B3",
+        ["view"] = "\uE7B3",
+        ["eye-off"] = "\uE7B3",
+        ["history"] = "\uE81C",
+        ["arrow-left"] = "\uE72B",
+        ["arrow-right"] = "\uE72A",
+        ["chevron-right"] = "\uE76C",
+        ["chevron-down"] = "\uE70D",
+        ["chevron-up"] = "\uE70E",
+        ["trending-up"] = "\uEAFC",
+        ["trending-down"] = "\uEAFC",
+        ["help-circle"] = "\uE9CE",
+        ["circle-help"] = "\uE9CE",
+        ["alert-triangle"] = "\uE7BA",
+        ["triangle-alert"] = "\uE7BA",
+        ["alert-circle"] = "\uE783",
+        ["circle-alert"] = "\uE783",
+        ["undo"] = "\uE7A7",
+        ["undo-2"] = "\uE7A7",
+        ["reply"] = "\uE97A",
+        ["send"] = "\uE724",
+        ["paperclip"] = "\uE723",
+        ["phone"] = "\uE717",
+        ["smartphone"] = "\uE8EA",
+        ["globe"] = "\uE774",
+        ["log-out"] = "\uE7E8",
+        ["message-square"] = "\uE8BD",
+        ["message-circle"] = "\uE8BD",
+        ["messages-square"] = "\uE8F2",
+        ["star"] = "\uE734",
+        ["package-check"] = "\uE7B8",
+        ["package-plus"] = "\uE7B8",
+        ["archive"] = "\uE7B8",
+        ["ban"] = "\uE733",
+        ["refresh-cw"] = "\uE72C",
+        ["rotate-cw"] = "\uE72C",
+        ["copy"] = "\uE8C8",
+        ["printer"] = "\uE749",
+        ["pen"] = "\uE70F",
+        ["square-pen"] = "\uE70F",
+        ["signature"] = "\uE70F",
+        ["list-filter"] = "\uE71C",
+        ["arrow-up-down"] = "\uE8CB",
+        ["ellipsis"] = "\uE712",
+        ["ellipsis-vertical"] = "\uE712",
+        ["more-vertical"] = "\uE712",
+        ["more-horizontal"] = "\uE712",
+        ["settings-2"] = "\uE713",
+        ["circle-user"] = "\uE77B",
+        ["user-round"] = "\uE77B",
+        ["users-round"] = "\uE716",
+        ["tags"] = "\uE8EC",
+        ["shirt"] = "\uE8EC",
+        ["cup-soda"] = "\uEC32",
+        ["coffee"] = "\uEC32",
+        ["soup"] = "\uEC09",
+        ["cooking-pot"] = "\uEC09",
+        ["cookie"] = "\uEC09",
+        ["milk"] = "\uEC09",
+        ["salad"] = "\uEC09",
+        ["utensils"] = "\uEC09",
+        ["utensils-crossed"] = "\uEC09",
+        ["flower"] = "\uEC0A",
+        ["rose"] = "\uEC0A",
+        ["wheat"] = "\uEC0A",
+        ["leaf"] = "\uEC0A",
+        ["bug"] = "\uEBE8",
+        ["lamp"] = "\uE82F",
+        ["layers"] = "\uE81E",
+        ["palette"] = "\uE790",
+        ["ribbon"] = "\uECA7",
+        ["scale"] = "\uE9E9",
+        ["type"] = "\uE8D2",
+        ["columns"] = "\uE736",
+        ["gauge"] = "\uEC48",
+        ["pie-chart"] = "\uEB05",
+        ["flag"] = "\uE7C1",
+        ["shopping-cart"] = "\uE7BF",
+        ["date"] = "\uE787",
+        ["calendar-days"] = "\uE787",
+        ["file-bar-chart"] = "\uE9F9",
+        ["library"] = "\uE8F1",
+        ["images"] = "\uE8B9",
+        ["thumbs-up"] = "\uE8E1",
+        ["list-checks"] = "\uE9A4",
+        ["link"] = "\uE71B",
+        ["external-link"] = "\uE8A7",
     };
 
     /// <summary>The glyph for a page's icon name, or the one for a page when the name maps nowhere.</summary>
@@ -246,20 +398,40 @@ public static class SystemGlyphs
     /// <returns>A character of Segoe Fluent Icons.</returns>
     public static string For(string? name, string? label = null)
     {
-        if (name is not null && Names.TryGetValue(name.Trim(), out string? found))
+        if (name is not null && Find(name) is { } found)
         {
             return found;
         }
 
         foreach (string word in (label ?? string.Empty).Split([' ', '-', '_', '/'], StringSplitOptions.RemoveEmptyEntries))
         {
-            if (Names.TryGetValue(word, out string? byLabel))
+            if (Find(word) is { } byLabel)
             {
                 return byLabel;
             }
         }
 
-        return "";
+        // A name that is still unknown is a small neutral dot, never a document or any shape that says something it does not mean.
+        return NeutralDot;
+    }
+
+    /// <summary>The glyph drawn for an icon whose name the client does not know.</summary>
+    public const string NeutralDot = "\uECCC";
+
+    /// <summary>Whether the client has a symbol for an icon name.</summary>
+    /// <param name="name">The icon's name.</param>
+    /// <returns>Whether the name is in the map.</returns>
+    public static bool Has(string name) => Find(name) is not null;
+
+    private static string? Find(string name)
+    {
+        string key = name.Trim();
+        if (Names.TryGetValue(key, out string? found))
+        {
+            return found;
+        }
+
+        return Aliases.TryGetValue(key, out string? other) && Names.TryGetValue(other, out string? aliased) ? aliased : null;
     }
 
     /// <summary>The glyph of a standard action.</summary>
