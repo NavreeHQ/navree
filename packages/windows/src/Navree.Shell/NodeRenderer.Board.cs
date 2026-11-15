@@ -179,6 +179,7 @@ internal sealed partial class NodeRenderer
             Content = words,
             Style = Look.Ramp("TextBlockButtonStyle"),
             Padding = new Thickness(0, 2, 0, 2),
+            MinHeight = 24,
             HorizontalAlignment = HorizontalAlignment.Left,
             HorizontalContentAlignment = HorizontalAlignment.Left,
         };

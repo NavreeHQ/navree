@@ -152,8 +152,14 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
         int before = RowsHeld();
         Navree.Controls.DataTableCellRef? chosen = table.ActiveCell;
         Say("the active cell before End: " + Words(chosen));
+
+        // End in a grid goes to the last column of the row; Control and End goes to the last row, where more rows are asked for.
         Foreground();
+        keybd_event(0x11, 0, 0, UIntPtr.Zero);
+        await Task.Delay(60);
         Press(End);
+        await Task.Delay(60);
+        keybd_event(0x11, 0, KeyUp, UIntPtr.Zero);
         await Task.Delay(200);
 
         // The end is where the table asks for more rows; they arrive, and the person is where they were: the same cell, the focus in the table.
@@ -168,9 +174,9 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
         Navree.Controls.DataTableCellRef? afterRows = tableAfter?.ActiveCell;
         Check("rows arrived when the end was reached", RowsHeld() > before, before + " rows held, then " + RowsHeld().ToString(CultureInfo.InvariantCulture));
         Check("the active cell is the same after the rows arrived", atEnd is not null && afterRows == atEnd, "at the end " + Words(atEnd) + ", after the rows " + Words(afterRows));
-        Check("the focus is in the table after the rows arrived", tableAfter is not null && FocusIsIn(tableAfter), "focus is on " + FocusedWords());
+        Check("the focus is on a cell of the table after the rows arrived", tableAfter is not null && FocusIsIn(tableAfter) && Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(window.Surface.XamlRoot) is FrameworkElement { } cellFocus && cellFocus.GetType().Name == "DataTableCell", "focus is on " + FocusedWords());
         int afterEnd = RowsHeld();
-        Check("End with a cell chosen went to the end and asked for more rows", afterEnd >= before, before + " rows held, then " + afterEnd.ToString(CultureInfo.InvariantCulture));
+        Check("Control and End with a cell chosen went to the end and rows came", afterEnd > before, before + " rows held, then " + afterEnd.ToString(CultureInfo.InvariantCulture));
         for (int page = 0; page < 6; page++)
         {
             Press(PageDown);
@@ -179,7 +185,7 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
 
         await Task.Delay(2000);
         int afterPages = RowsHeld();
-        Check("Page Down kept the view at the end and more rows came", afterPages >= afterEnd, afterEnd + " rows held, then " + afterPages.ToString(CultureInfo.InvariantCulture));
+        Check("Page Down kept the view at the end and more rows came", afterPages > afterEnd, afterEnd + " rows held, then " + afterPages.ToString(CultureInfo.InvariantCulture));
     }
 
     // Letters are typed one at a time into the table's search box, each long enough for the core's answer to come and the page to be
@@ -266,7 +272,10 @@ internal sealed class TableHands(ShellHost host, ShellWindow window, string fold
         Say("the active cell before the right click: " + Words(activeBefore) + ", after: " + Words(TableNow()?.ActiveCell));
         Say("open over the window: " + string.Join(", ", VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Select(popup => popup.Child?.GetType().Name ?? "nothing")) + "; menus in them: " + Popups().SelectMany(Below).OfType<MenuFlyoutPresenter>().Count());
         List<MenuFlyoutItem> items = [.. Popups().SelectMany(Below).OfType<MenuFlyoutItem>()];
-        Check("a right click on a row opens its menu", items.Count > 0, "items: " + string.Join(", ", items.Select(item => item.Text + (item.IsEnabled ? string.Empty : " (disabled)"))));
+
+        // A row has a menu when the core sent it actions: the orders' rows carry none (their cells hold a form with the order's number as a button), so no menu is right.
+        bool rowsHaveActions = host.State.FrontScreen?.Screen is Models.Screen shown && Tree.Nodes(shown).OfType<Models.Table>().Any(table => table.Rows.Any(row => row.Actions.Count > 0));
+        Check("a right click on a row opens a menu exactly when the rows carry actions", (items.Count > 0) == rowsHaveActions, "rows carry actions: " + rowsHaveActions + "; items: " + string.Join(", ", items.Select(item => item.Text + (item.IsEnabled ? string.Empty : " (disabled)"))));
         await ShotAsync("hands-row-menu");
         MenuFlyoutItem? chosen = items.FirstOrDefault(item => item.IsEnabled);
         if (chosen is null)
