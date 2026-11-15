@@ -59,7 +59,8 @@ pub struct StorageOptions {
     /// The name of the default disk (default `local`).
     pub default: String,
     /// The disks, by name (`[A-Za-z0-9_-]`). Each has a `driver`: `local`,
-    /// `memory`, `s3`, `gcs` or `azure`.
+    /// `memory`, `s3`, `gcs`, `azure` or the name of a driver a module
+    /// registers with `m.disk_driver`.
     pub disks: BTreeMap<String, DiskConfig>,
     /// An absolute base URL (`https://api.example.com`) prepended to the
     /// links the app serves itself ([temporary URLs](crate::Disk::temporary_url)

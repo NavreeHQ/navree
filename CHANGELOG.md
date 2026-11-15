@@ -97,8 +97,12 @@ every `@navree/*` package carries the same version.
   `mail.transport` name that no module registers as a mail transport keeps
   `unknown mail transport (expected ..)`, and so does a bare built-in type such as `smtp`); a
   notification that lists a channel no module adds fails that delivery, which is recorded as
-  failed. `config:check` reports the same registrations and settings in the same words without
-  booting the app (only the boot checks a channel's registration), and `config:schema` lists the
+  failed. `config:check` reports the same problems of the registrations and of the setting each
+  kind reads, in the same words, without booting the app. It reads the names in a failover's list
+  and in `mail.transports` only as the `mail` section is read, where an unknown one is
+  `unknown mail transport (expected ..)` as at boot; it does not check the registration of a
+  notification channel, a registration that takes the name of a key of the section of a module
+  given its options in code, or a driver's factory: only the boot does. `config:schema` lists the
   built-in and registered names of `cache.store`, `queue.driver`, `session.store`,
   `realtime.backplane`, `notify.sms.driver`, `notify.whatsapp.driver` and `search.engine`. A
   factory's error is shown as it wrote it in the boot error, so it must not contain a secret from
