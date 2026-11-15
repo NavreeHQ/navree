@@ -306,6 +306,9 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
     val downWords = stringResource(R.string.navree_move_down)
     val toWords = targets.map { (_, name) -> stringResource(R.string.navree_move_to, name) }
 
+    // Where each card stands, asked once per answer and not once per card (a lane of thousands would search its ids for each).
+    val places = remember(ids) { ids.withIndex().associate { it.value to it.index } }
+
     fun move(item: String, to: Navree.List, before: String?) {
         val from = listId ?: return
         val target = to.id ?: return
@@ -313,7 +316,7 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
     }
 
     fun step(item: String, steps: Int) {
-        val landing = ReorderRules.landing(ids, ids.indexOf(item), steps) ?: return
+        val landing = ReorderRules.landing(ids, places[item] ?: -1, steps) ?: return
         move(item, node, landing.before)
     }
 
@@ -328,7 +331,7 @@ internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = M
                 continue
             }
             val id = child.id ?: continue
-            val index = ids.indexOf(id)
+            val index = places[id] ?: -1
             val up = index > 0
             val down = index in 0 until ids.lastIndex
             val moves = buildList {
