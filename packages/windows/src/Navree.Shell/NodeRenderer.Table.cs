@@ -160,10 +160,14 @@ internal sealed partial class NodeRenderer
             panel.Children.Add(Look.Label(table.Caption, "BodyStrongTextBlockStyle"));
         }
 
+        int toolbarFrom = current!.Children.Count;
         if (table.Query is not null && TableToolbar(table.Query) is { } toolbar)
         {
             view.Toolbar = toolbar;
         }
+
+        // The fields of the bar are the records drawn for it, in the order they were drawn: what an answer brings up to date is found by place.
+        List<Drawn> toolbarRecords = [.. current.Children.Skip(toolbarFrom)];
 
         panel.Children.Add(view);
 
@@ -177,7 +181,7 @@ internal sealed partial class NodeRenderer
                 return false;
             }
 
-            if (!PageRules.Same(QueryNode(previous), QueryNode(next)) && !UpdateToolbar(me, previous, next))
+            if (!PageRules.Same(QueryNode(previous), QueryNode(next)) && !UpdateToolbar(toolbarRecords, next))
             {
                 return false;
             }
@@ -210,28 +214,35 @@ internal sealed partial class NodeRenderer
         && previous.Columns.Count == next.Columns.Count
         && previous.Columns.Select(column => column.Key ?? column.Label).SequenceEqual(next.Columns.Select(column => column.Key ?? column.Label));
 
-    // The fields of the query form are drawn in the bar above the table and are brought up to date where they stand; a query with other fields is a table drawn again.
-    private bool UpdateToolbar(Drawn me, Models.Table previous, Models.Table next)
+    // The fields of the query form are drawn in the bar above the table and stand: each is the same control while only its starting value changed, and
+    // what the screen holds for it is shown by its handle. A query with other fields, or a field that changed otherwise, is a table drawn again.
+    private static bool UpdateToolbar(List<Drawn> records, Models.Table next)
     {
-        List<Models.Node> was = QueryFields(previous.Query!);
         List<Models.Node> now = QueryFields(next.Query!);
-        if (was.Count != now.Count)
+        if (records.Count != now.Count)
         {
             return false;
         }
 
-        for (int at = 0; at < was.Count; at++)
+        for (int at = 0; at < now.Count; at++)
         {
-            Drawn? record = me.Children.FirstOrDefault(child => ReferenceEquals(child.Node, was[at]));
-            if (record is null)
+            bool same = (records[at].Node, now[at]) switch
+            {
+                (Models.Field was, Models.Field is1) => PageRules.Same(BareField(was), BareField(is1)),
+                (var was, var is1) => PageRules.Same(was, is1),
+            };
+            if (!same)
             {
                 return false;
             }
-
-            _ = Refresh(record, now[at]);
         }
 
-        return !Failed;
+        for (int at = 0; at < now.Count; at++)
+        {
+            records[at].Node = now[at];
+        }
+
+        return true;
     }
 
     // The nodes the query form is drawn from, in the order they are drawn: the search field, then the rest.
@@ -389,6 +400,7 @@ internal sealed class ProtocolTableModel : IDataTableModel
     private const int Sample = 40;
 
     private Models.Table table;
+    private ScreenView applied;
     private DataTableColumn[] columns;
     private readonly Dictionary<string, int> places = new(StringComparer.Ordinal);
     private List<Models.TableRow> rows;
@@ -398,6 +410,7 @@ internal sealed class ProtocolTableModel : IDataTableModel
     internal ProtocolTableModel(Models.Table protocol, ScreenView screen)
     {
         table = protocol;
+        applied = screen;
         state = StateOf(protocol, screen);
         columns = protocol.Columns.Select((column, index) => ColumnOf(column, index, protocol.Rows)).ToArray();
         rows = [.. protocol.Rows];
@@ -443,7 +456,8 @@ internal sealed class ProtocolTableModel : IDataTableModel
         DataTableColumn[] nextColumns = next.Columns.Select((column, index) => ColumnOf(column, index, next.Rows)).ToArray();
         bool columnsChanged = !columns.AsSpan().SequenceEqual(nextColumns);
         List<Models.TableRow> before = rows;
-        (List<Models.TableRow> after, DataTableModelChangedEventArgs[] events) = Diff(before, [.. next.Rows]);
+        (List<Models.TableRow> after, DataTableModelChangedEventArgs[] events) = Diff(before, [.. next.Rows], new ScreenFacts(applied, fields: false), new ScreenFacts(screen, fields: false));
+        applied = screen;
         table = next;
         state = StateOf(next, screen);
         columns = nextColumns;
@@ -472,7 +486,7 @@ internal sealed class ProtocolTableModel : IDataTableModel
 
     // How the rows held become the rows there are now: rows joined at the end or at the start, rows that stand but were drawn again, or all new.
     // The rows that are unchanged stay the same objects, so what was drawn for them is kept.
-    private static (List<Models.TableRow> Rows, DataTableModelChangedEventArgs[] Events) Diff(List<Models.TableRow> before, List<Models.TableRow> after)
+    private static (List<Models.TableRow> Rows, DataTableModelChangedEventArgs[] Events) Diff(List<Models.TableRow> before, List<Models.TableRow> after, IScreenFacts was, IScreenFacts now)
     {
         DataTableModelChangedEventArgs[] reset = [new DataTableModelChangedEventArgs(DataTableChangeKind.Reset)];
         if (before.Any(row => row.Id is null) || after.Any(row => row.Id is null) || before.Count == 0 || after.Count < before.Count)
@@ -498,7 +512,7 @@ internal sealed class ProtocolTableModel : IDataTableModel
         List<DataTableModelChangedEventArgs> events = [];
         for (int at = 0; at < before.Count; at++)
         {
-            if (PageRules.SameRow(before[at], after[offset + at]))
+            if (PageRules.SameRow(before[at], after[offset + at]) && PageRules.SameAroundRow(after[offset + at], was, now))
             {
                 after[offset + at] = before[at];
             }

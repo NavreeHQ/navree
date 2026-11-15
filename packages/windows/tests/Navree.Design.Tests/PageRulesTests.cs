@@ -253,6 +253,18 @@ public sealed class PageRulesTests
         Assert.IsTrue(PageRules.SameRow(one.Rows[1], other.Rows[1]));
     }
 
+    [TestMethod]
+    public void A_state_of_a_button_in_a_row_of_a_table_is_seen_around_the_row()
+    {
+        const string Page = """
+            {"t":"table","id":"t","columns":[{"label":"A"}],"rows":[{"id":"r1","cells":[{"t":"button","id":"del","label":"Delete"}]},{"id":"r2","cells":[{"t":"text","value":"x"}]}]}
+            """;
+        Models.Table table = (Models.Table)Read(Page);
+        Facts busy = new() { States = { ["del"] = "disabled" } };
+        Assert.IsFalse(PageRules.SameAroundRow(table.Rows[0], new Facts(), busy));
+        Assert.IsTrue(PageRules.SameAroundRow(table.Rows[1], new Facts(), busy));
+    }
+
     // ---- helpers -----------------------------------------------------------------------------------------
 
     private static IReadOnlyList<Models.Node> Texts(params string[] ids) =>

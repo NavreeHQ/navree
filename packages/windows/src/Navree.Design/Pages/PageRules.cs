@@ -190,6 +190,17 @@ public static class PageRules
         return true;
     }
 
+    /// <summary>What the screen holds around the parts of a row of a table (its cells, its actions, its detail) is the same in two views of it.</summary>
+    /// <param name="row">The row.</param>
+    /// <param name="before">The screen as the row was drawn from it.</param>
+    /// <param name="after">The screen now.</param>
+    /// <returns>True when none of it changed.</returns>
+    public static bool SameAroundRow(Models.TableRow row, IScreenFacts before, IScreenFacts after)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return row.Cells.Concat(row.Actions).Concat(row.Detail).All(node => SameAround(node, before, after));
+    }
+
     /// <summary>
     /// Matches the children of a container with the children it had: by id where both have one (and are of one kind), else by place and kind among
     /// the children that have none. A child that has moved to another place is reported as moved, not as gone and new.

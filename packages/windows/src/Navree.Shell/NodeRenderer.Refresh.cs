@@ -19,6 +19,9 @@ internal sealed partial class NodeRenderer
     /// <summary>How many were drawn again in their own place.</summary>
     internal int Replaced { get; set; }
 
+    /// <summary>How many children came, went or moved since the count was last taken.</summary>
+    internal int Structural { get; set; }
+
     /// <summary>Whether a part could not be put in its place, so the whole body is to be drawn again.</summary>
     internal bool Failed { get; set; }
 
@@ -77,7 +80,19 @@ internal sealed partial class NodeRenderer
         current = null;
         try
         {
+            int before = context.Rendered;
+            Dictionary<string, int> kinds = new(context.RenderedKinds);
             Drawn record = RenderRecord(node);
+
+            // What a part draws when it comes into view is not what an answer drew again: it is counted apart.
+            context.Lazy += context.Rendered - before;
+            context.Rendered = before;
+            context.RenderedKinds.Clear();
+            foreach (KeyValuePair<string, int> kept in kinds)
+            {
+                context.RenderedKinds[kept.Key] = kept.Value;
+            }
+
             foreach (Drawn part in record.Walk())
             {
                 foreach (((string Form, string Field) key, FieldHandle handle) in part.Fields)
@@ -123,7 +138,11 @@ internal sealed partial class NodeRenderer
             return old;
         }
 
-        if (old.Update is { } update && TryUpdate(update, now))
+        bool failedBefore = Failed;
+        Failed = false;
+        bool updated = old.Update is { } update && TryUpdate(update, now);
+        Failed = updated ? Failed || failedBefore : failedBefore;
+        if (updated)
         {
             old.Node = now;
             old.Screen = screen;

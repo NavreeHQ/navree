@@ -7,6 +7,9 @@ namespace Navree.Design.Pages;
 /// </summary>
 public sealed class TextEcho
 {
+    // How long after the last words the box told, the core saying what it said before is still taken for the answer that has not come yet.
+    private static readonly TimeSpan Recent = TimeSpan.FromSeconds(3);
+
     private readonly List<(string Text, DateTime At)> told = [];
     private readonly TimeSpan lifetime;
     private string? lastCore;
@@ -38,9 +41,9 @@ public sealed class TextEcho
     /// </returns>
     public bool ShouldWrite(string core, string box, DateTime at)
     {
-        if (lastCore == core)
+        if (lastCore == core && told.Count > 0 && at - told[^1].At < Recent)
         {
-            // The core says again what it said: nothing it did, whatever the box holds now.
+            // The core says again what it said while the box's own words are on their way: nothing it did, whatever the box holds now.
             return false;
         }
 

@@ -479,7 +479,13 @@ internal sealed partial class NodeRenderer
     // ---- forms and fields -------------------------------------------------------------------------------
 
     private UIElement DrawForm(Models.Form form) =>
-        InForm(Tree.FormId(form), () => Column(form.Children, 16));
+        InForm(Tree.FormId(form), () =>
+        {
+            StackPanel panel = new() { Spacing = 16 };
+            Group run = Run(form.Children, new PanelHost(panel.Children), () => 0);
+            UpdateRun<Models.Form>(node => node with { Children = [] }, run, node => node.Children, node => Tree.FormId(node) == Tree.FormId(form));
+            return panel;
+        });
 
     private UIElement DrawField(Models.Field field)
     {
@@ -1070,7 +1076,7 @@ internal sealed partial class NodeRenderer
         }
 
         ShowErrors(held);
-        FieldHandle handle = new() { Show = view => { show(view); ShowErrors(view); } };
+        FieldHandle handle = new() { Show = view => { show(view); ShowErrors(view); }, Element = control as FrameworkElement };
         if (current is not null)
         {
             current.Fields.Add(((form, id), handle));

@@ -72,4 +72,13 @@ public sealed class TextEchoTests
         Assert.IsFalse(echo.ShouldWrite("ka", "kau", Start.AddMilliseconds(160)), "an answer to something else repeats ka: the box has moved on");
         Assert.IsTrue(echo.ShouldWrite("x", "kau", Start.AddMilliseconds(180)), "a value nobody typed is the core's own");
     }
+
+    [TestMethod]
+    public void A_reset_by_the_core_to_what_it_said_before_still_clears_the_box_once_the_words_are_no_longer_on_their_way()
+    {
+        TextEcho echo = new(initial: string.Empty);
+        echo.Told("x", Start);
+        Assert.IsFalse(echo.ShouldWrite(string.Empty, "x", Start.AddMilliseconds(500)), "within moments the empty answer may be the one to an earlier letter");
+        Assert.IsTrue(echo.ShouldWrite(string.Empty, "x", Start.AddSeconds(5)), "seconds later the box still holds x and the core holds nothing: the core's own doing");
+    }
 }

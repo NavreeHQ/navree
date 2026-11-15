@@ -291,6 +291,27 @@ internal sealed class Group
             desired.Add(pairing.Old[at] >= 0 ? Records[pairing.Old[at]] : renderer.RenderIn(owner, now[at], Form, Overlay));
         }
 
+        // A child that keeps its order among the others is never taken out of its place (it would lose the focus); only the ones that moved are.
+        int structural = pairing.Gone.Count;
+        for (int at = 0; at < desired.Count; at++)
+        {
+            if (pairing.Moved[at])
+            {
+                int taken = Host.IndexOf(desired[at].Element);
+                if (taken >= 0)
+                {
+                    Host.RemoveAt(taken);
+                }
+
+                structural++;
+            }
+            else if (pairing.Old[at] < 0)
+            {
+                structural++;
+            }
+        }
+
+        renderer.Structural += structural;
         int position = Start();
         for (int at = 0; at < desired.Count; at++)
         {

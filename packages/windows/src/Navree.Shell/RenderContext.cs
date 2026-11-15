@@ -81,6 +81,9 @@ internal sealed class RenderContext
     /// <summary>How many nodes were drawn by calls of the drawing since the count was last taken.</summary>
     internal int Rendered { get; set; }
 
+    /// <summary>How many nodes were drawn outside a pass (a table's cells when they come into view) since the count was last taken.</summary>
+    internal int Lazy { get; set; }
+
     /// <summary>How many of each kind were drawn since the count was last taken.</summary>
     internal Dictionary<string, int> RenderedKinds { get; } = [];
 
@@ -90,6 +93,23 @@ internal sealed class RenderContext
     /// <summary>Makes the lists of what was found (overlays, fields, buttons) again from the records that stand.</summary>
     internal void Rebuild()
     {
+        // What a table's cells drew and that has since left the window (rows replaced, rows scrolled far away) is let go of, once there is a good deal of it.
+        if (LooseFields.Count > 300)
+        {
+            foreach ((string Form, string Field) key in LooseFields.Where(pair => pair.Value.Element is { XamlRoot: null }).Select(pair => pair.Key).ToList())
+            {
+                _ = LooseFields.Remove(key);
+            }
+        }
+
+        if (LooseTriggers.Count > 300)
+        {
+            foreach (string key in LooseTriggers.Where(pair => pair.Value.XamlRoot is null).Select(pair => pair.Key).ToList())
+            {
+                _ = LooseTriggers.Remove(key);
+            }
+        }
+
         Overlays.Clear();
         Fields.Clear();
         Triggers.Clear();
@@ -137,6 +157,15 @@ internal sealed class RenderContext
         RenderedKinds.Clear();
         return (total, kinds);
     }
+
+    /// <summary>Takes the count of what was drawn outside a pass, and starts it again.</summary>
+    /// <returns>How many nodes.</returns>
+    internal int TakeLazy()
+    {
+        int total = Lazy;
+        Lazy = 0;
+        return total;
+    }
 }
 
 /// <summary>A field that is on the screen, and how to show its state.</summary>
@@ -144,4 +173,7 @@ internal sealed class FieldHandle
 {
     /// <summary>Shows what the field holds and what is wrong with it.</summary>
     internal required Action<FieldView?> Show { get; init; }
+
+    /// <summary>The control the field drew, to tell whether it is still in a window.</summary>
+    internal FrameworkElement? Element { get; init; }
 }

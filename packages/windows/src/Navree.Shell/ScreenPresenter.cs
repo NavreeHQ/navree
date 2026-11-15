@@ -130,7 +130,8 @@ internal sealed class ScreenPresenter : Grid
             return false;
         }
 
-        (int lazy, _) = context.TakeCount();
+        _ = context.TakeCount();
+        int lazy = context.TakeLazy();
         PageKeeper.Held? held = PageKeeper.Capture(page.Panel);
         double offset = scroller.VerticalOffset;
         double extentBefore = scroller.ExtentHeight;
@@ -139,6 +140,7 @@ internal sealed class ScreenPresenter : Grid
         renderer.Stood = 0;
         renderer.Updated = 0;
         renderer.Replaced = 0;
+        renderer.Structural = 0;
         renderer.Failed = false;
         Models.Screen now = native.Screen;
         bool pageChanged = false;
@@ -208,7 +210,7 @@ internal sealed class ScreenPresenter : Grid
         context.ShowFields();
         (int rendered, string kinds) = context.TakeCount();
         PageReports.Add(new PageReport(screen.Id, "update", rendered, renderer.Stood, renderer.Updated, renderer.Replaced, kinds, lazy));
-        bool replaced = pageChanged || renderer.Replaced > 0;
+        bool replaced = pageChanged || renderer.Replaced > 0 || renderer.Structural > 0;
         if (replaced || earlierArrived)
         {
             scroller.UpdateLayout();
