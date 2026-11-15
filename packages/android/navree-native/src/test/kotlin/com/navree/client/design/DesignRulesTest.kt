@@ -461,6 +461,39 @@ class FormRulesTest {
     }
 }
 
+class TaskActionsTest {
+    private fun action(label: String, role: Navree.Role) = Navree.Button(action = Navree.Action.Navigate("/x"), label = label, role = role)
+
+    @Test
+    fun a_task_with_many_actions_keeps_the_title_its_room_by_putting_them_at_the_foot() {
+        val resend = action("Resend confirmation", Navree.Role.SECONDARY)
+        val refund = action("Refund", Navree.Role.SECONDARY)
+        val cancel = action("Cancel order", Navree.Role.DESTRUCTIVE)
+        val open = action("Open as a page", Navree.Role.NAVIGATION)
+        val placed = OverlayRules.taskActions(listOf(resend, refund, cancel, open), hasSubmit = false)
+        assertNull("no action is the one that finishes the task", placed.bar)
+        assertEquals(listOf(resend, refund, open, cancel), placed.foot)
+    }
+
+    @Test
+    fun the_one_primary_action_finishes_the_task_from_the_bar() {
+        val save = action("Save", Navree.Role.PRIMARY)
+        val other = action("Discard changes", Navree.Role.SECONDARY)
+        val placed = OverlayRules.taskActions(listOf(other, save), hasSubmit = false)
+        assertEquals(save, placed.bar)
+        assertEquals(listOf(other), placed.foot)
+    }
+
+    @Test
+    fun a_forms_submit_takes_the_place_in_the_bar_and_a_way_out_is_not_an_action() {
+        val save = action("Save", Navree.Role.PRIMARY)
+        val cancel = action("Cancel", Navree.Role.CANCEL)
+        val placed = OverlayRules.taskActions(listOf(save, cancel), hasSubmit = true)
+        assertNull(placed.bar)
+        assertEquals(listOf(save), placed.foot)
+    }
+}
+
 class SymbolsTest {
     @Test
     fun every_standard_action_takes_a_system_symbol_the_client_carries() {

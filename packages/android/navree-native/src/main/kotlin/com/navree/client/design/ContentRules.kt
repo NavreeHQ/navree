@@ -298,6 +298,9 @@ object FormRules {
     }
 }
 
+/** Where a task sheet's actions are drawn: at most one in the bar, the rest at the end of the content. */
+data class TaskActions(val bar: Navree.Button?, val foot: List<Navree.Button>)
+
 /** How a sheet of the tree sits in its bottom sheet. */
 data class SheetPlan(
     /** Whether the sheet may rest half open before it is dragged up. */
@@ -316,6 +319,24 @@ object OverlayRules {
         Navree.SheetSize.MEDIUM -> SheetPlan(partial = window.height != HeightClass.Compact, fullHeight = false)
         Navree.SheetSize.LARGE -> SheetPlan(partial = false, fullHeight = false)
         Navree.SheetSize.FULL -> SheetPlan(partial = false, fullHeight = true)
+    }
+
+    /**
+     * Where the actions of a task sheet go. The bar of a full-screen dialog
+     * holds an X, the title and at most one affirming action (the form's own
+     * submit, or else the one primary action); every other action stands at
+     * the end of the content, the destructive ones last. Actions that took
+     * the whole bar would leave the title no room.
+     */
+    fun taskActions(buttons: List<Navree.Button>, hasSubmit: Boolean): TaskActions {
+        val affirming = buttons.filter { it.role != Navree.Role.CANCEL && it.standard != Navree.Standard.CANCEL }
+        val inBar = if (hasSubmit) {
+            null
+        } else {
+            affirming.firstOrNull { (it.role == Navree.Role.PRIMARY || it.role == Navree.Role.CONFIRM) && !ScreenRules.destructive(it) }
+        }
+        val rest = affirming.filter { it !== inBar }
+        return TaskActions(inBar, rest.filterNot(ScreenRules::destructive) + rest.filter(ScreenRules::destructive))
     }
 
     /** Dialog buttons sit side by side while there are two short ones; more, or long ones, stack. */

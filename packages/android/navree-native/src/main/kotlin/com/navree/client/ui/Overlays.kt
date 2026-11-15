@@ -1,7 +1,10 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.navree.client.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -133,10 +136,10 @@ private fun Sheet(
  */
 @Composable
 private fun TaskSheet(sheet: Navree.Sheet, place: Place, full: Boolean, close: () -> Unit) {
-    val buttons = sheet.actions.filterIsInstance<Navree.Button>()
-    val forward = buttons.filter(::affirms)
     val form = sheet.children.asSequence().flatMap { it.walk() }.filterIsInstance<Navree.Form>().firstOrNull()
     val submit = form?.submitButton()
+    // One action finishes the task from the bar; the others stand at the end of the content.
+    val placed = OverlayRules.taskActions(sheet.actions.filterIsInstance<Navree.Button>(), hasSubmit = form != null && submit != null)
     val inner = place.copy(omit = submit)
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = !full)) {
         Surface(
@@ -148,7 +151,7 @@ private fun TaskSheet(sheet: Navree.Sheet, place: Place, full: Boolean, close: (
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TipIconButton(stringResource(R.string.navree_close), Glyphs.Close, close)
                     Text(sheet.title ?: "", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp).semantics { heading() })
-                    for (button in forward) QuietButton(button, place)
+                    placed.bar?.let { QuietButton(it, place) }
                     if (form != null && submit != null) QuietButton(submit, place.copy(form = form.id))
                 }
                 Column(
@@ -157,6 +160,11 @@ private fun TaskSheet(sheet: Navree.Sheet, place: Place, full: Boolean, close: (
                 ) {
                     sheet.subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     for (child in sheet.children) NodeView(child, inner)
+                    if (placed.foot.isNotEmpty()) {
+                        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (button in placed.foot) QuietButton(button, inner)
+                        }
+                    }
                 }
             }
         }
