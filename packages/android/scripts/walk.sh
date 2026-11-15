@@ -223,11 +223,17 @@ check "back closes the order and the list is there" wait_for Search 10
 
 say "== back, one step at a time"
 "$ADB" shell input keyevent KEYCODE_BACK
-sleep 2
+sleep 3
+shot back-from-orders
+dump
+say "after back from Orders it says: $(ui texts | tr '
+' '|' | cut -c1-200)"
 check "back from another destination goes to the first one" wait_for_part "Revenue today" 10
 "$ADB" shell input keyevent KEYCODE_BACK
-sleep 2
-check "back from the first destination leaves the app" bash -c "! '$ADB' shell dumpsys window | grep -q 'mCurrentFocus.*$PKG'"
+sleep 4
+shot back-from-first
+say "focus after the last back: $("$ADB" shell dumpsys window | grep mCurrentFocus | head -1)"
+check "back from the first destination leaves the app" bash -c "! '$ADB' shell dumpsys window | grep mCurrentFocus | grep -q '$PKG'"
 
 say "== a link from outside"
 launch
