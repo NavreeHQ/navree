@@ -7,6 +7,8 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-11-15
+
 ### Fixed
 
 - A live list the server drew while what it shows was still changing, such as an assistant's
@@ -14,6 +16,12 @@ every `@navree/*` package carries the same version.
   script arrived after the live stream had opened: the finished answer never showed until something
   else changed. The live module now asks a list nobody has answered for yet again every 0.3 seconds
   for about six seconds, so the list fetches what it missed as soon as its script is there.
+- Navree Native (preview): the store, inbox and board example apps name their person to the
+  framework on every request (the board the team member a visitor views it as, the inbox the agent
+  a visitor works as), so a native client keeps and restores a person's place on them. Before,
+  their answers named nobody and a client restored nothing.
+- The store, inbox and board example apps draw a not-found page inside the app's shell; the
+  inbox's does so without counting its conversations.
 
 ## [1.2.3] - 2026-11-15
 
@@ -715,7 +723,8 @@ Most apps upgrade with no change. These are the changes that can ask something o
 
 First release. Read what it includes in the [release notes](https://navree.com/docs/prologue/release-notes/).
 
-[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.4
 [1.2.3]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.3
 [1.2.2]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.2
 [1.2.1]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.1
