@@ -14,4 +14,14 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Navree.Design\Navree.Design.csproj" />
+  </ItemGroup>
+
+  <!-- The gallery and the tests read the control's inner parts. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Navree.Gallery" />
+    <InternalsVisibleTo Include="Navree.Controls.Tests" />
+  </ItemGroup>
+
 </Project>
