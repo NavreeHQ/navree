@@ -164,7 +164,7 @@ app/
       route.ts        # sign-in, sign-out and refresh, and every other /api call with the bearer token
 `}</FileTree>
 
-The browser only talks to the Next.js server, which talks to the API. `@navree/next` keeps the tokens in httpOnly cookies on that server, and the browser never sees them. Until the Navree packages are on npm, `package.json` links them from your Navree checkout, and `web/README.md` says how to build them. `navree dev` starts the front end's dev server too.
+The browser only talks to the Next.js server, which talks to the API. `@navree/next` keeps the tokens in httpOnly cookies on that server, and the browser never sees them. `package.json` asks npm for `@navree/client` and `@navree/next` as version ranges; when the app's `navree` comes from a checkout, it links them from that checkout instead, and `web/README.md` says how to build them. `navree dev` starts the front end's dev server too.
 
 ### With Navree UI
 
