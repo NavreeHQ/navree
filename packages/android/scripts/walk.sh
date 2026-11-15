@@ -150,9 +150,11 @@ $(curl -s -S --max-time 15 -D - -o /dev/null -c "$jar" -b "$jar" \
 first_screen_only() { ui contains 'Revenue today' && ui absent-part 'Fulfilment'; }
 
 # Cold starts, timed: what the system says it took to show the first frame and to show the page
-# (the app reports when it is fully drawn), and the app's own marks of where the time went.
+# (the app reports when it is fully drawn), and the app's own marks of where the time went. Fails
+# when a start did not show the first screen within 30 seconds: a time of a start that never got
+# there is not a time of a start.
 timed_starts() {
-  local n
+  local n missing=0
   say "== how long a cold start takes (${1:-this build})"
   for n in 1 2 3; do
     "$ADB" shell input keyevent KEYCODE_HOME
@@ -161,10 +163,14 @@ timed_starts() {
     "$ADB" logcat -c
     "$ADB" shell am start -W -n "$PKG/$ACTIVITY" | grep -E 'ThisTime|TotalTime|WaitTime' | tr '\n' ' ' | tee -a "$OUT/walk.txt"
     echo >> "$OUT/walk.txt"
-    wait_for Dashboard 30 > /dev/null
+    if ! wait_for Dashboard 30 > /dev/null; then
+      say "start $n did not show the first screen within 30 seconds"
+      missing=$((missing + 1))
+    fi
     sleep 2
     "$ADB" logcat -d | grep -E 'NavreeStart|Fully drawn' | sed 's/^.*\(NavreeStart\|ActivityTaskManager\)/\1/' | tee -a "$OUT/walk.txt"
   done
+  [ "$missing" -eq 0 ]
 }
 
 # Sourced, the script only defines its helpers (the tests of the script do).
@@ -172,7 +178,7 @@ if [ "${BASH_SOURCE[0]}" != "$0" ]; then return 0; fi
 
 if [ "${ONLY:-}" = starts ]; then
   timed_starts "${BUILD:-this build}"
-  exit 0
+  exit $?
 fi
 
 # ---------------------------------------------------------------- starts
@@ -197,7 +203,7 @@ launch
 strip cold-second 14
 check "a second start shows the first screen" wait_for Dashboard 20
 
-timed_starts "the debug build"
+check "every timed start of the debug build shows the first screen" timed_starts "the debug build"
 
 say "== no network at start, with a page kept"
 "$ADB" shell input keyevent KEYCODE_HOME
