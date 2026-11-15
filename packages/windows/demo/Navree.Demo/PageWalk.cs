@@ -80,6 +80,7 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
             await Task.Delay(1500);
             string port = server is null ? string.Empty : new Uri(server).Port.ToString(CultureInfo.InvariantCulture);
             Say("the server is " + server + " (port " + port + ")");
+            await KindsAsync();
             switch (port)
             {
                 case "8095":
@@ -106,6 +107,33 @@ internal sealed class PageWalk(ShellHost host, ShellWindow window, string folder
             File.WriteAllLines(Path.Combine(folder, "page.txt"), log);
             App.Finish(null);
         }
+    }
+
+    // How many parts of each kind the first destinations of this app draw: what the kinds that are brought up to date in place are chosen by.
+    private async Task KindsAsync()
+    {
+        Dictionary<string, int> all = [];
+        for (int destination = 0; destination < 5; destination++)
+        {
+            host.Send(Events.Select(destination));
+            await Task.Delay(2500);
+            if (host.State.FrontScreen?.Screen is not Models.Screen tree)
+            {
+                continue;
+            }
+
+            Dictionary<string, int> here = [];
+            foreach (Models.Node node in Tree.Nodes(tree))
+            {
+                string kind = node.GetType().Name;
+                here[kind] = here.GetValueOrDefault(kind) + 1;
+                all[kind] = all.GetValueOrDefault(kind) + 1;
+            }
+
+            Say("destination " + destination + " (" + tree.Title + ") holds " + string.Join(", ", here.OrderByDescending(pair => pair.Value).Select(pair => pair.Key + " " + pair.Value)));
+        }
+
+        Say("all of them together: " + string.Join(", ", all.OrderByDescending(pair => pair.Value).Select(pair => pair.Key + " " + pair.Value)));
     }
 
     // ================================================================================================================
