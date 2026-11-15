@@ -1,5 +1,6 @@
 using System.Globalization;
 using Navree.Design;
+using Navree.Platform;
 using Navree.Protocol;
 using Navree.Runtime;
 using Navree.Shell;
@@ -75,6 +76,12 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
             await SettleAsync();
             ScreenView? pushed = host.State.FrontScreen;
             Check("destination " + destination + ": " + href + " is pushed", pushed is not null && pushed.Id != first.Id && host.State.Nav.CanGoBack, "front " + first.Id + " then " + pushed?.Id + ", can go back " + host.State.Nav.CanGoBack);
+            if (pushed?.Screen is Models.Screen pushedTree && !string.IsNullOrEmpty(pushedTree.Title))
+            {
+                await Task.Delay(800);
+                Check("destination " + destination + ": the window shows the pushed screen's title \"" + pushedTree.Title + "\"", DrawnText.Of(window.Content).Contains(pushedTree.Title, StringComparison.Ordinal), "looked for it in the words of the window");
+            }
+
             host.Send(Events.Back);
             await SettleAsync();
             Check("destination " + destination + ": back returns to the first screen", host.State.FrontScreen?.Id == first.Id && host.State.Nav.CanGoBack == backBefore, "front " + host.State.FrontScreen?.Id + ", can go back " + host.State.Nav.CanGoBack + " (before the push: " + backBefore + ")");
@@ -130,7 +137,7 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
                 await SettleAsync();
                 await Task.Delay(800);
                 int is1 = host.State.FrontScreen?.Screen is Models.Screen now1 ? Rows(now1) : -1;
-                Check("destination " + destination + ": the screen's search narrows what is shown", is1 != was, was + " parts then " + is1);
+                Check("destination " + destination + ": the screen's search narrows what is shown", is1 >= 0 && is1 < was, was + " parts then " + is1 + " (fewer is narrower)");
                 host.Send(Events.Search(front.Id, string.Empty));
                 await SettleAsync();
                 return;
@@ -155,7 +162,7 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
                 await SettleAsync();
                 await Task.Delay(1200);
                 int is2 = host.State.FrontScreen?.Screen is Models.Screen now2 ? Rows(now2) : -1;
-                Check("destination " + destination + ": typing in " + field.Name + " narrows what is shown", is2 != was, was + " parts then " + is2);
+                Check("destination " + destination + ": typing in " + field.Name + " narrows what is shown", is2 >= 0 && is2 < was, was + " parts then " + is2 + " (fewer is narrower)");
                 host.Send(Events.Field(front.Id, Tree.FormId(form), field.Id ?? field.Name, new TextValue(string.Empty)));
                 await SettleAsync();
                 return;
@@ -197,6 +204,12 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
                 await Task.Delay(1000);
                 FormView? view = host.State.FrontScreen?.Forms.GetValueOrDefault(formId);
                 int errors = view?.Fields.Values.Sum(f => f.Errors.Count) ?? 0;
+                string? firstError = view?.Fields.Values.SelectMany(f => f.Errors).FirstOrDefault();
+                if (firstError is not null)
+                {
+                    Check("destination " + destination + ": the first error is drawn at its field", DrawnText.Of(window.Content).Contains(firstError, StringComparison.Ordinal), "\"" + firstError + "\" looked for in the words of the window");
+                }
+
                 Check("destination " + destination + ": " + formId + " sent empty is told what is wrong", errors > 0 || host.State.Messages.Count > 0, errors + " errors under its fields; messages waiting " + host.State.Messages.Count + (host.State.Messages.Count > 0 ? ": " + string.Join(" / ", host.State.Messages.Select(m => m.ToString())) : string.Empty));
                 return;
             }
@@ -246,7 +259,9 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
         await SettleAsync();
         await Task.Delay(2500);
         bool shown = host.State.FrontScreen?.Screen is Models.Screen after && Said(after, Phrase);
+        bool drawn = DrawnText.Of(window.Content).Contains(Phrase, StringComparison.Ordinal);
         Check("the message sent is in the thread", shown, shown ? "found in the screen's tree" : "not found; messages waiting " + host.State.Messages.Count);
+        Check("the message sent is drawn in the window", drawn, drawn ? "found in the words of the window" : "not found in the words of the window");
     }
 
     private async Task SecondWindow()
@@ -265,21 +280,32 @@ internal sealed class ChecksWalker(ShellHost host, ShellWindow window, string fo
 
     private async Task SignOut()
     {
-        string? before = host.State.App?.User?.Name;
-        bool ended = false;
-        host.SessionEnded += _ => ended = true;
+        WipeReport? report = null;
+        host.SessionEnded += ended => report = ended;
 
-        // The person signs out as they would: with what the server put in their menu.
-        Models.Button? out1 = host.State.App?.User?.Menu.OfType<Models.Button>().FirstOrDefault(b => b.Label.Contains("Sign out", StringComparison.OrdinalIgnoreCase));
-        Check("the person's menu offers signing out", out1?.Action is not null, out1 is null ? "no such item in " + string.Join(", ", host.State.App?.User?.Menu.Select(n => n.GetType().Name) ?? []) : "found");
-        if (out1?.Action is not null)
+        // The person signs out as they would: with what the server put in their menu, or with the client's own item when it has none.
+        Models.Button? server = host.State.App?.User?.Menu.OfType<Models.Button>().FirstOrDefault(b => b.Label.Contains("Sign out", StringComparison.OrdinalIgnoreCase));
+        bool own = host.OffersOwnSignOut;
+        Check("the person has a way out: the server's menu or the client's own", server?.Action is not null || own, server?.Action is not null ? "the server's menu has \"" + server.Label + "\"" : own ? "the client's own item" : "none: the menu holds " + string.Join(", ", host.State.App?.User?.Menu.Select(n => n.GetType().Name) ?? []));
+        if (server?.Action is not null)
         {
-            host.Send(Events.Act(host.State.Nav.Front, out1.Action, null, null, null, null, out1.Ask, out1.Id));
+            host.Send(Events.Act(host.State.Nav.Front ?? 0, server.Action, null, null, null, null, server.Ask, server.Id));
+        }
+        else if (own)
+        {
+            _ = host.SignOutHereAsync();
         }
 
-        await Task.Delay(4000);
+        for (int round = 0; round < 120 && report is null; round++)
+        {
+            await Task.Delay(250);
+        }
+
         await SettleAsync();
-        Check("signing out wipes the session", ended, "the wipe report " + (ended ? "came" : "did not come") + "; before: " + before + ", after: " + (host.State.App?.User?.Name ?? "nobody") + ", stage " + host.State.Nav.Stage + ", screens held " + host.State.Screens.Count);
+        string steps = report is null ? "no report came" : "done: " + string.Join(", ", report.Done) + "; failed: " + string.Join(", ", report.Failed.Select(f => f.Key + " (" + f.Value + ")"));
+        Check("signing out wipes the session: the wipe came and every step of it finished", report is { Complete: true, Done.Count: 3 }, steps);
+        string? webFolder = host.Options.WebFolder;
+        Check("signing out leaves no web view data on the device", webFolder is null || !Directory.Exists(webFolder) || Directory.GetFiles(webFolder, "*", SearchOption.AllDirectories).Length == 0, webFolder is null ? "no folder of its own to read" : Directory.Exists(webFolder) ? "the folder is there" : "the folder is gone");
     }
 
     // ---- reading the screen -----------------------------------------------------------------------------------
