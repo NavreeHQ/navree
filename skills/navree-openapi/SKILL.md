@@ -85,6 +85,7 @@ impl NotesController {
 | `request = T` | the JSON request body |
 | `response = T`, `status = 201` | the success body and status (default 200) |
 | `responses(400, 404)` | extra error statuses, with the error schema `HttpError` |
+| `query = R` | a list route's `filter` (`deepObject`), `sort`, `search` and paging parameters, from `R`, its `ListResource` |
 
 Hand-written routes use `RouteDef::api(ApiMeta { .. })` with
 `request`/`response` as `Some(schema_fn::<T>)` (`navree::http`).
@@ -173,8 +174,9 @@ builds from them. The schema's `paths` type goes to
 
 ## Limits to know
 
-- Query parameters aren't documented (describe them in `description`;
-  register the filter DTO with `m.api_schema`).
+- A list route that doesn't say `query = R` has no query parameters in the
+  document, and a generated client needs them added by hand. Any other query
+  parameter takes a `RouteDoc` (`m.api_route`).
 - Bodies are JSON only (no multipart, no CSV schemas); path parameters are
   always strings.
 - `/api/me/abilities`, `/api/access/*`, `/broadcasting/auth`, `/health/*`
