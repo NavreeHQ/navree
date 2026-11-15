@@ -634,7 +634,12 @@ jobs:
                 if (-not $run.WaitForExit(900000)) { "the walk of $($app[0]) $($look -join ' ') did not end in 900 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
                 else { "the walk of $($app[0]) $($look -join ' ') ended" }
               }
+              # What a person does in the app, with each thing's outcome said: forward and back, more rows, a search, a form's errors, a message sent, a second window, signing out.
+              $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--checks', $out, '--name', $app[0], '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+              if (-not $run.WaitForExit(600000)) { "the checks of $($app[0]) did not end in 600 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+              else { "the checks of $($app[0]) ended" }
             }
+            Get-ChildItem $out -Filter '*-checks.txt' | ForEach-Object { "--- $($_.Name)"; Get-Content $_.FullName }
             Get-ChildItem $out -Filter '*-faults.txt' | ForEach-Object { "--- $($_.Name)"; Get-Content $_.FullName }
             $log = Join-Path $exe.Directory.FullName 'navree-demo.log'
             if (Test-Path $log) { Copy-Item $log (Join-Path $out 'navree-demo.log') }

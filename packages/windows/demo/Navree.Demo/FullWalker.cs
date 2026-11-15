@@ -86,7 +86,7 @@ internal sealed class FullWalker(ShellHost host, ShellWindow window, string fold
         }
 
         string here = host.State.Nav.Destinations.ElementAtOrDefault(index)?.Href ?? string.Empty;
-        List<string> hrefs = [.. Hrefs(tree).Where(href => href != here && href != "/").Distinct().Take(3)];
+        List<string> hrefs = [.. Hrefs(tree).Where(href => href != here && href != "/").Distinct().Take(2)];
         Say(label + ": " + hrefs.Count + " links to push: " + string.Join(" ", hrefs));
         int push = 0;
         foreach (string href in hrefs)
@@ -122,7 +122,9 @@ internal sealed class FullWalker(ShellHost host, ShellWindow window, string fold
             return;
         }
 
-        foreach (Models.Node node in Tree.Nodes(tree).Where(node => node is Models.Sheet or Models.Dialog or Models.Popover).Take(3))
+        // What a sheet, dialog or popover shows when it is opened by the core's own event is the first thing it holds; the ones that load their
+        // content when a link opens them are walked by the checks. They are pictured at the middle width only.
+        foreach (Models.Node node in Tree.Nodes(tree).Where(node => width == "w840" && node is Models.Sheet or Models.Dialog or Models.Popover).Take(3))
         {
             string? id = Tree.IdOf(node);
             if (id is null)
@@ -192,6 +194,11 @@ internal sealed class FullWalker(ShellHost host, ShellWindow window, string fold
         if (prefix == "light-" && width == "w840")
         {
             await Inspect(Path.Combine(folder, prefix + app + "-" + width + "-" + name + "-ui.txt"));
+            if (host.State.FrontScreen?.Screen is Models.Screen outlined)
+            {
+                File.WriteAllText(Path.Combine(folder, prefix + app + "-" + width + "-" + name + "-nodes.txt"), Outline(outlined));
+            }
+
             try
             {
                 if (window.CurrentPage is Microsoft.UI.Xaml.Controls.Panel page && host.State.FrontScreen?.Content is NativeContent)
@@ -383,6 +390,49 @@ internal sealed class FullWalker(ShellHost host, ShellWindow window, string fold
                 yield return go.Href;
             }
         }
+    }
+
+    // What the protocol's tree holds that a person can use: each part with its id, its words and what it does.
+    private static string Outline(Models.Screen tree)
+    {
+        StringBuilder text = new();
+        text.AppendLine("screen " + tree.GetType().Name + (tree.Search is null ? string.Empty : " with a search"));
+        foreach (Models.Node node in Tree.Nodes(tree))
+        {
+            string kind = node.GetType().Name;
+            if (kind is "Stack" or "Grid" or "Divider" or "Spacer" or "Icon" or "NodeUnknown")
+            {
+                continue;
+            }
+
+            StringBuilder line = new();
+            line.Append(kind);
+            foreach (string name in new[] { "Id", "Name", "Label", "Title", "Text", "Kind", "Href" })
+            {
+                if (node.GetType().GetProperty(name)?.GetValue(node) is { } value && value.ToString() is { Length: > 0 } said)
+                {
+                    line.Append(' ').Append(name).Append('=').Append(said.Length > 48 ? said[..48] + "..." : said);
+                }
+            }
+
+            if (node.GetType().GetProperty("Action")?.GetValue(node) is Models.Action action)
+            {
+                line.Append(" action=").Append(action.GetType().Name);
+                if (action is Models.ActionNavigate go)
+                {
+                    line.Append(' ').Append(go.Href);
+                }
+            }
+
+            if (node.GetType().GetProperty("Ask")?.GetValue(node) is not null)
+            {
+                line.Append(" asks");
+            }
+
+            text.AppendLine(line.ToString());
+        }
+
+        return text.ToString();
     }
 
     private static string Safe(string id)
