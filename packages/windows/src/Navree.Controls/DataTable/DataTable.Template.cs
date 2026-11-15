@@ -140,18 +140,41 @@ public sealed partial class DataTable
         }
     }
 
+    // The table listens to its model only while it is in the tree, and runs nothing while it is out of it.
     private void OnLoaded()
     {
         loaded = true;
+        modelLink.Attach(Model, OnModelEvent);
         AttachSticky();
         RecomputeMetrics();
         RebuildColumns(remeasure: true);
+        if (templateWired && Model is { } model && StampOf(model) != modelStamp)
+        {
+            // The model changed while the table was out of the tree, and nothing told it.
+            ModelAttached();
+        }
     }
 
     private void OnUnloaded()
     {
         loaded = false;
+        modelLink.Detach();
+        StopTimers();
         SaveLayoutNow();
+    }
+
+    // Every timer the table started stops, and what they would have said or let go of is dropped or done now.
+    private void StopTimers()
+    {
+        choiceTimer?.Stop();
+        addedTimer?.Stop();
+        anchorPinTimer?.Stop();
+        assistivePinTimer?.Stop();
+        addedLater = 0;
+        addedEarlier = 0;
+        pins.Release(PinOwner.Anchor);
+        pins.Release(PinOwner.Assistive);
+        rowsLayout.Pinned = pins.Indices;
     }
 
     private void AttachSticky()

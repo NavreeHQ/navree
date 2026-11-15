@@ -149,6 +149,11 @@ public sealed partial class DataTable
 
     private void TryActivate(bool focus, int attempt)
     {
+        if (!loaded)
+        {
+            return;
+        }
+
         if (ElementOf(new Cell(activeRow, activeColumn)) is { } element)
         {
             MarkActive(element);

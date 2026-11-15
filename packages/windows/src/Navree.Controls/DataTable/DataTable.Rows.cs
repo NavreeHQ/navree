@@ -18,6 +18,8 @@ public sealed partial class DataTable
     private double headerHeight = 40;
     private RowShape shape = RowShape.OneLine;
     private bool sortAsked;
+    private readonly ModelLink modelLink = new();
+    private ModelStamp modelStamp;
     private readonly CursorWatch cursorWatch = new();
     private readonly DetailSeeds detailSeeds = new();
     private readonly RowShapeWatch shapeWatch = new();
@@ -35,16 +37,28 @@ public sealed partial class DataTable
     /// <summary>One line in each cell or two.</summary>
     internal RowShape Shape => shape;
 
+    /// <summary>What a model said of itself when the table last had it in step.</summary>
+    private readonly record struct ModelStamp(int Rows, string? First, string? Last, DataTableLoadState State, string? Summary, DataTableCursor Later, DataTableCursor Earlier);
+
+    private static ModelStamp StampOf(IDataTableModel model) => new(
+        model.RowCount,
+        model.RowCount > 0 ? model.GetRow(0).Key : null,
+        model.RowCount > 0 ? model.GetRow(model.RowCount - 1).Key : null,
+        model.State,
+        model.Summary,
+        model.Later,
+        model.Earlier);
+
     private void ModelChanged(IDataTableModel? previous, IDataTableModel? current)
     {
-        if (previous is not null)
+        // The model is listened to only while the table is in the tree (see OnLoaded).
+        if (loaded)
         {
-            previous.Changed -= OnModelEvent;
+            modelLink.Attach(current, OnModelEvent);
         }
-
-        if (current is not null)
+        else
         {
-            current.Changed += OnModelEvent;
+            modelLink.Detach();
         }
 
         choice = new ChoiceState(new HashSet<string>(StringComparer.Ordinal), false);
@@ -82,6 +96,10 @@ public sealed partial class DataTable
         UpdateState();
         UpdateFooter();
         UpdateBulkBar();
+        if (Model is { } attached)
+        {
+            modelStamp = StampOf(attached);
+        }
     }
 
     private void OnModelEvent(object? sender, DataTableModelChangedEventArgs e)
@@ -156,6 +174,11 @@ public sealed partial class DataTable
             UpdateState();
             UpdateFooter();
             UpdateBulkBar();
+        }
+
+        if (Model is { } current)
+        {
+            modelStamp = StampOf(current);
         }
     }
 
@@ -507,7 +530,10 @@ public sealed partial class DataTable
             DispatcherQueue.TryEnqueue(() =>
             {
                 detailGeometryQueued = false;
-                UpdateGeometry();
+                if (loaded)
+                {
+                    UpdateGeometry();
+                }
             });
         }
     }
