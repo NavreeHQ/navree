@@ -959,7 +959,7 @@ class WideListStatesTest {
 class ShortLineTest {
     @Test
     fun a_line_with_a_dial_that_leaves_most_of_the_card_empty_is_put_in_the_middle() {
-        assertTrue(CompositionRules.holdsDial(listOf(Navree.Ring(value = 83.0), Navree.Text(value = "words"))))
+        assertTrue(CompositionRules.holdsDial(listOf(Navree.Ring(max = 100.0, value = 83.0), Navree.Text(value = "words"))))
         assertFalse(CompositionRules.holdsDial(listOf(Navree.Text(value = "words"))))
         assertTrue(CompositionRules.centresShortLine(usedPx = 550, roomPx = 1265))
         assertFalse("a line that fills most of its card stays at the start", CompositionRules.centresShortLine(usedPx = 900, roomPx = 1265))
