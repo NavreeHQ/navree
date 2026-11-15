@@ -495,16 +495,10 @@ jobs:
       AUDIT_PAST_EDGE: "1040"
       # What the press run proves: how many of its checks must pass.
       PRESS_PASSES: "7"
-      # Checks that say FAIL today because the page does not do the thing yet (a popover opens as a dialog, a row has no menu, a card
-      # cannot be dragged into a lane): one pattern for each. A check that says FAIL and is not named here fails the job; one named here
-      # that says PASS is told so, and its line is taken off in the change that fixed it.
-      KNOWN_FAILS: |
-        \[hands\] FAIL a right click on a row opens its menu
-        \[popover\] FAIL the focus is back on the button
-        \[moves\] FAIL dragging the card into the third lane
-        \[hands\] FAIL the focus is in the table after the rows arrived
-        \[hands\] FAIL every letter typed across the answers is in the box
-        \[hands\] FAIL the box has the focus after the answers
+      # Checks that say FAIL today because the page does not do the thing yet: one pattern for each. A check that says FAIL and is not named
+      # here fails the job; one named here that says PASS is told so, and its line is taken off in the change that fixed it. None is named now:
+      # every line that was has been seen to pass in the cloud.
+      KNOWN_FAILS: ""
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
@@ -769,6 +763,12 @@ jobs:
                 else { "the popover check ended" }
                 if (Test-Path "$out\popover.txt") { Get-Content "$out\popover.txt" }
               }
+              # What a person meets when an answer arrives while they are in the middle of something: the page is brought up to date where it stands, and
+              # each scenario reads that what the person was using is the same object afterwards, with what they did still in it and the focus where it was.
+              $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--page', "$out\page-$($app[0])", '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+              if (-not $run.WaitForExit(600000)) { $problems += "the page walk of $($app[0]) did not end in 600 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+              else { "the page walk of $($app[0]) ended" }
+              if (Test-Path "$out\page-$($app[0])\page.txt") { Get-Content "$out\page-$($app[0])\page.txt" }
               # A card of the board moved with the real keys, a real click on its menu and the real pointer, and what the server kept.
               if ($app[0] -eq 'board') {
                 $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--moves', $out, '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
@@ -777,6 +777,12 @@ jobs:
                 if (Test-Path "$out\moves.txt") { Get-Content "$out\moves.txt" }
               }
             }
+            # The same walk with no server, on the protocol's own pages: a disclosure, a pane that waits for its page, and the form with a colour field and a file field
+            # (a colour chosen with the keyboard, files chosen through a picker the walk supplies, what the walk's own server received read by hash).
+            $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--page', "$out\page-fixtures", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+            if (-not $run.WaitForExit(600000)) { $problems += "the page walk of the fixtures did not end in 600 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+            else { "the page walk of the fixtures ended" }
+            if (Test-Path "$out\page-fixtures\page.txt") { Get-Content "$out\page-fixtures\page.txt" }
             # Signing out empties what the web view keeps, read from the web view: a web page that stores a cookie and a value is shown,
             # left, and the person signs out with the answer a server gives; the web page shown after says what it finds. No server is needed.
             $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--wipe', $out, '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
@@ -798,7 +804,7 @@ jobs:
           }
           if ($problems) { $problems | ForEach-Object { "PROBLEM: $_" }; throw "the walks did not all run: $($problems -join '; ')" }
 
-      # What the walks found decides the job: every check line the demos wrote is read, and any that says FAIL fails it; a run that
+      # What the walks found decides the job: every check line the demos wrote (the page walks' too) is read, and any that says FAIL fails it; a run that
       # wrote no checks, or stopped before its last line, fails it; and the audit's counts are added over every look and may not
       # pass the numbers written at the top of this job.
       - name: What the walks found
@@ -809,12 +815,12 @@ jobs:
           $failed = @()
           $known = @($env:KNOWN_FAILS -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
           $stillFailing = @()
-          foreach ($file in 'store-checks.txt', 'inbox-checks.txt', 'board-checks.txt', 'wipe.txt', 'sheet.txt', 'hands.txt', 'popover.txt', 'moves.txt') {
+          foreach ($file in 'store-checks.txt', 'inbox-checks.txt', 'board-checks.txt', 'wipe.txt', 'sheet.txt', 'hands.txt', 'popover.txt', 'moves.txt', 'page-store\page.txt', 'page-inbox\page.txt', 'page-board\page.txt', 'page-fixtures\page.txt') {
             $path = Join-Path $out $file
             if (-not (Test-Path $path)) { $failed += "$file was not written"; continue }
             $lines = Get-Content $path
-            $passes = @($lines | Where-Object { $_ -match '\[(check|hands|popover|moves)\] PASS' }).Count
-            $fails = @($lines | Where-Object { $_ -match '\[(check|hands|popover|moves)\] FAIL' })
+            $passes = @($lines | Where-Object { $_ -match '\[(check|hands|popover|moves|page)\] PASS' }).Count
+            $fails = @($lines | Where-Object { $_ -match '\[(check|hands|popover|moves|page)\] FAIL' })
             $unknown = @($fails | Where-Object { $line = $_; -not ($known | Where-Object { $line -match $_ }) })
             $stillFailing += $fails | Where-Object { $line = $_; $known | Where-Object { $line -match $_ } }
             "$file : $passes passed, $($fails.Count) failed ($($fails.Count - $unknown.Count) of them named in KNOWN_FAILS)"
