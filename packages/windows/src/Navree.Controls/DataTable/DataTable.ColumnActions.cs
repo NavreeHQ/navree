@@ -1,0 +1,404 @@
+using System.Globalization;
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Navree.Design.Tables;
+using Windows.Foundation;
+using Windows.System;
+using DispatcherQueuePriority = Microsoft.UI.Dispatching.DispatcherQueuePriority;
+
+namespace Navree.Controls;
+
+public sealed partial class DataTable
+{
+    private readonly HashSet<string> personWidths = new(StringComparer.Ordinal);
+    private List<string> columnOrder = [];
+    private DispatcherQueueTimer? saveTimer;
+    private string? loadedFor;
+    private string? resizingKey;
+    private double resizeStartWidth;
+    private int saveCounter;
+
+    private string KeyOf(DataTableHeaderCell cell) => ColumnAt(cell.ColumnIndex).Key;
+
+    // The keys that work on a heading: widen and narrow, move, fit, the menu.
+    private bool HeaderKey(DataTableHeaderCell cell, VirtualKey key, bool ctrl, bool shift, bool alt)
+    {
+        if (Model is null || cell.ColumnIndex < 0)
+        {
+            return false;
+        }
+
+        bool rtl = FlowDirection == FlowDirection.RightToLeft;
+        DataTableColumn column = ColumnAt(cell.ColumnIndex);
+        if (alt && key is VirtualKey.Left or VirtualKey.Right)
+        {
+            int direction = (key == VirtualKey.Right) != rtl ? 1 : -1;
+            double current = widths.TryGetValue(column.Key, out double known) ? known : 0;
+            widths[column.Key] = ColumnSizing.ResizeByKey(column.Kind, current, direction, shift);
+            personWidths.Add(column.Key);
+            ColumnsChangedByPerson(Announcements.ColumnWidth(column.Header, (int)Math.Round(widths[column.Key])));
+            return true;
+        }
+
+        if (ctrl && key is VirtualKey.Left or VirtualKey.Right)
+        {
+            MoveColumn(column, (key == VirtualKey.Right) != rtl ? 1 : -1);
+            DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () => SetActive(new Cell(-1, activeColumn), focus: true));
+            return true;
+        }
+
+        if (ctrl && key is VirtualKey.Number0 or VirtualKey.NumberPad0)
+        {
+            FitColumn(cell);
+            return true;
+        }
+
+        if (key == VirtualKey.Application || (shift && key == VirtualKey.F10))
+        {
+            ShowColumnMenu(cell, null);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>A pointer began to widen a column.</summary>
+    internal void ResizeStarted(DataTableHeaderCell cell)
+    {
+        resizingKey = KeyOf(cell);
+        resizeStartWidth = widths.TryGetValue(resizingKey, out double known) ? known : 0;
+    }
+
+    /// <summary>A pointer is widening a column.</summary>
+    internal void ResizeMoved(DataTableHeaderCell cell, double dx)
+    {
+        if (resizingKey is null)
+        {
+            return;
+        }
+
+        double delta = FlowDirection == FlowDirection.RightToLeft ? -dx : dx;
+        widths[resizingKey] = ColumnSizing.Clamp(ColumnAt(cell.ColumnIndex).Kind, resizeStartWidth + delta);
+        RebuildColumns(remeasure: false);
+    }
+
+    /// <summary>A pointer stopped widening a column.</summary>
+    internal void ResizeEnded(DataTableHeaderCell cell, bool keep)
+    {
+        if (resizingKey is not { } key)
+        {
+            return;
+        }
+
+        resizingKey = null;
+        if (!keep)
+        {
+            widths[key] = resizeStartWidth;
+            RebuildColumns(remeasure: false);
+            return;
+        }
+
+        personWidths.Add(key);
+        ColumnsChangedByPerson(Announcements.ColumnWidth(ColumnAt(cell.ColumnIndex).Header, (int)Math.Round(widths[key])));
+    }
+
+    /// <summary>Makes a column as wide as what it holds needs.</summary>
+    internal void FitColumn(DataTableHeaderCell cell)
+    {
+        if (Model is not { } model || Presenter is not { } presenter)
+        {
+            return;
+        }
+
+        DataTableColumn column = ColumnAt(cell.ColumnIndex);
+        double widest = measurer.Width(column.Header, TextStyle.BodyStrong);
+        int count = Math.Min(model.RowCount, 180);
+        for (int i = 0; i < count; i++)
+        {
+            widest = Math.Max(widest, measurer.Width(presenter.CellText(model.GetRow(i), cell.ColumnIndex), TextStyle.Body));
+        }
+
+        widths[column.Key] = ColumnSizing.Clamp(column.Kind, ColumnSizing.AutoWidth(column.Kind, widest, column.Sort is not null));
+        personWidths.Add(column.Key);
+        ColumnsChangedByPerson(Announcements.ColumnWidth(column.Header, (int)Math.Round(widths[column.Key])));
+    }
+
+    private void ResetWidth(string key)
+    {
+        personWidths.Remove(key);
+        widths.Remove(key);
+        ColumnsChangedByPerson(null);
+    }
+
+    private void ColumnsChangedByPerson(Announcement? say)
+    {
+        RebuildColumns(remeasure: false);
+        ScheduleSave();
+        RaiseLayoutChanged();
+        if (say is not null)
+        {
+            Announce(DataTableStrings.Get(say));
+        }
+    }
+
+    // Opens the menu of a column: from a right click at a point, from a key beside the cell.
+    internal void ShowColumnMenu(DataTableHeaderCell cell, Point? at)
+    {
+        if (Model is null || cell.ColumnIndex < 0)
+        {
+            return;
+        }
+
+        DataTableColumn column = ColumnAt(cell.ColumnIndex);
+        if (column.Role == ColumnRole.Actions)
+        {
+            return;
+        }
+
+        int grid = cell.GridColumn;
+        bool resizable = ColumnSizing.ResizeRange(column.Kind).Max > 0;
+        List<ColInfo> shownInfos = shown.Select(s => new ColInfo(s.Column.Key, s.Column.Kind, s.Column.Role, s.Column.Secondary)).ToList();
+        int endCount = shown.Count(s => s.Placed.Group == ColumnGroup.FrozenEnd);
+        int applied = layout?.FrozenStartApplied ?? 0;
+        MenuFlyout menu = new();
+        menu.Items.Add(Item("DataTable_Menu_Sort", column.Sort is not null, () => RaiseSortRequested(column)));
+        menu.Items.Add(Item("DataTable_Menu_Fit", resizable, () => FitColumn(cell)));
+        menu.Items.Add(Item("DataTable_Menu_ResetWidth", personWidths.Contains(column.Key), () => ResetWidth(column.Key)));
+        menu.Items.Add(Item("DataTable_Menu_Hide", grid >= 0 && ColumnSet.CanHide(shownInfos, grid), () => HideColumn(column)));
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(Item("DataTable_Menu_MoveEarlier", ColumnOrder.CanMove(grid, -1, applied, endCount, shown.Count), () => MoveColumn(column, -1)));
+        menu.Items.Add(Item("DataTable_Menu_MoveLater", ColumnOrder.CanMove(grid, 1, applied, endCount, shown.Count), () => MoveColumn(column, 1)));
+        menu.Items.Add(Item("DataTable_Menu_Freeze", grid >= 0 && grid >= applied, () => FreezeUpTo(grid)));
+        menu.Items.Add(Item("DataTable_Menu_Unfreeze", applied > 0, Unfreeze));
+        menu.Items.Add(new MenuFlyoutSeparator());
+
+        MenuFlyoutSubItem columnsMenu = new() { Text = DataTableStrings.Get("DataTable_Menu_Columns") };
+        foreach (DataTableColumn each in Model.Columns)
+        {
+            if (each.Role is ColumnRole.Subtitle or ColumnRole.Actions)
+            {
+                continue;
+            }
+
+            DataTableColumn captured = each;
+            ToggleMenuFlyoutItem toggle = new() { Text = each.Header, IsChecked = !hiddenKeys.Contains(each.Key) };
+            toggle.Click += (_, _) =>
+            {
+                if (hiddenKeys.Contains(captured.Key))
+                {
+                    ShowColumn(captured);
+                }
+                else
+                {
+                    HideColumn(captured);
+                }
+            };
+            columnsMenu.Items.Add(toggle);
+        }
+
+        menu.Items.Add(columnsMenu);
+        MenuFlyoutSubItem densityMenu = new() { Text = DataTableStrings.Get("DataTable_Menu_Density") };
+        foreach ((Density value, string id) in new[] { (Density.Compact, "DataTable_Density_Compact"), (Density.Standard, "DataTable_Density_Standard"), (Density.Comfortable, "DataTable_Density_Comfortable") })
+        {
+            Density captured = value;
+            RadioMenuFlyoutItem item = new() { Text = DataTableStrings.Get(id), GroupName = "DataTableDensity", IsChecked = density == value };
+            item.Click += (_, _) =>
+            {
+                Density = captured;
+                ScheduleSave();
+            };
+            densityMenu.Items.Add(item);
+        }
+
+        menu.Items.Add(densityMenu);
+        menu.Items.Add(Item("DataTable_Menu_Reset", personWidths.Count > 0 || hiddenKeys.Count > 0 || forcedShownKeys.Count > 0 || columnOrder.Count > 0 || frozenWish is not null, ResetColumns));
+        menu.Closed += (_, _) => RestoreFocus();
+        if (at is { } point)
+        {
+            menu.ShowAt(this, new FlyoutShowOptions { Position = point });
+        }
+        else
+        {
+            menu.ShowAt(cell);
+        }
+    }
+
+    private static MenuFlyoutItem Item(string id, bool enabled, Action act)
+    {
+        MenuFlyoutItem item = new() { Text = DataTableStrings.Get(id), IsEnabled = enabled };
+        item.Click += (_, _) => act();
+        return item;
+    }
+
+    internal void HideColumn(DataTableColumn column)
+    {
+        hiddenKeys.Add(column.Key);
+        forcedShownKeys.Remove(column.Key);
+        ColumnsChangedByPerson(Announcements.ColumnVisibility(column.Header, false));
+    }
+
+    private void ShowColumn(DataTableColumn column)
+    {
+        hiddenKeys.Remove(column.Key);
+        if (column.Secondary)
+        {
+            forcedShownKeys.Add(column.Key);
+        }
+
+        ColumnsChangedByPerson(Announcements.ColumnVisibility(column.Header, true));
+    }
+
+    // Moves a column one step past its neighbour among the columns shown.
+    internal void MoveColumn(DataTableColumn column, int delta)
+    {
+        int grid = GridColumnOf(column.Key);
+        int endCount = shown.Count(s => s.Placed.Group == ColumnGroup.FrozenEnd);
+        if (grid < 0 || !ColumnOrder.CanMove(grid, delta, layout?.FrozenStartApplied ?? 0, endCount, shown.Count))
+        {
+            return;
+        }
+
+        List<string> all = FullOrder();
+        string neighbour = shown[grid + delta].Column.Key;
+        columnOrder = [.. ColumnOrder.Move(all, all.IndexOf(column.Key), all.IndexOf(neighbour))];
+        ColumnsChangedByPerson(Announcements.ColumnMoved(column.Header, grid + delta + 1, shown.Count));
+        activeColumn = Math.Clamp(grid + delta, 0, shown.Count - 1);
+    }
+
+    private List<string> FullOrder() => [.. ColumnOrder.Reconcile(Model!.Columns.Select(c => c.Key).ToList(), columnOrder)];
+
+    internal void FreezeUpTo(int gridColumn)
+    {
+        int before = frozenWish ?? ColumnSet.DefaultFrozen(shown.Select(s => new ColInfo(s.Column.Key, s.Column.Kind, s.Column.Role, s.Column.Secondary)).ToList());
+        frozenWish = gridColumn + 1;
+        RebuildColumns(remeasure: false);
+        if ((layout?.FrozenStartApplied ?? 0) < gridColumn + 1)
+        {
+            frozenWish = before;
+            RebuildColumns(remeasure: false);
+            Announce(DataTableStrings.Get("DataTable_NoRoomToFreeze"));
+            return;
+        }
+
+        ColumnsChangedByPerson(null);
+    }
+
+    private void Unfreeze()
+    {
+        frozenWish = 0;
+        ColumnsChangedByPerson(null);
+    }
+
+    private void ResetColumns()
+    {
+        columnOrder = [];
+        personWidths.Clear();
+        ForgetLayout();
+        ScheduleSave();
+        RaiseLayoutChanged();
+    }
+
+    // What a person has kept of the columns is read when the columns first arrive for a key.
+    private void LoadStoredLayout(IReadOnlyList<DataTableColumn> columns)
+    {
+        if (layoutKey is not { } key || layoutStore is not { } store)
+        {
+            return;
+        }
+
+        string signature = key + "|" + string.Join(',', columns.Select(c => c.Key));
+        if (loadedFor == signature)
+        {
+            return;
+        }
+
+        loadedFor = signature;
+        if (!store.TryLoad(key, out string json) || LayoutText.Parse(json) is not { } stored)
+        {
+            return;
+        }
+
+        List<string> serverKeys = columns.Select(c => c.Key).ToList();
+        if (!stored.Order.Any(serverKeys.Contains) && stored.Columns.Keys.All(k => !serverKeys.Contains(k)))
+        {
+            return;
+        }
+
+        columnOrder = [.. ColumnOrder.Reconcile(serverKeys, stored.Order)];
+        frozenWish = Math.Clamp(stored.Frozen, 0, columns.Count);
+        if (Enum.TryParse(stored.Density, ignoreCase: true, out Density kept))
+        {
+            density = kept;
+        }
+
+        foreach (DataTableColumn column in columns)
+        {
+            if (!stored.Columns.TryGetValue(column.Key, out StoredColumn? kept2))
+            {
+                continue;
+            }
+
+            if (kept2.Width is { } width && string.Equals(kept2.Kind, column.Kind.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                widths[column.Key] = ColumnSizing.Clamp(column.Kind, width);
+                personWidths.Add(column.Key);
+            }
+
+            if (kept2.Hidden is true)
+            {
+                hiddenKeys.Add(column.Key);
+            }
+            else if (kept2.Hidden is false)
+            {
+                forcedShownKeys.Add(column.Key);
+            }
+        }
+
+        saveCounter = stored.Columns.Values.Select(c => c.Seen).DefaultIfEmpty(0).Max();
+    }
+
+    private void ScheduleSave()
+    {
+        if (layoutKey is null || layoutStore is null)
+        {
+            return;
+        }
+
+        saveTimer ??= DispatcherQueue.CreateTimer();
+        saveTimer.Stop();
+        saveTimer.Interval = TimeSpan.FromMilliseconds(400);
+        saveTimer.IsRepeating = false;
+        saveTimer.Tick -= OnSaveTimer;
+        saveTimer.Tick += OnSaveTimer;
+        saveTimer.Start();
+    }
+
+    private void OnSaveTimer(DispatcherQueueTimer sender, object args) => SaveLayoutNow();
+
+    internal void SaveLayoutNow()
+    {
+        if (layoutKey is not { } key || layoutStore is not { } store || Model is not { } model)
+        {
+            return;
+        }
+
+        saveTimer?.Stop();
+        saveCounter++;
+        Dictionary<string, StoredColumn> columns = [];
+        foreach (DataTableColumn column in model.Columns)
+        {
+            double? width = personWidths.Contains(column.Key) && widths.TryGetValue(column.Key, out double w) ? w : null;
+            bool? hidden = hiddenKeys.Contains(column.Key) ? true : forcedShownKeys.Contains(column.Key) ? false : null;
+            if (width is not null || hidden is not null)
+            {
+                columns[column.Key] = new StoredColumn(column.Kind.ToString().ToLowerInvariant(), width, hidden, saveCounter);
+            }
+        }
+
+        int frozen = frozenWish ?? ColumnSet.DefaultFrozen(shown.Select(s => new ColInfo(s.Column.Key, s.Column.Kind, s.Column.Role, s.Column.Secondary)).ToList());
+        StoredLayout stored = new(LayoutText.CurrentVersion, density.ToString().ToLowerInvariant(), frozen, FullOrder(), columns);
+        store.Save(key, LayoutText.Serialize(stored));
+    }
+}

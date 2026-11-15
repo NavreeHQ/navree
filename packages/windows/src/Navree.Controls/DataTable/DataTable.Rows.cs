@@ -494,6 +494,11 @@ public sealed partial class DataTable
         }
     }
 
+    /// <summary>Opens a row's menu beside a cell, as a key does.</summary>
+    /// <param name="row">The row.</param>
+    /// <param name="cell">The cell.</param>
+    internal void ShowRowMenuForRun(DataTableRow row, FrameworkElement cell) => ShowRowMenu(row, cell, null);
+
     // The row's menu, at a point when the pointer asked and beside the cell when a key did.
     private bool ShowRowMenu(DataTableRow row, FrameworkElement? target, Windows.Foundation.Point? position)
     {

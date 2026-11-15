@@ -478,7 +478,8 @@ public sealed class DataTableRow : Control
         foreach (DataTableHeaderCell header in headers)
         {
             DataTableColumn column = table.ColumnAt(header.ColumnIndex);
-            header.Set(column.Role == ColumnRole.Actions ? string.Empty : column.Header, column.Align, column.Sort, hasMenu: false);
+            bool actions = column.Role == ColumnRole.Actions;
+            header.Set(actions ? string.Empty : column.Header, column.Align, column.Sort, hasMenu: !actions, canResize: ColumnSizing.ResizeRange(column.Kind).Max > 0);
             header.IsActive = table.IsActiveHeader(header.GridColumn);
         }
 

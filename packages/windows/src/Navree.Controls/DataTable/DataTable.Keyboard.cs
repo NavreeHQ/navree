@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Navree.Design.Tables;
 using Windows.System;
+using DispatcherQueuePriority = Microsoft.UI.Dispatching.DispatcherQueuePriority;
 
 namespace Navree.Controls;
 
@@ -209,6 +210,23 @@ public sealed partial class DataTable
             return;
         }
 
+        if (headerCell is not null && HeaderKey(headerCell, e.Key, ctrl, shift, alt))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (headerCell is null && row >= 0 && (e.Key == VirtualKey.Application || (shift && e.Key == VirtualKey.F10)))
+        {
+            e.Handled = true;
+            if (cell!.Row is { } menuRow)
+            {
+                ShowRowMenu(menuRow, cell, null);
+            }
+
+            return;
+        }
+
         switch (e.Key)
         {
             case VirtualKey.Left:
@@ -295,7 +313,7 @@ public sealed partial class DataTable
         };
         NavMods mods = (ctrl ? NavMods.Ctrl : NavMods.None) | (shift ? NavMods.Shift : NavMods.None);
         int page = GridNavigation.PageRows(scroll?.ViewportHeight ?? 0, rowHeight);
-        bool rtl = ActualFlowDirection == FlowDirection.RightToLeft;
+        bool rtl = FlowDirection == FlowDirection.RightToLeft;
 
         if (shift && current.Row >= 0 && key is VirtualKey.Up or VirtualKey.Down && current.Row < model.RowCount)
         {

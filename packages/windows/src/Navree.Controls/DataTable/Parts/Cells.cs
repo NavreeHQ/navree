@@ -73,6 +73,9 @@ public sealed class DataTableHeaderCell : Control
     private bool over;
     private bool pressed;
     private bool menuAvailable;
+    private bool resizable;
+    private ResizeGrip? grip;
+    private UIElement? options;
 
     /// <summary>Makes a heading cell.</summary>
     public DataTableHeaderCell()
@@ -99,6 +102,9 @@ public sealed class DataTableHeaderCell : Control
     /// <summary>The words of the heading.</summary>
     internal string Heading => heading;
 
+    /// <summary>The strip that widens the column, or null before the template is made.</summary>
+    internal ResizeGrip? Grip => grip;
+
     /// <summary>Whether a press on the heading asks for a sort.</summary>
     internal bool Sortable => sortable;
 
@@ -107,13 +113,15 @@ public sealed class DataTableHeaderCell : Control
     /// <param name="alignment">Where the words sit.</param>
     /// <param name="sort">How the column is sorted now, or null when it cannot be.</param>
     /// <param name="hasMenu">Whether the cell shows the dots of a menu when pointed at.</param>
-    internal void Set(string words, DataTableAlign alignment, DataTableSort? sort, bool hasMenu)
+    /// <param name="canResize">Whether a pointer can widen the column.</param>
+    internal void Set(string words, DataTableAlign alignment, DataTableSort? sort, bool hasMenu, bool canResize)
     {
         heading = words;
         align = alignment;
         sortable = sort is not null;
         direction = sort?.Direction ?? DataTableSortDirection.None;
         menuAvailable = hasMenu;
+        resizable = canResize;
         Refresh();
     }
 
@@ -123,6 +131,16 @@ public sealed class DataTableHeaderCell : Control
         base.OnApplyTemplate();
         text = GetTemplateChild("PART_Text") as TextBlock;
         sortGlyph = GetTemplateChild("PART_SortGlyph") as FontIcon;
+        options = GetTemplateChild("PART_Options") as UIElement;
+        if (GetTemplateChild("PART_Grip") is ResizeGrip made && !ReferenceEquals(made, grip))
+        {
+            grip = made;
+            made.Started += () => Row?.Owner?.ResizeStarted(this);
+            made.Moved += dx => Row?.Owner?.ResizeMoved(this, dx);
+            made.Ended += keep => Row?.Owner?.ResizeEnded(this, keep);
+            made.FitRequested += () => Row?.Owner?.FitColumn(this);
+        }
+
         Refresh();
     }
 
@@ -172,6 +190,17 @@ public sealed class DataTableHeaderCell : Control
     }
 
     /// <inheritdoc />
+    protected override void OnRightTapped(RightTappedRoutedEventArgs e)
+    {
+        base.OnRightTapped(e);
+        if (!e.Handled && Row?.Owner is { } owner)
+        {
+            owner.ShowColumnMenu(this, e.GetPosition(owner));
+            e.Handled = true;
+        }
+    }
+
+    /// <inheritdoc />
     protected override void OnGotFocus(RoutedEventArgs e)
     {
         base.OnGotFocus(e);
@@ -202,7 +231,16 @@ public sealed class DataTableHeaderCell : Control
             sortGlyph.Visibility = direction == DataTableSortDirection.None ? Visibility.Collapsed : Visibility.Visible;
         }
 
-        _ = menuAvailable;
+        if (grip is not null)
+        {
+            grip.Visibility = resizable ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (options is not null)
+        {
+            options.Visibility = menuAvailable ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         UpdateState();
     }
 }

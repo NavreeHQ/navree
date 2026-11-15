@@ -77,9 +77,17 @@ public sealed partial class DataTable
         }
 
         IReadOnlyList<DataTableColumn> columns = model.Columns;
-        List<ColInfo> infos = columns.Select(c => new ColInfo(c.Key, c.Kind, c.Role, c.Secondary)).ToList();
+        LoadStoredLayout(columns);
+        Dictionary<string, int> byKey = [];
+        for (int i = 0; i < columns.Count; i++)
+        {
+            byKey[columns[i].Key] = i;
+        }
+
+        List<int> personsOrder = ColumnOrder.Reconcile(columns.Select(c => c.Key).ToList(), columnOrder).Select(k => byKey[k]).ToList();
+        List<ColInfo> infos = personsOrder.Select(i => new ColInfo(columns[i].Key, columns[i].Kind, columns[i].Role, columns[i].Secondary)).ToList();
         IReadOnlyList<int> chosen = ColumnSet.Shown(infos, hiddenKeys, forcedShownKeys, viewport);
-        List<int> start = [.. chosen];
+        List<int> start = chosen.Select(i => personsOrder[i]).ToList();
         List<int> end = [];
         while (start.Count > 0 && end.Count < 2 && columns[start[^1]].Role == ColumnRole.Actions)
         {
@@ -98,7 +106,7 @@ public sealed partial class DataTable
         hasCheckColumn = model.Choice.Available;
         hasChevronColumn = AnyDetail(model);
         double gutter = (hasCheckColumn ? FrozenGutter.CheckWidth : 0) + (hasChevronColumn ? FrozenGutter.ChevronWidth : 0);
-        List<ColInfo> startInfos = start.Select(i => infos[i]).ToList();
+        List<ColInfo> startInfos = start.Select(i => new ColInfo(columns[i].Key, columns[i].Kind, columns[i].Role, columns[i].Secondary)).ToList();
         int wish = frozenWish ?? ColumnSet.DefaultFrozen(startInfos);
         ColumnLayout built = ColumnLayoutBuilder.Build(start.Select(Spec).ToList(), wish, end.Select(Spec).ToList(), gutter, viewport);
 
@@ -113,7 +121,8 @@ public sealed partial class DataTable
         }
 
         string signature = string.Join('|', order.Select(i => columns[i].Key)) + (hasCheckColumn ? "+c" : string.Empty) + (hasChevronColumn ? "+d" : string.Empty);
-        if (signature != shownSignature)
+        bool versionChanged = signature != shownSignature;
+        if (versionChanged)
         {
             shownSignature = signature;
             LayoutVersion++;
@@ -133,7 +142,7 @@ public sealed partial class DataTable
             edgeEnd.Margin = new Thickness(0, 0, built.Fe, 0);
         }
 
-        RefreshAllRows(numbersOnly: false);
+        RefreshAllRows(numbersOnly: !versionChanged);
     }
 
     private bool AnyDetail(IDataTableModel model)
@@ -236,8 +245,4 @@ public sealed partial class DataTable
         }
     }
 
-    private void SaveLayoutNow()
-    {
-        // What a person kept of the columns is saved by the part that owns storage.
-    }
 }

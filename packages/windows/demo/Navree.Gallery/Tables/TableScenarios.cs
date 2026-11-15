@@ -11,7 +11,8 @@ namespace Navree.Gallery;
 /// <summary>Shows the table in its states, in light and dark, and drives it from the keyboard.</summary>
 internal static class TableScenarios
 {
-    private static readonly string[] Standard = ["standard", "chosen", "sorted", "loading", "empty", "failed", "scrolled", "keys"];
+    private static readonly string[] Standard =
+        ["standard", "chosen", "sorted", "loading", "empty", "failed", "scrolled", "detail", "cursor", "menu", "rowmenu", "layout", "keys"];
 
     /// <summary>The scenarios a run of "table" covers.</summary>
     internal static IReadOnlyList<string> All => Standard;
@@ -43,13 +44,25 @@ internal static class TableScenarios
         string tag = $"{name}-{theme.ToString().ToLowerInvariant()}";
         Report.Line("== table " + tag);
         window.ThemeHost.RequestedTheme = theme;
-        DataTable table = Build(name, out ListDataTableModel<Customer>? model);
+        MemoryLayoutStore store = new();
+        DataTable table = Build(name, store, out ListDataTableModel<Customer>? model);
         table.Margin = new Thickness(12);
         window.StageHost.Child = table;
         await Waiting.LoadedAsync(table);
         await Task.Delay(1200);
         await Prepare(name, table, model);
         await Task.Delay(500);
+        if (name == "layout")
+        {
+            // A second table with the same key reads what the first one kept.
+            Report.Line($"[{tag}] kept: {string.Join(" / ", store.Kept.Select(k => k.Key + " = " + k.Value))}");
+            table = Build(name, store, out model);
+            table.Margin = new Thickness(12);
+            window.StageHost.Child = table;
+            await Waiting.LoadedAsync(table);
+            await Task.Delay(1200);
+        }
+
         Describe(tag, table);
         if (name == "keys")
         {
@@ -59,11 +72,36 @@ internal static class TableScenarios
         await Handshake.StepAsync("table-" + tag, "the " + name + " table in " + theme);
     }
 
-    private static DataTable Build(string name, out ListDataTableModel<Customer>? model)
+    private static DataTable Build(string name, MemoryLayoutStore store, out ListDataTableModel<Customer>? model)
     {
         model = DemoData.Model(sorted: name == "sorted" ? "amount" : null, descending: true);
         TextTablePresenter<Customer> presenter = new(model);
+        if (name == "detail")
+        {
+            model.HasDetailOf = _ => true;
+            presenter.Detail = c => new TextBlock { Text = $"{c.Name} wrote from {c.City}. Phone {c.Phone}, mail {c.Email}. Owes {DemoData.Rupees(c.Amount)}.", TextWrapping = TextWrapping.Wrap };
+        }
+
+        if (name == "rowmenu")
+        {
+            presenter.Menu = c =>
+            {
+                MenuFlyout menu = new();
+                menu.Items.Add(new MenuFlyoutItem { Text = "Open " + c.Name });
+                menu.Items.Add(new MenuFlyoutItem { Text = "Send reminder" });
+                menu.Items.Add(new MenuFlyoutSeparator());
+                menu.Items.Add(new MenuFlyoutItem { Text = "Delete" });
+                return menu;
+            };
+        }
+
         DataTable table = new() { Model = model, Presenter = presenter, Culture = DemoData.Culture, Caption = "Customers" };
+        if (name == "layout")
+        {
+            table.LayoutKey = "gallery/customers";
+            table.LayoutStore = store;
+        }
+
         switch (name)
         {
             case "loading":
@@ -74,6 +112,12 @@ internal static class TableScenarios
                 model.FailureMessage = "The customers could not be loaded. Check the connection and try again.";
                 break;
             case "empty":
+                break;
+            case "cursor":
+                model.Reset(DemoData.Make(0, 300));
+                model.Summary = "1–300 of 1,204";
+                model.Earlier = new DataTableCursor(true, CursorState.Loading);
+                model.Later = new DataTableCursor(true, CursorState.Failed);
                 break;
             default:
                 model.Reset(DemoData.Make(0, 300));
@@ -96,9 +140,54 @@ internal static class TableScenarios
                 table.Scroller?.ScrollTo(420, 0, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
                 await Task.Delay(800);
                 break;
+            case "detail":
+                foreach (int index in new[] { 1, 4 })
+                {
+                    if (table.RowsRepeater?.TryGetElement(index) is DataTableRow row)
+                    {
+                        table.ToggleDetail(row);
+                    }
+                }
+
+                await Task.Delay(900);
+                break;
+            case "menu":
+                if (table.HeaderRow?.Headers.FirstOrDefault(h => h.GridColumn == 1) is { } heading)
+                {
+                    table.ShowColumnMenu(heading, null);
+                    await Task.Delay(700);
+                }
+
+                break;
+            case "rowmenu":
+                if (table.RowsRepeater?.TryGetElement(2) is DataTableRow target && target.Cells.Count > 1)
+                {
+                    table.ShowRowMenuForRun(target, target.Cells[1]);
+                    await Task.Delay(700);
+                }
+
+                break;
+            case "layout":
+                await ChangeLayoutAsync(table);
+                break;
         }
 
         _ = model;
+    }
+
+    // A person's changes to the columns, made by the same calls a pointer and a menu make.
+    private static async Task ChangeLayoutAsync(DataTable table)
+    {
+        DataTableHeaderCell Heading(string key) => table.HeaderRow!.Headers.First(h => table.Model!.Columns[h.ColumnIndex].Key == key);
+        DataTableHeaderCell name = Heading("name");
+        table.ResizeStarted(name);
+        table.ResizeMoved(name, 90);
+        table.ResizeEnded(name, true);
+        table.HideColumn(table.Model!.Columns.First(c => c.Key == "plan"));
+        table.MoveColumn(table.Model!.Columns.First(c => c.Key == "city"), 1);
+        table.FreezeUpTo(1);
+        await Task.Delay(600);
+        table.SaveLayoutNow();
     }
 
     // What the table made of its model: the numbers a person would check by eye.
@@ -172,6 +261,21 @@ internal static class TableScenarios
             _ => focused.GetType().Name,
         };
     }
+}
+
+/// <summary>Keeps a table's layout in memory, as a host would on disk.</summary>
+internal sealed class MemoryLayoutStore : IDataTableLayoutStore
+{
+    private readonly Dictionary<string, string> kept = [];
+
+    /// <summary>What is kept.</summary>
+    internal IReadOnlyDictionary<string, string> Kept => kept;
+
+    /// <inheritdoc />
+    public bool TryLoad(string key, out string json) => kept.TryGetValue(key, out json!);
+
+    /// <inheritdoc />
+    public void Save(string key, string json) => kept[key] = json;
 }
 
 /// <summary>Sends real key events to the window, as a person at the keyboard would.</summary>

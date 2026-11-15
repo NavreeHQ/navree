@@ -120,6 +120,39 @@
         </Setter>
     </Style>
 
+    <!-- The strip a heading is widened by. -->
+    <Style TargetType="local:ResizeGrip">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:ResizeGrip">
+                    <Grid x:Name="PART_Root" Background="Transparent">
+                        <Border x:Name="PART_Line"
+                                Width="1"
+                                HorizontalAlignment="Right"
+                                Opacity="0"
+                                Background="{ThemeResource DataTableResizeLine}" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Line.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Line.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- A heading cell. -->
     <Style TargetType="local:DataTableHeaderCell">
         <Setter Property="IsTabStop" Value="False" />
@@ -158,6 +191,7 @@
                                       Opacity="0"
                                       Foreground="{ThemeResource DataTableHeaderForeground}" />
                         </Grid>
+                        <local:ResizeGrip x:Name="PART_Grip" Width="8" HorizontalAlignment="Right" />
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal" />
@@ -300,6 +334,16 @@
                                                    TabFocusNavigation="Local"
                                                    XYFocusKeyboardNavigation="Disabled" />
                                 </ScrollView>
+                                <ProgressBar x:Name="PART_EarlierProgress"
+                                             IsIndeterminate="True"
+                                             VerticalAlignment="Top"
+                                             Visibility="Collapsed" />
+                                <InfoBar x:Name="PART_EarlierFailed"
+                                         Severity="Warning"
+                                         IsClosable="False"
+                                         IsOpen="False"
+                                         VerticalAlignment="Top"
+                                         Visibility="Collapsed" />
                                 <Border x:Name="PART_EdgeStart"
                                         Width="1"
                                         HorizontalAlignment="Left"

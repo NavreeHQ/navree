@@ -154,7 +154,7 @@ public sealed partial class DataTable
         }
 
         stickyAttached = true;
-        sticky.Attach(ActualFlowDirection == FlowDirection.RightToLeft);
+        sticky.Attach(FlowDirection == FlowDirection.RightToLeft);
         if (CurrentLayout is { } layout)
         {
             sticky.SetFrozenWidths(layout.Fs, layout.Fe);

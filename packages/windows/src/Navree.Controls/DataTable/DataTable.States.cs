@@ -18,6 +18,8 @@ public sealed partial class DataTable
     private TextBlock? footerStatus;
     private HyperlinkButton? footerRetry;
     private UIElement? customEmpty;
+    private ProgressBar? earlierProgress;
+    private InfoBar? earlierFailed;
     private bool stateWired;
 
     private void WireStateParts()
@@ -33,6 +35,8 @@ public sealed partial class DataTable
         footerRing = GetTemplateChild("PART_FooterRing") as ProgressRing;
         footerStatus = GetTemplateChild("PART_FooterStatus") as TextBlock;
         footerRetry = GetTemplateChild("PART_FooterRetry") as HyperlinkButton;
+        earlierProgress = GetTemplateChild("PART_EarlierProgress") as ProgressBar;
+        earlierFailed = GetTemplateChild("PART_EarlierFailed") as InfoBar;
         if (stateWired)
         {
             return;
@@ -60,6 +64,14 @@ public sealed partial class DataTable
         {
             footerRetry.Content = DataTableStrings.Get("DataTable_Retry");
             footerRetry.Click += (_, _) => RaiseRetryRequested(RetryKind.More);
+        }
+
+        if (earlierFailed is not null)
+        {
+            Button again = new() { Content = DataTableStrings.Get("DataTable_Retry") };
+            again.Click += (_, _) => RaiseRetryRequested(RetryKind.Earlier);
+            earlierFailed.ActionButton = again;
+            earlierFailed.Message = DataTableStrings.Get("DataTable_LoadEarlierFailed");
         }
     }
 
@@ -155,5 +167,18 @@ public sealed partial class DataTable
 
         bool show = model.RowCount > 0 && (summary.Length > 0 || later != CursorState.Idle);
         footer.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+
+        CursorState earlier = model.Earlier.State;
+        if (earlierProgress is not null)
+        {
+            earlierProgress.Visibility = earlier == CursorState.Loading ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (earlierFailed is not null)
+        {
+            bool failed = earlier == CursorState.Failed;
+            earlierFailed.Visibility = failed ? Visibility.Visible : Visibility.Collapsed;
+            earlierFailed.IsOpen = failed;
+        }
     }
 }
