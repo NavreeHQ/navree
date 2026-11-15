@@ -109,6 +109,13 @@ try {
     Say ("primary screen: " + [System.Windows.Forms.SystemInformation]::PrimaryMonitorSize + ", virtual screen: " + [System.Windows.Forms.SystemInformation]::VirtualScreen)
 } catch { Say "screen size: failed: $($_.Exception.Message)" }
 try {
+    $metrics = Get-ItemProperty 'HKCU:\Control Panel\Desktop\WindowMetrics' -ErrorAction Stop
+    Say ("applied DPI: " + $metrics.AppliedDPI)
+    $personalize = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -ErrorAction Stop
+    Say ("apps use light theme: " + $personalize.AppsUseLightTheme + ", transparency: " + $personalize.EnableTransparency)
+} catch { Say "dpi and theme: failed: $($_.Exception.Message)" }
+Say ("Set-DisplayResolution available: " + [bool](Get-Command Set-DisplayResolution -ErrorAction SilentlyContinue))
+try {
     Get-CimInstance Win32_VideoController | ForEach-Object { Say ("video: " + $_.Name + ", " + $_.CurrentHorizontalResolution + "x" + $_.CurrentVerticalResolution) }
 } catch { Say "video: failed: $($_.Exception.Message)" }
 

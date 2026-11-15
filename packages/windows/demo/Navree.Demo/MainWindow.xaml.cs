@@ -17,7 +17,7 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
         AppWindow.Resize(new SizeInt32(1100, 760));
 
-        CoreStatus.Text = AskTheCore();
+        CoreStatus.Text = AskTheCore() + Environment.NewLine + PackageIdentity();
         Root.Loaded += OnRootLoaded;
     }
 
@@ -34,6 +34,19 @@ public sealed partial class MainWindow : Window
         catch (Exception problem)
         {
             return "The core did not answer: " + problem.GetType().Name + ": " + problem.Message;
+        }
+    }
+
+    // Says whether the app runs with package identity: asking for the current package fails when it has none.
+    private static string PackageIdentity()
+    {
+        try
+        {
+            return "Package identity: " + Windows.ApplicationModel.Package.Current.Id.FullName;
+        }
+        catch (Exception)
+        {
+            return "Package identity: none";
         }
     }
 
