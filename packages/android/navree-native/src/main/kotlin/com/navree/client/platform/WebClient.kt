@@ -275,13 +275,15 @@ internal class WorkerRules(private val make: (Origins) -> Unit, private val told
 }
 
 /**
- * The guard on service workers, made when it is needed, not at the start: it
- * starts the web view's engine, which takes a while, and an app whose first
- * screen is native does not need it before that screen is drawn. It is made
- * on the main thread when the main thread is idle after the first screen is
- * drawn, and in any case before a web view is made (a page cannot register a
- * worker before it is in a web view); where it could not be made, each web
- * page made tries again, and the first failure is in the log.
+ * The guard on service workers. Setting the service worker controller's
+ * client is a call into the web view's engine, and it is not made while the
+ * app starts: it is made on the main thread when the main thread is idle after
+ * the first screen is drawn, and in any case before a web view is made (a page
+ * cannot register a worker before it is in a web view). That moves this call
+ * only. The engine itself is started by the first native request, when the
+ * cookie jar ([WebViewCookies]) asks the web view's cookie store. Where the
+ * guard could not be made, each web page made tries again, and the first
+ * failure is in the log.
  */
 object WorkerGuard {
     private val rules = WorkerRules(::setServiceWorkerRules, ClientLog.told)

@@ -321,4 +321,7 @@ With nothing opened, the list has the window.
   and a dialog or a popup takes its direction from the composition it is opened
   from.
 - A service worker a page registers is held to the origins the web view is:
-  its requests to any other origin are answered 403.
+  its requests to any other origin are answered 403. A page's own scripts open
+  a socket or start a worker only for an address on the app's origins. What a
+  script does inside a worker is not covered (the page's content security
+  policy is what holds it).
