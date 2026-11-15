@@ -211,10 +211,13 @@ class LiveDemosTest {
         val app = start(origin!!)
         send(app, Events.select(2))
         settled(app)
-        val fields = compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().map { it.id }
+        val start = compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes()
+        val fields = start.map { it.id }
+        val named = start.associate { node -> node.id to (node.config.getOrNull(SemanticsProperties.EditableText)?.text.orEmpty() + " " + node.config.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text }.orEmpty()).trim() }
         assertTrue("the inventory shows fields to walk through", fields.isNotEmpty())
         val seen = ArrayList<Stop>()
-        repeat(40) { press ->
+        // Two stops a row (its field and its button), the page's own controls first, and a margin.
+        repeat((fields.size * 3 + 20).coerceAtMost(120)) { press ->
             compose.onRoot().performKeyInput { pressKey(Key.Tab) }
             compose.waitForIdle()
             val stop = focusedStop()
@@ -227,7 +230,7 @@ class LiveDemosTest {
             seen += stop
         }
         val missed = fields.filter { id -> seen.none { it.id == id } }
-        assertTrue("fields that were in view at the start and were never a stop: ${missed.size} of ${fields.size}", missed.isEmpty())
+        assertTrue("fields that were in view at the start and were never a stop in ${seen.size} presses: ${missed.size} of ${fields.size}: ${missed.map { named[it] }}; the stops were ${seen.map { it.name.take(24) }}", missed.isEmpty())
     }
 
     /** After a field's keyboard action ends the typing, the out-of-sight place that takes the focus is not a stop of the next Tab. */
