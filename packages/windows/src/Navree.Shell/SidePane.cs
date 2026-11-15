@@ -79,6 +79,10 @@ internal sealed class SidePane : Grid
         });
     }
 
+    /// <summary>Says what the pane is about, as the overlay now says.</summary>
+    /// <param name="heading">The words.</param>
+    internal void Retitle(string heading) => title.Text = heading;
+
     /// <summary>Puts new content in the pane that is showing.</summary>
     internal void Replace(UIElement content) => body.Content = content;
 

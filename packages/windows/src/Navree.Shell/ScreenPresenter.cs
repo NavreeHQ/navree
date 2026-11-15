@@ -111,18 +111,20 @@ internal sealed class ScreenPresenter : Grid
 
         Present(scroller);
 
-        if (shown is not null && shown.Id == screen.Id && shownWidth == width && BringUpToDate(screen))
+        // Where the person was on this page, before anything is changed: the focus and what it holds.
+        PageKeeper.Held? held = shown is not null && shown.Id == screen.Id ? PageKeeper.Capture(scroller.Content as FrameworkElement) : null;
+        if (shown is not null && shown.Id == screen.Id && shownWidth == width && BringUpToDate(screen, held))
         {
             shown = screen;
             return;
         }
 
-        DrawWhole(screen, width);
+        DrawWhole(screen, width, held);
     }
 
     // The screen is the one on the screen at the width it is drawn for: what changed is brought up to date in the page that stands; false when the page
     // has to be drawn again (the screen shows something else than a native page, or a part could not be put in its place).
-    private bool BringUpToDate(ScreenView screen)
+    private bool BringUpToDate(ScreenView screen, PageKeeper.Held? held)
     {
         if (renderer is null || Context is not { } context || parts is not { } page
             || screen.Content is not NativeContent native || shown?.Content is not NativeContent before || before.Screen is not { } was)
@@ -132,7 +134,6 @@ internal sealed class ScreenPresenter : Grid
 
         _ = context.TakeCount();
         int lazy = context.TakeLazy();
-        PageKeeper.Held? held = PageKeeper.Capture(page.Panel);
         double offset = scroller.VerticalOffset;
         double extentBefore = scroller.ExtentHeight;
         bool earlierArrived = EarlierArrived(shown, screen);
@@ -229,7 +230,22 @@ internal sealed class ScreenPresenter : Grid
             PageKeeper.Restore(page.Panel, held);
         }
 
-        keeper.Serve(page.Panel, screen, host.Send, context.OverlayRoots);
+        keeper.Serve(page.Panel, screen, host.Send, () => Context is { } live ? live.OverlayRoots() : []);
+
+        // A card that was just moved gets its handle back by the id the focus is put back by; the wish for it does not outlive this answer.
+        string? wanted = CardFocus.Wanted;
+        if (wanted is not null)
+        {
+            page.Panel.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, async () =>
+            {
+                await Task.Delay(1200);
+                if (CardFocus.Wanted == wanted)
+                {
+                    CardFocus.Wanted = null;
+                }
+            });
+        }
+
         return true;
     }
 
@@ -269,10 +285,9 @@ internal sealed class ScreenPresenter : Grid
         && previous.Lists.Any(pair => pair.Value.LoadingBefore && screen.Lists.TryGetValue(pair.Key, out ListState? now) && !now.LoadingBefore && !now.FailedBefore);
 
     // The screen is drawn from its tree, all of it, the scroll position kept.
-    private void DrawWhole(ScreenView screen, WidthClass width)
+    private void DrawWhole(ScreenView screen, WidthClass width, PageKeeper.Held? held)
     {
-        // Where the person was on this page, before it is replaced: the focus and what it holds, and the place of each screen's scroll.
-        PageKeeper.Held? held = shown is not null && shown.Id == screen.Id ? PageKeeper.Capture(scroller.Content as FrameworkElement) : null;
+        // The place of each screen's scroll is kept as the page is replaced.
         if (shown is not null)
         {
             offsets[shown.Id] = scroller.VerticalOffset;
@@ -335,7 +350,7 @@ internal sealed class ScreenPresenter : Grid
             PageKeeper.Restore(built, held);
         }
 
-        keeper.Serve(built, screen, host.Send, context.OverlayRoots);
+        keeper.Serve(built, screen, host.Send, () => Context is { } live ? live.OverlayRoots() : []);
     }
 
     // One thing fills the area: the screen's scrolling page, or a web view.

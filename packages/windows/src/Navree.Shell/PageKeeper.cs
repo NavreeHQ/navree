@@ -24,6 +24,7 @@ internal sealed class PageKeeper
     internal sealed record Held(string Node, int Start, int Length, string? Row, string? Column);
 
     private readonly Dictionary<long, long> served = [];
+    private readonly Dictionary<long, long> waiting = [];
 
     /// <summary>Gives a drawn node the id the tree gave it, so it can be found again after the page is drawn again.</summary>
     /// <param name="element">What was drawn.</param>
@@ -121,27 +122,35 @@ internal sealed class PageKeeper
     /// <param name="send">Tells the core.</param>
     internal void Serve(FrameworkElement page, ScreenView screen, Action<string> send, Func<IEnumerable<FrameworkElement>>? elsewhere = null)
     {
-        if (screen.Focus is not { } request || served.TryGetValue(screen.Id, out long last) && last >= request.Serial)
+        if (screen.Focus is not { } request || served.TryGetValue(screen.Id, out long last) && last >= request.Serial
+            || waiting.TryGetValue(screen.Id, out long inFlight) && inFlight >= request.Serial)
         {
             return;
         }
 
-        served[screen.Id] = request.Serial;
+        waiting[screen.Id] = request.Serial;
         int attempts = 0;
         void Try()
         {
             attempts++;
             if (Give(page, request.Target, null) || (elsewhere?.Invoke().Any(root => Give(root, request.Target, null)) ?? false))
             {
+                served[screen.Id] = request.Serial;
+                _ = waiting.Remove(screen.Id);
                 send(Events.Focused(screen.Id, request.Serial));
             }
-            else if (attempts < 12 && page.XamlRoot is not null)
+            else if (attempts < 25 && page.XamlRoot is not null)
             {
                 page.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, async () =>
                 {
                     await Task.Delay(80);
                     Try();
                 });
+            }
+            else
+            {
+                // Not there to be given the focus: the next answer asks again.
+                _ = waiting.Remove(screen.Id);
             }
         }
 

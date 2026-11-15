@@ -23,7 +23,7 @@ internal sealed partial class NodeRenderer
 
     // Whether a list is a set of cards: it can be reordered and its rows hold more than a title.
     private static bool HoldsCards(Models.List list) =>
-        list.Id is not null && list.Reorder is not null && list.Children.OfType<Models.Row>().Any(row => row.Detail.Count > 0);
+        list.Id is not null && list.Reorder is not null && (list.Reorder.Group is not null || list.Children.OfType<Models.Row>().Any(row => row.Detail.Count > 0));
 
     // The rows of a list of cards: the rows only, each drawn as a card.
     private static IReadOnlyList<Models.Node> KeptRows(Models.List list) => [.. list.Children.OfType<Models.Row>()];

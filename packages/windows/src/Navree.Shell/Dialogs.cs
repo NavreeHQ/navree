@@ -19,7 +19,10 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
     private readonly Dictionary<(long Screen, bool Pane), ScreenPresenter> modals = [];
     private ContentDialog? dialog;
     private Flyout? flyout;
-    private bool flyoutClosedByUs;
+    private readonly HashSet<Flyout> closingByUs = [];
+    private FrameworkElement? flyoutAnchor;
+    private bool repositioning;
+    private bool closedByEscape;
     private TaskCompletionSource closing = new();
     private bool closedByUs;
     private bool pumping;
@@ -31,6 +34,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
         if (e.Key == Windows.System.VirtualKey.Escape && flyout is { IsOpen: true } open)
         {
             e.Handled = true;
+            closedByEscape = true;
             open.Hide();
         }
     }
@@ -259,6 +263,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                         if (kept)
                         {
                             want.Holder!.View = view;
+                            want.Context?.Rebuild();
                         }
                         else
                         {
@@ -268,13 +273,19 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                         if (flyout is not null && want.Anchor is { XamlRoot: not null } moved && !ReferenceEquals(moved, showing.Anchor))
                         {
                             // The control it opened at was drawn again: it stays beside the new one.
+                            repositioning = true;
                             try
                             {
+                                flyoutAnchor = moved;
                                 flyout.ShowAt(moved);
                             }
                             catch (Exception problem)
                             {
                                 System.Diagnostics.Debug.WriteLine("a popover could not be moved: " + problem.Message);
+                            }
+                            finally
+                            {
+                                repositioning = false;
                             }
                         }
 
@@ -286,7 +297,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
 
                 if (flyout is not null)
                 {
-                    flyoutClosedByUs = true;
+                    _ = closingByUs.Add(flyout);
                     flyout.Hide();
                     flyout = null;
                     showing = null;
@@ -337,18 +348,25 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                     }
 
                     flyout = shown;
+                    flyoutAnchor = anchor;
                     showing = want;
-                    flyoutClosedByUs = false;
+                    closedByEscape = false;
                     shown.Closed += (_, _) =>
                     {
-                        bool byUs = flyoutClosedByUs;
+                        if (repositioning)
+                        {
+                            return;
+                        }
+
+                        bool byUs = closingByUs.Remove(shown);
                         if (ReferenceEquals(flyout, shown))
                         {
                             flyout = null;
                             showing = null;
                         }
 
-                        if (!byUs && anchor.XamlRoot is null)
+                        FrameworkElement openedAt = flyoutAnchor ?? anchor;
+                        if (!byUs && openedAt.XamlRoot is null)
                         {
                             // It went with the control it was open at, which the page drawing again took away: it is shown again at the new one.
                             if (!pumping)
@@ -359,7 +377,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                         else if (!byUs)
                         {
                             want.OnClosed(ContentDialogResult.None);
-                            _ = anchor.Focus(FocusState.Programmatic);
+                            _ = openedAt.Focus(closedByEscape ? FocusState.Keyboard : FocusState.Programmatic);
                         }
                     };
                     shown.Opened += (_, _) =>
@@ -408,10 +426,11 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
 
     private void BringUpToDate(Wanted want)
     {
-        FrameworkElement? old = flyout?.Content as FrameworkElement ?? dialog?.Content as FrameworkElement;
+        FrameworkElement? old = flyout?.Content as FrameworkElement ?? dialog?.Content as FrameworkElement ?? (pane.IsShowing ? pane.Content as FrameworkElement : null);
         PageKeeper.Held? held = old is null ? null : PageKeeper.Capture(old);
         UIElement fresh = want.Rebuild!();
         FrameworkElement? placed = null;
+        string heading = want.Overlay is { } overlay ? Titled(overlay) : string.Empty;
         if (flyout is not null)
         {
             ScrollViewer wrapped = new() { Content = fresh, MaxHeight = 420 };
@@ -422,11 +441,13 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
         {
             ScrollViewer wrapped = new() { Content = fresh };
             dialog.Content = wrapped;
+            dialog.Title = heading;
             placed = wrapped;
         }
         else if (pane.IsShowing)
         {
             pane.Replace(fresh);
+            pane.Retitle(heading);
             placed = fresh as FrameworkElement;
         }
 
