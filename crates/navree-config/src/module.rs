@@ -128,8 +128,9 @@ fn register(m: &mut ModuleBuilder, sources: ConfigSources) {
 /// every module has built its sections (and so read its keys), and for the
 /// logger to be installed.
 ///
-/// With `app.strict_config` the unknown keys and the failed settings stop
-/// the boot instead of being logged.
+/// With `app.strict_config` the unknown keys, the sections set beside a module
+/// that was given its options in code, and the failed settings stop the boot
+/// instead of being logged.
 struct ConfigDiagnostics {
     config: Arc<Config>,
     /// The keys of the sections the modules registered, and the keys they

@@ -179,10 +179,13 @@ pub struct AppOptions {
     /// comma-separated string.
     #[serde(deserialize_with = "key_list")]
     pub previous_keys: Vec<Secret<String>>,
-    /// Refuse to start when the configuration has a key nothing reads, or,
-    /// in an environment that behaves like production, a setting the
-    /// production profile fails (no `app.key`, a SQLite database, mail that
-    /// goes to the log). Off by default: the boot only logs them.
+    /// Refuse to start when the configuration has a key or section that
+    /// nothing reads, a section that is set while its module was given its
+    /// options in code (`for_root`), so the section is not read, or, in an
+    /// environment that behaves like production, a setting the production
+    /// profile fails (no `app.key`, a SQLite database, mail that goes to the
+    /// log, a session cookie that also goes over plain HTTP). Off by default:
+    /// the boot only logs them.
     pub strict_config: bool,
 }
 
