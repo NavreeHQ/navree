@@ -470,7 +470,10 @@ mod tests {
 
         let kept = defuse(body, "s1");
         let html = render(&kept);
-        assert!(html.contains(r#"data-slot="geo:map""#), "the element stays: {html}");
+        assert!(
+            html.contains(r#"data-slot="geo:map""#),
+            "the element stays: {html}"
+        );
         assert!(!html.contains("data-ui-ext"), "{html}");
         assert!(!html.contains("data-ui-props"), "{html}");
         assert!(!html.contains("data-ui-keep-attrs"), "{html}");

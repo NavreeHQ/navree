@@ -165,7 +165,10 @@ fn a_page_links_the_sheets_and_preloads_the_scripts_its_elements_name_once_each(
         assert!(at(&html, &sheet) < at(&html, icon), "{html}");
     }
     assert!(at(&html, icon) < at(&html, &script_preload(&MAP)), "{html}");
-    assert!(at(&html, &script_preload(&MAP)) < at(&html, "<script"), "{html}");
+    assert!(
+        at(&html, &script_preload(&MAP)) < at(&html, "<script"),
+        "{html}"
+    );
     // A sheet-only extension is not preloaded.
     assert_eq!(html.matches("modulepreload").count(), 1, "{html}");
 }
@@ -210,9 +213,10 @@ fn a_sheet_value_outside_the_grammar_is_not_linked() {
         el("div")
             .uses(Uses::EXTENSION_SHEETS)
             .attr("data-ui-ext-sheet", "https://cdn.example/x.css"),
-        el("div")
-            .uses(Uses::EXTENSION_SHEETS)
-            .attr("data-ui-ext-sheet", "/_navree/ui/ext/geo.map-0f9e8d7c6b5a.css?v=2"),
+        el("div").uses(Uses::EXTENSION_SHEETS).attr(
+            "data-ui-ext-sheet",
+            "/_navree/ui/ext/geo.map-0f9e8d7c6b5a.css?v=2",
+        ),
         el("div")
             .uses(Uses::EXTENSION_SHEETS)
             .attr("data-ui-ext-sheet", "/_navree/ui/ext/../app/x.css"),
@@ -326,7 +330,8 @@ impl Controller for Pages {
             })
             .public(),
             RouteDef::on(Method::POST, "!/badge", || async {
-                Reply::ops(Vec::new()).morph("badge", el("span").slot("geo:badge").extension(&BADGE))
+                Reply::ops(Vec::new())
+                    .morph("badge", el("span").slot("geo:badge").extension(&BADGE))
             })
             .public(),
         ]
@@ -364,7 +369,10 @@ async fn modules_of(path: &str) -> Vec<String> {
 #[tokio::test(flavor = "current_thread")]
 async fn a_reply_that_morphs_in_an_extension_brings_the_extensions_module() {
     let modules = modules_of("/pin").await;
-    assert!(modules.iter().any(|url| url == assets::CORE_URL), "{modules:?}");
+    assert!(
+        modules.iter().any(|url| url == assets::CORE_URL),
+        "{modules:?}"
+    );
     assert!(
         modules.iter().any(|url| url == assets::EXTENSIONS_URL),
         "{modules:?}"
@@ -642,7 +650,11 @@ async fn an_unknown_extension_file_is_warned_only_for_the_apps_namespaces_and_at
     assert_eq!(warned().len(), 2, "{:?}", warned());
     // Anyone can ask for any name: the log holds 64 of them and no more.
     for number in 0..70 {
-        not_found(&app, &format!("/_navree/ui/ext/geo.name{number}-0123456789ab.js")).await;
+        not_found(
+            &app,
+            &format!("/_navree/ui/ext/geo.name{number}-0123456789ab.js"),
+        )
+        .await;
     }
     assert_eq!(warned().len(), 64);
     app.shutdown().await.unwrap();
@@ -799,11 +811,7 @@ async fn a_script_extension_without_a_contract_or_with_an_unknown_one_fails_the_
     );
 
     // A stylesheet alone needs no contract.
-    let app = builder()
-        .module(UiModule)
-        .module(BadgeModule)
-        .build()
-        .await;
+    let app = builder().module(UiModule).module(BadgeModule).build().await;
     app.client()
         .get(BADGE.sheet_url().expect("a stylesheet"))
         .send()
@@ -826,9 +834,8 @@ async fn a_booted_app_logs_each_extension_once_with_the_size_of_its_files() {
         "{said:?}"
     );
     assert!(
-        said.iter().any(|line| line.contains(
-            "UI extension geo.badge (plugin `navree-plugin-geo`): stylesheet 1 KB"
-        )),
+        said.iter().any(|line| line
+            .contains("UI extension geo.badge (plugin `navree-plugin-geo`): stylesheet 1 KB")),
         "{said:?}"
     );
     app.shutdown().await.unwrap();
@@ -986,7 +993,9 @@ fn kit_problems_finds_raw_markup_outside_icons_stored_html_and_toolkit_parts() {
                 .attr("data-ui-props", big)
                 .into()
         ),
-        ["div[geo:map]: data-ui-props is 70 KB; keep props under 64 KB and fetch the rest from a route"]
+        [
+            "div[geo:map]: data-ui-props is 70 KB; keep props under 64 KB and fetch the rest from a route"
+        ]
     );
 
     // An island's script is its own: it is not an extension too.
@@ -995,7 +1004,10 @@ fn kit_problems_finds_raw_markup_outside_icons_stored_html_and_toolkit_parts() {
             &el("div")
                 .slot("geo:map")
                 .attr("data-ui-island", "/_navree/ui/island/clock-0123456789ab.js")
-                .attr("data-ui-ext", MAP.script_url().expect("a script").to_owned())
+                .attr(
+                    "data-ui-ext",
+                    MAP.script_url().expect("a script").to_owned()
+                )
                 .into()
         ),
         ["div[geo:map] is both an island and an extension"]
@@ -1231,13 +1243,22 @@ fn no_built_in_name_uses_the_extension_separators() {
     let mut clashes: Vec<String> = Vec::new();
     for (path, source) in &sources {
         let code = toolkit_code(source);
-        for slot in slots_in_rust(&code).iter().filter(|slot| slot.contains(':')) {
+        for slot in slots_in_rust(&code)
+            .iter()
+            .filter(|slot| slot.contains(':'))
+        {
             clashes.push(format!("{path}: the slot `{slot}` holds a colon"));
         }
-        for name in custom_properties(&code).iter().filter(|name| name.contains("--")) {
+        for name in custom_properties(&code)
+            .iter()
+            .filter(|name| name.contains("--"))
+        {
             clashes.push(format!("{path}: the custom property `--{name}` holds `--`"));
         }
-        for name in keyframe_names(&code).iter().filter(|name| name.contains("--")) {
+        for name in keyframe_names(&code)
+            .iter()
+            .filter(|name| name.contains("--"))
+        {
             clashes.push(format!("{path}: the keyframes `{name}` hold `--`"));
         }
     }
@@ -1245,10 +1266,16 @@ fn no_built_in_name_uses_the_extension_separators() {
         for slot in slots_in_css(css).iter().filter(|slot| slot.contains(':')) {
             clashes.push(format!("{path}: the slot `{slot}` holds a colon"));
         }
-        for name in custom_properties(css).iter().filter(|name| name.contains("--")) {
+        for name in custom_properties(css)
+            .iter()
+            .filter(|name| name.contains("--"))
+        {
             clashes.push(format!("{path}: the custom property `--{name}` holds `--`"));
         }
-        for name in keyframe_names(css).iter().filter(|name| name.contains("--")) {
+        for name in keyframe_names(css)
+            .iter()
+            .filter(|name| name.contains("--"))
+        {
             clashes.push(format!("{path}: the keyframes `{name}` hold `--`"));
         }
     }

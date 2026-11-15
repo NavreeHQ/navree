@@ -1404,7 +1404,9 @@ mod tests {
         assert_eq!(Uses::EXTENSIONS.0.count_ones(), 1);
         assert_eq!(Uses::EXTENSION_SHEETS.0.count_ones(), 1);
         assert_ne!(Uses::EXTENSIONS, Uses::EXTENSION_SHEETS);
-        let both = Uses::EXTENSIONS.with(Uses::EXTENSION_SHEETS).with(Uses::CORE);
+        let both = Uses::EXTENSIONS
+            .with(Uses::EXTENSION_SHEETS)
+            .with(Uses::CORE);
         assert_eq!(
             both.extension_bits(),
             Uses::EXTENSIONS.with(Uses::EXTENSION_SHEETS)
