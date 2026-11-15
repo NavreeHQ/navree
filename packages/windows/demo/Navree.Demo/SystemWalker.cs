@@ -274,9 +274,9 @@ internal sealed class SystemWalker(ShellHost host, ShellWindow window, SystemPla
 /// <summary>Draws a part of the screen, as the system shows it, to a PNG file: the windows, the taskbar, the notification area.</summary>
 internal static class ScreenPicture
 {
-    internal static async Task SaveAsync(string file)
+    internal static async Task SaveAsync(string file, Box? region = null)
     {
-        Box area = ScreenCapture.Screen();
+        Box area = region ?? ScreenCapture.Screen();
         byte[] pixels = ScreenCapture.Grab(area) ?? throw new InvalidOperationException("the screen could not be copied");
         using InMemoryRandomAccessStream stream = new();
         BitmapEncoder encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);

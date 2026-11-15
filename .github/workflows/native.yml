@@ -580,6 +580,84 @@ jobs:
           $log = Join-Path $folder 'navree-demo.log'
           if (Test-Path $log) { Copy-Item $log (Join-Path $out 'navree-demo.log') }
 
+      # The store, inbox and board demos, answering the client for real (SQLite, on this machine), so every screen of each is
+      # walked: every destination, every screen a link pushes, every sheet and dialog, at four widths, in light, dark and
+      # right to left. Each picture is the window as the screen shows it, with what is over it.
+      - name: Build and start the store, inbox and board demos
+        if: matrix.variant == 'image'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          cargo build --locked -p store-demo -p inbox-demo -p board-demo --features store-demo/native-preview,inbox-demo/native-preview,board-demo/native-preview
+          $folder = "$env:RUNNER_TEMP\demos"
+          New-Item -ItemType Directory -Force -Path $folder | Out-Null
+          $ids = @()
+          $servers = @(
+            @{ name = 'store'; port = 8095; simulator = 'STORE_SIMULATOR'; database = 'STORE_DATABASE_URL'; extra = @{} },
+            @{ name = 'inbox'; port = 8096; simulator = 'INBOX_SIMULATOR'; database = 'INBOX_DATABASE_URL'; extra = @{ INBOX_SCALE = '2000' } },
+            @{ name = 'board'; port = 8097; simulator = 'BOARD_SIMULATOR'; database = 'BOARD_DATABASE_URL'; extra = @{} }
+          )
+          foreach ($server in $servers) {
+            $env:PORT = [string]$server.port
+            Set-Item -Path "env:$($server.simulator)" -Value 'off'
+            Set-Item -Path "env:$($server.database)" -Value "sqlite://$($server.name).db?mode=rwc"
+            foreach ($key in $server.extra.Keys) { Set-Item -Path "env:$key" -Value $server.extra[$key] }
+            $run = Start-Process -FilePath "$PWD\target\debug\$($server.name)-demo.exe" -WorkingDirectory $folder -PassThru -RedirectStandardOutput "$folder\$($server.name).log" -RedirectStandardError "$folder\$($server.name).err.log"
+            $ids += $run.Id
+          }
+          $ids | Out-File "$folder\ids.txt"
+          foreach ($server in $servers) {
+            $up = $false
+            for ($i = 0; $i -lt 240 -and -not $up; $i++) {
+              try { Invoke-WebRequest -Uri "http://127.0.0.1:$($server.port)/" -UseBasicParsing -TimeoutSec 3 | Out-Null; $up = $true } catch { if ($_.Exception.Response) { $up = $true } else { Start-Sleep -Seconds 1 } }
+            }
+            "$($server.name) on $($server.port): " + $(if ($up) { 'answers' } else { 'did not answer' })
+            try {
+              $shell = Invoke-WebRequest -Uri "http://127.0.0.1:$($server.port)/_navree/native/shell" -UseBasicParsing -TimeoutSec 10 -Headers @{ 'X-Navree-Native' = '1'; 'X-Navree-Client' = 'platform=windows; form=desktop; vocab=0; scheme=light; text=1.00'; 'Accept' = 'application/vnd.navree.native+json' }
+              "$($server.name) shell: $($shell.StatusCode), $($shell.Content.Length) bytes"
+            } catch { "$($server.name) shell: $($_.Exception.Message)" }
+          }
+
+      - name: Walk every screen of the three demos
+        if: matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter Navree.Demo.exe | Select-Object -First 1
+          $out = "$env:RUNNER_TEMP\full"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $apps = @(@('store', 8095), @('inbox', 8096), @('board', 8097))
+          $looks = @(@('--light'), @('--dark'), @('--light', '--rtl'))
+          foreach ($app in $apps) {
+            foreach ($look in $looks) {
+              $arguments = @('--full', $out, '--name', $app[0], '--server', "http://127.0.0.1:$($app[1])") + $look
+              $run = Start-Process -FilePath $exe.FullName -ArgumentList $arguments -WorkingDirectory $exe.Directory.FullName -PassThru
+              if (-not $run.WaitForExit(900000)) { "the walk of $($app[0]) $($look -join ' ') did not end in 900 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+              else { "the walk of $($app[0]) $($look -join ' ') ended" }
+            }
+          }
+          Get-ChildItem $out -Filter '*-faults.txt' | ForEach-Object { "--- $($_.Name)"; Get-Content $_.FullName }
+          $log = Join-Path $exe.Directory.FullName 'navree-demo.log'
+          if (Test-Path $log) { Copy-Item $log (Join-Path $out 'navree-demo.log') }
+
+      - name: Keep the pictures of every screen
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-every-screen
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/full
+            ${{ runner.temp }}/demos/*.log
+          retention-days: 30
+
+      - name: Stop the demos
+        if: always() && matrix.variant == 'image'
+        shell: pwsh
+        run: |
+          $file = "$env:RUNNER_TEMP\demos\ids.txt"
+          if (Test-Path $file) { Get-Content $file | ForEach-Object { if ($_) { Stop-Process -Id ([int]$_) -Force -ErrorAction SilentlyContinue } } }
+
       - name: A picture was taken
         if: matrix.variant == 'image'
         shell: pwsh
