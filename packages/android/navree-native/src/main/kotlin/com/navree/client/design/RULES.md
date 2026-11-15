@@ -308,6 +308,11 @@ With nothing opened, the list has the window.
   left, the other way round. The chevrons and the date picker do the same.
 - A chart says its marks to a finger as well as to TalkBack: a finger held on
   a bar or a line draws a rule down the mark and a small card with its label
-  and values. A drag that scrolls the page is the page's.
+  and values (and says them to a screen reader as the chart's state). A
+  finger that goes up, or that the page takes to scroll, reads nothing: a
+  drag that scrolls the page is the page's. A slide along a chart, past the
+  touch slop, is the chart's: it reads each mark it passes and does not also
+  turn the day of a screen of days; a day is turned by a swipe that starts
+  off a chart, or by the pager's arrows.
 - A service worker a page registers is held to the origins the web view is:
   its requests to any other origin are answered 403.
