@@ -38,7 +38,8 @@ and sections that nothing reads (usually typos; the boot warns about them
 too), keys set in both `.env` and a file, and for production the unsafe
 settings that fail the check (no `app.key`, a SQLite `database.url`,
 `mail.transport = "log"` and `session.secure = false`).
-Both run without booting the app. `navree config:schema [--out <file>]`
+`--env <name>` reads `config/env/<name>.toml` for that check, with no
+`APP_ENV` set. Both run without booting the app. `navree config:schema [--out <file>]`
 writes a JSON Schema of the whole tree for the editor, and
 `navree config:publish <section> [--force] [--stdout]` writes
 `config/<section>.toml` with every key commented out beside its default.

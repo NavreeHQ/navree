@@ -41,6 +41,12 @@ every `@navree/*` package carries the same version.
   trait gives `FormView` a method named `id_prefix` or `form_id`, or `Rejected` one named
   `id_prefix`, calls it through the trait (`MyExt::id_prefix(form, ..)`).
 
+### Fixed
+
+- `navree config:check --env <name>` reads `config/env/<name>.toml` in place of the file of the
+  environment the app would pick, as a boot in that environment would, so a setting made only in
+  `config/env/production.toml` is seen by `--env production` with no `APP_ENV` set.
+
 ## [1.2.2] - 2026-11-14
 
 ### Upgrading

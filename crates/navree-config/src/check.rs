@@ -22,7 +22,9 @@ const USAGE: &str = "usage: config:check [--env <name>]";
 /// What `config:check` was asked.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CheckOptions {
-    /// Check as if `app.env` were this name, whatever the sources say.
+    /// Check as if `app.env` were this name, whatever the sources say: the
+    /// file `config/env/<name>.toml` is read in place of the one of the
+    /// environment the sources chose, as a boot in that environment would.
     /// `--env production` applies the production profile.
     pub environment: Option<String>,
 }
@@ -84,8 +86,9 @@ pub struct CheckReport {
 }
 
 impl CheckReport {
-    /// Loads `sources` (with `app.env` set to `options.environment` when
-    /// given) and checks them against `registrations`.
+    /// Loads `sources` (with `app.env` set to `options.environment` and the
+    /// environment's file read for it, when given) and checks them against
+    /// `registrations`.
     ///
     /// Only a source that cannot be loaded at all (a malformed file) is an
     /// `Err`; everything else is in the report.
@@ -107,7 +110,7 @@ impl CheckReport {
         options: &CheckOptions,
     ) -> Result<CheckReport, ConfigError> {
         let sources = match &options.environment {
-            Some(name) => sources.clone().set("app.env", name.as_str()),
+            Some(name) => sources.for_environment(name).set("app.env", name.as_str()),
             None => sources.clone(),
         };
         let config = Config::load(&sources)?;

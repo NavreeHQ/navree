@@ -1167,6 +1167,15 @@ mod tests {
                 &["openapi:export", "web/openapi.json"],
             ),
             (&["billing:sync-plans", "-v"], &["billing:sync-plans", "-v"]),
+            // `--env` belongs to the app's command: it is not read here.
+            (
+                &["config:check", "--env", "production"],
+                &["config:check", "--env", "production"],
+            ),
+            (
+                &["config:check", "--env=production"],
+                &["config:check", "--env=production"],
+            ),
         ] {
             let Command::Forward(forwarded) = parse(args) else {
                 panic!("{args:?} must be forwarded");
