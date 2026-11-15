@@ -211,6 +211,7 @@ public sealed partial class ShellWindow : Window
         titleBar.IsBackButtonEnabled = nav.CanGoBack || settingsOpen;
         ShowDestinations(nav);
         ShowSearch(state.FrontScreen?.Screen?.Search);
+        ShowAccount(state.App?.User);
 
         if (nav.Stage != Stage.Ready)
         {
