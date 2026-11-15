@@ -25,8 +25,13 @@ internal static class ThemeLookup
             return known.Brush;
         }
 
-        Brush? found = Find(Application.Current.Resources, key, theme, 0) as Brush
-            ?? (Application.Current.Resources.TryGetValue(key, out object? plain) ? plain as Brush : null);
+        Brush? found = Find(Application.Current.Resources, key, theme, 0) as Brush;
+
+        // A colour that is nothing at all is a resource that was not worked out where it was found: the application's own answer is taken instead.
+        if (found is null or SolidColorBrush { Color.A: 0 })
+        {
+            found = Application.Current.Resources.TryGetValue(key, out object? plain) ? plain as Brush : null;
+        }
 
         // A plain brush is copied: the resource's own brush is shared with every control that uses it, and is theirs to change.
         Brush? made = found is SolidColorBrush solid ? new SolidColorBrush(solid.Color) { Opacity = solid.Opacity } : found;
