@@ -29,7 +29,10 @@ public sealed partial class GaugeView : KindControl
         Start();
     }
 
-    private double Position => AxisRules.Position(gauge.Value, gauge.Min, gauge.Max);
+    // A scale given the wrong way round is the same scale: its ends are taken in order.
+    private (double Min, double Max) Ends => RangeRules.Ends(gauge.Min, gauge.Max);
+
+    private double Position => AxisRules.Position(gauge.Value, Ends.Min, Ends.Max);
 
     private int? Current => ZoneRules.IndexOf(gauge.Value, gauge.Zones);
 
@@ -139,7 +142,7 @@ public sealed partial class GaugeView : KindControl
         double radius = (diameter / 2) - (stroke / 2);
         double cx = canvas.Width / 2;
         double cy = diameter / 2;
-        double span = gauge.Max - gauge.Min;
+        double span = Ends.Max - Ends.Min;
         Windows.UI.Color colour = Mark(palette);
 
         if (gauge.Zones.Count == 0 || span <= 0)
@@ -157,8 +160,8 @@ public sealed partial class GaugeView : KindControl
             for (int at = 0; at < gauge.Zones.Count; at++)
             {
                 Models.Zone zone = gauge.Zones[at];
-                double low = AxisRules.Position(Math.Min(zone.From, zone.To), gauge.Min, gauge.Max);
-                double high = AxisRules.Position(Math.Max(zone.From, zone.To), gauge.Min, gauge.Max);
+                double low = AxisRules.Position(Math.Min(zone.From, zone.To), Ends.Min, Ends.Max);
+                double high = AxisRules.Position(Math.Max(zone.From, zone.To), Ends.Min, Ends.Max);
                 double begin = at == 0 ? low : low + hair;
                 double end = at == gauge.Zones.Count - 1 ? high : high - hair;
                 if (end > begin)
@@ -199,7 +202,7 @@ public sealed partial class GaugeView : KindControl
         }
 
         // The ends of the scale, under the arc's ends.
-        foreach ((double position, double value) in new[] { (0.0, gauge.Min), (1.0, gauge.Max) })
+        foreach ((double position, double value) in new[] { (0.0, Ends.Min), (1.0, Ends.Max) })
         {
             Pt end = Ink.Polar(cx, cy, radius, GaugeRules.Angle(position));
             canvas.Labels.Say(canvas.Caption(NumberWords.Amount(value)), end.X, end.Y + (stroke / 2) + 10, Across.Middle, Down.Middle);
@@ -222,6 +225,8 @@ public sealed partial class RangeView : KindControl
         this.range = range;
         Start();
     }
+
+    private (double Min, double Max) Ends => RangeRules.Ends(range.Min, range.Max);
 
     private string Amount(double value) => NumberWords.WithUnit(NumberWords.Amount(value), range.Unit);
 
@@ -277,7 +282,7 @@ public sealed partial class RangeView : KindControl
         ends.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         ends.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         ends.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        ends.Children.Add(Ink.Words(range.Low ?? Amount(range.Min), 12, palette.Secondary));
+        ends.Children.Add(Ink.Words(range.Low ?? Amount(Ends.Min), 12, palette.Secondary));
         string? middle = current is int zone ? range.Zones[zone].Label : range.Zones.FirstOrDefault()?.Label;
         if (middle is not null)
         {
@@ -288,7 +293,7 @@ public sealed partial class RangeView : KindControl
             ends.Children.Add(label);
         }
 
-        TextBlock high = Ink.Words(range.High ?? Amount(range.Max), 12, palette.Secondary);
+        TextBlock high = Ink.Words(range.High ?? Amount(Ends.Max), 12, palette.Secondary);
         Grid.SetColumn(high, 2);
         ends.Children.Add(high);
         stack.Children.Add(HealthParts.Hidden(ends));
@@ -304,8 +309,8 @@ public sealed partial class RangeView : KindControl
         for (int at = 0; at < range.Zones.Count; at++)
         {
             Models.Zone zone = range.Zones[at];
-            double low = AxisRules.Position(Math.Min(zone.From, zone.To), range.Min, range.Max);
-            double high = AxisRules.Position(Math.Max(zone.From, zone.To), range.Min, range.Max);
+            double low = AxisRules.Position(Math.Min(zone.From, zone.To), Ends.Min, Ends.Max);
+            double high = AxisRules.Position(Math.Max(zone.From, zone.To), Ends.Min, Ends.Max);
             (double start, double size) = RangeRules.Band(low, high, width, height);
             (Brush fill, Brush? edge, double edgeWidth) = palette.Surface(zone.Colour, Models.Hue.Neutral, at, 0.55);
             canvas.Shapes.Put(Ink.Box(size, height, fill, height / 2, edge, edgeWidth), start, middle - (height / 2));
@@ -315,7 +320,7 @@ public sealed partial class RangeView : KindControl
         {
             Windows.UI.Color colour = current is int zone ? palette.Category(range.Zones[zone].Colour, Models.Hue.Neutral, zone) : palette.ColourOf("TextFillColorPrimaryBrush");
             double marker = height + 10;
-            double x = RangeRules.MarkerAt(AxisRules.Position(value, range.Min, range.Max), width, marker);
+            double x = RangeRules.MarkerAt(AxisRules.Position(value, Ends.Min, Ends.Max), width, marker);
             canvas.Shapes.Put(Ink.Disc(marker, Palette.Mark(colour), palette.Card, 3), x - (marker / 2), middle - (marker / 2));
         }
     }
