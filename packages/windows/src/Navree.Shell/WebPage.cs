@@ -79,7 +79,7 @@ internal sealed class WebPage : Grid
                 return;
             }
 
-            view.CoreWebView2.Navigate(web.Url);
+            view.CoreWebView2!.Navigate(web.Url);
         }
         catch (Exception problem)
         {
