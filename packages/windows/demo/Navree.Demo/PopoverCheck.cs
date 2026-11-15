@@ -110,6 +110,11 @@ internal sealed class PopoverCheck(ShellHost host, ShellWindow window, string fo
             // is the presenter's box carried into the button's space, and the gap is the distance between their nearest edges (none when they touch).
             double gap;
             string said;
+
+            // The page is drawn again when the flyout opens, so the button that was pressed may be a control that has left the window: the
+            // button that stands there now, by the same name, is the one the flyout is measured against.
+            Button? standing = Below(window.Surface).OfType<Button>().FirstOrDefault(candidate => candidate.ActualWidth > 0 && (AutomationProperties.GetName(candidate) == label || candidate.Content as string == label));
+            button = standing ?? button;
             try
             {
                 Rect flyout = presenter.TransformToVisual(button).TransformBounds(new Rect(0, 0, presenter.ActualWidth, presenter.ActualHeight));
