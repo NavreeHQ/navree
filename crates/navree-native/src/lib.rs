@@ -112,9 +112,10 @@ pub const MAX_NODES: usize = 100_000;
 /// counted the same way. A page that comes as one answer is held to
 /// `MAX_NODES`; what comes to a screen over time (rows by cursor, the changes
 /// of a list that is kept up to date, a region's answer, an op) is held to
-/// this. A client applies none of an op, a merge, more rows or a region's
-/// answer that would take the screen past it, says so, and a list that is
-/// kept up to date stops asking for what changed until something tells it to.
+/// this. A client applies none of the ops of an answer that would take the
+/// screen past it, says so, and fetches the screen again; a list that asked
+/// for more rows shows its failed state, and a list that is kept up to date
+/// stops asking for what changed until something tells it to.
 pub const MAX_SCREEN_NODES: usize = 4 * MAX_NODES;
 
 /// The longest an id or a name an answer gives may be, in bytes: 256. A node's
@@ -138,7 +139,7 @@ pub const MAX_OPS: usize = 1_000;
 /// through the whole screen, so an answer asks about as many visits as it has
 /// such ops times the nodes the screen holds, counted as for [`MAX_NODES`]. A
 /// client applies none of the ops of an answer that would pass it, says so,
-/// and leaves the screen as it was. A visit takes some tens of nanoseconds,
+/// and leaves the screen as it was (and fetches it again). A visit takes some tens of nanoseconds,
 /// so this is about the longest a person can be made to wait for one answer.
 /// The thirteen ops of the most recorded answer reach it only on a screen of
 /// over a million nodes; a thousand ops, on one of twenty thousand.

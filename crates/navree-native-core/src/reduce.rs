@@ -2042,6 +2042,7 @@ impl Core {
         }
         view.title = Some(screen.title.clone()).filter(|title| !title.is_empty());
         inner.weight = crate::weight::of_screen(&screen);
+        inner.refused = 0;
         view.content = Content::Native {
             screen: Box::new(screen),
         };
