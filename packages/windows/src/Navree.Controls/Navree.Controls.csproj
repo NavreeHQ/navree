@@ -14,4 +14,10 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>
 
+  <!-- The drawn kinds (charts, rings, gauges, flags) read the protocol's parts and the plain rules. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Navree.Protocol\Navree.Protocol.csproj" />
+    <ProjectReference Include="..\Navree.Design\Navree.Design.csproj" />
+  </ItemGroup>
+
 </Project>
