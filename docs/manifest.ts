@@ -320,6 +320,9 @@ export const sections: DocsSection[] = [
       "live-hub",
       "drag-and-drop",
       "islands",
+      "your-own-components",
+      "extension-contract",
+      "page-policy",
       // Native apps
       "native",
       // What is next

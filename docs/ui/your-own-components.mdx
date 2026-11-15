@@ -1,0 +1,702 @@
+---
+title: "Build your own component"
+description: "A component Navree UI doesn't have: a struct that turns into a node, with a stylesheet, a script, a form field and an inline editor of its own, built in an app or shipped in a plugin."
+---
+
+Navree UI draws what it has. When your app needs a part it doesn't have (a map of your delivery area, a rating that posts to your route, a field that checks a pin code against your configuration), you build it as a component of your own. It is a Rust struct that turns into a node, as the toolkit's own components are. It can bring a stylesheet and a script of its own, be a form field, and edit a table cell in place, and the toolkit checks it against the same rules as its own parts.
+
+This page builds one component, a rating, from five stars the server draws to a form field. Its two files, `assets/rating.css` and `assets/rating.js`, are shown in full. The browser's side of it is in [the browser contract](/docs/ui/extension-contract/), and what a page may load beyond its own origin is in [the page policy](/docs/ui/page-policy/).
+
+## Is it Navree UI's?
+
+Check the [component list](/docs/components/overview/) first. A part that every app would use, such as a new kind of chart or a new picker, belongs in Navree UI itself. Propose it as a pull request to the toolkit instead of building it in your app, so that it comes with the toolkit's themes, tests and docs.
+
+Build a component of your own when it is yours: a map of your delivery area, a field that checks a value against your configuration, a part that wraps a library your plugin ships. It lives in an app or in a plugin crate. An app uses the namespace `app`. A plugin uses its own namespace (`geo`, `announcements`), so what it names can't meet what the app or another plugin names.
+
+## A component is a struct that turns into a node
+
+A component is a struct with its root `Element` in a field called `el`. Two macros give it what the toolkit's own components have. `component_methods!` adds the methods every root has, and `component_node!` turns the struct into a `Node` by calling an `into_node` method you write. A page takes the component wherever it takes a node: as a child, as a page's body, in a table cell.
+
+```rust title="src/ui/rating.rs"
+use navree::ui::{Element, Node, UiExtension, el, extension_script, extension_sheet};
+use serde::Serialize;
+
+/// The component's files, read, checked and hashed when this crate compiles.
+static RATING: UiExtension = UiExtension::new("app", "rating")
+    .script(extension_script!("assets/rating.js", 16 * 1024))
+    .sheet(extension_sheet!("assets/rating.css", "app", 8 * 1024))
+    .contract(1)
+    .keeps(&["data-busy"])
+    .routes(&["/ratings/"]);
+
+/// What the script is given, as JSON.
+#[derive(Serialize)]
+struct RatingProps {
+    value: u8,
+    pick: Option<String>,
+    rate_at: Option<String>,
+}
+
+/// A rating out of five. It is shown as it is, or changed by a click when it has a route.
+#[must_use]
+pub struct Rating {
+    el: Element,
+    stars: u8,
+    rate_at: Option<String>,
+}
+
+navree::ui::component_methods!(Rating);
+navree::ui::component_node!(Rating);
+
+impl Rating {
+    /// A rating of `stars` out of five.
+    pub fn new(stars: u8) -> Self {
+        Self {
+            el: el("div").slot("app:rating"),
+            stars: stars.min(5),
+            rate_at: None,
+        }
+    }
+
+    /// Lets a click on a star post the new rating to `href`.
+    pub fn rate_at(mut self, href: impl Into<String>) -> Self {
+        self.rate_at = Some(href.into());
+        self
+    }
+
+    fn into_node(self) -> Node {
+        let props = RatingProps {
+            value: self.stars,
+            pick: None,
+            rate_at: self.rate_at.clone(),
+        };
+        let root = self.el.extension_with(&RATING, &props);
+        let root = match self.rate_at {
+            Some(href) => root.extension_call(href),
+            None => root,
+        };
+        root.child(stars(self.stars)).into()
+    }
+}
+
+/// The stars as the server draws them. They stay when no script runs.
+fn stars(value: u8) -> Element {
+    let drawn: Vec<Element> = (1..=5)
+        .map(|at| {
+            el("span")
+                .slot("app:rating-star")
+                .flag("data-selected", at <= value)
+                .attr("aria-hidden", "true")
+                .child("★")
+        })
+        .collect();
+    el("div")
+        .slot("app:rating-stars")
+        .flag("data-ui-keep", true)
+        .attr("role", "img")
+        .attr("aria-label", format!("{value} out of 5"))
+        .child(drawn)
+}
+```
+
+`Rating::new(4)` is a rating of four stars: a `div` with the slot `app:rating`, holding a `div` with the five stars. `RATING` names the component's two files. The next sections say what each does. The root names them with `extension_with`, so the page links the stylesheet and loads the script wherever the component is drawn.
+
+## The root's methods
+
+`component_methods!(Rating)` adds six methods to the type, each acting on the root element: `id`, `attr`, `on`, `hotkey`, `hotkey_within` and `span`. They are the methods the toolkit's own components have, with the same meaning.
+
+```rust
+use navree::ui::View;
+
+View::new("Delivery").body(
+    Rating::new(4)
+        .id("delivery-rating")
+        .attr("data-size", "lg")
+        .span(2),
+)
+```
+
+The macros take plain types. A component with a generic parameter writes its own methods and its own conversion to `Node`.
+
+## Slots, names and separators
+
+`data-slot` says what a part is. The root of a component of your own has a slot of its namespace, a colon and a word (`app:rating`), and its parts do the same (`app:rating-stars`, `app:rating-star`). The stylesheet is scoped to that slot, and `kit::assert_component` fails when the root has another one.
+
+Every name a component of your own puts on the page uses a separator the toolkit never uses, so none of them can be a name the toolkit has. No slot of the toolkit holds a colon, and no custom property or animation name of the toolkit holds a double dash inside it.
+
+| What | Form | Example |
+|---|---|---|
+| A slot | the namespace, a colon and a word | `app:rating`, `app:rating-star` |
+| A custom property | two dashes, the namespace, two dashes and a word | `--app--size` |
+| A keyframes, counter style or layer name, and a font family | the namespace, two dashes and a word | `app--pulse` |
+| An `@property` name, and the value of `anchor-name`, `position-anchor` and `view-transition-name` | two dashes, the namespace, two dashes and a word | `--app--pin` |
+| An event a script emits | the namespace, a colon and a word | `app:rated` |
+
+`UiExtension::new("app", "rating")` takes the namespace (a lower-case letter followed by up to 63 lower-case letters, digits or `_`) and the extension's name (1 to 64 lower-case letters, digits and `-`). Either outside those rules fails the build.
+
+The stylesheet's build refuses a hoisted rule, a layer or a global-name property whose name doesn't follow its form (see the next section), and `ui.emit` writes the namespace into every event a script emits. A custom property isn't checked: its form is what keeps it from a name the toolkit has. Two names can still meet: two Rust types of one name, which an app that imports both crates with a glob sees as ambiguous where it uses the name, and two components of one name in the docs.
+
+## Styles that come with it, and their scope
+
+`extension_sheet!("assets/rating.css", "app", 8 * 1024)` reads the stylesheet when your crate compiles. Its path is relative to the folder of your crate's `Cargo.toml`. The macro checks the sheet, scopes it to the namespace and hashes what it will serve. The last argument is the most the sheet may be once scoped, in bytes, written as any expression. A sheet over it, a file that can't be read, or a rule outside the rules below stops the build and names the file and the line. The macros are in the facade's `ui-extension-files` feature: turn it on in your `navree` dependency (see [shipping it in a plugin](#shipping-it-in-a-plugin-ui-extension-files)).
+
+```css title="assets/rating.css"
+/* The rating's stylesheet. The build scopes every rule below to the app's components: a rule
+   can reach the rating and what is inside it, and nothing else on the page. */
+
+/* The root. `&` is the element a rule is scoped to, so the slot says which component's root. */
+&[data-slot="app:rating"] {
+  --app--size: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+&[data-slot="app:rating"][data-size="lg"] {
+  --app--size: 1.75rem;
+}
+
+/* A rating that is waiting for the server's answer. */
+&[data-slot="app:rating"][data-busy] {
+  opacity: 0.6;
+}
+
+/* The parts inside the root: a selector with no `&` is read as a descendant of it. */
+[data-slot="app:rating-stars"] {
+  display: inline-flex;
+  gap: 0.125rem;
+}
+
+[data-slot="app:rating-star"] {
+  border: 0;
+  padding: 0;
+  background: none;
+  font-size: var(--app--size);
+  line-height: 1;
+  color: var(--line);
+}
+
+[data-slot="app:rating-star"][data-selected] {
+  color: var(--accent);
+}
+
+/* The stars a script draws are buttons: they can be pressed and focused. */
+button[data-slot="app:rating-star"] {
+  cursor: pointer;
+}
+
+button[data-slot="app:rating-star"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  button[data-slot="app:rating-star"]:hover {
+    animation: app--pulse 0.3s ease-out;
+  }
+}
+
+@keyframes app--pulse {
+  from {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+```
+
+Every rule is served inside `:where([data-slot^="app:"])`, so it reaches only an element that is a component's root or inside one. `:where()` adds no specificity, so your app's own stylesheets, which the page links after the component's, win at equal weight. `&` in a selector is that same element. A selector with no `&` is read as a descendant of it, as native CSS nesting reads it: write `&[data-slot="app:rating"]` for the root and a plain selector for a part.
+
+The page links the stylesheet in the head, after the toolkit's and the theme's and before your app's own. A component in a table's cell, in a row's menu or in an open detail row is found too, and so is one in a reply that morphs it in.
+
+The build holds the sheet to these rules:
+
+- **Refused:**
+  - An at-rule outside the list below. `@import`, `@charset`, `@namespace`, `@page`, `@scope`, `@position-try`, `@view-transition`, `@font-feature-values` and `@font-palette-values` are refused by name, and so is any other.
+  - A selector that can style outside the component. A selector that writes no `&` is read as if the rule's own `&` and a descendant combinator stood in front of it. `&` must then appear exactly once, never inside `:is()`, `:where()`, `:not()`, `:has()`, `:nth-child(… of …)` or any other function, and the compound that holds it may not be followed by `+` or `~`. What comes before `&` is allowed (`.dark &`, `body.ltr & .x`, `:root:not([data-ui-js]) &`).
+  - A global name outside the namespace: the name of a hoisted rule or of a layer, and the values of `anchor-name`, `position-anchor`, `view-transition-name`, `scroll-timeline-name`, `view-timeline-name`, `timeline-scope` and `anchor-scope`. These properties also take `none`, `auto`, `match-element` and the CSS-wide keywords, and the last two take `all`.
+  - An address that is not a `data:` address, in `url()`, `src()`, `image()` and `image-set()`. A relative address would resolve under the extension route, where no picture is served. Remove a vendor sheet's relative pictures or inline them as `data:` addresses, and ship the app's pictures as an `AppImage`.
+  - Blocks that don't balance, and anything that would be read differently once it is served.
+- **Kept inside the scope:** `@media`, `@supports`, `@container`, `@starting-style` and `@layer` blocks.
+- **Hoisted to the top level, in source order:** `@keyframes`, `@property`, `@font-face`, `@counter-style` and `@layer` statements, each named under the namespace as the table above says. An at-rule of these kinds inside a block is refused.
+- **Rewritten:** a top-level selector whose whole first compound is `:root`, and that writes no `&`, means the component's root and is served as `&`.
+- **Dropped:** a declaration a browser would drop (`*zoom: 1`) is not served.
+- **Served as read:** the sheet is written again from what was read, and read once more. The build stops unless the second reading equals the first.
+
+A rule outside them fails the build with a message that names the file and the line:
+
+```text
+extension_sheet!: assets/rating.css:12: @import is not taken: a plugin's sheet styles its own components, and bundles what it needs
+extension_sheet!: assets/rating.css:12: the selector `:is(.a, &)` can style outside the component: & appears once, outside :is/:where/:not/:has, and never before + or ~
+extension_sheet!: assets/rating.css:12: `pulse` is a global name and must be app--…
+extension_sheet!: assets/rating.css:12: url(..) in a plugin's sheet is a data: URL; ship pictures as AppImage and pass their address
+extension_sheet!: assets/rating.css: the blocks do not balance
+extension_sheet!: assets/rating.css: the sheet does not parse the same once served; write it in plain CSS
+extension_sheet!: assets/rating.css is 9000 bytes once scoped, over its ceiling of 8 * 1024
+```
+
+Some things stay yours to get right, because a stylesheet can't hold them: styles a script writes through the CSSOM, a component drawn with `position: fixed` over other content, and a popup that a library places on `<body>`, which sits outside the component and so loses the scoped styles.
+
+A component with no behaviour names a stylesheet and no script: build its `UiExtension` with `.sheet(..)` and no `.script(..)`. The page then links the stylesheet and loads no script.
+
+## Behaviour in the browser
+
+`extension_script!("assets/rating.js", 16 * 1024)` reads the script when your crate compiles, measures it against its ceiling and hashes it. It does not parse the script. The macro hashes it, so a file of several megabytes costs no compile-time evaluation, and a file past its ceiling stops the build.
+
+The script is a JavaScript module that exports `contract` and `mount`. The rating's script draws the stars as buttons when the rating can be changed, and leaves the server's stars alone when it can't:
+
+```js title="assets/rating.js"
+// The rating's script. The server draws the five stars. When the rating can be changed, this turns
+// them into buttons: a rating that is a form field moves the field, and one that has a route of its
+// own posts the new value there.
+export const contract = 1;
+
+const MOST = 5;
+
+export function mount(el, props, ui) {
+  const body = ui.find("[data-slot='app:rating-stars']");
+  const field = props.pick ? ui.find(`input[name="${CSS.escape(props.pick)}"]`) : null;
+  // Only shown: the stars the server drew stay as they are.
+  if (!body || (!field && !props.rate_at)) return;
+
+  let current = props;
+
+  // The stars as buttons, filled up to the value. A star that had the focus keeps it.
+  const draw = () => {
+    const focused = [...body.children].indexOf(document.activeElement);
+    body.setAttribute("role", "group");
+    body.setAttribute("aria-label", "Rating");
+    body.replaceChildren(
+      ...Array.from({ length: MOST }, (_, at) => {
+        const star = document.createElement("button");
+        star.type = "button";
+        star.setAttribute("data-slot", "app:rating-star");
+        star.setAttribute("aria-label", `${at + 1} of ${MOST}`);
+        star.setAttribute("aria-pressed", String(at + 1 === current.value));
+        if (at < current.value) star.setAttribute("data-selected", "");
+        star.textContent = "★";
+        return star;
+      }),
+    );
+    if (focused >= 0) body.children[focused].focus();
+  };
+
+  const choose = async (value) => {
+    const before = current.value;
+    current = { ...current, value };
+    draw();
+    if (field) {
+      // An inline edit posts when the field changes; a form takes the value when it is sent.
+      field.value = String(value);
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    el.setAttribute("data-busy", "");
+    const answer = await ui.call(current.rate_at, { stars: String(value) });
+    el.removeAttribute("data-busy");
+    if (!answer.ok) {
+      current = { ...current, value: before };
+      draw();
+    }
+  };
+
+  ui.on(body, "click", (event) => {
+    const star = ui.closest(event.target, "button[data-slot='app:rating-star']");
+    if (star) choose([...body.children].indexOf(star) + 1);
+  });
+  // Enter on a star chooses it: it does not end the edit of a table cell around it.
+  ui.on(body, "keydown", (event) => {
+    if (event.key === "Enter") event.stopPropagation();
+  });
+  // Typing in the field moves the stars.
+  if (field) {
+    ui.on(field, "input", () => {
+      current = { ...current, value: Math.min(MOST, Math.max(0, Number(field.value) || 0)) };
+      draw();
+    });
+  }
+
+  draw();
+  return {
+    update(next) {
+      current = next;
+      draw();
+    },
+  };
+}
+```
+
+The script draws only inside the star `div`, which the server marked `data-ui-keep`. That `div` is the script's own body: a morph from the server leaves it as the script left it, and the runtime seals it before the script loads, so nothing a script or a library writes there can drive the runtime or join a form around the component. Everything else the script reaches goes through `ui`, the helpers `mount` is given. [The browser contract](/docs/ui/extension-contract/) says what each does.
+
+The extension says what the script may do:
+
+- `.contract(1)` is the browser contract the script is written for. A script with no contract stops the boot, and so does a contract the toolkit doesn't run.
+- `.routes(&["/ratings/"])` are the route prefixes the script may call: at most 8, each starting and ending with `/`, with at least one segment (`/ratings/`, never `/`), of lower-case letters, digits and `/ _ . -`, with no `.` or `..` segment, and never under `/_navree/`. A script reaches a path under one of them, and nothing else.
+- `Element::extension_call` lets a script call one exact address, for a route only the server can name. `Rating::rate_at("/deliveries/42/rating")` writes it with `extension_call`: the route is outside `/ratings/`, and the script posts to it with `ui.call`. A query and a fragment are left out, and so is an address that isn't a path of this site or that holds white space. Call it after `extension`, which replaces the addresses an earlier call wrote.
+- `.keeps(&["data-busy"])` are attributes the script sets on its root that a morph from the server leaves as the script set them, beside `data-ui-mounted` and `data-ui-failed`: at most 8, each a lower-case letter followed by up to 63 lower-case letters, digits or `-`, never `data-ui-*`, `style`, `on*`, `id`, `name`, `form` or an attribute that holds an address.
+
+A name, a namespace, a kept attribute or a route prefix outside these rules fails the build with a message that says which.
+
+A page with a component that has a script loads the `core` and `extensions` modules (the `extensions` module is under 4 KB gzip) and the script, and nothing more. A page whose components have no script loads none. A region, a lazy list, an activity feed or a picker that receives a component only after the page is drawn can't tell the page it needs the `extensions` module, so put an element that carries `.uses(Uses::EXTENSIONS)` (`Element::uses`) in what the host draws first. A reply that morphs a component in brings the module with it.
+
+## Props, and the server telling it something
+
+`extension_with(&RATING, &props)` writes the props as JSON in an attribute, escaped as every attribute is, and the script is given them parsed, so a value can't become markup or code. A value that can't be written as JSON is written as `null`. Keep props under 64 KB, and fetch the rest from a route: `kit::problems` reports props over that. A string in the props opens nothing: a script reaches only the routes the element names, whatever the props hold.
+
+To tell a mounted component something, answer with a morph that carries new props. The script's `update(props)` is called with them, and the component keeps its state, its focus and what the script drew:
+
+```rust
+use navree::ui::Reply;
+
+Reply::ops(vec![]).morph(
+    "delivery-rating",
+    Rating::new(5)
+        .id("delivery-rating")
+        .rate_at("/deliveries/42/rating"),
+)
+```
+
+A script with no `update` is mounted again when its props change.
+
+## A form field of your own, and its check
+
+A form field of your own is a `FieldControl`. It draws the field and holds what it posts to a check on the server. Write one as a type, keep it in a `static`, and name it in a form.
+
+```rust
+use navree::ui::{Control, ControlCx, ControlField, FieldControl, Form, Validate};
+use serde::Deserialize;
+
+/// A rating as a form field: stars to click and the number they set.
+pub struct RatingControl;
+
+impl FieldControl for RatingControl {
+    fn name(&self) -> &'static str {
+        "app.rating"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        let value = field
+            .value
+            .and_then(|text| text.parse::<u8>().ok())
+            .unwrap_or(0)
+            .min(5);
+        let props = RatingProps {
+            value,
+            pick: Some(field.name.to_owned()),
+            rate_at: None,
+        };
+        el("div")
+            .slot("app:rating")
+            .extension_with(&RATING, &props)
+            .child((
+                el("input")
+                    .attr("type", "number")
+                    .attr("name", field.name.to_owned())
+                    .attr("min", "1")
+                    .attr("max", "5")
+                    .attr_opt("value", field.value.map(str::to_owned))
+                    .attr_opt(
+                        "aria-label",
+                        field.label_id.is_none().then(|| field.label.to_owned()),
+                    )
+                    .flag("required", field.required)
+                    .flag("disabled", field.disabled),
+                stars(value),
+            ))
+            .into()
+    }
+
+    fn check(&self, value: &str, _cx: &ControlCx<'_>) -> Result<(), String> {
+        match value.trim().parse::<u8>() {
+            Ok(1..=5) => Ok(()),
+            _ => Err("Choose a rating from 1 to 5".to_owned()),
+        }
+    }
+}
+
+pub static RATING_FIELD: RatingControl = RatingControl;
+
+#[derive(Debug, Deserialize, Validate, Form)]
+pub struct Feedback {
+    /// How was the delivery?
+    #[validate(skip)]
+    #[form(control = RATING_FIELD)]
+    pub stars: u8,
+    /// What would you change?
+    #[validate(skip)]
+    pub comment: Option<String>,
+}
+```
+
+The control's name is the namespace of the plugin that ships it, a dot and a name of its own (`app.rating`, `geo.location`). `#[form(control = RATING_FIELD)]` draws the field with the control, and the field's type reads the text the control posted: no `Options` lookup and no password-name check run for it. A field takes `control` or `widget`, not both. A form described at run time names it with `Widget::Control(Control::new(&RATING_FIELD))`, and a cell of a table with `EditCell::control`.
+
+`FormView` draws the field inside its own box, which gives it the label, the help and the error. What `draw` is given is a `ControlField`:
+
+| Field | What it holds |
+|---|---|
+| `name`, `id` | the name the value posts as, and the id the field gives the part it ties |
+| `label`, `label_id` | the label's text, and the label element's id (`None` in a table cell, where the control labels itself with `aria-label`) |
+| `value`, `placeholder` | the value as text, and the hint while it is empty |
+| `required`, `invalid`, `disabled` | what the field says of itself |
+| `described_by` | the ids of the field's help and error, for the control's parts other than the one the field ties |
+
+What a control draws follows a few rules, which `kit::assert_control` checks in a test:
+
+- It draws a form field named `field.name`, and that is the part a person uses. When that field is hidden, the control marks the part a person uses `data-field-control` and labels it: `aria-labelledby` with the label's id, or `aria-label` when there is none.
+- The field gives the first form field it finds in what the control draws, or the first part marked `data-field-control`, its id, its `aria-invalid` and its `aria-describedby`. The control sets none of those on that part, and uses `described_by` for its other parts.
+- Every `input`, `select`, `textarea` and `button` it draws is disabled when `field.disabled` is.
+- The form field is drawn outside the control's owned bodies, so the seal doesn't detach it from its form.
+
+The check runs on every path a value arrives by, before the field's type reads it. `Err` is the message the field shows. The paths are a derived form read with `Submit`, a step of a `Wizard`, a draft read back with `Draft::read_for`, a described form through `check_controls`, and an inline edit through `EditedValue::read`. An optional field left empty is not checked. A field that is not optional and is missing from the post reads as empty, and is checked as that.
+
+A check can read the app. `ControlCx` gives it `messages()`, the app's validation messages in the reader's language, `app()`, the app, and `config()`, the app's configuration. `config()` reads the configuration files. Options a module sets in code reach a check through `app()?.contributions::<T>()`, which is synchronous.
+
+`app()` and `config()` are there when the value arrives through an app: `Submit`, `EditedValue::read`, a wizard step given `Language::of(Some(&ctx)).await`, a draft read with `read_for`, `check_controls`. `decode` and `decode_with` give a check neither, and neither does a `Language` made with `new` or `english`. A check that can't do its work without them refuses the value: a value that could not be checked is not accepted.
+
+```rust
+/// A pin code, held to the ones the app delivers to (`delivery.pin_codes` in its configuration).
+struct PinCode;
+
+impl FieldControl for PinCode {
+    fn name(&self) -> &'static str {
+        "app.pin-code"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("input")
+            .attr("type", "text")
+            .attr("name", field.name.to_owned())
+            .attr("inputmode", "numeric")
+            .attr_opt("value", field.value.map(str::to_owned))
+            .flag("required", field.required)
+            .flag("disabled", field.disabled)
+            .into()
+    }
+
+    fn check(&self, value: &str, cx: &ControlCx<'_>) -> Result<(), String> {
+        let Some(config) = cx.config() else {
+            return Err("The delivery area cannot be checked right now".to_owned());
+        };
+        match config.section::<Vec<String>>("delivery.pin_codes") {
+            Ok(served) if served.iter().any(|code| code == value) => Ok(()),
+            _ => Err("We deliver to Ludhiana and Jalandhar only".to_owned()),
+        }
+    }
+}
+```
+
+The form is drawn and read as any other. The route a star posts to can read the same form, so the control's check runs on a click on a star as well:
+
+```rust
+use navree::http::response::{IntoResponse, Response};
+use navree::ui::form::{FormView, Rejected};
+use navree::ui::{Reply, Submit};
+
+async fn rate(submit: Result<Submit<Feedback>, Rejected<Feedback>>) -> Response {
+    match submit {
+        Ok(Submit(feedback)) => Reply::ops(vec![])
+            .morph(
+                "delivery-rating",
+                Rating::new(feedback.stars)
+                    .id("delivery-rating")
+                    .rate_at("/deliveries/42/rating"),
+            )
+            .into_response(),
+        Err(rejected) => rejected.into_response(),
+    }
+}
+
+fn feedback_form() -> FormView<Feedback> {
+    FormView::<Feedback>::new()
+        .post("/deliveries/42/feedback")
+        .submit("Send")
+}
+```
+
+A form described at run time is read with `check_controls`, which runs the check of every control field and returns the errors by field name:
+
+```rust
+use navree::ui::form::{FormField, Language, Widget, check_controls};
+
+let fields = [FormField::new(
+    "stars",
+    "Rating",
+    Widget::Control(Control::new(&RATING_FIELD)),
+)];
+let posted = vec![("stars".to_owned(), "9".to_owned())];
+let errors = check_controls(&fields, &posted, &Language::english());
+assert_eq!(errors["stars"][0], "Choose a rating from 1 to 5");
+```
+
+When a control's own part stands in for a hidden field, an error from the server lands on the field's box (`data-invalid`), not on the part. [The browser contract](/docs/ui/extension-contract/#errors-on-a-hidden-field) says what the control does about it.
+
+## An inline editor, and reading its value
+
+`EditCell::control` puts a control in a table's cell. The cell posts to the address you give it when the value changes, and the server answers with a reply:
+
+```rust
+use navree::ui::table::EditCell;
+
+EditCell::control("4", "/deliveries/42/rating", Control::new(&RATING_FIELD)).label("Rating")
+```
+
+The control is drawn for a field named `value`, with an id of its own (`edit-` and 12 hex digits of the hash of its address, so no two cells of a table share one), no label id, `aria-label` from `label(..)` and `disabled` from `disabled(..)`. With JavaScript off, the cell is a form with a Save button.
+
+The handler reads the post with `EditedValue<T>`. It takes the one field `value` of the urlencoded body, within the route's body limit (413 past it), and a post with no `value` is a 400. `read` runs the control's check and then reads the text as `T`:
+
+```rust
+use navree::http::Extension;
+use navree::kernel::AppContext;
+use navree::ui::form::Language;
+use navree::ui::{EditedValue, Reply};
+
+async fn edit_rating(Extension(ctx): Extension<AppContext>, edit: EditedValue<u8>) -> Reply {
+    let language = Language::of(Some(&ctx)).await;
+    match edit.read(Control::new(&RATING_FIELD), &language) {
+        Ok(stars) => {
+            // Store `stars` for delivery 42, then answer with the row.
+            let _ = stars;
+            Reply::ops(vec![])
+        }
+        Err(refused) => refused.reply("/deliveries"),
+    }
+}
+```
+
+A value the control refuses is refused with the control's message. A value that is not a `T` is refused in the form's own words for a value that is not valid. `EditRefused::reply` answers 422 with the message as a danger toast, and the cell goes back to the value it had. With JavaScript off it answers 303 to the address you give, and the toast shows there. `EditedValue::read_built_in` reads a value with no check. It is for the four editors the toolkit draws (text, number, date and select), never for a cell drawn with `EditCell::control`, whose value would reach your code unchecked.
+
+In the browser, a cell posts when a field in it changes. Enter ends the edit, and Escape puts the cell's first `input` or `select` back to the value it had. A control's script stops the keys it handles itself and the `change` events of its inner parts from reaching the cell, with `event.stopPropagation()`: the rating's script does it for Enter. A control whose own part shows the value puts that part back when a refused edit goes back, on `ui:sent` with `ok: false`.
+
+## Testing it, and the stored twin
+
+`navree::ui::kit` checks a component in a plain test, with no browser:
+
+- `kit::problems(&node)` returns what breaks a component's rules, one line each, and `kit::assert_component(&node)` fails the test with those lines.
+- `kit::assert_control(&control)` draws a control three times for a field named `drop_at`: with a label id, with a label id and read-only, and with no label id, as in a table cell. It fails the test with what breaks the rules of a control above.
+- `kit::stored_twin(&node)` is the node again inside an element marked `data-ui-stored`, as stored content such as a message a reader wrote would carry it.
+- `TestView::uses_extension(&extension)` says whether a page names an extension's files, a table's rows and an open detail row included.
+
+```rust
+use navree::ui::{TestView, View, kit};
+
+#[test]
+fn the_rating_follows_the_component_rules() {
+    kit::assert_component(&Rating::new(4).into());
+}
+
+#[test]
+fn the_rating_field_follows_the_control_rules() {
+    kit::assert_control(&RATING_FIELD);
+}
+
+#[test]
+fn a_page_with_a_rating_links_its_files() {
+    let page = View::new("Delivery").body(Rating::new(4));
+    assert!(TestView::of(&page).uses_extension(&RATING));
+}
+```
+
+`kit::problems` finds raw markup outside an icon's shapes, cleaned stored HTML and the text of a toolkit part, a root whose slot is not its namespace's, an address it names that is not a served file, props that are not JSON or are over 64 KB, and an element that is both an island and an extension. Each line says where it is, with the elements from the node given down, each by its tag and its slot in brackets:
+
+```text
+raw markup at div[app:rating]: only an icon's shapes, cleaned stored HTML, or a toolkit part's own text is written as it is
+the extension root at div[app:rating] has data-slot="geo:rating", which is not app:<word>
+control app.rating: draws no form field named drop_at
+control app.rating: drop_at is hidden, and no part marked data-field-control is labelled
+control app.rating: with disabled set, div[app:rating] > button is not disabled
+control app.rating: input sets aria-describedby on the part Field ties; use described_by on its other parts
+```
+
+Stored content never mounts a component: the runtime acts on no hook inside an element marked `data-ui-stored`. A browser test draws a node beside its twin and checks that the component is mounted (`data-ui-mounted`) and the twin is not:
+
+```rust
+use navree::ui::{Node, View, kit};
+
+let rating: Node = Rating::new(4).into();
+View::new("Delivery").body((rating.clone(), kit::stored_twin(&rating)))
+```
+
+For a browser test, `navree::browser` (see [browser testing](/docs/packages/browser-testing/)) has `Page::assert_no_policy_violations`. It fails when the page reported a content security policy violation since it loaded, naming each blocked address and directive, so a component that loads a source its app has not allowed shows up in a test.
+
+## Shipping it in a plugin (`ui-extension-files`)
+
+A plugin crate that ships a component turns on the facade's `ui-extension-files` feature in its own `navree` dependency. An app that builds its own components turns it on too. No other app compiles the macro crate:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1.3", features = ["ui", "ui-extension-files"] }
+```
+
+The module that ships the extension contributes it, and the toolkit serves its files:
+
+```rust
+use navree::prelude::ModuleBuilder;
+
+// In one of the app's modules, or in the plugin's.
+fn register(m: &mut ModuleBuilder) {
+    m.contribute(RATING);
+}
+```
+
+The toolkit serves a contributed extension's files at `GET /_navree/ui/ext/{file}`, named by the namespace, a dot, the name, a dash, the first 12 hex digits of the file's content hash and `.js` or `.css` (`app.rating-0f9e8d7c6b5a.css`). A file is `immutable` under its current hash, and an older hash still gets the current file, uncached, so a page that stays open across a deploy keeps working. The toolkit makes the files' brotli form at boot. The route exists only in an app where a module contributes an extension. A name no extension has is a 404, and in one of the app's own namespaces (its plugins' or `app`) it is also a warning in the log, once for each name and for at most 64 names.
+
+The boot checks each extension, and stops with every problem it found:
+
+```text
+plugin `navree-plugin-geo` contributes the UI extension `maps.pin`, which is not under its namespace: build it with UiExtension::new("geo", "pin")
+module `Shop` contributes the UI extension `geo.badge` under `geo`, the namespace of plugin `navree-plugin-geo`; an app's own extensions use a namespace no plugin has, such as app
+UI extension `geo.map` is contributed by both `FirstMapModule` and `SecondMapModule` with different files; give one another name
+UI extension `geo.empty` has no script and no stylesheet
+UI extension `geo.tour` has a script but declares no contract: add .contract(1)
+UI extension `geo.tour` is written for extension contract 2, and this navree-ui runs contract 1: update navree, or use a release of `navree-plugin-geo` written for contract 1
+```
+
+Two modules that contribute one name with the same files contribute one extension. Each extension is logged once, with the size of its files (``UI extension geo.map (plugin `navree-plugin-geo`): script 150 KB, stylesheet 21 KB, contract 1``). A plugin's route prefix that has no segment named for its namespace is a warning, so a plugin keeps its routes under its own name:
+
+```text
+UI extension `geo.map` may call routes under `/places/`, which has no segment named `geo`: keep a plugin's routes under its own namespace, such as .routes(&["/geo/"])
+```
+
+`plugins/geo` in the Navree repository is a plugin built only from what this page shows: a map component and a drop-point form field. Its tests prove the blocks below, which show its code.
+
+```rust,ignore
+// plugins/geo/src/ui/map.rs
+pub static MAP: UiExtension = UiExtension::new("geo", "map")
+    .script(extension_script!("assets/map.js", 200 * 1024)) // the map library bundled, and the glue
+    .sheet(extension_sheet!("assets/map.css", "geo", 32 * 1024))
+    .contract(1)
+    .keeps(&["data-moving"])
+    .routes(&["/geo/"]);
+```
+
+```rust,ignore
+// plugins/geo/src/lib.rs
+impl Module for GeoModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(navree::plugin_info!(title = "Maps and places"));
+        m.config_section::<GeoOptions>();
+        m.contribute(ui::map::MAP);
+        // The map's tiles come from another host: ask the app to allow it.
+        m.contribute(PageSources::new().ask(Directive::ImgSrc, "https://tile.openstreetmap.org", "map tiles"));
+        m.controller::<GeoController>();
+    }
+}
+```
+
+`navree::plugin` names what a plugin's components are made of: `UiExtension`, `ExtensionFile`, `FieldControl`, `Control`, `ControlCx`, `EditedValue`, `PageSources`, `Directive` and `PagePolicy`. A plugin asks the app to allow a source with `PageSources`, and the app decides in its `ui.policy` configuration (see [the page policy](/docs/ui/page-policy/#what-a-plugin-asks-for)).
+
+## What a component cannot do yet
+
+A component of your own is held to what the toolkit can check and the page's policy allows. These are the limits today:
+
+- A form field posts text. A control can't carry a file; a file field is an [upload](/docs/components/upload/).
+- A component can't be part of generated UI: the attributes that name an extension are dropped from generated markup, so it never mounts there (see [generative UI](/docs/ai/generative-ui/)).
+- An extension is one script and one stylesheet. A script bundles what it needs and can't import a second file.
+- A morph that arrives while a person is dragging, drawing or typing in a component is applied at once: the next morph wins.
+- A script can't start a worker from a `blob:` address.
+
+These are never possible, whatever a plugin or a configuration says: a script from another host, a frame, and an operation of a plugin's own. The server's ops are a closed list, a page's scripts come from the app alone, and no page can be framed.

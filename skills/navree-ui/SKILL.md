@@ -1,6 +1,6 @@
 ---
 name: navree-ui
-description: "Builds Navree UI pages from scratch, with no design to start from: turns on `UiModule`, registers one `Shell`, writes page routes (`AppShell`, `AppPage`) with an access attribute each, forms from `#[derive(Validate, Form)]` read back with `Submit<T>` (rejected forms and field errors under the inputs), lists with `DataTable` and `#[derive(TableRow)]` (filters, sorting, bulk actions, CSV export, cursor pages), regions that load, poll or follow a stream, long work shown with `Progress`, error pages (`ErrorPage`, `SignInRequired`, `Forbidden`, `NotFound`, `EmptyState`, the `page` and `json_only` marks on a route), themes in light, dark and system mode with the theme menu, dates and times (`Calendar`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker`), the selects (`Select`, `Combobox`, `MultiSelect`, `Command`), `PhoneInput`, `LazyList`, `SplitPane`, `Timeline`, `ActivityFeed`, `Sortable`, the wizard, stepper, toolbar, tree and slider, and page tests with `TestView` and no browser. Use when asked to add a page, a list page, a form, a table, a dashboard or a settings screen in Navree UI (`navree-ui`, `navree::ui`), to change one, or to find which Navree UI component fits a need. Do not call a component missing before checking the index in this skill. For a job that starts from a design, mock-up or screenshots, use `navree-design-to-ui`."
+description: "Builds Navree UI pages from scratch, with no design to start from: turns on `UiModule`, registers one `Shell`, writes page routes (`AppShell`, `AppPage`) with an access attribute each, forms from `#[derive(Validate, Form)]` read back with `Submit<T>` (rejected forms and field errors under the inputs), lists with `DataTable` and `#[derive(TableRow)]` (filters, sorting, bulk actions, CSV export, cursor pages), regions that load, poll or follow a stream, long work shown with `Progress`, error pages (`ErrorPage`, `SignInRequired`, `Forbidden`, `NotFound`, `EmptyState`, the `page` and `json_only` marks on a route), themes in light, dark and system mode with the theme menu, dates and times (`Calendar`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker`), the selects (`Select`, `Combobox`, `MultiSelect`, `Command`), `PhoneInput`, `LazyList`, `SplitPane`, `Timeline`, `ActivityFeed`, `Sortable`, the wizard, stepper, toolbar, tree and slider, components of your own (`UiExtension`, `FieldControl`, `EditCell::control` and `kit`), the page policy (`ui.policy`, `PageSources`, `.fresh()`), and page tests with `TestView` and no browser. Use when asked to add a page, a list page, a form, a table, a dashboard or a settings screen in Navree UI (`navree-ui`, `navree::ui`), to change one, or to find which Navree UI component fits a need. Do not call a component missing before checking the index in this skill. For a job that starts from a design, mock-up or screenshots, use `navree-design-to-ui`."
 ---
 
 # Build Navree UI pages
@@ -23,7 +23,9 @@ around them.
 
 1. **Use components that exist.** The index at the end of this skill lists
    every one. A need that is not in it is a gap: say so, and do not make a
-   stand-in from raw elements, a stylesheet or a script. The toolkit's
+   stand-in from raw elements, a stylesheet or a script. When the app needs
+   the part anyway, build it as a component of your own (see "Your own
+   components" below), never as a stand-in. The toolkit's
    stylesheet reads only `data-*` attributes, so a `class` does nothing
    unless the app's own stylesheet (`AppSheet`) styles it, and `style` is
    dropped. The content security policy refuses inline script and style.
@@ -759,22 +761,232 @@ forms the session's token.
 
 ## What is not shipped
 
-Do not write code for these, and do not stand in for them with raw elements.
-Tell the owner they are coming.
+Do not stand in for these with raw elements. Tell the owner they are not
+shipped; where the app needs one, build it as a component of your own (the
+next section).
 
-- **A rich text editor.** Islands are shipped (`Island` with an
-  `IslandScript`, the docs page `ui/islands`), but no editor is.
+- **A rich text editor.** None is shipped; build one as a component of your
+  own (`FieldControl`, the docs page `ui/your-own-components`), its HTML
+  cleaned on the server.
 - **Static files past the app's own stylesheet, fonts and pictures.** The
   content security policy loads styles, scripts, fonts and images only from
   the app's own origin: an `AppSheet`, `AppFont` or `AppImage` is compiled in
   and served by the toolkit (see
   [`references/app-and-site-blocks.md`](references/app-and-site-blocks.md)).
+  A plugin's own files are a `UiExtension`, and a source outside the app is
+  the owner's line in `ui.policy`.
 
 Navigator (`navree-navigator`) reads the UI docs through `search_docs` and
 `read_doc` (slugs such as `ui/forms` and `components/date-picker`),
 `list_components` lists the components of the toolkit, `list_routes` with
 `pages_only` lists the pages, and `render_page` outlines what a page draws
 for a guest.
+
+## Your own components
+
+Build one when the app or a plugin needs a part the index below lacks and the
+part is its own: a map of the delivery area, a rating that posts to a route, a
+field with a check of its own. A part every app would want belongs in Navree
+UI itself: tell the owner, and propose it as a pull request to the toolkit.
+[`ui/your-own-components`](https://navree.com/docs/ui/your-own-components/)
+builds one from start to end, and
+[`ui/extension-contract`](https://navree.com/docs/ui/extension-contract/) is
+what its script is given and may do.
+
+A component is a struct with its root `Element` in a field called `el`.
+`navree::ui::component_methods!` gives it the methods every root has (`id`,
+`attr`, `on`, `hotkey`, `hotkey_within`, `span`), and
+`navree::ui::component_node!` turns it into a `Node` through an `into_node`
+method you write. The root's slot is the namespace, a colon and a word:
+`app:rating` in an app, the plugin's own namespace in a plugin.
+
+```rust
+use navree::ui::{Element, Node, el};
+
+/// A rating out of five, in the app's namespace.
+pub struct Rating {
+    el: Element,
+    stars: u8,
+}
+
+navree::ui::component_methods!(Rating);
+navree::ui::component_node!(Rating);
+
+impl Rating {
+    pub fn new(stars: u8) -> Self {
+        Self { el: el("div").slot("app:rating"), stars: stars.min(5) }
+    }
+
+    fn into_node(self) -> Node {
+        self.el
+            .attr("role", "img")
+            .attr("aria-label", format!("{} out of 5", self.stars))
+            .child("★")
+            .into()
+    }
+}
+```
+
+A stylesheet and a script of its own are a `UiExtension` under the namespace.
+It needs the facade's `ui-extension-files` feature in the crate's `navree`
+dependency, which turns on `extension_script!` and `extension_sheet!`: they
+read, check and hash the files when the crate compiles, and scope the
+stylesheet to the namespace.
+
+```rust,ignore
+use navree::ui::{UiExtension, extension_script, extension_sheet};
+
+static RATING: UiExtension = UiExtension::new("app", "rating")
+    .script(extension_script!("assets/rating.js", 16 * 1024))
+    .sheet(extension_sheet!("assets/rating.css", "app", 8 * 1024))
+    .contract(1)
+    .routes(&["/ratings/"]);
+
+// In `into_node`: `self.el.extension_with(&RATING, &props)`, with props that
+// implement `Serialize`. In the module that ships it: `m.contribute(RATING)`.
+```
+
+- The sheet is refused for a selector that can style outside the component
+  (`&` must appear once, never inside `:is()`, `:where()`, `:not()` or
+  `:has()`), an at-rule outside its list, a global name outside the namespace
+  (`app--pulse`, `--app--size`) and a `url()` that is not `data:`.
+- The script is a module that exports `contract` (`1`) and
+  `mount(el, props, ui)`. It draws only inside an element the server marked
+  `data-ui-keep`, which the runtime seals before the script loads, and it
+  reaches the server only through `ui.call` and `ui.get`, at the routes the
+  extension names and the exact addresses `Element::extension_call` writes.
+- A plugin names its own namespace in `UiExtension::new`; a namespace that is
+  not the plugin's stops the boot. The files are inside the crate, read
+  relative to its `Cargo.toml`.
+
+A form field of your own is a `FieldControl`: `draw` draws a form field named
+`field.name`, and `check` is the server's check of what it posts, on every path
+the value arrives by (`Submit`, a wizard step, a draft, `check_controls`,
+`EditedValue::read`). `cx.config()` reads the configuration files, and
+`cx.app()` the app. Keep the control in a `static` and name it in a derived
+form with `#[form(control = RATING_FIELD)]`.
+
+```rust
+use navree::ui::{Control, ControlCx, ControlField, FieldControl, Form, Validate};
+use serde::Deserialize;
+
+pub struct RatingControl;
+
+impl FieldControl for RatingControl {
+    fn name(&self) -> &'static str {
+        "app.rating"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("input")
+            .attr("type", "number")
+            .attr("name", field.name.to_owned())
+            .attr("min", "1")
+            .attr("max", "5")
+            .attr_opt("value", field.value.map(str::to_owned))
+            .flag("disabled", field.disabled)
+            .into()
+    }
+
+    fn check(&self, value: &str, _cx: &ControlCx<'_>) -> Result<(), String> {
+        match value.trim().parse::<u8>() {
+            Ok(1..=5) => Ok(()),
+            _ => Err("Choose a rating from 1 to 5".to_owned()),
+        }
+    }
+}
+
+pub static RATING_FIELD: RatingControl = RatingControl;
+
+#[derive(Debug, Deserialize, Validate, Form)]
+pub struct Feedback {
+    /// How was the delivery?
+    #[validate(skip)]
+    #[form(control = RATING_FIELD)]
+    pub stars: u8,
+}
+```
+
+An inline editor in a table cell is `EditCell::control`. Read its post with
+`EditedValue<T>`: `read(Control::new(&RATING_FIELD), &language)` runs the
+control's check before it reads the value, and `refused.reply(back)` answers a
+refusal with 422 and a toast. `read_built_in` is for the four built-in editors
+only, never for a control's cell.
+
+```rust
+use navree::http::Extension;
+use navree::ui::form::Language;
+use navree::ui::table::EditCell;
+use navree::ui::{EditedValue, Reply};
+
+fn rating_cell(stars: u8, id: u64) -> EditCell {
+    EditCell::control(stars, format!("/deliveries/{id}/rating"), Control::new(&RATING_FIELD))
+        .label("Rating")
+}
+
+async fn edit_rating(Extension(ctx): Extension<AppContext>, edit: EditedValue<u8>) -> Reply {
+    let language = Language::of(Some(&ctx)).await;
+    match edit.read(Control::new(&RATING_FIELD), &language) {
+        Ok(stars) => {
+            let _ = stars; // store it, then answer with the row
+            Reply::ops(vec![])
+        }
+        Err(refused) => refused.reply("/deliveries"),
+    }
+}
+```
+
+Test a component with no browser through `navree::ui::kit`: `assert_component`
+fails with what breaks the component rules, `assert_control` with what breaks a
+control's, and `stored_twin` draws the node again as stored content, for a
+browser test that checks the twin is never mounted.
+
+```rust
+use navree::ui::kit;
+
+#[test]
+fn the_rating_follows_the_rules() {
+    kit::assert_component(&Rating::new(4).into());
+    kit::assert_control(&RATING_FIELD);
+}
+```
+
+## The page policy
+
+Every page carries a strict policy (`PAGE_CSP`): scripts, styles, fonts and
+requests from the app's own origin. Only the app's configuration widens it,
+never a plugin: the `ui.policy` section (`config/ui.policy.toml`) allows
+sources by the plugin's namespace for `img_src`, `media_src`, `connect_src` and
+`font_src`, and one `wasm` switch allows WebAssembly for every script. A
+script, style, worker or frame source cannot be allowed.
+
+```toml
+[allow.geo]
+img_src = ["https://tile.openstreetmap.org"]
+```
+
+A plugin says what its components need with `PageSources`, and the boot logs
+what was asked and what the app allowed. A component that needs a source the
+app did not allow draws its fallback: `PagePolicy::allows(directive, source)`
+tells it. A page that takes a password, a code or a PIN is marked `.fresh()` on
+its `View` or `AppPage`: in an app with extensions or allowed sources it starts
+from a clean document, keeps the strict policy and mounts no component.
+
+```rust
+use navree::ui::{Directive, PageSources, View, el};
+
+// In the plugin's module: asking allows nothing; the app's `ui.policy` decides.
+fn register(m: &mut ModuleBuilder) {
+    m.contribute(PageSources::new().ask(Directive::ImgSrc, "https://tile.openstreetmap.org", "map tiles"));
+}
+
+fn sign_in_page() -> View {
+    View::new("Sign in").fresh().body(el("p").child("Enter your password."))
+}
+```
+
+Read [`ui/page-policy`](https://navree.com/docs/ui/page-policy/) for the forms a
+source takes and the pages that are fresh.
 
 ## Every component
 
@@ -852,7 +1064,8 @@ marketing blocks draw a public site from the same app with no script, and
 - No `UiModule` in the app root, or `UiOnDemand` standing in for it: there
   are no toolkit files and no error pages.
 - `style=""`, a `class`, an `on*` attribute or a `<script>` in a page. They
-  are dropped or refused. Use a component, a `Cmd`, or record a gap.
+  are dropped or refused. Use a component, a `Cmd`, a component of your own
+  (a `UiExtension`), or record a gap.
 - Drawing every row of a big table into the page. Page it, or use a
   `LazyList`.
 - Two `DataTable`s on one page. They would share the address. Give the
@@ -903,6 +1116,9 @@ marketing blocks draw a public site from the same app with no script, and
 - https://navree.com/docs/ui/icons/
 - https://navree.com/docs/ui/flags/
 - https://navree.com/docs/ui/app-styles/
+- https://navree.com/docs/ui/your-own-components/
+- https://navree.com/docs/ui/extension-contract/
+- https://navree.com/docs/ui/page-policy/
 - https://navree.com/docs/ui/marketing-sites/
 - https://navree.com/docs/ui/seo/
 - https://navree.com/docs/ui/coming-next/

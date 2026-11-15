@@ -81,6 +81,7 @@ FormView::<NewDeal>::new()
 | `max = 3` | the most values a `Many<T>` field takes: the multi-select stops there, and a post with more is refused |
 | `autofocus`, `wide` | takes focus on load; takes the form's whole width |
 | `skip` | not drawn and never read from the request |
+| `control = PATH` | draws the field with a control of your own, a `static` that implements `FieldControl`, and holds the posted value to the control's server check; it can't be combined with `widget`. See [Build your own component](/docs/ui/your-own-components/#a-form-field-of-your-own-and-its-check) |
 
 Fields sit in two columns where there is room, and a `wide` field takes both; `FormView::one_column()` puts each field on its own line.
 

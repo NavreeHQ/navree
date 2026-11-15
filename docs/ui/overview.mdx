@@ -3,7 +3,7 @@ title: "Navree UI"
 description: "Typed Rust components rendered to HTML on the server, one stylesheet, and a small runtime that loads only when a page needs it."
 ---
 
-Navree UI is the toolkit in `navree::ui` (the `navree-ui` crate). A handler returns components; the toolkit renders them to HTML on the server. A page with nothing interactive ships no JavaScript. There is no per-tab state on the server, no WebAssembly, and no Node at run time or in `cargo build`.
+Navree UI is the toolkit in `navree::ui` (the `navree-ui` crate). A handler returns components; the toolkit renders them to HTML on the server. A page with nothing interactive ships no JavaScript. There is no per-tab state on the server, no WebAssembly of the toolkit's own (an app may allow it for its components: see [the page policy](/docs/ui/page-policy/)), and no Node at run time or in `cargo build`.
 
 ```rust
 use navree::ui::*;
@@ -67,6 +67,7 @@ Every page loads one stylesheet. A component with styles of its own, such as a c
 | A split pane, or a single-key shortcut | `split` or `keys`. |
 | A lazy list | `lazy`, and `live` when it follows an event stream. |
 | A sortable that moves items | `core` and `sortable`. |
+| A component of your own with a script | `core` and `extensions` (under 4 KB gzip), and the component's script. A component with a stylesheet only loads no script. See [Build your own component](/docs/ui/your-own-components/). |
 | An upload, a one-time code field or a carousel | `upload`, `otp` or `carousel`, each with a small stylesheet of its own. |
 | Markdown text | A stylesheet, `markdown`, and no script. |
 
@@ -89,6 +90,8 @@ In a release build the same file also checks that a 1,000-row data table renders
 Every page carries a strict content security policy: scripts, styles, fonts and requests from the page's own origin only, no inline script or style, and no framing.
 
 <UiCsp />
+
+That is the policy an app gets until it allows more. The `ui.policy` configuration can add image, media, request and font sources for a plugin's components, and never script, style, worker or frame sources: see [the page policy](/docs/ui/page-policy/).
 
 The toolkit is built so that a page can't break that policy or be turned against its users:
 

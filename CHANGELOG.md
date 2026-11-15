@@ -120,6 +120,36 @@ every `@navree/*` package carries the same version.
   `EventKind::EVERY` lists all twenty kinds, `EventKind::ALL` still the nineteen); an event whose
   name is not two or more lower-case words joined by `.` is not delivered, and the registry logs a
   warning the first time it sees the name.
+- Components of your own in Navree UI. A struct with `navree::ui::component_methods!` and
+  `component_node!` is a component as the toolkit's are, and `navree::ui::kit` checks it against the
+  toolkit's rules (`kit::problems`, `assert_component`, `assert_control` and `stored_twin`). A
+  `UiExtension` names a component's script and stylesheet under a namespace. With the facade's
+  `ui-extension-files`, `extension_script!` and `extension_sheet!` read and hash the files when the
+  crate compiles, and scope the stylesheet, so a plugin's stylesheet applies only inside its
+  components. The macros live in the new crate `navree-ui-ext-macros`, which only an app with that
+  feature compiles. `Element::extension`, `extension_with` and `extension_call` name the files on an
+  element: the page links the stylesheets it names (those in table rows and replies too), and a new
+  runtime module mounts the script, seals what it draws and lets it call only the routes the server
+  named (browser contract 1). `GET /_navree/ui/ext/{file}` serves the files of an app that
+  contributes one. `navree::plugin` names `UiExtension`, `ExtensionFile`, `FieldControl`, `Control`,
+  `ControlCx`, `EditedValue`, `PageSources`, `Directive` and `PagePolicy` for a plugin's modules.
+- A form field of your own: a `FieldControl`, drawn with `#[form(control = ..)]` in a derived form,
+  `Widget::Control` in a described one and `EditCell::control` in a table. Its server check runs on
+  every path a value arrives by (`Submit`, wizard steps, drafts read with `Draft::read_for`,
+  `EditedValue::read` and `check_controls`) and can read the app's configuration through
+  `ControlCx`.
+- The page policy, `ui.policy`: an app allows image, media, connection and font sources for a
+  plugin by its namespace (`ui.policy.allow.geo.img_src`), and WebAssembly with one switch; a plugin
+  says what it needs with `PageSources`, and the boot says what was asked and what was allowed.
+  Script, style, worker and frame sources cannot be allowed. With nothing allowed, every answer
+  keeps the toolkit's policy.
+- `View::fresh` and `AppPage::fresh`: in an app with a UI extension, a plugin's island script or an
+  allowed source, a page that must start clean is entered and left by a full page load, keeps the
+  toolkit's policy, and no answer it gives is drawn into another page. The sign-in and account
+  pages, the OAuth consent page, Helm and Lighthouse are fresh, and the log names a page or a reply
+  that sends a password field outside one.
+- `Page::assert_no_policy_violations` (navree-browser) fails when a page reported a content security
+  policy violation.
 
 ### Changed
 
@@ -249,6 +279,26 @@ every `@navree/*` package carries the same version.
   their name in every format. 1.2's derive wrote a variant index in binary formats such as bincode
   or postcard, so a value 1.2 wrote in such a format does not read back in 1.3. JSON, TOML and the
   configuration read as before.
+- New inherent items: `Element::extension`, `Element::extension_with`, `Element::extension_call`,
+  `View::fresh`, `AppPage::fresh`, `EditCell::control`, `TestView::uses_extension`,
+  `Uses::EXTENSIONS`, `Uses::EXTENSION_SHEETS` and `Page::assert_no_policy_violations`. An app whose
+  own trait gives these types an item of one of these names reaches it through the trait.
+- New names at the root of `navree::ui` (`UiExtension`, `ExtensionFile`, `Control`, `ControlCx`,
+  `ControlField`, `FieldControl`, `EditedValue`, `EditRefused`, `Directive`, `PagePolicy`,
+  `PagePolicyOptions`, `PolicySources`, `PageSources`, `kit`, and the macros `component_methods!`
+  and `component_node!`; with `ui-extension-files`, `extension_script!` and `extension_sheet!`) can
+  make two glob imports ambiguous where the name is used.
+- `Widget` gains `Control`, and the `Form` derive's message for an unknown option lists `control`.
+- The configuration section `ui.policy` and the provider `PagePolicy` show in
+  `config:show --defaults`, `config:schema`, `check --graph` and `introspect --json`.
+- The core runtime grows by 121 bytes gzip (12,939 to 13,060) and acts on a `ui:core` event whose
+  detail is an object; `extensions-*.js` joins the toolkit's files; the tree module takes no
+  children from a page that starts clean.
+- In an app with a UI extension, a plugin's island script or an allowed source, the sign-in and
+  account pages, the consent page, Helm and Lighthouse are entered and left by a full load, carry
+  `data-ui-fresh-page` on the document's root element and the header `x-navree-fresh`, and their
+  answers are not drawn into other pages' regions. An app with none of these keeps the pages,
+  headers and navigation of 1.2.2.
 
 ### Fixed
 
