@@ -108,6 +108,15 @@ pub const MAX_BODY: usize = 8 * 1024 * 1024;
 /// into pages by cursor.
 pub const MAX_NODES: usize = 100_000;
 
+/// The most nodes a screen may hold: 400,000, four times [`MAX_NODES`] and
+/// counted the same way. A page that comes as one answer is held to
+/// `MAX_NODES`; what comes to a screen over time (rows by cursor, the changes
+/// of a list that is kept up to date, a region's answer, an op) is held to
+/// this. A client applies none of an op, a merge, more rows or a region's
+/// answer that would take the screen past it, says so, and a list that is
+/// kept up to date stops asking for what changed until something tells it to.
+pub const MAX_SCREEN_NODES: usize = 4 * MAX_NODES;
+
 /// The most ops one answer may hold: 1,000. A client fails an answer with
 /// more as one it could not read. The most recorded so far is 13 (a board
 /// moving its cards). The cap does not bound the work of the ops: each op that

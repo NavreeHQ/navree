@@ -366,3 +366,98 @@ fn a_merge_costs_the_rows_it_brings_and_not_the_list_times_them() {
     println!("a merge of 40,000 rows and 20,000 gone, into 40,000 rows: {took:?}");
     assert!(took.as_secs() < 3, "the merge took {took:?}");
 }
+
+/// A screen has a largest size, four times what one answer may hold, however
+/// it comes to hold it. A list that is kept up to date and a server that
+/// answers every ask with a hundred thousand rows more and says more follow
+/// is asked for at most that many: the answer that would pass the largest
+/// size is not applied, and the list stops asking.
+#[test]
+fn a_screen_has_a_largest_size_and_a_live_list_stops_asking_there() {
+    use navree_native::MAX_NODES;
+    let mut core = Core::new(Config::new(
+        "https://shop.example",
+        Client::new(Platform::Android, FormFactor::Phone),
+    ));
+    let shell = request_of(&core.send(Event::Start));
+    let page = request_of(&answer(
+        &mut core,
+        shell,
+        &json!({"navree": 1, "build": "b1", "name": "Charkha Supply Co.", "home": "/"}),
+    ));
+    let arrived = answer(
+        &mut core,
+        page,
+        &json!({"navree": 1, "build": "b1", "vocab": 0, "screen": {"title": "Orders", "body": {
+            "t": "list", "id": "orders", "since": "0", "changes": "/orders/changes",
+            "live": {"src": "/stream?topics=orders"}, "children": []}}}),
+    );
+    let screen = core.view().front.expect("a screen is in front");
+    let stream = arrived
+        .effects
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::StreamOpen { stream, .. } => Some(*stream),
+            _ => None,
+        })
+        .expect("the list's stream is opened");
+    let spoke = |state| Event::Stream {
+        stream,
+        state,
+        name: None,
+        status: None,
+    };
+    core.send(spoke(StreamState::Open));
+    let nudged = core.send(spoke(StreamState::Event));
+    let timer = nudged
+        .effects
+        .iter()
+        .find_map(|effect| match effect {
+            Effect::Timer { timer, .. } => Some(*timer),
+            _ => None,
+        })
+        .expect("the ask waits for the stream to go quiet");
+    let mut asked = Some(request_of(&core.send(Event::Timer { timer })));
+
+    let per_answer = MAX_NODES - 10;
+    let mut answers = 0;
+    while let Some(request) = asked.take() {
+        answers += 1;
+        assert!(
+            answers <= 12,
+            "the core is still asking after {answers} answers"
+        );
+        let nodes: Vec<Value> = (0..per_answer)
+            .map(|number| json!({"t": "row", "id": format!("r{answers}-{number}"), "title": "CS"}))
+            .collect();
+        let update = answer(
+            &mut core,
+            request,
+            &json!({"navree": 1, "build": "b1", "vocab": 0, "ops": [
+                {"op": "merge", "target": "orders", "since": answers.to_string(), "at": "end", "more": true, "nodes": nodes}]}),
+        );
+        asked = update.effects.iter().find_map(|effect| match effect {
+            Effect::Fetch(request) => Some(request.request),
+            _ => None,
+        });
+        if answers == 5 {
+            // The fifth would take the screen to nearly five times what one
+            // answer may hold: it is not applied, it is said, and nothing more is asked.
+            assert_eq!(asked, None, "{:?}", update.effects);
+            assert!(
+                update
+                    .effects
+                    .iter()
+                    .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "size")),
+                "{:?}",
+                update.effects
+            );
+        }
+    }
+    assert_eq!(answers, 5);
+    let content = serde_json::to_value(&core.view().screens[&screen].content).unwrap();
+    let rows = content["screen"]["body"]["children"]
+        .as_array()
+        .map(Vec::len);
+    assert_eq!(rows, Some(4 * per_answer));
+}
