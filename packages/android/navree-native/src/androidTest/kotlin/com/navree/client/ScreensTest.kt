@@ -232,11 +232,11 @@ class ScreensTest {
             assertTrue("press ${press + 1}: the stop has no name; the stops so far: $stops", named.isNotEmpty())
             stops += named
         }
-        stops.zipWithNext().forEach { (before, after) -> assertTrue("the stop \"$after\" came twice running", before != after) }
+        stops.zipWithNext().forEach { (before, after) -> assertTrue("the stop \"$after\" came twice running; the stops were ${stops.map { it.take(28) }}", before != after) }
         // Each picked field is one stop of a loop, not two: its label starts the name of one stop, in the first loop.
         for (label in listOf("City", "Tier", "Customer since")) {
             val found = stops.count { it.startsWith(label) }
-            assertTrue("$label is a stop at most once in each loop of the form: $found in ${stops.size} presses", found in 1..2)
+            assertTrue("$label is a stop at most once in each loop of the form: $found in ${stops.size} presses; the stops were ${stops.map { it.take(28) }}", found in 1..2)
         }
     }
 }
