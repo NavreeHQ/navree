@@ -22,14 +22,14 @@ use navree_config::check::CheckOptions;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_kernel::{AppBuilder, BoxFuture, CommandSpec, Module, ModuleBuilder, Navree};
 use navree_storage::{
-    Disk, DiskDriver, DiskDriverError, DiskUpload, FileMeta, ModuleBuilderStorageExt, OpenedFile,
-    Storage, StorageModule, StorageOptions,
+    Disk, DiskConfig, DiskDriver, DiskDriverError, DiskUpload, FileMeta, ModuleBuilderStorageExt,
+    OpenedFile, Storage, StorageModule, StorageOptions,
 };
 use serde::Deserialize;
 use serde_json::json;
 
 use crate::conformance::{Http, Subject};
-use crate::support::{SIGNING_KEY, TestApp, boot_error};
+use crate::support::{SIGNING_KEY, TestApp, boot_error, single_disk};
 
 type Files = Arc<Mutex<BTreeMap<String, (Bytes, DateTime<Utc>)>>>;
 
@@ -323,6 +323,33 @@ async fn a_disk_given_in_code_hands_its_driver_its_table() {
     assert_eq!(
         *seen.lock().unwrap(),
         Some(("Amritsar invoices".to_owned(), Some("invoices".to_owned())))
+    );
+}
+
+/// Registers the disk driver `sanduk` a second time.
+struct SecondSandukModule;
+
+impl Module for SecondSandukModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.disk_driver("sanduk", |_| async { Ok(Sanduk::default()) });
+    }
+}
+
+#[tokio::test]
+async fn a_disk_driver_registered_twice_fails_the_boot_also_when_storage_is_replaced() {
+    let storage = Storage::new(&single_disk("memory", DiskConfig::Memory), SIGNING_KEY).unwrap();
+    let error = boot_error(
+        Navree::app()
+            .module(ConfigModule::for_root(ConfigSources::new()))
+            .module(StorageModule::from_config())
+            .module(SandukModule::default())
+            .module(SecondSandukModule)
+            .override_value(Arc::new(storage)),
+    )
+    .await;
+    assert!(
+        error.contains("disk driver `sanduk` is registered by both `SandukModule` and `SecondSandukModule`; register it once"),
+        "{error}"
     );
 }
 

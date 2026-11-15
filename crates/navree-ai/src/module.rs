@@ -13,7 +13,7 @@ use navree_kernel::{
 
 use crate::agent::Agent;
 use crate::commands::prune_command;
-use crate::drivers::{SLOT, registered_drivers};
+use crate::drivers::{CheckedDrivers, SLOT, check_drivers, registered_drivers};
 use crate::error::map_ai_error;
 use crate::memory::{self, Conversations};
 use crate::options::VectorStoreKind;
@@ -99,10 +99,18 @@ fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
     m.exports::<AiOptions>()
         .factory(
             // Every registration of a provider driver is checked, whichever
-            // tables select one; each table of a registered driver gets the
-            // driver its registration builds.
+            // tables select one and whether or not `Ai` is replaced.
+            Factory::<CheckedDrivers>::new(|r: Resolver| async move {
+                check_drivers(&r.app())?;
+                Ok(Arc::new(CheckedDrivers))
+            }),
+        )
+        .factory(
+            // Each table of a registered driver gets the driver its
+            // registration builds.
             Factory::<Ai>::new(move |r: Resolver| async move {
                 let options = r.get::<AiOptions>().await?;
+                r.get::<CheckedDrivers>().await?;
                 let app = r.app();
                 let registered = registered_drivers(&r, &options, in_code).await?;
                 Ok(Arc::new(Ai::build_with(
@@ -111,7 +119,10 @@ fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
                     registered,
                 )?))
             })
-            .deps(vec![ProviderKey::of::<AiOptions>()]),
+            .deps(vec![
+                ProviderKey::of::<AiOptions>(),
+                ProviderKey::of::<CheckedDrivers>(),
+            ]),
         )
         .exports::<Ai>()
         .factory(

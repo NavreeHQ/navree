@@ -17,7 +17,7 @@ use navree_kernel::{
 use serde_json::Value;
 
 use crate::controller::RealtimeController;
-use crate::drivers::SLOT;
+use crate::drivers::{CheckedBackplanes, SLOT};
 use crate::realtime::Relay;
 use crate::relay::{self, RelayClient};
 use crate::{Backplane, BackplaneKind, Live, Realtime, RealtimeOptions};
@@ -95,12 +95,18 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
         None => m.config::<RealtimeOptions>(),
     };
     m.factory(
+        // Every registration of a backplane is checked, whichever is
+        // selected and whether or not `Realtime` is replaced.
+        Factory::<CheckedBackplanes>::new(|r: Resolver| async move {
+            check_registrations(&r.app(), &SLOT, RealtimeOptions::schema())?;
+            Ok(Arc::new(CheckedBackplanes))
+        }),
+    )
+    .factory(
         Factory::<Realtime>::new(|r: Resolver| async move {
             let options = r.get::<RealtimeOptions>().await?;
+            r.get::<CheckedBackplanes>().await?;
             let app = r.app();
-            // Every registration of a backplane is checked, whichever is
-            // selected.
-            check_registrations(&app, &SLOT, RealtimeOptions::schema())?;
             let cors_origins = match app.try_get::<HttpOptions>().await {
                 Some(http) => http.cors.allowed_origins.clone(),
                 None => Vec::new(),
@@ -120,7 +126,10 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
             realtime.start_backplane().await?;
             Ok(realtime)
         })
-        .deps(vec![ProviderKey::of::<RealtimeOptions>()]),
+        .deps(vec![
+            ProviderKey::of::<RealtimeOptions>(),
+            ProviderKey::of::<CheckedBackplanes>(),
+        ]),
     )
     .exports::<Realtime>()
     .factory(
