@@ -119,7 +119,7 @@ internal sealed class PageKeeper
     /// <param name="page">The page that is on the screen.</param>
     /// <param name="screen">The screen's state.</param>
     /// <param name="send">Tells the core.</param>
-    internal void Serve(FrameworkElement page, ScreenView screen, Action<string> send)
+    internal void Serve(FrameworkElement page, ScreenView screen, Action<string> send, Func<IEnumerable<FrameworkElement>>? elsewhere = null)
     {
         if (screen.Focus is not { } request || served.TryGetValue(screen.Id, out long last) && last >= request.Serial)
         {
@@ -131,7 +131,7 @@ internal sealed class PageKeeper
         void Try()
         {
             attempts++;
-            if (Give(page, request.Target, null))
+            if (Give(page, request.Target, null) || (elsewhere?.Invoke().Any(root => Give(root, request.Target, null)) ?? false))
             {
                 send(Events.Focused(screen.Id, request.Serial));
             }

@@ -227,7 +227,7 @@ internal sealed class ScreenPresenter : Grid
             PageKeeper.Restore(page.Panel, held);
         }
 
-        keeper.Serve(page.Panel, screen, host.Send);
+        keeper.Serve(page.Panel, screen, host.Send, context.OverlayRoots);
         return true;
     }
 
@@ -333,7 +333,7 @@ internal sealed class ScreenPresenter : Grid
             PageKeeper.Restore(built, held);
         }
 
-        keeper.Serve(built, screen, host.Send);
+        keeper.Serve(built, screen, host.Send, context.OverlayRoots);
     }
 
     // One thing fills the area: the screen's scrolling page, or a web view.

@@ -50,6 +50,31 @@ internal sealed class RenderContext
     /// <summary>The buttons that were drawn outside a drawing of the tree, by key.</summary>
     internal Dictionary<string, FrameworkElement> LooseTriggers { get; } = [];
 
+    /// <summary>The bodies of the sheets, dialogs and popovers that are open: drawn apart from the page, and kept up to date with it.</summary>
+    internal List<Drawn> Extra { get; } = [];
+
+    /// <summary>The elements that hold what is open over the page now (a sheet, a dialog, a popover), where the core's request for the focus may name a part.</summary>
+    internal Func<IEnumerable<FrameworkElement>> OverlayRoots { get; set; } = static () => [];
+
+    /// <summary>Takes in the body of an overlay: the fields and buttons it drew are found with the page's.</summary>
+    /// <param name="owner">The record of the body.</param>
+    internal void AddRoot(Drawn owner)
+    {
+        Extra.Add(owner);
+        foreach (Drawn record in owner.Walk())
+        {
+            foreach (((string Form, string Field) key, FieldHandle handle) in record.Fields)
+            {
+                Fields[key] = handle;
+            }
+
+            foreach ((string key, FrameworkElement element) in record.Triggers)
+            {
+                Triggers[key] = element;
+            }
+        }
+    }
+
     /// <summary>The records of the parts of the screen's page that is drawn: the page itself, and the body in it.</summary>
     internal Drawn? Page { get; set; }
 
@@ -87,20 +112,17 @@ internal sealed class RenderContext
             Triggers[loose.Key] = loose.Value;
         }
 
-        if (Page is not null)
+        foreach (Drawn record in Page is null ? Extra.SelectMany(extra => extra.Walk()) : Page.Walk().Concat(Extra.SelectMany(extra => extra.Walk())))
         {
-            foreach (Drawn record in Page.Walk())
+            Overlays.AddRange(record.Overlays);
+            foreach (((string Form, string Field) key, FieldHandle handle) in record.Fields)
             {
-                Overlays.AddRange(record.Overlays);
-                foreach (((string Form, string Field) key, FieldHandle handle) in record.Fields)
-                {
-                    Fields[key] = handle;
-                }
+                Fields[key] = handle;
+            }
 
-                foreach ((string key, FrameworkElement element) in record.Triggers)
-                {
-                    Triggers[key] = element;
-                }
+            foreach ((string key, FrameworkElement element) in record.Triggers)
+            {
+                Triggers[key] = element;
             }
         }
 

@@ -54,6 +54,9 @@ internal sealed class SidePane : Grid
         };
     }
 
+    /// <summary>What the pane holds.</summary>
+    internal UIElement? Content => body.Content as UIElement;
+
     /// <summary>Whether the pane is showing.</summary>
     internal bool IsShowing => Visibility == Visibility.Visible;
 

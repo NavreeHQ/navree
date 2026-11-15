@@ -49,10 +49,37 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
             root.AddHandler(UIElement.KeyDownEvent, new Microsoft.UI.Xaml.Input.KeyEventHandler(CloseFlyoutOnEscape), true);
         }
 
+        if (context is not null)
+        {
+            // The core's request for the focus may name a part of what is open over the page; the bodies that are no longer open are let go of.
+            context.OverlayRoots = Roots;
+            OverlayBodyView? open = showing?.Holder?.View;
+            _ = context.Extra.RemoveAll(record => open is null || !ReferenceEquals(record, open.Owner));
+        }
+
         latest = Decide(state, context, modalInFront);
         if (!pumping)
         {
             _ = PumpAsync();
+        }
+    }
+
+    // What holds the sheet, dialog or popover that is open.
+    private IEnumerable<FrameworkElement> Roots()
+    {
+        if (flyout?.Content is FrameworkElement inFlyout)
+        {
+            yield return inFlyout;
+        }
+
+        if (dialog?.Content is FrameworkElement inDialog)
+        {
+            yield return inDialog;
+        }
+
+        if (pane.IsShowing)
+        {
+            yield return pane;
         }
     }
 
@@ -145,37 +172,47 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 OverlayRequest overlay = request;
                 bool large = overlay.Node is Models.Sheet { Size: Models.SheetSize.Large };
 
+                // The body is drawn when what is wanted is shown, and kept: later answers bring it up to date where it stands.
+                OverlayHolder holder = new();
+                UIElement Body()
+                {
+                    holder.View = new OverlayBodyView(context, overlay);
+                    return holder.View.Element;
+                }
+
                 // A popover opens at the control that opened it, where that control is found again on the screen.
                 FrameworkElement? anchor = overlay.Node is Models.Popover && Triggers.Last is string key && context.Triggers.TryGetValue(key, out FrameworkElement? found) ? found : null;
                 if (anchor is not null)
                 {
                     return new Wanted(
                         "overlay:" + screen.Id + ":" + overlay.Id + ":flyout",
-                        () => OverlayDialog(overlay, context),
+                        () => OverlayDialog(overlay, Body()),
                         null,
                         null,
                         _ => host.Send(Events.Overlay(screen.Id, overlay.Id, false)),
                         large: false)
                     {
-                        Flyout = () => new Flyout { Content = new ScrollViewer { Content = OverlayBody(overlay, context), MaxHeight = 420 } },
+                        Flyout = () => new Flyout { Content = new ScrollViewer { Content = Body(), MaxHeight = 420 } },
                         Anchor = anchor,
-                        Rebuild = () => OverlayBody(overlay, context),
+                        Rebuild = Body,
                         Context = context,
-                        Version = context.Version,
+                        Holder = holder,
+                        Overlay = overlay,
                     };
                 }
 
                 return new Wanted(
                     "overlay:" + screen.Id + ":" + overlay.Id + (AsPane(large) ? ":pane" : ":dialog"),
-                    () => OverlayDialog(overlay, context),
-                    new PaneBody(Titled(overlay), () => OverlayBody(overlay, context)),
+                    () => OverlayDialog(overlay, Body()),
+                    new PaneBody(Titled(overlay), Body),
                     null,
                     _ => host.Send(Events.Overlay(screen.Id, overlay.Id, false)),
                     large: large)
                 {
-                    Rebuild = () => OverlayBody(overlay, context),
+                    Rebuild = Body,
                     Context = context,
-                    Version = context.Version,
+                    Holder = holder,
+                    Overlay = overlay,
                 };
             }
         }
@@ -191,70 +228,14 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
             _ => string.Empty,
         };
 
-    private static ContentDialog OverlayDialog(OverlayRequest overlay, RenderContext context) =>
+    private static ContentDialog OverlayDialog(OverlayRequest overlay, UIElement body) =>
         new()
         {
             Title = Titled(overlay),
-            Content = new ScrollViewer { Content = OverlayBody(overlay, context) },
+            Content = new ScrollViewer { Content = body },
             CloseButtonText = "Close",
             MinWidth = 480,
         };
-
-    private static UIElement OverlayBody(OverlayRequest overlay, RenderContext context)
-    {
-        NodeRenderer renderer = new(context);
-        StackPanel body = new() { Spacing = 12 };
-        switch (overlay.Node)
-        {
-            case Models.Sheet sheet:
-                if (sheet.Subtitle is not null)
-                {
-                    body.Children.Add(Look.Label(sheet.Subtitle, muted: true));
-                }
-
-                foreach (Models.Node child in sheet.Children)
-                {
-                    body.Children.Add(renderer.RenderInOverlay(child, overlay.Id));
-                }
-
-                foreach (Models.Node action in sheet.Actions)
-                {
-                    body.Children.Add(renderer.RenderInOverlay(action, overlay.Id));
-                }
-
-                break;
-            case Models.Dialog inner:
-                if (inner.Text is not null)
-                {
-                    body.Children.Add(Look.Label(inner.Text));
-                }
-
-                foreach (Models.Node child in inner.Children)
-                {
-                    body.Children.Add(renderer.RenderInOverlay(child, overlay.Id));
-                }
-
-                StackPanel actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
-                foreach (Models.Node action in inner.Actions)
-                {
-                    actions.Children.Add(renderer.RenderInOverlay(action, overlay.Id));
-                }
-
-                body.Children.Add(actions);
-                break;
-            case Models.Popover popover:
-                foreach (Models.Node child in popover.Children)
-                {
-                    body.Children.Add(renderer.RenderInOverlay(child, overlay.Id));
-                }
-
-                break;
-            default:
-                break;
-        }
-
-        return body;
-    }
 
     // One thing is over the window at a time: what is wanted replaces what is showing, and the latest wish wins.
     private async Task PumpAsync()
@@ -268,11 +249,22 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 if (want is not null && showing is not null && want.Key == showing.Key)
                 {
                     want.Refresh?.Invoke();
-                    if (want.Rebuild is not null && (want.Version != showing.Version || !ReferenceEquals(want.Anchor, showing.Anchor)))
+                    if (want.Rebuild is not null)
                     {
-                        // The page was drawn again (an answer changed it): what a sheet, dialog or popover of the page holds is drawn from the new
-                        // tree, so a server's error stands at its field and a button that is busy says so; where the person was in it is put back.
-                        BringUpToDate(want);
+                        // An answer changed the screen: what a sheet, dialog or popover of the page holds is brought up to date where it stands, so a
+                        // server's error stands at its field, a button that is busy says so, and the one that is open stays the one that is open. Only a
+                        // body that cannot be (the overlay is another kind, or the screen was drawn again) is drawn again, with the place in it put back.
+                        OverlayBodyView? view = showing.Holder?.View;
+                        bool kept = view is not null && ReferenceEquals(view.Context, want.Context) && want.Overlay is not null && view.Update(want.Overlay);
+                        if (kept)
+                        {
+                            want.Holder!.View = view;
+                        }
+                        else
+                        {
+                            BringUpToDate(want);
+                        }
+
                         if (flyout is not null && want.Anchor is { XamlRoot: not null } moved && !ReferenceEquals(moved, showing.Anchor))
                         {
                             // The control it opened at was drawn again: it stays beside the new one.
@@ -471,6 +463,12 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
 
     private sealed record PaneBody(string Title, Func<UIElement> Build);
 
+    /// <summary>The body of an overlay that is open, once it is drawn.</summary>
+    private sealed class OverlayHolder
+    {
+        internal OverlayBodyView? View { get; set; }
+    }
+
     private sealed record Wanted(string Key, Func<ContentDialog> Dialog, PaneBody? Pane, Action? Refresh, Action<ContentDialogResult> OnClosed, bool large = false)
     {
         internal bool Large { get; } = large;
@@ -487,8 +485,11 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
         /// <summary>The page's drawing the body was drawn from.</summary>
         internal RenderContext? Context { get; init; }
 
-        /// <summary>What the overlays of the page were when this wish was made: the body is drawn again when they are another.</summary>
-        internal int Version { get; init; }
+        /// <summary>The body of the overlay, when it has been drawn.</summary>
+        internal OverlayHolder? Holder { get; init; }
+
+        /// <summary>The overlay, as the tree has it.</summary>
+        internal OverlayRequest? Overlay { get; init; }
     }
 }
 

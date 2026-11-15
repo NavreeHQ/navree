@@ -31,6 +31,29 @@ internal sealed partial class NodeRenderer
         return group;
     }
 
+    /// <summary>Draws the children of a body that stands apart from the page (a sheet, a dialog, a popover) into a run of its own record, in the overlay they stand in.</summary>
+    /// <param name="owner">The record of the body.</param>
+    /// <param name="children">The children.</param>
+    /// <param name="host">Where their elements go.</param>
+    /// <param name="start">The place in the host where the run begins.</param>
+    /// <param name="overlay">The sheet, dialog or popover they stand in.</param>
+    /// <returns>The run.</returns>
+    internal Group DrawRun(Drawn owner, IReadOnlyList<Models.Node> children, IHost host, Func<int> start, string overlay)
+    {
+        (Drawn? outer, string? outerOverlay) = (current, currentOverlay);
+        current = owner;
+        currentOverlay = overlay;
+        try
+        {
+            return Run(children, host, start);
+        }
+        finally
+        {
+            current = outer;
+            currentOverlay = outerOverlay;
+        }
+    }
+
     /// <summary>
     /// Says how the part being drawn is brought up to date: it is, in place, when its own properties are the same (its children aside) and its run of
     /// children can be; the nodes it draws that are not in the run must stand too, or it is drawn again.
