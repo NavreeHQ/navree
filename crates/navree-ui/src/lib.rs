@@ -145,7 +145,7 @@ pub use flow::{
     StepState, Stepper, StepperLabels, Toolbar, ToolbarItem, Tree, TreeChildren, TreeNode,
     TreeSelect, TreeSelection, TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
 };
-pub use form::{FormView, Money, Submit};
+pub use form::{Control, ControlCx, ControlField, FieldControl, FormView, Money, Submit};
 pub use hint::{Presented, Role, Standard};
 pub use html::{Href, HrefError, LocalHref, SafeHtml};
 pub use island::{Island, IslandScript};

@@ -23,6 +23,10 @@ struct FieldHints {
     rows: Option<LitInt>,
     max: Option<LitInt>,
     widget: Option<Ident>,
+    /// The control that draws the field and checks its value: a path to a `static`.
+    control: Option<syn::Path>,
+    /// Where the `control` key was written, for the error when `widget` is given too.
+    control_at: Option<proc_macro2::Span>,
     date_rules: Option<syn::Path>,
     time_rules: Option<syn::Path>,
     slider: Option<syn::Path>,
@@ -46,6 +50,10 @@ fn hints(attrs: &[syn::Attribute]) -> syn::Result<FieldHints> {
                 "rows" => out.rows = Some(meta.value()?.parse()?),
                 "max" => out.max = Some(meta.value()?.parse()?),
                 "widget" => out.widget = Some(meta.value()?.parse()?),
+                "control" => {
+                    out.control = Some(meta.value()?.parse()?);
+                    out.control_at = meta.path.get_ident().map(Ident::span);
+                }
                 "date_rules" => out.date_rules = Some(meta.value()?.parse()?),
                 "time_rules" => out.time_rules = Some(meta.value()?.parse()?),
                 "slider" => out.slider = Some(meta.value()?.parse()?),
@@ -54,7 +62,7 @@ fn hints(attrs: &[syn::Attribute]) -> syn::Result<FieldHints> {
                 "skip" => out.skip = true,
                 _ => {
                     return Err(meta.error(format!(
-                        "unknown `form` option `{key}`: expected label, placeholder, help, prompt, error, addon, rows, max, widget, date_rules, time_rules, slider, autofocus, wide or skip"
+                        "unknown `form` option `{key}`: expected label, placeholder, help, prompt, error, addon, rows, max, widget, control, date_rules, time_rules, slider, autofocus, wide or skip"
                     )));
                 }
             }
@@ -175,6 +183,13 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
             continue;
         }
         let Some(ident) = &field.ident else { continue };
+        // A field is drawn by the toolkit's widget or by a control, not both.
+        if hint.control.is_some() && hint.widget.is_some() {
+            return Err(syn::Error::new(
+                hint.control_at.unwrap_or_else(proc_macro2::Span::call_site),
+                "#[form(control = ..)] and #[form(widget = ..)] on one field: a field is drawn one way; keep one",
+            ));
+        }
         let rust_name = ident.unraw().to_string();
         let name =
             serde_rename(&field.attrs).unwrap_or_else(|| apply_case(&rust_name, case.as_deref()));
@@ -198,6 +213,7 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         // never writes back: named `password`, or ending in it (`new_password`).
         let secret = matches!(element_name.as_deref(), Some("String" | "str"))
             && hint.widget.is_none()
+            && hint.control.is_none()
             && is_secret_name(&name);
         let inferred = if secret {
             Some(quote!(#ui::form::Widget::Input(#ui::InputKind::Password)))
@@ -209,18 +225,24 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         let instant = is_utc_instant(element);
         let decimal = matches!(element_name.as_deref(), Some("Decimal"));
         let phone_type = matches!(type_name(inner).as_deref(), Some("Phone" | "PhoneNumber"));
-        let widget = match &hint.widget {
+        let widget = match (&hint.widget, &hint.control) {
+            // A control draws the field and checks what it posts; the type is read from the text.
+            (_, Some(control)) => {
+                quote!(#ui::form::Widget::Control(#ui::form::Control::new(&#control)))
+            }
             // A phone input on text keeps the number as E.164 text.
-            Some(widget) if widget == "phone" && !phone_type => {
+            (Some(widget), None) if widget == "phone" && !phone_type => {
                 quote!(#ui::form::Widget::PhoneText)
             }
-            Some(widget) => named_widget(&ui, widget, rows)?,
-            None if many.is_some() => quote!(#ui::form::Widget::Multi),
-            None => inferred
+            (Some(widget), None) => named_widget(&ui, widget, rows)?,
+            (None, None) if many.is_some() => quote!(#ui::form::Widget::Multi),
+            (None, None) => inferred
                 .clone()
                 .unwrap_or_else(|| quote!(#ui::form::Widget::Select)),
         };
+        // A control has no `Options` lookup: the field's type need not have any.
         let options = if inferred.is_none()
+            && hint.control.is_none()
             && hint.widget.as_ref().is_none_or(|w| {
                 matches!(
                     w.to_string().as_str(),

@@ -16,9 +16,11 @@
 //!
 //! [`problems`] says what breaks them, [`assert_component`] fails a test with that, and
 //! [`stored_twin`] draws the same node as stored content, for a browser test that checks the
-//! component does not act on its own twin.
+//! component does not act on its own twin. A form field of your own has rules of its own:
+//! [`assert_control`] checks what a [`FieldControl`] draws against them.
 
 use crate::extension::{EXTENSION_PATH, is_script_address, is_sheet_address, markup_values};
+use crate::form::{ControlField, FieldControl};
 use crate::node::{AttrValue, Element, Node, Uses, el};
 
 /// The deepest a walk goes, as the renderer's: what is below is left out.
@@ -99,6 +101,209 @@ pub fn stored_twin(node: &Node) -> Node {
         .flag("data-ui-stored", true)
         .child(node.clone())
         .into()
+}
+
+/// The name of the form field [`assert_control`] draws a control for.
+const CONTROL_FIELD: &str = "drop_at";
+
+/// What a control draws, checked against the rules of a control; fails the test with every line
+/// of what is wrong when there is something. The control is drawn three times, for the field
+/// `drop_at`: with a label id, with a label id and read-only, and with no label id (as in a table
+/// cell). It must draw a form field named `drop_at`, and that field is the part a person uses; or
+/// the control marks the part a person uses `data-field-control` and labels it (`aria-labelledby`
+/// when there is a label id, `aria-label` when there is none). With the field read-only, every
+/// `input`, `select`, `textarea` and `button` it draws is disabled. It sets no
+/// `aria-describedby` on the part the field ties its id and descriptions to, the first form
+/// field or part marked `data-field-control`: `described_by` is for its other parts. And what it
+/// draws keeps the rules [`problems`] checks.
+///
+/// ```
+/// use navree_ui::form::{ControlField, FieldControl};
+/// use navree_ui::{Node, el, kit};
+///
+/// struct PinCode;
+///
+/// impl FieldControl for PinCode {
+///     fn name(&self) -> &'static str {
+///         "app.pin-code"
+///     }
+///
+///     fn draw(&self, field: &ControlField<'_>) -> Node {
+///         el("input")
+///             .attr("type", "text")
+///             .attr("name", field.name.to_owned())
+///             .flag("disabled", field.disabled)
+///             .into()
+///     }
+/// }
+///
+/// kit::assert_control(&PinCode);
+/// ```
+#[track_caller]
+pub fn assert_control(control: &dyn FieldControl) {
+    let found = control_problems(control);
+    assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+/// What [`assert_control`] says is wrong with `control`, one line each, none twice.
+fn control_problems(control: &dyn FieldControl) -> Vec<String> {
+    let name = control.name();
+    let base = ControlField {
+        label: "Drop point",
+        ..ControlField::new(CONTROL_FIELD)
+    };
+    let draws = [
+        ControlField {
+            label_id: Some("drop_at-label"),
+            ..base
+        },
+        ControlField {
+            label_id: Some("drop_at-label"),
+            disabled: true,
+            ..base
+        },
+        base,
+    ];
+    let mut found: Vec<String> = Vec::new();
+    let mut say = |line: String| {
+        if !found.contains(&line) {
+            found.push(line);
+        }
+    };
+    for field in &draws {
+        let node = control.draw(field);
+        let mut parts = Vec::new();
+        elements(&node, "", 0, &mut parts);
+
+        let named: Vec<&Element> = parts
+            .iter()
+            .map(|(element, _)| *element)
+            .filter(|element| {
+                matches!(element.tag(), "input" | "select" | "textarea")
+                    && text(element, "name") == Some(CONTROL_FIELD)
+            })
+            .collect();
+        if named.is_empty() {
+            say(format!(
+                "control {name}: draws no form field named {CONTROL_FIELD}"
+            ));
+        } else if named.iter().all(|element| is_hidden(element)) {
+            // The field posts, but nobody can use it: a part of the control stands in for it,
+            // and has to be named for assistive technology.
+            let label = if field.label_id.is_some() {
+                "aria-labelledby"
+            } else {
+                "aria-label"
+            };
+            let labelled = parts.iter().any(|(element, _)| {
+                element.get("data-field-control").is_some()
+                    && text(element, label).is_some_and(|value| !value.trim().is_empty())
+            });
+            if !labelled {
+                say(format!(
+                    "control {name}: {CONTROL_FIELD} is hidden, and no part marked data-field-control is labelled"
+                ));
+            }
+        }
+
+        if field.disabled {
+            for (element, path) in &parts {
+                if matches!(element.tag(), "input" | "select" | "textarea" | "button")
+                    && element.get("disabled").is_none()
+                {
+                    say(format!(
+                        "control {name}: with disabled set, {path} is not disabled"
+                    ));
+                }
+            }
+        }
+
+        if let Some((element, path)) = tied(&node, "", 0)
+            && element.get("aria-describedby").is_some()
+        {
+            say(format!(
+                "control {name}: {path} sets aria-describedby on the part Field ties; use described_by on its other parts"
+            ));
+        }
+
+        for line in problems(&node) {
+            say(line);
+        }
+    }
+    found
+}
+
+/// Every element of `node` with its path (see [`problems`]), in document order.
+fn elements<'a>(node: &'a Node, above: &str, depth: u32, out: &mut Vec<(&'a Element, String)>) {
+    if depth > MAX_DEPTH {
+        return;
+    }
+    match node {
+        Node::Element(element) => {
+            let path = path_to(element, above);
+            out.push((element, path.clone()));
+            for child in element.child_nodes() {
+                elements(child, &path, depth + 1, out);
+            }
+        }
+        Node::Fragment(nodes) => {
+            for child in nodes {
+                elements(child, above, depth + 1, out);
+            }
+        }
+        Node::Empty | Node::Text(_) | Node::Int(_) | Node::Raw(_) | Node::Static(_) => {}
+    }
+}
+
+/// The part of `node` a form field ties its id, its invalid mark and its descriptions to: the
+/// first form field in document order, or the first part marked `data-field-control`, as
+/// the field's box finds it; a hidden input and what is marked `data-field-skip` are passed by.
+fn tied<'a>(node: &'a Node, above: &str, depth: u32) -> Option<(&'a Element, String)> {
+    if depth > MAX_DEPTH {
+        return None;
+    }
+    match node {
+        Node::Element(element) => {
+            let path = path_to(element, above);
+            let hidden = element.tag() == "input" && text(element, "type") == Some("hidden");
+            if element.get("data-field-skip").is_some() || hidden {
+                return None;
+            }
+            if element.get("data-field-control").is_some()
+                || matches!(element.tag(), "input" | "select" | "textarea")
+            {
+                return Some((element, path));
+            }
+            element
+                .child_nodes()
+                .iter()
+                .find_map(|child| tied(child, &path, depth + 1))
+        }
+        Node::Fragment(nodes) => nodes
+            .iter()
+            .find_map(|child| tied(child, above, depth + 1)),
+        Node::Empty | Node::Text(_) | Node::Int(_) | Node::Raw(_) | Node::Static(_) => None,
+    }
+}
+
+/// Whether `element` is an `input` of type `hidden`.
+fn is_hidden(element: &Element) -> bool {
+    element.tag() == "input"
+        && text(element, "type").is_some_and(|kind| kind.eq_ignore_ascii_case("hidden"))
+}
+
+/// The path of `element` below the element at `above`: its tag with its slot in brackets
+/// (`div[geo:map]`), after the path above it, joined by ` > `.
+fn path_to(element: &Element, above: &str) -> String {
+    let segment = match text(element, "data-slot") {
+        Some(slot) => format!("{}[{slot}]", element.tag()),
+        None => element.tag().to_owned(),
+    };
+    if above.is_empty() {
+        segment
+    } else {
+        format!("{above} > {segment}")
+    }
 }
 
 /// One step of [`problems`].
@@ -199,15 +404,7 @@ fn raw_problems(markup: &str, above: &Above<'_>, found: &mut Vec<String>) {
 /// What `element` breaks, and then what is below it.
 fn element_problems(element: &Element, above: &Above<'_>, depth: u32, found: &mut Vec<String>) {
     let slot = text(element, "data-slot");
-    let segment = match slot {
-        Some(slot) => format!("{}[{slot}]", element.tag()),
-        None => element.tag().to_owned(),
-    };
-    let path = if above.path.is_empty() {
-        segment
-    } else {
-        format!("{} > {segment}", above.path)
-    };
+    let path = path_to(element, above.path);
     let script = text(element, "data-ui-ext");
     let sheet = text(element, "data-ui-ext-sheet");
 
