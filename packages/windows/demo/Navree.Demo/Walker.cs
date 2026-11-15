@@ -35,6 +35,7 @@ internal sealed class Walker(ShellHost host, ShellWindow window, string folder)
                 {
                     host.Send(Events.Act(front, new Models.ActionNavigate { Href = "/orders/1" }));
                     await Shot(prefix, name, "order");
+                    await TryDialogAsync(name);
                 }
 
                 await HomeAsync();
@@ -55,6 +56,32 @@ internal sealed class Walker(ShellHost host, ShellWindow window, string folder)
             File.WriteAllLines(Path.Combine(folder, prefix + "walk.txt"), log);
             Application.Current.Exit();
         }
+    }
+
+    // The order's Refund button opens a dialog of the page's own: it is over the window, and closing it is told to the core.
+    // (A dialog is drawn by the system above the window's content, so the pictures of the content do not hold it; the log says what was over the window.)
+    private async Task TryDialogAsync(string width)
+    {
+        if (host.State.FrontScreen is not ScreenView order || order.Screen is not Models.Screen tree)
+        {
+            return;
+        }
+
+        Models.Button? refund = Navree.Design.Tree.Nodes(tree).OfType<Models.Button>().FirstOrDefault(button => button.Label == "Refund");
+        if (refund?.Action is null)
+        {
+            Say("no Refund button on the order");
+            return;
+        }
+
+        host.Send(Events.Act(order.Id, refund.Action, null, null, null, null, refund.Ask, refund.Id));
+        await SettleAsync();
+        await Task.Delay(600);
+        Say(width + ": after Refund, overlays " + string.Join(",", host.State.FrontScreen?.Overlays ?? []) + "; over the window: " + (window.OverTheWindow ?? "nothing"));
+        host.Send(Events.Overlay(order.Id, "refund", false));
+        await SettleAsync();
+        await Task.Delay(300);
+        Say(width + ": after closing it, overlays " + string.Join(",", host.State.FrontScreen?.Overlays ?? []) + "; over the window: " + (window.OverTheWindow ?? "nothing"));
     }
 
     private static string Prefix()

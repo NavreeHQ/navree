@@ -110,6 +110,9 @@ public sealed class ShellWindow : Window
     /// <summary>The element the window's pictures are taken of: everything but the system's own frame.</summary>
     public FrameworkElement Surface => root;
 
+    /// <summary>What is over the window (a question, a dialog, a pane at the side), by name; null when nothing is.</summary>
+    public string? OverTheWindow => dialogs.ShowingKey;
+
     /// <summary>The page of the screen in front, all of it (not only what the window's height shows).</summary>
     public FrameworkElement? CurrentPage => front.PageElement;
 

@@ -31,6 +31,9 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
         }
     }
 
+    /// <summary>What is over the window now, by name; null when nothing is.</summary>
+    internal string? ShowingKey => showing?.Key;
+
     private WidthClass Width => WindowRules.ClassOf(root.ActualWidth);
 
     private Wanted? Decide(ViewState state, RenderContext? context, bool modalInFront)

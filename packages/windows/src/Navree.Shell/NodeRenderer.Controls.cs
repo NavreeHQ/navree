@@ -314,22 +314,41 @@ internal sealed partial class NodeRenderer
         ScrollViewer.SetVerticalScrollBarVisibility(view, ScrollBarVisibility.Disabled);
         foreach (Models.TableRow row in table.Rows)
         {
-            Grid grid = new() { ColumnSpacing = 12, Padding = new Thickness(0, 6, 0, 6), MinHeight = 40 };
+            Grid grid = new() { ColumnSpacing = 12, RowSpacing = 6, Padding = new Thickness(0, 6, 0, 6), MinHeight = 40 };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            // What the person does to a row (a form, a button, a menu) goes under what the row says, across its whole width.
+            StackPanel doing = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
             StackPanel text = new() { VerticalAlignment = VerticalAlignment.Center };
             if (lead < row.Cells.Count)
             {
                 text.Children.Add(Render(row.Cells[lead]));
             }
 
-            StackPanel secondary = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
+            StackPanel secondary = new() { Orientation = context.Width == WidthClass.Compact ? Orientation.Vertical : Orientation.Horizontal, Spacing = context.Width == WidthClass.Compact ? 2 : 8 };
             for (int at = 0; at < row.Cells.Count && at < table.Columns.Count; at++)
             {
-                if (at != lead && !end.Contains(at) && (at == sub || table.Columns[at].Secondary || table.Columns[at].Role is null))
+                if (at == lead || end.Contains(at))
+                {
+                    continue;
+                }
+
+                if (row.Cells[at] is Models.Form or Models.Button or Models.Menu or Models.Field)
+                {
+                    doing.Children.Add(Render(row.Cells[at]));
+                }
+                else if (at == sub || table.Columns[at].Secondary || table.Columns[at].Role is null)
                 {
                     secondary.Children.Add(Render(row.Cells[at]));
                 }
+            }
+
+            foreach (Models.Node action in row.Actions)
+            {
+                doing.Children.Add(Render(action));
             }
 
             if (secondary.Children.Count > 0)
@@ -346,6 +365,13 @@ internal sealed partial class NodeRenderer
 
             Grid.SetColumn(trailing, 1);
             grid.Children.Add(trailing);
+            if (doing.Children.Count > 0)
+            {
+                Grid.SetRow(doing, 1);
+                Grid.SetColumnSpan(doing, 2);
+                grid.Children.Add(doing);
+            }
+
             if (row.Action is not null)
             {
                 grid.Tag = new RowAction(row.Action, row.Id);
