@@ -8,7 +8,7 @@
 //! in: a list of names or of days, the pairs and commands of an action.
 
 use navree_native::node::{Node, TableRow};
-use navree_native::{Input, Op, Screen};
+use navree_native::{Input, MAX_SCREEN_NODES, MAX_WORK, Op, Screen};
 
 use crate::tree::roots;
 
@@ -101,6 +101,46 @@ pub(crate) fn of_rows<'a>(rows: impl IntoIterator<Item = &'a TableRow>) -> usize
         tally.row(row);
     }
     tally.total
+}
+
+/// Whether an op finds its target by looking through the screen for it: every
+/// op that names a node, a form, a list or a region.
+pub(crate) fn looks_through(op: &Op) -> bool {
+    matches!(
+        op,
+        Op::Morph { .. }
+            | Op::Replace { .. }
+            | Op::Append { .. }
+            | Op::Prepend { .. }
+            | Op::Remove { .. }
+            | Op::Merge { .. }
+            | Op::Rows { .. }
+            | Op::Row { .. }
+            | Op::Errors { .. }
+            | Op::Open { .. }
+            | Op::Close { .. }
+            | Op::Focus { .. }
+            | Op::Invalidate { .. }
+    )
+}
+
+/// Whether ops that bring `brought` (an op's own weight, in order) can be
+/// applied to a screen that weighs `held`: it never passes
+/// [`MAX_SCREEN_NODES`], and the work of the ops that look through it,
+/// counted as it will be done (each charged what the screen holds when it
+/// runs, with what the ops before it brought), does not pass [`MAX_WORK`].
+pub(crate) fn fit(held: usize, ops: &[Op], brought: &[usize]) -> bool {
+    let (mut size, mut work) = (held, 0_usize);
+    for (op, brought) in ops.iter().zip(brought) {
+        if looks_through(op) {
+            work = work.saturating_add(size);
+        }
+        size = size.saturating_add(*brought);
+        if size > MAX_SCREEN_NODES || work > MAX_WORK {
+            return false;
+        }
+    }
+    true
 }
 
 /// What an op brings.

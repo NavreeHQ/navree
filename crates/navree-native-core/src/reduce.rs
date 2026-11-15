@@ -194,6 +194,7 @@ impl Core {
             Event::Overlay { screen, id, open } => self.set_open(screen, &id, open),
             Event::Refresh { screen } => self.refresh(screen),
             Event::RegionRetry { screen, region } => {
+                self.acted_on(screen);
                 self.shell_again();
                 self.fetch_region(screen, &region, None)
             }
@@ -201,12 +202,18 @@ impl Core {
                 screen,
                 id,
                 before: false,
-            } => self.more(screen, &id),
+            } => {
+                self.acted_on(screen);
+                self.more(screen, &id)
+            }
             Event::More {
                 screen,
                 id,
                 before: true,
-            } => self.rows_before(screen, &id),
+            } => {
+                self.acted_on(screen);
+                self.rows_before(screen, &id)
+            }
             Event::RegionGo {
                 screen,
                 region,
@@ -1930,7 +1937,16 @@ impl Core {
         self.touch_screen(id);
     }
 
+    /// The person acted on a screen: answers refused for their size no longer
+    /// count against it.
+    pub(crate) fn acted_on(&mut self, id: ScreenId) {
+        if let Some(inner) = self.inner.screens.get_mut(&id) {
+            inner.refused = 0;
+        }
+    }
+
     fn refresh(&mut self, id: ScreenId) {
+        self.acted_on(id);
         self.shell_again();
         self.fetch_page(id, true);
     }
@@ -2066,7 +2082,6 @@ impl Core {
         }
         view.title = Some(screen.title.clone()).filter(|title| !title.is_empty());
         inner.weight = crate::weight::of_screen(&screen);
-        inner.refused = 0;
         view.content = Content::Native {
             screen: Box::new(screen),
         };
