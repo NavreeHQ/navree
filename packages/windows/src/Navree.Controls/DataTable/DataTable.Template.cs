@@ -211,11 +211,11 @@ public sealed partial class DataTable
 
         // The contrast colours are heard of through the settings of the window: the event of the settings class that needs a core window
         // is not raised for a desktop window.
-        if (themeSettings is null && XamlRoot?.ContentIslandEnvironment is { } environment)
+        if (themeSettings is null && XamlRoot is { } island)
         {
             try
             {
-                themeSettings = Microsoft.UI.System.ThemeSettings.CreateForWindowId(environment.AppWindowId);
+                themeSettings = Microsoft.UI.System.ThemeSettings.CreateForWindowId(island.ContentIslandEnvironment.AppWindowId);
                 themeSettings.Changed += OnHighContrastChanged;
             }
             catch (Exception)
