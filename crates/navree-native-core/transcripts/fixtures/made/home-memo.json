@@ -1,0 +1,26 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Dashboard",
+  "body": {
+   "t": "form",
+   "id": "memo",
+   "method": "post",
+   "action": "/memo",
+   "children": [
+    {
+     "t": "field",
+     "id": "memo-text",
+     "name": "memo-text",
+     "label": "Memo",
+     "input": {
+      "t": "text",
+      "multiline": true
+     }
+    }
+   ]
+  }
+ }
+}
