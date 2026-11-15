@@ -84,6 +84,34 @@ internal sealed class Walker(ShellHost host, ShellWindow window, string folder)
         Say(width + ": after closing it, overlays " + string.Join(",", host.State.FrontScreen?.Overlays ?? []) + "; over the window: " + (window.OverTheWindow ?? "nothing"));
     }
 
+    // What a screen reader is given, as the system's own tool reads it from outside the app (when the tool is on the machine).
+    private async Task InspectAsync(string file)
+    {
+        try
+        {
+            System.Diagnostics.ProcessStartInfo info = new("winapp", "ui inspect -a " + Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture) + " --depth 14")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            using System.Diagnostics.Process? tool = System.Diagnostics.Process.Start(info);
+            if (tool is null)
+            {
+                return;
+            }
+
+            string text = await tool.StandardOutput.ReadToEndAsync();
+            await tool.WaitForExitAsync();
+            File.WriteAllText(file, System.Text.RegularExpressions.Regex.Replace(text, "\u001b\\[[0-9;]*m", string.Empty));
+            Say("wrote " + Path.GetFileName(file));
+        }
+        catch (Exception problem)
+        {
+            Say("no accessibility tree: " + problem.Message);
+        }
+    }
+
     private static string Prefix()
     {
         string[] arguments = Environment.GetCommandLineArgs();
@@ -148,9 +176,7 @@ internal sealed class Walker(ShellHost host, ShellWindow window, string folder)
             Say("wrote " + Path.GetFileName(file));
             if (prefix == "light-")
             {
-                string tree = Path.Combine(folder, prefix + width + "-" + screen + "-ui.txt");
-                File.WriteAllText(tree, AutomationDump.Of(window.Surface));
-                Say("wrote " + Path.GetFileName(tree));
+                await InspectAsync(Path.Combine(folder, prefix + width + "-" + screen + "-ui.txt"));
             }
 
             if (window.CurrentPage is Microsoft.UI.Xaml.Controls.Panel page)
