@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
@@ -399,7 +400,7 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
                 else -> column
             }
             Roomed(ContentRules.contentDp(pane, most, marginDp)) {
-                Box(Modifier.readable(most).padding(horizontal = margin, vertical = if (node is Navree.Field) 8.dp else 0.dp)) {
+                Box(Modifier.readable(most, column).padding(horizontal = margin, vertical = if (node is Navree.Field) 8.dp else 0.dp)) {
                     // A form's own button under its fields sits at the form's end, as wide as its words.
                     if (node is Navree.Button && block.form != null) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NodeView(node, inner) }
@@ -415,7 +416,7 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
                 is Navree.Row -> Box(if (block.group == Group.None) Modifier.readable(column) else Modifier) { RowView(node, inner, block.group) }
                 is Navree.FeedRow -> Box(Modifier.readable(column)) { FeedRowView(node, inner) }
                 is Navree.Field -> if (block.group == Group.None) {
-                    Box(Modifier.readable(FormRules.FORM_MOST_DP)) { FieldView(node, inner, asItem = true) }
+                    Box(Modifier.readable(FormRules.FORM_MOST_DP, column)) { FieldView(node, inner, asItem = true) }
                 } else {
                     Grouped(block.group) { FieldView(node, inner, asItem = true) }
                 }
@@ -864,7 +865,8 @@ internal fun FilterBar(form: Navree.Form, place: Place, sends: Boolean, edge: Bo
     Column(Modifier.fillMaxWidth()) {
         // The box of words the filters narrow by stands over them, in the screen's one column.
         bar?.search?.takeIf { sends }?.let { words ->
-            Box(Modifier.readable(FormRules.FORM_MOST_DP).padding(horizontal = margin).padding(bottom = 8.dp)) { FieldView(words, inForm) }
+            // It starts where the chips under it start.
+            Box(Modifier.fillMaxWidth().wrapContentWidth(Alignment.Start).widthIn(max = FormRules.FORM_MOST_DP.dp).fillMaxWidth().padding(horizontal = margin).padding(bottom = 8.dp)) { FieldView(words, inForm) }
         }
         LazyRow(
             contentPadding = PaddingValues(horizontal = margin),

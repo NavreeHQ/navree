@@ -153,8 +153,10 @@ internal fun Roomed(roomDp: Float, content: @Composable () -> Unit) {
  * Content in a wide window is one column of readable width, in the middle.
  * What is in the column starts at the column's start, as text does.
  */
-internal fun Modifier.readable(mostDp: Int = ContentRules.CONTENT_MOST_DP): Modifier =
-    fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = mostDp.dp).fillMaxWidth()
+internal fun Modifier.readable(mostDp: Int = ContentRules.CONTENT_MOST_DP, columnDp: Int = mostDp): Modifier =
+    // The column stands in the middle; what is narrower than the column (a field, a form) starts at the column's start edge.
+    fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = maxOf(mostDp, columnDp).dp).fillMaxWidth()
+        .wrapContentWidth(Alignment.Start).widthIn(max = mostDp.dp).fillMaxWidth()
 
 @Composable
 internal fun failureTitle(failure: Failure): String = stringResource(
