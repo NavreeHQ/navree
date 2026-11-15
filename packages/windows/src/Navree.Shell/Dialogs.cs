@@ -16,6 +16,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
 {
     private Wanted? latest;
     private Wanted? showing;
+    private readonly Dictionary<(long Screen, bool Pane), ScreenPresenter> modals = [];
     private ContentDialog? dialog;
     private Flyout? flyout;
     private bool flyoutClosedByUs;
@@ -26,6 +27,11 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
     /// <summary>What is over the window now: a question, a modal screen, or an overlay of the screen in front.</summary>
     internal void Update(ViewState state, RenderContext? context, bool modalInFront)
     {
+        foreach ((long Screen, bool Pane) gone in modals.Keys.Where(key => !state.Screens.ContainsKey(key.Screen)).ToList())
+        {
+            _ = modals.Remove(gone);
+        }
+
         latest = Decide(state, context, modalInFront);
         if (!pumping)
         {
@@ -61,26 +67,48 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
         if (modalInFront && front is not null)
         {
             long id = front.Id;
-            ScreenPresenter presenter = new(host);
             string heading = front.Screen?.Title ?? front.Title ?? string.Empty;
             Models.Present present = state.Nav.Modals.FirstOrDefault(modal => modal.Stack.Contains(id))?.Present ?? Models.Present.Sheet;
-            return new Wanted(
-                "screen:" + id,
-                () => new ContentDialog { Title = heading, Content = presenter, CloseButtonText = "Close", MinWidth = 520 },
-                new PaneBody(heading, () =>
+            bool large = present != Models.Present.Full;
+
+            // One presenter for each screen and each way of showing it, kept while the screen is held: its later states are shown in the
+            // one that is on the screen, and a dialog and a pane never hold the same element.
+            ScreenPresenter PresenterOf(bool pane)
+            {
+                if (!modals.TryGetValue((id, pane), out ScreenPresenter? held))
                 {
-                    presenter.Show(front, Width);
-                    return presenter;
-                }),
-                () => presenter.Show(host.State.Screens.TryGetValue(id, out ScreenView? held) ? held : front, Width),
+                    held = new ScreenPresenter(host);
+                    modals[(id, pane)] = held;
+                }
+
+                held.Show(host.State.Screens.TryGetValue(id, out ScreenView? latestScreen) ? latestScreen : front, Width);
+                return held;
+            }
+
+            return new Wanted(
+                "screen:" + id + (WindowRules.UsesSidePane(Width, large) ? ":pane" : ":dialog"),
+                () => new ContentDialog { Title = heading, Content = PresenterOf(false), CloseButtonText = "Close", MinWidth = 520 },
+                new PaneBody(heading, () => PresenterOf(true)),
+                () =>
+                {
+                    foreach (bool pane in new[] { false, true })
+                    {
+                        if (modals.ContainsKey((id, pane)))
+                        {
+                            _ = PresenterOf(pane);
+                        }
+                    }
+                },
                 _ => host.Send(Events.Dismissed(id)),
-                large: present != Models.Present.Full);
+                large: large);
         }
 
         if (context is not null)
         {
             ScreenView screen = context.Screen;
-            foreach (OverlayRequest request in context.Overlays.AsEnumerable().Reverse())
+            // The core keeps the order they were opened in (the last opened last): the one opened last is the one shown.
+            List<string> opened = [.. screen.Overlays];
+            foreach (OverlayRequest request in context.Overlays.OrderByDescending(candidate => opened.IndexOf(candidate.Id)))
             {
                 if (!screen.IsOpen(request.Id))
                 {
@@ -95,7 +123,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 if (anchor is not null)
                 {
                     return new Wanted(
-                        "overlay:" + screen.Id + ":" + overlay.Id,
+                        "overlay:" + screen.Id + ":" + overlay.Id + ":flyout",
                         () => OverlayDialog(overlay, context),
                         null,
                         null,
@@ -104,16 +132,22 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                     {
                         Flyout = () => new Flyout { Content = new ScrollViewer { Content = OverlayBody(overlay, context), MaxHeight = 420 } },
                         Anchor = anchor,
+                        Rebuild = () => OverlayBody(overlay, context),
+                        Context = context,
                     };
                 }
 
                 return new Wanted(
-                    "overlay:" + screen.Id + ":" + overlay.Id,
+                    "overlay:" + screen.Id + ":" + overlay.Id + (WindowRules.UsesSidePane(Width, large) ? ":pane" : ":dialog"),
                     () => OverlayDialog(overlay, context),
                     new PaneBody(Titled(overlay), () => OverlayBody(overlay, context)),
                     null,
                     _ => host.Send(Events.Overlay(screen.Id, overlay.Id, false)),
-                    large: large);
+                    large: large)
+                {
+                    Rebuild = () => OverlayBody(overlay, context),
+                    Context = context,
+                };
             }
         }
 
@@ -205,6 +239,14 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 if (want is not null && showing is not null && want.Key == showing.Key)
                 {
                     want.Refresh?.Invoke();
+                    if (want.Rebuild is not null && !ReferenceEquals(want.Context, showing.Context))
+                    {
+                        // The page was drawn again (an answer changed it): what a sheet, dialog or popover of the page holds is drawn from the new
+                        // tree, so a server's error stands at its field and a button that is busy says so; where the person was in it is put back.
+                        BringUpToDate(want);
+                        showing = want;
+                    }
+
                     return;
                 }
 
@@ -241,6 +283,11 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 {
                     // Light dismiss (a click away, Escape) closes it and tells the core; the focus goes back to the control that opened it.
                     Flyout shown = want.Flyout();
+                    if (shown.Content is FrameworkElement shownContent)
+                    {
+                        shownContent.FlowDirection = root.FlowDirection;
+                    }
+
                     flyout = shown;
                     showing = want;
                     flyoutClosedByUs = false;
@@ -276,6 +323,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
 
                 ContentDialog next = want.Dialog();
                 next.XamlRoot = root.XamlRoot;
+                next.FlowDirection = root.FlowDirection;
                 dialog = next;
                 showing = want;
                 closing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -290,9 +338,50 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
         }
     }
 
+    private void BringUpToDate(Wanted want)
+    {
+        FrameworkElement? old = flyout?.Content as FrameworkElement ?? dialog?.Content as FrameworkElement;
+        PageKeeper.Held? held = old is null ? null : PageKeeper.Capture(old);
+        UIElement fresh = want.Rebuild!();
+        FrameworkElement? placed = null;
+        if (flyout is not null)
+        {
+            ScrollViewer wrapped = new() { Content = fresh, MaxHeight = 420 };
+            flyout.Content = wrapped;
+            placed = wrapped;
+        }
+        else if (dialog is not null)
+        {
+            ScrollViewer wrapped = new() { Content = fresh };
+            dialog.Content = wrapped;
+            placed = wrapped;
+        }
+        else if (pane.IsShowing)
+        {
+            pane.Replace(fresh);
+            placed = fresh as FrameworkElement;
+        }
+
+        if (held is not null && placed is not null)
+        {
+            PageKeeper.Restore(placed, held);
+        }
+    }
+
     private async Task ShowAsync(ContentDialog shown, Wanted want)
     {
-        ContentDialogResult result = await shown.ShowAsync();
+        ContentDialogResult result;
+        try
+        {
+            result = await shown.ShowAsync();
+        }
+        catch (Exception problem)
+        {
+            // A dialog that could not be shown (another is open on the window, the window is not laid out yet) is not shown; the ones after it still are.
+            System.Diagnostics.Debug.WriteLine("a dialog could not be shown: " + problem.Message);
+            result = ContentDialogResult.None;
+        }
+
         bool byUs = closedByUs;
         dialog = null;
         showing = null;
@@ -315,6 +404,12 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
 
         /// <summary>The control a flyout opens at.</summary>
         internal FrameworkElement? Anchor { get; init; }
+
+        /// <summary>Draws the body again from the page's tree as it is now.</summary>
+        internal Func<UIElement>? Rebuild { get; init; }
+
+        /// <summary>The page's drawing the body was drawn from.</summary>
+        internal RenderContext? Context { get; init; }
     }
 }
 

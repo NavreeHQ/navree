@@ -14,6 +14,7 @@ internal sealed class SidePane : Grid
     private readonly TextBlock title = Look.Label(string.Empty, "SubtitleTextBlockStyle");
     private readonly ContentControl body = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
     private Action? closed;
+    private object? before;
 
     internal SidePane()
     {
@@ -43,6 +44,14 @@ internal sealed class SidePane : Grid
         ScrollViewer scroll = new() { Content = body, Padding = new Thickness(20, 0, 20, 20) };
         Grid.SetRow(scroll, 1);
         Children.Add(scroll);
+        KeyDown += (_, e) =>
+        {
+            if (e.Key == Windows.System.VirtualKey.Escape && IsShowing)
+            {
+                e.Handled = true;
+                Close();
+            }
+        };
     }
 
     /// <summary>Whether the pane is showing.</summary>
@@ -54,7 +63,17 @@ internal sealed class SidePane : Grid
         title.Text = heading;
         body.Content = content;
         closed = onClosed;
+        before = XamlRoot is null ? null : Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot);
         Visibility = Visibility.Visible;
+
+        // The focus goes into the pane, as it does into a dialog, and the pane closes on Escape.
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(body) is Control first)
+            {
+                _ = first.Focus(FocusState.Programmatic);
+            }
+        });
     }
 
     /// <summary>Puts new content in the pane that is showing.</summary>
@@ -66,6 +85,12 @@ internal sealed class SidePane : Grid
         Visibility = Visibility.Collapsed;
         body.Content = null;
         closed = null;
+        if (before is Control back && back.XamlRoot is not null)
+        {
+            _ = back.Focus(FocusState.Programmatic);
+        }
+
+        before = null;
     }
 
     private void Close()
