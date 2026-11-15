@@ -388,21 +388,33 @@ object FilterRules {
         return !(name.contains("per_page") || name.contains("perpage") || name.contains("page_size") || name == "limit" || name.endsWith("[size]"))
     }
 
-    /** A row of filters: the filters of a form, and the links or buttons that go with them (clearing them). */
-    data class Bar(val fields: List<Navree.Field>, val actions: List<Navree.Node>)
+    /**
+     * A row of filters: the filters of a form, the links or buttons that go
+     * with them (clearing them), and the one box of words they filter by, if
+     * the form has one.
+     */
+    data class Bar(val fields: List<Navree.Field>, val actions: List<Navree.Node>, val search: Navree.Field? = null)
 
     /**
      * Whether a form is only a set of filters on what is shown under it: it
      * asks with a read, every field is a choice or a switch (at least one a
-     * choice), and nothing else stands in it but the links or buttons that go
-     * with them. Such a form is a row of chips that scrolls along, not a stack
-     * of text fields. A button that sends the form is left out: each choice
-     * asks by itself.
+     * choice) but for one box of words, and nothing else stands in it but the
+     * links or buttons that go with them. Such a form is a row of chips that
+     * scrolls along, under its box of words, not a stack of fields. A button
+     * that sends the form is left out: each choice, and the keyboard's own
+     * action in the box, ask by themselves.
      */
     fun bar(form: Navree.Form): Bar? {
         if (form.method != Navree.Method.GET || form.id == null) return null
-        val fields = form.fields()
-        if (fields.isEmpty() || !fields.all(::isFilter) || fields.all { it.input is Navree.ToggleInput }) return null
+        val all = form.fields()
+        val words = all.filter { !isFilter(it) }
+        val search = words.singleOrNull()?.takeIf { field ->
+            val kind = (field.input as? Navree.TextInput)?.kind
+            kind == Navree.TextKind.SEARCH || kind == Navree.TextKind.PLAIN
+        }
+        if (words.isNotEmpty() && search == null) return null
+        val fields = all.filter(::isFilter)
+        if (fields.isEmpty() || fields.all { it.input is Navree.ToggleInput }) return null
         val actions = ArrayList<Navree.Node>()
         var other = false
         fun visit(node: Navree.Node) {
@@ -415,7 +427,7 @@ object FilterRules {
             }
         }
         form.children.forEach(::visit)
-        return if (other) null else Bar(fields, actions)
+        return if (other) null else Bar(fields, actions, search)
     }
 }
 

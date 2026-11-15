@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
@@ -619,8 +620,23 @@ private fun ContextualBar(screen: Navree.Screen, table: Navree.Table, count: Int
         navigationIcon = { TipIconButton(stringResource(R.string.navree_clear_choice), Glyphs.Close, { choosing.tickAll(ui, place, on = false) }) },
         actions = {
             if (SelectionRules.offerAcross(table, across) && total != null) {
-                TextButton(onClick = { choosing.tickAll(ui, place, on = true, across = true) }) {
-                    Text(stringResource(R.string.navree_choose_across, numbers.format(total)), maxLines = 1)
+                val everyRow = stringResource(R.string.navree_choose_across, numbers.format(total))
+                if (ui.window.largestText) {
+                    // At the largest text the words would take the room of the count: the offer waits in a menu.
+                    var open by remember { mutableStateOf(false) }
+                    Box {
+                        TipIconButton(stringResource(R.string.navree_more_options), Glyphs.More, { open = true })
+                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                            DropdownMenuItem(text = { Text(everyRow) }, onClick = {
+                                open = false
+                                choosing.tickAll(ui, place, on = true, across = true)
+                            })
+                        }
+                    }
+                } else {
+                    TextButton(onClick = { choosing.tickAll(ui, place, on = true, across = true) }) {
+                        Text(everyRow, maxLines = 1)
+                    }
                 }
             }
             if (form != null) {
@@ -807,7 +823,8 @@ private fun SearchTopBar(
                 inputField = input,
                 expanded = expanded,
                 onExpandedChange = { expanded = it },
-                modifier = if (expanded) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                // Collapsed, the bar is as wide as the library makes a search bar at most (720 dp), in the middle of a wide pane.
+                modifier = if (expanded) Modifier.fillMaxWidth() else Modifier.padding(horizontal = 16.dp).widthIn(max = 720.dp).fillMaxWidth(),
             ) {
                 // The search view: the screen's results, as they change with the words.
                 val results = remember(screen.body, view) { blocks(screen.body, view, 400, hoisted = query?.form).filter { it is Block.TableItem || it is Block.Item || it is Block.More || it is Block.Fill } }
@@ -836,96 +853,102 @@ private fun FilterBar(form: Navree.Form, place: Place, sends: Boolean) {
         ui.change(inForm, field, value)
         if (sends) ui.act(inForm, Navree.Action.Submit())
     }
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = margin),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-    ) {
-        items(filters.size, key = { filters[it].id ?: filters[it].name }) { index ->
-            val field = filters[index]
-            val label = field.label ?: field.name
-            var open by remember { mutableStateOf(false) }
-            when (val input = field.input) {
-                is Navree.ChoicesInput -> {
-                    val chosen = (inForm.value(field) as? FieldValue.Many)?.values ?: input.values
-                    val named = input.options.filter { it.value in chosen }
-                    Box {
-                        FilterChip(
-                            selected = chosen.isNotEmpty(),
-                            onClick = { open = true },
-                            // It opens a menu of its choices: a screen reader says so, not "checkbox".
-                            modifier = Modifier.semantics { role = Role.DropdownList },
-                            label = {
-                                Text(
-                                    when (named.size) {
-                                        0 -> label
-                                        1 -> named.first().label
-                                        else -> "$label · ${named.size}"
-                                    },
-                                )
-                            },
-                            trailingIcon = { Icon(Glyphs.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        )
-                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                            for (option in input.options) {
-                                val on = option.value in chosen
-                                DropdownMenuItem(
-                                    text = { Text(option.label) },
-                                    leadingIcon = { if (on) Icon(Glyphs.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) },
-                                    trailingIcon = option.detail?.let { detail -> { Text(detail, style = MaterialTheme.typography.labelMedium) } },
-                                    onClick = {
-                                        val next = if (on) chosen - option.value else chosen + option.value
-                                        change(field, FieldValue.Many(input.options.map { it.value }.filter { it in next }))
-                                    },
-                                    modifier = Modifier.semantics { selected = on },
-                                )
-                            }
-                        }
-                    }
-                }
-                is Navree.ChoiceInput -> {
-                    val value = (inForm.value(field) as? FieldValue.Text)?.text ?: input.value
-                    val named = input.options.firstOrNull { it.value == value }
-                    Box {
-                        FilterChip(
-                            selected = named != null && named.value.isNotEmpty(),
-                            onClick = { open = true },
-                            modifier = Modifier.semantics { role = Role.DropdownList },
-                            label = { Text(if (named != null && named.value.isNotEmpty()) named.label else label) },
-                            trailingIcon = { Icon(Glyphs.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        )
-                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                            for (option in input.options) {
-                                DropdownMenuItem(
-                                    text = { Text(option.label) },
-                                    leadingIcon = { if (option.value == value) Icon(Glyphs.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) },
-                                    onClick = {
-                                        open = false
-                                        change(field, FieldValue.Text(option.value))
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-                is Navree.ToggleInput -> {
-                    val on = (inForm.value(field) as? FieldValue.Flag)?.on ?: input.on
-                    FilterChip(
-                        selected = on,
-                        onClick = { change(field, FieldValue.Flag(!on)) },
-                        label = { Text(label) },
-                        leadingIcon = if (on) ({ Icon(Glyphs.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null,
-                    )
-                }
-                else -> Unit
-            }
+    Column(Modifier.fillMaxWidth()) {
+        // The box of words the filters narrow by stands over them, in the screen's one column.
+        bar?.search?.let { words ->
+            Box(Modifier.readable(FormRules.FORM_MOST_DP).padding(horizontal = margin).padding(bottom = 8.dp)) { FieldView(words, inForm) }
         }
-        // What clears the filters stands after them.
-        items(actions.size, key = { "action-$it" }) { index ->
-            when (val action = actions[index]) {
-                is Navree.Button -> AssistChip(onClick = { ui.press(inForm, action) }, label = { Text(action.label) }, enabled = !action.disabled)
-                is Navree.Link -> AssistChip(onClick = { ui.act(inForm, action.action) }, label = { Text(action.label) })
-                else -> Unit
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = margin),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        ) {
+            items(filters.size, key = { filters[it].id ?: filters[it].name }) { index ->
+                val field = filters[index]
+                val label = field.label ?: field.name
+                var open by remember { mutableStateOf(false) }
+                when (val input = field.input) {
+                    is Navree.ChoicesInput -> {
+                        val chosen = (inForm.value(field) as? FieldValue.Many)?.values ?: input.values
+                        val named = input.options.filter { it.value in chosen }
+                        Box {
+                            FilterChip(
+                                selected = chosen.isNotEmpty(),
+                                onClick = { open = true },
+                                // It opens a menu of its choices: a screen reader says so, not "checkbox".
+                                modifier = Modifier.semantics { role = Role.DropdownList },
+                                label = {
+                                    Text(
+                                        when (named.size) {
+                                            0 -> label
+                                            1 -> named.first().label
+                                            else -> "$label · ${named.size}"
+                                        },
+                                    )
+                                },
+                                trailingIcon = { Icon(Glyphs.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            )
+                            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                                for (option in input.options) {
+                                    val on = option.value in chosen
+                                    DropdownMenuItem(
+                                        text = { Text(option.label) },
+                                        leadingIcon = { if (on) Icon(Glyphs.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) },
+                                        trailingIcon = option.detail?.let { detail -> { Text(detail, style = MaterialTheme.typography.labelMedium) } },
+                                        onClick = {
+                                            val next = if (on) chosen - option.value else chosen + option.value
+                                            change(field, FieldValue.Many(input.options.map { it.value }.filter { it in next }))
+                                        },
+                                        modifier = Modifier.semantics { selected = on },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    is Navree.ChoiceInput -> {
+                        val value = (inForm.value(field) as? FieldValue.Text)?.text ?: input.value
+                        val named = input.options.firstOrNull { it.value == value }
+                        Box {
+                            FilterChip(
+                                selected = named != null && named.value.isNotEmpty(),
+                                onClick = { open = true },
+                                modifier = Modifier.semantics { role = Role.DropdownList },
+                                label = { Text(if (named != null && named.value.isNotEmpty()) named.label else label) },
+                                trailingIcon = { Icon(Glyphs.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            )
+                            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                                for (option in input.options) {
+                                    DropdownMenuItem(
+                                        text = { Text(option.label) },
+                                        leadingIcon = { if (option.value == value) Icon(Glyphs.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) },
+                                        onClick = {
+                                            open = false
+                                            change(field, FieldValue.Text(option.value))
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    is Navree.ToggleInput -> {
+                        val on = (inForm.value(field) as? FieldValue.Flag)?.on ?: input.on
+                        FilterChip(
+                            selected = on,
+                            onClick = { change(field, FieldValue.Flag(!on)) },
+                            label = { Text(label) },
+                            leadingIcon = if (on) ({ Icon(Glyphs.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null,
+                        )
+                    }
+                    else -> Unit
+                }
+            }
+            // What clears the filters stands after them.
+            items(actions.size, key = { "action-$it" }) { index ->
+                when (val action = actions[index]) {
+                    is Navree.Button -> AssistChip(onClick = { ui.press(inForm, action) }, label = { Text(action.label) }, enabled = !action.disabled)
+                    is Navree.Link -> AssistChip(onClick = { ui.act(inForm, action.action) }, label = { Text(action.label) })
+                    else -> Unit
+                }
             }
         }
     }

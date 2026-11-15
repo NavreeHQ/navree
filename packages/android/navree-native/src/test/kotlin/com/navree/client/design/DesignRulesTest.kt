@@ -485,10 +485,24 @@ class FormRulesTest {
         val choices = listOf<Navree.Node>(choice("assignee"))
         assertNull("a post is a form to fill in", FilterRules.bar(Navree.Form(id = "f", method = Navree.Method.POST, children = choices)))
         assertNull("no id, nothing to tell the core", FilterRules.bar(Navree.Form(children = choices)))
-        assertNull("a text field is not a filter", FilterRules.bar(Navree.Form(id = "f", children = choices + Navree.Field(name = "q", input = Navree.TextInput()))))
+        assertNull("two boxes of words are a form", FilterRules.bar(Navree.Form(id = "f", children = choices + Navree.Field(name = "q", input = Navree.TextInput()) + Navree.Field(name = "r", input = Navree.TextInput()))))
+        assertNull("a password is not a search", FilterRules.bar(Navree.Form(id = "f", children = choices + Navree.Field(name = "q", input = Navree.TextInput(kind = Navree.TextKind.PASSWORD)))))
         assertNull("words among them", FilterRules.bar(Navree.Form(id = "f", children = choices + Navree.Text(value = "Pick"))))
         val switches = Navree.Form(id = "f", children = listOf(Navree.Field(name = "on", input = Navree.ToggleInput())))
         assertNull("only switches are settings", FilterRules.bar(switches))
+    }
+
+    @Test
+    fun one_box_of_words_goes_over_the_chips_and_the_button_that_sends_goes() {
+        val words = Navree.Field(id = "q", name = "q", label = "Search conversations", input = Navree.TextInput())
+        val form = Navree.Form(
+            id = "f",
+            children = listOf(words, choice("channel"), choice("priority"), Navree.Button(label = "Filter", action = Navree.Action.Submit())),
+        )
+        val bar = FilterRules.bar(form)!!
+        assertEquals(words, bar.search)
+        assertEquals(listOf("channel", "priority"), bar.fields.map { it.name })
+        assertEquals(emptyList<Navree.Node>(), bar.actions)
     }
 
     @Test
