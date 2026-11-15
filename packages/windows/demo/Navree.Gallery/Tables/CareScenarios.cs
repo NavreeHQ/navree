@@ -241,6 +241,7 @@ internal static class CareScenarios
         await Task.Delay(800);
         DataTableRow? row = table.RowsRepeater?.TryGetElement(2) as DataTableRow;
         Report.Line($"[care-detail-open] row c00002 arrived with its detail open: detail made {row?.DetailContent is not null}, open {table.IsDetailOpen("c00002")}; row c00001 open {table.IsDetailOpen("c00001")}");
+        Report.Line($"[care-detail-open] cells whose words are cut: {TableScenarios.CutCells(table)}");
         await Handshake.StepAsync("care-detail-open-sent", "the table as the server sent it: the detail of the third row, Tarun Arora, is open");
         if (row is not null)
         {
