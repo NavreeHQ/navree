@@ -616,6 +616,7 @@ impl Core {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         };
         for row in &mut page.rows {
             let scope = row.id.clone();

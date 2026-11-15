@@ -267,6 +267,7 @@ impl Core {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         }
         .name(&mut nodes, Some(target));
         let fresh: BTreeSet<String> = Survey::of(nodes.iter())
@@ -697,6 +698,7 @@ impl Core {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         };
         for row in &mut rows {
             let scope = row.id.clone();
@@ -769,6 +771,7 @@ impl Core {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         };
         let scope = row.id.clone();
         let scope = scope.as_deref().or(Some(target));

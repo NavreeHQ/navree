@@ -434,6 +434,7 @@ impl Core {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         }
         .name(&mut nodes, None);
         let Some(mut node) = nodes.pop() else {
@@ -516,6 +517,7 @@ impl Core {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         }
         .name(&mut nodes, Some(target));
         let Some(parent) = find_in_mut(screen, &is) else {
@@ -950,6 +952,7 @@ impl Core {
         inner.forms.clear();
         inner.form_ids.clear();
         inner.field_ids.clear();
+        inner.next_names.clear();
         let loose =
             (!survey.loose.is_empty()).then(|| (String::new(), survey.loose.as_slice(), None));
         let found = survey.forms.iter().map(|form| {

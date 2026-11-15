@@ -461,3 +461,52 @@ fn a_screen_has_a_largest_size_and_a_live_list_stops_asking_there() {
         .map(Vec::len);
     assert_eq!(rows, Some(4 * per_answer));
 }
+
+/// Naming what an answer repeats is linear: fields of one name in one form,
+/// and forms of one id, each get a name of their own in one pass.
+#[test]
+fn naming_what_an_answer_repeats_costs_what_it_repeats() {
+    let page = |body: &Value| {
+        let mut core = Core::new(Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        ));
+        let shell = request_of(&core.send(Event::Start));
+        let page = request_of(&answer(
+            &mut core,
+            shell,
+            &json!({"navree": 1, "build": "b1", "name": "Charkha Supply Co.", "home": "/"}),
+        ));
+        let started = Instant::now();
+        answer(
+            &mut core,
+            page,
+            &json!({"navree": 1, "build": "b1", "vocab": 1, "screen": {"title": "Orders", "body": body}}),
+        );
+        let took = started.elapsed();
+        (core, took)
+    };
+    // Ninety-nine thousand fields called `note` in one form.
+    let fields: Vec<Value> = (0..99_000)
+        .map(|_| json!({"t": "field", "name": "note", "input": {"t": "text"}}))
+        .collect();
+    let (core, took) = page(
+        &json!({"t": "form", "id": "notes", "method": "post", "action": "/notes", "children": fields}),
+    );
+    let screen = core.view().front.expect("a screen is in front");
+    assert_eq!(
+        core.view().screens[&screen].forms["notes"].fields.len(),
+        99_000
+    );
+    println!("99,000 fields of one name: {took:?}");
+    assert!(took.as_secs() < 20, "naming the fields took {took:?}");
+    // Thirty thousand forms of one id.
+    let forms: Vec<Value> = (0..30_000)
+        .map(|_| json!({"t": "form", "id": "note", "method": "post", "action": "/note", "children": []}))
+        .collect();
+    let (core, took) = page(&json!({"t": "stack", "children": forms}));
+    let screen = core.view().front.expect("a screen is in front");
+    assert_eq!(core.view().screens[&screen].forms.len(), 30_000);
+    println!("30,000 forms of one id: {took:?}");
+    assert!(took.as_secs() < 20, "naming the forms took {took:?}");
+}
