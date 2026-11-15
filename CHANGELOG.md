@@ -50,6 +50,10 @@ every `@navree/*` package carries the same version.
   that already exists (the migration `make:module` made in the same second, for one) stops it
   before the model and the files ahead of it are written; it used to leave them, and the changes to
   the module, behind while saying that nothing was written.
+- The Navree UI starter (`navree new --ui navree`) counts the day a new customer joins in the app's
+  time zone (`time.default_zone`, set to `Asia/Kolkata` in `config/app.toml`, or the workspace's own)
+  instead of a fixed 330 minutes ahead of UTC; it registers `TimeModule`, and the page takes
+  `CurrentZone`.
 
 ## [1.2.2] - 2026-11-14
 

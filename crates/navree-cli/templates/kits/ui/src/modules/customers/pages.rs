@@ -113,9 +113,10 @@ async fn index(
         .body(customers_table(&query, &page, &labels)))
 }
 
-/// `GET /customers/new`.
-async fn new_form(desk: Desk) -> AppPage {
-    let today = (chrono::Utc::now() + chrono::TimeDelta::minutes(330)).date_naive();
+/// `GET /customers/new`. A new customer joins today, in the request's time zone
+/// (the workspace's own, else `time.default_zone` in `config/app.toml`).
+async fn new_form(desk: Desk, zone: CurrentZone) -> AppPage {
+    let today = zone.today().date();
     let form = FormView::<CustomerForm>::new()
         .of(&CustomerForm::blank(today))
         .post("/customers/new")
