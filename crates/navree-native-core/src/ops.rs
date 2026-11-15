@@ -27,8 +27,8 @@ use crate::forms::field_view;
 use crate::origin::Target;
 use crate::reduce::By;
 use crate::state::{
-    Content, Failure, Focus, FormMeta, FormView, Message, MessageInner, Notice, RegionMeta,
-    ScreenId, ScreenView,
+    Content, Focus, FormMeta, FormView, Message, MessageInner, Notice, RegionMeta, ScreenId,
+    ScreenView,
 };
 use crate::tree::{
     MAX_DEPTH, Names, Slot, Survey, depth, depth_of, fields_of, find_in, find_in_mut, find_mut,
@@ -120,10 +120,6 @@ impl Core {
     /// Applies ops to a screen, in order. `after_send`: they answer something
     /// the person just sent from it. True when they lead away from the screen.
     pub(crate) fn apply_ops(&mut self, id: ScreenId, ops: Vec<Op>, after_send: bool) -> bool {
-        let mut current = id;
-        let mut left = false;
-        let mut signed_out = false;
-        let focuses = ops.iter().any(|op| matches!(op, Op::Focus { .. }));
         // An answer's changes are applied whole or not at all. What its ops
         // bring is bounded by the screen's largest size, and the work of its
         // ops by `MAX_WORK`, counted as it will be done: an op that looks
@@ -133,7 +129,7 @@ impl Core {
         let brought: Vec<usize> = ops.iter().map(crate::weight::of_op).collect();
         let any = ops.iter().any(looks_through) || brought.iter().any(|brought| *brought > 0);
         if any && !self.screen_fits(id, |held| crate::weight::fit(held, &ops, &brought)) {
-            return self.answer_refused(id, ops);
+            return self.answer_refused(id, ops, after_send);
         }
         // An answer of ops that is applied sets the refusals back.
         if !ops.is_empty()
@@ -141,6 +137,15 @@ impl Core {
         {
             inner.refused = 0;
         }
+        self.run_ops(id, ops, after_send)
+    }
+
+    /// Carries out ops one after the other, as they come.
+    fn run_ops(&mut self, id: ScreenId, ops: Vec<Op>, after_send: bool) -> bool {
+        let mut current = id;
+        let mut left = false;
+        let mut signed_out = false;
+        let focuses = ops.iter().any(|op| matches!(op, Op::Focus { .. }));
         for op in ops {
             match op {
                 Op::Morph { target, node } => self.put(current, &target, node, true),
@@ -289,9 +294,17 @@ impl Core {
     /// report for the developer, and the passing notice that it failed. Once
     /// for an event, whatever the answer brought.
     pub(crate) fn refused_for_size(&mut self, id: ScreenId, detail: String) {
+        self.refused_for_size_as(id, detail, Some(Notice::Failed));
+    }
+
+    /// As [`Core::refused_for_size`], with another notice for the person, or
+    /// none.
+    fn refused_for_size_as(&mut self, id: ScreenId, detail: String, notice: Option<Notice>) {
         if !std::mem::replace(&mut self.inner.size_said, true) {
             self.report("size", detail);
-            self.failed(Failure::Protocol, Some(id));
+            if let Some(notice) = notice {
+                self.notice(notice, Some(id));
+            }
         }
     }
 
@@ -319,37 +332,53 @@ impl Core {
     /// ask for more work than an answer may, changes nothing: the person gets
     /// the failure a screen that could not be read gets, and the screen is
     /// out of date, so it is fetched again, once: the count of refusals
-    /// belongs to the screen, and the person acting on it sets it back. Of what the answer said, only a sign-out is carried out. True
-    /// when that leads away from the screen.
-    fn answer_refused(&mut self, id: ScreenId, ops: Vec<Op>) -> bool {
-        self.refused_for_size(
+    /// belongs to the screen, and the person acting on it sets it back. Of
+    /// what the answer said, what changes nothing on the screen is carried
+    /// out, in its order (a toast, a new address, going somewhere, a
+    /// sign-out, a reply to the device, and a reload while the screen is still
+    /// to be fetched again): a save that worked still says so and goes where
+    /// it meant to. The person is told the screen is loading while it will be
+    /// fetched again, and that it did not work when it will not. True when
+    /// what was carried out leads away from the screen.
+    fn answer_refused(&mut self, id: ScreenId, ops: Vec<Op>, after_send: bool) -> bool {
+        let again = self.inner.screens.get_mut(&id).is_some_and(|inner| {
+            inner.refused = inner.refused.saturating_add(1);
+            inner.stale = inner.refused < 2;
+            inner.stale
+        });
+        // A reload is the fetch the screen is owed, and is not asked for more
+        // than once on the answer's account.
+        let carried: Vec<Op> = ops
+            .into_iter()
+            .filter(|op| {
+                !looks_through(op)
+                    && crate::weight::of_op(op) == 0
+                    && (again || !matches!(op, Op::Reload))
+            })
+            .collect();
+        let leads = carried.iter().any(|op| {
+            matches!(
+                op,
+                Op::SignedOut | Op::Navigate { .. } | Op::NavigateExternal { .. } | Op::Reload
+            )
+        });
+        let said = carried
+            .iter()
+            .any(|op| !matches!(op, Op::Reload | Op::Device { .. }));
+        // Having left the screen, the person is told nothing about it.
+        let notice = match (leads, said && again) {
+            (true, _) => None,
+            (false, true) => Some(Notice::Loading),
+            (false, false) => Some(Notice::Failed),
+        };
+        self.refused_for_size_as(
             id,
             format!(
                 "an answer's ops were not applied: they would take the screen past {MAX_SCREEN_NODES} nodes or ask for more than {MAX_WORK} visits to a node"
             ),
+            notice,
         );
-        if let Some(inner) = self.inner.screens.get_mut(&id) {
-            inner.refused = inner.refused.saturating_add(1);
-            inner.stale = inner.refused < 2;
-        }
-        let mut left = false;
-        let mut signed_out = false;
-        for op in ops {
-            match op {
-                Op::SignedOut => {
-                    left = true;
-                    signed_out = true;
-                    self.signed_out_on_purpose();
-                }
-                Op::Navigate { href, .. } if signed_out => {
-                    if let Target::Inside(url) = self.inner.origin.resolve(&href, "/") {
-                        self.inner.land = Some(url);
-                    }
-                }
-                _ => {}
-            }
-        }
-        left
+        self.run_ops(id, carried, after_send)
     }
 
     pub(crate) fn too_deep(&mut self, target: &str) {
@@ -1110,7 +1139,7 @@ impl Core {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Config, Core, Effect, Event, Response, Update};
+    use crate::{Config, Core, Effect, Event, Notice, Response, Update};
     use navree_native::{CONTENT_TYPE, Client, FormFactor, Op, Platform};
 
     fn page(rows: usize) -> Response {
@@ -1159,6 +1188,112 @@ mod tests {
             1_000
         ]))
         .expect("ops")
+    }
+
+    /// What a refused answer still says: a write that worked is answered with
+    /// a toast, an address, a place to go and ops that would change a screen
+    /// too large to change. What changes nothing on the screen is carried out
+    /// (the toast, the address, the move), what would change it is not, the
+    /// screen is fetched again, and the person is told it is loading, not
+    /// that the write failed.
+    #[test]
+    fn a_refused_answer_still_says_what_costs_nothing() {
+        let with_too_much = |costless: serde_json::Value| -> Vec<Op> {
+            let mut ops = too_much();
+            ops.append(&mut serde_json::from_value(costless).expect("ops"));
+            ops
+        };
+        let said = |core: &Core, at: usize| -> Vec<(Option<String>, Option<Notice>)> {
+            core.view().messages[at..]
+                .iter()
+                .map(|message| (message.text.clone(), message.notice))
+                .collect()
+        };
+
+        // A toast and a new address: the screen stays, says what the server
+        // said, is fetched again, and is told to be loading.
+        let (mut core, screen) = core_with_a_screen();
+        let at = core.view().messages.len();
+        let left = core.apply_ops(
+            screen,
+            with_too_much(serde_json::json!([
+                {"op": "toast", "text": "Saved", "tone": "success"},
+                {"op": "url", "href": "/orders?page=2"}
+            ])),
+            true,
+        );
+        assert!(!left);
+        let messages = said(&core, at);
+        assert!(
+            messages
+                .iter()
+                .any(|(text, _)| text.as_deref() == Some("Saved")),
+            "the toast was shown: {messages:?}"
+        );
+        assert!(
+            messages
+                .iter()
+                .any(|(_, notice)| *notice == Some(Notice::Loading)),
+            "the screen is said to be loading: {messages:?}"
+        );
+        assert!(
+            messages
+                .iter()
+                .all(|(_, notice)| *notice != Some(Notice::Failed)),
+            "a write that worked is not told it failed: {messages:?}"
+        );
+        assert!(
+            core.inner.screens[&screen].stale,
+            "the screen is fetched again"
+        );
+        assert!(core.view().screens[&screen].url.ends_with("/orders?page=2"));
+
+        // A toast and a place to go: the person goes there, and is told
+        // nothing of the screen they left.
+        let (mut core, screen) = core_with_a_screen();
+        let at = core.view().messages.len();
+        let left = core.apply_ops(
+            screen,
+            with_too_much(serde_json::json!([
+                {"op": "toast", "text": "Saved", "tone": "success"},
+                {"op": "navigate", "href": "/orders/7"}
+            ])),
+            true,
+        );
+        assert!(left, "the move was carried out");
+        let messages = said(&core, at);
+        assert_eq!(
+            messages,
+            vec![(Some("Saved".to_owned()), None)],
+            "{messages:?}"
+        );
+        assert!(
+            core.view()
+                .screens
+                .values()
+                .any(|view| view.url.ends_with("/orders/7")),
+            "the place the answer named was gone to"
+        );
+
+        // Past the one refetch the screen is owed, the person is told it did
+        // not work.
+        let (mut core, screen) = core_with_a_screen();
+        core.apply_ops(screen, too_much(), false);
+        core.apply_ops(screen, too_much(), false);
+        let at = core.view().messages.len();
+        core.inner.size_said = false;
+        core.apply_ops(
+            screen,
+            with_too_much(serde_json::json!([{"op": "toast", "text": "Saved"}])),
+            true,
+        );
+        let messages = said(&core, at);
+        assert!(
+            messages
+                .iter()
+                .any(|(_, notice)| *notice == Some(Notice::Failed)),
+            "{messages:?}"
+        );
     }
 
     /// An answer of ops alone that is refused has the screen fetched again at
