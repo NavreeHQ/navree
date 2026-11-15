@@ -463,6 +463,8 @@ pub(crate) struct Names<'a> {
     pub fields: &'a mut BTreeSet<String>,
     /// The id the server gave each form, by the id the form has here.
     pub server: &'a mut BTreeMap<String, Option<String>>,
+    /// The next suffix to try for each name that is taken.
+    pub next: &'a mut BTreeMap<String, u32>,
 }
 
 /// What a form is named from: its id, or, with none, a stem of its address no
@@ -494,14 +496,27 @@ fn count_bases(node: &Node, counts: &mut BTreeMap<String, usize>) {
     }
 }
 
-fn free(taken: &BTreeSet<String>, stem: String) -> String {
+/// A name not in `taken`: `stem`, or `stem~2`, `stem~3`, ... The next suffix
+/// to try is remembered for the stem (`next`, under `kind`), so a name an
+/// answer repeats a hundred thousand times is made a hundred thousand times,
+/// and not a hundred thousand times over the ones before.
+fn free(
+    taken: &BTreeSet<String>,
+    next: &mut BTreeMap<String, u32>,
+    kind: &str,
+    stem: String,
+) -> String {
     if !taken.contains(&stem) {
         return stem;
     }
-    (2u32..)
-        .map(|n| format!("{stem}~{n}"))
-        .find(|name| !taken.contains(name))
-        .unwrap_or(stem)
+    let key = format!("{kind}{stem}");
+    let from = next.get(&key).copied().unwrap_or(2);
+    let (n, name) = (from..)
+        .map(|n| (n, format!("{stem}~{n}")))
+        .find(|(_, name)| !taken.contains(name))
+        .unwrap_or((from, stem));
+    next.insert(key, n.saturating_add(1));
+    name
 }
 
 impl Names<'_> {
@@ -530,7 +545,7 @@ impl Names<'_> {
             Some(scope) if repeated => format!("{base}~{scope}"),
             _ => base,
         };
-        let handle = free(self.forms, stem);
+        let handle = free(self.forms, self.next, "form:", stem);
         self.forms.insert(handle.clone());
         self.server.insert(handle.clone(), server);
         form.id = Some(handle.clone());
@@ -547,7 +562,7 @@ impl Names<'_> {
                 stem.push('=');
                 stem.push_str(value);
             }
-            free(self.fields, stem)
+            free(self.fields, self.next, "field:", stem)
         });
         self.fields.insert(id.clone());
         field.id = Some(id);
@@ -1074,10 +1089,12 @@ mod tests {
         let mut nodes = vec![form(format!("{long}/1")), form(format!("{long}/2"))];
         let (mut forms, mut fields, mut server) =
             (BTreeSet::new(), BTreeSet::new(), BTreeMap::new());
+        let mut next = BTreeMap::new();
         Names {
             forms: &mut forms,
             fields: &mut fields,
             server: &mut server,
+            next: &mut next,
         }
         .name(&mut nodes, None);
         assert_eq!(forms.len(), 2, "{forms:?}");
@@ -1340,10 +1357,12 @@ mod tests {
         })];
         let (mut forms, mut fields, mut server) =
             (BTreeSet::new(), BTreeSet::new(), BTreeMap::new());
+        let mut next = BTreeMap::new();
         Names {
             forms: &mut forms,
             fields: &mut fields,
             server: &mut server,
+            next: &mut next,
         }
         .name(&mut nodes, None);
         assert_eq!(
@@ -1372,6 +1391,7 @@ mod tests {
             forms: &mut forms,
             fields: &mut fields,
             server: &mut server,
+            next: &mut next,
         }
         .name(&mut later, Some("panel"));
         assert_eq!(

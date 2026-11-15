@@ -1975,10 +1975,12 @@ impl Core {
         inner.form_ids.clear();
         inner.field_ids.clear();
         inner.server_ids.clear();
+        inner.next_names.clear();
         let mut names = Names {
             forms: &mut inner.form_ids,
             fields: &mut inner.field_ids,
             server: &mut inner.server_ids,
+            next: &mut inner.next_names,
         };
         names.name(&mut screen.actions, None);
         if let Some(scores) = screen

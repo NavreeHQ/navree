@@ -846,6 +846,9 @@ pub(crate) struct ScreenInner {
     pub field_ids: BTreeSet<String>,
     /// The id the server gave each form, by the form's id here.
     pub server_ids: BTreeMap<String, Option<String>>,
+    /// The next suffix to try for a name that is taken, by the name (with
+    /// `form:` or `field:` before it): what repeats is named in one pass.
+    pub next_names: BTreeMap<String, u32>,
     pub forms: BTreeMap<String, FormMeta>,
     /// The fields the person changed, by id.
     pub dirty: BTreeSet<String>,
