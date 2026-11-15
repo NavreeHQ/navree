@@ -178,6 +178,19 @@ object ListRules {
         return row.detail.firstNotNullOfOrNull(::find)
     }
 
+    /** What a row that is its title button can do now: tapped (`enabled`), or waiting for its request's answer (`busy`). */
+    data class TitleUse(val enabled: Boolean, val busy: Boolean)
+
+    /**
+     * A row that is its title button is as usable as the button is: not while the
+     * button is disabled, or pending, or its form's request is on its way; and it
+     * shows that it waits when the button is pending or its request is on its way.
+     */
+    fun titleUse(button: Navree.Button, formPending: Boolean): TitleUse {
+        val busy = button.pending || formPending
+        return TitleUse(enabled = !button.disabled && !busy, busy = busy)
+    }
+
     /**
      * The row with the form of its title button taken out of its detail. The
      * form is found by what it holds, not by being the same object: a row

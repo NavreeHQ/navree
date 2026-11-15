@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -192,6 +193,7 @@ internal fun RowView(
     // A button that only says the row's title is the row's own tap, not a second line under it.
     val titled = if (row.action == null) ListRules.titleButton(row) else null
     val shown = if (titled != null) ListRules.withoutTitleButton(row, titled.form) else row
+    val titleUse = titled?.let { ListRules.titleUse(it.button, place.pending) }
     val action = row.action
     val menu = row.menu
     val swipe = row.swipe.firstOrNull()
@@ -237,9 +239,10 @@ internal fun RowView(
                 }
                 else -> null
             },
-            trailingContent = if ((!below && (row.trailing != null || badge != null)) || menu.isNotEmpty() || handle != null) {
+            trailingContent = if ((!below && (row.trailing != null || badge != null)) || menu.isNotEmpty() || handle != null || titleUse?.busy == true) {
                 {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (titleUse?.busy == true) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         if (!below) {
                             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 row.trailing?.let { trailing ->
@@ -265,7 +268,7 @@ internal fun RowView(
                             onClick = { ui.act(place, action, from = row.id) },
                         )
                         action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action, from = row.id) }
-                        titled != null -> Modifier.clickable(role = Role.Button) { ui.press(place.copy(form = titled.form.id), titled.button) }
+                        titled != null -> Modifier.clickable(enabled = titleUse?.enabled == true, role = Role.Button) { ui.press(place.copy(form = titled.form.id), titled.button) }
                         else -> Modifier
                     },
                 )
