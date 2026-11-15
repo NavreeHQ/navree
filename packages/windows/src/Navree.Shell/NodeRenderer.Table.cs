@@ -61,7 +61,13 @@ internal sealed partial class NodeRenderer
             view.EmptyContent = Render(table.Empty);
         }
 
-        Dictionary<string, Models.TableRow> byKey = table.Rows.Where(row => row.Id is not null).ToDictionary(row => row.Id!, StringComparer.Ordinal);
+        Dictionary<string, Models.TableRow> byKey = new(StringComparer.Ordinal);
+        foreach (Models.TableRow row in table.Rows.Where(row => row.Id is not null))
+        {
+            // Two rows with one id: the first is the one the id names.
+            _ = byKey.TryAdd(row.Id!, row);
+        }
+
         view.ApplyChoice(byKey.Values.Where(row => row.Selected).Select(row => row.Id!), model.AcrossOn);
         view.ChoiceRequested += (_, e) =>
         {

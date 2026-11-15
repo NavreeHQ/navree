@@ -24,7 +24,18 @@ internal sealed partial class NodeRenderer(RenderContext context)
     /// <summary>Draws a node.</summary>
     internal UIElement Render(Models.Node node)
     {
-        UIElement element = Draw(node);
+        UIElement element;
+        try
+        {
+            element = Draw(node);
+        }
+        catch (Exception problem) when (problem is not OutOfMemoryException)
+        {
+            // A part that cannot be drawn (a path that is not path data, two rows with one id, a control that throws) is that part's state, not the app's end.
+            System.Diagnostics.Debug.WriteLine("a part could not be drawn: " + node.GetType().Name + ": " + problem.Message);
+            element = CouldNotShow(node);
+        }
+
         string? id = Tree.IdOf(node);
         if (id is not null && element is FrameworkElement shown)
         {
@@ -112,6 +123,15 @@ internal sealed partial class NodeRenderer(RenderContext context)
         };
 
     private static UIElement Empty() => new Microsoft.UI.Xaml.Controls.Border();
+
+    // The place of a part that could not be drawn says so, small, and a screen reader is told.
+    private static UIElement CouldNotShow(Models.Node node)
+    {
+        TextBlock note = Look.Label("(this part could not be shown)", "CaptionTextBlockStyle", muted: true);
+        AutomationProperties.SetName(note, "A part of this page could not be shown");
+        _ = node;
+        return note;
+    }
 
     // A kind this build does not draw is said so, small, where it stands: never silently, never as a fake.
     private static UIElement NotDrawn(Models.Node node)
@@ -852,7 +872,17 @@ internal sealed partial class NodeRenderer(RenderContext context)
     {
         string markup = "<Path xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Data=\""
             + System.Security.SecurityElement.Escape(data.Length > 4096 ? string.Empty : data) + "\"/>";
-        ShapePath path = (ShapePath)XamlReader.Load(markup);
+        ShapePath path;
+        try
+        {
+            path = (ShapePath)XamlReader.Load(markup);
+        }
+        catch (Exception)
+        {
+            // Text that is not path data is an icon with nothing in it, not an exception for the page.
+            path = new ShapePath();
+        }
+
         if (stroke)
         {
             path.Stroke = ink;

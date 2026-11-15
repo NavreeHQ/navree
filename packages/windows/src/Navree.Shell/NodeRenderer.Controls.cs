@@ -265,6 +265,12 @@ internal sealed partial class NodeRenderer
             text.Children.Add(Look.Label(row.Subtitle, "CaptionTextBlockStyle", muted: true));
         }
 
+        // What the row holds under its two lines (its labels, a person, counts) is drawn under them.
+        foreach (Models.Node more in row.Detail.Where(node => node is not Models.Disclosure))
+        {
+            text.Children.Add(Render(more));
+        }
+
         Grid.SetColumn(text, 1);
         grid.Children.Add(text);
         if (row.Trailing is not null)
@@ -597,10 +603,48 @@ internal sealed partial class NodeRenderer
                 break;
             case Models.DateInput date:
                 string day = held?.Value is TextValue held4 ? held4.Text : date.Value;
+                bool hasDate = DateTimeOffset.TryParse(day, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out DateTimeOffset moment);
+                if (date.Kind == Models.DateKind.Time)
+                {
+                    // A time is picked with a time picker and sent as hours and minutes, not as a day.
+                    TimePicker clock = new() { Header = header, IsEnabled = !field.Disabled, SelectedTime = hasDate || TimeSpan.TryParse(day, System.Globalization.CultureInfo.InvariantCulture, out _) ? (hasDate && day.Contains(':', StringComparison.Ordinal) ? moment.TimeOfDay : TimeSpan.Parse(day, System.Globalization.CultureInfo.InvariantCulture)) : null, MinuteIncrement = 5 };
+                    clock.SelectedTimeChanged += (_, e) =>
+                    {
+                        if (e.NewTime is TimeSpan chosenTime)
+                        {
+                            send(new TextValue(chosenTime.ToString(@"hh\:mm", System.Globalization.CultureInfo.InvariantCulture)));
+                        }
+                    };
+                    control = clock;
+                    break;
+                }
+
                 CalendarDatePicker picker = new() { Header = header, IsEnabled = !field.Disabled };
-                if (DateTimeOffset.TryParse(day, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out DateTimeOffset moment))
+                if (hasDate)
                 {
                     picker.Date = moment;
+                }
+
+                // The days the page allows: not before its least, not after its most, and not on the days it rules out.
+                if (DateTimeOffset.TryParse(date.Min, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out DateTimeOffset least))
+                {
+                    picker.MinDate = least;
+                }
+
+                if (DateTimeOffset.TryParse(date.Max, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out DateTimeOffset most1))
+                {
+                    picker.MaxDate = most1;
+                }
+
+                HashSet<string> off = [.. date.OffDays];
+                HashSet<DayOfWeek> offWeek = [.. date.OffWeekdays.Select(weekday => Enum.TryParse(weekday.ToString(), true, out DayOfWeek named) ? named : (DayOfWeek)(-1))];
+                if (off.Count > 0 || offWeek.Count > 0)
+                {
+                    picker.CalendarViewDayItemChanging += (_, e) =>
+                    {
+                        DateTimeOffset item = e.Item.Date;
+                        e.Item.IsBlackout = off.Contains(item.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)) || offWeek.Contains(item.DayOfWeek);
+                    };
                 }
 
                 picker.DateChanged += (_, e) =>
