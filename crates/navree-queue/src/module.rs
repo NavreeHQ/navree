@@ -138,7 +138,7 @@ fn register(m: &mut ModuleBuilder, options: Option<QueueOptions>) {
                     QueueDriver::Registered(name) => Store::Custom(
                         name.as_str(),
                         build_driver::<dyn QueueStore>(
-                            &r.app(),
+                            &r,
                             &SLOT,
                             "queue.driver",
                             name,

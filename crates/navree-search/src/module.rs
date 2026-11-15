@@ -106,8 +106,7 @@ fn register(m: &mut ModuleBuilder, options: Option<SearchOptions>) {
         .factory(
             Factory::<Search>::new(|r: Resolver| async move {
                 let options = r.get::<SearchOptions>().await?;
-                let app = r.app();
-                let search = Search::build(&app, (*options).clone())
+                let search = Search::build(&r, (*options).clone())
                     .await
                     .map_err(|error| format!("cannot start search: {error}"))?;
                 Ok(Arc::new(search))

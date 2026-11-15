@@ -113,7 +113,7 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
                 app.tracker(),
             )?
             .with_relay(relay_of(&options, &app).await?);
-            if let Some(backplane) = backplane_of(&options, &app).await? {
+            if let Some(backplane) = backplane_of(&options, &r).await? {
                 realtime = realtime.with_backplane(backplane);
             }
             let realtime = Arc::new(realtime);
@@ -148,13 +148,14 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
 /// [`MemoryBackplane`](crate::MemoryBackplane)).
 async fn backplane_of(
     options: &RealtimeOptions,
-    app: &AppContext,
+    r: &Resolver,
 ) -> Result<Option<Arc<dyn Backplane>>, BoxError> {
+    let app = r.app();
     match options.backplane.resolved() {
         BackplaneKind::None => Ok(app.try_get::<dyn Backplane>().await),
         BackplaneKind::Registered(name) => {
             let backplane = build_driver::<dyn Backplane>(
-                app,
+                r,
                 &SLOT,
                 "realtime.backplane",
                 name,

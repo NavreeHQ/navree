@@ -219,7 +219,7 @@ fn register(m: &mut ModuleBuilder, options: Option<CacheOptions>) {
             let backend = match options.store.resolved() {
                 CacheStoreKind::Registered(name) => Some(
                     build_driver::<CacheBackend>(
-                        &r.app(),
+                        &r,
                         &SLOT,
                         "cache.store",
                         name,

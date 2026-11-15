@@ -156,7 +156,7 @@ fn register(m: &mut ModuleBuilder, options: Option<MailOptions>) {
             Factory::<dyn MailTransport>::new(|r| async move {
                 let options = r.get::<MailOptions>().await?;
                 r.get::<TransportRegistrations>().await?;
-                build_transport(&options.transport, &r.app(), "mail.transport").await
+                build_transport(&options.transport, &r, "mail.transport").await
             })
             .deps(vec![
                 ProviderKey::of::<MailOptions>(),
@@ -213,7 +213,7 @@ fn register(m: &mut ModuleBuilder, options: Option<MailOptions>) {
                     .with_telemetry(telemetry);
                 for (name, config) in &options.transports {
                     let key = format!("mail.transports.{name}");
-                    let built = build_transport(config, &r.app(), &key).await?;
+                    let built = build_transport(config, &r, &key).await?;
                     mailer = mailer.with_transport(name.clone(), built);
                 }
                 if options.delivery.enabled {

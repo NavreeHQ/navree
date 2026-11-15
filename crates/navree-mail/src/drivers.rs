@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use navree_config::__private::{build_driver, register_driver};
 use navree_config::{DriverContext, DriverSlot};
-use navree_kernel::{AppContext, BoxError, BoxFuture, ModuleBuilder};
+use navree_kernel::{BoxError, BoxFuture, ModuleBuilder, Resolver};
 
 use crate::{FailoverTransport, MailError, MailTransport, TransportConfig};
 
@@ -127,12 +127,12 @@ impl ModuleBuilderMailTransportExt for ModuleBuilder {
 }
 
 /// Builds the transport `config` describes, at `key` (`mail.transport`,
-/// `mail.transports.otp`): a transport a module registers through its
-/// registration, a failover member by member, a built-in one with
-/// [`TransportConfig::build`].
+/// `mail.transports.otp`), from the factory of the provider `r` builds: a
+/// transport a module registers through its registration, a failover
+/// member by member, a built-in one with [`TransportConfig::build`].
 pub(crate) fn build_transport<'a>(
     config: &'a TransportConfig,
-    app: &'a AppContext,
+    r: &'a Resolver,
     key: &'a str,
 ) -> BoxFuture<'a, Result<Arc<dyn MailTransport>, BoxError>> {
     Box::pin(async move {
@@ -146,7 +146,7 @@ pub(crate) fn build_transport<'a>(
             }
             TransportConfig::Registered(name) => {
                 build_driver::<dyn MailTransport>(
-                    app,
+                    r,
                     &SLOT,
                     key,
                     *name,
@@ -165,7 +165,7 @@ pub(crate) fn build_transport<'a>(
                 }
                 let mut built = Vec::with_capacity(transports.len());
                 for transport in transports {
-                    built.push(build_transport(transport, app, key).await?);
+                    built.push(build_transport(transport, r, key).await?);
                 }
                 Ok(Arc::new(FailoverTransport::new(built)) as Arc<dyn MailTransport>)
             }

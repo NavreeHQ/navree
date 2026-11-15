@@ -104,7 +104,7 @@ fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
             Factory::<Ai>::new(move |r: Resolver| async move {
                 let options = r.get::<AiOptions>().await?;
                 let app = r.app();
-                let registered = registered_drivers(&app, &options, in_code).await?;
+                let registered = registered_drivers(&r, &options, in_code).await?;
                 Ok(Arc::new(Ai::build_with(
                     (*options).clone(),
                     Some(app.downgrade()),
