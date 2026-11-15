@@ -666,6 +666,61 @@ fn a_field_control_value_decodes_into_the_fields_type() {
     assert_eq!(errors["stars"], ["Stars is not valid."]);
 }
 
+/// A count of seats whose check says what a count looks like.
+struct Seats;
+
+impl FieldControl for Seats {
+    fn name(&self) -> &'static str {
+        "app.seats"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("input").attr("name", field.name.to_owned()).into()
+    }
+
+    fn check(&self, value: &str, _cx: &ControlCx<'_>) -> Result<(), String> {
+        if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) {
+            Ok(())
+        } else {
+            Err("Enter the seats as a number, such as 4".to_owned())
+        }
+    }
+}
+
+static SEATS: Seats = Seats;
+
+#[derive(Debug, Deserialize, Validate, Form)]
+#[allow(
+    dead_code,
+    reason = "the form is read and its check run; its fields are not used"
+)]
+struct Booking {
+    /// Seats
+    #[validate(skip)]
+    #[form(control = SEATS)]
+    seats: u8,
+    /// Coach
+    #[validate(skip)]
+    coach: u8,
+}
+
+// A text the control refuses and the type cannot read is one fault, said once, in the
+// control's words. The form's own words stay for a text the control accepts.
+#[test]
+fn a_text_the_control_refuses_and_the_type_cannot_read_is_said_once_in_the_controls_words() {
+    let errors = decode::<Booking>(&pairs(&[("seats", "four"), ("coach", "2")])).unwrap_err();
+    assert_eq!(errors["seats"], ["Enter the seats as a number, such as 4"]);
+    // 300 is a number to the control and too large for the type.
+    let errors = decode::<Booking>(&pairs(&[("seats", "300"), ("coach", "2")])).unwrap_err();
+    assert_eq!(errors["seats"], ["Seats is not valid."]);
+    // Another field's wrong type is still named beside the control's refusal.
+    let errors = decode::<Booking>(&pairs(&[("seats", "four"), ("coach", "B")])).unwrap_err();
+    assert_eq!(errors["seats"], ["Enter the seats as a number, such as 4"]);
+    assert_eq!(errors["coach"], ["Coach: enter a number."]);
+    let booking = decode::<Booking>(&pairs(&[("seats", "4"), ("coach", "2")])).expect("a booking");
+    assert_eq!((booking.seats, booking.coach), (4, 2));
+}
+
 /// A control that posts through a hidden input, and marks a part of its own that no label names.
 struct HiddenUnlabelled;
 

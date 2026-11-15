@@ -186,7 +186,9 @@ pub trait FieldControl: Send + Sync + 'static {
 
     /// The server's check of a posted value, before the field's type reads it: `Err` is the
     /// message shown. It is called only through [`Control::check`], so it runs on every path the
-    /// value arrives by.
+    /// value arrives by. In a form, when the check refuses a text that the field's type cannot
+    /// read either, the check's message is the field's one error; a text the check accepts and
+    /// the type cannot read gets the form's own words for a value that is not valid.
     ///
     /// A check that cannot do its work without the app or the configuration (`cx.app()` or
     /// `cx.config()` is `None`) refuses the value: a value that could not be checked is not
@@ -3009,11 +3011,19 @@ where
     // the rules or the type already said what is wrong with it, that is the message.
     let mut errors = outcome.err().unwrap_or_default();
     for (name, texts) in refused {
-        let says_once = T::FIELDS
-            .iter()
-            .any(|field| field.name == name && (is_moment(field) || field.decimal));
+        let field = T::FIELDS.iter().find(|field| field.name == name);
+        let says_once = field.is_some_and(|field| is_moment(field) || field.decimal);
         if says_once && errors.contains_key(&name) {
             continue;
+        }
+        // A control that refuses a text has said what is wrong with it: when the field's type
+        // cannot read that text either, the form's own words for a value of the wrong type
+        // would say it a second time, less exactly.
+        if let Some(field) = field.filter(|field| matches!(field.widget, Widget::Control(_))) {
+            let of_the_type = words.render(field.name, type_error_key(field), &[]);
+            if let Some(list) = errors.get_mut(&name) {
+                list.retain(|text| *text != of_the_type);
+            }
         }
         let list = errors.entry(name).or_default();
         for text in texts {
