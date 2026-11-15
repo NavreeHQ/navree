@@ -32,6 +32,9 @@ jobs:
         working-directory: crates/navree-ui/runtime
       - run: node build.mjs --check
         working-directory: crates/navree-ui/runtime
+      # The runtime's unit tests: its modules as written, on a stand-in for the page.
+      - run: node --test "test/*.test.mjs"
+        working-directory: crates/navree-ui/runtime
       # The icons and flags, fetched from the pinned releases (each refused unless its
       # checksum matches icons.lock.json) and written again: fails on any difference.
       - run: node icons.mjs --check
