@@ -64,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -205,7 +206,7 @@ private fun TextFieldView(field: Navree.Field, input: Navree.TextInput, place: P
     val focus = LocalFocusManager.current
     val sink = LocalFocusSink.current
     // The keyboard's own action ends the typing: the focus goes to the screen's sink, not to whatever the system finds first.
-    val finished: () -> Unit = { if (sink == null || runCatching { sink.requestFocus() }.isFailure) focus.clearFocus() }
+    val finished: () -> Unit = { if (sink == null) focus.clearFocus() else sink.take() }
     val current = (place.value(field) as? FieldValue.Text)?.text ?: input.value
     var shown by remember { mutableStateOf(TextFieldValue(current, TextRange(current.length))) }
     val echo = remember { Echo() }
@@ -518,7 +519,8 @@ private fun PickerField(
             supportingText = support.text?.let { shown -> { Text(shown) } },
             isError = support.isError,
             singleLine = true,
-            modifier = Modifier.fillMaxWidth().clearAndSetSemantics {},
+            // The layer over it is the one stop, for a keyboard's Tab as for a screen reader.
+            modifier = Modifier.fillMaxWidth().focusProperties { canFocus = false }.clearAndSetSemantics {},
         )
         // The field itself would open the keyboard; this takes the touch and opens the picker.
         Box(

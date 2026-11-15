@@ -182,7 +182,26 @@ internal val LocalInCard = compositionLocalOf { false }
  * system does not hand it to the first thing that can take it (a search box at
  * the top of the screen, whose keyboard would then open). Null where none is drawn.
  */
-internal val LocalFocusSink = staticCompositionLocalOf<androidx.compose.ui.focus.FocusRequester?> { null }
+internal val LocalFocusSink = staticCompositionLocalOf<FocusSink?> { null }
+
+/**
+ * The focus sink's state. It can take the focus only while it is asked for
+ * ([take]) and until the focus leaves it again, so a hardware keyboard's Tab
+ * never stops on it: it is out of sight, and a stop that cannot be seen is not one.
+ */
+internal class FocusSink {
+    val requester = androidx.compose.ui.focus.FocusRequester()
+    var armed by androidx.compose.runtime.mutableStateOf(false)
+        private set
+
+    fun take() {
+        armed = true
+    }
+
+    fun release() {
+        armed = false
+    }
+}
 
 /** The width of the pane a screen is drawn in, in dp; 0 outside a screen. */
 internal val LocalPane = compositionLocalOf { 0f }
