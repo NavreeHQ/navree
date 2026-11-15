@@ -117,4 +117,28 @@ public sealed class KindStringsTests
 
         Assert.AreEqual(0, found.Count, string.Join("; ", found.Distinct()));
     }
+
+    [TestMethod]
+    public void Every_word_is_used_by_a_kind_so_none_is_left_in_the_strings_that_nothing_says()
+    {
+        string all = string.Join('\n', Sources().Select(source => source.Text));
+        List<string> unused = [];
+        foreach (System.Reflection.PropertyInfo property in typeof(KindStrings).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static).Where(property => property.PropertyType == typeof(string)))
+        {
+            if (!all.Contains("KindStrings." + property.Name, StringComparison.Ordinal))
+            {
+                unused.Add(property.Name);
+            }
+        }
+
+        foreach (System.Reflection.MethodInfo method in typeof(KindStrings).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static).Where(method => method.ReturnType == typeof(string) && method.Name is not ("Get" or "English") && !method.IsSpecialName))
+        {
+            if (!all.Contains("KindStrings." + method.Name + "(", StringComparison.Ordinal))
+            {
+                unused.Add(method.Name);
+            }
+        }
+
+        Assert.AreEqual(0, unused.Count, string.Join(", ", unused));
+    }
 }

@@ -501,6 +501,13 @@ public sealed class KindsSafetyTests
         // More places than pixels are not drawn either.
         Assert.AreEqual(300, ThinRules.Places(1000, 300).Count);
 
+        // A fixed cap, as a scatter keeps: all of a few, a spread of very many with both ends.
+        Assert.IsTrue(ThinRules.Spread(10, 1500).SequenceEqual(Enumerable.Range(0, 10)));
+        Assert.AreEqual(300, ThinRules.Spread(5000, 300).Count);
+        Assert.AreEqual(4999, ThinRules.Spread(5000, 300)[^1]);
+        Assert.IsTrue(ThinRules.Spread(5000, 0).SequenceEqual([0, 4999]));
+        Assert.AreEqual(0, ThinRules.Spread(0, 300).Count);
+
         // A surface of nothing still keeps the two ends.
         Assert.IsTrue(ThinRules.Places(50, 0).SequenceEqual([0, 49]));
         Assert.IsTrue(ThinRules.Places(50, double.NaN).SequenceEqual([0, 49]));
@@ -555,5 +562,32 @@ public sealed class KindsSafetyTests
 
         // Slices with nothing in them are never read out.
         Assert.AreEqual(1, DonutRules.SliceAt([0, 5], ring, ring.Cx + middle, ring.Cy, 6, mirrored: false));
+    }
+
+    [TestMethod]
+    public void A_ring_past_its_goal_tells_assistive_technology_a_value_inside_its_range_and_says_past_goal_in_words()
+    {
+        Assert.AreEqual((0.0, 100.0, 100.0), RingRules.Range(150, 100));
+        Assert.AreEqual((0.0, 100.0, 83.0), RingRules.Range(83, 100));
+        Assert.AreEqual((0.0, 100.0, 0.0), RingRules.Range(-4, 100));
+        Assert.IsNull(RingRules.Range(null, 100));
+        Assert.IsNull(RingRules.Range(double.NaN, 100));
+        Assert.IsNull(RingRules.Range(50, 0));
+        Assert.IsNull(RingRules.Range(50, double.PositiveInfinity));
+
+        Assert.IsTrue(RingRules.PastGoal(150, 100));
+        Assert.IsFalse(RingRules.PastGoal(100, 100));
+        Assert.IsFalse(RingRules.PastGoal(null, 100));
+        Assert.IsFalse(RingRules.PastGoal(5, 0));
+        Assert.AreEqual("Steps, 150 of 100, past goal", RingRules.Said("Steps, 150 of 100", 150, 100));
+        Assert.AreEqual("Steps, 83 of 100", RingRules.Said("Steps, 83 of 100", 83, 100));
+        foreach (double value in new[] { -3, 0, 50, 100, 101, 1e9, double.PositiveInfinity })
+        {
+            (double min, double max, double held)? range = RingRules.Range(value, 100);
+            if (range is { } found)
+            {
+                Assert.IsTrue(found.held >= found.min && found.held <= found.max, value + " held at " + found.held);
+            }
+        }
     }
 }

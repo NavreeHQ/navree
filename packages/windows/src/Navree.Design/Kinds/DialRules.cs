@@ -119,6 +119,14 @@ public static class RingRules
         return (0, max, Math.Clamp(found, 0, max));
     }
 
+    /// <summary>What a ring says to a screen reader: its words, and when its value is past its goal, that it is, in words (its range value stays inside its range).</summary>
+    /// <param name="words">The ring's words (the page's summary or its value).</param>
+    /// <param name="value">The value, or none.</param>
+    /// <param name="max">The goal.</param>
+    /// <returns>The words.</returns>
+    public static string Said(string words, double? value, double max) =>
+        PastGoal(value, max) ? words + ", " + KindStrings.PastGoal : words;
+
     /// <summary>What the middle of a ring says: its value without the unit, or a dash when it has none.</summary>
     /// <param name="ring">The ring.</param>
     /// <param name="culture">The culture of the numbers.</param>

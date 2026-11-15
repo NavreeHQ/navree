@@ -59,19 +59,23 @@ public sealed partial class CalendarHeatView : KindControl
 
     private DayOfWeek FirstDay => culture.DateTimeFormat.FirstDayOfWeek;
 
-    private List<(DateOnly Date, double? Value)> Days =>
-        [.. heatmap.Days.Select(day => (Date: PagerRules.Day(day.Date), day.Value)).Where(day => day.Date.HasValue).Select(day => (day.Date!.Value, day.Value))];
+    // The days in date order, read once: they are asked for at every size and every read-out.
+    private IReadOnlyList<(DateOnly Date, double? Value)>? days;
+
+    private IReadOnlyList<(DateOnly Date, double? Value)> Days => days ??= HeatRules.InOrder(heatmap.Days.Select(day => (day.Date, day.Value)));
 
     private (DateOnly First, DateOnly Last) Span()
     {
-        List<(DateOnly Date, double? Value)> days = Days;
+        IReadOnlyList<(DateOnly Date, double? Value)> days = Days;
         DateOnly today = DateOnly.FromDateTime(DateTime.Today);
-        DateOnly first = PagerRules.Day(heatmap.First) ?? (days.Count > 0 ? days.Min(day => day.Date) : today);
-        DateOnly last = PagerRules.Day(heatmap.Last) ?? (days.Count > 0 ? days.Max(day => day.Date) : first);
+        DateOnly first = PagerRules.Day(heatmap.First) ?? (days.Count > 0 ? days[0].Date : today);
+        DateOnly last = PagerRules.Day(heatmap.Last) ?? (days.Count > 0 ? days[^1].Date : first);
         return (first, last);
     }
 
-    private double Highest => Days.Where(day => day.Value.HasValue).Select(day => day.Value!.Value).DefaultIfEmpty(1).Max();
+    private double? highest;
+
+    private double Highest => highest ??= Days.Where(day => day.Value.HasValue && double.IsFinite(day.Value.Value)).Select(day => day.Value!.Value).DefaultIfEmpty(1).Max();
 
     private double Step(double width)
     {
@@ -434,7 +438,9 @@ public sealed partial class ScatterView : KindControl
             Models.PointSeries series = scatter.Series[at];
             Windows.UI.Color colour = palette.Series(series.Colour, at);
             SeriesLook? look = palette.Look(at);
-            foreach (Models.Point point in series.Points)
+
+            // Thousands of points are drawn and read out as a spread of them (see ThinRules): each is an element and a place.
+            foreach (Models.Point point in ThinRules.Spread(series.Points.Count, Math.Max(ThinRules.MostMarks / Math.Max(scatter.Series.Count, 1), 2)).Select(place => series.Points[place]))
             {
                 double px = X(point.X);
                 double py = Y(point.Y);

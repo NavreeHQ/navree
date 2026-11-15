@@ -394,7 +394,7 @@ public sealed partial class ChartView : KindControl
 
         if (frame.Horizontal)
         {
-            for (int at = 0; at < frame.Count; at++)
+            foreach (int at in ThinRules.Places(frame.Count, canvas.Height / 14))
             {
                 TextBlock words = canvas.Caption(LabelAt(at));
                 words.MaxWidth = Math.Max(frame.X0 - 10, 20);
@@ -444,7 +444,9 @@ public sealed partial class ChartView : KindControl
         double[] tops = new double[count];
         Array.Fill(tops, double.MaxValue);
 
-        for (int place = 0; place < count; place++)
+        // A chart of very many places draws and reads out a spread of them (see ThinRules).
+        IReadOnlyList<int> kept = ThinRules.Places(count, frame.Horizontal ? canvas.Height : canvas.Width);
+        foreach (int place in kept)
         {
             double sum = stacked && shares ? chart.Series.Sum(series => place < series.Values.Count ? Math.Max(series.Values[place] ?? 0, 0) : 0) : 1;
             double running = 0;
@@ -484,7 +486,7 @@ public sealed partial class ChartView : KindControl
 
         PaintPlaces(canvas, frame);
 
-        for (int place = 0; place < count; place++)
+        foreach (int place in kept)
         {
             List<ProbeLine> lines = [];
             List<string> spoken = [];
@@ -526,13 +528,15 @@ public sealed partial class ChartView : KindControl
         PaintGuides(canvas, frame, marks, style);
         Palette palette = canvas.Palette;
         bool area = chart.Kind == Models.ChartKind.Area;
+        IReadOnlyList<int> kept = ThinRules.Places(count, canvas.Width);
+        HashSet<int>? keeps = kept.Count == count ? null : [.. kept];
 
         for (int at = 0; at < chart.Series.Count; at++)
         {
             Models.Series series = chart.Series[at];
             Windows.UI.Color colour = SeriesColour(palette, at);
             IReadOnlyList<int> runs = AxisRules.Runs(series.Values);
-            foreach (IGrouping<int, int> run in Enumerable.Range(0, series.Values.Count).Where(place => series.Values[place].HasValue).GroupBy(place => runs[place]))
+            foreach (IGrouping<int, int> run in Enumerable.Range(0, series.Values.Count).Where(place => series.Values[place].HasValue && (keeps is null || keeps.Contains(place))).GroupBy(place => runs[place]))
             {
                 List<Pt> points = [.. run.Select(place => new Pt(frame.Centre(place), frame.Along(series.Values[place]!.Value)))];
                 SeriesLook? look = palette.Look(at);
@@ -565,7 +569,7 @@ public sealed partial class ChartView : KindControl
 
         PaintPlaces(canvas, frame);
 
-        for (int place = 0; place < count; place++)
+        foreach (int place in kept)
         {
             List<ProbeLine> lines = [];
             List<(Point At, Windows.UI.Color Colour)> marksAt = [];
@@ -623,7 +627,7 @@ public sealed partial class ChartView : KindControl
         List<(int Place, double Value)> found = [];
         if (chart.Series.Count > 0)
         {
-            for (int at = 0; at < chart.Series[0].Values.Count; at++)
+            foreach (int at in ThinRules.Places(chart.Series[0].Values.Count, canvas.Width))
             {
                 if (chart.Series[0].Values[at] is double value)
                 {

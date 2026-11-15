@@ -315,7 +315,21 @@ public static class ThinRules
             return [];
         }
 
-        int most = (int)Math.Min(MostMarks, Math.Max(Math.Floor(Guard.Length(width)), 2));
+        return Spread(count, (int)Math.Min(MostMarks, Math.Max(Math.Floor(Guard.Length(width)), 2)));
+    }
+
+    /// <summary>The places of a run of <paramref name="count"/> that are kept when at most <paramref name="most"/> are: all of them, else an even spread with the first and the last.</summary>
+    /// <param name="count">How many places there are.</param>
+    /// <param name="most">The most to keep (at least two).</param>
+    /// <returns>The places, in order.</returns>
+    public static IReadOnlyList<int> Spread(int count, int most)
+    {
+        if (count <= 0)
+        {
+            return [];
+        }
+
+        most = Math.Max(most, 2);
         if (count <= most)
         {
             return [.. Enumerable.Range(0, count)];

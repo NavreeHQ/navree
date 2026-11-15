@@ -97,6 +97,16 @@ public static class HeatRules
     /// <summary>How strong each of the four shades is, as an opacity of the hue.</summary>
     public static IReadOnlyList<double> Opacities { get; } = [0.22, 0.45, 0.7, 1.0];
 
+    /// <summary>The days of a calendar in date order, whatever order the page sent them in (the order the keys step through them); a day that is not a date is left out, and days of one date keep the order they came in.</summary>
+    /// <param name="days">The page's days: the date as written and the value.</param>
+    /// <returns>The days, earliest first.</returns>
+    public static IReadOnlyList<(DateOnly Date, double? Value)> InOrder(IEnumerable<(string Date, double? Value)> days) =>
+        [.. days
+            .Select(day => (Date: PagerRules.Day(day.Date), day.Value))
+            .Where(day => day.Date.HasValue)
+            .Select(day => (day.Date!.Value, day.Value))
+            .OrderBy(day => day.Item1)];
+
     /// <summary>
     /// The shade of a day, 0 to 3, or none for a day with no value (no data, not a day of none). The steps are where the second, third
     /// and fourth shade begin; without them, four equal parts from 0 to the highest.

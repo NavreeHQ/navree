@@ -373,15 +373,19 @@ public sealed partial class StripView : KindControl
             6);
 
         double width = canvas.Width / count;
-        for (int at = 0; at < count; at++)
+
+        // Past the most places that can be read out, a place stands for a run of cells, the words of its first.
+        int run = Math.Max((int)Math.Ceiling(count / (double)ThinRules.MostMarks), 1);
+        for (int at = 0; at < count; at += run)
         {
             Models.StripCell cell = strip.Cells[at];
             int? kind = KindOf(cell);
             string words = kind is int found ? KeyRules.Entry(strip.Key[found].Name, strip.Key[found].Detail) : KindStrings.NoReading;
+            double across = Math.Min(run, count - at) * width;
             canvas.Probes.Add(new Probe(
-                canvas.Mx((at + 0.5) * width),
+                canvas.Mx((at * width) + (across / 2)),
                 0,
-                canvas.Mrect(at * width, 0, width, canvas.Height),
+                canvas.Mrect(at * width, 0, across, canvas.Height),
                 cell.Label,
                 [new ProbeLine(kind is int shown ? Colour(palette, shown) : null, words)],
                 cell.Label + ", " + words));
