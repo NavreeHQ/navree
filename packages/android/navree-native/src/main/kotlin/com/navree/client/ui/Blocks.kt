@@ -251,7 +251,7 @@ internal fun blocks(
                 val empty = node.empty
                 if (node.rows.isEmpty() && empty != null) {
                     out += Block.Single(key("$path/empty", empty.nodeId), empty, form)
-                } else if (ListRules.tableAsList(widthDp, node.columns.size, fontScale)) {
+                } else if (ListRules.tableAsList(widthDp, node.columns.size + ListRules.typingColumns(node.columns, node.rows), fontScale)) {
                     node.rows.forEachIndexed { index, row -> out += Block.TableItem(key("$path/$index", row.id), node, row, form) }
                 } else {
                     out += Block.Single(key(path, node.id), node, form)

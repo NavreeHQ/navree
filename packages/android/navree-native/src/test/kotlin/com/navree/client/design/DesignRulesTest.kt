@@ -640,6 +640,17 @@ class ColumnShareTest {
     }
 
     @Test
+    fun a_table_with_a_box_to_type_in_counts_that_column_twice_for_its_room() {
+        val columns = listOf(column("Order", Navree.ColumnRole.TITLE), column("Delivery note"))
+        val typing = Navree.TableRow(cells = listOf(Navree.Text(value = "CH-1"), Navree.Field(name = "note", input = Navree.TextInput())))
+        assertEquals(1, ListRules.typingColumns(columns, listOf(typing)))
+        assertEquals(0, ListRules.typingColumns(columns, listOf(row("CH-1", "Open"))))
+        // Six columns of 128 dp need 768 dp: an upright tablet's 740 dp holds them as a list, a wide one as a table.
+        assertTrue(ListRules.tableAsList(740, 5 + 1))
+        assertFalse(ListRules.tableAsList(1200, 5 + 1))
+    }
+
+    @Test
     fun at_the_largest_text_a_table_with_seven_columns_is_a_list_even_in_a_wide_pane() {
         assertFalse(ListRules.tableAsList(1000, 7, 1f))
         assertTrue(ListRules.tableAsList(1000, 7, 2f))

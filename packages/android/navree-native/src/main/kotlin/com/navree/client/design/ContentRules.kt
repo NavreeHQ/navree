@@ -33,7 +33,7 @@ object ListRules {
     const val TABLE_FROM_DP = 600
 
     /** The least a column gets, in dp. A table with more columns than fit is a list at any width. */
-    const val COLUMN_LEAST_DP = 112
+    const val COLUMN_LEAST_DP = 128
 
     /** The least a lane of a board stands in, in dp: a card's title and its choices read in it. */
     const val LANE_LEAST_DP = 240
@@ -236,6 +236,9 @@ object ListRules {
      */
     /** The share of a column with a box to type in: a box and a button side by side. */
     const val TYPING_COLUMN_WEIGHT = 2.4f
+
+    /** How many of a table's columns hold a box to type in: each takes the room of two columns, so a table that holds one has more to fit. */
+    fun typingColumns(columns: List<Navree.Column>, rows: List<Navree.TableRow>): Int = columnWeights(columns, rows).count { it == TYPING_COLUMN_WEIGHT }
 
     fun columnWeights(columns: List<Navree.Column>, rows: List<Navree.TableRow>): List<Float> =
         columns.mapIndexed { index, column ->
