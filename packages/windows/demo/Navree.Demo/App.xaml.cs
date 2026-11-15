@@ -62,7 +62,7 @@ public partial class App : Application
 
         string? answers = Option(arguments, "--answers") ?? FixtureFetcher.Recorded();
         string? live = Option(arguments, "--server");
-        bool testing = Option(arguments, "--walk") is not null || Option(arguments, "--system-walk") is not null || Option(arguments, "--probe") is not null || Option(arguments, "--run") is not null || Option(arguments, "--full") is not null || Option(arguments, "--checks") is not null || Option(arguments, "--moves") is not null || Option(arguments, "--popover") is not null || Option(arguments, "--hands") is not null;
+        bool testing = Option(arguments, "--walk") is not null || Option(arguments, "--system-walk") is not null || Option(arguments, "--probe") is not null || Option(arguments, "--run") is not null || Option(arguments, "--full") is not null || Option(arguments, "--checks") is not null || Option(arguments, "--moves") is not null || Option(arguments, "--popover") is not null || Option(arguments, "--hands") is not null || Option(arguments, "--wipe") is not null;
         PlaceOptions placeOptions = new()
         {
             Scheme = Scheme,
@@ -72,6 +72,8 @@ public partial class App : Application
         IFetcher? fetcher = Array.IndexOf(arguments, "--offline") >= 0
             ? new OfflineFetcher()
             : answers is null ? null : new FixtureFetcher(answers, Array.IndexOf(arguments, "--search") >= 0);
+        string? wipe = Option(arguments, "--wipe");
+        string? webFolder = testing ? Path.Combine(Path.GetTempPath(), "navree-demo-web-" + Environment.ProcessId) : null;
         ShellOptions options = live is not null
             ? new ShellOptions
             {
@@ -79,6 +81,8 @@ public partial class App : Application
                 AppName = "Navree Demo",
                 LoopbackHttp = live.StartsWith("http://", StringComparison.Ordinal),
                 KeptFolder = testing ? Path.Combine(Path.GetTempPath(), "navree-demo-kept-" + Environment.ProcessId) : null,
+                WebFolder = webFolder,
+                AnswerFirst = testing ? DemoAnswers.SignOut : null,
                 Place = placeOptions,
             }
             : new ShellOptions
@@ -86,8 +90,10 @@ public partial class App : Application
                 Origin = "https://charkha.example",
                 AppName = "Navree Demo",
                 Fetcher = fetcher is null ? null : new RecordingFetcher(fetcher),
-                RecordedPages = answers is null ? null : address => FixtureFetcher.Page(answers, address),
+                RecordedPages = wipe is not null ? WipeProbe.Handle : answers is null ? null : address => FixtureFetcher.Page(answers, address),
                 KeptFolder = testing ? Path.Combine(Path.GetTempPath(), "navree-demo-kept-" + Environment.ProcessId) : null,
+                WebFolder = webFolder,
+                AnswerFirst = testing ? DemoAnswers.SignOut : null,
                 Place = placeOptions,
             };
 
@@ -143,6 +149,10 @@ public partial class App : Application
         else if (Option(arguments, "--moves") is string movesFolder)
         {
             _ = new BoardMoves(host, window, movesFolder).RunAsync();
+        }
+        else if (wipe is not null)
+        {
+            _ = new WipeCheck(host, window, wipe, webFolder!, place).RunAsync();
         }
         else if (Option(arguments, "--checks") is string checksFolder)
         {
