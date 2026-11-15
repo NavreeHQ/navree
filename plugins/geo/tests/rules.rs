@@ -254,10 +254,7 @@ fn the_map_and_the_location_control_follow_the_rules() {
     let form = render(&FormView::<NewDelivery>::new().post("/deliveries").into());
     assert!(form.contains(r#"data-slot="geo:location""#), "{form}");
     assert!(form.contains(r#"name="drop_at""#), "{form}");
-    assert!(
-        form.contains(r#"placeholder="30.9010,75.8573""#),
-        "{form}"
-    );
+    assert!(form.contains(r#"placeholder="30.9010,75.8573""#), "{form}");
     assert!(form.contains(r#"data-slot="geo:locate""#), "{form}");
     assert!(form.contains(MAP.script_url().expect("a script")), "{form}");
 }
@@ -398,7 +395,13 @@ async fn geo_boots_in_test_app_and_asks_for_the_tile_host() {
     assert!(html.contains("Sarabha Nagar, Ludhiana"), "{html}");
     assert!(html.contains(r#"id="drop-place""#), "{html}");
     // Only the id of a place line is redrawn.
-    let response = post(&app, "/geo/reverse", "at=30.8890%2C75.8340&target=account", true).await;
+    let response = post(
+        &app,
+        "/geo/reverse",
+        "at=30.8890%2C75.8340&target=account",
+        true,
+    )
+    .await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     // A page with a map keeps the toolkit's policy, and names the plugin's files.
@@ -422,7 +425,11 @@ async fn geo_boots_in_test_app_and_asks_for_the_tile_host() {
     ));
     let policy = app.get::<PagePolicy>().await;
     assert!(policy.allows(Directive::ImgSrc, TILE));
-    assert!(policy.header().contains("img-src 'self' data: https://tile.openstreetmap.org"));
+    assert!(
+        policy
+            .header()
+            .contains("img-src 'self' data: https://tile.openstreetmap.org")
+    );
     let options = app.get::<GeoOptions>().await;
     assert_eq!(
         Tiles::new(&options, &policy).address().as_deref(),
@@ -438,8 +445,9 @@ async fn geo_boots_in_test_app_and_asks_for_the_tile_host() {
     );
     let map = page(&app, "/map").await;
     assert!(
-        map.header("content-security-policy")
-            .is_some_and(|policy| policy.contains("img-src 'self' data: https://tile.openstreetmap.org")),
+        map.header("content-security-policy").is_some_and(
+            |policy| policy.contains("img-src 'self' data: https://tile.openstreetmap.org")
+        ),
         "{:?}",
         map.header("content-security-policy")
     );

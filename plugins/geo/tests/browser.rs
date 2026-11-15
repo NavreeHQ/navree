@@ -139,12 +139,7 @@ async fn new_delivery(submit: Result<Submit<NewDelivery>, Rejected<NewDelivery>>
 
 /// `POST /deliveries/{id}/drop`: a new drop point from a table cell, held to the delivery area
 /// before it is stored.
-async fn edit_drop(
-    drops: Drops,
-    id: i64,
-    ctx: AppContext,
-    edit: EditedValue<GeoPoint>,
-) -> Reply {
+async fn edit_drop(drops: Drops, id: i64, ctx: AppContext, edit: EditedValue<GeoPoint>) -> Reply {
     let language = Language::of(Some(&ctx)).await;
     match edit.read(Control::new(&LOCATION), &language) {
         Ok(at) => {
@@ -400,10 +395,7 @@ impl Shop {
 
     /// The page at `path`, with the browser signed in as Harpreet Sandhu.
     async fn open(&self, path: &str) -> Result<Page, BrowserError> {
-        let page = self
-            .browser
-            .visit(self.server.url("/test/sign-in"))
-            .await?;
+        let page = self.browser.visit(self.server.url("/test/sign-in")).await?;
         page.visit(self.server.url(path)).await?;
         Ok(page)
     }
@@ -466,8 +458,8 @@ fn tile_of(at: GeoPoint, zoom: u32) -> (u64, u64) {
     let tiles = f64::from(1_u32 << zoom);
     let lat = at.lat.to_radians();
     let x = ((at.lng + 180.0) / 360.0 * tiles).floor();
-    let y = ((1.0 - (lat.tan() + 1.0 / lat.cos()).ln() / std::f64::consts::PI) / 2.0 * tiles)
-        .floor();
+    let y =
+        ((1.0 - (lat.tan() + 1.0 / lat.cos()).ln() / std::f64::consts::PI) / 2.0 * tiles).floor();
     (x as u64, y as u64)
 }
 
@@ -486,8 +478,13 @@ async fn harpreet_moves_the_drop_pin_and_the_address_follows() -> Result<(), Bro
     click_map(&page, 90, -40).await?;
     let picked = changed_from(&page, &Target::from(FIELD), "30.8890,75.8340").await?;
     let at = point(&picked);
-    assert_eq!(at.to_string(), picked, "the field holds a point as it displays");
-    page.assert_see(format!("{} ({picked})", nearest(at))).await?;
+    assert_eq!(
+        at.to_string(),
+        picked,
+        "the field holds a point as it displays"
+    );
+    page.assert_see(format!("{} ({picked})", nearest(at)))
+        .await?;
     page.assert_no_console_errors().await?;
     Ok(())
 }
@@ -611,7 +608,9 @@ async fn the_stored_twin_of_the_map_is_never_mounted() -> Result<(), BrowserErro
     page.wait_for(DRAWN_MAP).await?;
 
     let mounted: u64 = page
-        .script(r#"return document.querySelectorAll('[data-slot="geo:map"][data-ui-mounted]').length"#)
+        .script(
+            r#"return document.querySelectorAll('[data-slot="geo:map"][data-ui-mounted]').length"#,
+        )
         .await?;
     assert_eq!(mounted, 1, "only the real map is mounted");
     let in_twin: u64 = page
@@ -632,7 +631,8 @@ async fn use_my_location_is_a_button_that_submits_nothing() -> Result<(), Browse
     let page = shop.open("/deliveries/new").await?;
     page.wait_for(r#"css=[data-slot="geo:location"][data-ui-mounted]"#)
         .await?;
-    page.assert_visible(r#"css=[data-slot="geo:locate"]"#).await?;
+    page.assert_visible(r#"css=[data-slot="geo:locate"]"#)
+        .await?;
 
     let before = requests(&page).await?;
     page.press("Use my location").await?;
@@ -644,6 +644,7 @@ async fn use_my_location_is_a_button_that_submits_nothing() -> Result<(), Browse
     // not shown.
     page.script::<bool>("document.documentElement.removeAttribute('data-ui-js'); return true")
         .await?;
-    page.assert_missing(r#"css=[data-slot="geo:locate"]"#).await?;
+    page.assert_missing(r#"css=[data-slot="geo:locate"]"#)
+        .await?;
     Ok(())
 }
