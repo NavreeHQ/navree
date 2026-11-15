@@ -49,8 +49,8 @@ internal sealed class SystemWalker(ShellHost host, ShellWindow window, SystemPla
                     host.Send(Events.Select(1));
                     await Task.Delay(2500);
                     Say("the screen has a search: " + (host.State.FrontScreen?.Screen?.Search is not null));
-                    await Content(prefix, "search");
-                    await Screen(prefix, "search-screen");
+                    await Content(prefix, "title-bar");
+                    await Screen(prefix, "screen");
                 });
                 return;
             }
@@ -136,6 +136,21 @@ internal sealed class SystemWalker(ShellHost host, ShellWindow window, SystemPla
                 {
                     double left = page.TransformToVisual(window.Surface).TransformPoint(new Windows.Foundation.Point(0, 0)).X;
                     Say("the page is " + page.ActualWidth + " wide, from " + left);
+                    Microsoft.UI.Xaml.DependencyObject? above = page;
+                    while (above is Microsoft.UI.Xaml.FrameworkElement element)
+                    {
+                        try
+                        {
+                            double across = element.TransformToVisual(window.Surface).TransformPoint(new Windows.Foundation.Point(0, 0)).X;
+                            Say("  inside " + element.GetType().Name + ": " + element.ActualWidth + " wide, from " + across);
+                        }
+                        catch (Exception)
+                        {
+                            Say("  inside " + element.GetType().Name + ": " + element.ActualWidth + " wide");
+                        }
+
+                        above = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(element);
+                    }
                 }
 
                 await Screen(prefix, "full-screen");
@@ -250,7 +265,7 @@ internal sealed class SystemWalker(ShellHost host, ShellWindow window, SystemPla
         string[] arguments = Environment.GetCommandLineArgs();
         string theme = Array.IndexOf(arguments, "--dark") >= 0 ? "dark" : "light";
         string packaged = PackageIdentity.Has() ? "packaged-" : "unpackaged-";
-        return packaged + theme + (Array.IndexOf(arguments, "--rtl") >= 0 ? "-rtl" : string.Empty) + (Array.IndexOf(arguments, "--offline") >= 0 ? "-offline" : string.Empty) + "-";
+        return packaged + theme + (Array.IndexOf(arguments, "--rtl") >= 0 ? "-rtl" : string.Empty) + (Array.IndexOf(arguments, "--offline") >= 0 ? "-offline" : string.Empty) + (Array.IndexOf(arguments, "--search") >= 0 ? "-search" : string.Empty) + "-";
     }
 
     private void Say(string line) => log.Add(DateTime.Now.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture) + " " + line);
