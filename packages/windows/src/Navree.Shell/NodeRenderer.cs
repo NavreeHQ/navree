@@ -729,7 +729,7 @@ internal sealed partial class NodeRenderer(RenderContext context)
         Brush ink = brush ?? Look.ToneBrush(icon.Tone);
         if (icon.Paths.Count == 0 && icon.Fills.Count == 0)
         {
-            FontIcon glyph = Look.Glyph(Glyphs.For(icon.Name), size * 0.8);
+            FontIcon glyph = Look.Glyph(SystemGlyphs.For(icon.Name), size * 0.8);
             glyph.Foreground = ink;
             return glyph;
         }

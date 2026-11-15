@@ -40,6 +40,13 @@ internal sealed class FixtureFetcher(string folder) : IFetcher
         return stem + ".json";
     }
 
+    /// <summary>The page a web view asks for, when one is recorded: <c>/</c> is <c>index.embed.html</c>.</summary>
+    internal static (byte[] Body, string ContentType)? Page(string folder, Uri address)
+    {
+        string file = Path.Combine(folder, NameOf(address.ToString())[..^".json".Length] + ".embed.html");
+        return File.Exists(file) ? (File.ReadAllBytes(file), "text/html; charset=utf-8") : null;
+    }
+
     /// <summary>The folder of recorded answers the repository keeps for the store demo, found above the program.</summary>
     internal static string? Recorded()
     {

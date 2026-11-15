@@ -40,6 +40,7 @@ public partial class App : Application
                 Origin = "https://charkha.example",
                 AppName = "Navree Demo",
                 Fetcher = answers is null ? null : new FixtureFetcher(answers),
+                RecordedPages = answers is null ? null : address => FixtureFetcher.Page(answers, address),
                 KeptFolder = Path.Combine(Path.GetTempPath(), "navree-demo-kept-" + Environment.ProcessId),
             };
 

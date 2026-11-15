@@ -72,6 +72,9 @@ public sealed class Origins
     /// <summary>The configured origin, as scheme, host and port, when it can be used.</summary>
     public string? Home => home?.Text;
 
+    /// <summary>The origins a document may have: the app's own and those it allows (a host may start with <c>*.</c>), each as scheme, host and port.</summary>
+    public IReadOnlyList<string> Documents => [.. (home is null ? Array.Empty<string>() : [home.Text]), .. others.Select(other => other.Text)];
+
     /// <summary>
     /// Whether this whole address is the app's own: an <c>http</c> or <c>https</c> address with no white space,
     /// control character or backslash anywhere, a host of ASCII letters, digits, <c>-</c> and <c>.</c> (or a

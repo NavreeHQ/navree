@@ -102,6 +102,33 @@ public sealed class ShellHost : IDisposable
         disk.Dispose();
     }
 
+    // Runs a step that must be on the UI thread, and completes when it has been.
+    private Func<Task> OnUiAsync(Func<Task> step) =>
+        () =>
+        {
+            TaskCompletionSource done = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!dispatcher.TryEnqueue(async () =>
+            {
+                try
+                {
+                    await step();
+                    done.SetResult();
+                }
+                catch (Exception problem)
+                {
+                    done.SetException(problem);
+                }
+            }))
+            {
+                done.SetException(new InvalidOperationException("the window is gone"));
+            }
+
+            return done.Task;
+        };
+
+    /// <summary>What a page in the web view is answered with when the app has recorded answers instead of a network.</summary>
+    internal Func<Uri, (byte[] Body, string ContentType)?>? RecordedPages => Options.RecordedPages;
+
     private void OnProblem(string what) => dispatcher.TryEnqueue(() => Problem?.Invoke(what));
 
     // On the core's thread: the state is handed to the UI thread, and then each effect, in order.
@@ -313,6 +340,7 @@ public sealed class ShellHost : IDisposable
                     kept.Clear();
                     return Task.CompletedTask;
                 }),
+                new WipeStep("what the web view keeps", OnUiAsync(WebPage.ClearAllAsync)),
             ]).ConfigureAwait(true);
         if (!report.Complete)
         {

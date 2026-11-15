@@ -16,6 +16,7 @@ internal sealed class ScreenPresenter : Grid
 {
     private readonly ShellHost host;
     private readonly ScrollViewer scroller = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+    private readonly Dictionary<long, WebPage> webs = [];
     private ScreenView? shown;
     private WidthClass shownWidth;
 
@@ -36,8 +37,26 @@ internal sealed class ScreenPresenter : Grid
             shown = null;
             Context = null;
             scroller.Content = null;
+            Present(scroller);
             return;
         }
+
+        if (screen.Content is WebContent web)
+        {
+            if (!webs.TryGetValue(screen.Id, out WebPage? page))
+            {
+                page = new WebPage(host, screen.Id, host.RecordedPages);
+                webs[screen.Id] = page;
+            }
+
+            shown = screen;
+            Context = null;
+            Present(page);
+            _ = page.ShowAsync(web);
+            return;
+        }
+
+        Present(scroller);
 
         bool sameDrawing = shown is not null
             && shown.Id == screen.Id
@@ -80,6 +99,16 @@ internal sealed class ScreenPresenter : Grid
         {
             scroller.UpdateLayout();
             scroller.ChangeView(null, offset, null, disableAnimation: true);
+        }
+    }
+
+    // One thing fills the area: the screen's scrolling page, or a web view.
+    private void Present(UIElement element)
+    {
+        if (Children.Count != 1 || !ReferenceEquals(Children[0], element))
+        {
+            Children.Clear();
+            Children.Add(element);
         }
     }
 

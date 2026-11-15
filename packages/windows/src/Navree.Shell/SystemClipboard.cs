@@ -14,7 +14,7 @@ internal static class SystemClipboard
         {
             global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContentWithOptions(
                 package,
-                new ClipboardContentOptions { IsAllowedInHistory = false, IsRoamingEnabled = false });
+                new ClipboardContentOptions { IsAllowedInHistory = false, IsRoamable = false });
         }
         else
         {

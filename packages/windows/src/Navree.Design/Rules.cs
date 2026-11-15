@@ -102,7 +102,7 @@ public static class Words
 }
 
 /// <summary>Which of Windows' own icons (Segoe Fluent Icons) stands for an icon a page names.</summary>
-public static class Glyphs
+public static class SystemGlyphs
 {
     private static readonly Dictionary<string, string> Names = new(StringComparer.OrdinalIgnoreCase)
     {

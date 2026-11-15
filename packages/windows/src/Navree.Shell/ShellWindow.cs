@@ -283,7 +283,7 @@ public sealed class ShellWindow : Window
                     NavigationViewItem item = new()
                     {
                         Content = destination.Label,
-                        Icon = Look.Glyph(Glyphs.For(destination.Icon?.Name, destination.Label)),
+                        Icon = Look.Glyph(SystemGlyphs.For(destination.Icon?.Name, destination.Label)),
                         Tag = at,
                     };
                     if (destination.Badge is not null)

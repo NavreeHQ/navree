@@ -26,7 +26,7 @@ internal sealed partial class NodeRenderer
         }
         else if (button.Standard is Models.Standard standard)
         {
-            content.Children.Add(Look.Glyph(Glyphs.Of(standard)));
+            content.Children.Add(Look.Glyph(SystemGlyphs.Of(standard)));
         }
 
         if (!button.IconOnly)
@@ -102,7 +102,7 @@ internal sealed partial class NodeRenderer
                     MenuFlyoutItem item = new() { Text = entry.Label, IsEnabled = !entry.Disabled };
                     if (entry.Standard is Models.Standard standard)
                     {
-                        item.Icon = Look.Glyph(Glyphs.Of(standard));
+                        item.Icon = Look.Glyph(SystemGlyphs.Of(standard));
                     }
 
                     Models.Action? action = entry.Action;

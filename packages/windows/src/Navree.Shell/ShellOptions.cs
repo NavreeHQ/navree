@@ -23,6 +23,9 @@ public sealed record ShellOptions
     /// <summary>What answers the core's requests, when it is not the network: the demo's recorded answers.</summary>
     public IFetcher? Fetcher { get; init; }
 
+    /// <summary>What answers a request of a page in the web view for the app's own origin, when it is not the network: the demo's recorded pages.</summary>
+    public Func<Uri, (byte[] Body, string ContentType)?>? RecordedPages { get; init; }
+
     /// <summary>Where what the app keeps between launches goes; the app's folder under the local application data when left out.</summary>
     public string? KeptFolder { get; init; }
 

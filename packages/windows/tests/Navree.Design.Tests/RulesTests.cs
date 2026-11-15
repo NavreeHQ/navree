@@ -56,11 +56,11 @@ public sealed class RulesTests
     [TestMethod]
     public void An_icon_the_page_names_gets_windows_own_glyph_and_a_name_that_maps_nowhere_the_label_or_a_page()
     {
-        Assert.AreEqual("", Glyphs.For("home"));
-        Assert.AreEqual("", Glyphs.For("Orders"));
-        Assert.AreEqual("", Glyphs.For("unheard-of", "Inventory and stock"));
-        Assert.AreEqual("", Glyphs.For("unheard-of", "Zebra"));
-        Assert.AreEqual("", Glyphs.Of(Models.Standard.Share));
+        Assert.AreEqual("", SystemGlyphs.For("home"));
+        Assert.AreEqual("", SystemGlyphs.For("Orders"));
+        Assert.AreEqual("", SystemGlyphs.For("unheard-of", "Inventory and stock"));
+        Assert.AreEqual("", SystemGlyphs.For("unheard-of", "Zebra"));
+        Assert.AreEqual("", SystemGlyphs.Of(Models.Standard.Share));
     }
 
     [TestMethod]
