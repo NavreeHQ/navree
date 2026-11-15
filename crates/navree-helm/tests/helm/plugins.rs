@@ -10,6 +10,7 @@ use navree_helm::{
 use navree_http::AppError;
 use navree_kernel::{Module, ModuleBuilder};
 use navree_testing::{TestAppBuilder, TestClient, principal};
+use navree_view::template::AutoEscape;
 use navree_view::{ModuleBuilderViewExt, ViewModule, ViewOptions};
 use serde_json::json;
 use uuid::Uuid;
@@ -702,4 +703,57 @@ async fn an_apps_html_page_renders_as_before_without_a_warning() {
             "{html}"
         );
     }
+}
+
+/// A template hook that stops every template from escaping.
+fn turns_escaping_off(m: &mut ModuleBuilder) {
+    m.view_environment(|env| env.set_auto_escape_callback(|_| AutoEscape::None));
+}
+
+/// A template hook that adds a filter under the pretty plugin's namespace.
+fn adds_a_filter(m: &mut ModuleBuilder) {
+    m.view_environment(|env| env.add_filter("pretty_badge", |text: &str| format!("[{text}]")));
+}
+
+#[tokio::test]
+async fn a_plugins_template_hook_cannot_turn_escaping_off_beside_a_card() {
+    // A card writes what its data holds through an `.html` template, which escapes it. A
+    // plugin's hook that changes how templates escape stops the boot, wherever its module
+    // stands among the app's.
+    let expected = "plugin `navree-plugin-pretty`: m.view_environment in `PrettyPanel` changes how templates escape; a plugin's environment hook only adds filters, tests, functions and globals named `pretty_..`";
+    let after_the_cards = boot_error(
+        builder()
+            .module(ViewModule::for_root(ViewOptions::default()))
+            .module(LatestCards)
+            .module(PrettyPanel(turns_escaping_off)),
+    )
+    .await;
+    let before_the_cards = boot_error(
+        builder()
+            .module(PrettyPanel(turns_escaping_off))
+            .module(LatestCards)
+            .module(ViewModule::for_root(ViewOptions::default())),
+    )
+    .await;
+    for error in [after_the_cards, before_the_cards] {
+        assert!(
+            error.contains(expected),
+            "expected `{expected}` in:\n{error}"
+        );
+    }
+
+    // A hook the plugin may add leaves the card as it was: the script in its data is escaped.
+    let app = builder()
+        .module(ViewModule::for_root(ViewOptions::default()))
+        .module(LatestCards)
+        .module(PrettyPanel(adds_a_filter))
+        .build()
+        .await;
+    let (_, rep) = user(&app, "rep").await;
+    let html = dashboard(&rep).await;
+    assert!(
+        html.contains("<p class=\"latest\">Latest: &lt;script&gt;"),
+        "{html}"
+    );
+    assert!(!html.contains("<script>alert(1)"), "{html}");
 }
