@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -114,26 +113,12 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
         Say("the field held " + quantity.Text + " before it was typed into");
         await ClickAsync(quantity);
         Foreground();
-        ScreenView? before = host.State.FrontScreen;
-        FrameworkElement? page = window.CurrentPage;
-        lastSeen = before;
-        lastPage = page;
-        drawn = Private(Private(window, "front"), "shown") as ScreenView;
-        drawnWidth = Private(Private(window, "front"), "shownWidth");
-        Say("the page was drawn for width " + drawnWidth + "; the window's width is " + Private(window, "width") + "; the drawing's context is " + (Private(Private(window, "front"), "<Context>k__BackingField") is null ? "none" : "there"));
-        host.StateChanged += OnState;
         await KeyAsync(CtrlKey, LetterA);
         await Task.Delay(300);
         await KeyAsync(0, (byte)(Digit0 + 6));
-        await Task.Delay(700);
-        Say("after the 6: the field holds '" + quantity.Text + "', it is " + (quantity.XamlRoot is null ? "off the screen" : "still on it") + ", the page is " + (ReferenceEquals(page, window.CurrentPage) ? "the same" : "a new one") + ", focus is on " + FocusedWords());
-        Compare(before, host.State.FrontScreen);
-        TextBox? again = Everything().OfType<TextBox>().FirstOrDefault(box => NameOf(box).StartsWith("Units of Chakla belan", StringComparison.Ordinal));
-        Say("the field is " + (ReferenceEquals(again, quantity) ? "the same element" : "a new element") + " and holds '" + again?.Text + "'");
         await KeyAsync(0, Digit0);
         await Task.Delay(700);
-        host.StateChanged -= OnState;
-        again = Everything().OfType<TextBox>().FirstOrDefault(box => NameOf(box).StartsWith("Units of Chakla belan", StringComparison.Ordinal));
+        TextBox? again = Everything().OfType<TextBox>().FirstOrDefault(box => NameOf(box).StartsWith("Units of Chakla belan", StringComparison.Ordinal));
         Check("the quantity typed is in the field", again?.Text == "60", "the field holds '" + again?.Text + "'; focus is on " + FocusedWords());
         await ShotAsync("press-restock-typed", "60 typed into the quantity of the first row");
 
@@ -268,85 +253,6 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
             { } other => other.GetType().Name,
         };
 
-    // What of a screen's state is another object after something was done: the parts a screen is drawn again for.
-    private void Compare(ScreenView? before, ScreenView? after) =>
-        Say("what the screen is drawn again for, changed by the typing: " + Differences(before, after));
-
-    private static string Differences(ScreenView? before, ScreenView? after)
-    {
-        if (before is null || after is null)
-        {
-            return before is null && after is null ? "no screen" : "a screen came or went";
-        }
-
-        List<string> changed = [];
-        if (!ReferenceEquals(before.Content, after.Content))
-        {
-            changed.Add("content");
-        }
-
-        if (!ReferenceEquals(before.States, after.States))
-        {
-            changed.Add("states");
-        }
-
-        if (!ReferenceEquals(before.Overlays, after.Overlays))
-        {
-            changed.Add("overlays");
-        }
-
-        if (!ReferenceEquals(before.Regions, after.Regions))
-        {
-            changed.Add("regions");
-        }
-
-        if (!ReferenceEquals(before.Lists, after.Lists))
-        {
-            changed.Add("lists");
-        }
-
-        if (!ReferenceEquals(before.Forms, after.Forms))
-        {
-            changed.Add("forms");
-        }
-
-        if (before.Loading != after.Loading || before.Refreshing != after.Refreshing)
-        {
-            changed.Add("loading");
-        }
-
-        if (before.Id != after.Id)
-        {
-            changed.Add("which screen");
-        }
-
-        return changed.Count == 0 ? "nothing" : string.Join(", ", changed);
-    }
-
-    private ScreenView? lastSeen;
-    private FrameworkElement? lastPage;
-    private ScreenView? drawn;
-    private object? drawnWidth;
-    private int updates;
-
-    // A field of an object that is not ours to read, read for a diagnosis.
-    private static object? Private(object? target, string name) =>
-        target?.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(target);
-
-    // Each update of the view state, and whether the window drew the page again for it (its own handler has run by now).
-    private void OnState(ViewState state)
-    {
-        FrameworkElement? page = window.CurrentPage;
-        Say("update " + (++updates).ToString(CultureInfo.InvariantCulture) + ": stage " + state.Nav.Stage + ", changed " + Differences(lastSeen, state.FrontScreen) + ", the page is " + (ReferenceEquals(page, lastPage) ? "the same" : "new"));
-        if (drawn is { } was && state.FrontScreen is { } now && updates == 1)
-        {
-            Say("  against what was drawn: same screen " + (was.Id == now.Id) + ", content " + ReferenceEquals(was.Content, now.Content) + ", states " + ReferenceEquals(was.States, now.States) + ", overlays " + ReferenceEquals(was.Overlays, now.Overlays) + ", regions " + ReferenceEquals(was.Regions, now.Regions) + ", lists " + ReferenceEquals(was.Lists, now.Lists) + ", loading " + (was.Loading == now.Loading) + ", refreshing " + (was.Refreshing == now.Refreshing) + ", failure " + Equals(was.Failure, now.Failure) + ", width " + Equals(drawnWidth, Private(window, "width")));
-        }
-
-        lastSeen = state.FrontScreen;
-        lastPage = page;
-    }
-
     // ---- what is on the screen -------------------------------------------------------------------------
 
     private IEnumerable<DependencyObject> Everything() => Below(window.Surface);
@@ -472,10 +378,9 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
 
     private async Task ReadyAsync()
     {
-        for (int round = 0; round < 60; round++)
+        for (int round = 0; round < 120; round++)
         {
-            ViewState state = await host.SettledAsync();
-            if (state.Nav.Stage == Stage.Ready)
+            if (host.State.Nav.Stage == Stage.Ready)
             {
                 return;
             }
@@ -486,13 +391,15 @@ internal sealed class Pressing(ShellHost host, ShellWindow window, string folder
         Say("the app did not get ready");
     }
 
+    // The core has nothing left to do and nothing is loading: three calm moments in a row. The state the window was told of is read, not
+    // asked for again: a whole new reading of the view is not told to the window, which would then draw its page again at the next change.
     private async Task SettleAsync()
     {
         int calm = 0;
-        for (int round = 0; round < 60 && calm < 2; round++)
+        for (int round = 0; round < 120 && calm < 3; round++)
         {
-            ViewState state = await host.SettledAsync();
             await Task.Delay(250);
+            ViewState state = host.State;
             bool busy = state.Nav.Stage != Stage.Ready || state.Screens.Values.Any(screen => screen.Loading || screen.Refreshing);
             calm = busy ? 0 : calm + 1;
         }
