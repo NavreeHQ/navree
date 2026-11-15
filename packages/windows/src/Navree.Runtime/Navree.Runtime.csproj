@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Navree.Runtime</RootNamespace>
+    <AssemblyName>Navree.Runtime</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Navree.Protocol\Navree.Protocol.csproj" />
+    <ProjectReference Include="..\Navree.Core\Navree.Core.csproj" />
+  </ItemGroup>
+
+</Project>

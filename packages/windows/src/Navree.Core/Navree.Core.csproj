@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Navree.Core</RootNamespace>
+    <AssemblyName>Navree.Core</AssemblyName>
+    <!-- The five functions are imported with LibraryImport, which writes the calls at build time. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- The core's library for the app's processor, when the build has made it (see ../../README.md).
+       It goes next to every program that uses this project, and the import finds it there. -->
+  <PropertyGroup>
+    <NavreeCoreLibrary Condition="'$(NavreeCoreLibrary)' == ''">$(MSBuildThisFileDirectory)..\..\native\win-x64\navree_native_core.dll</NavreeCoreLibrary>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(NavreeCoreLibrary)')">
+    <None Include="$(NavreeCoreLibrary)" Link="navree_native_core.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+</Project>

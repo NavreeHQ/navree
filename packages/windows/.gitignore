@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+*.user
+*.binlog
+TestResults/
+
+# The core's library, put here by the build before the solution is built.
+/native/
