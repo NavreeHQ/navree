@@ -129,9 +129,11 @@ path (`address.city`, `tags.1`) to its messages. Malformed JSON is
 - `navree::validation::confirmed`:
   `#[validate(length(min = 8), custom(confirmed(&self.password_confirmation)))]`
   with `#[validate(skip)] pub password_confirmation: String`.
-- serde errors come first and one at a time (a missing required field:
-  `title should not be empty`). To report every missing field at once, make
-  the fields `Option` with `required`, as `CreateDeal` above.
+- serde errors are reported together, with the rules of the fields that did
+  deserialize (a missing required field: `title should not be empty`): up to
+  16 of them, and only the first for input of 16 KiB or more. For a custom
+  message on a missing field, make it `Option` with `required`, as
+  `CreateDeal` above.
 - `#[serde(deny_unknown_fields)]` turns unknown keys into
   `property x should not exist`.
 

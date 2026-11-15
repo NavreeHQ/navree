@@ -130,7 +130,7 @@ The [error response format](#error-responses) section below explains each member
 
 `T` must implement `serde::de::DeserializeOwned` and `Validate`. Each extractor works in two steps:
 
-1. **Deserialize.** serde turns the input into `T`. A missing field, a wrong type or an unknown enum value fails here, as a field error, and every one of them is reported, together with the rules of the fields that did deserialize (input under 16 KiB; longer input reports its first).
+1. **Deserialize.** serde turns the input into `T`. A missing field, a wrong type or an unknown enum value fails here, as a field error, and every one of them is reported, together with the rules of the fields that did deserialize (input under 16 KiB, up to 16 such values; longer input reports its first).
 2. **Validate.** Every rule of `T` runs, and every failure is reported at once.
 
 Some failures are not validation errors and keep their own status: a JSON extractor answers 415 when the `Content-Type` header is not JSON, and a body larger than the route's body limit (`http.body_limit_bytes` unless the route sets its own) is a 413. See [errors](/docs/basics/errors/) for those.
@@ -250,7 +250,7 @@ pub enum Plan {
 
 ### Required fields
 
-Deserialization errors are reported together, and with the validation rules of the other fields: a `CreateContact` body with only `first_name` and `email` gets one error for each missing field. Input of 16 KiB or more reports its first deserialization error only.
+Deserialization errors are reported together, and with the validation rules of the other fields: a `CreateContact` body with only `first_name` and `email` gets one error for each missing field, up to 16. Input of 16 KiB or more reports its first deserialization error only.
 
 When you want a custom message for a missing field, make the field an `Option` and use the `required` rule. The CRM's deal DTO does this (`not_blank` is one of its own [custom rules](#custom-rules), which rejects a whitespace-only title):
 
