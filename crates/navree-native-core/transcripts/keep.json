@@ -1,5 +1,5 @@
 {
-  "about": "What the device keeps between launches. A page is written to the client's store only when its answer says it may be kept (`x-navree-keep: 1`, which the server sends when the page's `Cache-Control` does not say `no-store`); an answer that no longer says so removes what was kept for its address. At the next launch the kept shell is drawn at once, but a kept page waits until this launch's shell has answered over the network and named the same person: another person or nobody empties everything kept, and a shell that can't be reached means no kept page is drawn at all.",
+  "about": "What the device keeps between launches. A page is written to the client's store only when its answer says it may be kept (`x-navree-keep: 1`, which the server sends when the page's `Cache-Control` does not say `no-store`); an answer that no longer says so removes what was kept for its address. At the next launch the kept shell is drawn at once, but a kept page waits until this launch's shell has answered over the network and named the same person: another person or nobody empties everything kept, and a shell that can't be reached means no kept page is drawn at all, and the kept shell is replaced by the blank one.",
   "config": {"cache":{"persist":true}},
   "steps": [
     {
@@ -394,15 +394,20 @@
       }
     },
     {
-      "note": "The shell can't be reached. The kept shell stays drawn; no kept page is read.",
+      "note": "The shell can't be reached. The kept shell is replaced by the blank one, which has one destination, the app's first page; the Orders tab and its page on its way are gone with the kept shell's destinations, and no kept page is read.",
       "send": {"t":"response","request":1,"error":"offline"},
       "expect": {
-        "changed": [],
-        "effects": []
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": [
+          {"t":"cancel","request":3}
+        ]
       }
     },
     {
-      "note": "Even a kept page the client hands over unasked is not drawn.",
+      "note": "Even a kept page the client hands over unasked is not drawn: nobody asked for it, and the screen it was for is gone.",
       "send": {"t":"cache","key":"page:0193a4b2-0000-7000-8000-00000000ra01:https://shop.example/orders"},
       "body": "made/kept-orders.json",
       "expect": {
@@ -410,22 +415,23 @@
         "effects": []
       },
       "check": [
-        {"at":"/screens/2/content/t","is":"blank"}
+        {"at":"/screens/2","is":null},
+        {"at":"/screens/1/content/t","is":"blank"}
       ]
     },
     {
-      "note": "The page can't be reached either: the screen shows what a screen that could not load shows.",
-      "send": {"t":"response","request":3,"error":"offline"},
+      "note": "The first page can't be reached either: the screen shows what a screen that could not load shows.",
+      "send": {"t":"response","request":2,"error":"offline"},
       "expect": {
         "changed": [
-          {"t":"screen","id":2}
+          {"t":"screen","id":1}
         ],
         "effects": []
       },
       "check": [
-        {"at":"/screens/2/content/t","is":"blank"},
-        {"at":"/screens/2/failure","is":"offline"},
-        {"at":"/screens/2/loading","is":false}
+        {"at":"/screens/1/content/t","is":"blank"},
+        {"at":"/screens/1/failure","is":"offline"},
+        {"at":"/screens/1/loading","is":false}
       ]
     },
     {

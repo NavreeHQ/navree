@@ -674,6 +674,7 @@ const REQUIRED: &[&str] = &[
     "outside-taps",
     "origin-places",
     "keep-restore",
+    "keep-shell",
 ];
 
 #[test]

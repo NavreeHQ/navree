@@ -46,19 +46,6 @@ const MOST_REDIRECTS: u8 = 5;
 /// How long the answer to a form or a button may take.
 pub(crate) const SEND_LIMIT: u32 = 60_000;
 
-/// Destinations under a kept shell's, without the counts beside them: a
-/// count is the person's.
-fn without_badges(items: Vec<NavItem>) -> Vec<NavItem> {
-    items
-        .into_iter()
-        .map(|mut item| {
-            item.badge = None;
-            item.items = without_badges(item.items);
-            item
-        })
-        .collect()
-}
-
 /// What stands behind an address opened outside the app.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum By {
@@ -812,12 +799,32 @@ impl Core {
     }
 
     fn shell_failed(&mut self, failure: Failure) {
+        // This launch's shell did not come: the one kept on the device gives way.
+        if self.inner.shell_kept {
+            return self.no_shell();
+        }
         // A shell that is already drawn stays; only a first load can fail the app.
         if !self.inner.has_shell {
             self.view.stage = Stage::Failed;
             self.view.failure = Some(failure);
             self.touch(Change::Nav);
         }
+    }
+
+    /// What the shell asked for gave no shell: a server with no shell still
+    /// has pages, one destination, its first page. The shell kept on the
+    /// device gives way to the same and stays so until a shell answers: it
+    /// was the last launch's, and nothing says this launch's server still
+    /// holds it. A shell already drawn from an answer stays.
+    fn no_shell(&mut self) {
+        if self.inner.shell_kept {
+            // The person the kept shell named was the last launch's word, so
+            // its going is no sign-out, and nothing kept goes with it.
+            self.inner.user = None;
+        } else if self.inner.has_shell {
+            return;
+        }
+        self.install(Shell::new("", ""), false);
     }
 
     fn shell_answered(&mut self, response: Response) {
@@ -849,11 +856,7 @@ impl Core {
             .trim()
             .to_ascii_lowercase();
         if !(200..300).contains(&response.status) || media != CONTENT_TYPE {
-            // A server with no shell still has pages: one destination, its first page.
-            if !self.inner.has_shell {
-                self.install(Shell::new("", ""), false);
-            }
-            return;
+            return self.no_shell();
         }
         let header = decode::shell_stamp_of(&response);
         // Read where there is room for it, like any other answer.
@@ -898,9 +901,7 @@ impl Core {
             Ok(_) => self.shell_failed(Failure::Protocol),
             Err(error) => {
                 self.report("decode", format!("shell: {error}"));
-                if !self.inner.has_shell {
-                    self.install(Shell::new("", ""), false);
-                }
+                self.no_shell();
             }
         }
     }
@@ -945,8 +946,10 @@ impl Core {
 
     /// Draws the app from a shell. `from_device`: the shell is the one kept on the
     /// device, drawn before this launch's has answered. It draws the app's
-    /// bars and nothing of the person: not their name, their menu or a
-    /// badge, and a snapshot waits for this launch's shell.
+    /// name and its top-level destinations, each by its label and icon, and
+    /// nothing else of what the shell says: not the context line, the group
+    /// labels, the items below the top level, a count, the person or their
+    /// menu. A snapshot waits for this launch's shell.
     fn install(&mut self, shell: Shell, from_device: bool) {
         // Who it names: by the id its answer said, else by name and email.
         let naming = self.inner.naming.take();
@@ -1027,10 +1030,10 @@ impl Core {
                 .iter()
                 .position(|destination| destination.href == item.href);
             let stack = kept.map(|at| old.remove(at).stack).unwrap_or_default();
-            let (badge, items) = if from_device {
-                (None, without_badges(item.items))
+            let (group, badge, items) = if from_device {
+                (None, None, Vec::new())
             } else {
-                (item.badge, item.items)
+                (group, item.badge, item.items)
             };
             self.view.destinations.push(Destination {
                 label: item.label,
@@ -1054,7 +1057,7 @@ impl Core {
             .unwrap_or(0);
         self.view.app = Some(App {
             name: shell.name,
-            context: shell.context,
+            context: if from_device { None } else { shell.context },
             home: shell.home,
             theme: shell.theme,
             user: if from_device { None } else { shell.user },
@@ -2899,6 +2902,116 @@ mod tests {
         // A kept shell that large is not drawn either.
         assert!(new().shell_from_cache(shell));
         assert!(!new().shell_from_cache(&padded));
+    }
+
+    /// The shell kept on the device draws the app's name and its top-level
+    /// destinations only, and gives way to the blank shell whenever this
+    /// launch's shell request does not give a shell.
+    #[test]
+    fn the_kept_shell_draws_the_app_and_gives_way_when_this_launchs_shell_is_not_one() {
+        let kept = include_str!("../transcripts/fixtures/made/kept-boot-workspace.json");
+        let started = || {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Start);
+            core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(kept.to_owned()),
+            });
+            core
+        };
+        let core = started();
+        let view = core.view();
+        let app = view.app.as_ref().expect("the kept shell is drawn");
+        assert_eq!(app.name, "Charkha Supply Co.");
+        assert_eq!((app.context.as_deref(), app.user.is_some()), (None, false));
+        let labels: Vec<&str> = view
+            .destinations
+            .iter()
+            .map(|destination| destination.label.as_str())
+            .collect();
+        assert_eq!(labels, ["Dashboard", "Orders"]);
+        for destination in &view.destinations {
+            assert!(destination.icon.is_some(), "{destination:?}");
+            assert!(
+                destination.badge.is_none()
+                    && destination.group.is_none()
+                    && destination.items.is_empty(),
+                "{destination:?}"
+            );
+        }
+
+        let shell_answer = |status: u16, content_type: &str, body: &str| Response {
+            request: 1,
+            status,
+            content_type: Some(content_type.to_owned()),
+            body: body.to_owned(),
+            ..Response::default()
+        };
+        let answers = [
+            ("a 404", shell_answer(404, "text/html", "<p>")),
+            ("a 503", shell_answer(503, "text/html", "<p>")),
+            (
+                "an answer of another kind",
+                shell_answer(200, "text/html", "<p>"),
+            ),
+            (
+                "an answer that does not read",
+                shell_answer(200, CONTENT_TYPE, r#"{"navree":1,"build":"#),
+            ),
+            (
+                "a shell of another major",
+                shell_answer(
+                    200,
+                    CONTENT_TYPE,
+                    r#"{"navree":9,"build":"b","name":"x","home":"/"}"#,
+                ),
+            ),
+            (
+                "no network",
+                Response {
+                    request: 1,
+                    error: Some(TransportError::Offline),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a timeout",
+                Response {
+                    request: 1,
+                    error: Some(TransportError::Timeout),
+                    ..Response::default()
+                },
+            ),
+        ];
+        for (what, answer) in answers {
+            let mut core = started();
+            core.send(Event::Response(answer));
+            let view = core.view();
+            let app = view
+                .app
+                .as_ref()
+                .unwrap_or_else(|| panic!("{what}: no app"));
+            assert_eq!(
+                (
+                    app.name.as_str(),
+                    app.context.as_deref(),
+                    app.user.is_some()
+                ),
+                ("", None, false),
+                "{what}"
+            );
+            assert_eq!(view.destinations.len(), 1, "{what}");
+            let blank = &view.destinations[0];
+            assert!(
+                blank.label.is_empty() && blank.badge.is_none() && blank.items.is_empty(),
+                "{what}: {blank:?}"
+            );
+        }
     }
 
     /// Before the list is read, any read answered without the keep header
