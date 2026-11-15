@@ -1650,7 +1650,10 @@ fn no_link_or_form_of_such_a_table_names_cols_or_density() {
         query: "filter[hot]=true".to_owned(),
         is_default: false,
     }];
-    let page = TablePage::new(rows, 500);
+    // The page of rows says which page it is: `TablePage::new` is the first, and the table draws the
+    // page it was given, so the second is said here, as `TableQuery::load` says it.
+    let mut page = TablePage::new(rows, 500);
+    page.page = 2;
     let html = render(
         &DataTable::new("deals", &query, &page)
             .caption("Deals")
@@ -1667,17 +1670,23 @@ fn no_link_or_form_of_such_a_table_names_cols_or_density() {
     assert!(!html.contains("ensity"), "{html}");
     let links = hrefs(&html);
     for want in [
-        // The first page, the next page and the export keep what the address held that the table does.
+        // The page before and the page after the second, and the export, keep what the address
+        // held that the table keeps.
         "/deals?filter%5Bhot%5D=true&search=b&per_page=50",
         "/deals?filter%5Bhot%5D=true&search=b&page=3&per_page=50",
         "/deals/export?filter%5Bhot%5D=true&search=b&per_page=50",
+        // A row's details open on the page it is on.
+        "/deals?filter%5Bhot%5D=true&search=b&page=2&per_page=50&open=1",
+        // The filter bar's own state is `fb`: it names the columns that have a filter (the hidden
+        // one too), not the columns shown, so it is not the picker's and stays.
+        "/deals?filter%5Bhot%5D=true&search=b&page=2&per_page=50&fb=stage%2Ctitle%2Camount%2Cclosed%2Chot%2Ccompany",
     ] {
         assert!(links.contains(&want.to_owned()), "{want} in {links:?}");
     }
     assert!(
         links
             .iter()
-            .all(|href| !href.contains("cols") && !href.contains("density")),
+            .all(|href| !href.contains("cols=") && !href.contains("density=")),
         "{links:?}"
     );
     // The state the bulk form and the views' forms post back is the same.
