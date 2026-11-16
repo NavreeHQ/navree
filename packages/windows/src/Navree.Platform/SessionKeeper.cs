@@ -113,7 +113,8 @@ public sealed class SessionKeeper : IDisposable
             return true;
         }
 
-        // What an earlier start had to set aside is deleted now, if whatever held it has let go.
+        // What an earlier start had to set aside is deleted now, if whatever held it has let go. When the list that names it is there and
+        // cannot be trusted, everything kept is set aside and deleted the same way: the start is clean, and nothing is taken from it below.
         SetAsideAtStart = kept.DeleteSetAside();
         if (kept.Read(CookiesKey) is string saved)
         {

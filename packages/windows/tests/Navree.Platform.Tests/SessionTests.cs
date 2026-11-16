@@ -279,6 +279,103 @@ public sealed class SessionTests
     }
 
     [TestMethod]
+    [DataRow("held by another program")]
+    [DataRow("cut short")]
+    [DataRow("a folder in its place")]
+    [DataRow("names with no count after them")]
+    public void When_the_list_of_the_files_set_aside_cannot_be_trusted_nothing_that_was_kept_is_read_and_the_start_is_clean(string damage)
+    {
+        string folder = Folder();
+        try
+        {
+            SignedInBefore(folder);
+            (SessionKeeper keeper, _, _, _) = Start(folder);
+            using (keeper)
+            {
+                // A sign-out is cut short at its first step: the mark is on disk, and so is everything of the person.
+                _ = Assert.ThrowsExactly<InvalidOperationException>(() =>
+                    keeper.EndAsync(() => throw new InvalidOperationException("the process ended here"), null, [], []).GetAwaiter().GetResult());
+            }
+
+            // Another program holds the kept files, so the start that finishes the sign-out sets them aside and names them in the list.
+            List<FileStream> held = [.. Directory.GetFiles(folder, "*.kept").Select(file => new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))];
+            FileStream? heldList = null;
+            try
+            {
+                (SessionKeeper finishing, _, _, _) = Start(folder);
+                using (finishing)
+                {
+                    Assert.AreEqual(2, finishing.SetAsideAtStart);
+                }
+
+                string list = Path.Combine(folder, "set-aside.list");
+                string[] lines = File.ReadAllLines(list);
+                Assert.AreEqual(3, lines.Length, "the list names the two files and says how many it names");
+                Assert.AreEqual("end 2", lines[2]);
+
+                // Then the list is lost in one of the ways a file is lost.
+                switch (damage)
+                {
+                    case "held by another program":
+                        heldList = new FileStream(list, FileMode.Open, FileAccess.Read, FileShare.None);
+                        break;
+                    case "cut short":
+                        File.WriteAllText(list, lines[0] + "\n");
+                        break;
+                    case "a folder in its place":
+                        File.Delete(list);
+                        _ = Directory.CreateDirectory(list);
+                        break;
+                    default:
+                        File.WriteAllLines(list, lines[..2]);
+                        break;
+                }
+
+                // The next start reads nothing that was kept: the cookie of the person who signed out is never taken in again.
+                (SessionKeeper next, CookieStore cookies, KeptStore kept, bool finished) = Start(folder);
+                using (next)
+                {
+                    Expect.That(!finished, damage + ": a finished sign-out is finished again");
+                    Expect.That(kept.SetAsideListWasLost, damage + ": a list that cannot be trusted was trusted");
+                    Assert.IsNull(cookies.Header("https://shop.example/", DateTimeOffset.UtcNow), damage + ": the start took the cookie of the person who signed out");
+                    Assert.IsNull(kept.Read(SessionKeeper.CookiesKey), damage + ": the cookie file of the person who signed out is read again");
+                    Assert.IsNull(kept.Read("page:https://shop.example/orders"), damage + ": a page of the person who signed out is read again");
+                }
+            }
+            finally
+            {
+                heldList?.Dispose();
+                foreach (FileStream file in held)
+                {
+                    file.Dispose();
+                }
+            }
+
+            // Everything let go: the start after that deletes what was set aside, and the app keeps things again.
+            (SessionKeeper last, CookieStore lastCookies, KeptStore lastKept, _) = Start(folder);
+            using (last)
+            {
+                Assert.IsNull(lastCookies.Header("https://shop.example/", DateTimeOffset.UtcNow), damage + ": a later start took the cookie of the person who signed out");
+                Assert.AreEqual(0, Directory.GetFiles(folder, "*.kept").Length, damage + ": the files of the person who signed out are still on disk after they were let go");
+                last.Write("table-layout:orders", "{\"widths\":[120]}");
+                last.DrainAsync().Wait(Short);
+                Assert.AreEqual("{\"widths\":[120]}", lastKept.Read("table-layout:orders"), damage + ": nothing can be kept any more");
+            }
+
+            (SessionKeeper after, _, KeptStore afterKept, _) = Start(folder);
+            using (after)
+            {
+                Expect.That(!afterKept.SetAsideListWasLost, damage + ": every start goes on beginning with nothing");
+                Assert.AreEqual("{\"widths\":[120]}", afterKept.Read("table-layout:orders"), damage + ": what was kept after the clean start is not read at the next");
+            }
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
     public void Clearing_deletes_every_file_it_can_and_says_when_one_is_still_there()
     {
         string folder = Folder();

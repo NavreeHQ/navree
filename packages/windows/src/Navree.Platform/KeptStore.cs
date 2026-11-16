@@ -15,7 +15,9 @@ namespace Navree.Platform;
 /// Windows user can. It is written in the app's own folder under the local application data (not the roaming one, which
 /// is copied to other computers), and kept out of content indexing. A file that cannot be opened here is not an error: it is nothing.
 /// A file of a session that ended which the system would not let go (another program holds it) is set aside: it is named in a list beside
-/// it, never read again, and deleted as soon as it can be.
+/// it, never read again, and deleted as soon as it can be. The list is written whole or not at all, and says how many names it holds; a list
+/// that is there and cannot be read, or does not hold what it says it holds, names nothing that can be trusted, so everything in the folder
+/// is then set aside and the start is clean: a file of a person who signed out is never read again for want of the list that named it.
 /// </summary>
 public sealed class KeptStore
 {
@@ -26,7 +28,9 @@ public sealed class KeptStore
     private readonly string folder;
     private readonly byte[] entropy;
     private readonly object gate = new();
+    private const string AsideEnd = "end ";
     private HashSet<string>? aside;
+    private bool listLost;
 
     /// <summary>Opens the store in a folder.</summary>
     /// <param name="folder">The app's own folder for what it keeps.</param>
@@ -263,7 +267,7 @@ public sealed class KeptStore
         foreach (string file in Directory.GetFiles(folder))
         {
             string name = Path.GetFileName(file);
-            if (string.Equals(name, WipeMarkName, StringComparison.OrdinalIgnoreCase) || string.Equals(name, AsideName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(name, WipeMarkName, StringComparison.OrdinalIgnoreCase) || name.StartsWith(AsideName, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -281,7 +285,24 @@ public sealed class KeptStore
         return left;
     }
 
-    // The names of the files set aside, read once from the list beside them. A list that cannot be read names nothing.
+    /// <summary>
+    /// Whether the list of what is set aside was there and could not be trusted (it could not be read, or was cut short): everything that
+    /// was in the folder was then set aside, and nothing of it is read.
+    /// </summary>
+    public bool SetAsideListWasLost
+    {
+        get
+        {
+            lock (gate)
+            {
+                _ = Aside();
+                return listLost;
+            }
+        }
+    }
+
+    // The names of the files set aside, read once from the list beside them. A list that is there and cannot be read, or that does not hold
+    // the names it says it holds (a write cut short, a file put in its place), sets aside every file in the folder: nothing kept is read.
     private HashSet<string> Aside()
     {
         if (aside is not null)
@@ -290,29 +311,55 @@ public sealed class KeptStore
         }
 
         aside = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string list = Path.Combine(folder, AsideName);
+        bool whole = false;
         try
         {
-            string list = Path.Combine(folder, AsideName);
-            if (File.Exists(list))
+            if (!File.Exists(list) && !Directory.Exists(list))
             {
-                foreach (string line in File.ReadAllLines(list))
-                {
-                    if (line.Length > 0 && line == Path.GetFileName(line))
-                    {
-                        _ = aside.Add(line);
-                    }
-                }
+                return aside;
+            }
+
+            string[] lines = File.ReadAllLines(list);
+            int names = lines.Length - 1;
+            whole = names >= 0
+                && lines[names] == AsideEnd + names.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                && lines.Take(names).All(line => line.Length > 0 && line == Path.GetFileName(line));
+            if (whole)
+            {
+                aside.UnionWith(lines.Take(names));
             }
         }
         catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
         {
-            // Nothing named.
+            whole = false;
+        }
+
+        if (!whole)
+        {
+            listLost = true;
+            try
+            {
+                foreach (string file in Directory.GetFiles(folder))
+                {
+                    string name = Path.GetFileName(file);
+                    if (!string.Equals(name, WipeMarkName, StringComparison.OrdinalIgnoreCase) && !name.StartsWith(AsideName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _ = aside.Add(name);
+                    }
+                }
+            }
+            catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+            {
+                // The folder cannot be listed: nothing in it can be read either.
+            }
         }
 
         return aside;
     }
 
-    // Writes the list of what is set aside, through to the disk; no list when nothing is.
+    // Writes the list of what is set aside: whole or not at all (written beside itself, through to the disk, and then put in its place), with
+    // a last line that says how many names it holds. No list when nothing is set aside.
     private void SaveAside()
     {
         string list = Path.Combine(folder, AsideName);
@@ -322,14 +369,25 @@ public sealed class KeptStore
             {
                 File.Delete(list);
             }
+            else if (Directory.Exists(list))
+            {
+                // Something that is no list stands where the list goes: it is taken away, or every start would begin with nothing.
+                Directory.Delete(list, recursive: true);
+            }
 
             return;
         }
 
         Directory.CreateDirectory(folder);
-        using FileStream file = new(list, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough);
-        file.Write(Encoding.UTF8.GetBytes(string.Join("\n", aside.Order(StringComparer.Ordinal)) + "\n"));
-        file.Flush(flushToDisk: true);
+        string beside = list + ".part";
+        using (FileStream file = new(beside, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+        {
+            string[] names = [.. aside.Order(StringComparer.Ordinal)];
+            file.Write(Encoding.UTF8.GetBytes(string.Join("\n", names) + "\n" + AsideEnd + names.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n"));
+            file.Flush(flushToDisk: true);
+        }
+
+        File.Move(beside, list, overwrite: true);
     }
 
     /// <summary>Whether a sign-out was started and not finished: the mark <see cref="MarkWipe"/> leaves is there.</summary>

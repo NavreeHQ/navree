@@ -72,6 +72,12 @@ public sealed partial class ShellHost : IDisposable
             _ = webProfiles.Open(lastSessionEnded: false);
         }
 
+        // The list of the files set aside was there and could not be trusted: nothing that was kept was read, and the start is clean.
+        if (kept.SetAsideListWasLost)
+        {
+            Note("the list of kept files that were set aside could not be read: everything that was kept was set aside and nothing of it was read");
+        }
+
         // A file of a session that ended which another program holds does not stop the start: it is set aside and never read.
         if (session.SetAsideAtStart > 0)
         {
