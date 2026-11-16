@@ -17,6 +17,7 @@ Pick by what the reader has to see:
 | The same parts for several items, side by side | mini columns (`MiniColumns`) |
 | A category or a band for each slot of time | a colour strip (`ColorStrip`) |
 | One reading between two ends (a BMI, a resting heart rate) | a range scale (`RangeScale`) |
+| A reading or a category for each row at each column (days by hours, people by weeks) | the heat map (`Heatmap`) |
 | How consistent a habit is over months | the calendar heat map (`CalendarHeatmap`) |
 | Every measure against every other | the matrix heat map (`MatrixHeatmap`) |
 | The pairs that move together, ranked | the relation list (`RelationList`) |
@@ -168,7 +169,8 @@ same `part`s and drawn to 100%: sleep cycles, a week of workouts by kind.
 
 A colour strip (`ColorStrip`) is a row of equal cells. Each cell is either a
 category (`category` and `cells`) or a reading coloured by its band
-(`colors` and `readings`).
+(`colors` and `readings`). For several rows over the same slots, use one
+`Heatmap`: it has one legend for all of them.
 
 A range scale (`RangeScale`) puts one value on a scale between two ends,
 with a marker, words at the ends (`ends`) and a track that can be a
@@ -276,6 +278,19 @@ legend, hollow, so the reader sees every zone.
 
 ## Grids: heat maps, the relation list and the scatter chart
 
+The heat map (`Heatmap`) draws rows by columns: `columns(..)` names the
+columns, `row(name, values)` adds a row of readings and
+`category_row(name, names)` a row of categories (`category(name, ink)`
+declares one; an empty name is no data). A reading is shaded in five
+steps of `ink(..)` between the ends of `range(low, high)`, or takes the
+colour of its band with `colors(ColorScale)`; a band in a soft ink
+(`Ink::slot(2).soft()`) is the light step of its colour, so five bands can
+diverge from one colour through `Ink::muted().soft()` to another. There is
+one legend for the whole grid. `row_summary(RowSummary::Average)` or
+`Total` writes a figure at each row's end, `show_values()` writes the
+readings in the cells, `label_every(n)` thins the column names. At most 50
+rows and 144 columns. The table has the same rows and columns.
+
 The calendar heat map (`CalendarHeatmap`) draws a day per cell, in weeks,
 shaded in steps: `HeatSteps::Even` (the default), `Quartiles`, or
 `HeatSteps::at(a, b, c)` at values you choose. A day given as `None` is
@@ -296,10 +311,59 @@ and `Reference::identity()` draws the diagonal.
 ```rust
 use navree::datetime::Date;
 use navree::ui::charts::{
-    Axis, CalendarHeatmap, Domain, Gridlines, HeatSteps, Ink, MatrixHeatmap, PointSeries,
-    Reference, Relation, RelationList, Scatter,
+    Axis, CalendarHeatmap, ColorScale, Domain, Gridlines, HeatSteps, Heatmap, Ink, MatrixHeatmap,
+    NumberFormat, PointSeries, Reference, Relation, RelationList, RowSummary, Scatter,
 };
 use navree::ui::Tone;
+
+/// Steps in each hour of each day of a week: one row a day, 24 columns, the day's total at its end.
+pub fn steps_by_hour(week: Vec<(String, Vec<Option<u32>>)>) -> Heatmap {
+    let hours: Vec<String> = (0..24).map(|hour| format!("{hour}:00")).collect();
+    week.into_iter().fold(
+        Heatmap::new("Steps by hour")
+            .description("Harleen Kaur, last week")
+            .locale("en-IN")
+            .row_name("Day")
+            .columns(hours)
+            .range(0, 2_500)
+            .ink(Ink::slot(3))
+            .value_name("Steps")
+            .row_summary(RowSummary::Total),
+        |chart, (day, steps)| chart.row(day, steps),
+    )
+}
+
+/// Each person's weekly resting heart rate as a share of their usual, in five diverging bands.
+pub fn heart_against_usual() -> Heatmap {
+    Heatmap::new("Resting heart rate against usual")
+        .columns(["Week 1", "Week 2", "Week 3"])
+        .row("Harleen Kaur", [0.97, 1.01, 1.04])
+        .row("Gurpreet Singh", [Some(1.02), None, Some(1.13)])
+        .colors(
+            ColorScale::new(Ink::slot(1))
+                .label("Well under")
+                .from(0.94, Ink::slot(1).soft())
+                .label("Under")
+                .from(0.98, Ink::muted().soft())
+                .label("As usual")
+                .from(1.02, Ink::slot(2).soft())
+                .label("Over")
+                .from(1.08, Ink::slot(2))
+                .label("Well over"),
+        )
+        .format(NumberFormat::percent().max_decimals(0))
+        .show_values()
+}
+
+/// A week of workouts, a category in each cell.
+pub fn workouts() -> Heatmap {
+    Heatmap::new("Workouts by day")
+        .columns(["Mon", "Tue", "Wed", "Thu", "Fri"])
+        .category("Run", Ink::slot(1))
+        .category("Strength", Ink::slot(2))
+        .category("Rest", Ink::tone(Tone::named("slate")))
+        .category_row("Arjun Mehta", ["Run", "Rest", "Strength", "", "Run"])
+}
 
 /// A day's steps for the last 90 days; `None` where the phone recorded nothing.
 pub fn daily_steps(steps: &[Option<f64>]) -> CalendarHeatmap {

@@ -1,8 +1,9 @@
-//! Calendar and matrix heat maps, and the scatter plot.
+//! Heat maps of rows by columns, calendar and matrix heat maps, and the scatter plot.
 //!
-//! The data is made up and the people are made up: a training calendar, a matrix of
-//! measures from a wearable, and the gaps between heartbeats. The numbers that are rupees or
-//! counts are written in lakh grouping by the charts themselves.
+//! The data is made up and the people are made up: steps by hour, resting heart rates against
+//! each person's usual, a week of workouts, a training calendar, a matrix of measures from a
+//! wearable, and the gaps between heartbeats. The numbers that are rupees or counts are written
+//! in lakh grouping by the charts themselves.
 
 use navree::datetime::{Date, Weekday};
 use navree::ui::charts::*;
@@ -14,6 +15,44 @@ const SOURCE: &str = include_str!("grids.rs");
 
 pub fn all() -> Vec<Example> {
     vec![
+        // Heat map
+        single!("heatmap", "thumb", "A heat map", heatmap_thumb)
+            .start()
+            .width(420)
+            .height(200),
+        single!(
+            "heatmap",
+            "default",
+            "A week of steps by hour, with each day's total",
+            heatmap_default
+        )
+        .start()
+        .height(400),
+        single!(
+            "heatmap",
+            "bands",
+            "A diverging scale in five bands, with the values",
+            heatmap_bands
+        )
+        .start()
+        .height(300),
+        single!(
+            "heatmap",
+            "categories",
+            "A category in each cell",
+            heatmap_categories
+        )
+        .start()
+        .height(240),
+        single!(
+            "heatmap",
+            "states",
+            "Loading, failed and empty",
+            heatmap_states
+        )
+        .start()
+        .width(820)
+        .height(300),
         // Calendar heat map
         single!(
             "calendar-heatmap",
@@ -203,6 +242,165 @@ fn walking(days: i64, seed: u64) -> Vec<(Date, Option<f64>)> {
             (date, (!missed).then_some((steps / 50.0).round() * 50.0))
         })
         .collect()
+}
+
+/// The hours of a day, from midnight: `12 am`, `1 am` ... `11 pm`.
+fn hours() -> Vec<String> {
+    (0..24)
+        .map(|hour| match hour {
+            0 => "12 am".to_owned(),
+            1..=11 => format!("{hour} am"),
+            12 => "12 pm".to_owned(),
+            _ => format!("{} pm", hour - 12),
+        })
+        .collect()
+}
+
+/// A week of steps by hour, Monday first: quiet at night, a walk to work on weekdays, a long
+/// walk on Sunday morning, and an hour now and then the watch was off.
+fn steps_by_hour(seed: u64) -> Vec<(&'static str, Vec<Option<f64>>)> {
+    let mut noise = spread(seed);
+    ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        .into_iter()
+        .enumerate()
+        .map(|(day, name)| {
+            let weekend = day >= 5;
+            let values = (0..24)
+                .map(|hour| {
+                    let usual = match hour {
+                        0..=5 => 0.0,
+                        8 | 18 if !weekend => 1_900.0,
+                        9..=11 if day == 6 => 2_600.0,
+                        7..=21 => 650.0,
+                        _ => 120.0,
+                    };
+                    let (wobble, off) = (noise.next().unwrap_or(0.5), noise.next().unwrap_or(0.5));
+                    let steps = (usual * (0.5 + wobble) / 10.0).round() * 10.0;
+                    (off > 0.03).then_some(steps)
+                })
+                .collect();
+            (name, values)
+        })
+        .collect()
+}
+
+fn heatmap_thumb() -> Heatmap {
+    steps_by_hour(4).into_iter().fold(
+        Heatmap::new("Steps by hour")
+            .id("heatmap-thumb")
+            .hide_title()
+            .table(TableMode::ScreenReader)
+            .columns(hours())
+            .ink(Ink::slot(3)),
+        |chart, (day, values)| chart.row(day, values),
+    )
+}
+
+fn heatmap_default() -> Heatmap {
+    steps_by_hour(9).into_iter().fold(
+        Heatmap::new("Steps by hour")
+            .id("heatmap-default")
+            .description("Last week, Harleen Kaur")
+            .locale("en-IN")
+            .row_name("Day")
+            .columns(hours())
+            .range(0, 2_500)
+            .value_name("Steps")
+            .ink(Ink::slot(3))
+            .row_summary(RowSummary::Total),
+        |chart, (day, values)| chart.row(day, values),
+    )
+}
+
+fn heatmap_bands() -> Heatmap {
+    Heatmap::new("Resting heart rate against usual")
+        .id("heatmap-bands")
+        .description("Each week's average, as a share of the person's own usual")
+        .row_name("Person")
+        .columns(["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"])
+        .row("Harleen Kaur", [0.97, 1.01, 1.04, 0.99, 0.95, 0.94])
+        .row(
+            "Gurpreet Singh",
+            [
+                Some(1.02),
+                Some(1.09),
+                None,
+                Some(1.13),
+                Some(1.06),
+                Some(1.01),
+            ],
+        )
+        .row("Simran Kaur", [0.99, 0.98, 1.00, 1.03, 1.08, 1.12])
+        .row("Arjun Mehta", [1.05, 1.00, 0.96, 0.93, 0.91, 0.95])
+        .colors(
+            ColorScale::new(Ink::slot(1))
+                .label("Well under")
+                .from(0.94, Ink::slot(1).soft())
+                .label("Under")
+                .from(0.98, Ink::muted().soft())
+                .label("As usual")
+                .from(1.02, Ink::slot(2).soft())
+                .label("Over")
+                .from(1.08, Ink::slot(2))
+                .label("Well over"),
+        )
+        .format(NumberFormat::percent().max_decimals(0))
+        .value_name("Of usual")
+        .show_values()
+}
+
+fn heatmap_categories() -> Heatmap {
+    Heatmap::new("Workouts by day")
+        .id("heatmap-categories")
+        .description("Last week")
+        .row_name("Person")
+        .columns(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+        .category("Run", Ink::slot(1))
+        .category("Strength", Ink::slot(2))
+        .category("Yoga", Ink::slot(7))
+        .category("Rest", Ink::muted())
+        .category_row(
+            "Harleen Kaur",
+            ["Run", "Strength", "Rest", "Run", "Yoga", "", "Run"],
+        )
+        .category_row(
+            "Gurpreet Singh",
+            [
+                "Strength", "Rest", "Strength", "Rest", "Strength", "Run", "Rest",
+            ],
+        )
+        .category_row(
+            "Simran Kaur",
+            ["Yoga", "Yoga", "Run", "Yoga", "Rest", "Yoga", "Run"],
+        )
+}
+
+fn heatmap_states() -> Grid {
+    let state = |caption: &'static str, chart: Heatmap| {
+        Stack::gap(2).children((Text::muted(caption), chart))
+    };
+    Grid::cols(3).gap(4).children((
+        state(
+            "Loading",
+            Heatmap::new("Steps by hour")
+                .id("heatmap-loading")
+                .loading(),
+        ),
+        state(
+            "Failed",
+            Heatmap::new("Steps by hour")
+                .id("heatmap-failed")
+                .failed(None)
+                .retry("/activity"),
+        ),
+        state(
+            "Empty",
+            Heatmap::new("Steps by hour").id("heatmap-empty").empty(
+                "No steps yet",
+                Some("Hours appear here once your watch syncs.".to_owned()),
+            ),
+        ),
+    ))
 }
 
 fn calendar_heatmap_thumb() -> CalendarHeatmap {

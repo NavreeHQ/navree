@@ -187,6 +187,7 @@ pub const GROUPS: &[Group] = &[
             "color-strip",
             "range-scale",
             "trend",
+            "heatmap",
             "calendar-heatmap",
             "matrix-heatmap",
             "relation-list",
@@ -893,6 +894,14 @@ pub const COMPONENTS: &[Component] = &[
     component("trend", "Trend", &["Trend"], "thumb")
         .about("Which way something moved and by how much: an arrow, a signed change and a colour for what it means.")
         .parts("default"),
+    component(
+        "heatmap",
+        "Heat map",
+        &["Heatmap", "RowSummary", "GridLabels"],
+        "thumb",
+    )
+    .about("Rows by columns, a cell for each: a reading in five steps of one colour or in the bands of a scale, or a category, with one legend for the whole grid.")
+    .parts("default"),
     component(
         "calendar-heatmap",
         "Calendar heat map",

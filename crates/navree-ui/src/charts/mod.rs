@@ -1,7 +1,7 @@
 //! Charts drawn on the server as SVG: [`Chart`] (line, area and bar, vertical and
 //! horizontal, grouped and stacked), [`Donut`], [`Sparkline`] and [`Funnel`], the
-//! grids and points ([`CalendarHeatmap`], [`MatrixHeatmap`], [`RelationList`] and
-//! [`Scatter`]), and
+//! grids and points ([`Heatmap`], [`CalendarHeatmap`], [`MatrixHeatmap`], [`RelationList`]
+//! and [`Scatter`]), and
 //! [`Report`], which reads a date range from the URL, picks a grain and buckets a
 //! query by it.
 //!
@@ -73,8 +73,8 @@ pub use downsample::lttb;
 pub use format::{Compact, CompactStep, Grouping, NumberFormat, NumberLocale};
 pub use funnel::{Funnel, MAX_STAGES, Stage};
 pub use grids::{
-    CalendarHeatmap, GridLabels, HeatSteps, MAX_RELATIONS, MatrixHeatmap, PointSeries, Relation,
-    RelationList, Scatter,
+    CalendarHeatmap, GridLabels, HeatSteps, Heatmap, MAX_HEAT_COLUMNS, MAX_HEAT_ROWS,
+    MAX_RELATIONS, MatrixHeatmap, PointSeries, Relation, RelationList, RowSummary, Scatter,
 };
 pub use linear::{LinearLabels, MAX_PARTS};
 pub use marks::{ActiveDot, Curve, Dots, Place, Reference, TooltipStyle, Zone};

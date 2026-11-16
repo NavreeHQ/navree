@@ -1,4 +1,4 @@
-/* Grid charts: the calendar and matrix heat maps and the scatter plot, linked on a page that
+/* Grid charts: the heat maps (rows by columns, calendar, matrix) and the scatter plot, linked on a page that
    draws one, after the charts sheet (the frame, the legend, the tooltip and the table are
    there). A heat map is steps of one ink mixed into the surface: --c is the ink (data-color,
    data-tone), --surface the page, so a theme's tokens set both and light and dark have a
@@ -19,6 +19,9 @@
 [data-m="4"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 62%,var(--surface)),color-mix(in oklab,var(--c) 72%,var(--surface)))}
 [data-m="5"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 80%,var(--surface)),color-mix(in oklab,var(--c) 88%,var(--surface)))}
 [data-m="6"]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:var(--c)}
+/* A band of a soft ink is the light step of its colour; of a vivid ink, its deep end. */
+[data-mix=soft]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:light-dark(color-mix(in oklab,var(--c) 34%,var(--surface)),color-mix(in oklab,var(--c) 40%,var(--surface)))}
+[data-mix=vivid]:is([data-slot=heat-cell],[data-slot=heat-key]){--bg:var(--c-vivid,color-mix(in oklab,var(--c) 62%,var(--fg)))}
 [data-result=ns]:is([data-slot=heat-cell],[data-slot=heat-key]){background:color-mix(in oklab,var(--fg) 12%,var(--surface))}
 [data-result=none]:is([data-slot=heat-cell],[data-slot=heat-key]){background:none;outline:1px dotted var(--line-2);outline-offset:-1px}
 [data-result=self]{visibility:hidden}
@@ -29,10 +32,10 @@
 [data-slot=heat-key]{display:inline-block;width:12px;height:12px;flex:none;border-radius:2px;forced-color-adjust:none}
 [data-slot=heat-legend]{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0;padding:0;list-style:none;font-size:11px;color:var(--fg-3);justify-content:flex-end;& li{display:inline-flex;align-items:center;gap:.375rem}}
 [data-slot=heat-legend-word]{padding-inline:4px}
-[data-kind=matrix-heatmap] [data-slot=heat-legend]{justify-content:flex-start;gap:.375rem 1rem}
+:is([data-kind=matrix-heatmap],[data-kind=heatmap]) [data-slot=heat-legend]{justify-content:flex-start;gap:.375rem 1rem}
 
 /* The calendar: a column for each week, scrolling sideways when it is wider than the chart. */
-[data-kind=calendar-heatmap] [data-slot=chart-body],[data-kind=matrix-heatmap] [data-slot=chart-body]{overflow-x:auto;scrollbar-width:thin}
+:is([data-kind=calendar-heatmap],[data-kind=matrix-heatmap],[data-kind=heatmap]) [data-slot=chart-body]{overflow-x:auto;scrollbar-width:thin}
 [data-slot=heat],[data-slot=heat-matrix]{--cell:12px;--gap:3px;--head:18px}
 [data-slot=heat]{display:flex;gap:6px;width:max-content;padding-inline-end:1.5rem}
 [data-slot=heat-weeks]{display:flex;gap:var(--gap)}
@@ -51,9 +54,16 @@
 [data-slot=heat-rowhead]{padding-inline-end:6px;text-align:end;font-size:12px;color:var(--fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 [data-slot=heat-colhead]{flex:none;width:var(--cell);font-size:11px;text-align:center;color:var(--fg-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 :is([data-slot=heat-rowhead],[data-slot=heat-colhead])[data-active]{color:var(--fg);font-weight:600}
-[data-slot=heat-matrix] [data-slot=heat-cell]{display:grid;place-items:center;font-size:11px;font-variant-numeric:tabular-nums;color:var(--fg)}
+:is([data-slot=heat-matrix],[data-slot=heat-grid]) [data-slot=heat-cell]{display:grid;place-items:center;font-size:11px;font-variant-numeric:tabular-nums;color:var(--fg)}
 /* A value in a cell is black or white, whichever has more contrast with the step: black above a relative luminance of .179. */
-[data-slot=heat-matrix] [data-m]{color:color(from var(--bg) srgb-linear clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1) clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1) clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1))}
+:is([data-slot=heat-matrix] [data-m],[data-slot=heat-grid] [data-level]){color:color(from var(--bg) srgb-linear clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1) clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1) clamp(0,(.179 - .2126 * r - .7152 * g - .0722 * b) * 1000,1))}
+
+/* Rows by columns: the cells share the width and keep their height; a column's name may run
+   over the unnamed ones after it. */
+[data-slot=heat-grid]{--cell:24px;--gap:2px;--head-w:6.5rem;display:flex;flex-direction:column;gap:var(--gap);min-width:max-content;padding-inline-end:.5rem}
+[data-slot=heat-grid] :is([data-slot=heat-cell],[data-slot=heat-colhead]){flex:1 0 10px;width:auto;min-width:0}
+[data-slot=heat-grid] [data-slot=heat-colhead]{overflow:visible;text-align:start}
+[data-slot=heat-rowend]{flex:none;width:4.5rem;font-size:12px;font-variant-numeric:tabular-nums;color:var(--fg-2);text-align:end}
 
 /* The scatter: translucent points that darken where they pile up; the hit area is wider than the dot. */
 [data-slot=chart-points]{fill:var(--c)}

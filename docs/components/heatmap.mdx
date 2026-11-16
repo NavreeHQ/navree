@@ -1,0 +1,160 @@
+---
+title: "Heat map"
+description: "Rows by columns, a cell for each, shaded in five steps of one colour, coloured by the band of a scale or by category, with one legend for the whole grid. Drawn on the server."
+---
+
+<UiPreview example="heatmap/default" />
+
+`Heatmap` shows a reading for each row at each column: each day at each hour, each person in each week, each store on each day. Every row shares the columns, so a pattern across rows reads at a glance: the hours every weekday was busy, the week a person's resting heart rate rose. A cell holds a reading or a category, and a cell with nothing recorded is hollow, not the faintest step.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+let hours: Vec<String> = (0..24).map(|hour| format!("{hour}:00")).collect();
+Heatmap::new("Steps by hour")
+    .description("Last week, Harleen Kaur")
+    .locale("en-IN")
+    .row_name("Day")
+    .columns(hours)
+    .row("Mon", (0..24).map(|hour| if hour < 6 { 0 } else { 400 + hour * 35 }))
+    .row("Tue", (0..24).map(|hour| if hour < 7 { 0 } else { 350 + hour * 40 }))
+    .range(0, 2_500)
+    .value_name("Steps")
+    .ink(Ink::slot(3))
+    .row_summary(RowSummary::Total)
+```
+
+`.columns(...)` names the columns in order, and `.row(name, values)` adds a row of readings, one for each column. A value that is `None` or not a finite number is a cell with no data, and so is a cell past the end of a short row; values past the last column are left out.
+
+## When to use it
+
+Use a heat map to compare many rows over the same columns, where the pattern matters more than any one value. For one row of a sequence, use a [colour strip](/docs/components/color-strip/). For a day per cell laid out in weeks, use a [calendar heat map](/docs/components/calendar-heatmap/). For every measure against every other, use a [matrix heat map](/docs/components/matrix-heatmap/). To read exact values over time, use a [line chart](/docs/components/line-chart/).
+
+## Anatomy
+
+<UiAnatomy component="heatmap" />
+
+## Five steps of one colour
+
+By default a reading is shaded in five equal steps from the low end of the range to the high end. `.range(0, 2_500)` sets the ends; without it they are the lowest and the highest reading. A reading past an end takes the step at that end, and `.range(0, 1)` suits a share.
+
+`.ink(Ink)` sets the colour the steps are made of: a chart colour, a tone or the accent (the default). The stylesheet steps it through the page's own surface, with one ramp for the light palette and another for the dark one, so every theme gets a ramp that is right for it. The legend runs from one end of the range to the other through the five steps, its ends written as readings; `.ends("Still", "Active")` gives them words instead.
+
+## Bands of a scale
+
+`.colors(ColorScale)` colours each reading by the band of a [`ColorScale`](/docs/components/progress/#painted) it falls in, at the band's full colour, and the legend names each band. A band of a soft ink (`Ink::slot(2).soft()`) is the light step of its colour, so a scale can run from one colour through a neutral middle to another: a diverging scale in five bands.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Heatmap::new("Resting heart rate against usual")
+    .row_name("Person")
+    .columns(["Week 1", "Week 2", "Week 3", "Week 4"])
+    .row("Harleen Kaur", [0.97, 1.01, 1.04, 0.93])
+    .row("Gurpreet Singh", [Some(1.02), Some(1.09), None, Some(1.13)])
+    .row("Simran Kaur", [0.99, 0.95, 1.00, 1.03])
+    .colors(
+        ColorScale::new(Ink::slot(1))
+            .label("Well under")
+            .from(0.94, Ink::slot(1).soft())
+            .label("Under")
+            .from(0.98, Ink::muted().soft())
+            .label("As usual")
+            .from(1.02, Ink::slot(2).soft())
+            .label("Over")
+            .from(1.08, Ink::slot(2))
+            .label("Well over"),
+    )
+    .format(NumberFormat::percent().max_decimals(0))
+    .value_name("Of usual")
+    .show_values()
+```
+
+`.show_values()` writes each reading in its cell, in black or white, whichever reads on the cell's colour. It suits a grid of a few columns; past twelve or so the cells are too small for it.
+
+<UiPreview example="heatmap/bands" />
+
+## Categories
+
+A cell can hold a category instead of a reading: a run, a strength session, a rest day. Declare the categories with `.category(name, ink)` to choose their colours and the order of the legend, then add rows with `.category_row(name, categories)`. An empty name is a cell with no data, and a category you did not declare takes the next categorical colour.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Heatmap::new("Workouts by day")
+    .columns(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+    .category("Run", Ink::slot(1))
+    .category("Strength", Ink::slot(2))
+    .category("Rest", Ink::muted())
+    .category_row("Harleen Kaur", ["Run", "Strength", "Rest", "Run", "Strength", "", "Run"])
+    .category_row("Arjun Mehta", ["Strength", "Rest", "Yoga", "Yoga", "Run", "Run", "Rest"])
+```
+
+<UiPreview example="heatmap/categories" />
+
+## One legend
+
+The grid has one legend for every row, above it: the five steps between the ends, or the scale's named bands, then the categories, then a hollow key for "No data" when a cell has none. It is for the eye: the summary and the table say the same in words.
+
+## Rows, columns and their ends
+
+The cells share the chart's width and keep their height; a grid wider than the chart, on a phone say, scrolls sideways. Above the grid every column is named when about sixteen fit, and otherwise one in two, three or more, from the first; `.label_every(6)` names every sixth. The tooltip and the table name every column.
+
+`.row_summary(RowSummary::Average)` writes the average of each row's readings at its end, and `RowSummary::Total` their sum, in the table too. A cell with no data is left out of both.
+
+A heat map draws at most 50 rows and 144 columns (a day in ten-minute slots): the first ones, and a note under it says how many were left out.
+
+## Values and words
+
+`.value_name("Steps")` names a reading in the tooltip (the title by default), `.unit("steps")` says what it counts, and `.format(NumberFormat)` writes it. `.locale("en-IN")` groups numbers in lakh and crore. `.row_name("Day")` names the table's first column. The words the chart writes, from "No data" to the summary's template, are fields of [`GridLabels`](/docs/components/calendar-heatmap/#words), passed to `.words(...)`.
+
+## Motion
+
+`.motion(Motion::new())` fades the rows in, one after another. The cells are drawn finished, so a reader who asks for less motion sees the final state.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). A heat map with no column, or with no cell that holds a reading or a category, is empty.
+
+<UiPreview example="heatmap/states" />
+
+## The table
+
+The table has the heat map's own rows and columns: the row's name, then a cell for each column with its reading or its category, or "No data", then the row's average or total when there is one. See [The table](/docs/components/line-chart/#the-table).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the heat map, which is one tab stop. |
+| `←`, `→` | Moves to the cell before or after, in the same row. |
+| `↑`, `↓` | Moves to the row above or below, in the same column. |
+| `Home`, `End` | Moves to the first or the last cell of the row. |
+| `Page Up`, `Page Down` | Moves to the top or the bottom of the column. |
+| `Esc` | Hides the tooltip. |
+
+- The heat map is a group named by its title and described by its summary: how many rows and columns, the highest and the lowest reading with their row and column, the most common category, and how many cells have no data.
+- The row and the column of the cell under the pointer or the keys are highlighted. The tooltip names the row and the column in full where the headers are cut or left out, and a move by key is announced politely: the row, the column and the reading.
+- A cell with no data is hollow and dashed, and says "No data" in the tooltip and the table, so it is never read as the lowest step.
+- The legend is hidden from assistive technology: the summary and the table twin give every reading and category in words. In a right-to-left page, the rows run from the right and `←` and `→` swap.
+
+</UiA11y>
+
+## API
+
+### Heatmap
+
+<UiProps type="Heatmap" />
+
+### RowSummary
+
+<UiProps type="RowSummary" />
+
+### GridLabels
+
+<UiProps type="GridLabels" />

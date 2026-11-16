@@ -1,4 +1,4 @@
-// The grid charts in real browsers: the calendar and matrix heat maps and the scatter plot, against the
+// The grid charts in real browsers: the heat maps (rows by columns, calendar, matrix) and the scatter plot, against the
 // proof app's /charts/grids. Every case at 390 and 1440 px in dark and light with axe clean (also with a
 // tooltip open), no policy report and no sideways scroll of the page; the keys of a grid (arrows by row and
 // column, Home and End along a row, the page keys along a column, Escape) with the tooltip and the live
@@ -31,7 +31,7 @@ const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const reachable = await fetch(`${BASE}/charts/grids?case=matrix`).then((r) => r.ok, () => false);
 
-const CASES = ["calendar", "calendar-short", "calendar-year", "matrix", "matrix-full", "relations", "scatter", "scatter-axes", "scatter-big", "locale", "motion", "hostile", "states"];
+const CASES = ["calendar", "calendar-short", "calendar-year", "matrix", "heatmap", "heatmap-bands", "matrix-full", "relations", "scatter", "scatter-axes", "scatter-big", "locale", "motion", "hostile", "states"];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Polls `check` until it is true: the wait is for a state, never for a time. */
@@ -453,6 +453,129 @@ for (const name of NAMES) {
         assert.match(info.title, /very long name/);
         assert.equal(info.scripts, 0);
         assert.equal(info.pwned, undefined);
+        await page.done();
+      });
+    });
+
+    describe("the heat map", () => {
+      /** What the table says for the cell at row `r`, column `c`: its row and column, and its value. */
+      const fromCross = (page, fig, r, c) =>
+        page.evaluate(
+          ({ fig, r, c }) => {
+            const table = document.getElementById(fig).querySelector("[data-slot=chart-table] table");
+            const text = (cell) => (cell.querySelector("[aria-hidden=true]") || cell).textContent.trim();
+            const row = table.tBodies[0].rows[r];
+            return { row: text(row.cells[0]), column: text(table.tHead.rows[0].cells[c + 1]), value: text(row.cells[c + 1]) };
+          },
+          { fig, r, c },
+        );
+
+      test("the keys move by row and column and the tooltip says the cell's row, column and value", async () => {
+        const page = await open("/charts/grids?case=heatmap");
+        await tabTo(page, body("heatmap"));
+        const check = async (r, c, what) => {
+          const v = await view(page, "heatmap");
+          const t = await fromCross(page, "heatmap", r, c);
+          assert.deepEqual([v.cell.r, v.cell.c], [r, c], what);
+          assert.equal(v.open, true, `${what}: the tooltip is open`);
+          assert.equal(v.head, `${t.row}, ${t.column}`, `${what}: the head names the row and the column`);
+          assert.equal(v.rows[0].value, t.value, `${what}: the value is the table's`);
+          assert.equal(v.say, `${t.row}, ${t.column}, ${v.rows[0].name} ${t.value}`, `${what}: the live region says the same`);
+          // The row's header and the column's are marked; a column left unnamed above the grid has no words.
+          assert.equal(v.heads.length, 2, `${what}: two headers are marked`);
+          assert.ok(v.heads.includes(t.row), `${what}: the row's header is marked`);
+          assert.equal(v.inside, true, `${what}: the tooltip stays in the visible chart`);
+        };
+        await check(0, 0, "focus");
+        await page.keyboard.press("ArrowRight");
+        await check(0, 1, "right");
+        await page.keyboard.press("ArrowDown");
+        await check(1, 1, "down");
+        await page.keyboard.press("End");
+        await check(1, 36, "end: the last column");
+        await page.keyboard.press("PageDown");
+        await check(7, 36, "page down: the last row");
+        await page.keyboard.press("Home");
+        await check(7, 0, "home: the first column");
+        await page.keyboard.press("Escape");
+        assert.equal((await view(page, "heatmap")).open, false, "Escape hides the tooltip");
+        await page.done();
+      });
+
+      test("one legend, five steps and a hollow cell for no data, and the cells share the width", async () => {
+        const page = await open("/charts/grids?case=heatmap");
+        const info = await page.evaluate(() => {
+          const f = document.getElementById("heatmap");
+          const cells = [...f.querySelectorAll("[data-slot=heat-cell]")];
+          const widths = new Set(cells.slice(0, 37).map((c) => Math.round(c.getBoundingClientRect().width)));
+          const none = cells.find((c) => c.dataset.level === "none");
+          return {
+            legends: f.querySelectorAll("[data-slot=heat-legend]").length,
+            steps: f.querySelectorAll("[data-slot=heat-legend] [data-level]:not([data-level=none])").length,
+            widths: [...widths],
+            outline: none && getComputedStyle(none).outlineStyle,
+            body: f.querySelector("[data-slot=chart-body]").clientWidth,
+            grid: f.querySelector("[data-slot=heat-grid]").scrollWidth,
+          };
+        });
+        assert.equal(info.legends, 1);
+        assert.equal(info.steps, 5);
+        assert.ok(info.widths.length <= 2, `the cells share the width: ${info.widths}`);
+        assert.equal(info.outline, "dashed");
+        assert.ok(info.grid <= info.body + 1, "at 1440 px the grid fits its chart");
+        await page.done();
+      });
+
+      test("a scale's bands are told apart, and a value in a cell reads on every band", async () => {
+        for (const light of [false, true]) {
+          const page = await open("/charts/grids?case=heatmap-bands", { light });
+          const info = await page.evaluate(() => {
+            const rgb = (color) => {
+              const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+              ctx.fillStyle = "#000";
+              ctx.fillStyle = color;
+              ctx.fillRect(0, 0, 1, 1);
+              return [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+            };
+            const lum = (c) => {
+              const v = rgb(c).map((x) => x / 255).map((x) => (x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4));
+              return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+            };
+            const cells = [...document.querySelectorAll("#heatmap-bands [data-slot=heat-cell]:not([data-level=none])")];
+            const keys = [...document.querySelectorAll("#heatmap-bands [data-slot=heat-key]:not([data-level=none])")];
+            return {
+              bands: new Set(keys.map((k) => getComputedStyle(k).backgroundColor)).size,
+              keys: keys.length,
+              least: Math.min(...cells.map((c) => {
+                const s = getComputedStyle(c);
+                const a = lum(s.color) + 0.05, b = lum(s.backgroundColor) + 0.05;
+                return Math.max(a, b) / Math.min(a, b);
+              })),
+            };
+          });
+          assert.equal(info.keys, 5);
+          assert.equal(info.bands, 5, `${light ? "light" : "dark"}: five different bands`);
+          assert.ok(info.least >= 4.5, `${light ? "light" : "dark"}: the least contrast of a value is ${info.least.toFixed(2)}`);
+          await page.done();
+        }
+      });
+
+      test("on a phone the grid scrolls inside its chart and the keys bring the cell into view", async () => {
+        const page = await open("/charts/grids?case=heatmap", { width: 390 });
+        const [, whole, shown] = (await view(page, "heatmap")).scroll;
+        assert.ok(whole > shown, "the grid is wider than the chart");
+        await tabTo(page, body("heatmap"));
+        await page.keyboard.press("End");
+        await until(async () => (await view(page, "heatmap")).scroll[0] > 100, "scrolling to the last column");
+        await page.done();
+      });
+
+      test("right to left: the arrows are mirrored", async () => {
+        const page = await open("/charts/grids?case=heatmap");
+        await page.evaluate(() => (document.documentElement.dir = "rtl"));
+        await tabTo(page, body("heatmap"));
+        await page.keyboard.press("ArrowLeft");
+        assert.equal((await view(page, "heatmap")).cell.c, 1, "left is the next column in a right-to-left page");
         await page.done();
       });
     });

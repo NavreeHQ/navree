@@ -1,6 +1,7 @@
-//! Grids and points: [`CalendarHeatmap`] (a day per cell, weeks across), [`MatrixHeatmap`]
-//! (one measure against another, such as a correlation matrix), [`RelationList`] (the same
-//! pairs as a ranked list) and [`Scatter`] (a point per pair of values).
+//! Grids and points: [`Heatmap`] (rows by columns, a reading or a category in each cell),
+//! [`CalendarHeatmap`] (a day per cell, weeks across), [`MatrixHeatmap`] (one measure against
+//! another, such as a correlation matrix), [`RelationList`] (the same pairs as a ranked list)
+//! and [`Scatter`] (a point per pair of values).
 //!
 //! ```
 //! use navree_datetime::Date;
@@ -33,11 +34,13 @@
 //! numbers are grouped by it (`en-IN` writes lakh and crore).
 
 mod calendar;
+mod heatmap;
 mod matrix;
 mod relations;
 mod scatter;
 
 pub use calendar::{CalendarHeatmap, HeatSteps};
+pub use heatmap::{Heatmap, MAX_HEAT_COLUMNS, MAX_HEAT_ROWS, RowSummary};
 pub use matrix::{MatrixHeatmap, Relation};
 pub use relations::{MAX_RELATIONS, RelationList};
 pub use scatter::{PointSeries, Scatter};
@@ -115,6 +118,23 @@ pub struct GridLabels {
     pub scatter_correlation: Cow<'static, str>,
     /// Under a scatter that draws fewer points than it was given: `{shown}`, `{total}`.
     pub scatter_cut: Cow<'static, str>,
+    /// A heat map's summary: `{rows}`, `{columns}`.
+    pub heatmap_summary: Cow<'static, str>,
+    /// Added to a heat map's summary when it holds readings: `{max}`, `{max_row}`,
+    /// `{max_column}`, `{min}`, `{min_row}`, `{min_column}`.
+    pub heatmap_extremes: Cow<'static, str>,
+    /// Added to a heat map's summary when it holds categories: `{name}`, `{share}`.
+    pub heatmap_most: Cow<'static, str>,
+    /// Added to a heat map's summary when cells have nothing recorded: `{missing}`.
+    pub heatmap_missing: Cow<'static, str>,
+    /// Under a heat map that draws fewer rows than it was given: `{shown}`, `{total}`.
+    pub heatmap_rows_cut: Cow<'static, str>,
+    /// Under a heat map that draws fewer columns than it was given: `{shown}`, `{total}`.
+    pub heatmap_columns_cut: Cow<'static, str>,
+    /// The column at the end of a heat map's rows that holds their average.
+    pub average: Cow<'static, str>,
+    /// The column at the end of a heat map's rows that holds their total.
+    pub total: Cow<'static, str>,
 }
 
 impl Default for GridLabels {
@@ -162,6 +182,16 @@ impl GridLabels {
             scatter_cut: Cow::Borrowed(
                 "The drawing shows {shown} of {total} points; the table lists the points drawn.",
             ),
+            heatmap_summary: Cow::Borrowed("{rows} rows by {columns} columns."),
+            heatmap_extremes: Cow::Borrowed(
+                " Highest {max}, {max_row} at {max_column}. Lowest {min}, {min_row} at {min_column}.",
+            ),
+            heatmap_most: Cow::Borrowed(" Most often {name}, {share} of the cells."),
+            heatmap_missing: Cow::Borrowed(" {missing} cells have no data."),
+            heatmap_rows_cut: Cow::Borrowed("The first {shown} of {total} rows are drawn."),
+            heatmap_columns_cut: Cow::Borrowed("The first {shown} of {total} columns are drawn."),
+            average: Cow::Borrowed("Average"),
+            total: Cow::Borrowed("Total"),
         }
     }
 }

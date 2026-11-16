@@ -77,6 +77,7 @@ is dropped.
 | A strip of coloured cells over time | `ColorStrip::new(title)` with `.category(..)` and `.cells(..)`, or `.colors(ColorScale)` and `.readings(..)` |
 | A reading on a scale between two ends | `RangeScale::new(title, value).range(min, max).ends(low, high).track(Gradient)` |
 | A change with an arrow, green or red | `Trend::new(change)`, `.up_is_bad()`, on a figure with `Stat::change(..)` |
+| A grid of rows by columns (days by hours, people by weeks, stores by days), one legend for all rows | `Heatmap::new(title).columns(..).row(name, values)`, `.range(low, high)` and `.ink(..)` for five steps, `.colors(ColorScale)` for bands (a soft ink is a light band: diverging scales), `.category(name, ink)` and `.category_row(name, names)` for categories, `.row_summary(RowSummary::Average)`; a missing cell is hollow |
 | A habit calendar, a contribution grid | `CalendarHeatmap::new(title).days((date, Some(value)))`, `.steps(HeatSteps::at(a, b, c))`; a missing day is hollow |
 | A correlation matrix, ranked pairs | `MatrixHeatmap::new(title).metrics(..).relation(a, b, Relation::new(r))`, `RelationList::new(title).relation(..)` |
 | A scatter plot | `Scatter::new(title).series(PointSeries::new(name, pairs))` |

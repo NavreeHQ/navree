@@ -2120,8 +2120,8 @@ mod tests {
     #[test]
     fn what_the_toolkit_has_beyond_what_is_read_is_a_named_miss_and_never_a_guess() {
         use crate::charts::{
-            CalendarHeatmap, ColorStrip, DayClock, Gauge, MatrixHeatmap, Meter, MiniColumn,
-            MiniColumns, RangeScale, Ring, RingValue, Rings, Scatter, Segment,
+            CalendarHeatmap, ColorStrip, DayClock, Gauge, Heatmap, MatrixHeatmap, Meter,
+            MiniColumn, MiniColumns, RangeScale, Ring, RingValue, Rings, Scatter, Segment,
         };
         use crate::native::TestNative;
         use crate::{CopyField, DayPager, Dock, DockItem, InfoTip, View};
@@ -2161,6 +2161,13 @@ mod tests {
             (
                 MatrixHeatmap::new("Relations").into(),
                 "chart:matrix-heatmap",
+            ),
+            (
+                Heatmap::new("Deals by week")
+                    .columns(["Mon", "Tue"])
+                    .row("North", [3, 5])
+                    .into(),
+                "chart:heatmap",
             ),
             (Scatter::new("Pairs").into(), "chart:scatter"),
             (

@@ -257,6 +257,24 @@ every `@navree/*` package carries the same version.
   tiles' widths and the raised card, and is linked only where one is drawn; every component
   that uses none of them is drawn as before. Each method is a new inherent method: an app whose
   own extension trait gives the type a method of that name calls it through the trait.
+- `Heatmap` draws a heat map of rows by columns: a cell for each row at each column, such as
+  each day at each hour or each person in each week. `columns(..)` names the columns,
+  `row(name, values)` adds a row of readings and `category_row(name, names)` a row of categories
+  (`category(name, ink)` declares one and its colour). A reading is shaded in five equal steps of
+  `ink(..)` between the ends of `range(low, high)` (the lowest and the highest reading by
+  default), or takes the colour of its band with `colors(ColorScale)`; a band in a soft ink is
+  the light step of its colour, so five bands can run from one colour through a neutral middle to
+  another. A cell with no data is hollow, not the faintest step. The grid has one legend for
+  every row (the steps between the ends, or the scale's named bands, the categories and "No
+  data"), a tooltip for each cell, the arrow keys from cell to cell, a summary, and a table of the
+  same rows and columns. `row_summary(RowSummary::Average)` or `RowSummary::Total` writes a
+  figure at each row's end, `show_values()` writes the readings in the cells, `label_every(n)`
+  thins the columns' names, and `ends(low, high)`, `row_name(..)`, `value_name(..)`, `unit(..)`,
+  `format(..)`, `words(..)` and `motion(..)` work as on the other grid charts. It draws at most
+  `MAX_HEAT_ROWS` (50) rows and `MAX_HEAT_COLUMNS` (144) columns and says so when it cuts.
+  `GridLabels` gains the words it writes. The grid charts' sheet gains its rules, and the charts
+  module reads a heat map's tooltip from its table of rows and columns; every other chart's
+  tooltip is read as before.
 
 ### Fixed
 

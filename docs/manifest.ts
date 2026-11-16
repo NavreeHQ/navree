@@ -452,6 +452,7 @@ export const sections: DocsSection[] = [
       "color-strip",
       "range-scale",
       "trend",
+      "heatmap",
       "calendar-heatmap",
       "matrix-heatmap",
       "relation-list",

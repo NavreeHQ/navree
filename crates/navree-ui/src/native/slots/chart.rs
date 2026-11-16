@@ -179,7 +179,7 @@ fn waiting(kind: &str) -> Option<&'static str> {
         "color-strip" => "a `strip`",
         "range-scale" => "a `range`",
         "calendar-heatmap" => "a `calendar_heatmap`",
-        "matrix-heatmap" | "relation-list" => "a `matrix_heatmap`",
+        "matrix-heatmap" | "relation-list" | "heatmap" => "a `matrix_heatmap`",
         "scatter" => "a `scatter`",
         _ => return None,
     })

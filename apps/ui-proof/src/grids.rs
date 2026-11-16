@@ -1,4 +1,5 @@
-//! The grid charts in every state: calendar and matrix heat maps and the scatter plot.
+//! The grid charts in every state: heat maps of rows by columns, calendar and matrix heat maps
+//! and the scatter plot.
 //!
 //! | Page | Shows |
 //! |---|---|
@@ -65,6 +66,37 @@ fn beats(n: usize, seed: u64) -> Vec<(f64, f64)> {
         gaps.push(now.round());
     }
     gaps.windows(2).map(|p| (p[0], p[1])).collect()
+}
+
+/// The share of each ten-minute slot from 10:00 that each of `rows` people spent moving: more as
+/// the day goes on, a slot now and then with no reading.
+fn moving(id: &'static str, rows: usize, slots: usize) -> Heatmap {
+    let mut seq = Seq(17);
+    let names: Vec<String> = (0..slots)
+        .map(|s| format!("{}:{:02}", 10 + s / 6, s % 6 * 10))
+        .collect();
+    (0..rows).fold(
+        Heatmap::new("Moving, every ten minutes")
+            .id(id)
+            .description("The walking group, Saturday")
+            .row_name("Person")
+            .columns(names)
+            .range(0, 1)
+            .format(NumberFormat::percent().max_decimals(0))
+            .value_name("Moving")
+            .ink(Ink::slot(1)),
+        |chart, r| {
+            let values: Vec<Option<f64>> = (0..slots)
+                .map(|s| {
+                    let (a, b) = (seq.next(), seq.next());
+                    (b > 0.04).then(|| {
+                        (0.25 + 0.6 * s as f64 / slots as f64 + 0.3 * (a - 0.5)).clamp(0.0, 1.0)
+                    })
+                })
+                .collect();
+            chart.row(format!("Walker {}", r + 1), values)
+        },
+    )
 }
 
 const MEASURES: [&str; 6] = ["Sleep", "Stress", "Steps", "HRV", "Resting HR", "Mood"];
@@ -138,6 +170,56 @@ fn cases() -> Vec<(&'static str, Node)> {
                 .into(),
         ),
         ("matrix", correlations("matrix").lower_triangle().into()),
+        (
+            "heatmap",
+            moving("heatmap", 8, 37)
+                .row_summary(RowSummary::Average)
+                .into(),
+        ),
+        (
+            "heatmap-bands",
+            Grid::cols(1)
+                .gap(3)
+                .children((
+                    Heatmap::new("Resting heart rate against usual")
+                        .id("heatmap-bands")
+                        .row_name("Person")
+                        .columns(["Week 1", "Week 2", "Week 3", "Week 4"])
+                        .row("Harleen Kaur", [0.97, 1.01, 1.04, 0.93])
+                        .row("Gurpreet Singh", [Some(1.02), Some(1.09), None, Some(1.13)])
+                        .row("Simran Kaur", [0.99, 0.95, 1.00, 1.03])
+                        .colors(
+                            ColorScale::new(Ink::slot(1))
+                                .label("Well under")
+                                .from(0.94, Ink::slot(1).soft())
+                                .label("Under")
+                                .from(0.98, Ink::muted().soft())
+                                .label("As usual")
+                                .from(1.02, Ink::slot(2).soft())
+                                .label("Over")
+                                .from(1.08, Ink::slot(2))
+                                .label("Well over"),
+                        )
+                        .format(NumberFormat::percent().max_decimals(0))
+                        .value_name("Of usual")
+                        .show_values(),
+                    Heatmap::new("Workouts by day")
+                        .id("heatmap-categories")
+                        .columns(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+                        .category("Run", Ink::slot(1))
+                        .category("Strength", Ink::slot(2))
+                        .category("Rest", Ink::muted())
+                        .category_row(
+                            "Harleen Kaur",
+                            ["Run", "Strength", "Rest", "Run", "Strength", "", "Run"],
+                        )
+                        .category_row(
+                            "Arjun Mehta",
+                            ["Strength", "Rest", "Yoga", "Yoga", "Run", "Run", "Rest"],
+                        ),
+                ))
+                .into(),
+        ),
         (
             "relations",
             RelationList::new("What moves together")
@@ -292,6 +374,14 @@ fn cases() -> Vec<(&'static str, Node)> {
                             "A measure with a very long name that no header could hold",
                             Relation::new(-0.9),
                         ),
+                    Heatmap::new(NASTY)
+                        .id("hostile-heatmap")
+                        .columns([NASTY, "b"])
+                        .row(NASTY, [1, 2])
+                        .category_row("c", [NASTY, "x"])
+                        .row_name(NASTY)
+                        .value_name(NASTY)
+                        .unit(NASTY),
                     Scatter::new(NASTY)
                         .id("hostile-scatter")
                         .series(
@@ -330,7 +420,9 @@ fn gallery(shell: &AppShell, case: &Case) -> AppPage {
         .map(|(name, node)| section(name, node))
         .collect();
     shell.page("Grid charts").body(Stack::gap(4).children((
-        Text::muted("Calendar and matrix heat maps and the scatter plot, in every state."),
+        Text::muted(
+            "Heat maps, calendar and matrix heat maps and the scatter plot, in every state.",
+        ),
         Grid::cols(1).gap(4).children(sections),
     )))
 }

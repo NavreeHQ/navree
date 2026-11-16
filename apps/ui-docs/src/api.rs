@@ -104,6 +104,7 @@ pub const FILES: &[&str] = &[
     "charts/range_scale.rs",
     "charts/strip.rs",
     "charts/grids/mod.rs",
+    "charts/grids/heatmap.rs",
     "charts/grids/calendar.rs",
     "charts/grids/matrix.rs",
     "charts/grids/relations.rs",
