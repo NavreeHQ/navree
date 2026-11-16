@@ -774,8 +774,22 @@ internal sealed partial class NodeRenderer
                     // The words of every option the box has been given, by value: what the box says when the core sets the value itself.
                     Dictionary<string, string> words = new(StringComparer.Ordinal);
                     ShownValue choiceShown = new(chosen);
+
+                    // What the list was last made from. An answer that brings the same options is not a new list: the lines stay the ones
+                    // they are, so the line under the keyboard's highlight is still there to be chosen when the answer has come.
+                    IReadOnlyList<Models.ChoiceOption>? listed = null;
+                    bool listedMore = false;
+                    string listedFor = string.Empty;
                     void Offer(IReadOnlyList<Models.ChoiceOption> found, bool more, string typed)
                     {
+                        if (listed is not null && listedMore == more && string.Equals(listedFor, typed, StringComparison.Ordinal) && ChoiceRules.SameOptions(listed, found))
+                        {
+                            return;
+                        }
+
+                        listed = found;
+                        listedMore = more;
+                        listedFor = typed;
                         foreach (Models.ChoiceOption option in found)
                         {
                             words[option.Value] = ChoiceRules.Words(option);
