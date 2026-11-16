@@ -1,22 +1,48 @@
-// document_script_harness.js <script.js>: runs the document script in a stand-in page and tries the page's tricks.
+// document_script_harness.js <script.js> [change]: runs the document script in a stand-in page, lets the page change
+// what it likes after the script ran (the [change] named), then tries to open sockets and start workers.
 const fs = require("fs");
 const source = fs.readFileSync(process.argv[2], "utf8");
+const change = process.argv[3] || "none";
+
+// The harness's own references, taken before anything runs: a change the page makes never reaches them.
+const Str = String;
+const RealURL = URL;
+const stringify = JSON.stringify;
+const write = process.stdout.write.bind(process.stdout);
+const push = (list, value) => { list[list.length] = value; };
+const each = (list, f) => { const out = []; for (let i = 0; i < list.length; i++) out[out.length] = f(list[i]); return out; };
+const keysOf = Object.keys;
+const protoOf = Object.getPrototypeOf;
+const isArray = Array.isArray;
+const apply = Reflect.apply;
+const hrefOf = Object.getOwnPropertyDescriptor(URL.prototype, "href").get;
+const resolve = (u) => apply(hrefOf, new RealURL(Str(u), page.base), []);
+
+// The page's base address: what the document's real base is, as the engine resolves against it.
+const page = { base: "http://localhost:8080/" };
 
 const sockets = [];
 const workers = [];
 const protocols = [];
 const options = [];
+// The engine's own constructors: an address is turned into a string and resolved against the document's real base.
 class FakeWebSocket {
-  constructor(u, p) { sockets.push(String(u)); protocols.push(p); }
+  constructor(u, p) { push(sockets, resolve(u)); push(protocols, p); }
 }
 FakeWebSocket.CONNECTING = 0; FakeWebSocket.OPEN = 1; FakeWebSocket.CLOSING = 2; FakeWebSocket.CLOSED = 3;
 class FakeWorker {
-  constructor(u, o) { workers.push(String(u)); options.push(o); }
+  constructor(u, o) { push(workers, resolve(u)); push(options, o); }
 }
+class FakeNode {
+  get baseURI() { return page.base; }
+}
+class FakeDocument extends FakeNode {}
 global.self = global;
 global.WebSocket = FakeWebSocket;
 global.Worker = FakeWorker;
-global.document = { baseURI: "http://localhost:8080/", documentElement: { remove() {} } };
+global.Node = FakeNode;
+global.document = new FakeDocument();
+global.document.documentElement = { remove() {} };
 global.location = { href: "http://localhost:8080/" };
 global.origin = "http://localhost:8080";
 global.window = { stop() {} };
@@ -26,17 +52,83 @@ let emptied = false;
 global.document.documentElement.remove = () => { emptied = true; };
 (0, eval)(source);
 
+// What a page's script does after the document script ran. Each answers the app's address, or "yes", wherever the
+// document script might ask it something, so a check that asks it lets another host through.
+const own = "http://localhost:8080/";
+const changes = {
+  none() {},
+  url() {
+    global.URL = function () { return { href: own, protocol: "http:", hostname: "localhost", port: "8080", origin: "http://localhost:8080" }; };
+  },
+  string() {
+    global.String = function (u) { return u; };
+  },
+  "string methods"() {
+    String.prototype.replace = function () { return own; };
+    String.prototype.slice = function () { return "x"; };
+    String.prototype.indexOf = function () { return 0; };
+    String.prototype.startsWith = function () { return true; };
+    String.prototype.endsWith = function () { return true; };
+    String.prototype.toLowerCase = function () { return "localhost"; };
+  },
+  "url getters"() {
+    for (const [name, value] of [["href", own], ["protocol", "http:"], ["hostname", "localhost"], ["host", "localhost:8080"], ["port", "8080"], ["origin", "http://localhost:8080"]]) {
+      Object.defineProperty(RealURL.prototype, name, { get() { return value; }, configurable: true });
+    }
+  },
+  base() {
+    // A base element that sends a relative address elsewhere, and a base address that says it is the app's.
+    page.base = "ws://other.example:8080/";
+    Object.defineProperty(FakeNode.prototype, "baseURI", { get() { return own; }, configurable: true });
+  },
+  "call and apply"() {
+    Function.prototype.call = function () { return own; };
+    Function.prototype.apply = function () { return own; };
+    Function.prototype.bind = function () { return function () { return own; }; };
+  },
+  reflect() {
+    Reflect.apply = function () { return own; };
+    Reflect.construct = function () { return { href: own, protocol: "http:", hostname: "localhost", port: "8080" }; };
+    Reflect.get = function () { return own; };
+  },
+  arrays() {
+    Array.from = function () { return ["x"]; };
+    Array.prototype.indexOf = function () { return 0; };
+    Array.prototype.includes = function () { return true; };
+    Array.prototype.some = function () { return true; };
+    Array.prototype.forEach = function () {};
+    Array.prototype.map = function () { return []; };
+  },
+  "domexception"() {
+    global.DOMException = function () { return undefined; };
+  },
+  regexp() {
+    RegExp.prototype[Symbol.replace] = function () { return own; };
+    RegExp.prototype.test = function () { return true; };
+    RegExp.prototype.exec = function () { return [own]; };
+  },
+};
+changes[change]();
+
 const results = {};
 function attempt(name, fn) {
   try { fn(); results[name] = "made"; } catch (e) { results[name] = "refused " + (e && e.name); }
 }
 
-// a plain address of the app, and another host
+// a plain address of the app, and other hosts (one on the app's own port)
 attempt("own socket", () => new WebSocket("ws://localhost:8080/own"));
 attempt("other socket", () => new WebSocket("ws://other.example/x"));
+attempt("other socket on the app's port", () => new WebSocket("ws://other.example:8080/x"));
+attempt("relative socket", () => new WebSocket("x"));
+// a host under a pattern the app names (`*.cdn.example`), the name itself, and one that only ends the same way
+attempt("host under a pattern", () => new WebSocket("wss://a.cdn.example/x"));
+attempt("the pattern's own name", () => new WebSocket("wss://cdn.example/x"));
+attempt("a name that ends the same", () => new WebSocket("wss://evilcdn.example/x"));
 // an object whose conversion answers the app's address first and another host second
 let n = 0;
 attempt("toString socket", () => new WebSocket({ toString() { return n++ ? "ws://other.example/x" : "ws://localhost:8080/own"; } }));
+let p = 0;
+attempt("toPrimitive socket", () => new WebSocket({ [Symbol.toPrimitive]() { return p++ ? "ws://other.example/x" : "ws://localhost:8080/own"; } }));
 n = 0;
 attempt("toString worker", () => new Worker({ toString() { return n++ ? "blob:http://localhost:8080/abc" : "/own.js"; } }));
 attempt("blob worker", () => new Worker("blob:http://localhost:8080/abc"));
@@ -48,5 +140,6 @@ let m = 0;
 attempt("protocols", () => new WebSocket("ws://localhost:8080/p", { [Symbol.iterator]: function* () { yield "a"; yield "b"; } }));
 attempt("options", () => new Worker("/o.js", { get name() { return "n" + m++; }, type: "module", credentials: "omit", extra: 1 }));
 
-const own = (o) => o !== undefined && o !== null && typeof o === "object" && !Array.isArray(o) ? { plain: Object.getPrototypeOf(o) === Object.prototype, keys: Object.keys(o) } : o;
-console.log(JSON.stringify({ results, sockets, workers, emptied, protocols: protocols.map((p) => (Array.isArray(p) ? p : own(p))), options: options.map(own), optionName: options.length ? options[options.length - 1] && options[options.length - 1].name : null }));
+const plain = (o) => o !== undefined && o !== null && typeof o === "object" && !isArray(o) ? { plain: protoOf(o) === Object.prototype, keys: keysOf(o) } : o;
+const last = options.length ? options[options.length - 1] : null;
+write(stringify({ change, results, sockets, workers, emptied, protocols: each(protocols, (q) => (isArray(q) ? q : plain(q))), options: each(options, plain), optionName: last && last.name }) + "\n");

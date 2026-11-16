@@ -406,6 +406,67 @@ class WebWorkersTest {
         assertTrue("the page's own socket opens: $ownSockets", waitFor(5) { ownSockets.isNotEmpty() })
     }
 
+    // ------------------------------------------------------------------ a page that replaces what a check could use
+
+    /**
+     * What a page's script can replace after the check at the start of the document ran, one change to a frame
+     * (each `srcdoc` frame is a window of its own and is checked as the page is): the global `URL` and `String`,
+     * the string and regular expression methods, the getters of `URL.prototype`, `Reflect` and `Function.prototype`'s
+     * `call` and `apply`, `Array.from` and the array methods. Each frame then opens the app's own socket, tries
+     * another server's, and hands over an object that answers the app's address the first time it is turned into a
+     * string and the other server's the second. Two more frames do the same for workers, with a `blob:` address.
+     */
+    private fun pageThatReplacesWhatTheCheckCouldUse(): String {
+        val own = "ws://localhost:${app.port}/own-socket"
+        val otherSocket = "ws://localhost:${other.port}/socket"
+        val ownHttp = "http://localhost:${app.port}/"
+        val blob = "URL_ORIGINAL.createObjectURL(new Blob(['${socketOfTheWorker().replace("'", "\\'")}'], {type: 'text/javascript'}))"
+        val changes = linkedMapOf(
+            "url" to "URL = function(){ return {href: '$ownHttp', protocol: 'http:', hostname: 'localhost', port: '${app.port}'} };",
+            "string" to "String = function(u){ return u };",
+            "strings" to "String.prototype.replace = function(){ return '$ownHttp' }; String.prototype.slice = function(){ return 'x' }; String.prototype.indexOf = function(){ return 0 }; " +
+                "String.prototype.endsWith = function(){ return true }; String.prototype.startsWith = function(){ return true }; RegExp.prototype[Symbol.replace] = function(){ return '$ownHttp' };",
+            "getters" to "['href', 'protocol', 'hostname', 'port', 'host', 'origin'].forEach(function(n){ Object.defineProperty(URL.prototype, n, {configurable: true, get: function(){ return {href: '$ownHttp', protocol: 'http:', hostname: 'localhost', port: '${app.port}', host: 'localhost:${app.port}', origin: 'http://localhost:${app.port}'}[n] }}) });",
+            "reflect" to "Reflect.apply = function(){ return '$ownHttp' }; Reflect.construct = function(){ return {href: '$ownHttp'} }; Function.prototype.call = function(){ return '$ownHttp' }; Function.prototype.apply = function(){ return '$ownHttp' };",
+            "arrays" to "Array.from = function(){ return [] }; Array.prototype.forEach = function(){}; Array.prototype.indexOf = function(){ return 0 }; Array.prototype.includes = function(){ return true };",
+            "primitive" to "",
+        )
+        fun frame(name: String, script: String) =
+            "<iframe srcdoc=\"" + ("<script>var I = Image, URL_ORIGINAL = URL, R = function(m){ new I().src = '/says?m=$name-' + m };$script</script>")
+                .replace("&", "&amp;").replace("\"", "&quot;") + "\"></iframe>"
+        fun attempt(what: String, body: String) = "try { $body; R('$what-made') } catch (e) { R('$what-refused') }"
+        val frames = StringBuilder()
+        for ((name, change) in changes) {
+            val turned = if (name == "primitive") "{[Symbol.toPrimitive]: function(){ return n++ ? '$otherSocket' : '$own' }}" else "{toString: function(){ return n++ ? '$otherSocket' : '$own' }}"
+            frames.append(frame(name, "try { $change } catch (e) {}" + attempt("own", "new WebSocket('$own')") + attempt("other", "new WebSocket('$otherSocket')") + "var n = 0;" + attempt("object", "new WebSocket($turned)")))
+        }
+        for ((name, change) in listOf("worker-url" to changes.getValue("url"), "worker-string" to changes.getValue("string"))) {
+            frames.append(frame(name, "var b = $blob; try { $change } catch (e) {}" + attempt("own", "new Worker('/own.js')") + attempt("blob", "new Worker(b)") + "var n = 0;" + attempt("object", "new Worker({toString: function(){ return n++ ? b : '/own.js' }})")))
+        }
+        // A socket of the newer kind, where the web view has it: checked as WebSocket is.
+        val stream = "<script>if (typeof WebSocketStream === 'function') { new Image().src = '/says?m=stream-present'; try { new WebSocketStream('$otherSocket'); new Image().src = '/says?m=stream-other-made' } catch (e) { new Image().src = '/says?m=stream-other-refused' } } else { new Image().src = '/says?m=stream-absent' }</script>"
+        return "<p>ours</p>$frames$stream"
+    }
+
+    @Test
+    fun aPageThatReplacesWhatACheckCouldUseStillOpensASocketOrStartsAWorkerOnlyOnTheAppsOrigins() {
+        documentChecks()
+        serve({ pageThatReplacesWhatTheCheckCouldUse() }, { mapOf("/own.js" to "1;") })
+        openedBy(Origins(base, loopbackHttp = true))
+        val sockets = listOf("url", "string", "strings", "getters", "reflect", "arrays", "primitive")
+        val expected = sockets.flatMap { listOf("$it-own-made", "$it-other-refused", "$it-object-made") } +
+            listOf("worker-url", "worker-string").flatMap { listOf("$it-own-made", "$it-blob-refused", "$it-object-made") }
+        waitForSaid(expected.size + 1, seconds = 45)
+        // A blob worker that ran would open its socket some time after it was made: as long as the control waits for it.
+        waitFor(15) { otherAsked.isNotEmpty() }
+        settle("socket-replaced.txt", "frames whose scripts replace globals, prototype methods and getters after the check ran")
+        assertEquals("what the frames were told", expected.sorted(), said.filter { !it.startsWith("stream-") }.sorted())
+        val stream = said.filter { it.startsWith("stream-") }
+        assertTrue("a WebSocketStream, where there is one, is refused another server: $stream", stream == listOf("stream-absent") || stream.sorted() == listOf("stream-other-refused", "stream-present"))
+        assertEquals("a socket or a worker reached another origin: $otherAsked", emptyList<String>(), otherAsked.toList())
+        assertTrue("the app's own sockets open: $ownSockets", waitFor(5) { ownSockets.isNotEmpty() })
+    }
+
     @Test
     fun aSocketReachesAnotherOriginWhereNothingChecksTheDocument() {
         serve({ socketsOfThePage() })
@@ -416,21 +477,30 @@ class WebWorkersTest {
     }
 
     // What the client cannot cover: the first, empty document of a frame the page makes and has not navigated
-    // does not get the script at the start of a document, so a socket made through it is not checked. A frame
-    // given a document (srcdoc, or an address) is.
+    // does not get the script at the start of a document, so a socket or a worker made through it is not checked,
+    // and a worker from a blob: address made there runs and opens its own socket. A frame given a document
+    // (srcdoc, or an address) is checked.
     @Test
-    fun aSocketOpenedFromAnEmptyFrameThePageMakesIsNotChecked() {
+    fun aSocketOrAWorkerMadeFromAnEmptyFrameThePageMakesIsNotChecked() {
         documentChecks()
+        val workerSocket = "new WebSocket('ws://localhost:${other.port}/from-a-worker')"
         serve({
             "<p>ours</p><script>" +
-                madeOrRefused("empty-frame", "var f = document.createElement('iframe'); document.body.appendChild(f); new f.contentWindow.WebSocket('ws://localhost:${other.port}/socket')") +
+                "var f = document.createElement('iframe'); document.body.appendChild(f);" +
+                madeOrRefused("empty-frame", "new f.contentWindow.WebSocket('ws://localhost:${other.port}/socket')") +
+                madeOrRefused("empty-frame-worker", "new f.contentWindow.Worker(URL.createObjectURL(new Blob([\"$workerSocket\"], {type: 'text/javascript'})))") +
                 "</script><iframe srcdoc=\"<script>try { new WebSocket('ws://localhost:${other.port}/socket'); new Image().src = '/says?m=srcdoc-made' } catch (e) { new Image().src = '/says?m=srcdoc-refused' }</script>\"></iframe>"
         })
         openedBy(Origins(base, loopbackHttp = true))
-        waitForSaid(2)
-        settle("socket-in-frame.txt", "a socket opened from a frame the page made, an empty one and one with srcdoc")
-        assertEquals("what the frames were told", listOf("empty-frame-made", "srcdoc-refused"), said.sorted())
-        assertEquals("only the empty frame's socket reached the other origin: $otherAsked", listOf("UPGRADE /socket"), otherAsked.toList())
+        waitForSaid(3)
+        waitFor(15) { otherAsked.size >= 2 }
+        settle("socket-in-frame.txt", "a socket and a blob worker made from a frame the page made, an empty one and one with srcdoc")
+        assertEquals("what the frames were told", listOf("empty-frame-made", "empty-frame-worker-made", "srcdoc-refused"), said.sorted())
+        assertEquals(
+            "only the empty frame's socket and its worker's socket reached the other origin: $otherAsked",
+            listOf("UPGRADE /from-a-worker", "UPGRADE /socket"),
+            otherAsked.sorted(),
+        )
     }
 
     // What the client cannot cover: the check at the start of a document does not run inside a worker, and a

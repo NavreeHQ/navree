@@ -344,8 +344,14 @@ With nothing opened, the list has the window.
   phone the bottom navigation is reached by Shift+Tab from the top.
 - A service worker a page registers is held to the origins the web view is:
   its requests to any other origin are answered 403. A page's own scripts open
-  a socket or start a worker only for an address on the app's origins. What a
-  script does inside a worker is not covered: a worker loaded from an address
+  a socket or start a worker only for an address on the app's origins, checked
+  by the script at the start of every document with what it took before any
+  script of the page ran; so it holds against a page's scripts that run after
+  it, in the documents it runs in. Two ways round it remain: the first, empty
+  document of a frame the page creates, where the script does not run, which
+  gives an unchecked socket and worker; and what a script does inside a
+  worker. What holds in every case is the policy the app's server sends
+  (`connect-src`, `worker-src`): a worker loaded from an address
   follows the policy sent with its own script, not the page's, so the worker's
   script carries its own `connect-src`, and the page's `worker-src 'self'` is
   what stops workers from `blob:`, `data:` and other origins.

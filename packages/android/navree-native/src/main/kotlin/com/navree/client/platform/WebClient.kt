@@ -136,14 +136,19 @@ object WebRules {
      * A failure of the check itself empties the document too.
      *
      * The same script puts a check in front of the page's own `WebSocket`,
-     * `Worker` and `SharedWorker`, which are not requests the web view's client
-     * is asked about: one is made only for an address on the origins (so never
-     * from a `blob:` or `data:` address). What the page hands over is turned into a
-     * string once, and that string is what is checked and what the real constructor
-     * gets, so an object whose conversion answers differently the second time gets
-     * nowhere. It holds for the scripts of the
-     * document and of its frames that are given a document, not the empty first
-     * document of a frame the page makes and has not navigated. It does not reach into a worker: a script
+     * `WebSocketStream`, `Worker` and `SharedWorker`, which are not requests the
+     * web view's client is asked about: one is made only for an address on the
+     * origins (so never from a `blob:` or `data:` address). What the page hands
+     * over is turned into a string once; that string, resolved against the
+     * document's real base, is what is checked, and it is what the real
+     * constructor gets, so an object whose conversion answers differently the
+     * second time gets nowhere. Everything the check calls is taken when the
+     * script starts, before any script of the page, and is called only through
+     * the saved `Reflect.apply` and `Reflect.construct`: a global, a method or a
+     * getter the page replaces afterwards is never used. It holds for the scripts
+     * of the document and of its frames that are given a document, not the empty
+     * first document of a frame the page makes and has not navigated, whose
+     * window the script never ran in. It does not reach into a worker: a script
      * that already runs in a worker from one of the app's addresses opens what
      * it likes, and so does a service worker.
      */
@@ -165,22 +170,33 @@ object WebRules {
             ".observe(document,{childList:true,subtree:true})}catch(e){}" +
             "var d=document.documentElement;if(d)d.remove()}" +
             "var r=$rules;" +
-            "function at(a){var u=new URL(a),s=u.protocol.slice(0,-1);if(s!=='http'&&s!=='https')return false;" +
-            "var h=u.hostname,p=u.port?+u.port:(s==='http'?80:443);" +
-            "for(var i=0;i<r.length;i++){var x=r[i],n=x[1];if(x[0]===s&&x[2]===p&&(n===h||(n.indexOf('*.')===0&&h.length>n.length-1&&h.slice(1-n.length)===n.slice(1))))return true}" +
-            "return false}" +
+            // Everything the check calls is taken here, before any script of the page runs, and kept in this
+            // closure; from then on it is called only through the saved Reflect.apply and Reflect.construct.
+            // Nothing is looked up when a page's script calls a wrapper, so a global, a prototype's method or a
+            // getter the page replaces afterwards is never what the check uses. The check and the wrappers are
+            // one `try`: a failure of either empties the document.
+            "try{var A=Reflect.apply,K=Reflect.construct,S=String,U=URL,E=DOMException,D=document,W=self,F=Array.from,Y=Array," +
+            "G=function(o,p){return Object.getOwnPropertyDescriptor(o,p).get}," +
+            "H=G(U.prototype,'href'),P=G(U.prototype,'protocol'),M=G(U.prototype,'hostname'),O=G(U.prototype,'port'),B=G(Node.prototype,'baseURI'),Z=S.prototype.endsWith;" +
+            "if(!H||!P||!M||!O||!B||!Z)throw 0;" +
+            "for(var i=0;i<r.length;i++){var n=r[i][1];r[i][3]=n.indexOf('*.')===0?n.slice(1):''}" +
+            "var at=function(a){var u=K(U,[a]),s=A(P,u,[]);if(s==='ws:')s='http:';else if(s==='wss:')s='https:';if(s!=='http:'&&s!=='https:')return false;" +
+            "var h=A(M,u,[]),p=A(O,u,[]);p=p===''?(s==='http:'?80:443):+p;" +
+            "for(var i=0;i<r.length;i++){var x=r[i];if(x[0]+':'===s&&x[2]===p&&(x[3]===''?x[1]===h:h.length>x[3].length&&A(Z,h,[x[3]])))return true}" +
+            "return false};" +
             // Neither a socket nor a worker is a request the web view's client is asked about, and a
             // document-start script does not run inside a worker: the page's own scripts may open a
             // socket or start a worker only where its loads may go (never from a `blob:` or `data:`
-            // address). What the page hands over is turned into a string once, that string is what is checked
-            // and what the real constructor gets, and the options are copied: the page's own object, whose
-            // conversion could answer differently the second time, never reaches the real constructor.
-            // The check and the wrappers are one `try`: a failure of either empties the document.
-            "try{var wrap=function(k,s){var C=self[k];if(!C)return;var N=function(u,q){var x=String(u),h=new URL(x,document.baseURI).href;if(s)h=h.replace(/^ws/,'http');" +
-            "if(!at(h))throw new DOMException('Not allowed','SecurityError');return q===undefined?new C(x):new C(x,q&&typeof q==='object'?s?Array.from(q,String):{name:q.name,type:q.type,credentials:q.credentials}:q===null?q:String(q))};" +
-            "N.prototype=C.prototype;C.prototype.constructor=N;['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(n){if(n in C)N[n]=C[n]});self[k]=N};" +
-            "wrap('WebSocket',1);wrap('Worker');wrap('SharedWorker');" +
-            "var o=self.origin;if(o!=='null'){if(!at(o))stop();return}" +
+            // address). What the page hands over is turned into a string once, that string is resolved against
+            // the document's real base and checked, and it is what the real constructor gets; the options are
+            // copied into objects of the script's own.
+            "var cp=function(q,s){if(q===null||typeof q!=='object'&&typeof q!=='function')return s===1?S(q):q;if(s===1)return A(F,Y,[q,S]);" +
+            "if(s===2){var v=q.protocols;return{protocols:v===undefined?v:A(F,Y,[v,S]),signal:q.signal}}return{name:q.name,type:q.type,credentials:q.credentials}};" +
+            "var wrap=function(k,s){var C=W[k];if(!C)return;var N=function(u,q){var x=S(u),a=A(H,K(U,[x,A(B,D,[])]),[]);" +
+            "if(!at(a))throw K(E,['Not allowed','SecurityError']);return q===undefined?K(C,[x]):K(C,[x,cp(q,s)])};" +
+            "N.prototype=C.prototype;C.prototype.constructor=N;var c=['CONNECTING','OPEN','CLOSING','CLOSED'];for(var j=0;j<c.length;j++)if(c[j] in C)N[c[j]]=C[c[j]];W[k]=N};" +
+            "wrap('WebSocket',1);wrap('WebSocketStream',2);wrap('Worker');wrap('SharedWorker');" +
+            "var o=W.origin;if(o!=='null'){if(!at(o))stop();return}" +
             "var l=location.href;if(l.indexOf('about:')===0)return;if(!at(l))stop()}catch(e){stop()}})();"
     }
 
