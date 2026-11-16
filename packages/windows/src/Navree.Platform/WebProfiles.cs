@@ -79,10 +79,18 @@ public sealed class DiskWebFolders : IWebFolders
 /// when they can be, at the end of a session and at every start, until they are gone.
 /// </summary>
 /// <remarks>
+/// <para>
+/// The folder moves on first. The end of a session begins with <see cref="MoveOn"/>, before anything is emptied and before any wait: from that
+/// line on <see cref="Folder"/> is the new folder or none, and never again the folder it was. Emptying and deleting the old folder is what
+/// remains (<see cref="Finish"/>); it may take as long as it takes, be given up, or fail, and no web page of whoever comes next is opened in
+/// the old folder meanwhile.
+/// </para>
+/// <para>
 /// When what the web view kept for the session that ended could be neither cleared nor deleted, no web page is shown for the rest of that run
 /// (<see cref="Folder"/> is null): the browser behind the old folder may still be running in this process's name. The next start names a new
 /// folder and goes on. The number of the session now is the highest-numbered folder on disk, so the new folder is made on disk before the
 /// session that ended counts as over.
+/// </para>
 /// </remarks>
 public sealed class WebProfiles
 {
@@ -177,42 +185,56 @@ public sealed class WebProfiles
     }
 
     /// <summary>
-    /// The session ended, and the web view's own way of emptying its folder has been tried. The folder is never used again: a new one is made
-    /// for whoever comes next, and the older ones are deleted if they can be. When what was kept was not taken away
-    /// (<paramref name="taken"/> is false: neither cleared nor deleted) and its folder is still there, no web page is shown for the rest of
-    /// this run.
+    /// The end of a session begins: its folder is never used again from this line on. The session's number goes up and the folder of whoever
+    /// comes next is made and in force at once, before anything of the old one is emptied; when it cannot be made, no web page is shown for
+    /// the rest of this run. Nothing here waits, and nothing here can leave the old folder in use.
     /// </summary>
-    /// <param name="taken">Whether what the web view kept was cleared through a web view, or its folder deleted.</param>
-    /// <returns>Whether nothing of the session that ended is left for a web page of this run to reach: false means the sign-out is not finished.</returns>
-    public bool End(bool taken)
+    /// <returns>The folder of the session that ended, to be emptied and deleted (<see cref="Finish"/>).</returns>
+    public string MoveOn()
     {
         lock (gate)
         {
-            if (refused)
-            {
-                return false;
-            }
-
             long ended = current;
-            if (!folders.Make(PathOf(ended + 1)))
+            current = ended + 1;
+            if (!folders.Make(PathOf(current)))
             {
+                // Without the new folder on disk a later start would take the old one for the session's: nothing is shown instead.
                 refused = true;
                 say?.Invoke("a new folder for the web view could not be made: no web page is shown until the app is started again");
-                return false;
             }
 
-            current = ended + 1;
+            return PathOf(ended);
+        }
+    }
+
+    /// <summary>
+    /// The emptying of the folder a session left (<see cref="MoveOn"/>) has been tried, or given up. The older folders are deleted if they
+    /// can be. When what was kept was not taken away (<paramref name="taken"/> is false: neither cleared nor deleted) and its folder is still
+    /// there, no web page is shown for the rest of this run.
+    /// </summary>
+    /// <param name="ended">The folder of the session that ended, as <see cref="MoveOn"/> gave it.</param>
+    /// <param name="taken">Whether what the web view kept there was cleared through a web view of that session, or the folder deleted.</param>
+    /// <returns>
+    /// Whether the session's end is finished as far as the web view goes: what it kept is gone or emptied, the folder of whoever comes next is
+    /// on disk, and web pages may still be shown in this run. False means the sign-out is not finished.
+    /// </returns>
+    public bool Finish(string ended, bool taken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(ended);
+        lock (gate)
+        {
             left.Clear();
             DeleteOthers(folders.Names(root), LeftOver);
-            bool gone = !left.Contains(Name(ended), StringComparer.Ordinal);
+            bool gone = !left.Contains(Path.GetFileName(ended), StringComparer.Ordinal);
             if (!taken && !gone)
             {
                 refused = true;
                 say?.Invoke("what the web view kept could be neither cleared nor deleted: no web page is shown until the app is started again");
-                return false;
             }
 
-            return true;
+            // While no web page may be shown in this run (this session's data is still there, an earlier one's is, or no new folder could be
+            // made), no end of a session is finished: the next start finishes it, in a new folder.
+            return !refused;
         }
     }
 

@@ -54,14 +54,19 @@ public sealed class WebProfilesTests
         Assert.IsTrue(first.Open(lastSessionEnded: false));
         Assert.AreEqual(In("1"), first.Folder);
 
-        // The web view made its folder; the person signs out, and what it kept was taken away.
+        // The web view made its folder. The person signs out, and the folder is deleted while it is being emptied.
         disk.There.Add(In("1"));
-        disk.There.Remove(In("1"));
-        Assert.IsTrue(first.End(taken: true));
+        string ended = first.MoveOn();
+        Assert.AreEqual(In("1"), ended);
         Assert.AreEqual(In("2"), first.Folder, "whoever comes next is given the folder of the person who left");
+        Assert.IsTrue(first.Finish(ended, taken: true));
+        Assert.AreEqual(In("2"), first.Folder);
+        CollectionAssert.AreEqual(new[] { In("2") }, disk.There.ToArray(), "the folder of the session that ended is still on disk though nothing held it");
 
         // Another sign-out in the same run.
-        Assert.IsTrue(first.End(taken: true));
+        string second = first.MoveOn();
+        Assert.AreEqual(In("2"), second);
+        Assert.IsTrue(first.Finish(second, taken: true));
         Assert.AreEqual(In("3"), first.Folder);
 
         // The app is started again with nobody having signed out since: the same session, the same folder.
@@ -69,6 +74,74 @@ public sealed class WebProfilesTests
         Assert.IsTrue(next.Open(lastSessionEnded: false));
         Assert.AreEqual(In("3"), next.Folder);
         CollectionAssert.AreEqual(new[] { In("3") }, disk.There.ToArray(), "folders of sessions that ended are still on disk");
+    }
+
+    [TestMethod]
+    public async Task The_folder_moves_on_before_anything_is_emptied_so_a_clear_that_never_returns_leaves_no_page_in_the_old_folder()
+    {
+        FakeWebFolders disk = new();
+        WebProfiles run = new(Root, disk);
+        Assert.IsTrue(run.Open(lastSessionEnded: false));
+        string old = run.Folder!;
+        disk.There.Add(old);
+        disk.Held.Add(old);
+
+        // The sign-out begins: the folder moves on in its first line, before any step runs.
+        string ended = run.MoveOn();
+        Assert.AreEqual(old, ended);
+        Assert.AreNotEqual(old, run.Folder, "the folder of the person who is leaving is still the one a web page would be given");
+        Expect.That(disk.There.Contains(run.Folder!), "the folder of whoever comes next is not on disk");
+
+        // The web step's clear never returns. The wipe gives the step up at its limit and goes on, as the sign-out does.
+        TaskCompletionSource never = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task? step = null;
+        async Task EmptyAsync()
+        {
+            await never.Task;
+            _ = run.Finish(ended, taken: false);
+        }
+
+        WipeReport report = await Wipe.RunAsync([new WipeStep("what the web view keeps", () => step = EmptyAsync())], TimeSpan.FromMilliseconds(200));
+        Expect.That(!report.Complete, "a web step that never returned is said to have finished");
+        for (int waited = 0; waited < 250 && step is null; waited++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.IsNotNull(step, "the web step was never started");
+
+        // A web page is asked for now, while the old folder is still being emptied: it is given the new folder, never the old.
+        Assert.IsNotNull(run.Folder);
+        Assert.AreNotEqual(old, run.Folder, "a web page asked for during the wipe is opened in the folder of the person who left");
+
+        // Much later the clear gives up with nothing cleared and the folder still held: from then on no page is shown; still never the old.
+        never.SetResult();
+        await step!.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.IsNull(run.Folder);
+    }
+
+    [TestMethod]
+    public void When_no_new_folder_can_be_made_a_web_page_asked_for_during_the_wipe_is_refused_and_never_given_the_old_folder()
+    {
+        FakeWebFolders disk = new();
+        disk.There.Add(In("2"));
+        WebProfiles run = new(Root, disk);
+        Assert.IsTrue(run.Open(lastSessionEnded: false));
+        Assert.AreEqual(In("2"), run.Folder);
+
+        disk.NothingCanBeMade = true;
+        string ended = run.MoveOn();
+        Assert.AreEqual(In("2"), ended);
+        Assert.IsNull(run.Folder, "with no folder for whoever comes next, a web page is still given a folder");
+
+        // The old folder was emptied and deleted; the sign-out is still not finished, so the next start makes the new folder first.
+        Assert.IsFalse(run.Finish(ended, taken: true), "a sign-out that left whoever comes next no folder of their own is said to be finished");
+        Assert.IsNull(run.Folder);
+
+        // At a start that finishes a sign-out.
+        WebProfiles start = new(Root, disk);
+        Assert.IsFalse(start.Open(lastSessionEnded: true), "the start went on though whoever comes next has no folder of their own");
+        Assert.IsNull(start.Folder);
     }
 
     [TestMethod]
@@ -82,12 +155,15 @@ public sealed class WebProfilesTests
 
         // Something still holds a file of the folder: it cannot be deleted, and no web view was there to clear it.
         disk.Held.Add(In("1"));
-        Assert.IsFalse(run.End(taken: false), "a sign-out that left the web view's data on disk was said to be finished");
+        string ended = run.MoveOn();
+        Assert.IsFalse(run.Finish(ended, taken: false), "a sign-out that left the web view's data on disk was said to be finished");
         Assert.IsNull(run.Folder, "a web page can still be shown in the run whose sign-out left the web view's data");
         Expect.That(said.Any(line => line.Contains("no web page is shown until the app is started again", StringComparison.Ordinal)), "nothing was said: " + string.Join(" | ", said));
 
         // The same run, a second sign-out: still nothing is shown, and it is still not finished.
-        Assert.IsFalse(run.End(taken: true));
+        string again = run.MoveOn();
+        Assert.AreNotEqual(In("1"), again);
+        Assert.IsFalse(run.Finish(again, taken: true));
         Assert.IsNull(run.Folder);
 
         // The next start finds the sign-out unfinished. The folder is still held: the start goes on, in a folder the old profile was never in.
@@ -142,37 +218,19 @@ public sealed class WebProfilesTests
         Assert.IsTrue(run.Open(lastSessionEnded: false));
         disk.There.Add(In("1"));
 
-        // The browser behind the folder is still running, so the folder cannot go yet; its profile was cleared through a page.
+        // The browser behind the folder is still ending, so the folder cannot go yet; its profile was cleared through a page.
         disk.Held.Add(In("1"));
-        Assert.IsTrue(run.End(taken: true));
+        string ended = run.MoveOn();
+        Assert.IsTrue(run.Finish(ended, taken: true));
         Assert.AreEqual(In("2"), run.Folder, "the cleared folder of the person who left is used for whoever comes next");
         CollectionAssert.AreEqual(new[] { "1" }, run.Left.ToArray());
 
         // At the next sign-out the browser has ended, and the left-over folder goes with the one of that session.
         disk.Held.Clear();
-        disk.There.Add(In("2"));
-        Assert.IsTrue(run.End(taken: true));
+        string second = run.MoveOn();
+        Assert.IsTrue(run.Finish(second, taken: true));
         Assert.AreEqual(In("3"), run.Folder);
         CollectionAssert.AreEqual(new[] { In("3") }, disk.There.ToArray());
-    }
-
-    [TestMethod]
-    public void When_no_new_folder_can_be_made_nothing_is_shown_and_the_sign_out_is_not_finished()
-    {
-        FakeWebFolders disk = new() { NothingCanBeMade = true };
-        disk.There.Add(In("2"));
-
-        // At a sign-out.
-        WebProfiles run = new(Root, disk);
-        Assert.IsTrue(run.Open(lastSessionEnded: false));
-        Assert.AreEqual(In("2"), run.Folder);
-        Assert.IsFalse(run.End(taken: true));
-        Assert.IsNull(run.Folder);
-
-        // At a start that finishes a sign-out.
-        WebProfiles start = new(Root, disk);
-        Assert.IsFalse(start.Open(lastSessionEnded: true), "the start went on though whoever comes next has no folder of their own");
-        Assert.IsNull(start.Folder);
     }
 
     [TestMethod]
@@ -190,11 +248,11 @@ public sealed class WebProfilesTests
     }
 
     [TestMethod]
-    public void The_person_is_told_when_a_sign_out_did_not_finish_and_only_then()
+    public void A_wipe_with_a_step_that_failed_is_an_unfinished_sign_out_and_a_wipe_whose_steps_all_finished_is_not()
     {
-        Expect.That(SignOutWords.Unfinished(new WipeReport(["the cookies"], [new KeyValuePair<string, string>("what the web view keeps", "IOException")])), "a wipe with a failed step is not told");
-        Expect.That(!SignOutWords.Unfinished(new WipeReport(["the cookies", "what the web view keeps"], [])), "a finished wipe is told as unfinished");
-        Expect.That(!SignOutWords.Unfinished(null), "no report is told as unfinished");
+        Expect.That(SignOutWords.Unfinished(new WipeReport(["the cookies"], [new KeyValuePair<string, string>("what the web view keeps", "IOException")])), "a wipe with a failed step is not taken for unfinished");
+        Expect.That(!SignOutWords.Unfinished(new WipeReport(["the cookies", "what the web view keeps"], [])), "a finished wipe is taken for unfinished");
+        Expect.That(!SignOutWords.Unfinished(null), "no report is taken for an unfinished sign-out");
         StringAssert.Contains(SignOutWords.UnfinishedHelp, "Restart");
     }
 }

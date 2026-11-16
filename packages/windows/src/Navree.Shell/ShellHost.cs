@@ -533,13 +533,17 @@ public sealed partial class ShellHost : IDisposable
         // From here on only what the core asks for whoever comes next is started or kept. When the client ends the session, the core is the
         // leaving person's until it is told: the point is marked on the core's own thread, just before it is told.
         asked.SessionIsEnding();
+
+        // The web view's folder moves on first, before any step and before any wait: a web page asked for from this line on is given the
+        // folder of whoever comes next, or none, and never the folder of the person who is leaving, however long emptying that one takes.
+        string webEnded = webProfiles.MoveOn();
         WipeReport report;
         try
         {
             report = await session.EndAsync(
                 StopWork,
                 coreEnded ? null : () => client.SendAsync(Events.SignedOut, asked.CoreIsToldTheSessionEnded),
-                [new WipeStep("what the web view keeps", EndWebAsync, OnUi)],
+                [new WipeStep("what the web view keeps", () => EndWebAsync(webEnded), OnUi)],
                 [.. new[]
                 {
                     // A photograph still being read when the person signed out is waited for: it is refused, and its copy is gone, when this is done.
@@ -568,13 +572,24 @@ public sealed partial class ShellHost : IDisposable
         SessionEnded?.Invoke(report);
     }
 
-    // What the web view keeps for the person who is leaving is taken away (its profile cleared through a web view, or its folder deleted), and
-    // whatever came of that, the folder is never used again: whoever comes next has a new one. When it could be neither cleared nor deleted the
-    // step fails (so the mark of an unfinished sign-out stays) and no web page is shown for the rest of this run.
-    private async Task EndWebAsync()
+    // What the web view kept for the person who is leaving is taken away: its profile cleared through a web view, or its folder deleted. The
+    // folder itself moved on before this began (WebProfiles.MoveOn), so however this ends, and however long it takes, the folder is not used
+    // again. When it could be neither cleared nor deleted the step fails (so the mark of an unfinished sign-out stays) and no web page is shown
+    // for the rest of this run; that is settled whatever the emptying threw.
+    private async Task EndWebAsync(string ended)
     {
-        bool taken = webProfiles.Folder is string folder && await WebPage.ClearAllAsync(folder, what => ReportProblem("web wipe " + what));
-        if (!webProfiles.End(taken))
+        bool taken = false;
+        bool finished = false;
+        try
+        {
+            taken = await WebPage.ClearAllAsync(ended, what => ReportProblem("web wipe " + what));
+        }
+        finally
+        {
+            finished = webProfiles.Finish(ended, taken);
+        }
+
+        if (!finished)
         {
             throw new IOException("what the web view keeps could not be taken away");
         }
