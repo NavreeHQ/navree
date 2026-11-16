@@ -254,7 +254,12 @@ impl Core {
     /// nobody are not compared. Any answer that names a person is,
     /// and so is every other answer that names nobody: a 401 or a 403 among
     /// them is the news that the session ended.
-    pub(crate) fn same_session(&mut self, asked: &Asked, mut response: Response) -> Response {
+    pub(crate) fn same_session(
+        &mut self,
+        asked: &Asked,
+        heard: crate::reduce::Heard,
+        mut response: Response,
+    ) -> Response {
         if response.error.is_some()
             || response.left.is_some()
             || self.inner.synthetic
@@ -268,14 +273,9 @@ impl Core {
         let made_for = response
             .header(navree_native::PERSON_HEADER)
             .filter(|id| !id.is_empty());
-        // What a proxy, a gateway or a layer in front of the app's own code
-        // answers while the app restarts, sheds load or refuses a request it
-        // could not handle names nobody: it is not the app's word on who is
-        // signed in, and the next answer that gets through is. Such an answer
-        // is never kept, so passing it over keeps nothing of anybody.
-        if made_for.is_none()
-            && (!crate::reduce::got_through(&response) || crate::reduce::not_handled(&response))
-        {
+        // Such an answer is never kept, so passing it over keeps nothing of
+        // anybody, and the next answer that gets through is compared.
+        if !heard.speaks_for_the_session() {
             return response;
         }
         // A session belongs to a host: an answer from another origin the app

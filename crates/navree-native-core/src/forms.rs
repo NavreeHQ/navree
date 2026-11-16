@@ -1354,7 +1354,7 @@ impl Core {
                 // The server may have written before the answer failed or
                 // was too large to read: what is kept can't be trusted. Not
                 // so when the request never left the device.
-                if write && !self.inner.never_left {
+                if self.inner.write_may_have_run {
                     self.wrote(id);
                 }
                 // A write the server took is saved, even when what it
@@ -1375,7 +1375,9 @@ impl Core {
                 kept = true;
             }
             Answer::Html { url } => {
-                if write {
+                // Decided from the status, whatever the body: a page that
+                // refuses a write for its size is no write.
+                if self.inner.write_may_have_run {
                     self.wrote(id);
                 }
                 if alive && front {

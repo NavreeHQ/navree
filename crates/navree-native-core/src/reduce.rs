@@ -9,9 +9,9 @@
 //!   fresh one. A build the core has not seen empties what is kept.
 //! - A write makes every other screen out of date; each is fetched again when
 //!   it comes to the front. So does a write whose answer failed or was too
-//!   large to read: the server may have written before it did. A write that
-//!   never left the device (no network), or that the server answered as one
-//!   it could not handle (408, 413, 414, 429, 431), is no write.
+//!   large to read: the server may have written before it did. A write
+//!   counts as never made only when the server cannot have run it (see
+//!   `Heard::write_may_have_run`).
 //! - What can't be read is never a crash: the web view for a page, a fresh
 //!   fetch for a change to one.
 
@@ -83,12 +83,61 @@ pub(crate) fn got_through(response: &Response) -> bool {
     response.error.is_none() && response.status < 500 && response.status != 429
 }
 
-/// Whether an answer says its request could not be handled, before the app
-/// acted on it: too slow to arrive (408), a body too large (413), an address
-/// too long (414), too many requests (429), headers too large (431). What a
-/// layer in front of the app's own code answers so names nobody.
-pub(crate) fn not_handled(response: &Response) -> bool {
-    response.error.is_none() && matches!(response.status, 408 | 413 | 414 | 429 | 431)
+/// What an answer says of itself, read from its status, its headers and the
+/// request it answers before its body is: the one place two questions about
+/// it are decided, so the two answers cannot drift apart.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Heard {
+    /// No answer came: the transport's error.
+    pub(crate) error: Option<TransportError>,
+    /// The answer's status.
+    pub(crate) status: u16,
+    /// It names a person (`x-navree-person`, not empty).
+    pub(crate) names_someone: bool,
+    /// It answers the request that was sent first: no redirect was followed
+    /// to it, by the core or by the client's transport.
+    pub(crate) first_hop: bool,
+    /// The request carried a write.
+    pub(crate) carried_write: bool,
+    /// The core made it: the request was never sent.
+    pub(crate) made_here: bool,
+}
+
+impl Heard {
+    /// Whether this answer is the app's word on who is signed in. Not when
+    /// it names nobody and did not get through to the app or says its
+    /// request could not be handled (5xx, 408, 413, 414, 429, 431): what a
+    /// proxy, a gateway or a layer in front of the app's own code answers
+    /// while the app restarts, sheds load, or refuses a request too slow, too
+    /// large or too long. Any answer that names a person is, and so is every
+    /// other answer: a 401, a 403 or a 419 that names nobody is the news that
+    /// the session ended or changed.
+    pub(crate) fn speaks_for_the_session(&self) -> bool {
+        self.names_someone
+            || !(self.status >= 500 || matches!(self.status, 408 | 413 | 414 | 429 | 431))
+    }
+
+    /// Whether the server can have run the write this request carried. It
+    /// cannot only when the request that carried it never left the device
+    /// (no network, or never sent), or when the answer to that request, with
+    /// no redirect followed, names nobody and refuses it for its size before
+    /// any handler runs (413, 414, 431). Anything else may follow a write
+    /// that ran: a 408 or a 429 (a layer may answer in place of an answer
+    /// that was lost), an answer that names a person (a handler made it), a
+    /// 5xx, a timeout, an answer too large to read, and every answer after a
+    /// redirect (the write was taken; the page it led to failed).
+    pub(crate) fn write_may_have_run(&self) -> bool {
+        if !self.carried_write {
+            return false;
+        }
+        if !self.first_hop {
+            return true;
+        }
+        if self.made_here || self.error == Some(TransportError::Offline) {
+            return false;
+        }
+        self.error.is_some() || self.names_someone || !matches!(self.status, 413 | 414 | 431)
+    }
 }
 
 /// What an answer that asks for a newer app gives: its address only when it
@@ -2286,17 +2335,32 @@ impl Core {
         }
     }
 
+    /// What an answer says of itself (see [`Heard`]).
+    fn heard(&self, asked: &Asked, response: &Response) -> Heard {
+        let first_hop = asked.hops == 0
+            && (response.url.is_empty()
+                || self.inner.origin.absolute(&asked.url).as_deref()
+                    == Some(response.url.as_str()));
+        Heard {
+            error: response.error,
+            status: response.status,
+            names_someone: response
+                .header(navree_native::PERSON_HEADER)
+                .is_some_and(|id| !id.is_empty()),
+            first_hop,
+            carried_write: matches!(asked.purpose, Pending::Send { write: true, .. }),
+            made_here: self.inner.synthetic,
+        }
+    }
+
     fn answered_once(&mut self, response: Response) {
         // An answer nobody waits for any more changes nothing.
         let Some(asked) = self.inner.pending.remove(&response.request) else {
             return;
         };
-        // A write that never left the device, or that the server said it could
-        // not handle, did not happen.
-        self.inner.never_left = self.inner.synthetic
-            || response.error == Some(TransportError::Offline)
-            || not_handled(&response);
-        let response = self.same_session(&asked, response);
+        let heard = self.heard(&asked, &response);
+        self.inner.write_may_have_run = heard.write_may_have_run();
+        let response = self.same_session(&asked, heard, response);
         let response = self.keeping(&asked, response);
         let Some(response) = self.follow(&asked, response) else {
             return;
@@ -2998,8 +3062,8 @@ mod tests {
                 },
             ),
             (
-                "a 429: the server did not take the request",
-                false,
+                "a 429: a layer may answer in place of an answer that was lost",
+                true,
                 Response {
                     status: 429,
                     ..Response::default()
@@ -3046,6 +3110,127 @@ mod tests {
                 })
                 .unwrap_or_else(|| panic!("{what}: the form is sent: {sent:?}"));
             core.send(Event::Response(Response { request, ..failure }));
+            assert_eq!(
+                core.inner.epoch > epoch,
+                counts,
+                "{what}: counted as a write, or not"
+            );
+        }
+    }
+
+    /// A write counts as never made only when the server cannot have run it:
+    /// the answer to the request that carried it, with no redirect followed,
+    /// names nobody and refuses it for its size before any handler runs (413,
+    /// 414, 431), whatever its body. Any other answer may follow a write that
+    /// ran: a 408 or a 429, an answer that names the person, the page a
+    /// redirect led to, and no network once a redirect was taken.
+    #[test]
+    fn a_write_counts_as_never_made_only_when_the_server_cannot_have_run_it() {
+        let page = r#"{"navree":1,"build":"b1","vocab":0,"screen":{"title":"Order","body":{"t":"form","id":"note","method":"post","action":"/orders/1/note","children":[{"t":"field","id":"text","name":"text","input":{"t":"text"}},{"t":"button","label":"Save","action":{"t":"submit"}}]}}}"#;
+        let her = || {
+            vec![(
+                "x-navree-person".to_owned(),
+                "0193a4b2-0000-7000-8000-00000000ra01".to_owned(),
+            )]
+        };
+        let json = |status: u16| Response {
+            status,
+            content_type: Some("application/json".to_owned()),
+            body: "{}".to_owned(),
+            ..Response::default()
+        };
+        let moved = Response {
+            status: 303,
+            location: Some("/orders/42".to_owned()),
+            ..Response::default()
+        };
+        let cases: Vec<(&str, Vec<Response>, bool)> = vec![
+            (
+                "a 303 to the order, whose page is answered 429",
+                vec![moved.clone(), json(429)],
+                true,
+            ),
+            (
+                "a 303 to the order, whose page is answered 413",
+                vec![moved.clone(), json(413)],
+                true,
+            ),
+            (
+                "a 303 to the order, then no network",
+                vec![
+                    moved,
+                    Response {
+                        error: Some(TransportError::Offline),
+                        ..Response::default()
+                    },
+                ],
+                true,
+            ),
+            ("a 429", vec![json(429)], true),
+            ("a 408", vec![json(408)], true),
+            (
+                "a 413 that names her",
+                vec![Response {
+                    headers: her(),
+                    ..json(413)
+                }],
+                true,
+            ),
+            (
+                "a 413 that names nobody, as a page",
+                vec![Response {
+                    status: 413,
+                    content_type: Some("text/html".to_owned()),
+                    body: "<h1>413 Request Entity Too Large</h1>".to_owned(),
+                    ..Response::default()
+                }],
+                false,
+            ),
+            ("a 413 that names nobody", vec![json(413)], false),
+            ("a 414 that names nobody", vec![json(414)], false),
+            (
+                "a 431 that names nobody, with nothing in it",
+                vec![Response {
+                    status: 431,
+                    ..Response::default()
+                }],
+                false,
+            ),
+        ];
+        for (what, answers, counts) in cases {
+            let mut core = started();
+            core.send(Event::Response(Response {
+                request: 2,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: page.to_owned(),
+                ..Response::default()
+            }));
+            let epoch = core.inner.epoch;
+            let mut update = core.send(Event::Act {
+                screen: Some(1),
+                action: serde_json::from_value(serde_json::json!({"t": "submit"}))
+                    .expect("an action"),
+                form: Some("note".to_owned()),
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            });
+            for answer in answers {
+                let request = update
+                    .effects
+                    .iter()
+                    .find_map(|effect| match effect {
+                        Effect::Fetch(request) if !request.url.ends_with(SHELL_PATH) => {
+                            Some(request.request)
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| panic!("{what}: a request to answer: {update:?}"));
+                update = core.send(Event::Response(Response { request, ..answer }));
+            }
             assert_eq!(
                 core.inner.epoch > epoch,
                 counts,

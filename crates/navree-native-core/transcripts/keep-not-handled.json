@@ -1,5 +1,5 @@
 {
-  "about": "An answer that says the request could not be handled (a body too large, 413; and 408, 414 and 431 of the same kind) and names nobody says nothing of who is signed in, and a write answered so did not happen: nothing kept is emptied, the shell is not asked again, nothing is reported. The next answer that names another person empties what is kept, as any answer does.",
+  "about": "A body too large: a 413 that names nobody, answering the request that carried the write itself, says nothing of who is signed in, and the server cannot have run the write: nothing kept is emptied, the shell is not asked again, nothing is reported. The next answer that names another person empties what is kept, as any answer does.",
   "config": {"cache":{"persist":true}},
   "steps": [
     {
