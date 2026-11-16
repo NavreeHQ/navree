@@ -1023,6 +1023,7 @@ fn no_two_modules_share_a_bit() {
         Uses::EXTENSIONS,
         Uses::EXTENSION_SHEETS,
         Uses::AUTH_LAYOUT,
+        Uses::SHELL_PARTS,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {
