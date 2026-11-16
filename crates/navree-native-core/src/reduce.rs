@@ -3831,7 +3831,9 @@ mod tests {
             matches!(&exchange, Body::Json { text } if text.contains(r#""platform":"windows""#) && text.contains("CharkhaSupply_8wekyb3d8bbwe")),
             "{exchange:?}"
         );
-        // With no sign-in open, a return that comes is not used, and not opened.
+        // With no sign-in open, a link on the scheme is an ordinary link: one
+        // to a place the shell does not know is not opened, and nothing is
+        // exchanged.
         for planted in [
             format!("charkha://signed-in?code=PLANTED000&state={state}"),
             "charkha://signed-in?code=PLANTED000".to_owned(),
@@ -3869,6 +3871,128 @@ mod tests {
             url: Some("charkha://signed-in?token=PLANTED000".to_owned()),
         });
         assert!(fetches(&back).is_empty(), "{back:?}");
+    }
+
+    /// A link is a sign-in's return only for a sign-in that is open, on the
+    /// way back that sign-in named and with its `state`. With no callback in
+    /// the shell and no sign-in open, a link on the app's scheme that carries
+    /// a `code`, a `state` or an `error` of its own is the ordinary link it
+    /// is; with one open, a link with another `state`, or on another path
+    /// than the callback, is too.
+    #[test]
+    fn a_link_is_a_sign_ins_return_only_for_the_sign_in_that_is_open() {
+        let state = "ISIjJCUmJygpKissLS4vMA";
+        let bytes = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30";
+        let core_on = |platform: &str, shell: &str, open: bool| -> Core {
+            let config = serde_json::json!({
+                "origin": "https://shop.example",
+                "app_id": "com.charkha.supply",
+                "client": {"platform": platform, "form": "phone", "vocab": 0, "text_percent": 100},
+                "sign_in": {"callback": "charkha", "paths": ["/sign-in"]},
+            });
+            let mut core = Core::new(serde_json::from_value(config).expect("a configuration"));
+            core.send(Event::Start);
+            core.send(Event::Response(Response {
+                request: 1,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: shell.to_owned(),
+                ..Response::default()
+            }));
+            core.send(Event::Response(Response {
+                request: 2,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: include_str!("../transcripts/fixtures/made/welcome.json").to_owned(),
+                ..Response::default()
+            }));
+            if open {
+                core.send(Event::Act {
+                    screen: Some(1),
+                    action: serde_json::from_value(
+                        serde_json::json!({"t": "navigate", "href": "/sign-in"}),
+                    )
+                    .expect("an action"),
+                    form: None,
+                    overlay: None,
+                    text: None,
+                    now: None,
+                    ask: None,
+                    from: None,
+                });
+                core.send(Event::Random {
+                    request: 1,
+                    bytes: bytes.to_owned(),
+                });
+            }
+            core
+        };
+        let asked = |update: &Update| -> Vec<String> {
+            update
+                .effects
+                .iter()
+                .filter_map(|effect| match effect {
+                    Effect::Fetch(request) => Some(request.url.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let no_callback =
+            include_str!("../transcripts/fixtures/made/shell-app-nobody-windows.json");
+        let callback = include_str!("../transcripts/fixtures/made/shell-app-nobody.json");
+
+        // No sign-in open, no callback named: each is the ordinary link it is.
+        for link in [
+            "charkha://orders/7?code=DIWALI24",
+            "charkha://orders/7?state=open",
+            "charkha://orders/7?error=none",
+        ] {
+            let mut core = core_on("windows", no_callback, false);
+            let update = core.send(Event::OpenLink {
+                url: link.to_owned(),
+            });
+            let path = link.trim_start_matches("charkha:/");
+            assert!(
+                asked(&update)
+                    .iter()
+                    .any(|url| url == &format!("https://shop.example{path}")),
+                "{link} is opened: {update:?}"
+            );
+        }
+
+        // A sign-in open, no callback named: only this sign-in's state is its return.
+        let mut core = core_on("windows", no_callback, true);
+        let update = core.send(Event::OpenLink {
+            url: "charkha://orders/7?state=open".to_owned(),
+        });
+        assert!(
+            asked(&update)
+                .iter()
+                .any(|url| url == "https://shop.example/orders/7?state=open"),
+            "another state is an ordinary link: {update:?}"
+        );
+        let update = core.send(Event::OpenLink {
+            url: format!("charkha://signed-in?code=Tq7uX0b2c9&state={state}"),
+        });
+        assert!(
+            asked(&update)
+                .iter()
+                .any(|url| url.ends_with("/api/auth/app/exchange")),
+            "this sign-in's return is exchanged: {update:?}"
+        );
+
+        // A sign-in open, a callback named: a look-alike on another path is an ordinary link.
+        let mut core = core_on("ios", callback, true);
+        let update = core.send(Event::OpenLink {
+            url: format!("https://shop.example/orders/7?code=Tq7uX0b2c9&state={state}"),
+        });
+        let urls = asked(&update);
+        assert!(
+            urls.iter()
+                .any(|url| url.starts_with("https://shop.example/orders/7"))
+                && !urls.iter().any(|url| url.ends_with("/exchange")),
+            "{update:?}"
+        );
     }
 
     /// The retry keeps its pace: a request that got through asks for the shell

@@ -116,13 +116,11 @@
       }
     },
     {
-      "note": "No sign-in is open now: a return planted as a link, with that state or with none, is not used and not opened as a page.",
+      "note": "No sign-in is open now: a link on the app's scheme is an ordinary link, with a state or without one. `/signed-in` is neither a destination nor a route of the shell, so it is not opened, and nothing is exchanged.",
       "send": {"t":"open_link","url":"charkha://signed-in?code=PLANTED000&state=ISIjJCUmJygpKissLS4vMA"},
       "expect": {
         "changed": [],
-        "effects": [
-          {"t":"report","what":"sign_in","detail":"a sign-in's return arrived with no sign-in open, and was not used"}
-        ]
+        "effects": []
       },
       "check": [
         {"at":"/screens/2","is":null}
@@ -132,16 +130,14 @@
       "send": {"t":"open_link","url":"charkha://signed-in?code=PLANTED000"},
       "expect": {
         "changed": [],
-        "effects": [
-          {"t":"report","what":"sign_in","detail":"a sign-in's return arrived with no sign-in open, and was not used"}
-        ]
+        "effects": []
       },
       "check": [
         {"at":"/screens/2","is":null}
       ]
     },
     {
-      "note": "Nor when it comes as the end of a session.",
+      "note": "Handed back as the end of a session, with no sign-in open, it is not used.",
       "send": {"t":"sign_in_done","url":"charkha://signed-in?code=PLANTED000"},
       "expect": {
         "changed": [],

@@ -328,19 +328,26 @@ impl Core {
         });
     }
 
-    /// Whether an address is the one a sign-in session comes back on: the
-    /// shell's callback, or, when it names none, a link on the app's own
-    /// scheme that carries what a return carries (a code, a state or an
-    /// error).
+    /// Whether an address is a sign-in session's return. The shell's
+    /// callback is the hand-over's own way back: an address there is a return
+    /// whether or not a sign-in is open, and is never a page. With no callback
+    /// named, a link on the app's own scheme is a return only while a sign-in
+    /// is open and only with that sign-in's `state`; any other link is an
+    /// ordinary link.
     pub(crate) fn is_return(&self, address: &str) -> bool {
         let Some(routes) = &self.inner.sign_in else {
             return false;
         };
-        self.on_the_way_back(address)
-            && (routes.callback.is_some()
-                || ["code", "state", "error"]
-                    .iter()
-                    .any(|name| query_value(address, name).is_some()))
+        if routes.callback.is_some() {
+            return self.on_the_way_back(address);
+        }
+        match &self.inner.hand_over {
+            Some(HandOver::Open { state, .. }) => {
+                self.on_the_way_back(address)
+                    && query_value(address, "state").is_some_and(|returned| same(&returned, state))
+            }
+            _ => false,
+        }
     }
 
     /// A return of a sign-in session that came as a link from outside. It
