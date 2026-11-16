@@ -134,11 +134,14 @@ class LaneMoveTest {
     private fun handle(at: Int) =
         compose.onAllNodes(hasContentDescription("Move ${LaneBoard.title(at)}"), useUnmergedTree = true).onFirst()
 
+    /** Whether the handle of a card has the focus, in the tree a screen reader reads (the keyboard tests of the screens read that one) or in the tree of every part. */
     private fun focused(at: Int) =
-        compose.onAllNodes(isFocused() and hasContentDescription("Move ${LaneBoard.title(at)}"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        listOf(false, true).any { unmerged ->
+            compose.onAllNodes(isFocused() and hasContentDescription("Move ${LaneBoard.title(at)}"), useUnmergedTree = unmerged).fetchSemanticsNodes().isNotEmpty()
+        }
 
     /** What has the focus now, in words. */
-    private fun stopNow(): String = compose.onAllNodes(isFocused(), useUnmergedTree = true).fetchSemanticsNodes().joinToString(" + ") { node ->
+    private fun stopNow(): String = compose.onAllNodes(isFocused()).fetchSemanticsNodes().joinToString(" + ") { node ->
         listOfNotNull(
             node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", "),
             node.config.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text },
@@ -251,6 +254,9 @@ class LaneMoveTest {
     @Test
     fun aCardMovedByTheKeyboardAndByItsMenuKeepsTheFocusAndStandsWhereTheMoveSays() {
         open(200)
+        // As the screens' own Tab walks do: the screen has settled, and the key goes to the root.
+        Thread.sleep(1_500)
+        compose.waitForIdle()
         // The keyboard's Tab walks the screen from its top, a stop at a time, to the first card's handle (a button takes the focus only when the keyboard is in use).
         val stops = ArrayList<String>()
         for (press in 1..10) {
