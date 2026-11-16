@@ -359,8 +359,7 @@ async fn a_link_mailed_before_an_address_change_does_not_prove_the_new_address()
             .and_then(|mail| mail.text.clone())
             .expect("the mail and its text body")
     };
-    let token = link_param(&text_of("Your sign-in link"), "token")
-        .expect("a token in the link");
+    let token = link_param(&text_of("Your sign-in link"), "token").expect("a token in the link");
     let code = code_in(&text_of("Your sign-in code"));
 
     client
@@ -379,10 +378,8 @@ async fn a_link_mailed_before_an_address_change_does_not_prove_the_new_address()
         .await
         .unwrap();
     assert_eq!(unused, 0, "the change ends the link and the code");
-    let sessions = || {
-        refresh_token::Model::query()
-            .where_(refresh_token::Model::USER_ID.eq(user.id))
-    };
+    let sessions =
+        || refresh_token::Model::query().where_(refresh_token::Model::USER_ID.eq(user.id));
     let before = sessions().count(&*db).await.unwrap();
 
     client
@@ -440,8 +437,7 @@ async fn a_link_or_code_mailed_to_the_address_held_now_still_proves_it() {
         .send()
         .await
         .assert_status(202);
-    let token = link_param(&last_text(&app).await, "token")
-        .expect("a token in the link");
+    let token = link_param(&last_text(&app).await, "token").expect("a token in the link");
     update_profile(json!({ "name": "Harpreet Kaur" })).await;
     let signed_in = client
         .post("/api/auth/magic-link/verify")
@@ -493,8 +489,7 @@ async fn a_link_or_code_made_for_another_address_proves_nothing() {
         .send()
         .await
         .assert_status(202);
-    let token = link_param(&last_text(&app).await, "token")
-        .expect("a token in the link");
+    let token = link_param(&last_text(&app).await, "token").expect("a token in the link");
     client
         .post("/api/auth/otp")
         .json(&json!({ "email": "harpreet@sutlej.in" }))
@@ -609,8 +604,7 @@ async fn an_address_changed_during_a_sign_in_by_link_is_not_marked() {
         .send()
         .await
         .assert_status(202);
-    let token = link_param(&last_text(&app).await, "token")
-        .expect("a token in the link");
+    let token = link_param(&last_text(&app).await, "token").expect("a token in the link");
     let db = app.get::<Db>().await;
     *moves.0.lock().unwrap_or_else(PoisonError::into_inner) =
         Some((db, "simran@sutlej.in".to_owned()));
