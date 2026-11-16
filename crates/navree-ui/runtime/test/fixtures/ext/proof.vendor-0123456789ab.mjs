@@ -12,6 +12,8 @@ export function mount(el, props, ui) {
     `<form data-ui-form method="post" action="/account/email"><input name="email" value="harpreet@ludhiana.example"><button id="vendor-send">Show on map</button></form>` +
     `<div data-ui-own><button id="planted" data-ui-click='[["toggle","menu"]]'>Open</button></div>` +
     `<input id="vendor-charge" name="charge" value="0">` +
+    `<meta name="referrer" content="unsafe-url"><meta http-equiv="refresh" content="0;url=https://elsewhere.example/">` +
+    `<link rel="dns-prefetch" href="//elsewhere.example"><link rel="stylesheet" href="/_navree/ui/ext/proof.pad-0123456789ab.css"><base href="https://elsewhere.example/">` +
     `<form id="ui-sealed" method="get" action="/search"><input name="q" value="Ludhiana"><button id="vendor-search">See map</button></form>`;
   ui.later(0, () => {
     body.querySelector("#vendor-charge").setAttribute("form", "new-delivery");

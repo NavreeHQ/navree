@@ -221,6 +221,11 @@ test("a field written into an owned body does not post with the surrounding form
   assert.deepEqual([...new FormData($("new-delivery"))], [["charge", "40"]]);
 });
 
+test("every meta, link and base written into a body is taken out", () => {
+  assert.ok($("vendor-charge"), "the library did not write its markup");
+  assert.deepEqual([...$("vendor-body").querySelectorAll("meta,link,base")].map((el) => el.outerHTML), []);
+});
+
 test("a form written into a body with the id the sealed fields name owns none of them", () => {
   const written = $("vendor-body").querySelector("form[id=ui-sealed]");
   assert.ok(written, "the library did not write its form");

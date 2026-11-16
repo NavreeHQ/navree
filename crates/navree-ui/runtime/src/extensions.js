@@ -82,12 +82,13 @@ const sealed = new WeakSet();
 const detach = (el) => E.matches.call(el, FIELDS) && attr(el, "form") !== SEALED && set(el, "form", SEALED);
 
 /**
- * Takes every runtime hook off `el`, and takes it out of any form. What acts by being in a page and no
- * policy stops (a base that repoints every link, a refresh) is taken out, as from a fetched page.
+ * Takes every runtime hook off `el`, and takes it out of any form. What acts by being in a page (a base that
+ * repoints every link, a meta that refreshes the page or sets its referrer policy, a link the browser follows)
+ * is taken out. What the browser did as it was inserted, before this runs, is not undone.
  * @param {Element} el
  */
 const scrub = (el) => {
-  if (E.matches.call(el, "meta[http-equiv],base")) el.remove();
+  if (E.matches.call(el, "meta,link,base")) el.remove();
   for (const name of E.getAttributeNames.call(el)) if (name.startsWith("data-ui-")) unset(el, name);
   detach(el);
 };
