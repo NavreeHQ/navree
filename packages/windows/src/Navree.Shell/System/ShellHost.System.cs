@@ -10,7 +10,7 @@ namespace Navree.Shell;
 // the next launch, and what happens when the core says it has stopped.
 public sealed partial class ShellHost
 {
-    private const string SnapshotKey = "snapshot";
+    private const string SnapshotKey = StartRules.SnapshotKey;
     private readonly SignInTracker signIn = new();
     private LoopbackReturn? loopback;
     private CancellationTokenSource? loopbackWait;
@@ -301,6 +301,9 @@ public sealed partial class ShellHost
         }
 
         coreStopped = true;
+
+        // The start that follows begins clean: the snapshot kept so far may be what brought the stop, and is not given back to the core.
+        session.Write(StartRules.StoppedKey, "1");
         CoreStopped?.Invoke();
     }
 
@@ -320,6 +323,16 @@ public sealed partial class ShellHost
         catch (Exception)
         {
             // The key is released with the process in any case.
+        }
+
+        // What was asked to be kept is on disk before the next process reads it: the word that the core stopped, above all.
+        try
+        {
+            _ = session.DrainAsync().Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (AggregateException)
+        {
+            // The queue has ended: nothing more is written.
         }
 
         try

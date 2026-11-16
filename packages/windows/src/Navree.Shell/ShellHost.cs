@@ -189,7 +189,7 @@ public sealed partial class ShellHost : IDisposable
         }
 
         startNotes.Clear();
-        string? saved = kept.Read("snapshot");
+        string? saved = StartRules.SnapshotToRestore(kept);
         client.Send(SnapshotRulesAllow(saved) ? Events.Restore(saved!) : Events.Start);
     }
 
