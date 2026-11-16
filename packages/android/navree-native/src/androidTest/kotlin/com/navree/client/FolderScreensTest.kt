@@ -11,7 +11,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.navree.client.core.Content
 import com.navree.client.core.Events
 import com.navree.client.core.Stage
-import com.navree.client.ui.NavreeApp
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -22,6 +21,7 @@ import mockwebserver3.MockWebServer
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,12 +40,20 @@ import org.junit.runner.RunWith
  * giving `"shots": 0`); each screen is opened by its address, waited for by
  * its `title`, and photographed from its top `shots` times a window apart, as
  * `<device>-<look>-<name>-<n>.png` beside the other tests' shots.
+ *
+ * The cloud job names no folder, so this test is skipped there in every look;
+ * it runs only where `-e answers` is given, on a machine of its own.
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 class FolderScreensTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Before
+    fun readingListsFollowThePictures() {
+        Shots.rule = compose
+    }
 
     private val server = MockWebServer()
 
@@ -99,7 +107,7 @@ class FolderScreensTest {
             app = NavreeSession(compose.activity.application, config, origin.toHttpUrl())
             app.effects.activity = compose.activity
         }
-        compose.setContent { Shots.Looked { NavreeApp(app.driver, config, image = app::image) } }
+        compose.setContent { Shots.Looked { Host(app) } }
         waitFor("the app is ready", 60_000) { app.driver.nav.stage == Stage.Ready }
 
         for (visit in visits.filter { it.shots > 0 }) {
