@@ -706,9 +706,7 @@ async fn a_plugin_whose_namespace_is_the_first_word_of_the_apps_permission_fails
 
     // A permission a module of the app describes.
     let khata = Plugin(plugin("navree-plugin-khata", "khata"), &[]);
-    let app = builder()
-        .module(Plain("Khata", KHATA_EXPORT))
-        .module(khata);
+    let app = builder().module(Plain("Khata", KHATA_EXPORT)).module(khata);
     let error = boot_error(app).await;
     let expected = format!(
         "plugin `navree-plugin-khata` uses the namespace `khata`, the first word of the permission `khata.export` that `Khata` describes{HOLDS}"

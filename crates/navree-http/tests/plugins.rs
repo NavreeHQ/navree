@@ -116,7 +116,9 @@ mod navree_plugin_khata {
 
     /// The plugin's answer to its own error: 409.
     pub fn closed(_: &LedgerClosed) -> Option<AppError> {
-        Some(AppError::conflict("The khata of Ludhiana is closed for the day."))
+        Some(AppError::conflict(
+            "The khata of Ludhiana is closed for the day.",
+        ))
     }
 
     /// The plugin's module: it names the plugin, then registers what `.0` adds.
@@ -271,7 +273,9 @@ async fn the_app_may_add_a_plugins_layer() {
 
 /// An answer to every input or output error: 503, the khata is busy.
 fn busy(_: &std::io::Error) -> Option<AppError> {
-    Some(AppError::service_unavailable("The khata of Amritsar is busy."))
+    Some(AppError::service_unavailable(
+        "The khata of Amritsar is busy.",
+    ))
 }
 
 /// The refusal of the khata plugin's `LedgerModule` mapping the errors of type `error`.

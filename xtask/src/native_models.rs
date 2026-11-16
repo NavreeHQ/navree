@@ -1620,7 +1620,11 @@ impl CSharp<'_> {
             Ty::Optional(inner) => {
                 let held = self.ty(inner);
                 let read = self.reader_at(inner, at, depth + 1)?;
-                let kind = if self.is_value(inner) { "NullV" } else { "NullRef" };
+                let kind = if self.is_value(inner) {
+                    "NullV"
+                } else {
+                    "NullRef"
+                };
                 format!("static element{depth} => Reading.{kind}<{held}>(element{depth}, {read})")
             }
         })
@@ -1752,12 +1756,18 @@ impl CSharp<'_> {
             if let Def::Union { variants, .. } = def {
                 names.push(format!("{}Unknown", Self::flat(name)));
                 for variant in variants.iter().filter(|variant| variant.payload.is_none()) {
-                    names.push(format!("{}{}", Self::flat(name), Self::pascal(&variant.tag)));
+                    names.push(format!(
+                        "{}{}",
+                        Self::flat(name),
+                        Self::pascal(&variant.tag)
+                    ));
                 }
             }
             for type_name in names {
                 if let Some(other) = seen.insert(type_name.clone(), name.clone()) {
-                    return Err(format!("{name} and {other} are both the C# type {type_name}"));
+                    return Err(format!(
+                        "{name} and {other} are both the C# type {type_name}"
+                    ));
                 }
             }
         }
@@ -1814,7 +1824,11 @@ impl CSharp<'_> {
         if parents.is_empty() {
             let _ = writeln!(out, "    public sealed record {flat}");
         } else {
-            let _ = writeln!(out, "    public sealed record {flat} : {}", parents.join(", "));
+            let _ = writeln!(
+                out,
+                "    public sealed record {flat} : {}",
+                parents.join(", ")
+            );
         }
         out.push_str("    {\n");
         for field in fields {
@@ -1822,7 +1836,10 @@ impl CSharp<'_> {
             let ty = self.field_ty(field);
             match &field.default {
                 None => {
-                    let _ = writeln!(out, "        public required {ty} {property} {{ get; init; }}");
+                    let _ = writeln!(
+                        out,
+                        "        public required {ty} {property} {{ get; init; }}"
+                    );
                 }
                 Some(Value::Null) => {
                     let _ = writeln!(out, "        public {ty} {property} {{ get; init; }}");
@@ -1883,7 +1900,9 @@ impl CSharp<'_> {
         }
         let _ = writeln!(out, "\n    /// <summary><c>{name}</c>.</summary>");
         let _ = writeln!(out, "    public enum {flat}\n    {{");
-        out.push_str("        /// <summary>A word this build does not know.</summary>\n        Unknown,\n");
+        out.push_str(
+            "        /// <summary>A word this build does not know.</summary>\n        Unknown,\n",
+        );
         for value in values {
             let _ = writeln!(out, "        {},", Self::pascal(value));
         }
@@ -1959,7 +1978,10 @@ impl CSharp<'_> {
             out,
             "    /// <summary>A variant this build does not know, from a newer server, with what it keeps.</summary>"
         );
-        let _ = writeln!(out, "    public sealed record {flat}Unknown : {flat}\n    {{");
+        let _ = writeln!(
+            out,
+            "    public sealed record {flat}Unknown : {flat}\n    {{"
+        );
         out.push_str("        public required string Tag { get; init; }\n");
         for (field, ty) in keeps {
             let _ = writeln!(
@@ -2007,11 +2029,7 @@ impl CSharp<'_> {
         for (field, ty) in keeps {
             let at = format!("{name}.x-unknown.{field}");
             let read = self.reader(ty, &at)?;
-            let kind = if self.is_value(ty) {
-                "OptV"
-            } else {
-                "Opt"
-            };
+            let kind = if self.is_value(ty) { "OptV" } else { "Opt" };
             let _ = writeln!(
                 out,
                 "                    {} = Reading.{kind}<{}>(json, {}, {read}),",

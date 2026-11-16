@@ -407,7 +407,10 @@ fn plugin_islands(ctx: &AppContext) -> bool {
     if scripts.is_empty() {
         return false;
     }
-    if scripts.iter().any(|script| script.value.namespace.is_some()) {
+    if scripts
+        .iter()
+        .any(|script| script.value.namespace.is_some())
+    {
         return true;
     }
     let plugins = ctx.plugins().plugins;
