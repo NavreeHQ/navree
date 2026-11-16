@@ -553,8 +553,9 @@ impl fmt::Debug for ErrorMapper {
 /// and text, and before the app's mapper of the same type when the app imports the plugin. So
 /// only a module of the app maps another crate's errors; a plugin maps the error types of its
 /// own crate. An app whose mappers all come from modules that act for no plugin reads nothing
-/// more.
-pub(crate) fn mappers_of_plugins(ctx: &AppContext) -> Vec<String> {
+/// more. navree-micro, which answers its handlers' errors with the same mappers, refuses them
+/// with this in a service with no `HttpModule`.
+pub fn mappers_of_plugins(ctx: &AppContext) -> Vec<String> {
     let contributed = ctx.contributions::<ErrorMapper>();
     if contributed
         .iter()

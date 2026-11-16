@@ -10,7 +10,7 @@ use navree_access::AccessModule;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::Permission;
 use navree_db::DatabaseModule;
-use navree_http::{CurrentPrincipal, LayerSlot, ModuleBuilderHttpExt, Result};
+use navree_http::{AppError, CurrentPrincipal, LayerSlot, ModuleBuilderHttpExt, Result};
 use navree_kernel::{AppBuilder, Module, ModuleBuilder, Navree};
 use navree_macros::{injectable, message_handlers};
 use navree_micro::{MicroFake, MicroModule, MicroOptions, ModuleBuilderMicroExt};
@@ -28,13 +28,14 @@ const HARPREET: Uuid = Uuid::from_u128(0x0192_f0c1_0000_7000_8000_0000_0000_00a1
 /// The khata plugin, a community plugin whose crate is this module: the service's own modules
 /// are in no crate it names.
 mod navree_plugin_khata {
+    use std::fmt;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     use navree_contracts::AuthState;
     use navree_http::extract::Request;
     use navree_http::middleware::{self, Next};
-    use navree_http::{GlobalLayer, LayerSlot};
+    use navree_http::{AppError, GlobalLayer, LayerSlot};
     use navree_kernel::{Module, ModuleBuilder, PluginInfo};
     use navree_testing::principal;
 
@@ -63,6 +64,25 @@ mod navree_plugin_khata {
             applied.store(true, Ordering::SeqCst);
             Ok(router)
         })
+    }
+
+    /// The plugin's own error: the khata is closed for the day.
+    #[derive(Debug)]
+    pub struct LedgerClosed;
+
+    impl fmt::Display for LedgerClosed {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("the khata is closed for the day")
+        }
+    }
+
+    impl std::error::Error for LedgerClosed {}
+
+    /// The plugin's answer to its own error: 409.
+    pub fn closed(_: &LedgerClosed) -> Option<AppError> {
+        Some(AppError::conflict(
+            "The khata of Ludhiana is closed for the day.",
+        ))
     }
 
     /// The plugin's module: it names the plugin, then registers what `.0` adds.
@@ -132,7 +152,7 @@ async fn boot_error(plugin: LedgerModule) -> String {
     let micro = MicroFake::new();
     let builder = TestAuthenticator::install(service(&micro).module(plugin));
     match builder.boot().await {
-        Ok(_) => panic!("the service booted with the plugin's layer"),
+        Ok(_) => panic!("the service booted with what the plugin's module registers"),
         Err(error) => error.to_string(),
     }
 }
@@ -239,6 +259,63 @@ async fn a_service_with_no_plugin_answers_as_before() {
         .await
         .unwrap();
     assert_eq!(me, HARPREET);
+    app.shutdown().await.unwrap();
+}
+
+/// An answer to every input or output error: 503, the khata is busy.
+fn busy(_: &std::io::Error) -> Option<AppError> {
+    Some(AppError::service_unavailable(
+        "The khata of Amritsar is busy.",
+    ))
+}
+
+/// A module of the service that maps every input or output error: the service's own choice.
+struct IoErrors;
+
+impl Module for IoErrors {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.map_error::<std::io::Error>(busy);
+    }
+}
+
+/// The refusal of the khata plugin's `LedgerModule` mapping the errors of type `error`, as an
+/// app with `HttpModule` gives it.
+fn maps(error: &str) -> String {
+    format!(
+        "plugin `navree-plugin-khata` answers the app's errors of type `{error}` (m.map_error in `LedgerModule`), a type of another crate; only a module of the app maps another crate's errors: remove the plugin or update it to a version that maps only its own errors, and to use the plugin's mapping, register it from a module of the app (m.map_error)"
+    )
+}
+
+#[tokio::test]
+async fn a_plugin_mapping_of_another_crates_errors_fails_the_boot_of_a_service_without_http() {
+    // Every input or output error a handler of the service raises would answer 503, with the
+    // plugin's text.
+    let error = boot_error(LedgerModule::new(|m| {
+        m.map_error::<std::io::Error>(busy);
+    }))
+    .await;
+    let expected = maps(std::any::type_name::<std::io::Error>());
+    assert!(error.contains(&expected), "{error}");
+    assert_eq!(
+        error.matches("answers the app's errors of type").count(),
+        1,
+        "one refusal per mapping: {error}"
+    );
+
+    // Its own error type is the plugin's to map.
+    let micro = MicroFake::new();
+    let plugin = LedgerModule::new(|m| {
+        m.map_error::<navree_plugin_khata::LedgerClosed>(navree_plugin_khata::closed);
+    });
+    let app = TestApp::from_builder(service(&micro).module(plugin)).await;
+    app.shutdown().await.unwrap();
+
+    // The service maps another crate's errors from a module of its own, beside the plugin.
+    let micro = MicroFake::new();
+    let builder = service(&micro)
+        .module(IoErrors)
+        .module(LedgerModule::new(|_| {}));
+    let app = TestApp::from_builder(builder).await;
     app.shutdown().await.unwrap();
 }
 

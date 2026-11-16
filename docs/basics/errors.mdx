@@ -482,10 +482,10 @@ async fn charge(&self, Path(id): Path<Uuid>) -> Result<Json<Value>> {
 
 Mappers apply to the whole app, whichever module registers them. They only see 500s that carry a source: an `AppError` you build with a status yourself is sent as it is.
 
-Because a mapper answers every such error of the app, a module of a plugin that is not one of the framework's own packages maps only the error types of its own crate. A mapping of another crate's type, such as `std::io::Error` or the `tower` crate's `Elapsed`, stops the boot, and the app registers such a mapping from a module of its own. The HTTP module checks this at boot, before it builds the router:
+Because a mapper answers every such error of the app, a module of a plugin that is not one of the framework's own packages maps only the error types of its own crate. A mapping of another crate's type, such as `std::io::Error` or the `tower` crate's `Elapsed`, stops the boot, and the app registers such a mapping from a module of its own. The HTTP module checks this at boot, before it builds the router, and a message service with no HTTP module (navree-micro) checks it when it builds its message pipeline. The text names the type as Rust prints it:
 
 ```text wrap
-plugin `navree-plugin-khata` answers the app's errors of type `std::io::Error` (m.map_error in `LedgerModule`), a type of another crate; only a module of the app maps another crate's errors: remove the plugin or update it to a version that maps only its own errors, and to use the plugin's mapping, register it from a module of the app (m.map_error)
+plugin `navree-plugin-khata` answers the app's errors of type `std::io::error::Error` (m.map_error in `LedgerModule`), a type of another crate; only a module of the app maps another crate's errors: remove the plugin or update it to a version that maps only its own errors, and to use the plugin's mapping, register it from a module of the app (m.map_error)
 ```
 
 A plugin's error pages and error shell are the app's to choose in the same way: see [errors and states](/docs/ui/errors-and-states/).

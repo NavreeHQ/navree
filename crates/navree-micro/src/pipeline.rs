@@ -17,7 +17,7 @@ use navree_contracts::{
     AuditEntry, AuditKind, AuditSink, AuthState, AuthVia, Principal, RequestId,
 };
 use navree_db::Uow;
-use navree_http::__private::{DeclaredAccess, layers_of_plugins};
+use navree_http::__private::{DeclaredAccess, layers_of_plugins, mappers_of_plugins};
 use navree_http::AppRouter;
 use navree_http::body::{Body, to_bytes};
 use navree_http::extract::Request;
@@ -149,8 +149,9 @@ impl MessageRouter {
     /// Collects and checks every registered handler, then builds the
     /// router. Every problem is reported at once. An app-wide layer from a
     /// module of a plugin that is not one of the framework's own packages is
-    /// refused here as `build_router` refuses it, so a service without
-    /// `HttpModule` does not boot with it either.
+    /// refused here as `build_router` refuses it, and so is such a plugin's
+    /// mapping of another crate's errors, as `HttpModule` refuses it: a
+    /// service without `HttpModule` does not boot with either.
     pub(crate) async fn build(
         ctx: &AppContext,
         settings: &PipelineSettings,
@@ -194,13 +195,17 @@ impl MessageRouter {
         }
         // Only the app adds a layer that wraps every handler: such a layer from a module of a
         // plugin the kernel does not find first-party stops the boot, in any slot, with the
-        // refusal `build_router` gives, before any layer below is applied.
+        // refusal `build_router` gives, before any layer below is applied. And only a module
+        // of the app maps another crate's errors: such a plugin's mapping of one stops the boot
+        // with the refusal `HttpModule` gives, so it never answers a handler's error.
+        let mut refused = layers_of_plugins(ctx);
+        refused.extend(mappers_of_plugins(ctx));
         check(
             &patterns,
             settings,
             authenticator.is_some(),
             authorizer.is_some(),
-            layers_of_plugins(ctx),
+            refused,
         )?;
 
         let mut routes = navree_http::routing::Router::new();
@@ -518,7 +523,8 @@ fn path_of(registered: &Registered) -> String {
 }
 
 /// Checks the registered patterns; every problem at once, after `refused`
-/// (the plugins' app-wide layers).
+/// (the plugins' app-wide layers and their mappings of another crate's
+/// errors).
 fn check(
     patterns: &[Arc<Registered>],
     settings: &PipelineSettings,

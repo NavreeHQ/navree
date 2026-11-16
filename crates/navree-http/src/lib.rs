@@ -172,5 +172,6 @@ pub use workspace::RequestWorkspace;
 #[doc(hidden)]
 pub mod __private {
     pub use crate::declared::{AccessDeclarations, DeclaredAccess, declared_access};
+    pub use crate::error::mappers_of_plugins;
     pub use crate::router::layers_of_plugins;
 }
