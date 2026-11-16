@@ -69,6 +69,20 @@ fn form(tag: &str, name: &str, fields: &[(&str, Value)]) -> Value {
     object(&all)
 }
 
+/// The same forms, with a description on the one whose tag is `name`.
+fn described(mut forms: Value, name: &str, description: &str) -> Value {
+    if let Some(options) = forms.get_mut("oneOf").and_then(Value::as_array_mut) {
+        for option in options {
+            if option.pointer("/properties/t/const") == Some(&json!(name))
+                && let Some(option) = option.as_object_mut()
+            {
+                option.insert("description".to_owned(), json!(description));
+            }
+        }
+    }
+    forms
+}
+
 fn forms(tag: &str, each: &[(&str, &[(&str, Value)])]) -> Value {
     let options: Vec<Value> = each
         .iter()
@@ -417,7 +431,16 @@ pub fn schema() -> Value {
         ]),
         "Update": object(&[("changed", list(one("Change"))), ("effects", list(one("Effect")))]),
         "Change": forms("t", &change),
-        "Effect": forms("t", effect),
+        "Effect": described(
+            forms("t", effect),
+            "session_ending",
+            "A session is ending: the person signed out and the core waits for the push token's \
+             removal before `forget_session`. The push token's removal, the request just before it \
+             in the same update, goes out with the session's cookie: a client takes that \
+             request's cookies before it removes them (or carries the effects out in order and \
+             finishes sending that request's headers first). Everything else of the person may be \
+             removed at once.",
+        ),
         "Body": forms("t", &[
             ("form", &[("text", string())]),
             ("multipart", &[("parts", list(one("Part")))]),

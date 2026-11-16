@@ -503,6 +503,7 @@
         },
         {
           "additionalProperties": false,
+          "description": "A session is ending: the person signed out and the core waits for the push token's removal before `forget_session`. The push token's removal, the request just before it in the same update, goes out with the session's cookie: a client takes that request's cookies before it removes them (or carries the effects out in order and finishes sending that request's headers first). Everything else of the person may be removed at once.",
           "properties": {
             "t": {
               "const": "session_ending"
