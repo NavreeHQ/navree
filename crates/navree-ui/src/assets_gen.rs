@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "2348f9ab74db";
+pub const BUILD: &str = "d7247d79d118";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-0fa0a3105862.js";
@@ -78,7 +78,7 @@ pub const CHARTS_URL: &str = "/_navree/ui/charts-803f2f250ec5.js";
 pub const COUNT_UP_URL: &str = "/_navree/ui/count-up-ab38e4353d29.js";
 
 /// The URL of `islands.js`.
-pub const ISLANDS_URL: &str = "/_navree/ui/islands-d7e25f072c9b.js";
+pub const ISLANDS_URL: &str = "/_navree/ui/islands-3af213da0104.js";
 
 /// The URL of `parts.js`.
 pub const PARTS_URL: &str = "/_navree/ui/parts-12dc2c8376c5.js";
@@ -87,7 +87,7 @@ pub const PARTS_URL: &str = "/_navree/ui/parts-12dc2c8376c5.js";
 pub const GENUI_URL: &str = "/_navree/ui/genui-0564c8ee102c.js";
 
 /// The URL of `extensions.js`.
-pub const EXTENSIONS_URL: &str = "/_navree/ui/extensions-159c72338f16.js";
+pub const EXTENSIONS_URL: &str = "/_navree/ui/extensions-020f1cc757df.js";
 
 /// The URL of `phone.js`.
 #[cfg(feature = "phone")]
@@ -412,7 +412,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "islands",
         ext: "js",
-        hash: "d7e25f072c9b",
+        hash: "3af213da0104",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/islands.js"),
         gzip: Some(include_bytes!("../dist/islands.js.gz")),
@@ -439,7 +439,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "extensions",
         ext: "js",
-        hash: "159c72338f16",
+        hash: "020f1cc757df",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/extensions.js"),
         gzip: Some(include_bytes!("../dist/extensions.js.gz")),
