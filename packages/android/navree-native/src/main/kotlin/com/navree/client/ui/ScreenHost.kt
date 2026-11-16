@@ -218,15 +218,15 @@ internal fun PatientProgress() {
 }
 
 @Composable
-internal fun FailureState(failure: Failure, retry: () -> Unit) {
+internal fun FailureState(failure: Failure, title: String = failureTitle(failure), text: String = failureText(failure), retry: () -> Unit) {
     Column(Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         if (failure == Failure.Offline) {
             Icon(Glyphs.CloudOff, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(16.dp))
         }
-        Text(failureTitle(failure), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
+        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
         Text(
-            failureText(failure),
+            text,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

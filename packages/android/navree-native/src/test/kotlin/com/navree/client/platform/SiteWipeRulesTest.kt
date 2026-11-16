@@ -12,17 +12,59 @@ import java.nio.file.Files
 /** The rules of the client's own document that takes an origin's service workers and caches away when a session has ended. */
 class SiteWipeRulesTest {
     private val word = "0f3a9c5e7b1d2468ace013579bdf2468"
+    private val token = "7b1d2468ace013579bdf24680f3a9c5e"
 
     @Test
-    fun the_clients_own_document_is_the_main_frames_request_at_the_address_that_carries_the_gos_word() {
-        val address = WipeRules.address("https://shop.example", word)
-        assertEquals("https://shop.example/?navree-wipe=$word", address)
-        assertTrue(WipeRules.own(address, mainFrame = true, word = word))
-        assertFalse("a frame's request is not it", WipeRules.own(address, mainFrame = false, word = word))
-        assertFalse("another go's word is not it", WipeRules.own(WipeRules.address("https://shop.example", "ab12"), mainFrame = true, word = word))
-        assertFalse("nor an address that only begins like it", WipeRules.own("$address&next=/orders", mainFrame = true, word = word))
-        assertFalse(WipeRules.own("https://shop.example/", mainFrame = true, word = word))
-        assertEquals("http://localhost:8097/?navree-wipe=$word", WipeRules.address("http://localhost:8097", word))
+    fun the_clients_own_document_is_at_a_path_the_go_made_and_nothing_else_is_it() {
+        val address = WipeRules.address("https://shop.example", token)
+        assertEquals("https://shop.example/$token", address)
+        assertTrue(WipeRules.own(address, token))
+        assertTrue("on whichever origin is in turn", WipeRules.own(WipeRules.address("http://localhost:8097", token), token))
+        assertFalse("another go's path is not it", WipeRules.own(WipeRules.address("https://shop.example", "ab12"), token))
+        assertFalse("nor an address that only begins like it", WipeRules.own("$address?next=/orders", token))
+        assertFalse(WipeRules.own("$address/orders", token))
+        assertFalse(WipeRules.own("$address#top", token))
+        assertFalse(WipeRules.own("https://shop.example/", token))
+        assertFalse("what is not a web address", WipeRules.own("blob:https://shop.example/$token", token))
+        assertFalse("no go, no document", WipeRules.own("https://shop.example/", ""))
+        assertFalse("the word a document answers with is not in its address", address.contains(word))
+    }
+
+    @Test
+    fun while_a_deletion_is_owed_every_page_is_held_back_until_a_go_has_ended_and_then_only_the_pages_of_an_origin_it_left() {
+        assertTrue(WipeRules.held(left = null, origin = "https://shop.example"))
+        val left = setOf("https://pay.example")
+        assertTrue(WipeRules.held(left, "https://pay.example"))
+        assertFalse("an origin that said it is clean is not held for another", WipeRules.held(left, "https://shop.example"))
+        assertTrue("an address on none of the app's origins", WipeRules.held(left, null))
+    }
+
+    @Test
+    fun an_origin_has_its_tries_and_is_then_left_while_the_go_moves_on() {
+        val turns = WipeRules.Turns(listOf("https://shop.example", "https://pay.example", "https://patiala.shop.example"))
+        assertEquals("https://shop.example", turns.current)
+        turns.cleared()
+        assertEquals("https://pay.example", turns.current)
+        repeat(WipeRules.TRIES - 1) {
+            turns.missed()
+            assertEquals("it is shown the document again", "https://pay.example", turns.current)
+        }
+        turns.missed()
+        assertEquals("the next origin is not kept waiting", "https://patiala.shop.example", turns.current)
+        turns.cleared()
+        assertNull(turns.current)
+        assertEquals(setOf("https://pay.example"), turns.left)
+        // What is written into the mark, and read from it at the next start.
+        assertEquals(listOf("https://pay.example"), WipeRules.listed(WipeRules.lines(turns.left)))
+    }
+
+    @Test
+    fun a_go_that_cannot_go_on_leaves_every_origin_not_yet_cleared() {
+        val turns = WipeRules.Turns(listOf("https://shop.example", "https://pay.example", "https://patiala.shop.example"))
+        turns.cleared()
+        turns.stop()
+        assertNull(turns.current)
+        assertEquals(setOf("https://pay.example", "https://patiala.shop.example"), turns.left)
     }
 
     @Test

@@ -92,7 +92,8 @@ object WebRules {
     /**
      * What a web page is missing before it may be shown: the rules for a service
      * worker's requests, the script at the start of every document, and a web
-     * view that holds nothing of a session that ended ([clean]: [SiteWipe]). A
+     * view that holds nothing of a session that ended on the page's origin
+     * ([clean]: [SiteWipe.shows]). A
      * page is shown only when nothing is missing ([guardsInForce]); where the
      * system's web view is too old to take either guard, a web region is not
      * shown at all and the rest of the app works. Each name says what is not
@@ -278,15 +279,22 @@ internal fun guardDocuments(view: WebView, origins: Origins, told: Told): Boolea
  * Puts the origin rules on the requests of service workers too: a page of the
  * app may register one, and its requests do not pass through the web view's
  * client. A worker's request to any origin but the app's (and its named web
- * hosts) is answered 403. The setting is the process's: other code that sets
- * a client of its own replaces this one, and nothing tells. Throws when the
- * system's web view cannot take it.
+ * hosts) is answered 403. While the service workers of a session that ended
+ * are being taken away, a worker's request for the client's own document of
+ * that go is answered with it here ([SiteWipe.document]): the platform's
+ * reference for this callback says that where an answer is returned, "the
+ * return response and data will be used", so a worker that fetches what its
+ * pages ask for hands the client's document on and the address is not sent.
+ * The setting is the process's: other code that sets a client of its own
+ * replaces this one, and nothing tells. Throws when the system's web view
+ * cannot take it.
  */
 internal fun setServiceWorkerRules(origins: Origins) {
     ServiceWorkerController.getInstance().setServiceWorkerClient(
         object : ServiceWorkerClient() {
             override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
+                SiteWipe.document(url)?.let { return it }
                 return when (WebRules.workerRequest(origins.ours(url), origins.webHost(url))) {
                     WebRequest.Send -> null
                     else -> WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
@@ -420,7 +428,9 @@ open class OriginWebClient(
 ) : WebViewClient() {
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val url = request.url.toString()
-        val navigation = WebRules.navigation(origins.ours(url), origins.webHost(url), request.isForMainFrame, request.isRedirect, request.hasGesture())
+        var navigation = WebRules.navigation(origins.ours(url), origins.webHost(url), request.isForMainFrame, request.isRedirect, request.hasGesture())
+        // Where a redirect or a frame leads is held back as a page is, while its origin still holds what the pages of an ended session left.
+        if (navigation == WebNavigation.Load && SiteWipe.held(url)) navigation = WebNavigation.Stop
         if (WebRules.leftByRedirect(request.isForMainFrame, request.isRedirect, navigation)) onLeft()
         return when (navigation) {
             WebNavigation.Load -> {
@@ -442,8 +452,12 @@ open class OriginWebClient(
         val accept = request.requestHeaders?.entries?.firstOrNull { it.key.equals("accept", ignoreCase = true) }?.value
         return when (WebRules.request(origins.ours(url), origins.webHost(url), request.isForMainFrame, request.url.scheme?.lowercase(), accept)) {
             WebRequest.Send -> {
-                // An origin a document is loaded from is one whose workers and caches go when the session ends.
-                if (WebRules.document(request.isForMainFrame, accept)) SiteWipe.saw(url)
+                if (WebRules.document(request.isForMainFrame, accept)) {
+                    // A document on an origin that still holds what the pages of an ended session left is not loaded, in a frame either.
+                    if (SiteWipe.held(url)) return if (request.isForMainFrame) empty(204, "No Content") else empty(403, "Forbidden")
+                    // An origin a document is loaded from is one whose workers and caches go when the session ends.
+                    SiteWipe.saw(url)
+                }
                 null
             }
             WebRequest.KeepPage -> empty(204, "No Content")
@@ -453,7 +467,7 @@ open class OriginWebClient(
 
     override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
         // The last word for what the checks before cannot see, such as a redirect of a posted form.
-        if (!WebRules.shown(url != null && origins.ours(url), url)) {
+        if (!WebRules.shown(url != null && origins.ours(url), url) || (url != null && origins.ours(url) && SiteWipe.held(url))) {
             view.stopLoading()
             onLeft()
             return

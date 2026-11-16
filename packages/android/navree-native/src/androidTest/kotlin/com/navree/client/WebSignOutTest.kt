@@ -25,6 +25,7 @@ import com.navree.client.platform.OriginWebClient
 import com.navree.client.platform.Origins
 import com.navree.client.platform.SiteWipe
 import com.navree.client.platform.guardDocuments
+import com.navree.client.platform.guardWorkers
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
@@ -67,6 +68,12 @@ class WebSignOutTest {
 
     /** What the pages told the app's server, in order. */
     private val said = CopyOnWriteArrayList<String>()
+
+    /** The path of every request the app's server was sent, in order. */
+    private val asked = CopyOnWriteArrayList<String>()
+
+    /** Whether the server sends a request for a path it does not know to its sign-in page; else it answers such a request with nothing. */
+    private var visitor = false
 
     @After
     fun stop() {
@@ -121,9 +128,19 @@ class WebSignOutTest {
         });
     """.trimIndent()
 
+    /**
+     * A worker that takes its origin's pages over at once and asks the
+     * network for every request of theirs, the pages themselves included.
+     */
+    private val fetching = """
+        self.addEventListener('install', function(){ self.skipWaiting() });
+        self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim()) });
+        self.addEventListener('fetch', function(e){ e.respondWith(fetch(e.request)) });
+    """.trimIndent()
+
     private fun serve() {
         app.dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse = when (request.url.encodedPath) {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.url.encodedPath.also { asked += it }) {
                 "/says" -> {
                     said += request.url.queryParameter("m") ?: ""
                     MockResponse.Builder().code(204).build()
@@ -133,7 +150,8 @@ class WebSignOutTest {
                 "/enter" -> MockResponse.Builder().code(302).addHeader("Location", "http://127.0.0.1:${request.url.port}/").build()
                 "/look" -> page(looks)
                 "/sw.js" -> MockResponse.Builder().code(200).addHeader("Content-Type", "text/javascript").body(worker).build()
-                else -> MockResponse.Builder().code(204).build()
+                "/sign-in" -> page("")
+                else -> if (visitor) MockResponse.Builder().code(302).addHeader("Location", "/sign-in").build() else MockResponse.Builder().code(204).build()
             }
         }
         app.start()
@@ -165,17 +183,24 @@ class WebSignOutTest {
      * Shows the page at [path] and waits until it has stored all five. With
      * [origins], the web view has the client's own checks for them, as a web
      * page of the app has, and the client is told which origins it is for;
-     * without, the web view's client is the system's own.
+     * without, the web view's client is the system's own. With [guard], a
+     * service worker's requests are asked of the app's own rules from the
+     * start, as in the app; without, of nobody until the session ends.
      */
-    private fun start(path: String = "/", origins: (() -> Origins)? = null) {
+    private fun start(path: String = "/", origins: (() -> Origins)? = null, guard: Boolean = false) {
         serve()
         val checked = origins?.invoke()
         if (checked != null) compose.runOnUiThread { SiteWipe.arm(compose.activity, checked) }
-        // The service worker's script comes from the app's own origin; nothing in this test is about the guard on it.
-        compose.runOnUiThread {
-            ServiceWorkerController.getInstance().setServiceWorkerClient(object : ServiceWorkerClient() {
-                override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? = null
-            })
+        if (guard) {
+            val set = compose.runOnUiThread { guardWorkers(Origins(base, loopbackHttp = true)) }
+            assertTrue("the rules for a service worker's requests were set", set)
+        } else {
+            // The service worker's script comes from the app's own origin, and the test is not about the rules for its requests.
+            compose.runOnUiThread {
+                ServiceWorkerController.getInstance().setServiceWorkerClient(object : ServiceWorkerClient() {
+                    override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? = null
+                })
+            }
         }
         compose.setContent {
             val address = shown
@@ -306,5 +331,25 @@ class WebSignOutTest {
         start(path = "/enter", origins = { Origins(base, also = listOf(second()), loopbackHttp = true) })
         signOut()
         assertNothingLeft(looked("web-storage-after-a-redirect.txt", "the session ended; the page that stored was reached through a redirect to ${second()}", address = second() + "/look"))
+    }
+
+    /**
+     * A worker that asks the network for every page of its origin, as an
+     * app's own worker commonly does, on a server that sends a visitor it
+     * does not know to its sign-in page whatever the address. The client's
+     * own document is a page of that origin too: the worker's request for it
+     * is answered by the client where a service worker's requests are asked,
+     * so the worker hands the client's document on, the worker and the cache
+     * are gone, and the server is never asked for that address.
+     */
+    @Test
+    fun aWorkerThatFetchesEveryPageOfItsOriginIsGoneAfterTheSessionEndedAndTheServerIsNotAskedForTheClientsDocument() {
+        worker = fetching
+        visitor = true
+        start(guard = true)
+        signOut()
+        assertNothingLeft(looked("web-fetching-worker-after-sign-out.txt", "the session ended; the worker fetched every page of its origin from the network"))
+        val known = setOf("/", "/look", "/sw.js", "/says", "/sign-in", "/favicon.ico")
+        assertEquals("the server was asked for nothing but its own pages: $asked", emptyList<String>(), asked.filter { it !in known })
     }
 }

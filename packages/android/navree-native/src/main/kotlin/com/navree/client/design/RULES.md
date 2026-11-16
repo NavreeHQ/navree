@@ -444,10 +444,15 @@ With nothing opened, the list has the window.
 - The end of a session leaves nothing its pages stored in the web view for a
   page of the next. Where the system's web view cannot delete every kind of
   site data itself, a document of the client's own on each origin unregisters
-  its service workers and deletes its caches (`SiteWipe`). Until the web view
-  has said that everything is gone a web page is not shown: the failed screen
-  with "Try again", as without the two guards, and "Try again" sets the
-  deletion going again.
+  its service workers and deletes its caches (`SiteWipe`). That document is
+  the client's own wherever the web view asks for its address, a service
+  worker's request for it included, and the address is a path made for that
+  one go. Until the web view has said that everything is gone a web page is
+  not shown: words that say so and what the person can do, with "Try again",
+  which sets the deletion going again. An origin that does not say it is
+  clean is left after two tries and does not hold the others: their pages are
+  shown again, its own stay refused, and every later go is at the origins
+  that were left.
 - A service worker a page registers is held to the origins the web view is:
   its requests to any other origin are answered 403. A page's own scripts open
   a socket or start a worker only for an address on the app's origins or a

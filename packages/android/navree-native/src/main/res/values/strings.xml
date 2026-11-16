@@ -16,6 +16,8 @@
     <string name="navree_server_text">The server could not answer. Try again in a moment.</string>
     <string name="navree_protocol_title">This screen can\'t be shown</string>
     <string name="navree_protocol_text">Update the app, or try again later.</string>
+    <string name="navree_web_held_title">This page can\'t be shown yet</string>
+    <string name="navree_web_held_text">What the pages of the last session kept on this device is still being removed. Try again in a moment. If this stays, close the app and open it again, and update the system\'s web view (Android System WebView).</string>
     <string name="navree_offline_short">No connection</string>
     <string name="navree_server_short">Couldn\'t reach the server</string>
     <string name="navree_protocol_short">Couldn\'t show the answer</string>

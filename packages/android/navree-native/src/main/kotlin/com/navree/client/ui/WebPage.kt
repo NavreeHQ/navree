@@ -20,8 +20,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import com.navree.client.BuildConfig
+import com.navree.client.R
 import com.navree.client.core.Failure
 import androidx.compose.runtime.LaunchedEffect
 import com.navree.client.platform.ClientLog
@@ -40,13 +42,14 @@ private const val NOT_GUARDED = "not guarded"
  * What a web page is shown with, as the answers [WebPage] decides by: whether
  * the rules for a service worker's requests are in force, whether the script
  * at the start of every document was added to a web view, and whether the web
- * view holds nothing of a session that ended. The app has only the real ones;
+ * view holds nothing of a session that ended on the origin of the page's
+ * address. The app has only the real ones;
  * a test gives answers of its own, to see the page refused when one is missing.
  */
 internal class WebGuards(
     val workers: () -> Boolean = { WorkerGuard.ensure() },
     val documents: (WebView, Origins) -> Boolean = { view, origins -> guardDocuments(view, origins) },
-    val clean: () -> Boolean = { SiteWipe.clean() },
+    val clean: (address: String) -> Boolean = { address -> SiteWipe.shows(address) },
 )
 
 /** The guards [WebPage] asks: the real ones unless a test provides others. */
@@ -98,7 +101,7 @@ internal fun WebPage(
     val workers = remember(url, serial, attempt) { guards.workers() }
     var documents by remember(url, serial, attempt) { mutableStateOf(true) }
     // Nor while the web view still holds what the pages of a session that ended stored: asked again each time, and asking sets it going.
-    val clean = remember(url, serial, attempt) { guards.clean() }
+    val clean = remember(url, serial, attempt) { guards.clean(url) }
     val missing = WebRules.missingGuards(workers, documents, clean)
     LaunchedEffect(url, serial, attempt, missing) {
         if (missing.isNotEmpty()) ClientLog.say("a web page was not shown: " + missing.joinToString("; "))
@@ -107,10 +110,16 @@ internal fun WebPage(
     Box(modifier.fillMaxSize()) {
         if (failed || missing.isNotEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                FailureState(Failure.Protocol) {
+                val again: () -> Unit = {
                     gone = 0
                     failed = !origins.ours(url)
                     attempt++
+                }
+                if (!failed && workers && documents && !clean) {
+                    // Held back only by what the pages of an ended session left: said in words, with what the person can do about it.
+                    FailureState(Failure.Protocol, stringResource(R.string.navree_web_held_title), stringResource(R.string.navree_web_held_text), again)
+                } else {
+                    FailureState(Failure.Protocol, retry = again)
                 }
             }
         } else {

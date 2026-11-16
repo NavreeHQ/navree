@@ -215,7 +215,9 @@ class AndroidEffects(
      * write of the session that ended runs at all. What the web view holds is
      * owed its deletion from the first step until the web view has said it is
      * gone ([SiteWipe]): if the five seconds pass first, or the app ends, no
-     * web page is shown until it has, and the next start finishes it. The
+     * web page is shown until it has, and the next start finishes it; an
+     * origin that does not say so is left and its pages stay held back, while
+     * the pages of the others are shown again. The
      * push service's token for this install is deleted and a new one asked for.
      */
     private fun forget() {
@@ -259,12 +261,12 @@ class AndroidEffects(
                     }
                     try {
                         cookies.clear {
-                            val last = { clean: Boolean ->
+                            val last = { left: Set<String>? ->
                                 // Written to disk before the wipe is done, off the main thread: nothing after it,
                                 // the end of the session's thread included, comes first.
                                 thread(name = "navree-cookie-flush", isDaemon = true) {
                                     try {
-                                        SiteWipe.over(clean)
+                                        SiteWipe.over(left)
                                         cookies.flush()
                                     } finally {
                                         done()
@@ -275,17 +277,17 @@ class AndroidEffects(
                             // After the cookies and the storage: where the web view could not delete every kind itself, a document
                             // of the client's own on each origin unregisters its service workers and deletes its caches.
                             if (everyKind) {
-                                last(true)
+                                last(emptySet())
                             } else {
                                 try {
-                                    SiteWipe.documents(app, origins) { clean -> last(clean) }
+                                    SiteWipe.documents(app, origins) { left -> last(left) }
                                 } catch (_: Throwable) {
-                                    last(false)
+                                    last(null)
                                 }
                             }
                         }
                     } catch (_: Throwable) {
-                        SiteWipe.over(false)
+                        SiteWipe.over(null)
                         done()
                     }
                 }
