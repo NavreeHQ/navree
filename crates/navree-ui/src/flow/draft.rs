@@ -21,7 +21,8 @@ pub const MAX_STEPS: usize = 100;
 /// What one step has been given.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StepRecord {
-    /// The fields as last posted, in order. Passwords and files are never here.
+    /// The fields as last posted, in order. Secrets (passwords, and the fields a control keeps
+    /// secret) and files are never here.
     pub values: Vec<(String, String)>,
     /// Whether the person has tried to move on from the step: its errors, if it
     /// has any, are shown from then on.

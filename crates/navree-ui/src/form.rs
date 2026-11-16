@@ -129,6 +129,10 @@ impl Widget {
 /// colon and a word, and every form field inside it is disabled when the field is.
 /// [`kit::assert_control`](crate::kit::assert_control) checks them in a test.
 ///
+/// A control whose value is a secret, such as a password or a one-time code, says so with
+/// [`secret`](FieldControl::secret), and the toolkit keeps the value as it keeps a password
+/// input's: it is never shown again, given back or kept in a draft.
+///
 /// The check runs on every path a value arrives by: a derived form read with [`Submit`], a
 /// step of a [`Wizard`](crate::Wizard), a draft read back with
 /// [`Draft::read_for`](crate::Draft::read_for), a described form through [`check_controls`],
@@ -204,6 +208,16 @@ pub trait FieldControl: Send + Sync + RefUnwindSafe + 'static {
     fn check(&self, value: &str, cx: &ControlCx<'_>) -> Result<(), String> {
         let _ = (value, cx);
         Ok(())
+    }
+
+    /// Whether the value is a secret, such as a password or a one-time code. A secret is kept as
+    /// a password input's is: a refused form never shows it again, [`Rejected::values`] never
+    /// gives it back, a [`Wizard`](crate::Wizard) never keeps it in its draft, and `draw` is
+    /// given no value, in a form and in a table cell alike. A field drawn by a control under a
+    /// password's name (`password`, `new_password`) is a secret whatever this says. By default,
+    /// it is not one.
+    fn secret(&self) -> bool {
+        false
     }
 }
 
@@ -471,6 +485,12 @@ pub struct FormField {
     /// minimum, maximum and step. The slider draws it for the browser, and [`decode`]
     /// holds the posted value to it.
     pub slider: Option<fn() -> crate::flow::SliderSpec>,
+    /// A secret, kept as a password input's is: a refused form never shows it again, a wizard
+    /// never keeps it, and a control draws it with no value. The derive sets it on a field drawn
+    /// by a control under a password's name (`password`, `new_password`). A password input, and
+    /// a field whose control says its value is a secret ([`FieldControl::secret`]), are secrets
+    /// without it.
+    pub secret: bool,
 }
 
 impl FormField {
@@ -496,6 +516,7 @@ impl FormField {
             date_rules: None,
             time_rules: None,
             slider: None,
+            secret: false,
         }
     }
 
@@ -587,6 +608,20 @@ impl FormField {
     pub const fn slider(mut self, grid: Option<fn() -> crate::flow::SliderSpec>) -> Self {
         self.slider = grid;
         self
+    }
+
+    /// Sets whether it holds a secret.
+    pub const fn secret(mut self, secret: bool) -> Self {
+        self.secret = secret;
+        self
+    }
+
+    /// Whether what it holds is a secret: a password input, a field marked `secret`, or a field
+    /// whose control says its value is one.
+    pub(crate) fn is_secret(&self) -> bool {
+        self.secret
+            || self.widget == Widget::Input(InputKind::Password)
+            || matches!(self.widget, Widget::Control(control) if control.get().secret())
     }
 }
 
@@ -1665,7 +1700,8 @@ impl<T: Form> FormView<T> {
                     .label_id(Some(label_id.as_str()));
                 drawn.id = id.as_str();
                 drawn.label = field.label;
-                drawn.value = value;
+                // A secret is drawn with no value, whatever the form holds for it.
+                drawn.value = if field.is_secret() { None } else { value };
                 drawn.placeholder = field.placeholder;
                 drawn.described_by = described.as_deref();
                 control.get().draw(&drawn)
@@ -1891,18 +1927,19 @@ impl<T: Form> FormView<T> {
     }
 
     /// Each field as its label and the text a person would read for its value: a
-    /// choice by its label, a switch as `yes` or `no`. Passwords and hidden fields
-    /// are left out. A field with no value has an empty text.
+    /// choice by its label, a switch as `yes` or `no`. Secrets, passwords among them, and
+    /// hidden fields are left out. A field with no value has an empty text.
     pub(crate) fn summary_rows(&self, yes: &str, no: &str) -> Vec<(String, String)> {
         self.shape
             .fields
             .iter()
             .filter(|field| {
-                !matches!(
-                    field.widget,
-                    Widget::Input(InputKind::Hidden | InputKind::Password | InputKind::File)
-                        | Widget::File
-                )
+                !field.is_secret()
+                    && !matches!(
+                        field.widget,
+                        Widget::Input(InputKind::Hidden | InputKind::Password | InputKind::File)
+                            | Widget::File
+                    )
             })
             .map(|field| {
                 let values = self.values_of(field.name);
@@ -2613,17 +2650,18 @@ fn read_phones<T: Form>(
     (read, errors)
 }
 
-/// What a rejected form may show again: never what a password input holds, and a bounded
-/// amount. A `String` field named `password` (or ending in it) is a password input; so is any
-/// field with `#[form(widget = password)]`.
+/// What a rejected form may show again: never what a secret field holds, and a bounded amount.
+/// A `String` field named `password` (or ending in it) is a password input, and so is any field
+/// with `#[form(widget = password)]`; a field drawn by a control under such a name is a secret,
+/// and so is a field whose control says its value is one.
 fn echo<T: Form>(values: Vec<(String, String)>) -> Vec<(String, String)> {
     let mut left = MAX_ECHO;
     values
         .into_iter()
         .filter(|(name, value)| {
-            let secret = T::FIELDS.iter().any(|field| {
-                field.name == name && field.widget == Widget::Input(InputKind::Password)
-            });
+            let secret = T::FIELDS
+                .iter()
+                .any(|field| field.name == name && field.is_secret());
             if secret || value.len() > left {
                 return false;
             }
@@ -3501,9 +3539,10 @@ impl<T: Form> Rejected<T> {
 
     /// What was posted, as `(field, text)` in the order it was sent: the fields of the
     /// form and nothing else, so a `#[form(skip)]` field a client made up is not here,
-    /// and never what a password input holds (a `String` named `password`, or any field with
-    /// `widget = password`). A form refused before it was read (a body from another
-    /// site, one too large) has none.
+    /// and never what a secret field holds: a password input (a `String` named `password`, or
+    /// any field with `widget = password`), a field drawn by a control under such a name, or a
+    /// field whose control says its value is a secret ([`FieldControl::secret`]). A form refused
+    /// before it was read (a body from another site, one too large) has none.
     ///
     /// A handler reads it to look up what the person picked: a searched combobox posts
     /// only an id, and the form can show the id's label only when it is given one with

@@ -180,7 +180,7 @@ A taken address is a field error, `Work email has already been taken`, with the 
 
 ## What was posted
 
-A `Rejected<T>` holds what was posted. `value("owner_id")` is the first text sent under a field, `values_of("tags")` every text sent under a list field, and `values()` all of them, as `(field, text)` pairs of the form's own fields: never what a password input holds, and never a field marked `#[form(skip)]`.
+A `Rejected<T>` holds what was posted. `value("owner_id")` is the first text sent under a field, `values_of("tags")` every text sent under a list field, and `values()` all of them, as `(field, text)` pairs of the form's own fields: never what a password input or another secret field holds, and never a field marked `#[form(skip)]`.
 
 A picker that searches the server, such as a [Combobox](/docs/components/combobox/#searching-on-the-server), posts only the id of its choice, and the page that comes back would show that id. Give the form the label before you answer, with `choices(field, ...)`, or `options(field, ...)` for a plain `(value, label)` pair.
 
@@ -229,7 +229,7 @@ The runtime keeps the page and shows only the errors, so the label matters for t
 - A body from another site is refused with 403, by `Sec-Fetch-Site`, or by `Origin` where a browser doesn't send that, unless its `Origin` is in `http.cors.allowed_origins`. An `Origin` must name this host, and the scheme the request carries when it carries one. A request that sends neither header is a script, a test or a native app's HTTP stack: it is taken when it carries no cookie, and when it carries one it is taken only if the session's CSRF check compared its token and the token matched (in the `_csrf` field or a header), since a session could be riding on the cookie; otherwise it is refused with 403.
 - A body that isn't a urlencoded form gets 415; `GET` and `HEAD` get 405; past 1,000 fields, 413.
 - Only the struct's own fields are read: a `#[form(skip)]` field stays out of the client's reach.
-- A rejected form never writes back what a password input holds. A `String` field named `password`, or ending in it (`new_password`, `password_confirmation`), is drawn as one; `#[form(widget = password)]` makes any other field one, which is what a token or a key needs. `Rejected`'s `Debug` holds field names and errors, not values.
+- A rejected form never writes back what a password input holds. A `String` field named `password`, or ending in it (`new_password`, `password_confirmation`), is drawn as one; `#[form(widget = password)]` makes any other field one, which is what a token or a key needs. A field drawn by a [control of your own](/docs/ui/your-own-components/#a-form-field-of-your-own-and-its-check) is kept the same way when it has a password's name or its control says its value is a secret. `Rejected`'s `Debug` holds field names and errors, not values.
 - Behind a session, a plain form with JavaScript off proves itself with the token field: `FormView::csrf(session.csrf_token())`. The field holds the token [masked](/docs/basics/sessions-and-csrf/#the-token-in-pages), a fresh string in every page. The runtime sends the token as a header itself.
 
 Rules run once every field has the right type, so a form with a wrongly typed value reports the type errors first and the rules after they are fixed.

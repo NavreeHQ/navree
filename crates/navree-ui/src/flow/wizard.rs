@@ -201,7 +201,8 @@ pub struct WizardStep {
     optional: bool,
     /// The names a post may carry for this step, and are kept.
     allowed: Vec<String>,
-    /// The names of passwords and files: read to check the step, never kept.
+    /// The names of secrets (passwords and the fields a control keeps secret) and files: read
+    /// to check the step, never kept.
     secret: Vec<String>,
     check: Check,
     render: Render,
@@ -293,16 +294,16 @@ fn clean_id(id: &str) -> String {
 }
 
 /// The names a post may carry for the fields of `T`: the ones that are kept and
-/// the ones (passwords, files) that are only read.
+/// the ones (secrets such as passwords, and files) that are only read.
 fn field_names<T: Form>() -> (Vec<String>, Vec<String>) {
     let (mut kept, mut secret) = (Vec::new(), Vec::new());
     for field in T::FIELDS {
-        if matches!(
-            field.widget,
-            Widget::Input(
-                crate::components::InputKind::Password | crate::components::InputKind::File
+        if field.is_secret()
+            || matches!(
+                field.widget,
+                Widget::Input(crate::components::InputKind::File)
             )
-        ) {
+        {
             secret.push(field.name.to_owned());
             continue;
         }

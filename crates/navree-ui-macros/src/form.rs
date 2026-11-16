@@ -220,6 +220,9 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         } else {
             inferred_widget(&ui, element_name.as_deref())
         };
+        // A field a control draws keeps what its name says, whatever its type: under a password's
+        // name it is a secret, which a refused form never shows again and a wizard never keeps.
+        let secret_control = hint.control.is_some() && is_secret_name(&name);
         // A date and time read as UTC, and a number that is read exactly: what the widget
         // alone can't say, and the form needs to read the field.
         let instant = is_utc_instant(element);
@@ -294,7 +297,8 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
                 .decimal(#decimal)
                 .date_rules(#date_rules)
                 .time_rules(#time_rules)
-                .slider(#slider),
+                .slider(#slider)
+                .secret(#secret_control),
         });
         values.push(quote! {
             for value in #ui::form::FieldValue::field_values(&self.#ident) {

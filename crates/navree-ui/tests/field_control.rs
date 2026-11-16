@@ -138,6 +138,87 @@ impl FieldControl for Stars {
 
 static STARS: Stars = Stars;
 
+/// A password with a meter of its strength. It writes back whatever value it is given to draw.
+struct Strength;
+
+impl FieldControl for Strength {
+    fn name(&self) -> &'static str {
+        "app.strength"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("input")
+            .attr("type", "password")
+            .attr("name", field.name.to_owned())
+            .attr_opt("value", field.value.map(str::to_owned))
+            .flag("disabled", field.disabled)
+            .into()
+    }
+
+    fn check(&self, value: &str, _cx: &ControlCx<'_>) -> Result<(), String> {
+        if value.chars().count() >= 12 {
+            Ok(())
+        } else {
+            Err("Use at least 12 characters".to_owned())
+        }
+    }
+}
+
+static STRENGTH: Strength = Strength;
+
+/// A one-time code in six boxes: a secret by its own word, under any name. It writes back
+/// whatever value it is given to draw.
+struct OneTimeCode;
+
+impl FieldControl for OneTimeCode {
+    fn name(&self) -> &'static str {
+        "app.one-time-code"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("input")
+            .attr("type", "text")
+            .attr("name", field.name.to_owned())
+            .attr("inputmode", "numeric")
+            .attr_opt("value", field.value.map(str::to_owned))
+            .flag("disabled", field.disabled)
+            .into()
+    }
+
+    fn check(&self, value: &str, _cx: &ControlCx<'_>) -> Result<(), String> {
+        if value.len() == 6 && value.bytes().all(|byte| byte.is_ascii_digit()) {
+            Ok(())
+        } else {
+            Err("Enter the six-digit code from the message".to_owned())
+        }
+    }
+
+    fn secret(&self) -> bool {
+        true
+    }
+}
+
+static ONE_TIME_CODE: OneTimeCode = OneTimeCode;
+
+#[derive(Debug, Deserialize, Validate, Form)]
+#[allow(
+    dead_code,
+    reason = "the form is drawn, refused and kept in a draft; its fields are not read"
+)]
+struct SignUp {
+    /// Full name
+    #[validate(skip)]
+    full_name: String,
+    /// Password
+    #[validate(skip)]
+    #[form(control = STRENGTH)]
+    password: String,
+    /// Code from the message
+    #[validate(skip)]
+    #[form(control = ONE_TIME_CODE)]
+    code: String,
+}
+
 #[derive(Debug, Deserialize, Validate, Form)]
 struct Parcel {
     /// Who receives it
@@ -224,6 +305,31 @@ async fn parcels(submit: Result<Submit<Parcel>, Rejected<Parcel>>) -> Response {
     }
 }
 
+/// A sign-up: refused, the form is drawn again.
+async fn sign_ups(submit: Result<Submit<SignUp>, Rejected<SignUp>>) -> Response {
+    match submit {
+        Ok(Submit(_)) => "saved".into_response(),
+        Err(rejected) => rejected.into_response(),
+    }
+}
+
+/// What a refused sign-up gives its handler back: each field and its text, a line each, then
+/// what `value` finds for the password and for the code.
+async fn sign_up_values(submit: Result<Submit<SignUp>, Rejected<SignUp>>) -> Response {
+    match submit {
+        Ok(Submit(_)) => "saved".into_response(),
+        Err(rejected) => {
+            let mut lines: Vec<String> = rejected
+                .values()
+                .map(|(name, text)| format!("{name}={text}"))
+                .collect();
+            lines.push(format!("password: {:?}", rejected.value("password")));
+            lines.push(format!("code: {:?}", rejected.value("code")));
+            lines.join("\n").into_response()
+        }
+    }
+}
+
 /// An inline edit of a delivery's pin code: the value is held to the pin code control's check.
 async fn pin_edit(Extension(ctx): Extension<AppContext>, edit: EditedValue<String>) -> Reply {
     let language = Language::of(Some(&ctx)).await;
@@ -271,6 +377,8 @@ impl Controller for Pages {
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         vec![
             RouteDef::on(Method::POST, "!/parcels", parcels).public(),
+            RouteDef::on(Method::POST, "!/sign-ups", sign_ups).public(),
+            RouteDef::on(Method::POST, "!/sign-ups/values", sign_up_values).public(),
             RouteDef::on(Method::POST, "!/deliveries/{id}/pin", pin_edit).public(),
             RouteDef::on(Method::POST, "!/deliveries/{id}/note", note_edit).public(),
             RouteDef::on(Method::POST, "!/deliveries/{id}/seats", seats_edit).public(),
@@ -664,6 +772,88 @@ fn a_field_control_value_decodes_into_the_fields_type() {
     assert_eq!(feedback.stars, 4);
     let errors = decode::<Feedback>(&pairs(&[("stars", "x")])).unwrap_err();
     assert_eq!(errors["stars"], ["Stars is not valid."]);
+}
+
+// A secret drawn by a control, a password by its field's name and a one-time code by its
+// control's own word, is kept as a password input's value is: a refused form never shows it
+// again, the handler is never given it back, a wizard never keeps it, and the control is never
+// given it to draw.
+#[tokio::test]
+async fn a_secret_drawn_by_a_control_is_never_shown_again_given_back_or_kept() {
+    let (password, code) = ("Kesar-12", "482913");
+    let fields = <SignUp as navree_ui::form::Form>::FIELDS;
+    let field = |name: &str| {
+        fields
+            .iter()
+            .find(|field| field.name == name)
+            .expect("the field")
+    };
+    assert!(field("password").secret, "a control under a password's name");
+    assert!(!field("code").secret, "a secret by its control's word only");
+    assert!(!field("full_name").secret);
+
+    // The password is too short: with JavaScript off the form is drawn again, with the name and
+    // without either secret.
+    let app = boot().await;
+    let body = format!("full_name=Simran+Kaur&password={password}&code={code}");
+    let response = post(&app, "/sign-ups", &body, false).await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let html = response.text();
+    assert!(html.contains("Use at least 12 characters"), "{html}");
+    assert!(html.contains(r#"value="Simran Kaur""#), "what was typed: {html}");
+    assert!(!html.contains(password), "the password is shown again: {html}");
+    assert!(!html.contains(code), "the code is shown again: {html}");
+
+    // The handler of a refused form is given the name back, and neither secret.
+    let response = post(&app, "/sign-ups/values", &body, false).await;
+    assert_eq!(
+        response.text(),
+        "full_name=Simran Kaur\npassword: None\ncode: None"
+    );
+
+    // A form given the secrets to draw hands neither to its control.
+    let html = render(
+        &FormView::<SignUp>::new()
+            .with_values(pairs(&[
+                ("full_name", "Simran Kaur"),
+                ("password", password),
+                ("code", code),
+            ]))
+            .into(),
+    );
+    assert!(html.contains(r#"value="Simran Kaur""#), "{html}");
+    assert!(!html.contains(password), "{html}");
+    assert!(!html.contains(code), "{html}");
+
+    // Nor does a table cell.
+    let cell = EditCell::control(code, "/accounts/7/code", Control::new(&ONE_TIME_CODE));
+    let html = render(&cell.into());
+    assert!(html.contains(r#"name="value""#), "{html}");
+    assert!(!html.contains(code), "{html}");
+
+    // A step saved keeps what was typed, and neither secret.
+    let wizard = Wizard::new("sign-up")
+        .base("/sign-up")
+        .step(WizardStep::of::<SignUp>("account", "Account"));
+    let mut draft = Draft::new("account");
+    let outcome = wizard.submit(
+        &mut draft,
+        "account",
+        &pairs(&[
+            ("_rev", "0"),
+            ("_wizard", "save"),
+            ("full_name", "Simran Kaur"),
+            ("password", password),
+            ("code", code),
+        ]),
+    );
+    assert!(!matches!(outcome, WizardOutcome::Refused(_)), "{outcome:?}");
+    assert_eq!(draft.value("account", "full_name"), Some("Simran Kaur"));
+    assert_eq!(draft.value("account", "password"), None);
+    assert_eq!(draft.value("account", "code"), None);
+    let kept = serde_json::to_string(&draft).expect("a draft is data");
+    assert!(!kept.contains(password), "{kept}");
+    assert!(!kept.contains(code), "{kept}");
 }
 
 // A form, a field and an editable cell can hold a control, and are as safe to carry across a

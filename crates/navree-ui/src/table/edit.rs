@@ -88,7 +88,9 @@ impl EditCell {
     /// Edited by a control of your own, posted to `href`. The control is drawn for a field named
     /// `value`, with the id `edit-` and 12 hex digits of the FNV-1a hash of `href` (so no two
     /// cells of a table share one), no label id, `aria-label` from [`label`](Self::label) (its
-    /// text is the control's `label`) and `disabled` from [`disabled`](Self::disabled).
+    /// text is the control's `label`) and `disabled` from [`disabled`](Self::disabled). A control
+    /// whose value is a secret ([`FieldControl::secret`](crate::form::FieldControl::secret)) is
+    /// drawn with no value.
     ///
     /// Only a change of the field named `value` posts the cell, and only Enter and Escape in that
     /// field are the cell's; the other keys and changes inside the control are the control's own.
@@ -184,7 +186,8 @@ impl EditCell {
                 let mut field = ControlField::new("value");
                 field.id = id.as_str();
                 field.label = &*self.label;
-                field.value = Some(self.value.as_str());
+                // A secret is drawn with no value, as a form draws it.
+                field.value = (!control.get().secret()).then_some(self.value.as_str());
                 field.disabled = self.disabled;
                 control.get().draw(&field)
             }
