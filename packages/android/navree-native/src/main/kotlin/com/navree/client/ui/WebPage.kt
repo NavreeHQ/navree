@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -31,6 +32,24 @@ import com.navree.client.platform.WorkerGuard
 import com.navree.client.platform.guardDocuments
 import com.navree.client.webViewToken
 
+/** The tag of a web view whose script at the start of every document could not be added: it loads nothing. */
+private const val NOT_GUARDED = "not guarded"
+
+/**
+ * The two guards a web page is shown with, as the answers [WebPage] decides
+ * by: whether the rules for a service worker's requests are in force, and
+ * whether the script at the start of every document was added to a web view.
+ * The app has only the real ones; a test gives answers of its own, to see the
+ * page refused when either is missing.
+ */
+internal class WebGuards(
+    val workers: () -> Boolean = { WorkerGuard.ensure() },
+    val documents: (WebView, Origins) -> Boolean = { view, origins -> guardDocuments(view, origins) },
+)
+
+/** The guards [WebPage] asks: the real ones unless a test provides others. */
+internal val LocalWebGuards = staticCompositionLocalOf { WebGuards() }
+
 /**
  * A page of the app's origin that could not be drawn natively, in the
  * system's web view inside the app's own chrome. It shares the native
@@ -39,9 +58,11 @@ import com.navree.client.webViewToken
  * web chrome, and has no bridge to the app: no script interface, no file or
  * content access, no pop-ups, no mixed content.
  *
- * The page stays on the app's origins, and what it loads inside it comes
- * from them or from the app's web hosts ([OriginWebClient], and a check at
- * the start of every document, [guardDocuments]): a link the person taps is
+ * The page stays on the app's origins, and what it loads inside it is asked
+ * for only from them or from the app's web hosts, by the first address of each
+ * request ([OriginWebClient], and a check at the start of every document,
+ * [guardDocuments]; where a redirect then leads is the page's own policy's to
+ * hold): a link the person taps is
  * handed to the core, which decides where it leads (a native screen, the
  * system browser, nothing); any other way of leaving is stopped, and a page
  * taken off the origins ends as a failed screen. The page's title reaches the
@@ -49,9 +70,6 @@ import com.navree.client.webViewToken
  * ends, the page is loaded again once in a new web view, and after that the
  * screen says it failed, with "try again".
  */
-/** The tag of a web view whose script at the start of every document could not be added: it loads nothing. */
-private const val NOT_GUARDED = "not guarded"
-
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 internal fun WebPage(
@@ -62,6 +80,7 @@ internal fun WebPage(
     modifier: Modifier = Modifier,
 ) {
     val origins = LocalUi.current.origins
+    val guards = LocalWebGuards.current
     var loading by remember { mutableStateOf(true) }
     val link by rememberUpdatedState(onLink)
     val title by rememberUpdatedState(onTitle)
@@ -72,7 +91,7 @@ internal fun WebPage(
     // A page is not shown without its guards. The rules for a service worker's requests are asked for again
     // every time a page is made (and by "try again"); the script at the start of every document is added to
     // the web view itself, so its answer comes from the web view made for this attempt.
-    val workers = remember(url, serial, attempt) { WorkerGuard.ensure() }
+    val workers = remember(url, serial, attempt) { guards.workers() }
     var documents by remember(url, serial, attempt) { mutableStateOf(true) }
     val missing = WebRules.missingGuards(workers, documents)
     LaunchedEffect(url, serial, attempt, missing) {
@@ -110,7 +129,7 @@ internal fun WebPage(
                             CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
                             // Before the first load, so it runs in every document of every frame. Without it
                             // the page is not loaded: `update` below does not load a web view that has this tag.
-                            if (!guardDocuments(this, origins)) tag = NOT_GUARDED
+                            if (!guards.documents(this, origins)) tag = NOT_GUARDED
                             webViewClient = OriginWebClient(
                                 origins,
                                 onLink = { link(it) },

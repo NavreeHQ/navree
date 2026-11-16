@@ -635,13 +635,27 @@ class WebWorkersTest {
         assertEquals("nothing reached the other origin: $otherAsked", emptyList<String>(), otherAsked.toList())
     }
 
+    // Each worker says it ran before it does anything else: the one from the app's own address is the sign that
+    // workers run under this policy at all, and only after it ran is the absence of the others read.
+    private fun workersThatSayTheyRan(): String {
+        fun ran(name: String) = "fetch('$base/says?m=$name-ran', {mode: 'no-cors'}).catch(function(){}); ${socketOfTheWorker()}"
+        return "<p>ours</p><script>" +
+            madeOrRefused("blob", "new Worker(URL.createObjectURL(new Blob([\"${ran("blob")}\"], {type: 'text/javascript'})))") +
+            madeOrRefused("data", "new Worker('data:text/javascript,' + encodeURIComponent(\"${ran("data")}\"))") +
+            madeOrRefused("own", "new Worker('/own-ran.js')") +
+            "</script>"
+    }
+
     @Test
     fun aWorkerSrcPolicyOnThePageStopsWorkersFromBlobAndDataAddresses() {
         pagePolicy = "worker-src 'self'"
-        serve({ workersOfTheirOwnAddress() }, { mapOf("/own.js" to "1;") })
+        serve({ workersThatSayTheyRan() }, { mapOf("/own-ran.js" to "fetch('/says?m=own-ran')") })
         openedBy(Origins(base, loopbackHttp = true), documents = false, rules = false)
-        waitForSaid(5)
+        assertTrue("the worker from the app's own address ran: $said", waitFor(30) { said.contains("own-ran") })
+        // As long as the control waits for a blob worker's socket, after the sign that workers run.
+        waitFor(15) { otherAsked.isNotEmpty() || said.any { it == "blob-ran" || it == "data-ran" } }
         settle("workers-from-addresses-worker-src.txt", "worker-src 'self' on the page, with the system's own client and no document script")
-        assertEquals("a blob and a data worker did not run: $otherAsked", emptyList<String>(), otherAsked.toList())
+        assertTrue("a blob or a data worker ran: $said", said.none { it == "blob-ran" || it == "data-ran" })
+        assertEquals("a blob or a data worker reached another origin: $otherAsked", emptyList<String>(), otherAsked.toList())
     }
 }
