@@ -4294,6 +4294,86 @@ mod tests {
         }
     }
 
+    /// A snapshot the released core wrote (`made/snapshot-released.json`,
+    /// made by the core at 1.2.4 with a form of a short id and one of an id
+    /// longer than 64 bytes, each with a field of no id of its own) is read:
+    /// the place comes back, and what was typed comes back into the field of
+    /// the short form. The other field's name changed with how a long id's
+    /// stem is made, so its words go nowhere, and into no other field.
+    #[test]
+    fn a_snapshot_the_released_core_wrote_is_read() {
+        let snapshot: serde_json::Value = serde_json::from_str(include_str!(
+            "../transcripts/fixtures/made/snapshot-released.json"
+        ))
+        .expect("the snapshot reads");
+        let answered = |body: &str, request: u64| {
+            Event::Response(Response {
+                request,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                headers: vec![(
+                    "x-navree-person".to_owned(),
+                    "0193a4b2-0000-7000-8000-00000000ra01".to_owned(),
+                )],
+                body: body.to_owned(),
+                ..Response::default()
+            })
+        };
+        let fetched = |update: &Update| {
+            update
+                .effects
+                .iter()
+                .find_map(|effect| match effect {
+                    Effect::Fetch(request) => Some((request.request, request.url.clone())),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("a fetch: {update:?}"))
+        };
+        let mut core = Core::new(Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        ));
+        let started = core.send(Event::Restore { snapshot });
+        let (shell, _) = fetched(&started);
+        let back = core.send(answered(
+            include_str!("../transcripts/fixtures/store/shell.json"),
+            shell,
+        ));
+        let stack: Vec<String> = core.view.destinations[0]
+            .stack
+            .iter()
+            .map(|id| core.view.screens[id].url.clone())
+            .collect();
+        assert_eq!(stack, ["/", "/orders/1"], "the place comes back");
+        let (order, url) = fetched(&back);
+        assert_eq!(url, "https://shop.example/orders/1");
+        core.send(answered(
+            r#"{"navree":1,"build":"152bd84abf4d","vocab":0,"screen":{"title":"CS-20481","body":{"t":"text","value":"2 phulkari dupattas"}}}"#,
+            order,
+        ));
+        let (first, _) = fetched(&core.send(Event::Back));
+        core.send(answered(
+            include_str!("../transcripts/fixtures/made/home-two-forms.json"),
+            first,
+        ));
+        let typed: Vec<(String, String)> = core.view.screens[&1]
+            .forms
+            .values()
+            .flat_map(|form| form.fields.iter())
+            .filter_map(|(name, field)| match &field.value {
+                crate::FieldValue::Text { text } if !text.is_empty() => {
+                    Some((name.clone(), text.clone()))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            typed,
+            [("note.memo".to_owned(), "Call the courier".to_owned())],
+            "only the short form's words come back"
+        );
+    }
+
     /// A snapshot asked for before this launch's shell has answered names
     /// nobody the server has not named in this launch, and is not a
     /// visitor's: the client must not store it over a person's.

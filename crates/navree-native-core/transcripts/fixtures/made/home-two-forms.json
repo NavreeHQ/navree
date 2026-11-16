@@ -1,0 +1,54 @@
+{
+ "build": "152bd84abf4d",
+ "navree": 1,
+ "screen": {
+  "body": {
+   "children": [
+    {
+     "action": "/note",
+     "children": [
+      {
+       "input": {
+        "t": "text"
+       },
+       "label": "Memo",
+       "name": "memo",
+       "t": "field"
+      }
+     ],
+     "id": "note",
+     "method": "post",
+     "t": "form"
+    },
+    {
+     "action": "/dispatch",
+     "children": [
+      {
+       "input": {
+        "t": "text"
+       },
+       "label": "City",
+       "name": "city",
+       "t": "field"
+      }
+     ],
+     "id": "order-form-for-the-workshop-at-ludhiana-and-amritsar-branch-01139599",
+     "method": "post",
+     "t": "form"
+    },
+    {
+     "action": {
+      "href": "/orders/1",
+      "present": "push",
+      "t": "navigate"
+     },
+     "label": "Order",
+     "t": "link"
+    }
+   ],
+   "t": "stack"
+  },
+  "title": "Dashboard"
+ },
+ "vocab": 0
+}
