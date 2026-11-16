@@ -657,7 +657,11 @@ async fn use_my_location_is_a_button_that_submits_nothing() -> Result<(), Browse
     page.press("Use my location").await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
     page.assert_path_is("/deliveries/new").await?;
-    assert_eq!(request_names(&page).await?, before, "the button sent a request");
+    assert_eq!(
+        request_names(&page).await?,
+        before,
+        "the button sent a request"
+    );
 
     // The rule that hides it waits for the runtime's mark on the page: without it, the button is
     // not shown.
