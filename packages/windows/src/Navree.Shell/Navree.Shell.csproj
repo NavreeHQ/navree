@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>Navree.Shell</RootNamespace>
+    <AssemblyName>Navree.Shell</AssemblyName>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Navree.Protocol\Navree.Protocol.csproj" />
+    <ProjectReference Include="..\Navree.Core\Navree.Core.csproj" />
+    <ProjectReference Include="..\Navree.Runtime\Navree.Runtime.csproj" />
+    <ProjectReference Include="..\Navree.Design\Navree.Design.csproj" />
+    <ProjectReference Include="..\Navree.Platform\Navree.Platform.csproj" />
+    <ProjectReference Include="..\Navree.Presence\Navree.Presence.csproj" />
+    <ProjectReference Include="..\Navree.Controls\Navree.Controls.csproj" />
+  </ItemGroup>
+
+</Project>
