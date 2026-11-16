@@ -3623,6 +3623,166 @@ mod tests {
         }
     }
 
+    /// A Windows app signs in through the browser by the hand-over: the
+    /// session starts with a `state` and an S256 challenge, and its return is
+    /// taken only while that sign-in is open, with its `state`, on the address
+    /// the sign-in named (the app's scheme). Anything else is neither
+    /// exchanged nor opened as a page. Without the hand-over's routes the
+    /// browser is not used at all: its cookies are not the app's, so nothing
+    /// that comes back from it is opened with the app's.
+    #[test]
+    fn a_windows_app_signs_in_through_the_browser_by_the_hand_over_alone() {
+        let windows = |sign_in: serde_json::Value| -> Core {
+            let config = serde_json::json!({
+                "origin": "https://shop.example",
+                "app_id": "CharkhaSupply_8wekyb3d8bbwe",
+                "client": {"platform": "windows", "form": "desktop", "vocab": 0, "text_percent": 100},
+                "sign_in": sign_in,
+            });
+            Core::new(serde_json::from_value(config).expect("a configuration"))
+        };
+        let native = |request: u64, body: &str| {
+            Event::Response(Response {
+                request,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: body.to_owned(),
+                ..Response::default()
+            })
+        };
+        let fetches = |update: &Update| -> Vec<String> {
+            update
+                .effects
+                .iter()
+                .filter_map(|effect| match effect {
+                    Effect::Fetch(request) => Some(request.url.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let sign_in = |update: &Update| {
+            update.effects.iter().find_map(|effect| match effect {
+                Effect::SignIn { url, callback, .. } => Some((url.clone(), callback.clone())),
+                _ => None,
+            })
+        };
+        let tap = |href: &str| Event::Act {
+            screen: Some(1),
+            action: serde_json::from_value(serde_json::json!({"t": "navigate", "href": href}))
+                .expect("an action"),
+            form: None,
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        };
+
+        // With the hand-over's routes.
+        let mut core = windows(serde_json::json!({"callback": "charkha", "paths": ["/sign-in"]}));
+        core.send(Event::Start);
+        core.send(native(
+            1,
+            include_str!("../transcripts/fixtures/made/shell-app-nobody-windows.json"),
+        ));
+        core.send(native(
+            2,
+            include_str!("../transcripts/fixtures/made/welcome.json"),
+        ));
+        let asked = core.send(tap("/sign-in"));
+        let request = asked
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Random { request, .. } => Some(*request),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("the hand-over asks for random bytes: {asked:?}"));
+        let opened = core.send(Event::Random {
+            request,
+            bytes: "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30".to_owned(),
+        });
+        let (url, callback) = sign_in(&opened).expect("the session opens");
+        assert_eq!(
+            url,
+            "https://shop.example/auth/app/sign-in?platform=windows&app=CharkhaSupply_8wekyb3d8bbwe&code_challenge=658WgAyQKf_KhWlXY9I8Os5xARz0DpNUrNgQIF4lD4c&code_challenge_method=S256&state=ISIjJCUmJygpKissLS4vMA"
+        );
+        assert_eq!(callback.as_deref(), Some("charkha"));
+        let state = "ISIjJCUmJygpKissLS4vMA";
+        for (what, planted) in [
+            (
+                "another state",
+                "charkha://signed-in?code=PLANTED000&state=not-the-state".to_owned(),
+            ),
+            ("no state", "charkha://signed-in?code=PLANTED000".to_owned()),
+            (
+                "another way back than the sign-in named",
+                format!("https://shop.example/signed-in?code=PLANTED000&state={state}"),
+            ),
+        ] {
+            let update = core.send(Event::SignInDone { url: Some(planted) });
+            assert!(
+                fetches(&update).is_empty(),
+                "{what}: nothing is exchanged or opened: {update:?}"
+            );
+        }
+        let back = core.send(Event::SignInDone {
+            url: Some(format!("charkha://signed-in?code=Tq7uX0b2c9&state={state}")),
+        });
+        let exchange = back
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(request) if request.url.ends_with("/api/auth/app/exchange") => {
+                    request.body.clone()
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("the code is exchanged: {back:?}"));
+        assert!(
+            matches!(&exchange, Body::Json { text } if text.contains(r#""platform":"windows""#) && text.contains("CharkhaSupply_8wekyb3d8bbwe")),
+            "{exchange:?}"
+        );
+        // With no sign-in open, a return that comes is not used, and not opened.
+        for planted in [
+            format!("charkha://signed-in?code=PLANTED000&state={state}"),
+            "charkha://signed-in?code=PLANTED000".to_owned(),
+        ] {
+            for event in [
+                Event::OpenLink {
+                    url: planted.clone(),
+                },
+                Event::SignInDone {
+                    url: Some(planted.clone()),
+                },
+            ] {
+                let update = core.send(event);
+                assert!(
+                    !fetches(&update).iter().any(|url| url.contains("signed-in")),
+                    "{planted}: not opened: {update:?}"
+                );
+            }
+        }
+
+        // Without them, the browser is not used, and what comes back from it is not opened.
+        let mut core = windows(serde_json::json!({"callback": "charkha", "paths": ["/auth/*"]}));
+        core.send(Event::Start);
+        core.send(native(
+            1,
+            include_str!("../transcripts/fixtures/store/shell.json"),
+        ));
+        core.send(native(
+            2,
+            include_str!("../transcripts/fixtures/store/dashboard.json"),
+        ));
+        let tapped = core.send(tap("/auth/google"));
+        assert!(sign_in(&tapped).is_none(), "{tapped:?}");
+        let back = core.send(Event::SignInDone {
+            url: Some("charkha://signed-in?token=PLANTED000".to_owned()),
+        });
+        assert!(fetches(&back).is_empty(), "{back:?}");
+    }
+
     /// The retry keeps its pace: a request that got through asks for the shell
     /// again at most once in each pause, and only while the shell's own last
     /// failure was the network's or a timeout; the pause is not kept while

@@ -90,7 +90,9 @@ pub struct Config {
     #[serde(default)]
     pub loopback_http: bool,
     /// The app's own name with its system: the bundle id on Apple's systems,
-    /// the package name on Android (`com.charkha.supply`). The sign-in
+    /// the package name on Android (`com.charkha.supply`), on Windows the
+    /// package family name of a packaged app and the id it was built with
+    /// otherwise (`CharkhaSupply_8wekyb3d8bbwe`). The sign-in
     /// hand-over and the push registration name the app by it; without it
     /// neither is started.
     #[serde(default, skip_serializing_if = "String::is_empty")]

@@ -1,0 +1,157 @@
+{
+  "about": "Signing in through the browser on Windows, handed over to the app. The browser's cookies are not the app's, so the hand-over is the only way: the session starts with a `state` and an S256 challenge made from random bytes the client hands over, names the app by its package family name, and comes back on the app's scheme. A return is taken only while that sign-in is open, on the way back it named and with its `state`; any other is neither exchanged nor opened as a page.",
+  "config": {"app_id":"CharkhaSupply_8wekyb3d8bbwe","client":{"form":"desktop","platform":"windows","text_percent":100,"vocab":0},"sign_in":{"callback":"charkha","paths":["/sign-in"]}},
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=windows; form=desktop; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell names the hand-over's routes and no callback for this system: the return comes on the app's scheme.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-app-nobody-windows.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=windows; form=desktop; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/welcome.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person taps Sign in. The core asks for random bytes.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/sign-in"}},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"random","request":1,"bytes":48}
+        ]
+      },
+      "check": [
+        {"at":"/messages/0","is":null}
+      ]
+    },
+    {
+      "note": "The bytes come. The session opens at the start route with `platform=windows`, the app's id, the challenge and the state; it comes back on the app's scheme.",
+      "send": {"t":"random","request":1,"bytes":"0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"sign_in","url":"https://shop.example/auth/app/sign-in?platform=windows&app=CharkhaSupply_8wekyb3d8bbwe&code_challenge=658WgAyQKf_KhWlXY9I8Os5xARz0DpNUrNgQIF4lD4c&code_challenge_method=S256&state=ISIjJCUmJygpKissLS4vMA","callback":"charkha"}
+        ]
+      }
+    },
+    {
+      "note": "A return on the app's scheme with another state is not this sign-in's: nothing is exchanged, and the sign-in stays open.",
+      "send": {"t":"sign_in_done","url":"charkha://signed-in?code=PLANTED000&state=not-the-state"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return carried a state that is not this sign-in's, and was not used"}
+        ]
+      }
+    },
+    {
+      "note": "One with no state is not used either.",
+      "send": {"t":"sign_in_done","url":"charkha://signed-in?code=PLANTED000"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return carried a state that is not this sign-in's, and was not used"}
+        ]
+      }
+    },
+    {
+      "note": "One with this sign-in's state that came back another way than the sign-in named is not used either.",
+      "send": {"t":"sign_in_done","url":"https://shop.example/signed-in?code=PLANTED000&state=ISIjJCUmJygpKissLS4vMA"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return came back another way than the sign-in named, and was not used"}
+        ]
+      }
+    },
+    {
+      "note": "The return on the app's scheme with this sign-in's state: the code goes to the exchange route with the secret, naming the app as a Windows app.",
+      "send": {"t":"sign_in_done","url":"charkha://signed-in?code=Tq7uX0b2c9&state=ISIjJCUmJygpKissLS4vMA"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":3,"method":"post","url":"https://shop.example/api/auth/app/exchange","headers":[["x-navree-native","1"],["x-navree-client","platform=windows; form=desktop; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"platform\":\"windows\",\"app\":\"CharkhaSupply_8wekyb3d8bbwe\",\"code\":\"Tq7uX0b2c9\",\"code_verifier\":\"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA\"}"},"timeout_ms":60000,"xsrf":true}
+        ]
+      }
+    },
+    {
+      "note": "200: signed in. The shell is fetched again, and the screen in front.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/json"},
+      "body": "made/exchanged.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=windows; form=desktop; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=windows; form=desktop; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "No sign-in is open now: a return planted as a link, with that state or with none, is not used and not opened as a page.",
+      "send": {"t":"open_link","url":"charkha://signed-in?code=PLANTED000&state=ISIjJCUmJygpKissLS4vMA"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return arrived with no sign-in open, and was not used"}
+        ]
+      },
+      "check": [
+        {"at":"/screens/2","is":null}
+      ]
+    },
+    {
+      "send": {"t":"open_link","url":"charkha://signed-in?code=PLANTED000"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return arrived with no sign-in open, and was not used"}
+        ]
+      },
+      "check": [
+        {"at":"/screens/2","is":null}
+      ]
+    },
+    {
+      "note": "Nor when it comes as the end of a session.",
+      "send": {"t":"sign_in_done","url":"charkha://signed-in?code=PLANTED000"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return arrived with no sign-in open, and was not used"}
+        ]
+      },
+      "check": [
+        {"at":"/screens/2","is":null}
+      ]
+    }
+  ]
+}
