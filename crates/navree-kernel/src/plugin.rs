@@ -610,10 +610,32 @@ pub(crate) fn names_crate(type_name: &str, crate_name: &str) -> bool {
     })
 }
 
+/// The type a module's type name stands for, read through a reference or a
+/// pointer (`&T`, `&mut T`, `*const T`, `*mut T`) and inside `Box<..>` and
+/// `Pin<..>`, at any depth: a module typed `&'static Helper` or
+/// `Box<Helper>` is read as `Helper`, so its crate is `Helper`'s.
+pub(crate) fn module_path(type_name: &str) -> &str {
+    let mut path = type_name.trim();
+    loop {
+        let current = path;
+        let behind = ["&mut ", "&", "*const ", "*mut "]
+            .iter()
+            .find_map(move |marker| current.strip_prefix(*marker));
+        let inside = ["alloc::boxed::Box<", "core::pin::Pin<"]
+            .iter()
+            .find_map(move |wrapper| current.strip_prefix(*wrapper)?.strip_suffix('>'));
+        match behind.or(inside) {
+            Some(inner) => path = inner.trim(),
+            None => return path,
+        }
+    }
+}
+
 /// Whether the plugin `info`, whose modules have the types `type_names`, is
 /// first-party: `listed` pairs its name with a crate, it names that crate as
 /// its own, its version is `kernel_version`, and every module type, up to its
-/// first `<`, is a path of that crate (generic arguments do not count).
+/// first `<` and read through a reference ([`module_path`]), is a path of
+/// that crate (generic arguments do not count).
 ///
 /// It reads names: a package whose library is named like a listed crate meets
 /// it, as `std::any::type_name` prints the library's name. The plugin rules
@@ -632,9 +654,8 @@ pub(crate) fn is_first_party(
     info.crate_name == krate
         && info.version == kernel_version
         && type_names.iter().all(|type_name| {
-            let outer = type_name
-                .split_once('<')
-                .map_or(*type_name, |(outer, _)| outer);
+            let read = module_path(type_name);
+            let outer = read.split_once('<').map_or(read, |(outer, _)| outer);
             outer.starts_with(path.as_str())
         })
 }
@@ -733,6 +754,35 @@ mod tests {
         ] {
             assert!(names_crate(shape, "navree_plugin_a"), "{shape}");
         }
+    }
+
+    #[test]
+    fn a_module_typed_as_a_reference_or_a_box_is_read_as_the_type_behind_it() {
+        let helper = "navree_plugin_a::Helper";
+        for type_name in [
+            "navree_plugin_a::Helper",
+            "&navree_plugin_a::Helper",
+            "&mut navree_plugin_a::Helper",
+            "*const navree_plugin_a::Helper",
+            "alloc::boxed::Box<navree_plugin_a::Helper>",
+            "&alloc::boxed::Box<core::pin::Pin<&navree_plugin_a::Helper>>",
+        ] {
+            assert_eq!(module_path(type_name), helper, "{type_name}");
+        }
+        // Another generic type is read as it is, and a boxed trait object has no crate.
+        assert_eq!(
+            module_path("acme::Wrap<navree_plugin_a::Helper>"),
+            "acme::Wrap<navree_plugin_a::Helper>"
+        );
+        assert_eq!(
+            module_path("alloc::boxed::Box<dyn navree_kernel::module::Module>"),
+            "dyn navree_kernel::module::Module"
+        );
+        // First-party reads the module's type the same way.
+        let listed = [("navree-flags", "navree_flags")];
+        let flags = PluginInfo::new("navree-flags", "navree_flags", "flags", "1.3.0");
+        let by_reference = ["&navree_flags::module::FlagsModule"];
+        assert!(is_first_party(&flags, &by_reference, &listed, "1.3.0"));
     }
 
     #[test]

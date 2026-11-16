@@ -1343,3 +1343,53 @@ fn a_plugin_may_not_take_the_name_of_a_framework_command() {
         .validate()
         .expect("the plugin's own command, and the app's `plugins`");
 }
+
+// A module typed as a reference.
+
+/// The helper plugin: its crate is this module.
+mod navree_plugin_helper {
+    use navree_kernel::{CommandSpec, Module, ModuleBuilder, ModuleId, PluginInfo};
+
+    /// The plugin's info.
+    const HELPER: PluginInfo =
+        PluginInfo::new("navree-plugin-helper", module_path!(), "helper", "1.0.0");
+
+    /// A helper of the plugin's crate, which the plugin's module imports by reference.
+    pub struct Helper;
+
+    /// The one helper.
+    pub static THE_HELPER: Helper = Helper;
+
+    /// The helper as a module, typed as a reference to it, with an id that names no crate of
+    /// a plugin: it registers the framework's command `check`.
+    impl Module for &'static Helper {
+        fn id(&self) -> ModuleId {
+            ModuleId::named::<String>("helper")
+        }
+
+        fn register(&self, m: &mut ModuleBuilder) {
+            let command = CommandSpec::new("check", "The helper's", |_, _| async { Ok(()) });
+            m.command(command);
+        }
+    }
+
+    /// The plugin's module: it imports the helper by reference.
+    pub struct HelperPlugin;
+
+    impl Module for HelperPlugin {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(HELPER).import(&THE_HELPER);
+        }
+    }
+}
+
+#[test]
+fn a_module_typed_as_a_reference_acts_for_the_plugin_of_the_type_behind_it() {
+    use navree_plugin_helper::HelperPlugin;
+    // Its own type is `&Helper`, read as `Helper`, a type of the plugin's crate: it acts for
+    // the plugin, whatever its id names, and is held to the plugin's rules.
+    assert_eq!(
+        errors(Navree::app().module(HelperPlugin)),
+        "plugin `navree-plugin-helper` registers the command `check` in `helper` (a module of the plugin's crate `plugins::navree_plugin_helper`), a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise"
+    );
+}

@@ -8,7 +8,8 @@ use crate::command::FRAMEWORK_COMMANDS;
 use crate::graph::{Graph, ModuleNode, ROOT};
 use crate::plugin::{
     APP_ONLY_PROVIDERS, FIRST_PARTY, MODEL_HOOK_KEY, PluginInfo, PublishTag, Publishable,
-    RESERVED_NAMESPACES, app_only_role, destination, is_first_party, is_namespace, names_crate,
+    RESERVED_NAMESPACES, app_only_role, destination, is_first_party, is_namespace, module_path,
+    names_crate,
 };
 use crate::publish::{
     first_case_collision, first_file_and_folder, is_locale_path, is_safe_relative_path,
@@ -403,9 +404,8 @@ impl Graph {
             return String::new();
         }
         let in_crate = |type_name: &str| {
-            let outer = type_name
-                .split_once('<')
-                .map_or(type_name, |(outer, _)| outer);
+            let read = module_path(type_name);
+            let outer = read.split_once('<').map_or(read, |(outer, _)| outer);
             outer
                 .strip_prefix(info.crate_name)
                 .is_some_and(|rest| rest.starts_with("::"))
@@ -421,10 +421,12 @@ impl Graph {
     /// plugin's group, or `None`.
     ///
     /// A module acts for the plugin it names. Else, for the plugin of the
-    /// crate its type path is in, up to its first `<`: the type of the module
-    /// value the app or its importer passed, else the type its id names. For
-    /// each type, among plugins whose crates hold it, the longest crate name
-    /// wins, then the plugin first in import order. When its own type gives a
+    /// crate its type path is in, up to its first `<` and read through a
+    /// reference, a `Box` or a `Pin` (`&'static Helper` is `Helper`): the type
+    /// of the module value the app or its importer passed, else the type its
+    /// id names. For each type, among plugins whose crates hold it, the
+    /// longest crate name wins, then the plugin first in import order. When
+    /// its own type gives a
     /// first-party plugin and its id one that is not, it is the one its id
     /// gives. Else, for a module with generic arguments whose direct importers
     /// all act for plugins: the one of theirs whose crate its arguments name,
@@ -451,11 +453,11 @@ impl Graph {
         by_crate.sort_by_key(|group| std::cmp::Reverse(group.crate_name.len()));
         let group = |first: usize| groups.iter().find(|group| group.first == first);
         let first_party = |first: usize| group(first).is_some_and(|group| group.first_party);
-        // The plugin of the crate `type_name` is in, up to its first `<`.
+        // The plugin of the crate `type_name` is in, up to its first `<`, read through a
+        // reference, a `Box` or a `Pin`.
         let of_crate = |type_name: &str| {
-            let outer = type_name
-                .split_once('<')
-                .map_or(type_name, |(outer, _)| outer);
+            let read = module_path(type_name);
+            let outer = read.split_once('<').map_or(read, |(outer, _)| outer);
             by_crate
                 .iter()
                 .find(|group| {
