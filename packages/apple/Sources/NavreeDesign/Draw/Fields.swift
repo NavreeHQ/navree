@@ -31,17 +31,17 @@ struct FieldControl: View {
 
     /// What is wrong with the value, as the runtime holds it.
     private var error: String? {
-        let messages = context.errors(ref, field.name) ?? field.error.map { [$0] } ?? []
+        let messages = context.errors(ref, field.key) ?? field.error.map { [$0] } ?? []
         return messages.isEmpty ? nil : messages.joined(separator: " ")
     }
 
     /// The values the field holds now: what the reader chose, or what came.
     private var values: [String] {
-        context.values(ref, field.name) ?? field.input.initialValues
+        context.values(ref, field.key) ?? field.input.initialValues
     }
 
     private func set(_ values: [String]) {
-        context.send(.change(form: ref, name: field.name, values: values))
+        context.send(.change(form: ref, field: field.key, values: values))
     }
 
     private var text: Binding<String> {
@@ -87,7 +87,7 @@ struct FieldControl: View {
             ))
         case .file(let input):
             FileControl(label: label, input: input, chosen: values) { urls in
-                context.send(.files(form: ref, name: field.name, urls: urls))
+                context.send(.files(form: ref, field: field.key, urls: urls))
             }
         case .range(let input):
             RangeControl(label: label, input: input, values: values) { set($0) }
