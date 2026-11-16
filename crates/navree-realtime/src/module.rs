@@ -11,8 +11,8 @@ use navree_contracts::{Broadcaster, Principal};
 use navree_crypto::Encrypter;
 use navree_http::{HttpOptions, HttpServer, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey,
-    Resolver,
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Contributed, Factory, Module, ModuleBuilder,
+    ModuleId, PluginReport, ProviderKey, Resolver,
 };
 use serde_json::Value;
 
@@ -64,8 +64,9 @@ use crate::{Backplane, BackplaneKind, Live, Realtime, RealtimeOptions};
 /// Used plainly (`.module(RealtimeModule)`) or through
 /// [`from_config`](RealtimeModule::from_config), it reads the `realtime`
 /// configuration section ([`RealtimeOptions`]), so the app must include
-/// `ConfigModule`. Invalid options, malformed channel patterns and a pattern
-/// registered twice fail the boot.
+/// `ConfigModule`. Invalid options, malformed channel patterns, a pattern
+/// registered twice and a plugin's pattern outside the plugin's namespace
+/// (see [`ModuleBuilderRealtimeExt::channel`]) fail the boot.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RealtimeModule;
 
@@ -107,6 +108,9 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
             let options = r.get::<RealtimeOptions>().await?;
             r.get::<CheckedBackplanes>().await?;
             let app = r.app();
+            let channels = app.contributions::<ChannelRegistration>();
+            // A plugin's module authorizes channels under the plugin's namespace only.
+            outside_namespace(&app, &channels)?;
             let cors_origins = match app.try_get::<HttpOptions>().await {
                 Some(http) => http.cors.allowed_origins.clone(),
                 None => Vec::new(),
@@ -114,7 +118,7 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
             let mut realtime = Realtime::new(
                 (*options).clone(),
                 cors_origins,
-                app.contributions::<ChannelRegistration>(),
+                channels,
                 app.shutdown_token(),
                 app.tracker(),
             )?
@@ -149,6 +153,57 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
     )
     .exports::<Live>()
     .controller::<RealtimeController>();
+}
+
+/// Refuses each pattern of `channels` that a module of a plugin the kernel
+/// does not find first-party registers outside the plugin's namespace: such
+/// a module authorizes channels whose name starts with the namespace and `.`
+/// only, so its authorizer never decides one of the app's own private or
+/// presence channels (`private-users.{id}`). The app authorizes any channel
+/// with a plugin's function from a module of its own. The refusals are
+/// joined with `; `, as `Realtime::new` joins its own; a module of the app,
+/// a module that acts for no plugin and a first-party plugin's module are
+/// not refused.
+fn outside_namespace(
+    app: &AppContext,
+    channels: &[Contributed<ChannelRegistration>],
+) -> Result<(), BoxError> {
+    if channels.is_empty() {
+        return Ok(());
+    }
+    let plugins = app.plugins().plugins;
+    let refusals: Vec<String> = channels
+        .iter()
+        .filter_map(|registration| {
+            let plugin = community_plugin(&plugins, registration.module.id)?;
+            let namespace = plugin.info.namespace;
+            let pattern = registration.value.pattern;
+            let under = pattern
+                .strip_prefix(namespace)
+                .is_some_and(|rest| rest.starts_with('.'));
+            if under {
+                return None;
+            }
+            Some(format!(
+                "channel pattern `{pattern}` of module `{}`: plugin `{}` authorizes channels under `{namespace}.` only, and only a module of the app authorizes the app's other channels: remove the plugin or update it to a version that names its channels under `{namespace}.`, and to use the plugin's authorizer for `{pattern}`, register it from a module of the app (m.channel)",
+                registration.module.name, plugin.info.name
+            ))
+        })
+        .collect();
+    if refusals.is_empty() {
+        Ok(())
+    } else {
+        Err(refusals.join("; ").into())
+    }
+}
+
+/// The plugin the kernel does not find first-party that `module` acts for,
+/// if it acts for one: the plugins listing holds every module that acts for
+/// each plugin.
+fn community_plugin(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
+    plugins.iter().find(|plugin| {
+        !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
+    })
 }
 
 /// The backplane of this process: the `dyn Backplane` provider named after
@@ -271,6 +326,12 @@ pub trait ModuleBuilderRealtimeExt {
     /// authorizer decides whether a page's live stream may listen to the
     /// channel. Patterns under `navree-live.` are reserved for live topics
     /// and fail the boot.
+    ///
+    /// A module of a plugin that is not one of the framework's own packages
+    /// authorizes channels under the plugin's namespace only
+    /// (`announcements.{id}`): another pattern fails the boot. The app
+    /// authorizes any channel with the plugin's function from a module of
+    /// its own.
     ///
     /// The module does not need to import `RealtimeModule`.
     ///
