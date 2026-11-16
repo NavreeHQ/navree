@@ -38,12 +38,16 @@ object CompositionRules {
     /**
      * Whether a part takes the room left in a horizontal stack: a stack or
      * layers that say so, and a grid, a carousel or a chart, which have no
-     * width of their own. A ring, a shape or an icon keeps its size.
+     * width of their own. A ring, a shape or an icon keeps its size. A part
+     * for each room fills the line, so it shares what is left with the others
+     * that grow: left to its own size it would take the whole line.
      */
     fun grows(node: Navree.Node): Boolean = when (node) {
         is Navree.Stack -> node.grow
         is Navree.Layers -> node.grow
-        is Navree.Grid, is Navree.Carousel, is Navree.Chart -> true
+        is Navree.Grid, is Navree.Carousel, is Navree.Chart, is Navree.Adaptive -> true
+        // A field takes what is left of the line beside a button that keeps its size.
+        is Navree.Field -> true
         else -> false
     }
 
@@ -54,7 +58,52 @@ object CompositionRules {
      * (where the column is one part of a line) keeps the width it needs.
      */
     fun fillsWidth(stack: Navree.Stack, axis: Navree.Axis, inLine: Boolean): Boolean =
-        axis == Navree.Axis.VERTICAL && !inLine && (stack.align == Navree.Align.CENTER || stack.align == Navree.Align.END)
+        axis == Navree.Axis.VERTICAL && !inLine && (columnAlign(stack) == Navree.Align.CENTER || columnAlign(stack) == Navree.Align.END)
+
+    /**
+     * How a stack laid as a column places its parts across: by the stack's own
+     * `align`, whether or not it turns (the protocol: where parts sit across
+     * the axis; a stack that turns is a column in a narrow room and a line in a
+     * wide one, and says the same of both).
+     */
+    fun columnAlign(stack: Navree.Stack): Navree.Align? = stack.align
+
+    /** Whether a line of parts holds a dial: a ring, a ring set or a gauge. */
+    fun holdsDial(parts: List<Navree.Node>): Boolean = parts.any { it is Navree.Ring || it is Navree.Rings || it is Navree.Gauge }
+
+    /** The share of a card's width a line of parts may fill and still be put in the middle of the card, not at its start. */
+    const val SHORT_LINE = 0.7f
+
+    /**
+     * Whether a line of parts that fills `usedPx` of a room `roomPx` wide is
+     * put in the middle: a line with a dial in it that leaves most of a wide
+     * card empty beside it is a group in the card's middle, not a start with
+     * a void after it.
+     */
+    fun centresShortLine(usedPx: Int, roomPx: Int): Boolean = roomPx > 0 && usedPx < roomPx * SHORT_LINE
+
+    /**
+     * Whether a set of rings with its legend (the dial and the legend beside it,
+     * `groupPx` wide together) stands in the middle of the `roomPx` it is given:
+     * when it is given more than it needs, by the share of a short line. Where the
+     * width is taken up (a phone) it stands at the start as before. The set's own
+     * title stays where a title stands, at the start.
+     */
+    fun centresRings(groupPx: Int, roomPx: Int): Boolean = centresShortLine(groupPx, roomPx)
+
+    /**
+     * How tall the cards of one line are: the tallest height any of them has
+     * been seen to have (a card never shrinks under a line's other cards).
+     */
+    fun tallest(seenPx: Int, reportedPx: Int): Int = maxOf(seenPx, reportedPx)
+
+    /**
+     * How a stack laid as a column places its parts across, in a cell at the
+     * end of a table's column: the lines of a block at the end end where the
+     * widest line ends, so a short line stands under the others' end.
+     */
+    fun columnAlignIn(stack: Navree.Stack, endAligned: Boolean): Navree.Align? =
+        columnAlign(stack) ?: if (endAligned) Navree.Align.END else null
 
     /** The room a ring's legend needs beside its dial, and the space between the two, in dp. */
     private const val LEGEND_DP = 96f
@@ -101,7 +150,24 @@ object CompositionRules {
         val wanted = axis(stack, roomDp)
         if (wanted != Navree.Axis.HORIZONTAL || stack.wrap) return wanted
         val leasts = shown.map { leastAcrossDp(it, fontScale) }
-        return if (fitsAcross(roomDp, leasts, gapDp)) Navree.Axis.HORIZONTAL else Navree.Axis.VERTICAL
+        if (!fitsAcross(roomDp, leasts, gapDp)) return Navree.Axis.VERTICAL
+        // Each part that grows is given an equal share of what is left of the line: a wall of cards that would have
+        // one column in its share (and so end far below its neighbour) goes above it instead, as the guidance for a
+        // supporting pane has the supporting content go below the main one where the main one does not fit its half.
+        val share = roomLeftDp(roomDp, shown, gapDp, fontScale)
+        return if (shown.filter(::grows).all { share >= growingLeastDp(it, fontScale) }) Navree.Axis.HORIZONTAL else Navree.Axis.VERTICAL
+    }
+
+    /**
+     * The least a part that grows needs of its share of a line, in dp: a stack
+     * that holds a wall of cards (a grid of at least three, with no count of
+     * columns of its own) needs two columns of them; other parts give way.
+     */
+    fun growingLeastDp(node: Navree.Node, fontScale: Float): Float {
+        if (node !is Navree.Stack) return 0f
+        val wall = node.walk().filterIsInstance<Navree.Grid>().firstOrNull { it.cols == null && it.children.size >= 3 } ?: return 0f
+        val column = ((wall.min ?: 160) * fontScale.coerceAtLeast(1f)).toInt().coerceAtLeast(48)
+        return (2 * column + wall.gap * STEP_DP).toFloat()
     }
 
     /**
