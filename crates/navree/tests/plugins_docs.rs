@@ -815,6 +815,7 @@ mod navree_plugin_guard {
     use navree::plugin::PluginInfo;
     use navree::prelude::*;
     use navree::testing::principal;
+    use navree::ui::{NativeClient, NativeShellPart, NativeShellParts, NativeSignIn};
     use uuid::Uuid;
 
     /// The plugin's info.
@@ -893,6 +894,23 @@ mod navree_plugin_guard {
         }
     }
 
+    /// Where the plugin says the app's native clients sign in: routes of its own.
+    pub struct SignInHere;
+
+    impl NativeShellPart for SignInHere {
+        fn contribute(&self, shell: &mut NativeShellParts, _: &NativeClient) {
+            shell.sign_in(NativeSignIn::new("/guard/start", "/guard/exchange"));
+        }
+    }
+
+    /// The plugin's part of the native clients' shell document, for a module of the app to
+    /// register.
+    pub fn native_sign_in() -> Factory<dyn NativeShellPart> {
+        Factory::new(|_| async {
+            Ok(Arc::new(SignInHere) as Arc<dyn NativeShellPart>)
+        })
+    }
+
     /// A module of the plugin's crate that names no plugin, and registers what `.0` adds.
     pub struct Helper(pub fn(&mut ModuleBuilder));
 
@@ -945,6 +963,7 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
     use navree::auth::{AuthOptions, Strategy};
     use navree::helm::HelmOptions;
     use navree::http::{Authenticator, RouteAuthorizer};
+    use navree::ui::NativeShellPart;
     use navree::workspace::WorkspaceConfig;
     use navree_plugin_guard::{ChapterHours, Grants, Provides, TrustEveryone};
 
@@ -1030,6 +1049,14 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
             }),
             type_name::<Shell>(),
             "which is the app's shell",
+        ),
+        // Where the app's native clients sign in: the plugin's own routes.
+        (
+            Provides(|m| {
+                m.multi(navree_plugin_guard::native_sign_in());
+            }),
+            type_name::<dyn NativeShellPart>(),
+            "which says where the app's native clients sign in",
         ),
     ];
     for (provides, provider, role) in cases {
@@ -1167,6 +1194,35 @@ async fn the_app_may_register_a_plugins_sign_in_strategy() {
             .any(|strategy| strategy.name() == "trust-everyone"),
         "the app's module registered the plugin's strategy"
     );
+
+    app.shutdown().await.unwrap();
+}
+
+/// A module of the app: it registers where the guard plugin says native clients sign in.
+struct GuardNativeSignIn;
+
+impl Module for GuardNativeSignIn {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.multi(navree_plugin_guard::native_sign_in());
+    }
+}
+
+#[tokio::test]
+async fn the_app_may_register_where_a_plugin_says_native_clients_sign_in() {
+    use navree::ui::{NativeClient, NativeFamily, NativeShellPart, NativeShellParts, NativeSignIn};
+
+    let app = TestApp::builder()
+        .module(navree_plugin_guard::Provides(|_| {}))
+        .module(GuardNativeSignIn)
+        .build()
+        .await;
+    let parts = app.ctx().get_all::<dyn NativeShellPart>().await.unwrap();
+    assert_eq!(parts.len(), 1);
+    let mut said = NativeShellParts::default();
+    parts[0].contribute(&mut said, &NativeClient::new(NativeFamily::Apple));
+    let mut expected = NativeShellParts::default();
+    expected.sign_in(NativeSignIn::new("/guard/start", "/guard/exchange"));
+    assert_eq!(said, expected);
 
     app.shutdown().await.unwrap();
 }

@@ -533,6 +533,7 @@ pub const APP_ONLY_PROVIDERS: &[&str] = &[
     "dyn navree_contracts::permissions::PermissionCheck",
     "dyn navree_http::auth::Authenticator",
     "dyn navree_http::auth::RouteAuthorizer",
+    "dyn navree_ui::shell::contribute::NativeShellPart",
     "navree_access::factory::AbilityFactory",
     "navree_access::options::AccessOptions",
     "navree_auth::options::AuthOptions",
@@ -554,6 +555,9 @@ pub(crate) fn app_only_role(provider: &str) -> &'static str {
         }
         "dyn navree_http::auth::Authenticator" => "which decides who a request is signed in as",
         "dyn navree_http::auth::RouteAuthorizer" => "which decides who may open the app's routes",
+        "dyn navree_ui::shell::contribute::NativeShellPart" => {
+            "which says where the app's native clients sign in"
+        }
         "navree_access::factory::AbilityFactory" => "which builds every user's abilities",
         "navree_access::options::AccessOptions" => {
             "which sets the options of the app's access rules"
