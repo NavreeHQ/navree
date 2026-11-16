@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use navree_kernel::{AppContext, BoxError, BoxFuture, ModuleId};
 
-use crate::AccessSpec;
 use crate::mount::collect_mounts;
-use crate::router::route_table;
+use crate::router::routes_under;
+use crate::{AccessSpec, HttpServer};
 
 /// What one handler declares about who may call it, as the crate that serves
 /// the handler reads it at boot.
@@ -72,9 +72,19 @@ pub async fn declared_access(ctx: &AppContext) -> Result<Vec<DeclaredAccess>, Bo
 
 /// What the app's routes and mounts declare: what `HttpModule` contributes
 /// as its [`AccessDeclarations`].
+///
+/// The routes are read with the options of the app's [`HttpServer`], the ones
+/// the router is built with, and not with a lookup of `HttpOptions`: a second
+/// provider of the options in the app (a module that registers and exports
+/// its own) makes that lookup ambiguous, and the routes are read all the
+/// same. An app whose `HttpServer` cannot be resolved is refused.
 pub(crate) async fn routes_and_mounts(ctx: AppContext) -> Result<Vec<DeclaredAccess>, BoxError> {
+    let server = ctx
+        .get::<HttpServer>()
+        .await
+        .map_err(|error| format!("the app's routes cannot be read without HttpServer: {error}"))?;
     let mut declared = Vec::new();
-    for route in route_table(&ctx).await? {
+    for route in routes_under(&ctx, server.options()).await? {
         declared.push(DeclaredAccess {
             what: format!("the route `{} {}`", route.method, route.full_path),
             module: route.module_id,

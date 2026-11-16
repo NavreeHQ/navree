@@ -322,7 +322,16 @@ pub async fn route_table(ctx: &AppContext) -> Result<Vec<RouteMeta>, BoxError> {
         .get::<HttpOptions>()
         .await
         .map_err(|error| format!("route_table needs HttpModule in the app: {error}"))?;
-    Ok(collect_routes(ctx, &options)
+    routes_under(ctx, &options).await
+}
+
+/// The metadata of every route of the app as it is mounted under `options`,
+/// modules in dependency order.
+pub(crate) async fn routes_under(
+    ctx: &AppContext,
+    options: &HttpOptions,
+) -> Result<Vec<RouteMeta>, BoxError> {
+    Ok(collect_routes(ctx, options)
         .await?
         .into_iter()
         .map(|route| route.meta)

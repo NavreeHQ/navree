@@ -17,7 +17,8 @@ use navree_access::{
 };
 use navree_contracts::{ModuleBuilderPermissionsExt, Permission, permission_catalog, permitted};
 use navree_http::{
-    AppRouter, Controller, ModuleBuilderHttpExt, ModuleBuilderMountExt, Mount, RouteDef,
+    AppRouter, Controller, HttpOptions, ModuleBuilderHttpExt, ModuleBuilderMountExt, Mount,
+    RouteDef,
 };
 use navree_kernel::{
     BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ModuleId, PluginInfo, ProviderKey,
@@ -890,6 +891,39 @@ async fn an_app_route_may_check_a_subject_registered_as_the_plugins() {
     let error = boot_error(app).await;
     let expected = format!(
         "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the subject `announcements.Draft` that the route `GET /board` of `BoardModule` checks{NOT_REGISTERED}"
+    );
+    assert!(error.contains(&expected), "{error}");
+}
+
+/// What a module that registers HTTP options of its own, and exports them, adds: the app then
+/// has two providers of the options.
+fn own_http_options(m: &mut ModuleBuilder) {
+    m.value(HttpOptions::default()).exports::<HttpOptions>();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_routes_are_read_beside_a_second_provider_of_the_http_options() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+
+    // A module of the announcements plugin registers and exports HTTP options of its own. The
+    // app boots and serves with its own options, and a lookup of the options no longer
+    // answers: two modules export them.
+    let app = builder()
+        .module(NoticeSubjects(own_http_options))
+        .try_build()
+        .await
+        .expect("the app boots beside a second provider of the HTTP options");
+    assert!(app.ctx().try_get::<HttpOptions>().await.is_none());
+
+    // The routes are read with the server's own options all the same: a route's name under
+    // the plugin's namespace that the plugin does not describe is still refused.
+    let app = builder()
+        .module(NoticeSubjects(own_http_options))
+        .module(BoardModule(|route| route.permissions(&["announcements.archive"])));
+    let error = boot_error(app).await;
+    let expected = format!(
+        "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the permission `announcements.archive` that the route `GET /board` of `BoardModule` requires{NOT_DESCRIBED}"
     );
     assert!(error.contains(&expected), "{error}");
 }
