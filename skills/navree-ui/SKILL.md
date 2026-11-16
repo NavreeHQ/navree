@@ -763,7 +763,11 @@ app made by `navree new` does this in one extractor, `Desk`
 (`src/ui/shell.rs`): take `Desk` where this skill says `AppShell`. On the
 `AppShell`, `header_slot(node)` puts a workspace switcher under the app's name
 (`Shell::header_slot` for every page) and `csrf(token)` gives the shell's own
-forms the session's token. The brand row takes the app's
+forms the session's token. `footer_slot(node)` (on `Shell` or `AppShell`)
+puts a tile above the person, such as the plan's seats;
+`UserMenu::avatar(Avatar::initials(name).shape(AvatarShape::Circle))` draws
+the person's initials in place of the icon and `UserMenu::chevron(false)`
+leaves out the chevron. The brand row takes the app's
 mark (`Shell::logo(src)`, `.logo_dark(src)` for dark mode,
 `.logo_style(LogoStyle::Bare)` for the mark alone with no tile) and a badge
 at its end in place of the context line (`Shell::badge(..)`,

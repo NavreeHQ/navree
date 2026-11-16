@@ -48,6 +48,8 @@ struct Slots<'a> {
     header: Option<&'a Node>,
     /// The badge at the end of the brand row.
     badge: Option<&'a Node>,
+    /// What stands at the foot, above the person.
+    footer: Option<&'a Node>,
 }
 
 /// The cookie holding a toast for the next page.
@@ -471,6 +473,8 @@ pub struct UserMenu {
     name: Cow<'static, str>,
     email: Cow<'static, str>,
     links: Vec<MenuEntry>,
+    avatar: Option<Avatar>,
+    chevron: bool,
 }
 
 /// One line of a [`UserMenu`].
@@ -487,7 +491,42 @@ impl UserMenu {
             name: name.into(),
             email: email.into(),
             links: Vec::new(),
+            avatar: None,
+            chevron: true,
         }
+    }
+
+    /// Draws `avatar` at the start of the row, in place of the person icon: the person's
+    /// initials (`Avatar::initials(name).shape(AvatarShape::Circle)`) or their picture. The
+    /// row's name says who it is, so give the avatar the same name.
+    ///
+    /// ```
+    /// use navree_ui::{Avatar, AvatarShape, Shell, UserMenu};
+    ///
+    /// let html = Shell::new("Agra")
+    ///     .user(
+    ///         UserMenu::new("Dalbir Oberoi", "Admin")
+    ///             .avatar(Avatar::initials("Dalbir Oberoi").shape(AvatarShape::Circle))
+    ///             .chevron(false),
+    ///     )
+    ///     .page("Home", "/")
+    ///     .to_view()
+    ///     .to_html();
+    /// assert!(html.contains(r#"aria-label="Dalbir Oberoi" data-initials data-shape="circle">DO</span>"#));
+    /// assert!(html.contains(r#"popovertarget="ui-user-menu" aria-haspopup="dialog""#));
+    /// ```
+    #[must_use]
+    pub fn avatar(mut self, avatar: Avatar) -> Self {
+        self.avatar = Some(avatar);
+        self
+    }
+
+    /// Draws the chevron at the end of the row (`true`, the default) or not. The row opens the
+    /// menu either way, and tells assistive technology that it does.
+    #[must_use]
+    pub fn chevron(mut self, shown: bool) -> Self {
+        self.chevron = shown;
+        self
     }
 
     /// Adds a link to the menu, for a page to read. It isn't fetched ahead of a click.
@@ -515,7 +554,10 @@ impl UserMenu {
             .attr("aria-haspopup", "dialog")
             .attr("title", self.name.clone())
             .children((
-                Avatar::placeholder(self.name.clone().into_owned()),
+                match &self.avatar {
+                    Some(avatar) => Node::from(avatar.clone()),
+                    None => Avatar::placeholder(self.name.clone().into_owned()).into(),
+                },
                 el("span").slot("sidebar-user-text").children((
                     el("span")
                         .slot("sidebar-user-name")
@@ -524,7 +566,7 @@ impl UserMenu {
                         .slot("sidebar-user-email")
                         .child(self.email.clone()),
                 )),
-                icon(icons::CHEVRONS_UP_DOWN),
+                self.chevron.then(|| icon(icons::CHEVRONS_UP_DOWN)),
             ));
         let links: Vec<Element> = self
             .links
@@ -586,6 +628,7 @@ pub struct Shell {
     logo_style: LogoStyle,
     badge: Option<Node>,
     header_slot: Option<Node>,
+    footer_slot: Option<Node>,
     home: Href,
     groups: Vec<NavGroup>,
     user: Option<UserMenu>,
@@ -615,6 +658,7 @@ impl Shell {
             logo_style: LogoStyle::Tile,
             badge: None,
             header_slot: None,
+            footer_slot: None,
             home: Href::from("/"),
             groups: Vec::new(),
             user: None,
@@ -843,6 +887,15 @@ impl Shell {
         self
     }
 
+    /// Puts `slot` in the sidebar's foot, above the person: a tile with the plan's seats
+    /// and a button to add some. [`AppShell::footer_slot`] sets one for a request, in place of
+    /// this one. It hides with the names when the sidebar folds to its icons.
+    #[must_use]
+    pub fn footer_slot(mut self, slot: impl Into<Node>) -> Self {
+        self.footer_slot = Some(slot.into());
+        self
+    }
+
     /// Sets where the app's name links to, and which link only matches itself.
     #[must_use]
     pub fn home(mut self, home: impl Into<Href>) -> Self {
@@ -1066,6 +1119,7 @@ impl Shell {
             user,
             header: slot,
             badge,
+            footer: foot,
         } = slots;
         let header = self.brand(mode, badge);
         let best = self.best(path);
@@ -1087,11 +1141,20 @@ impl Shell {
                     .slot("sidebar-content")
                     .attr("aria-label", "Main")
                     .child(groups),
-                user.filter(|_| footer).map(|user| {
-                    el("div")
-                        .slot("sidebar-footer")
-                        .child(user.to_node(csrf, "right"))
-                }),
+                {
+                    let user = user.filter(|_| footer);
+                    (user.is_some() || foot.is_some()).then(|| {
+                        el("div").slot("sidebar-footer").children((
+                            foot.cloned().map(|foot| {
+                                el("div")
+                                    .slot("sidebar-footer-slot")
+                                    .uses(Uses::SHELL_PARTS)
+                                    .child(foot)
+                            }),
+                            user.map(|user| user.to_node(csrf, "right")),
+                        ))
+                    })
+                },
             ))
     }
 
@@ -1226,6 +1289,8 @@ pub struct AppPage {
     header_slot: Option<Node>,
     /// The request's badge in the brand row, in place of the shell's.
     badge: Option<Node>,
+    /// The request's footer slot, in place of the shell's.
+    footer_slot: Option<Node>,
     app_sheets: Vec<AppSheet>,
     app_fonts: Vec<AppFont>,
     /// What stands in the middle of the top bar for this page.
@@ -1265,6 +1330,7 @@ impl AppPage {
             user: None,
             header_slot: None,
             badge: None,
+            footer_slot: None,
             app_sheets: shell.app_sheets.clone(),
             app_fonts: shell.app_fonts.clone(),
             topbar: None,
@@ -1556,6 +1622,7 @@ impl AppPage {
                         user,
                         header: self.header_slot.as_ref().or(shell.header_slot.as_ref()),
                         badge,
+                        footer: self.footer_slot.as_ref().or(shell.footer_slot.as_ref()),
                     },
                 ),
                 el("div").slot("sidebar-overlay"),
@@ -1630,6 +1697,7 @@ pub struct AppShell {
     context: Option<Cow<'static, str>>,
     /// The badge at the end of the brand row for this request, in place of the shell's.
     badge: Option<Node>,
+    footer_slot: Option<Node>,
 }
 
 impl AppShell {
@@ -1652,6 +1720,7 @@ impl AppShell {
         page.user = self.user_menu.clone();
         page.header_slot = self.header_slot.clone();
         page.badge = self.badge.clone();
+        page.footer_slot = self.footer_slot.clone();
         page
     }
 
@@ -1736,6 +1805,29 @@ impl AppShell {
     #[must_use]
     pub fn header_slot(mut self, slot: impl Into<Node>) -> Self {
         self.header_slot = Some(slot.into());
+        self
+    }
+
+    /// Puts `slot` in the sidebar's foot for this request, above the person, in place of the
+    /// shell's [`footer_slot`](Shell::footer_slot): the seats of the plan signed in to.
+    ///
+    /// ```
+    /// use http::HeaderMap;
+    /// use navree_ui::{Shell, Stat, UserMenu};
+    ///
+    /// let html = Shell::new("Agra")
+    ///     .for_request("/", &HeaderMap::new())
+    ///     .user_menu(UserMenu::new("Priya Sharma", "priya@agra.in"))
+    ///     .footer_slot(Stat::new("Seats", "12 of 20"))
+    ///     .page("Home")
+    ///     .to_view()
+    ///     .to_html();
+    /// let slot = html.find("sidebar-footer-slot").unwrap();
+    /// assert!(slot < html.find(r#"data-slot="sidebar-user""#).unwrap());
+    /// ```
+    #[must_use]
+    pub fn footer_slot(mut self, slot: impl Into<Node>) -> Self {
+        self.footer_slot = Some(slot.into());
         self
     }
 
@@ -1849,6 +1941,7 @@ impl AppShell {
             links: Vec::new(),
             context: None,
             badge: None,
+            footer_slot: None,
         }
     }
 

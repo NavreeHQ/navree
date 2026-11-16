@@ -1,8 +1,8 @@
 /*
  * navree-ui's stylesheet: what the application shell draws only when an app asks for it, a sheet
  * of its own that a page links when it draws one of these (`Uses::SHELL_PARTS`): a workspace
- * switcher drawn as a card, a bare or dark mark and a badge in the brand row. The shell itself
- * is drawn by the sheet every page loads.
+ * switcher drawn as a card, a bare or dark mark and a badge in the brand row, a slot at the
+ * sidebar's foot. The shell itself is drawn by the sheet every page loads.
  */
 
 /* The brand row: a bare mark, a light and a dark mark in one picture, a badge at the end. */
@@ -10,6 +10,9 @@
 [data-slot=sidebar-logo] > picture{display:contents}
 [data-slot=sidebar-brand] > [data-slot=badge]{flex:none}
 @media (min-width:768px){[data-collapsed] > [data-slot=sidebar] [data-slot=sidebar-brand] > [data-slot=badge]{display:none}}
+/* The sidebar's foot: a slot 12 px above the person, hidden when the sidebar folds. */
+[data-slot=sidebar-footer-slot]:not(:last-child){margin-bottom:.75rem}
+@media (min-width:768px){[data-collapsed] > [data-slot=sidebar] [data-slot=sidebar-footer-slot]{display:none}}
 
 /* A workspace switcher as a card: the workspace's picture, its name over a second line and a
  * chevron, as wide as its place. In the sidebar's header it lines up with the links' rows. */

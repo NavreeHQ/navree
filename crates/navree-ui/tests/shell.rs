@@ -634,3 +634,89 @@ fn a_solid_badge_is_filled_with_the_accent_and_comes_with_the_parts_styles() {
     let plain: navree_ui::Node = Badge::new("Won").variant(BadgeVariant::Success).into();
     assert!(navree_ui::measure(&plain).uses.is_none());
 }
+
+// The sidebar's foot and the person
+
+#[test]
+fn a_footer_slot_stands_above_the_person_and_brings_the_shell_parts() {
+    let shell = store().footer_slot(el("p").child("Seats"));
+    let html = drawn(&shell);
+    let foot = &html[html.find(r#"<div data-slot="sidebar-footer">"#).unwrap()..];
+    assert!(
+        foot.starts_with(concat!(
+            r#"<div data-slot="sidebar-footer"><div data-slot="sidebar-footer-slot"><p>Seats</p></div>"#,
+            r#"<button data-slot="sidebar-user""#
+        )),
+        "{foot}"
+    );
+    assert!(loads(&shell).has(navree_ui::Uses::SHELL_PARTS));
+    // The request's in place of the shell's; with no person, the slot stands alone.
+    let request = store()
+        .footer_slot(el("p").child("Every account"))
+        .for_request("/", &HeaderMap::new())
+        .footer_slot(el("p").child("This account"))
+        .page("Home")
+        .to_view()
+        .to_html();
+    assert!(
+        request.contains("This account") && !request.contains("Every account"),
+        "{request}"
+    );
+    let alone = drawn(&Shell::new("Agra").footer_slot(el("p").child("Seats")));
+    assert!(
+        alone.contains(r#"<div data-slot="sidebar-footer"><div data-slot="sidebar-footer-slot"><p>Seats</p></div></div>"#),
+        "{alone}"
+    );
+    // No slot, no box for one; folding to the icons hides it.
+    assert!(!drawn(&store()).contains("sidebar-footer-slot"));
+    assert!(!drawn(&Shell::new("Agra")).contains("sidebar-footer"));
+    assert!(shell_parts().contains(
+        "@media (min-width:768px){[data-collapsed] > [data-slot=sidebar] [data-slot=sidebar-footer-slot]{display:none}}"
+    ));
+    assert!(
+        shell_parts()
+            .contains("[data-slot=sidebar-footer-slot]:not(:last-child){margin-bottom:.75rem}")
+    );
+}
+
+/// The button of the person's row in `html`.
+fn user_row(html: &str) -> &str {
+    let at = html.find(r#"<button data-slot="sidebar-user""#).unwrap();
+    &html[at..at + html[at..].find("</button>").unwrap()]
+}
+
+#[test]
+fn the_person_can_have_initials_and_no_chevron_and_the_row_still_opens_its_menu() {
+    let menu = UserMenu::new("Dalbir Oberoi", "Admin")
+        .avatar(Avatar::initials("Dalbir Oberoi").shape(navree_ui::AvatarShape::Circle))
+        .chevron(false)
+        .action("Sign out", "/sign-out");
+    let html = drawn(&store().user(menu.clone()));
+    let row = user_row(&html);
+    assert!(
+        row.contains(r#"popovertarget="ui-user-menu" aria-haspopup="dialog""#),
+        "{row}"
+    );
+    assert!(
+        row.contains(r#"<span data-slot="avatar" role="img" aria-label="Dalbir Oberoi" data-initials data-shape="circle">DO</span>"#),
+        "{row}"
+    );
+    assert!(
+        !row.contains("<svg"),
+        "no person icon and no chevron: {row}"
+    );
+    assert!(html.contains(r#"id="ui-user-menu""#), "{html}");
+    assert!(html.contains(r#"action="/sign-out""#), "{html}");
+    // As before with neither: the person icon and the chevron.
+    let plain = drawn(&store());
+    let row = user_row(&plain);
+    assert!(row.contains(r#"<path d="m7 15 5 5 5-5"/>"#), "{row}");
+    assert!(row.contains(r#"aria-label="Ravneet Kaur"><svg"#), "{row}");
+    // The chevron alone, kept.
+    let kept = drawn(&store().user(UserMenu::new("Anu", "anu@example.com").chevron(true)));
+    assert!(user_row(&kept).contains(r#"<path d="m7 15 5 5 5-5"/>"#));
+    // The top bar of the Header layout draws the same avatar.
+    let header = drawn(&store().layout(ShellLayout::Header).user(menu));
+    let bar = &header[header.find(r#"data-slot="topbar-user""#).unwrap()..];
+    assert!(user_row(bar).contains("data-initials"), "{header}");
+}

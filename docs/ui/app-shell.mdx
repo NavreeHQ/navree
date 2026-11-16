@@ -114,6 +114,28 @@ Shell::new("Kesar")
 
 A bare or dark mark and a badge are drawn by the shell parts stylesheet, which a page links only when it draws one of them.
 
+## The sidebar's foot
+
+The person signed in stands at the foot of the sidebar: `Shell::user(menu)`, or `AppShell::user_menu(menu)` for a request. Their name is drawn in the `sidebar_user` style of the theme's [type scale](/docs/ui/themes/#type) and the line under it in the shell's muted text (the `shell_muted` [colour role](/docs/ui/themes/#colour-roles)).
+
+- **Their picture:** `UserMenu::avatar(avatar)` draws an [avatar](/docs/components/avatar/) of yours in place of the person icon: their initials, round, or their photo.
+- **The chevron:** `UserMenu::chevron(false)` leaves out the chevron at the end of the row. The row opens the menu either way, and tells assistive technology that it does.
+- **Above the person:** `Shell::footer_slot(node)` puts something 12 px above the person, such as a tile with the plan's seats and a button to add some; `AppShell::footer_slot(node)` sets one for a request, in place of the shell's. It hides with the names when the sidebar folds, and a shell without one draws no box for it.
+
+```rust
+async fn home(shell: AppShell, person: Person) -> AppPage {
+    shell
+        .footer_slot(Card::titled("Seats").body(Stat::new("Left", "8 of 20")))
+        .user_menu(
+            UserMenu::new(person.name.clone(), person.email.clone())
+                .avatar(Avatar::initials(person.name.clone()).shape(AvatarShape::Circle))
+                .chevron(false)
+                .action("Sign out", "/sign-out"),
+        )
+        .page("Home")
+}
+```
+
 ## Only what a reader may use
 
 A button that answers "no" should not have been drawn. With the `access` feature, `navree::ui::ability` asks the reader's [abilities](/docs/security/authorization/) before the page draws a navigation item, a bulk action, a row action or any other part. `Requires::requires(action, subject)` gates a part, and `ByAbility` (implemented for `Ability`, which the `Abilities` extractor derefs to) keeps what the reader may see:

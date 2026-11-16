@@ -112,6 +112,15 @@ every `@navree/*` package carries the same version.
   `Shell::logo_dark`, `logo_style` and `badge` and `AppShell::badge` are new inherent methods: an
   app whose own extension trait gives `Shell` or `AppShell` a method of one of these names calls
   it through the trait.
+- The sidebar's foot takes more than the person: `Shell::footer_slot(node)` puts something above
+  them, such as a tile with the plan's seats, and `AppShell::footer_slot(node)` one for a
+  request; it stands 12 px above the person, hides with the names when the sidebar folds, and a
+  shell without one draws no box for it. `UserMenu::avatar(avatar)` draws an avatar of the app's
+  (the person's initials) in place of the person icon, and `UserMenu::chevron(false)` leaves out
+  the chevron; the row opens its menu as before. A shell and a menu with none of these are drawn
+  as before. `Shell::footer_slot`, `AppShell::footer_slot`, `UserMenu::avatar` and
+  `UserMenu::chevron` are new inherent methods: an app whose own extension trait gives one of
+  these types a method of one of these names calls it through the trait.
 
 ## [1.7.0] - 2026-11-27
 
