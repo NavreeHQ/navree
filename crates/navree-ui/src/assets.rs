@@ -140,6 +140,7 @@ fn sheet_modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::CHART_LINEAR, CHART_LINEAR_URL),
         (Uses::CHART_GRIDS, CHART_GRIDS_URL),
         (Uses::APP_BLOCKS, APP_BLOCKS_URL),
+        (Uses::AUTH_LAYOUT, AUTH_LAYOUT_URL),
         (Uses::PARTS_STYLES, PARTS_STYLES_URL),
         (Uses::SORTABLE_GRID_STYLES, SORTABLE_GRID_STYLES_URL),
         (Uses::MARKETING, MARKETING_URL),

@@ -133,6 +133,21 @@ every `@navree/*` package carries the same version.
   text's. A page with none of these is drawn as before. These are new inherent methods: an app
   whose own extension trait gives `AppPage` or `Breadcrumb` a method of one of these names calls
   it through the trait.
+- `AuthLayout`, the page of a sign-in form, says where its panel stands and how it looks, and
+  what the form's column holds besides the form. `aside_end` puts the panel after the form, in
+  reading order and on the screen; `aside_inset` sets it 0.75rem off the window's edges in the
+  theme's `panel` corner, padded 3.5rem, with the form's column and the panel sharing the room
+  left; `aside_inverse` draws it on the theme's inverse surface, in the colours a theme's
+  `Inverse` gives it. `brand` puts the app's brand (a `marketing::Brand`) at the top of the
+  form's column at every width, its name in the type scale's `brand` style, so a phone keeps
+  it when the panel is hidden; `footer` puts a small line at the column's foot; `body_width`
+  makes the column 360, 400 or 480 px wide in place of 448. Their styles are a sheet of their
+  own, linked after the app blocks' sheet by a layout that uses one (`Uses::AUTH_LAYOUT`); a
+  layout that uses none is drawn and linked as before, and `AuthPages` draws its pages as
+  before, held by a test. A native client that is given an auth page as a screen leaves the
+  brand out, as it does the panel, and says the footer's line after the form. The six methods
+  are new inherent methods of `AuthLayout`: an app whose own extension trait gives it a method
+  of the same name calls it through the trait.
 
 ### Fixed
 

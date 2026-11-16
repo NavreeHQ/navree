@@ -294,6 +294,8 @@ second at the most.
 | A brand typeface, a backdrop or rhythm a theme can't say, the app's logo | `AppFont`, `AppSheet` and `AppImage`, compiled in and served by the toolkit; `Shell::font(..)`, `.stylesheet(..)`, `.logo(..)` |
 | How the browser's tab reads | `Shell::title_template("{} · App")`, `AppPage::document_title(..)` |
 | Sign-in and sign-up pages with the app's panel beside the form | `AuthPages` with `.sign_up()`, `.aside(..)`, `.theme_menu()`; a guest page of your own in an `AuthLayout` |
+| A sign-in board with the panel on the right, inset from the edges with large corners, dark on a light page | `AuthLayout::aside_end()`, `.aside_inset()` (corner from the theme's `Corners::panel`), `.aside_inverse()` (colours from `Roles::inverse`) |
+| A brand above the sign-in form that stays on a phone, a footer line under it, a narrower form column | `AuthLayout::brand(Brand::new(..).mark(..))`, `.footer(..)`, `.body_width(400)` |
 
 ## Public pages
 

@@ -941,6 +941,32 @@ crate::node::into_node!(CopyField);
 /// assert!(html.contains(r#"<div data-slot="auth-layout" data-aside>"#));
 /// assert!(html.contains(r#"<main data-slot="auth-main" id="main">"#));
 /// ```
+///
+/// The panel can stand after the form ([`aside_end`](Self::aside_end)), off the window's
+/// edges in the theme's panel corner ([`aside_inset`](Self::aside_inset)) and on the theme's
+/// inverse surface ([`aside_inverse`](Self::aside_inverse)). The form's column can hold the
+/// app's brand at its top ([`brand`](Self::brand)) and a line at its foot
+/// ([`footer`](Self::footer)), at every width, and be narrower or wider
+/// ([`body_width`](Self::body_width)). These link a small sheet of their own,
+/// [`Uses::AUTH_LAYOUT`]; a layout that uses none of them is drawn as it always was.
+///
+/// ```
+/// use navree_ui::marketing::Brand;
+/// use navree_ui::{AuthLayout, Text, el, render};
+///
+/// let page = AuthLayout::new(el("form").child("…"))
+///     .brand(Brand::new("Kesar", "/"))
+///     .footer(Text::muted("Every sign-in is checked."))
+///     .aside(el("p").child("Sleep, heart and steps, scored every day."))
+///     .aside_end()
+///     .aside_inset()
+///     .aside_inverse()
+///     .body_width(400);
+/// let html = render(&page.into());
+/// assert!(html.starts_with(r#"<div data-slot="auth-layout" data-aside="end inset" data-body="400"><main"#));
+/// assert!(html.contains(r#"<div data-slot="auth-brand"><a data-slot="site-brand" href="/">"#));
+/// assert!(html.ends_with(r#"</main><aside data-slot="auth-aside" data-inverse aria-label="About"><p>Sleep, heart and steps, scored every day.</p></aside></div>"#));
+/// ```
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct AuthLayout {
@@ -948,7 +974,16 @@ pub struct AuthLayout {
     aside: Option<Node>,
     aside_label: Cow<'static, str>,
     corner: Option<Node>,
+    aside_end: bool,
+    aside_inset: bool,
+    aside_inverse: bool,
+    brand: Option<Node>,
+    footer: Option<Node>,
+    body_width: u16,
 }
+
+/// The width of an auth layout's form column, in pixels, when it is not set.
+const AUTH_BODY_WIDTH: u16 = 448;
 
 impl AuthLayout {
     /// The page around `body`: the heading and the form's card.
@@ -958,6 +993,12 @@ impl AuthLayout {
             aside: None,
             aside_label: Cow::Borrowed("About"),
             corner: None,
+            aside_end: false,
+            aside_inset: false,
+            aside_inverse: false,
+            brand: None,
+            footer: None,
+            body_width: AUTH_BODY_WIDTH,
         }
     }
 
@@ -979,25 +1020,100 @@ impl AuthLayout {
         self
     }
 
+    /// Puts the panel after the form, in reading order and on the screen: the form's column
+    /// on the start side, the panel on the end side. Without it the panel comes first.
+    pub fn aside_end(mut self) -> Self {
+        self.aside_end = true;
+        self
+    }
+
+    /// Insets the panel from the window's edges by 0.75rem and rounds it in the theme's
+    /// `panel` corner (`Corners::panel`), padded 3.5rem with 2.5rem between its parts and no
+    /// line beside it. The form's column grows from 35rem and the panel from 30rem, by equal
+    /// parts of the room that is left.
+    pub fn aside_inset(mut self) -> Self {
+        self.aside_inset = true;
+        self
+    }
+
+    /// Draws the panel on the theme's inverse surface (`data-inverse`): the other palette, a
+    /// dark panel on a light page and a light one on a dark page, in the colours a theme's
+    /// `Inverse` gives it, checked for contrast. Every part inside reads it.
+    pub fn aside_inverse(mut self) -> Self {
+        self.aside_inverse = true;
+        self
+    }
+
+    /// The app's brand at the top of the form's column, at every width, so it stays when the
+    /// panel is hidden: a [`Brand`](crate::marketing::Brand), its name and mark linking home.
+    /// Its name is drawn in the theme's `brand` text style (`TypeScale::brand`).
+    pub fn brand(mut self, brand: impl Into<Node>) -> Self {
+        self.brand = Some(brand.into());
+        self
+    }
+
+    /// A line at the foot of the form's column, in small quiet text: how sign-ins are kept
+    /// safe, a link to the terms.
+    pub fn footer(mut self, footer: impl Into<Node>) -> Self {
+        self.footer = Some(footer.into());
+        self
+    }
+
+    /// The width of the form's column at most, in pixels: 360, 400, 448 (the default) or
+    /// 480. Another number takes the nearest. On a narrower screen it takes the room there is.
+    pub fn body_width(mut self, px: u16) -> Self {
+        self.body_width = [360, 400, AUTH_BODY_WIDTH, 480]
+            .into_iter()
+            .min_by_key(|step| step.abs_diff(px))
+            .unwrap_or(AUTH_BODY_WIDTH);
+        self
+    }
+
     fn into_node(self) -> Node {
         let has_aside = self.aside.is_some();
-        el("div")
-            .slot("auth-layout")
-            .flag("data-aside", has_aside)
-            .uses(Uses::APP_BLOCKS)
-            .children((
-                self.aside.map(|aside| {
-                    el("aside")
-                        .slot("auth-aside")
-                        .attr("aria-label", self.aside_label)
-                        .child(aside)
-                }),
-                el("main").slot("auth-main").attr("id", "main").children((
-                    self.corner
-                        .map(|corner| el("div").slot("auth-corner").child(corner)),
-                    el("div").slot("auth-body").child(self.body),
-                )),
-            ))
+        // Where the panel stands and how, as the words of one attribute; nothing for the plain
+        // panel, so a layout with no options is the markup it always was.
+        let placed: Vec<&str> = [(self.aside_end, "end"), (self.aside_inset, "inset")]
+            .into_iter()
+            .filter_map(|(on, word)| (on && has_aside).then_some(word))
+            .collect();
+        let width = (self.body_width != AUTH_BODY_WIDTH).then(|| self.body_width.to_string());
+        let own_sheet =
+            !placed.is_empty() || width.is_some() || self.brand.is_some() || self.footer.is_some();
+        let mut root = el("div").slot("auth-layout");
+        root = if placed.is_empty() {
+            root.flag("data-aside", has_aside)
+        } else {
+            root.attr("data-aside", placed.join(" "))
+        };
+        let aside = self.aside.map(|aside| {
+            el("aside")
+                .slot("auth-aside")
+                .flag("data-inverse", self.aside_inverse)
+                .attr("aria-label", self.aside_label)
+                .child(aside)
+        });
+        let main = el("main").slot("auth-main").attr("id", "main").children((
+            self.brand
+                .map(|brand| el("div").slot("auth-brand").child(brand)),
+            self.corner
+                .map(|corner| el("div").slot("auth-corner").child(corner)),
+            el("div").slot("auth-body").child(self.body),
+            self.footer
+                .map(|footer| el("div").slot("auth-footer").child(footer)),
+        ));
+        let (first, last) = if self.aside_end {
+            (None, aside)
+        } else {
+            (aside, None)
+        };
+        root.attr_opt("data-body", width)
+            .uses(if own_sheet {
+                Uses::APP_BLOCKS.with(Uses::AUTH_LAYOUT)
+            } else {
+                Uses::APP_BLOCKS
+            })
+            .children((first, main, last))
             .into()
     }
 }
@@ -1476,6 +1592,133 @@ mod tests {
             full.contains(r#"<div data-slot="auth-corner">menu</div>"#),
             "{full}"
         );
+    }
+
+    #[test]
+    fn an_auth_layout_with_no_options_is_the_markup_it_was_and_links_the_app_blocks_alone() {
+        for layout in [
+            AuthLayout::new("form"),
+            AuthLayout::new("form").aside("about").corner("menu"),
+            // Where the panel stands means nothing without a panel, and the default width
+            // is no width.
+            AuthLayout::new("form")
+                .aside_end()
+                .aside_inset()
+                .aside_inverse()
+                .body_width(448),
+            AuthLayout::new("form").body_width(450),
+        ] {
+            let uses = crate::render::measure(&layout.clone().into()).uses;
+            assert!(uses.has(Uses::APP_BLOCKS), "{layout:?}");
+            assert!(!uses.has(Uses::AUTH_LAYOUT), "{layout:?}");
+            let out = html(layout);
+            assert!(
+                !out.contains("data-inverse") && !out.contains("data-body"),
+                "{out}"
+            );
+        }
+        assert_eq!(
+            html(AuthLayout::new("form").aside_end().aside_inset()),
+            html(AuthLayout::new("form")),
+        );
+    }
+
+    #[test]
+    fn the_panel_can_stand_after_the_form_inset_and_on_the_inverse_surface() {
+        let end = html(AuthLayout::new("form").aside("about").aside_end());
+        assert_eq!(
+            end,
+            r#"<div data-slot="auth-layout" data-aside="end"><main data-slot="auth-main" id="main"><div data-slot="auth-body">form</div></main><aside data-slot="auth-aside" aria-label="About">about</aside></div>"#
+        );
+        let inset = html(AuthLayout::new("form").aside("about").aside_inset());
+        assert!(
+            inset.starts_with(
+                r#"<div data-slot="auth-layout" data-aside="inset"><aside data-slot="auth-aside" aria-label="About">"#
+            ),
+            "the panel first, inset: {inset}"
+        );
+        let all = html(
+            AuthLayout::new("form")
+                .aside("about")
+                .aside_end()
+                .aside_inset()
+                .aside_inverse(),
+        );
+        assert!(
+            all.starts_with(r#"<div data-slot="auth-layout" data-aside="end inset"><main"#),
+            "{all}"
+        );
+        assert!(
+            all.ends_with(r#"<aside data-slot="auth-aside" data-inverse aria-label="About">about</aside></div>"#),
+            "{all}"
+        );
+        // The inverse surface alone is the theme's: it needs no sheet of the layout's own.
+        let inverse = AuthLayout::new("form").aside("about").aside_inverse();
+        let uses = crate::render::measure(&inverse.clone().into()).uses;
+        assert!(!uses.has(Uses::AUTH_LAYOUT));
+        assert!(html(inverse).contains(r#"<aside data-slot="auth-aside" data-inverse "#));
+        for placed in [
+            AuthLayout::new("form").aside("about").aside_end(),
+            AuthLayout::new("form").aside("about").aside_inset(),
+        ] {
+            let uses = crate::render::measure(&placed.into()).uses;
+            assert!(uses.has(Uses::APP_BLOCKS) && uses.has(Uses::AUTH_LAYOUT));
+        }
+        // The sheet swaps the columns for the panel at the end, and insets and rounds the
+        // panel in the theme's panel corner, both only where the panel shows.
+        let css = include_str!("../../styles/extra/auth-layout.css");
+        let wide = &css[css.find("@media (min-width:960px){").expect("a wide block")..];
+        assert!(wide.contains(
+            "[data-slot=auth-layout][data-aside~=end]{grid-template-columns:minmax(0,6fr) minmax(0,5fr);"
+        ));
+        assert!(wide.contains(
+            "margin:.75rem;padding:3.5rem;gap:2.5rem;border:0;border-radius:var(--radius-panel,var(--radius-lg))"
+        ));
+        // The inverse panel is the theme's inverse surface, with no rule of its own.
+        assert!(!css.contains("[data-inverse]"));
+    }
+
+    #[test]
+    fn the_brand_and_the_footer_stand_in_the_forms_column_at_every_width() {
+        use crate::marketing::Brand;
+        let out = html(
+            AuthLayout::new("form")
+                .brand(Brand::new("Kesar", "/"))
+                .footer("Checked on every sign-in.")
+                .corner("menu")
+                .aside("about"),
+        );
+        assert!(out.contains(r#"<main data-slot="auth-main" id="main"><div data-slot="auth-brand"><a data-slot="site-brand" href="/"><span data-slot="site-brand-name">Kesar</span></a></div><div data-slot="auth-corner">menu</div><div data-slot="auth-body">form</div><div data-slot="auth-footer">Checked on every sign-in.</div></main>"#), "{out}");
+        let uses = crate::render::measure(&AuthLayout::new("form").footer("x").into()).uses;
+        assert!(uses.has(Uses::AUTH_LAYOUT));
+        // The brand is in the main column, which no width hides, and nothing in the sheet
+        // hides it; its name is the type scale's brand.
+        let css = include_str!("../../styles/extra/auth-layout.css");
+        assert!(!css.contains("display:none"));
+        assert!(css.contains("font-size:var(--text-brand-size,1.0625rem);font-weight:var(--text-brand-weight,650);line-height:var(--text-brand-line);letter-spacing:var(--text-brand-tracking,-.015em);font-family:var(--text-brand-face,var(--font-display))"));
+    }
+
+    #[test]
+    fn the_forms_column_takes_the_nearest_of_four_widths() {
+        for (asked, given) in [
+            (300, "360"),
+            (390, "400"),
+            (420, "400"),
+            (470, "480"),
+            (900, "480"),
+        ] {
+            let out = html(AuthLayout::new("form").body_width(asked));
+            assert!(
+                out.starts_with(&format!(
+                    r#"<div data-slot="auth-layout" data-body="{given}">"#
+                )),
+                "{asked}: {out}"
+            );
+            let css = include_str!("../../styles/extra/auth-layout.css");
+            assert!(css.contains(&format!(
+                "[data-body=\"{given}\"] [data-slot=auth-body]{{width:min(100%,"
+            )));
+        }
     }
 
     #[test]

@@ -34,6 +34,7 @@
 //! | `/charts` | every chart type in its states; `/charts/report` a report over a window |
 //! | `/charts/grids` | the calendar and matrix heat maps and the scatter plot in every state |
 //! | `/app-blocks` | the app's own stylesheet and typeface, figure tiles, an info tip, chart skeletons, a breathing guide, a dock, a day pager and a view switcher |
+//! | `/auth-layouts` | the page of a sign-in form: the panel first or after it, flush or inset and inverse, a brand and a footer, a form with no card and links as buttons, `?case=` one of them |
 //! | `/islands` | a part of the page drawn in the browser by a script of the app's own, through a morph and away |
 //! | `/extensions` | components of the app's own and of a plugin: mounting, new props and leaving, owned bodies and the seal, calls to the app's routes, a script that asks for another site's file, a sheet scoped to its components, pages that start clean, an inline editor with a control of a plugin's own, and the plugin's map |
 //! | `/parts` | the small parts of the base components, the colour picker, an avatar group, a trace, a questionnaire, a select with flags, flags by pointer and a sparkline in each row |
@@ -55,6 +56,7 @@ use navree::ui::{NavGroup, NavItem, PagesOptions, Shell, UiModule, UserMenu, ico
 
 mod agra_theme;
 mod app_blocks;
+mod auth_layouts;
 mod bench;
 mod charts;
 mod compare;
@@ -172,6 +174,7 @@ impl Module for ProofModule {
             .controller::<charts::ChartPages>()
             .controller::<grids::GridPages>()
             .controller::<app_blocks::AppBlockPages>()
+            .controller::<auth_layouts::AuthLayoutPages>()
             .controller::<islands::IslandPages>()
             .controller::<extensions::ExtensionPages>()
             .controller::<compare::ComparePages>()

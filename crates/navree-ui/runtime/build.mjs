@@ -167,6 +167,8 @@ const FILES = [
   ["chart-grids", "css", "text/css; charset=utf-8", await extraCss(["chart-grids.css"])],
   // The app blocks: a figure tile's icon, unit and ring, the info tip, chart skeletons, the breathing guide and the dock. No script.
   ["app-blocks", "css", "text/css; charset=utf-8", await extraCss(["app-blocks.css"])],
+  // An auth layout's options: the panel after the form or inset, a brand and a footer, another width. No script.
+  ["auth-layout", "css", "text/css; charset=utf-8", await extraCss(["auth-layout.css"])],
   // The styles of the parts that need no script, and of the parts module's own.
   ["parts-styles", "css", "text/css; charset=utf-8", await extraCss(["parts.css"])],
   // The sortable grid's styles, linked with every sortable grid; its script only where tiles move.

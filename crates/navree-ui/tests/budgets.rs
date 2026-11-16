@@ -875,6 +875,37 @@ fn the_marketing_sheet_is_at_most_6_kb_gzip_and_a_site_page_loads_no_script() {
     assert!(!html.contains("<script"), "{html}");
 }
 
+/// The auth layout's options (the panel after the form or inset, a brand, a footer, another
+/// width) are styled in a sheet of their own of at most 1 KB gzip, linked after the app
+/// blocks' sheet by a layout that uses one. A plain layout links what it always did, and the
+/// bit links that sheet alone: no script and no other module's file.
+#[test]
+fn the_auth_layout_sheet_is_at_most_1_kb_gzip_and_only_a_layout_with_options_links_it() {
+    use navree_ui::AuthLayout;
+    use navree_ui::marketing::Brand;
+
+    assert!(size("auth-layout") <= 1024, "{}", size("auth-layout"));
+    let sheets = |layout: AuthLayout| linked(&View::new("x").body(layout).to_html()).1;
+    assert_eq!(
+        sheets(AuthLayout::new("form").aside("about").aside_inverse()),
+        ["navree-ui", "app-blocks"]
+    );
+    for layout in [
+        AuthLayout::new("form").aside("about").aside_end(),
+        AuthLayout::new("form").aside("about").aside_inset(),
+        AuthLayout::new("form").brand(Brand::new("Kesar", "/")),
+        AuthLayout::new("form").footer("x"),
+        AuthLayout::new("form").body_width(400),
+    ] {
+        assert_eq!(sheets(layout), ["navree-ui", "app-blocks", "auth-layout"]);
+    }
+    assert_eq!(assets::scripts(Uses::AUTH_LAYOUT).count(), 0);
+    assert_eq!(
+        assets::stylesheets(Uses::AUTH_LAYOUT).collect::<Vec<_>>(),
+        [assets::AUTH_LAYOUT_URL]
+    );
+}
+
 /// The bits are one each, so a page asks for exactly what it names.
 #[test]
 fn no_two_modules_share_a_bit() {
@@ -919,6 +950,7 @@ fn no_two_modules_share_a_bit() {
         Uses::SORTABLE_GRID_STYLES,
         Uses::EXTENSIONS,
         Uses::EXTENSION_SHEETS,
+        Uses::AUTH_LAYOUT,
     ];
     for (at, one) in all.iter().enumerate() {
         for other in &all[at + 1..] {

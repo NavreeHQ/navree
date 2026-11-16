@@ -347,6 +347,11 @@ impl Uses {
     /// in the brand row, a slot at the sidebar's foot, actions in the top bar and a page
     /// heading with badges or a subtitle, linked on a page that draws one.
     pub const SHELL_PARTS: Self = Self(1 << 45);
+    /// The auth layout's own stylesheet: no script, only the styles of an
+    /// [`AuthLayout`](crate::AuthLayout)'s options: the panel after the form or inset from
+    /// the window's edges, a brand and a footer in the form's column, and the column's
+    /// width. A layout that uses none of them links the app blocks' sheet alone.
+    pub const AUTH_LAYOUT: Self = Self(1 << 46);
 
     /// Both sets together.
     #[must_use]

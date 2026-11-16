@@ -553,7 +553,23 @@ the reader's own theme and mode laid over them.
 
 The page around each form is the auth layout (`AuthLayout`): the form, and
 the app's panel beside it on a wide screen (alone on a phone). Use it for a
-guest page of your own, such as accepting an invitation.
+guest page of your own, such as accepting an invitation. A design's sign-in
+board maps onto its options, each a typed method, never CSS:
+
+- `aside_end()`: the panel on the end side, after the form in reading order.
+- `aside_inset()`: the panel 0.75rem off the window's edges, rounded in the
+  theme's `Corners::panel`, padded 3.5rem with 2.5rem between its parts; the
+  form's column grows from 35rem and the panel from 30rem by equal parts.
+- `aside_inverse()`: the panel on the theme's inverse surface (a dark panel
+  on a light page), coloured by the theme's `Roles::inverse`, checked.
+- `brand(Brand::new(name, href).mark(..))`: the brand at the top of the
+  form's column at every width, so a phone keeps it; its name is the type
+  scale's `brand` style.
+- `footer(node)`: a small quiet line at the foot of the form's column.
+- `body_width(px)`: the form's column at 360, 400, 448 (default) or 480 px.
+
+A layout with none of them is drawn as it always was; they link a small
+sheet of their own (`Uses::AUTH_LAYOUT`).
 
 ```rust
 use navree::auth::AuthPages;
@@ -600,6 +616,26 @@ pub fn join_page(family: &str) -> View {
         )))
         .aside(about_panel())
         .aside_label("About Sutlej Fit"),
+    )
+}
+
+/// The same page as a design draws it: the brand above the form, the panel on
+/// the right, inset, rounded and dark.
+pub fn join_page_as_designed(family: &str) -> View {
+    View::new("Join a family plan").body(
+        AuthLayout::new(Stack::gap(6).children((
+            Heading::h1(format!("Join {family}")),
+            Field::new("join-email", "Email").control(Input::email("email").autocomplete("email")),
+            Button::primary("Ask to join").block(),
+        )))
+        .brand(navree::ui::marketing::Brand::new("Sutlej Fit", "/"))
+        .footer(Text::muted("We ask the family's owner before you join."))
+        .aside(about_panel())
+        .aside_label("About Sutlej Fit")
+        .aside_end()
+        .aside_inset()
+        .aside_inverse()
+        .body_width(400),
     )
 }
 ```

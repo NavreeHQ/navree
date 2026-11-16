@@ -2504,6 +2504,41 @@ fn an_auth_page_is_a_screen_only_where_it_gives_the_client_a_call() {
 }
 
 #[test]
+fn an_auth_page_with_a_brand_and_a_footer_is_still_a_screen_where_it_gives_a_call() {
+    use navree_ui::marketing::Brand;
+    use navree_ui::{AuthLayout, NativeCall, NativeProvider, Stack};
+    let page = || {
+        let call = NativeCall::provider_sign_in(
+            NativeProvider::Apple,
+            "/api/auth/social/apple/native/nonce",
+            "/api/auth/social/apple/native/session",
+        );
+        let column = Stack::gap(4).children((
+            el("h1").slot("page-title").child("Sign in"),
+            Button::outline("Sign in with Apple").native_call(call),
+        ));
+        View::new("Sign in").body(
+            AuthLayout::new(column)
+                .aside(Text::new("Orders, packed and tracked."))
+                .aside_end()
+                .brand(Brand::new("Sutlej Supply", "/"))
+                .footer(Text::muted("Every sign-in is checked for a new device.")),
+        )
+    };
+    // The brand over the column is a browser's, as the panel is; the line at its foot is
+    // the column's, said after the form.
+    let native = TestNative::build(with_caps(Platform::Ios, &["platform_sign_in"]), page);
+    assert!(native.is_native(), "{:?}", native.why());
+    assert!(native.sees("Every sign-in is checked for a new device."));
+    assert!(!native.sees("Orders, packed and tracked."));
+    assert_eq!(native.page().dropped, ["auth-aside", "auth-brand"]);
+    assert!(matches!(
+        native.tap("Sign in with Apple"),
+        Some(Action::Device(_))
+    ));
+}
+
+#[test]
 fn a_link_a_browser_reloads_the_page_for_is_a_plain_link_to_a_native_client() {
     let page = TestNative::of(
         &View::new("Sign in").body(
