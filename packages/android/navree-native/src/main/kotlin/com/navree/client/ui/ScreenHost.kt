@@ -18,7 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
@@ -30,6 +33,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -37,7 +41,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.SnackbarHost
@@ -53,6 +56,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.ui.layout.layout
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -62,11 +67,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -86,6 +99,7 @@ import com.navree.client.design.BarScroll
 import com.navree.client.design.ContentRules
 import com.navree.client.design.FabPlace
 import com.navree.client.design.FormRules
+import com.navree.client.design.ListRules
 import com.navree.client.design.NavigationIcon
 import com.navree.client.design.Presentation
 import com.navree.client.design.ScreenContext
@@ -167,7 +181,8 @@ private fun Snackbars(info: HostInfo) {
 @Composable
 private fun BlankScreen(screen: ScreenView, info: HostInfo) {
     val ui = LocalUi.current
-    Scaffold(
+    ScreenFrame(
+        topBarShown = info.context.chrome,
         topBar = {
             // A screen brought back after the system ended the app has its title before its page.
             if (info.context.chrome) {
@@ -225,7 +240,8 @@ internal fun FailureState(failure: Failure, retry: () -> Unit) {
 private fun WebScreen(screen: ScreenView, content: Content.Web, info: HostInfo) {
     val ui = LocalUi.current
     var title by rememberSaveable(screen.id) { mutableStateOf(content.title ?: "") }
-    Scaffold(
+    ScreenFrame(
+        topBarShown = info.context.chrome,
         topBar = {
             if (info.context.chrome) {
                 TopAppBar(
@@ -253,8 +269,12 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     val (arranged, bars) = remember(screen, view.states, info.context) { arrange(screen, view, info.context) }
     val context = info.context.copy(toolbar = bars.isNotEmpty())
     val plan = remember(arranged, context, window) { ScreenRules.plan(arranged, context, window) }
-    val place = Place(view, selectedUrl = info.selectedUrl)
+    // The row that leads to the page shown beside the list is marked; a screen that holds its own list marks the row of its own page.
+    val shownUrl = info.selectedUrl ?: view.url.ifEmpty { null }
+    val open = remember(screen.body, shownUrl) { ListRules.openRow(shownUrl, ListRules.rowAddresses(screen.body)) }
+    val place = Place(view, openRow = open, titleInBar = plan.titleInBar)
     val list = rememberLazyListState()
+    val choices = rememberLaneChoices()
     var searching by rememberSaveable { mutableStateOf(false) }
     val pinned = TopAppBarDefaults.pinnedScrollBehavior()
     val leaving = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -266,31 +286,78 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     val hoisted = if (plan.searchInQuery) query?.form else null
     val atTop by remember { derivedStateOf { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < 24 } }
     val fab = plan.fab?.let { arranged.actions.getOrNull(it) as? Navree.Button }
+    // The app bar draws nothing for a plan with no bar, unless rows are being chosen: it is then about them.
+    val chosen = chosenRows(view, remember(arranged) { SelectionRules.selectable(arranged.body) })
+    val barShown = chosen != null || plan.bar != BarKind.None
     // A glance the page opened stands beside the content on a wide window.
     val side = if (ScreenRules.sheet(task = false, window = window) == Presentation.SideSheet) openGlance(place) else null
 
     // What the screen showed at its first drawing comes in without motion; a part an op adds later may.
     val shown = remember(view.id) { Shown().apply { screen.body.walk().mapNotNull { it.nodeId }.forEach { ids.add(it) } } }
     LaunchedEffect(view.id) { shown.first = false }
+    val sink = remember { FocusSink() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    // The sink is asked for when a field is done: once it can take the focus, the focus is put on it, and where that fails it is cleared.
+    // `requestFocus()` answers false when the request was cancelled (compose-ui 1.10 and later; the BOM here is later), and throws when the sink is not laid out.
+    LaunchedEffect(sink.armed) {
+        if (sink.armed && !runCatching { sink.requester.requestFocus() }.getOrDefault(false)) {
+            focusManager.clearFocus()
+            sink.release()
+        }
+    }
     Row(Modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalShown provides shown) {
-        Scaffold(
+        CompositionLocalProvider(LocalShown provides shown, LocalFocusSink provides sink) {
+        ScreenFrame(
             modifier = Modifier.weight(1f).nestedScroll(behaviour.nestedScrollConnection),
-            topBar = { ScreenBar(view, arranged, plan, place, info, behaviour, searching) { searching = it } },
-            floatingActionButton = {
-                if (fab != null && plan.fabPlace == FabPlace.BottomEnd) Fab(fab, place, plan.fabExtended, expanded = atTop)
-            },
+            topBarShown = barShown,
+            topBar = { ScreenBar(view, arranged, plan, place, info, behaviour, searching, chosen) { searching = it } },
+            floatingActionButton = if (fab != null && plan.fabPlace == FabPlace.BottomEnd) ({ Fab(fab, place, plan.fabExtended, expanded = atTop) }) else null,
             snackbarHost = { Snackbars(info) },
         ) { padding ->
+            val dayPager = remember(screen) { PagerRules.inBar(screen) }
+            val dayRtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+            val dayDensity = androidx.compose.ui.platform.LocalDensity.current.density
             BoxWithConstraints(
                 Modifier
                     .fillMaxSize()
                     .padding(top = padding.calculateTopPadding())
                     .consumeWindowInsets(padding)
-                    .imePadding(),
+                    .imePadding()
+                    // A screen of days turns to the day before or after when it is swiped along.
+                    .then(
+                        if (dayPager != null) {
+                            Modifier.pointerInput(dayPager.previous, dayPager.next, dayRtl) {
+                                var dragged = 0f
+                                detectHorizontalDragGestures(
+                                    onDragStart = { dragged = 0f },
+                                    onDragEnd = {
+                                        PagerRules.swipe(dragged / dayDensity, dayRtl, dayPager.previous, dayPager.next)?.let {
+                                            ui.act(place, Navree.Action.Navigate(it))
+                                        }
+                                    },
+                                    onHorizontalDrag = { _, amount -> dragged += amount },
+                                )
+                            }
+                        } else {
+                            Modifier
+                        },
+                    ),
             ) {
-                val items = remember(screen.body, view, maxWidth, barSubmit, hoisted, window.fontScale) {
-                    blocks(screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted, fontScale = window.fontScale)
+                // Where the focus goes when a field is done: out of sight, and not for a screen reader to stop at.
+                Box(
+                    Modifier
+                        .size(1.dp)
+                        .focusProperties { canFocus = sink.armed }
+                        .focusRequester(sink.requester)
+                        .onFocusChanged { if (!it.isFocused && sink.armed) sink.release() }
+                        .focusable()
+                        .clearAndSetSemantics {},
+                )
+                val items = remember(screen.body, view, maxWidth, barSubmit, hoisted, window.fontScale, choices.chosen) {
+                    blocks(
+                        screen.body, view, maxWidth.value.toInt(), omit = barSubmit, hoisted = hoisted, fontScale = window.fontScale, titleInBar = plan.titleInBar,
+                        lanes = LaneLayout(ContentRules.marginDp(window), choices.chosen),
+                    )
                 }
                 val floating = (fab != null && plan.fabPlace == FabPlace.BottomEnd) || bars.isNotEmpty()
                 val bottom = padding.calculateBottomPadding() + if (floating) 88.dp else 16.dp
@@ -298,7 +365,7 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
                 val column = ContentRules.columnMostDp(cardsSideBySide(items))
                 val pane = maxWidth.value
                 val body: @Composable () -> Unit = {
-                    CompositionLocalProvider(LocalPane provides pane, LocalColumn provides column) {
+                    CompositionLocalProvider(LocalPane provides pane, LocalColumn provides column, LocalLaneChoices provides choices) {
                         Body(items, place.copy(omit = barSubmit), list, PaddingValues(top = 8.dp, bottom = bottom))
                     }
                 }
@@ -335,9 +402,16 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
 /** The screen's column of blocks, drawn as it scrolls. */
 @Composable
 internal fun Body(blocks: List<Block>, place: Place, state: LazyListState, padding: PaddingValues) {
-    LazyColumn(state = state, contentPadding = padding, modifier = Modifier.fillMaxSize()) {
-        items(count = blocks.size, key = { blocks[it].key }, contentType = { blocks[it]::class }) { index ->
-            BlockView(blocks[index], place)
+    val lanes = remember { Lanes() }
+    val moving = lanes.lists(blocks)
+    val shown = lanes.arranged(blocks, moving)
+    for ((id, list) in moving) key(id) { lanes.of(id).Settling(list) }
+    KeepTheWindow(state, shown, { it.key }, enabled = { moving.keys.none { lanes.of(it).held != null } })
+    CompositionLocalProvider(LocalPageList provides state, LocalLanes provides lanes) {
+        LazyColumn(state = state, contentPadding = padding, modifier = Modifier.fillMaxSize()) {
+            items(count = shown.size, key = { shown[it].key }, contentType = { shown[it]::class }) { index ->
+                BlockView(shown[index], place)
+            }
         }
     }
 }
@@ -355,12 +429,29 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             val node = block.node
             // A table where there is room for one takes the pane's width: its columns need it.
             val most = when {
-                node is Navree.Table -> ContentRules.TABLE_MOST_DP
+                // Two panes side by side need the pane's width: a list and what it opened.
+                node is Navree.Table || node is Navree.Split -> ContentRules.TABLE_MOST_DP
+                // Lanes of a board take the pane's width: each is a column of cards, and they stand side by side.
+                node is Navree.Grid && ListRules.areLanes(node.children) -> ContentRules.TABLE_MOST_DP
                 block.form != null -> FormRules.FORM_MOST_DP
                 else -> column
             }
+            // Lanes side by side are each a lazy list: the board is as tall as what is left of the window under its top, which is the height they scroll in.
+            val pageList = LocalPageList.current
+            val board = if (node is Navree.Grid && ListRules.areLanes(node.children)) {
+                Modifier.layout { measurable, constraints ->
+                    val info = pageList?.layoutInfo
+                    val top = info?.visibleItemsInfo?.firstOrNull { it.key == block.key }?.offset ?: 0
+                    val room = if (info == null) constraints.maxHeight else info.viewportEndOffset - maxOf(top, info.viewportStartOffset)
+                    val height = room.coerceIn(minOf(BOARD_LEAST_DP.dp.roundToPx(), constraints.maxHeight), constraints.maxHeight)
+                    val placeable = measurable.measure(constraints.copy(minHeight = height, maxHeight = height))
+                    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                }
+            } else {
+                Modifier
+            }
             Roomed(ContentRules.contentDp(pane, most, marginDp)) {
-                Box(Modifier.readable(most).padding(horizontal = margin, vertical = if (node is Navree.Field) 8.dp else 0.dp)) {
+                Box(Modifier.readable(most, column).padding(horizontal = margin, vertical = if (node is Navree.Field) 8.dp else 0.dp).then(board)) {
                     // A form's own button under its fields sits at the form's end, as wide as its words.
                     if (node is Navree.Button && block.form != null) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { NodeView(node, inner) }
@@ -376,7 +467,7 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
                 is Navree.Row -> Box(if (block.group == Group.None) Modifier.readable(column) else Modifier) { RowView(node, inner, block.group) }
                 is Navree.FeedRow -> Box(Modifier.readable(column)) { FeedRowView(node, inner) }
                 is Navree.Field -> if (block.group == Group.None) {
-                    Box(Modifier.readable(FormRules.FORM_MOST_DP)) { FieldView(node, inner, asItem = true) }
+                    Box(Modifier.readable(FormRules.FORM_MOST_DP, column)) { FieldView(node, inner, asItem = true) }
                 } else {
                     Grouped(block.group) { FieldView(node, inner, asItem = true) }
                 }
@@ -388,21 +479,24 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             Text(block.text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.semantics { heading() })
             block.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        is Block.Filters -> FilterBar(block.form, place)
+        is Block.Filters -> FilterBar(block.form, place, block.sends)
         is Block.Waiting -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Waiting(Modifier.size(40.dp)) }
         is Block.Space -> Spacer(Modifier.height(block.dp.dp))
-        is Block.More -> {
-            val state = place.screen.lists[block.id]
-            if (state?.failed == true) {
-                RetryLine(stringResource(R.string.navree_more_failed)) { ui.send(Events.more(place.id, block.id)) }
-            } else {
-                // Drawing the end of the list is what asks for the next page; the core asks once.
-                LaunchedEffect(block.key) { ui.send(Events.more(place.id, block.id)) }
-                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                }
-            }
+        // Drawing the end of the list is what asks for the next page; the core asks once.
+        is Block.More -> MoreEnd(block.key, block.id, place)
+        is Block.Moving -> {
+            val lane = requireNotNull(LocalLanes.current) { "a row of a lane outside a screen's list" }.of(block.list.id)
+            MovingRow(
+                block.row,
+                block.list,
+                lane,
+                LocalPageList.current,
+                place.copy(form = block.form ?: place.form),
+                modifier = Modifier.readable(column).padding(horizontal = margin),
+                animation = Modifier.animateItem(),
+            )
         }
+        is Block.LaneTabs -> Box(Modifier.readable(ContentRules.TABLE_MOST_DP, column).padding(horizontal = margin).padding(bottom = 12.dp)) { LaneTabsView(block) }
         is Block.Fill -> Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) { NodeView(block.node, place) }
         is Block.Before -> {
             val state = place.screen.lists[block.id]
@@ -421,13 +515,19 @@ private fun LazyItemScope.BlockView(block: Block, place: Place) {
             val content = ContentRules.contentDp(pane, column, marginDp)
             // Where the room is known, the cards of a line are as tall as the tallest of them.
             val even = content > 0f && block.nodes.all(::measuresAhead)
+            val tallest = rememberTallest(block.nodes, content)
             Row(
                 Modifier.readable(column).padding(horizontal = margin).then(if (even) Modifier.height(IntrinsicSize.Min) else Modifier),
                 horizontalArrangement = Arrangement.spacedBy(ContentRules.CARD_GAP_DP.dp),
             ) {
                 val inner = place.copy(form = block.form ?: place.form)
                 val width = if (content > 0f) ContentRules.cardWidthDp(content, block.columns) else 0f
-                for (node in block.nodes) Box(Modifier.weight(1f).fillMaxHeight()) { Roomed(width) { NodeView(node, inner, Modifier.fillMaxHeight()) } }
+                for (node in block.nodes) {
+                    // Cards that cannot say how tall they are are made as tall as the tallest once they are laid out.
+                    Box(if (even) Modifier.weight(1f).fillMaxHeight() else Modifier.weight(1f).sameHeightAs(tallest), propagateMinConstraints = !even) {
+                        Roomed(width) { NodeView(node, inner, Modifier.fillMaxHeight()) }
+                    }
+                }
                 repeat(block.columns - block.nodes.size) { Spacer(Modifier.weight(1f)) }
             }
         }
@@ -444,6 +544,8 @@ private fun Fab(button: Navree.Button, place: Place, extended: Boolean, expanded
             icon = { androidx.compose.material3.Icon(vector, contentDescription = null) },
             onClick = { ui.press(place, button) },
             expanded = expanded,
+            // Folded to its icon while the list is scrolled, it is still named.
+            modifier = Modifier.semantics { contentDescription = button.label },
         )
     } else {
         FloatingActionButton(onClick = { ui.press(place, button) }) { androidx.compose.material3.Icon(vector, contentDescription = button.label) }
@@ -507,6 +609,17 @@ private fun ToolbarView(bar: Navree.Toolbar, place: Place) {
     }
 }
 
+/** A table whose rows are being chosen: how many are, and whether every row is. */
+internal class ChosenRows(val table: Navree.Table, val count: Int, val across: Boolean)
+
+/** The rows being chosen in the table the screen's rows are chosen in, or null when none are and the offer is not made. */
+internal fun chosenRows(view: ScreenView, table: Navree.Table?): ChosenRows? {
+    if (table == null) return null
+    val across = table.id?.let { view.lists[it]?.across } == true
+    val count = SelectionRules.chosen(table, across).size
+    return if (count > 0 || across) ChosenRows(table, count, across) else null
+}
+
 @Composable
 private fun ScreenBar(
     view: ScreenView,
@@ -516,19 +629,15 @@ private fun ScreenBar(
     info: HostInfo,
     behaviour: TopAppBarScrollBehavior,
     searching: Boolean,
+    chosen: ChosenRows?,
     setSearching: (Boolean) -> Unit,
 ) {
     val navigationIcon: @Composable () -> Unit = { NavigationIconView(plan.navigationIcon, view, screen.back) }
     val actions: @Composable RowScope.() -> Unit = { BarActions(screen, plan, place, info, setSearching) }
     // While rows are chosen the app bar is about them.
-    val table = remember(screen) { SelectionRules.selectable(screen.body) }
-    if (table != null) {
-        val across = table.id?.let { view.lists[it]?.across } == true
-        val count = SelectionRules.chosen(table, across).size
-        if (count > 0 || across) {
-            ContextualBar(screen, table, count, across, place)
-            return
-        }
+    if (chosen != null) {
+        ContextualBar(screen, chosen.table, chosen.count, chosen.across, place)
+        return
     }
     val pager = remember(screen) { PagerRules.inBar(screen) }
     when {
@@ -585,8 +694,23 @@ private fun ContextualBar(screen: Navree.Screen, table: Navree.Table, count: Int
         navigationIcon = { TipIconButton(stringResource(R.string.navree_clear_choice), Glyphs.Close, { choosing.tickAll(ui, place, on = false) }) },
         actions = {
             if (SelectionRules.offerAcross(table, across) && total != null) {
-                TextButton(onClick = { choosing.tickAll(ui, place, on = true, across = true) }) {
-                    Text(stringResource(R.string.navree_choose_across, numbers.format(total)), maxLines = 1)
+                val everyRow = stringResource(R.string.navree_choose_across, numbers.format(total))
+                if (ui.window.largestText) {
+                    // At the largest text the words would take the room of the count: the offer waits in a menu.
+                    var open by remember { mutableStateOf(false) }
+                    Box {
+                        TipIconButton(stringResource(R.string.navree_more_options), Glyphs.More, { open = true })
+                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                            DropdownMenuItem(text = { Text(everyRow) }, onClick = {
+                                open = false
+                                choosing.tickAll(ui, place, on = true, across = true)
+                            })
+                        }
+                    }
+                } else {
+                    TextButton(onClick = { choosing.tickAll(ui, place, on = true, across = true) }) {
+                        Text(everyRow, maxLines = 1)
+                    }
                 }
             }
             if (form != null) {
@@ -621,7 +745,7 @@ private fun RowScope.BarActions(screen: Navree.Screen, plan: ScreenPlan, place: 
             } else {
                 TipIconButton(node.label, rememberIcon(node.icon, node.standard) ?: Glyphs.More, { ui.press(place, node) }, enabled = usable(node, place))
             }
-            is Navree.Menu -> MenuButtonView(node, place)
+            is Navree.Menu -> MenuButtonView(node, place, labelled = false)
             else -> Unit
         }
     }
@@ -663,7 +787,8 @@ private fun AccountMenu(user: Navree.User, place: Place) {
         IconButton(onClick = { open = true }, modifier = Modifier.semantics { contentDescription = "$label, ${user.name}" }) {
             AvatarView(Navree.Avatar(name = user.name), size = 32)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        // The menu stands 8 dp in from the window's end edge, as Material's menus keep a margin, not 4.
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, offset = androidx.compose.ui.unit.DpOffset((-4).dp, 0.dp)) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Text(user.name, style = MaterialTheme.typography.titleSmall)
                 user.email?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -754,7 +879,7 @@ private fun SearchTopBar(
                         for (action in plan.barActions) {
                             when (val node = screen.actions.getOrNull(action.index)) {
                                 is Navree.Button -> TipIconButton(node.label, rememberIcon(node.icon, node.standard) ?: Glyphs.More, { ui.press(place, node) }, enabled = usable(node, place))
-                                is Navree.Menu -> MenuButtonView(node, place)
+                                is Navree.Menu -> MenuButtonView(node, place, labelled = false)
                                 else -> Unit
                             }
                         }
@@ -773,7 +898,8 @@ private fun SearchTopBar(
                 inputField = input,
                 expanded = expanded,
                 onExpandedChange = { expanded = it },
-                modifier = if (expanded) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                // Collapsed, the bar is as wide as the library makes a search bar at most (720 dp), in the middle of a wide pane.
+                modifier = if (expanded) Modifier.fillMaxWidth() else Modifier.padding(horizontal = 16.dp).widthIn(max = 720.dp).fillMaxWidth(),
             ) {
                 // The search view: the screen's results, as they change with the words.
                 val results = remember(screen.body, view) { blocks(screen.body, view, 400, hoisted = query?.form).filter { it is Block.TableItem || it is Block.Item || it is Block.More || it is Block.Fill } }
@@ -789,92 +915,122 @@ private fun SearchTopBar(
  * of its choices. Choosing tells the core, which asks for the rows again.
  */
 @Composable
-private fun FilterBar(form: Navree.Form, place: Place) {
+internal fun FilterBar(form: Navree.Form, place: Place, sends: Boolean, edge: Boolean = true) {
     val ui = LocalUi.current
     val inForm = place.copy(form = form.id)
-    val filters = remember(form) { form.fields().filter(FilterRules::isFilter) }
+    val bar = remember(form) { FilterRules.bar(form) }
+    val filters = remember(form) { bar?.fields ?: form.fields().filter(FilterRules::isFilter) }
+    // A table's query keeps its box of words in the app bar and has no links to draw here.
+    val actions = if (sends) bar?.actions.orEmpty() else emptyList()
     if (filters.isEmpty()) return
-    val margin = ContentRules.marginDp(ui.window).dp
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = margin),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-    ) {
-        items(filters.size, key = { filters[it].id ?: filters[it].name }) { index ->
-            val field = filters[index]
-            val label = field.label ?: field.name
-            var open by remember { mutableStateOf(false) }
-            when (val input = field.input) {
-                is Navree.ChoicesInput -> {
-                    val chosen = (inForm.value(field) as? FieldValue.Many)?.values ?: input.values
-                    val named = input.options.filter { it.value in chosen }
-                    Box {
-                        FilterChip(
-                            selected = chosen.isNotEmpty(),
-                            onClick = { open = true },
-                            label = {
-                                Text(
-                                    when (named.size) {
-                                        0 -> label
-                                        1 -> named.first().label
-                                        else -> "$label · ${named.size}"
-                                    },
-                                )
-                            },
-                            trailingIcon = { Icon(Glyphs.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        )
-                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                            for (option in input.options) {
-                                val on = option.value in chosen
-                                DropdownMenuItem(
-                                    text = { Text(option.label) },
-                                    leadingIcon = { if (on) Icon(Glyphs.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) },
-                                    trailingIcon = option.detail?.let { detail -> { Text(detail, style = MaterialTheme.typography.labelMedium) } },
-                                    onClick = {
-                                        val next = if (on) chosen - option.value else chosen + option.value
-                                        ui.change(inForm, field, FieldValue.Many(input.options.map { it.value }.filter { it in next }))
-                                    },
-                                    modifier = Modifier.semantics { selected = on },
-                                )
+    // On the screen's own line the row keeps the screen's margins; inside a part that has its own, it has none.
+    val margin = if (edge) ContentRules.marginDp(ui.window).dp else 0.dp
+    // A form of filters on a page asks by itself with each choice; a table's query is asked by the core.
+    val change: (Navree.Field, FieldValue) -> Unit = { field, value ->
+        ui.change(inForm, field, value)
+        if (sends) ui.act(inForm, Navree.Action.Submit())
+    }
+    Column(Modifier.fillMaxWidth()) {
+        // The box of words the filters narrow by stands over them, in the screen's one column.
+        bar?.search?.takeIf { sends }?.let { words ->
+            // It starts where the chips under it start.
+            Box(Modifier.fillMaxWidth().wrapContentWidth(Alignment.Start).widthIn(max = FormRules.FORM_MOST_DP.dp).fillMaxWidth().padding(horizontal = margin).padding(bottom = 8.dp)) { FieldView(words, inForm) }
+        }
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = margin),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        ) {
+            items(filters.size, key = { filters[it].id ?: filters[it].name }) { index ->
+                val field = filters[index]
+                val label = field.label ?: field.name
+                var open by remember { mutableStateOf(false) }
+                when (val input = field.input) {
+                    is Navree.ChoicesInput -> {
+                        val chosen = (inForm.value(field) as? FieldValue.Many)?.values ?: input.values
+                        val named = input.options.filter { it.value in chosen }
+                        Box {
+                            FilterChip(
+                                selected = chosen.isNotEmpty(),
+                                onClick = { open = true },
+                                // It opens a menu of its choices: a screen reader says so, not "checkbox".
+                                modifier = Modifier.semantics { role = Role.DropdownList },
+                                label = {
+                                    Text(
+                                        when (named.size) {
+                                            0 -> label
+                                            1 -> named.first().label
+                                            else -> "$label · ${named.size}"
+                                        },
+                                    )
+                                },
+                                trailingIcon = { Icon(Glyphs.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            )
+                            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                                for (option in input.options) {
+                                    val on = option.value in chosen
+                                    DropdownMenuItem(
+                                        text = { Text(option.label) },
+                                        leadingIcon = { if (on) Icon(Glyphs.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) },
+                                        trailingIcon = option.detail?.let { detail -> { Text(detail, style = MaterialTheme.typography.labelMedium) } },
+                                        onClick = {
+                                            val next = if (on) chosen - option.value else chosen + option.value
+                                            change(field, FieldValue.Many(input.options.map { it.value }.filter { it in next }))
+                                        },
+                                        modifier = Modifier.semantics { selected = on },
+                                    )
+                                }
                             }
                         }
                     }
-                }
-                is Navree.ChoiceInput -> {
-                    val value = (inForm.value(field) as? FieldValue.Text)?.text ?: input.value
-                    val named = input.options.firstOrNull { it.value == value }
-                    Box {
-                        FilterChip(
-                            selected = named != null && named.value.isNotEmpty(),
-                            onClick = { open = true },
-                            label = { Text(if (named != null && named.value.isNotEmpty()) named.label else label) },
-                            trailingIcon = { Icon(Glyphs.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        )
-                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                            for (option in input.options) {
-                                DropdownMenuItem(
-                                    text = { Text(option.label) },
-                                    leadingIcon = { if (option.value == value) Icon(Glyphs.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) },
-                                    onClick = {
-                                        open = false
-                                        ui.change(inForm, field, FieldValue.Text(option.value))
-                                    },
-                                )
+                    is Navree.ChoiceInput -> {
+                        val value = (inForm.value(field) as? FieldValue.Text)?.text ?: input.value
+                        val named = input.options.firstOrNull { it.value == value }
+                        Box {
+                            FilterChip(
+                                selected = named != null && named.value.isNotEmpty(),
+                                onClick = { open = true },
+                                modifier = Modifier.semantics { role = Role.DropdownList },
+                                label = { Text(if (named != null && named.value.isNotEmpty()) named.label else label) },
+                                trailingIcon = { Icon(Glyphs.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            )
+                            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                                for (option in input.options) {
+                                    DropdownMenuItem(
+                                        text = { Text(option.label) },
+                                        leadingIcon = { if (option.value == value) Icon(Glyphs.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) },
+                                        onClick = {
+                                            open = false
+                                            change(field, FieldValue.Text(option.value))
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
+                    is Navree.ToggleInput -> {
+                        val on = (inForm.value(field) as? FieldValue.Flag)?.on ?: input.on
+                        FilterChip(
+                            selected = on,
+                            onClick = { change(field, FieldValue.Flag(!on)) },
+                            label = { Text(label) },
+                            leadingIcon = if (on) ({ Icon(Glyphs.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null,
+                        )
+                    }
+                    else -> Unit
                 }
-                is Navree.ToggleInput -> {
-                    val on = (inForm.value(field) as? FieldValue.Flag)?.on ?: input.on
-                    FilterChip(
-                        selected = on,
-                        onClick = { ui.change(inForm, field, FieldValue.Flag(!on)) },
-                        label = { Text(label) },
-                        leadingIcon = if (on) ({ Icon(Glyphs.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null,
-                    )
+            }
+            // What clears the filters stands after them.
+            items(actions.size, key = { "action-$it" }) { index ->
+                when (val action = actions[index]) {
+                    is Navree.Button -> AssistChip(onClick = { ui.press(inForm, action) }, label = { Text(action.label) }, enabled = !action.disabled)
+                    is Navree.Link -> AssistChip(onClick = { ui.act(inForm, action.action) }, label = { Text(action.label) })
+                    else -> Unit
                 }
-                else -> Unit
             }
         }
     }
 }
+
+/** The least height of a board of lanes side by side, in dp: a board is not made shorter than a few cards where the window has little room under its top. */
+private const val BOARD_LEAST_DP = 280
