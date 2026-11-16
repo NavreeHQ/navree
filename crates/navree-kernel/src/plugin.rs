@@ -603,6 +603,21 @@ pub(crate) fn app_only_role(provider: &str) -> &'static str {
 /// [`app_only_role`] of a type name it does not know.
 const OTHER_ROLE: &str = "which decides who may do what in the app";
 
+/// How the app uses a plugin's provider of [`APP_ONLY_PROVIDERS`], as the
+/// last clause of the text that refuses the plugin's own registration: a
+/// module of the app registers it. An app has one audit sink, so a plugin's
+/// is for an app that has no other: beside navree-audit's `AuditModule` a
+/// second sink is either not the one the app's modules find, or makes every
+/// lookup of the sink ambiguous, and then no audit record is written.
+pub(crate) fn app_only_advice(provider: &str) -> &'static str {
+    match provider {
+        "dyn navree_contracts::audit::AuditSink" => {
+            "and an app has one audit sink: to use the plugin's, register it from a module of an app that has no other (it cannot be used beside navree-audit's AuditModule)"
+        }
+        _ => "and to use the plugin's, register it from a module of the app",
+    }
+}
+
 /// The start of the type name of a model hook's provider key,
 /// `dyn ModelHook<M>` of navree-orm, the model's type path following it.
 /// Not public API; Navree's own crates and tests use it.
@@ -865,6 +880,35 @@ mod tests {
         for provider in APP_ONLY_PROVIDERS {
             assert_ne!(app_only_role(provider), OTHER_ROLE, "{provider}");
         }
+    }
+
+    #[test]
+    fn the_advice_for_the_audit_sink_says_an_app_has_one() {
+        let registers = "and to use the plugin's, register it from a module of the app";
+        for provider in APP_ONLY_PROVIDERS {
+            let advice = app_only_advice(provider);
+            if *provider == "dyn navree_contracts::audit::AuditSink" {
+                assert_eq!(
+                    advice,
+                    "and an app has one audit sink: to use the plugin's, register it from a module of an app that has no other (it cannot be used beside navree-audit's AuditModule)"
+                );
+            } else {
+                assert_eq!(advice, registers, "{provider}");
+            }
+        }
+        // The refusal ends with the advice.
+        let refused = crate::KernelError::PluginProvidesAppOnly {
+            plugin: "navree-plugin-guard",
+            provider: "dyn navree_contracts::audit::AuditSink",
+            role: app_only_role("dyn navree_contracts::audit::AuditSink"),
+            module: "Provides",
+            reason: String::new(),
+        }
+        .to_string();
+        assert_eq!(
+            refused,
+            "plugin `navree-plugin-guard` provides `dyn navree_contracts::audit::AuditSink` in `Provides`, which receives the app's audit records; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and an app has one audit sink: to use the plugin's, register it from a module of an app that has no other (it cannot be used beside navree-audit's AuditModule)"
+        );
     }
 
     /// A namespace is a folder name (`resources/views/<namespace>/`): every word the path

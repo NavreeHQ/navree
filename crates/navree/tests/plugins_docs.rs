@@ -1035,16 +1035,6 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
             type_name::<dyn ChangeObserver>(),
             "which sees, and can change, every write the app commits",
         ),
-        // A sink of the app's audit records, exported: beside navree-audit's, neither would be
-        // the one the app's modules find, and every record would be lost.
-        (
-            Provides(|m| {
-                m.factory(navree_plugin_guard::audit_sink())
-                    .exports::<dyn AuditSink>();
-            }),
-            type_name::<dyn AuditSink>(),
-            "which receives the app's audit records",
-        ),
     ];
     for (provides, provider, role) in cases {
         let refused = Navree::app()
@@ -1054,6 +1044,24 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
             .to_string();
         assert_eq!(refused, guard_provides("`Provides`", provider, role));
     }
+    // A sink of the app's audit records, exported: beside navree-audit's, neither would be the
+    // one the app's modules find, and every record would be lost. An app has one sink, so the
+    // refusal sends the plugin's to an app that has no other.
+    let sink = type_name::<dyn AuditSink>();
+    let refused = Navree::app()
+        .module(Provides(|m| {
+            m.factory(navree_plugin_guard::audit_sink())
+                .exports::<dyn AuditSink>();
+        }))
+        .validate()
+        .expect_err(sink)
+        .to_string();
+    assert_eq!(
+        refused,
+        format!(
+            "plugin `navree-plugin-guard` provides `{sink}` in `Provides`, which receives the app's audit records; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and an app has one audit sink: to use the plugin's, register it from a module of an app that has no other (it cannot be used beside navree-audit's AuditModule)"
+        )
+    );
     // A sign-in policy may only refuse a sign-in: a plugin registers its own.
     Navree::app()
         .module(Provides(|m| {

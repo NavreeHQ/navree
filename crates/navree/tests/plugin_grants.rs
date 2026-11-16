@@ -268,6 +268,7 @@ async fn an_app_with_no_plugin_registers_through_every_route_as_before() {
 /// in no crate it names.
 mod navree_plugin_roster {
     use navree::BoxFuture;
+    use navree::contracts::{AuditEntry, AuditSink};
     use navree::orm::ExecContext;
     use navree::plugin::PluginInfo;
     use navree::prelude::*;
@@ -301,6 +302,15 @@ mod navree_plugin_roster {
     /// other scopes leave out included.
     pub fn every_member(query: Builder<Member>) -> Builder<Member> {
         query.without_global_scopes()
+    }
+
+    /// The plugin's audit sink, for a module of the app to register: it keeps nothing.
+    pub struct RosterSink;
+
+    impl AuditSink for RosterSink {
+        fn record(&self, _entry: AuditEntry) -> BoxFuture<'_, Result<(), BoxError>> {
+            Box::pin(async { Ok(()) })
+        }
     }
 }
 
@@ -417,5 +427,55 @@ async fn the_frameworks_audit_module_keeps_the_apps_audit_sink_beside_a_plugin()
         .await;
     assert_eq!(app.ctx().plugins().plugins.len(), 1);
     assert!(app.ctx().try_get::<dyn AuditSink>().await.is_some());
+    app.shutdown().await.unwrap();
+}
+
+/// A module of the app that registers the roster plugin's audit sink, and exports it when `.0`
+/// says so.
+struct RosterAudit(bool);
+
+impl Module for RosterAudit {
+    fn register(&self, m: &mut ModuleBuilder) {
+        use navree::contracts::AuditSink;
+
+        m.factory(Factory::<dyn AuditSink>::new(|_| async {
+            Ok(Arc::new(navree_plugin_roster::RosterSink) as Arc<dyn AuditSink>)
+        }));
+        if self.0 {
+            m.exports::<dyn AuditSink>();
+        }
+    }
+}
+
+#[tokio::test]
+async fn an_app_has_one_audit_sink_so_a_plugins_is_not_used_beside_the_audit_module() {
+    use navree::audit::{AuditLog, AuditModule};
+    use navree::contracts::AuditSink;
+    use navree_plugin_roster::RosterModule;
+
+    // The audit module beside the roster plugin, as above.
+    let audited = || {
+        workspace_app()
+            .config("audit.routes", false)
+            .module(AuditModule::from_config())
+            .module(RosterModule(|_| {}))
+    };
+
+    // A module of the app registers the plugin's sink without exporting it: the sink the app's
+    // modules find is still the audit module's log, and the plugin's receives no record.
+    let app = audited().module(RosterAudit(false)).build().await;
+    let found = app.ctx().try_get::<dyn AuditSink>().await;
+    let found = found.expect("the app's audit sink");
+    let log = app.get::<AuditLog>().await;
+    assert!(
+        std::ptr::addr_eq(Arc::as_ptr(&found), Arc::as_ptr(&log)),
+        "the audit module's log is the app's sink"
+    );
+    app.shutdown().await.unwrap();
+
+    // Exported, as the audit module exports its own: two sinks answer a lookup, so none is
+    // found, and no audit record would be written.
+    let app = audited().module(RosterAudit(true)).build().await;
+    assert!(app.ctx().try_get::<dyn AuditSink>().await.is_none());
     app.shutdown().await.unwrap();
 }

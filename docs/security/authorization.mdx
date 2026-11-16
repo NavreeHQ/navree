@@ -400,7 +400,7 @@ plugin `navree-plugin-guard` provides `dyn navree_contracts::permissions::Permis
 | `dyn Backplane` | carries every broadcast of the app's channels between its processes |
 | `ModelEventFake` | silences the listeners of every model of the app |
 
-A plugin ships the provider as a function, and your app registers it: `m.multi(khata::permission_check())` for a permission check, `m.strategy::<khata::LedgerStrategy>()` for a strategy. A plugin can still register a sign-in policy with `m.sign_in_policy::<P>()`, because a policy can only refuse a sign-in, and a backplane as a driver with `m.backplane(..)`, which selects it by name with `realtime.backplane` and is not a provider.
+A plugin ships the provider as a function, and your app registers it: `m.multi(khata::permission_check())` for a permission check, `m.strategy::<khata::LedgerStrategy>()` for a strategy. The audit sink is the exception to that advice. An app has one audit sink, so a plugin's sink is for an app that has no other. Beside the audit module (navree-audit's `AuditModule`) a second sink is either not the one your modules find, or it makes every lookup of the sink fail and no audit record is written, and the refusal of a plugin's sink ends with that instead: `and an app has one audit sink: to use the plugin's, register it from a module of an app that has no other (it cannot be used beside navree-audit's AuditModule)`. A plugin can still register a sign-in policy with `m.sign_in_policy::<P>()`, because a policy can only refuse a sign-in, and a backplane as a driver with `m.backplane(..)`, which selects it by name with `realtime.backplane` and is not a provider.
 
 #### A namespace the app already uses
 
