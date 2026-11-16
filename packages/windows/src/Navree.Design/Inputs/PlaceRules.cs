@@ -24,12 +24,12 @@ public sealed record PlaceResult(PlaceOutcome Outcome, string? Why = null);
 /// <summary>
 /// Takes the place a photograph was taken (its GPS tags) out of the bytes of a picture before it is sent, unless the field keeps it. The pictures
 /// are changed where the place is written and nowhere else, so every pixel and every other tag stays as it was: the GPS directory of the EXIF
-/// block and the GPS values of an XMP packet are emptied in place, with the sizes of everything left as they were.
+/// block is emptied in place, and an XMP packet that holds a place is replaced by an empty one, with the sizes of everything left as they were.
 /// Covered: JPEG, PNG, WebP and TIFF (the EXIF block and the XMP packet); GIF, BMP and SVG have no EXIF block and are checked for GPS text.
 /// Not covered, and refused when they are chosen for a field that does not keep the place: HEIC, HEIF, AVIF, JPEG XL, raw formats, and a picture
 /// of a covered kind that cannot be read to the end. Not covered at all: the place in a video, and a place written in a maker's own note.
 /// </summary>
-public static class PlaceRules
+public static partial class PlaceRules
 {
     private const ushort GpsPointer = 0x8825;
 
@@ -139,9 +139,20 @@ public static class PlaceRules
                 {
                     removed |= Exif(file, start + 6, end - start - 6);
                 }
-                else if (HasPrefix(file, start, end, "http://ns.adobe.com/xap/1.0/\0"u8) || HasPrefix(file, start, end, "http://ns.adobe.com/xmp/extension/\0"u8))
+                else if (HasPrefix(file, start, end, "http://ns.adobe.com/xap/1.0/\0"u8))
                 {
-                    removed |= Xmp(file, start, end);
+                    removed |= Xmp(file, start + "http://ns.adobe.com/xap/1.0/\0"u8.Length, end);
+                }
+                else if (HasPrefix(file, start, end, "http://ns.adobe.com/xmp/extension/\0"u8))
+                {
+                    // A piece of the extended packet: the signature, a GUID of 32 characters, the full length and this piece's offset, then the piece.
+                    int piece = start + "http://ns.adobe.com/xmp/extension/\0"u8.Length + 32 + 4 + 4;
+                    if (piece > end)
+                    {
+                        throw new FormatException("a piece of an extended XMP packet is cut");
+                    }
+
+                    removed |= Xmp(file, piece, end);
                 }
             }
 
@@ -180,13 +191,21 @@ public static class PlaceRules
             }
             else if (kind == "iTXt" && KeywordIs(file, start, end, "XML:com.adobe.xmp"))
             {
+                // Keyword, NUL, compression flag, compression method, language tag, NUL, translated keyword, NUL, then the text (PNG 11.3.3.4).
                 int flag = start + "XML:com.adobe.xmp".Length + 1;
-                if (flag < end && file[flag] != 0)
+                if (flag + 2 > end || file[flag] != 0)
                 {
                     throw new FormatException("a compressed XMP packet cannot be read");
                 }
 
-                changed = Xmp(file, start, end);
+                int language = Array.IndexOf(file, (byte)0, flag + 2, end - flag - 2);
+                int translated = language < 0 ? -1 : Array.IndexOf(file, (byte)0, language + 1, end - language - 1);
+                if (translated < 0)
+                {
+                    throw new FormatException("an iTXt chunk is cut");
+                }
+
+                changed = Xmp(file, translated + 1, end);
             }
             else if (kind is "tEXt" or "zTXt" or "iTXt" && KeywordStarts(file, start, end, "Raw profile type"))
             {
@@ -346,81 +365,6 @@ public static class PlaceRules
         5 or 10 or 12 or 16 or 17 or 18 => 8,
         _ => 1,
     };
-
-    // ---- XMP --------------------------------------------------------------------------------------------------
-
-    // Empties the value of every GPS property of the packet at file[from .. end], written as an attribute (exif:GPSLatitude="...") or as an element
-    // (<exif:GPSLatitude>...</exif:GPSLatitude>), with spaces, so the packet stays well formed and keeps its length. Returns true when a value was emptied.
-    private static bool Xmp(byte[] file, int from, int end)
-    {
-        bool removed = false;
-        ReadOnlySpan<byte> mark = "GPS"u8;
-        int at = from;
-        while (at + 4 < end)
-        {
-            int found = file.AsSpan(at, end - at).IndexOf(mark);
-            if (found < 0)
-            {
-                break;
-            }
-
-            int name = at + found;
-            at = name + mark.Length;
-
-            // A property of the exif namespace: "exif:" (or any prefix) then GPS then the rest of the name, then "=" or ">".
-            if (name == 0 || file[name - 1] != (byte)':')
-            {
-                continue;
-            }
-
-            int after = at;
-            while (after < end && (char.IsAsciiLetterOrDigit((char)file[after])))
-            {
-                after++;
-            }
-
-            if (after >= end)
-            {
-                break;
-            }
-
-            int valueStart;
-            int valueEnd;
-            if (file[after] == (byte)'=' && after + 1 < end && file[after + 1] is (byte)'"' or (byte)'\'')
-            {
-                byte quote = file[after + 1];
-                valueStart = after + 2;
-                valueEnd = Array.IndexOf(file, quote, valueStart, end - valueStart);
-            }
-            else if (file[after] == (byte)'>')
-            {
-                valueStart = after + 1;
-                valueEnd = Array.IndexOf(file, (byte)'<', valueStart, end - valueStart);
-            }
-            else
-            {
-                continue;
-            }
-
-            if (valueEnd < 0)
-            {
-                throw new FormatException("an XMP value is not closed");
-            }
-
-            for (int index = valueStart; index < valueEnd; index++)
-            {
-                if (file[index] != (byte)' ')
-                {
-                    removed = true;
-                    file[index] = (byte)' ';
-                }
-            }
-
-            at = valueEnd;
-        }
-
-        return removed;
-    }
 
     // ---- bytes ------------------------------------------------------------------------------------------------
 

@@ -168,23 +168,91 @@ public sealed class PlaceRulesTests
         Assert.AreEqual(PlaceOutcome.None, PlaceRules.TakeOut(none, "plain.JPG").Outcome);
     }
 
-    [TestMethod]
-    public void The_place_in_an_xmp_packet_is_emptied_as_an_attribute_and_as_an_element_and_the_packet_keeps_its_length()
-    {
-        string xmp = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:Description xmlns:exif=\"http://ns.adobe.com/exif/1.0/\" xmp:Rating=\"5\" exif:GPSLatitude=\"30,54.1N\"><exif:GPSLongitude>75,51.2E</exif:GPSLongitude><exif:GPSAltitudeRef>0</exif:GPSAltitudeRef></rdf:Description></x:xmpmeta>";
-        byte[] file = Jpeg([], xmp);
-        byte[] original = [.. file];
+    private const string EmptyPacket = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"/>";
 
-        PlaceResult result = PlaceRules.TakeOut(file, "Patiala.jpg");
+    private static string Packet(string properties, string elements = "") =>
+        "<?xpacket begin=\"﻿\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?><x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">"
+        + "<rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" xmp:Rating=\"5\" " + properties + ">" + elements + "</rdf:Description></rdf:RDF></x:xmpmeta>"
+        + new string(' ', 200) + "<?xpacket end=\"w\"?>";
+
+    // The XMP packet's bytes inside a JPEG made by Jpeg(): from after the namespace of its APP1 segment to the segment's end.
+    private static string PacketIn(byte[] file)
+    {
+        int name = Find(file, "http://ns.adobe.com/xap/1.0/\0"u8.ToArray());
+        int start = name + "http://ns.adobe.com/xap/1.0/\0".Length;
+        int length = (file[name - 2] << 8 | file[name - 1]) - 2 - "http://ns.adobe.com/xap/1.0/\0".Length;
+        return Encoding.UTF8.GetString(file, start, length);
+    }
+
+    [TestMethod]
+    [DataRow("exif:GPSLatitude=\"30,44.0N\" exif:GPSLongitude=\"76,46.8E\"", "", "30,44.0N")]
+    [DataRow("drone-dji:GpsLatitude=\"+30.7333\" drone-dji:GpsLongtitude=\"+76.7794\" drone-dji:AbsoluteAltitude=\"+350.20\"", "", "30.7333")]
+    [DataRow("exif:GPSLatitude = \"30,44.0N\"", "", "30,44.0N")]
+    [DataRow("exif:GPSLatitude\t=\r\n'30,44.0N'", "", "30,44.0N")]
+    [DataRow("EXIF:gpslatitude=\"30,44.0N\"", "", "30,44.0N")]
+    [DataRow("", "<exif:GPSLatitude>30,44.0N</exif:GPSLatitude>", "30,44.0N")]
+    [DataRow("", "<exif:GPSLatitude rdf:parseType=\"Resource\"><rdf:value>30,44.0N</rdf:value></exif:GPSLatitude>", "30,44.0N")]
+    [DataRow("", "<GPSLatitude xmlns=\"http://ns.adobe.com/exif/1.0/\">30,44.0N</GPSLatitude>", "30,44.0N")]
+    [DataRow("photoshop:City=\"Chandigarh\" photoshop:State=\"Punjab\" photoshop:Country=\"India\"", "", "Chandigarh")]
+    [DataRow("", "<Iptc4xmpCore:Location>Sector 17 Plaza</Iptc4xmpCore:Location>", "Sector 17 Plaza")]
+    [DataRow("", "<Iptc4xmpExt:LocationCreated><rdf:Bag><rdf:li Iptc4xmpExt:City=\"Chandigarh\" Iptc4xmpExt:Sublocation=\"Sector 17 Plaza\"/></rdf:Bag></Iptc4xmpExt:LocationCreated>", "Sector 17 Plaza")]
+    [DataRow("", "<Iptc4xmpCore:CreatorContactInfo Iptc4xmpCore:CiAdrCity=\"Chandigarh\" Iptc4xmpCore:CiAdrExtadr=\"Sector 17 Plaza\"/>", "Sector 17 Plaza")]
+    [DataRow("dc:coverage=\"Sector 17 Plaza, Chandigarh\"", "", "Sector 17 Plaza")]
+    [DataRow("xmpDM:shotLocation=\"Sector 17 Plaza\"", "", "Sector 17 Plaza")]
+    public void An_xmp_packet_that_holds_anything_about_a_place_goes_whole_and_keeps_its_length(string properties, string elements, string place)
+    {
+        string xmp = Packet(properties, elements);
+        byte[] file = Jpeg([], xmp);
+        int length = file.Length;
+
+        PlaceResult result = PlaceRules.TakeOut(file, "Chandigarh.jpg");
 
         Assert.AreEqual(PlaceOutcome.Removed, result.Outcome);
-        Assert.AreEqual(original.Length, file.Length);
-        string after = Encoding.UTF8.GetString(file);
-        Assert.IsFalse(after.Contains("30,54.1N", StringComparison.Ordinal));
-        Assert.IsFalse(after.Contains("75,51.2E", StringComparison.Ordinal));
-        Assert.IsTrue(after.Contains("xmp:Rating=\"5\"", StringComparison.Ordinal), "what is not a place stays");
-        Assert.IsTrue(after.Contains("exif:GPSLatitude=\"        \"", StringComparison.Ordinal), "the value is emptied with spaces, the attribute stays well formed");
-        Assert.IsTrue(after.Contains("<exif:GPSLongitude>        </exif:GPSLongitude>", StringComparison.Ordinal));
+        Assert.AreEqual(length, file.Length);
+        string after = PacketIn(file);
+        Assert.AreEqual(Encoding.UTF8.GetByteCount(xmp), Encoding.UTF8.GetByteCount(after), "the packet keeps its length");
+        Assert.AreEqual(EmptyPacket + new string(' ', after.Length - EmptyPacket.Length), after, "the packet is an empty one, padded with spaces");
+        Assert.IsFalse(Encoding.UTF8.GetString(file).Contains(place, StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    [DataRow("hdrgm:Version=\"1.0\" hdrgm:HDRCapacityMin=\"0\" hdrgm:HDRCapacityMax=\"4.7\" crs:MaskOpacity=\"50\" xmpMM:InstanceID=\"xmp.iid:1\"", "")]
+    [DataRow("", "<dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">Lohri in the city, with the whole family</rdf:li></rdf:Alt></dc:description>")]
+    public void An_xmp_packet_with_nothing_about_a_place_is_left_as_it_was(string properties, string elements)
+    {
+        byte[] file = Jpeg([], Packet(properties, elements));
+        byte[] original = [.. file];
+
+        Assert.AreEqual(PlaceOutcome.None, PlaceRules.TakeOut(file, "Lohri.jpg").Outcome);
+        CollectionAssert.AreEqual(original, file);
+    }
+
+    [TestMethod]
+    public void An_xmp_packet_about_a_place_goes_whole_from_a_png_and_from_a_webp_too()
+    {
+        byte[] packet = Encoding.UTF8.GetBytes(Packet("drone-dji:GpsLatitude=\"+30.7333\" drone-dji:GpsLongitude=\"+76.7794\""));
+        byte[] itxt = [.. "XML:com.adobe.xmp"u8.ToArray(), 0, 0, 0, 0, 0, .. packet];
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, .. Chunk("IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]), .. Chunk("iTXt", itxt), .. Chunk("IDAT", [1, 2, 3]), .. Chunk("IEND", [])];
+        byte[] chunk = [.. "XMP "u8.ToArray(), .. BitConverter.GetBytes((uint)packet.Length), .. packet, .. (packet.Length % 2 == 1 ? new byte[] { 0 } : [])];
+        byte[] inner = [.. "WEBP"u8.ToArray(), .. "VP8 "u8.ToArray(), 4, 0, 0, 0, 9, 8, 7, 6, .. chunk];
+        byte[] webp = [.. "RIFF"u8.ToArray(), .. BitConverter.GetBytes((uint)inner.Length), .. inner];
+
+        Assert.AreEqual(PlaceOutcome.Removed, PlaceRules.TakeOut(png, "Chandigarh.png").Outcome);
+        Assert.AreEqual(PlaceOutcome.Removed, PlaceRules.TakeOut(webp, "Chandigarh.webp").Outcome);
+        Assert.IsFalse(Encoding.UTF8.GetString(png).Contains("30.7333", StringComparison.Ordinal));
+        Assert.IsFalse(Encoding.UTF8.GetString(webp).Contains("30.7333", StringComparison.Ordinal));
+        int itxtAt = Find(png, "iTXt"u8.ToArray());
+        Assert.AreEqual(PlaceRules.Crc32(png.AsSpan(itxtAt, 4 + itxt.Length)), BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(itxtAt + 4 + itxt.Length)), "the chunk's check value matches what it now holds");
+    }
+
+    [TestMethod]
+    public void An_xmp_packet_that_is_not_utf8_is_refused_because_it_cannot_be_read()
+    {
+        byte[] file = Jpeg([]);
+        byte[] packet = Encoding.Unicode.GetBytes(Packet("exif:GPSLatitude=\"30,44.0N\""));
+        byte[] withXmp = [.. file[..20], 0xFF, 0xE1, (byte)((packet.Length + 31) >> 8), (byte)(packet.Length + 31), .. "http://ns.adobe.com/xap/1.0/\0"u8.ToArray(), .. packet, .. file[20..]];
+
+        Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut(withXmp, "Mohali.jpg").Outcome);
     }
 
     private static byte[] Chunk(string kind, byte[] data)
