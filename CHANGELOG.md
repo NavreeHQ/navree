@@ -165,25 +165,35 @@ every `@navree/*` package carries the same version.
   policy violation.
 - A plugin that is not one of the framework's own packages grants nothing through the framework's
   registration APIs. A module that acts for it (one that names it, a module of its crate, or a
-  generic module that only plugin modules import, such as the one `AccessModule::for_policy` makes)
-  stops the boot when it registers a policy with a rule on a subject that is not the plugin's or
-  on `all` (a rule that only a real user brings out is left out at every ability build and logged
-  at `navree::security`); registers a subject named outside the plugin's namespace
-  (`announcements.Announcement`); configures a module of another crate; provides a permission
-  check, the route authorizer, the authenticator, a sign-in strategy, the workspace gate, where
-  native clients sign in, the clock, an observer of every commit, the options of access,
-  workspaces, authentication or Helm, or the app's shell; adds a layer for every request; decides
-  who works as staff in Helm; authorizes a realtime channel outside its namespace; scopes a subject
-  that is not its own to workspaces; registers a global scope or a model hook on a model of
-  another crate; or registers a command named like one of the framework's own (`check`, `help`,
-  `list`, `introspect`, `plugins`, `plugin:publish`, `--help` and `-h`). The app registers the
-  plugin's piece from a module of its own, and that line is the grant. Each refusal names the
-  plugin and the module and most say what to do; those for a configured module, a provider, a hook
-  and a command also say why a module that does not name the plugin acts for it. A module of a
-  plugin's crate keeps its UI extensions under the plugin's namespace, and a module of the app
-  takes `app` or a namespace that no plugin and no part of the framework keeps. The rules hold a
-  plugin to what it declares; they are not a sandbox, and a crate linked into the app runs with the
-  app's rights.
+  generic module that only plugin modules import, such as the one `AccessModule::for_policy` makes;
+  a module passed as a reference or in a `Box` or a `Pin` is read as the type inside) stops the boot
+  when it registers a policy with a rule on a subject that is not the plugin's or on `all` (a rule
+  that only a real user brings out is left out at every ability build and logged at
+  `navree::security`); registers a subject named outside the plugin's namespace
+  (`announcements.Announcement`), or a subject with a permission prefix outside it, whatever crate
+  its type is in; configures a module of another crate; provides a permission check, the route
+  authorizer, the authenticator, a sign-in strategy, the workspace gate, where native clients sign
+  in, the clock, an observer of every commit or of every MongoDB commit, the sink of the audit
+  records, the realtime backplane, the ORM's model event fake, the options of access, workspaces,
+  authentication or Helm, or the app's shell; adds a layer for every request (a service with
+  `MicroModule` and no `HttpModule` refuses it the same way, before the layer wraps a message
+  handler); decides who works as staff in Helm; answers the app's errors with pages, an error shell
+  or an `m.map_error` of an error type of another crate; authorizes a realtime channel outside its
+  namespace, the namespace alone included; scopes a subject that is not its own to workspaces;
+  registers a global scope or a model hook on a model of another crate; or registers a command
+  named like one of the framework's own (`check`, `help`, `list`, `introspect`, `plugins`,
+  `plugin:publish`, `--help` and `-h`). The app registers the plugin's piece from a module of its
+  own, and that line is the grant. The plugin's namespace is its own too: a plugin whose namespace
+  is the first word of a permission that a module of the app describes, of a permission or a
+  subject that a route of the app declares, or of the permission prefix of another module's
+  subject stops the boot, and so does a channel pattern of the app whose first segment is a
+  plugin's namespace, since the plugin's policies or authorizer would decide it. `automations` is a
+  reserved namespace. A module that acts for a plugin keeps its UI extensions, static files and
+  island scripts under the plugin's namespace, and a module of the app takes `app` or a namespace
+  that no plugin and no part of the framework keeps. Each refusal names the plugin, most name the
+  module, and most say what to do; those for a configured module, a provider, a hook and a command
+  also say why a module that does not name the plugin acts for it. The rules hold a plugin to what
+  it declares; they are not a sandbox, and a crate linked into the app runs with the app's rights.
 - `access:explain` and `GET /api/me/abilities` name the plugin of each rule its policy wrote: the
   rule's `reason` is the policy and the plugin.
 - Navree Native: the Apple client for iPhone, iPad and Mac is in the repository (`packages/apple`,
@@ -341,15 +351,18 @@ every `@navree/*` package carries the same version.
   headers and navigation of 1.2.2.
 - An app with no plugin other than the framework's own packages registers as in 1.2: policies,
   subjects, configured modules, providers, layers for every request, Helm's staff policies,
-  realtime channels, workspace scopes, global scopes, model hooks and commands work for every
-  module as before.
+  error mappings, realtime channels, workspace scopes, global scopes, model hooks and commands work
+  for every module as before. An app that adds a plugin keeps its own registrations too, but one
+  that uses the plugin's namespace as its first word stops the boot: a channel pattern, a
+  permission, a route's permission or subject, or a subject's permission prefix, such as
+  `chat.support` beside a plugin named `chat`. Rename it in the app, or remove the plugin.
 - `plugins` (and the `plugins` of `introspect --json`) lists, under a plugin, every module that
   acts for it: a module that names it, a module of its crate, and a generic module that only
   plugin modules import, such as the one `AccessModule::for_policy` makes for its policy.
   `config:publish --plugin` publishes the sections of those modules too, and the checks of
-  templates and documents, of permissions, of error pages and of Helm's staff policies hold them
-  to the plugin's rules. When the checks refuse the app, `plugins` prints the listing before the
-  refusals.
+  templates, documents, static files and island scripts, of permissions, of error pages and of
+  Helm's staff policies hold them to the plugin's rules. When the checks refuse the app, `plugins`
+  prints the listing before the refusals.
 - A module that acts for a plugin and imports a configured instance (`for_root`, `from_config`) of
   a module of another crate is a boot error. In 1.2 the same two modules gave `ConfiguredTwice`
   when the app configured the module too, and otherwise the configured instance replaced the
