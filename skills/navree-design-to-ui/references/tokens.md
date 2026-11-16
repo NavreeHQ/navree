@@ -51,18 +51,20 @@ theme sets the same tokens to other values.
 | `card`, `field` | unset (`ink-1`) | unset (`ink-1`) | cards and fields apart from the sidebar: a theme's roles (below) |
 | `ghost-fg`, `shell-muted` | unset (`fg-2`, `fg-3`) | unset | a ghost button's text; the sidebar's quieter text |
 | `segment-track`, `segment-on`, `row-selected` | unset (`ink-2`, `ink-3`) | unset | segmented tabs' track and chosen tab; a selected row |
-| `sidebar-w` | `16rem` | `16rem` | the open sidebar |
+| `sidebar-w` | `16rem` | `16rem` | the open sidebar; a theme's `SidebarSizes::width` |
 | `sidebar-w-icon` | `3rem` | `3rem` | the sidebar as icons |
-| `topbar-h` | `3rem` | `3rem` | the top bar |
+| `topbar-h` | `3rem` | `3rem` | the top bar; a theme's `TopbarSizes::height` |
 | `page-pad` | `1.5rem` | `1.5rem` | the page's padding |
+| `control-xs` to `control-lg`, `field-xs` to `field-lg`, `field-px`, `badge-h`, `sidebar-pad-y`, `sidebar-pad-x`, `sidebar-gap`, `sidebar-item-h`, `topbar-px`, `page-pad-top`, `page-pad-x`, `page-pad-bottom`, `page-gap`, `page-max`, `card-pad`, `stat-pad-y`, `stat-pad-x` | unset | unset | sizes in px from a theme's `Sizes` (below) |
 | `font-sans` | Geist, then the system stack | | all text |
 | `font-display` | unset: the text face | | headings to `h3`, the page title, the brand: an `AppFont` with `as_face(Face::Display)` |
 | `font-mono` | the system monospace stack | | code |
 | `text-<kind>-size`, `-line`, `-weight`, `-tracking`, `-face` | unset | unset | each kind of text, from a theme's `TypeScale` (below) |
 
-Control heights are fixed by `Size`: 24, 28, 32 (the default) and 36
-pixels. Gaps in `Stack`, `Row` and `Grid` are steps, not pixels. There
-are no shadows on app surfaces and no glow.
+Control heights come from `Size`: 24, 28, 32 (the default) and 36 pixels,
+unless a theme's shape says what each step is (`Sizes`, below). Gaps in
+`Stack`, `Row` and `Grid` are steps, not pixels. There are no shadows on
+app surfaces and no glow.
 
 `navree::ui::theme::pairs()` lists every colour pair the stylesheet draws:
 text must reach WCAG AA (4.5:1), and the focus ring, icons and chart colours
@@ -96,6 +98,8 @@ Group the values by role, then give each role its Navree token:
 | cards and inputs apart from the sidebar (white cards on an off-white sidebar) | `card`, `field`: a theme's `Roles`; the sidebar and a table's header keep `ink-1` |
 | a dark card, band, code panel or side panel on a light page (or the other way) | the inverse surface: `Inverse` in a theme's `Roles` |
 | a ghost or icon button's text, the sidebar's secondary lines, a segment's track and chosen tab, a selected row | `ghost-fg`, `shell-muted`, `segment-track`, `segment-on`, `row-selected`: a theme's `Roles` |
+| control and field heights (40 px buttons, 44 px inputs on one page), a badge's height | a theme's `Sizes`: `ControlSizes`, `FieldSizes` with `Input::size` for a page's step, `badge_height` |
+| the sidebar's width and insets, the top bar's height, the page's padding and width, card padding | a theme's `Sizes`: `SidebarSizes`, `TopbarSizes`, `PageSizes`, `CardSizes` |
 | hover, raised | `ink-2` |
 | selected, pressed | `ink-3` |
 | borders, dividers, input outlines | `line`, `line-2`, `line-3` |

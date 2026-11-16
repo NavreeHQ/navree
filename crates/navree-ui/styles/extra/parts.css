@@ -53,13 +53,13 @@ h6[data-slot=heading]{font-size:.75rem;letter-spacing:.04em;text-transform:upper
 [data-slot=card][data-variant=dashed]{border-style:dashed;border-color:var(--line-3);background:transparent}
 
 /* Input: sizes, and a field with a clear button */
-[data-slot=input][data-size=xs]{height:1.5rem;padding:0 .5rem;font-size:12px}
-[data-slot=input][data-size=sm]{height:1.75rem;padding:0 .5rem;font-size:13px}
-[data-slot=input][data-size=lg]{height:2.25rem}
+[data-slot=input][data-size=xs]{height:var(--field-xs,1.5rem);padding:0 .5rem;font-size:12px}
+[data-slot=input][data-size=sm]{height:var(--field-sm,1.75rem);padding:0 .5rem;font-size:13px}
+[data-slot=input][data-size=lg]{height:var(--field-lg,2.25rem)}
 [data-slot=input-group]{
-  &[data-size=xs]{height:1.5rem}
-  &[data-size=sm]{height:1.75rem}
-  &[data-size=lg]{height:2.25rem}
+  &[data-size=xs]{height:var(--field-xs,1.5rem)}
+  &[data-size=sm]{height:var(--field-sm,1.75rem)}
+  &[data-size=lg]{height:var(--field-lg,2.25rem)}
   & > [data-slot=input][data-size]{padding-inline:.5rem}
   & > [data-script-only] > [data-ui-clear]{margin-inline-end:.125rem}
   & [data-ui-clear][hidden]{display:none}

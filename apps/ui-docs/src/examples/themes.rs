@@ -1,8 +1,8 @@
 //! Themes, modes, the theme menu, the shell's layouts and the theme builder.
 
 use navree::ui::theme::{
-    Appearance, BuilderDraft, Corner, Corners, Face, Mode, Rgb, Roles, Shape, TextStyle, Theme,
-    ThemeBuilder, ThemeId, ThemeMenu, TypeScale,
+    Appearance, BuilderDraft, ControlSizes, Corner, Corners, Face, FieldSizes, Mode, Rgb, Roles,
+    Shape, SidebarSizes, Sizes, TextStyle, Theme, ThemeBuilder, ThemeId, ThemeMenu, TypeScale,
 };
 use navree::ui::*;
 
@@ -180,7 +180,8 @@ fn shell_header() -> AppPage {
 
 /// Ocean with a shape of its own: pill buttons, badges, toggles and avatars, 12 px fields,
 /// panels and popups, 10 px rows and 16 px cards; a 28 px page title, 15 px card titles and
-/// figures in the mono face; and white cards and fields beside its tinted sidebar.
+/// figures in the mono face; 36 px controls and fields and a 248 px sidebar; and white cards
+/// and fields beside its tinted sidebar.
 fn shaped_theme() -> Theme {
     let shape = Shape::new()
         .corners(
@@ -200,6 +201,12 @@ fn shaped_theme() -> Theme {
                 .page_title(TextStyle::px(28).line(1.15).weight(600).tracking(-0.025))
                 .card_title(TextStyle::px(15).line(1.4).tracking(-0.01))
                 .stat_value(TextStyle::px(22).weight(500).face(Face::Mono)),
+        )
+        .sizes(
+            Sizes::new()
+                .controls(ControlSizes::new().md(36))
+                .fields(FieldSizes::new().md(36).padding_x(12))
+                .sidebar(SidebarSizes::new().width(248).inset_x(12).item_height(36)),
         );
     let roles = Roles::new()
         .card(Rgb::hex(0xffffff), Rgb::hex(0x0a0d12))

@@ -3,7 +3,8 @@
 //! A spec is a struct apps build literally, so it can't gain a field in 1.x. A shape is a
 //! value of its own that a theme of your own carries beside its spec
 //! ([`Theme::with_shape`](super::Theme::with_shape)): the corners of each kind of part
-//! ([`Corners`]) and the type scale ([`TypeScale`]). Each value is a CSS custom property that
+//! ([`Corners`]), the type scale ([`TypeScale`]) and the sizes of controls, the shell and the
+//! page ([`Sizes`]). Each value is a CSS custom property that
 //! the stylesheet reads with today's value as its fallback
 //! (`var(--radius-button,var(--radius))`), and a theme's stylesheet writes it only when the
 //! shape sets it. So a theme with the default shape, and every
@@ -436,6 +437,387 @@ const FIELD_TABLE: [(&str, Kind, &str); FIELDS] = [
     ("face", Kind::Face, "face"),
 ];
 
+/// Control heights in px, by [`Size`](crate::Size) step: buttons, toggles and the items of a
+/// toggle group, the width of an icon-only one, and segmented tabs, whose track is the step's
+/// height. A step you don't set keeps the toolkit's: 24, 28, 32 and 36 px, scaled by the
+/// theme's density.
+///
+/// ```
+/// use navree_ui::theme::ControlSizes;
+///
+/// let controls = ControlSizes::new().sm(32).md(36).lg(48);
+/// assert_ne!(controls, ControlSizes::new());
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[must_use]
+pub struct ControlSizes([Option<i32>; 4]);
+
+impl ControlSizes {
+    /// Every step the toolkit's.
+    pub const fn new() -> Self {
+        Self([None; 4])
+    }
+
+    /// `Size::Xs`, from 16 to 64 px.
+    pub const fn xs(mut self, px: u16) -> Self {
+        self.0[0] = Some(px as i32);
+        self
+    }
+
+    /// `Size::Sm`, from 16 to 64 px.
+    pub const fn sm(mut self, px: u16) -> Self {
+        self.0[1] = Some(px as i32);
+        self
+    }
+
+    /// The default size, from 16 to 64 px.
+    pub const fn md(mut self, px: u16) -> Self {
+        self.0[2] = Some(px as i32);
+        self
+    }
+
+    /// `Size::Lg`, from 16 to 64 px.
+    pub const fn lg(mut self, px: u16) -> Self {
+        self.0[3] = Some(px as i32);
+        self
+    }
+}
+
+/// Field heights in px by [`Size`](crate::Size) step, and their inner padding: inputs, input
+/// groups, native selects, the select and combobox controls and the phone input. A field takes
+/// a step with `Input::size`, so one page can draw 44 px fields and the rest 36 px. Without
+/// them: the control heights, and 10 px of padding.
+///
+/// ```
+/// use navree_ui::theme::FieldSizes;
+///
+/// let fields = FieldSizes::new().md(40).lg(44).padding_x(14);
+/// assert_ne!(fields, FieldSizes::new());
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[must_use]
+pub struct FieldSizes([Option<i32>; 5]);
+
+impl FieldSizes {
+    /// Every step the toolkit's.
+    pub const fn new() -> Self {
+        Self([None; 5])
+    }
+
+    /// `Size::Xs`, from 16 to 64 px.
+    pub const fn xs(mut self, px: u16) -> Self {
+        self.0[0] = Some(px as i32);
+        self
+    }
+
+    /// `Size::Sm`, from 16 to 64 px.
+    pub const fn sm(mut self, px: u16) -> Self {
+        self.0[1] = Some(px as i32);
+        self
+    }
+
+    /// The default size, from 16 to 64 px.
+    pub const fn md(mut self, px: u16) -> Self {
+        self.0[2] = Some(px as i32);
+        self
+    }
+
+    /// `Size::Lg`, from 16 to 64 px.
+    pub const fn lg(mut self, px: u16) -> Self {
+        self.0[3] = Some(px as i32);
+        self
+    }
+
+    /// The space between a field's edge and its text, from 0 to 32 px.
+    pub const fn padding_x(mut self, px: u16) -> Self {
+        self.0[4] = Some(px as i32);
+        self
+    }
+}
+
+/// The sidebar's sizes in px. Without them: 256 px wide, 8 px insets, 8 px between its blocks
+/// and 32 px items.
+///
+/// ```
+/// use navree_ui::theme::SidebarSizes;
+///
+/// let sidebar = SidebarSizes::new().width(248).inset_y(16).inset_x(12).gap(18).item_height(36);
+/// assert_ne!(sidebar, SidebarSizes::new());
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[must_use]
+pub struct SidebarSizes([Option<i32>; 5]);
+
+impl SidebarSizes {
+    /// Every size the toolkit's.
+    pub const fn new() -> Self {
+        Self([None; 5])
+    }
+
+    /// Its width open, from 160 to 400 px (`--sidebar-w`).
+    pub const fn width(mut self, px: u16) -> Self {
+        self.0[0] = Some(px as i32);
+        self
+    }
+
+    /// The space above its first block and below its last, from 0 to 64 px.
+    pub const fn inset_y(mut self, px: u16) -> Self {
+        self.0[1] = Some(px as i32);
+        self
+    }
+
+    /// The space at its sides, from 0 to 64 px.
+    pub const fn inset_x(mut self, px: u16) -> Self {
+        self.0[2] = Some(px as i32);
+        self
+    }
+
+    /// The space between its blocks (the brand, each group of links, the footer), from 0 to
+    /// 64 px.
+    pub const fn gap(mut self, px: u16) -> Self {
+        self.0[3] = Some(px as i32);
+        self
+    }
+
+    /// The height of each of its links, from 20 to 64 px.
+    pub const fn item_height(mut self, px: u16) -> Self {
+        self.0[4] = Some(px as i32);
+        self
+    }
+}
+
+/// The top bar's sizes in px. Without them: 48 px high, 12 px at its sides.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[must_use]
+pub struct TopbarSizes([Option<i32>; 2]);
+
+impl TopbarSizes {
+    /// Every size the toolkit's.
+    pub const fn new() -> Self {
+        Self([None; 2])
+    }
+
+    /// Its height, from 32 to 96 px (`--topbar-h`).
+    pub const fn height(mut self, px: u16) -> Self {
+        self.0[0] = Some(px as i32);
+        self
+    }
+
+    /// The space at its sides, from 0 to 64 px.
+    pub const fn inset_x(mut self, px: u16) -> Self {
+        self.0[1] = Some(px as i32);
+        self
+    }
+}
+
+/// The page's sizes in px, in the app shell. Without them: 24 px of padding, 16 px between
+/// its parts, and as wide as the window allows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[must_use]
+pub struct PageSizes([Option<i32>; 5]);
+
+impl PageSizes {
+    /// Every size the toolkit's.
+    pub const fn new() -> Self {
+        Self([None; 5])
+    }
+
+    /// The space above its content, from 0 to 96 px.
+    pub const fn padding_top(mut self, px: u16) -> Self {
+        self.0[0] = Some(px as i32);
+        self
+    }
+
+    /// The space at its sides, from 0 to 96 px.
+    pub const fn padding_x(mut self, px: u16) -> Self {
+        self.0[1] = Some(px as i32);
+        self
+    }
+
+    /// The space below its content, from 0 to 96 px.
+    pub const fn padding_bottom(mut self, px: u16) -> Self {
+        self.0[2] = Some(px as i32);
+        self
+    }
+
+    /// The space between its parts (its heading and each block), from 0 to 64 px.
+    pub const fn gap(mut self, px: u16) -> Self {
+        self.0[3] = Some(px as i32);
+        self
+    }
+
+    /// The most it is wide, its padding included, from 480 to 2400 px: on a wider window it
+    /// stands in the middle.
+    pub const fn max_width(mut self, px: u16) -> Self {
+        self.0[4] = Some(px as i32);
+        self
+    }
+}
+
+/// The padding of cards and stats in px. Without them: 16 px.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[must_use]
+pub struct CardSizes([Option<i32>; 3]);
+
+impl CardSizes {
+    /// Every size the toolkit's.
+    pub const fn new() -> Self {
+        Self([None; 3])
+    }
+
+    /// A card's padding, around its header, its content and its footer, from 0 to 64 px.
+    pub const fn padding(mut self, px: u16) -> Self {
+        self.0[0] = Some(px as i32);
+        self
+    }
+
+    /// A stat's padding above and below, from 0 to 64 px.
+    pub const fn stat_padding_y(mut self, px: u16) -> Self {
+        self.0[1] = Some(px as i32);
+        self
+    }
+
+    /// A stat's padding at its sides, from 0 to 64 px.
+    pub const fn stat_padding_x(mut self, px: u16) -> Self {
+        self.0[2] = Some(px as i32);
+        self
+    }
+}
+
+/// How many sizes a shape can set.
+const SIZES: usize = 25;
+
+/// The sizes of controls, fields, badges, the shell, the page and cards, in px. A size you
+/// don't set keeps the toolkit's, which follows the theme's density; one you set is the
+/// pixels you give, whatever the density.
+///
+/// ```
+/// use navree_ui::theme::{ControlSizes, FieldSizes, PageSizes, SidebarSizes, Sizes, TopbarSizes};
+///
+/// let sizes = Sizes::new()
+///     .controls(ControlSizes::new().sm(32).md(36).lg(48))
+///     .fields(FieldSizes::new().md(40).lg(44).padding_x(14))
+///     .sidebar(SidebarSizes::new().width(248).inset_y(16).inset_x(12).gap(18).item_height(36))
+///     .topbar(TopbarSizes::new().height(60).inset_x(32))
+///     .page(PageSizes::new().padding_top(28).padding_x(32).padding_bottom(40).gap(24).max_width(1240));
+/// assert!(!sizes.is_empty());
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[must_use]
+pub struct Sizes([Option<i32>; SIZES]);
+
+impl Sizes {
+    /// Every size the toolkit's.
+    pub const fn new() -> Self {
+        Self([None; SIZES])
+    }
+
+    const fn put<const N: usize>(mut self, from: usize, part: [Option<i32>; N]) -> Self {
+        let mut at = 0;
+        while at < N {
+            self.0[from + at] = part[at];
+            at += 1;
+        }
+        self
+    }
+
+    /// The controls' heights, in place of any set before.
+    pub const fn controls(self, controls: ControlSizes) -> Self {
+        self.put(0, controls.0)
+    }
+
+    /// The fields' heights and padding, in place of any set before.
+    pub const fn fields(self, fields: FieldSizes) -> Self {
+        self.put(4, fields.0)
+    }
+
+    /// A badge's height, from 14 to 40 px. Without it: 20 px.
+    pub const fn badge_height(mut self, px: u16) -> Self {
+        self.0[9] = Some(px as i32);
+        self
+    }
+
+    /// The sidebar's sizes, in place of any set before.
+    pub const fn sidebar(self, sidebar: SidebarSizes) -> Self {
+        self.put(10, sidebar.0)
+    }
+
+    /// The top bar's sizes, in place of any set before.
+    pub const fn topbar(self, topbar: TopbarSizes) -> Self {
+        self.put(15, topbar.0)
+    }
+
+    /// The page's sizes, in place of any set before.
+    pub const fn page(self, page: PageSizes) -> Self {
+        self.put(17, page.0)
+    }
+
+    /// The padding of cards and stats, in place of any set before.
+    pub const fn cards(self, cards: CardSizes) -> Self {
+        self.put(22, cards.0)
+    }
+
+    /// Whether no size is set.
+    pub fn is_empty(&self) -> bool {
+        self.0.iter().all(Option::is_none)
+    }
+}
+
+/// Each size: its custom property, its least and most px, the builder it is set on (empty
+/// for [`Sizes`] itself), its method, and whether the token layer writes it for every theme,
+/// so a part of the page drawn in another theme gets that theme's from the layer.
+const SIZE_TABLE: [(&str, u16, u16, &str, &str, bool); SIZES] = [
+    ("control-xs", 16, 64, "ControlSizes", "xs", false),
+    ("control-sm", 16, 64, "ControlSizes", "sm", false),
+    ("control-md", 16, 64, "ControlSizes", "md", false),
+    ("control-lg", 16, 64, "ControlSizes", "lg", false),
+    ("field-xs", 16, 64, "FieldSizes", "xs", false),
+    ("field-sm", 16, 64, "FieldSizes", "sm", false),
+    ("field-md", 16, 64, "FieldSizes", "md", false),
+    ("field-lg", 16, 64, "FieldSizes", "lg", false),
+    ("field-px", 0, 32, "FieldSizes", "padding_x", false),
+    ("badge-h", 14, 40, "", "badge_height", false),
+    ("sidebar-w", 160, 400, "SidebarSizes", "width", true),
+    ("sidebar-pad-y", 0, 64, "SidebarSizes", "inset_y", false),
+    ("sidebar-pad-x", 0, 64, "SidebarSizes", "inset_x", false),
+    ("sidebar-gap", 0, 64, "SidebarSizes", "gap", false),
+    (
+        "sidebar-item-h",
+        20,
+        64,
+        "SidebarSizes",
+        "item_height",
+        false,
+    ),
+    ("topbar-h", 32, 96, "TopbarSizes", "height", true),
+    ("topbar-px", 0, 64, "TopbarSizes", "inset_x", false),
+    ("page-pad-top", 0, 96, "PageSizes", "padding_top", false),
+    ("page-pad-x", 0, 96, "PageSizes", "padding_x", false),
+    (
+        "page-pad-bottom",
+        0,
+        96,
+        "PageSizes",
+        "padding_bottom",
+        false,
+    ),
+    ("page-gap", 0, 64, "PageSizes", "gap", false),
+    ("page-max", 480, 2400, "PageSizes", "max_width", false),
+    ("card-pad", 0, 64, "CardSizes", "padding", false),
+    ("stat-pad-y", 0, 64, "CardSizes", "stat_padding_y", false),
+    ("stat-pad-x", 0, 64, "CardSizes", "stat_padding_x", false),
+];
+
+/// The method on [`Sizes`] that takes each builder.
+const SIZE_BUILDERS: [(&str, &str); 6] = [
+    ("ControlSizes", "controls"),
+    ("FieldSizes", "fields"),
+    ("SidebarSizes", "sidebar"),
+    ("TopbarSizes", "topbar"),
+    ("PageSizes", "page"),
+    ("CardSizes", "cards"),
+];
+
 /// What kind of value a slot holds, and so how it is checked, written and read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
@@ -451,6 +833,8 @@ enum Kind {
     Tracking,
     /// A [`Face`].
     Face,
+    /// A length from the first to the second px.
+    Length(u16, u16),
 }
 
 /// What the short form adds to a tracking value, so it is never negative.
@@ -462,6 +846,7 @@ impl Kind {
         match self {
             Self::Corner | Self::Weight | Self::Face => 1,
             Self::Size | Self::Line | Self::Tracking => 2,
+            Self::Length(..) => 3,
         }
     }
 
@@ -474,25 +859,27 @@ impl Kind {
             Self::Weight => matches!(value, 400 | 500 | 600 | 700),
             Self::Tracking => (-60..=100).contains(&value),
             Self::Face => Face::of(value).is_some(),
+            Self::Length(least, most) => (i32::from(least)..=i32::from(most)).contains(&value),
         }
     }
 
     /// Why a value out of range is refused.
-    const fn rule(self) -> &'static str {
+    fn rule(self) -> String {
         match self {
-            Self::Corner => "A corner takes 0 to 32 px, or a pill.",
-            Self::Size => "A text size takes 10 to 72 px.",
-            Self::Line => "A line height takes 1 to 2, to two places.",
-            Self::Weight => "A weight is 400, 500, 600 or 700.",
-            Self::Tracking => "Tracking takes -0.06 to 0.1 em, to three places.",
-            Self::Face => "A face is text, display or mono.",
+            Self::Corner => "A corner takes 0 to 32 px, or a pill.".to_owned(),
+            Self::Size => "A text size takes 10 to 72 px.".to_owned(),
+            Self::Line => "A line height takes 1 to 2, to two places.".to_owned(),
+            Self::Weight => "A weight is 400, 500, 600 or 700.".to_owned(),
+            Self::Tracking => "Tracking takes -0.06 to 0.1 em, to three places.".to_owned(),
+            Self::Face => "A face is text, display or mono.".to_owned(),
+            Self::Length(least, most) => format!("This takes {least} to {most} px."),
         }
     }
 
     /// The value as CSS.
     fn css(self, value: i32, out: &mut String) {
         match self {
-            Self::Corner | Self::Size => {
+            Self::Corner | Self::Size | Self::Length(..) => {
                 let _ = write!(out, "{value}px");
             }
             Self::Line => out.push_str(&decimal(value, 2)),
@@ -523,6 +910,11 @@ impl Kind {
                 out.push(digit(value / 36));
                 out.push(digit(value));
             }
+            Self::Length(..) => {
+                out.push(digit(value / 1296));
+                out.push(digit(value / 36));
+                out.push(digit(value));
+            }
         }
     }
 
@@ -537,7 +929,7 @@ impl Kind {
         let number = || i32::try_from(u32::from_str_radix(text, 36).ok()?).ok();
         let value = match self {
             Self::Corner if text == "x" => PILL,
-            Self::Corner | Self::Size | Self::Line => number()?,
+            Self::Corner | Self::Size | Self::Line | Self::Length(..) => number()?,
             Self::Weight => number()? * 100,
             Self::Tracking => number()? - TRACKING_OFFSET,
             Self::Face => Face::ALL
@@ -552,7 +944,7 @@ impl Kind {
     fn json(self, value: i32) -> String {
         match self {
             Self::Corner if value == PILL => "pill".to_owned(),
-            Self::Corner | Self::Size => format!("{value}px"),
+            Self::Corner | Self::Size | Self::Length(..) => format!("{value}px"),
             Self::Line => decimal(value, 2),
             Self::Weight => value.to_string(),
             Self::Tracking => format!("{}em", decimal(value, 3)),
@@ -564,10 +956,10 @@ impl Kind {
     fn parse_json(self, text: &str) -> Option<i32> {
         let value = match self {
             Self::Corner if text == "pill" => PILL,
-            Self::Corner | Self::Size => {
+            Self::Corner | Self::Size | Self::Length(..) => {
                 let digits = text.strip_suffix("px")?;
                 if digits.is_empty()
-                    || digits.len() > 3
+                    || digits.len() > 4
                     || !digits.bytes().all(|b| b.is_ascii_digit())
                 {
                     return None;
@@ -597,7 +989,7 @@ impl Kind {
                 Corner::Pill => "Corner::Pill".to_owned(),
                 Corner::Px(n) => format!("Corner::Px({n})"),
             },
-            Self::Size | Self::Weight => value.to_string(),
+            Self::Size | Self::Weight | Self::Length(..) => value.to_string(),
             Self::Line | Self::Tracking => {
                 let text = decimal(value, if self == Self::Line { 2 } else { 3 });
                 if text.contains('.') {
@@ -667,8 +1059,11 @@ struct Slot {
     group: char,
     key: char,
     /// The builder method that sets it, for the Rust export: its group's builder's for a
-    /// corner, its text style's for a value of one.
+    /// corner or a size, its text style's for a value of one.
     method: &'static str,
+    /// Whether the token layer writes it for every theme (`--sidebar-w`, `--topbar-h`), so a
+    /// part of the page drawn in another theme gets that theme's from the layer.
+    layered: bool,
 }
 
 impl Slot {
@@ -698,11 +1093,14 @@ const CORNER_TABLE: [(&str, char, &str); PARTS] = [
 /// Where the type scale's slots start.
 const TYPE_AT: usize = PARTS;
 
+/// Where the sizes' slots start.
+const SIZES_AT: usize = TYPE_AT + STEPS * FIELDS;
+
 /// How many slots there are.
-const SLOT_COUNT: usize = TYPE_AT + STEPS * FIELDS;
+const SLOT_COUNT: usize = SIZES_AT + SIZES;
 
 /// Every value a shape can set, in the order a sheet writes them: the corners, one slot a
-/// part, then the type scale, five slots a kind of text.
+/// part, then the type scale, five slots a kind of text, then the sizes.
 fn slots() -> &'static [Slot] {
     static SLOTS: LazyLock<Vec<Slot>> = LazyLock::new(|| {
         let mut slots = Vec::with_capacity(SLOT_COUNT);
@@ -714,6 +1112,7 @@ fn slots() -> &'static [Slot] {
                 group: 'c',
                 key,
                 method,
+                layered: false,
             });
         }
         for (stem, key, _) in STEP_TABLE {
@@ -725,8 +1124,20 @@ fn slots() -> &'static [Slot] {
                     group: 't',
                     key,
                     method,
+                    layered: false,
                 });
             }
+        }
+        for (at, (stem, least, most, _, method, layered)) in SIZE_TABLE.into_iter().enumerate() {
+            slots.push(Slot {
+                stem,
+                suffix: "",
+                kind: Kind::Length(least, most),
+                group: 's',
+                key: char::from(b'a' + u8::try_from(at).unwrap_or(0)),
+                method,
+                layered,
+            });
         }
         slots
     });
@@ -734,7 +1145,7 @@ fn slots() -> &'static [Slot] {
 }
 
 /// The short form's groups, in the order they are written.
-const GROUPS: [char; 2] = ['c', 't'];
+const GROUPS: [char; 3] = ['c', 't', 's'];
 
 /// The marker of a value left unset inside a short form's entry: a letter no value uses.
 const UNSET: char = 'z';
@@ -773,6 +1184,7 @@ const UNSET: char = 'z';
 pub struct Shape {
     corners: Corners,
     type_scale: TypeScale,
+    sizes: Sizes,
 }
 
 impl Shape {
@@ -781,6 +1193,7 @@ impl Shape {
         Self {
             corners: Corners::new(),
             type_scale: TypeScale::new(),
+            sizes: Sizes::new(),
         }
     }
 
@@ -796,6 +1209,13 @@ impl Shape {
         self
     }
 
+    /// The sizes of controls, fields, the shell, the page and cards, in place of any set
+    /// before.
+    pub const fn sizes(mut self, sizes: Sizes) -> Self {
+        self.sizes = sizes;
+        self
+    }
+
     /// Whether it sets nothing.
     pub fn is_default(&self) -> bool {
         *self == Self::new()
@@ -805,10 +1225,11 @@ impl Shape {
     fn get(&self, at: usize) -> Option<i32> {
         match at {
             0..TYPE_AT => self.corners.0[at].map(Corner::value),
-            TYPE_AT..SLOT_COUNT => {
+            TYPE_AT..SIZES_AT => {
                 let at = at - TYPE_AT;
                 self.type_scale.0[at / FIELDS].0[at % FIELDS]
             }
+            SIZES_AT..SLOT_COUNT => self.sizes.0[at - SIZES_AT],
             _ => None,
         }
     }
@@ -817,10 +1238,11 @@ impl Shape {
     fn set(&mut self, at: usize, value: i32) {
         match at {
             0..TYPE_AT => self.corners.0[at] = Some(Corner::of(value)),
-            TYPE_AT..SLOT_COUNT => {
+            TYPE_AT..SIZES_AT => {
                 let at = at - TYPE_AT;
                 self.type_scale.0[at / FIELDS].0[at % FIELDS] = Some(value);
             }
+            SIZES_AT..SLOT_COUNT => self.sizes.0[at - SIZES_AT] = Some(value),
             _ => {}
         }
     }
@@ -837,7 +1259,7 @@ impl Shape {
     pub(crate) fn errors(&self) -> Vec<(String, String)> {
         self.values()
             .filter(|(slot, value)| !slot.kind.holds(*value))
-            .map(|(slot, _)| (slot.name(), slot.kind.rule().to_owned()))
+            .map(|(slot, _)| (slot.name(), slot.kind.rule()))
             .collect()
     }
 
@@ -852,7 +1274,9 @@ impl Shape {
     /// The custom properties it sets, which a part of the page drawn in another theme must
     /// not inherit.
     pub(crate) fn names(&self) -> impl Iterator<Item = String> + '_ {
-        self.values().map(|(slot, _)| slot.name())
+        self.values()
+            .filter(|(slot, _)| !slot.layered)
+            .map(|(slot, _)| slot.name())
     }
 
     /// Its part of the short form: a `-` and a group's tag, then an entry for each key with a
@@ -961,7 +1385,7 @@ impl Shape {
             let kind = slots()[index].kind;
             match value.as_str().and_then(|text| kind.parse_json(text)) {
                 Some(value) => shape.set(index, value),
-                None => errors.push((at, kind.rule().to_owned())),
+                None => errors.push((at, kind.rule())),
             }
         }
         shape
@@ -997,6 +1421,39 @@ impl Shape {
             }
             out.push_str(",\n        )");
         }
+        if !self.sizes.is_empty() {
+            out.push_str("\n        .sizes(\n            Sizes::new()");
+            // Each builder's calls together, in the table's order; a badge's height on `Sizes`.
+            let mut open: Option<&str> = None;
+            for ((slot, row), value) in slots()[SIZES_AT..].iter().zip(SIZE_TABLE).zip(self.sizes.0)
+            {
+                let (Some(value), builder) = (value, row.3) else {
+                    continue;
+                };
+                if open != Some(builder) {
+                    if open.is_some_and(|open| !open.is_empty()) {
+                        out.push(')');
+                    }
+                    if !builder.is_empty() {
+                        let method = SIZE_BUILDERS
+                            .iter()
+                            .find(|(name, _)| *name == builder)
+                            .map_or("", |(_, method)| *method);
+                        let _ = write!(out, "\n                .{method}({builder}::new()");
+                    }
+                    open = Some(builder);
+                }
+                if builder.is_empty() {
+                    let _ = write!(out, "\n                .{}({value})", slot.method);
+                } else {
+                    let _ = write!(out, ".{}({value})", slot.method);
+                }
+            }
+            if open.is_some_and(|open| !open.is_empty()) {
+                out.push(')');
+            }
+            out.push_str(",\n        )");
+        }
         out
     }
 
@@ -1011,6 +1468,18 @@ impl Shape {
         }
         if !self.type_scale.is_empty() {
             names.extend(["TextStyle", "TypeScale"]);
+        }
+        for (builder, _) in SIZE_BUILDERS {
+            if SIZE_TABLE
+                .iter()
+                .zip(self.sizes.0)
+                .any(|(row, value)| row.3 == builder && value.is_some())
+            {
+                names.push(builder);
+            }
+        }
+        if !self.sizes.is_empty() {
+            names.push("Sizes");
         }
         if !self.is_default() {
             names.push("Shape");

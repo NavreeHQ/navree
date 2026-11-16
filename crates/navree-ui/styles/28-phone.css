@@ -1,7 +1,7 @@
 /* Phone input: a country picker and the number, in one box. Without the phone
    module the picker is the browser's select; with it, a button opening a
    searchable list. The number is always written left to right. */
-[data-slot=phone-input]{position:relative;display:flex;align-items:stretch;height:2rem;border:1px solid var(--line-2);border-radius:var(--radius-field,var(--radius));background:var(--field,var(--ink-1));
+[data-slot=phone-input]{position:relative;display:flex;align-items:stretch;height:var(--field-md,2rem);border:1px solid var(--line-2);border-radius:var(--radius-field,var(--radius));background:var(--field,var(--ink-1));
   &:hover{border-color:var(--line-3)}
   &:focus-within{outline:2px solid var(--ring);outline-offset:-1px;border-color:transparent}
   &:has([aria-invalid=true]){border-color:var(--danger)}

@@ -60,6 +60,15 @@ every `@navree/*` package carries the same version.
   value is a custom property (`--text-page-title-size` and so on) that the stylesheet reads
   with the toolkit's value behind it, so a kind of text a scale doesn't set is drawn as before.
   Sizes are pixels, so text keeps its size under every density.
+- A shape's `Sizes` sets, in pixels, the height of controls (`ControlSizes`, by `Size` step,
+  segmented tabs included) and of fields (`FieldSizes`, by step, with their side padding, so a
+  page that draws its fields at `Size::Lg` gets the theme's large step), a badge's height, the
+  sidebar's width, insets, gap between blocks and link height (`SidebarSizes`), the top bar's
+  height and side padding (`TopbarSizes`), the page's padding, gap and largest width
+  (`PageSizes`), and the padding of cards and stats (`CardSizes`). Each is a custom property
+  read with today's size behind it, so a size a shape doesn't set keeps following the theme's
+  density; `--sidebar-w` and `--topbar-h`, which every theme shared, are now set by a theme
+  whose shape says so.
 
 ## [1.7.0] - 2026-11-27
 

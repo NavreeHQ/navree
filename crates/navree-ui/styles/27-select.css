@@ -4,8 +4,8 @@
  * layer (MIT, Copyright (c) 2023 shadcn), compact "Nova" style; the values, the 4px and
  * 6px corners and the app rules are Navree's own. See THIRD_PARTY.md.
  */
-[data-slot=select],[data-slot=combobox],[data-slot=multiselect]{--ctl:2rem;position:relative;display:block;width:100%;min-width:0;
-  &[data-size=xs]{--ctl:1.5rem}&[data-size=sm]{--ctl:1.75rem}&[data-size=lg]{--ctl:2.25rem}
+[data-slot=select],[data-slot=combobox],[data-slot=multiselect]{--ctl:var(--field-md,2rem);position:relative;display:block;width:100%;min-width:0;
+  &[data-size=xs]{--ctl:var(--field-xs,1.5rem)}&[data-size=sm]{--ctl:var(--field-sm,1.75rem)}&[data-size=lg]{--ctl:var(--field-lg,2.25rem)}
 }
 [data-slot=select-native]{display:none}
 [data-slot=select-control]{position:relative;display:block}

@@ -58,7 +58,7 @@ pub fn rounded_theme() -> Theme {
 
 ## Sizes
 
-Controls are 32 px tall by default, on a 4 px grid. `Size::Xs`, `Sm` and `Lg` make a control 24, 28 or 36 px. Buttons, toggles, avatars and a popover's button take a `Size`.
+Controls are 32 px tall by default, on a 4 px grid. `Size::Xs`, `Sm` and `Lg` make a control 24, 28 or 36 px. Buttons, toggles, avatars, inputs and a popover's button take a `Size`. A theme of your own can say what each step is, in pixels, with the [sizes](/docs/ui/themes/#sizes) of its shape: 36 px buttons and 44 px fields, say, and the sidebar's width, the top bar's height and the page's padding with them.
 
 <UiPreview example="foundations/sizes" />
 
@@ -72,7 +72,7 @@ Body text is 14 px Geist and secondary text 13 px. A theme may set its text in a
 
 ## Density
 
-A theme's density scales controls and space together while text keeps its size: compact at 7/8 (28 px controls), default, and comfortable at 9/8 (36 px). A [Table](/docs/components/table/) row is 40 px tall with 12 px of cell padding. A [DataTable](/docs/ui/data-table/) row is 48 px; the reader can make rows compact (36 px) or spacious (60 px) from the table's own controls. Pages have 24 px of padding.
+A theme's density scales controls and space together while text keeps its size: compact at 7/8 (28 px controls), default, and comfortable at 9/8 (36 px). A size a theme's shape sets in pixels keeps its pixels under every density. A [Table](/docs/components/table/) row is 40 px tall with 12 px of cell padding. A [DataTable](/docs/ui/data-table/) row is 48 px; the reader can make rows compact (36 px) or spacious (60 px) from the table's own controls. Pages have 24 px of padding.
 
 ## Layout and the shell
 

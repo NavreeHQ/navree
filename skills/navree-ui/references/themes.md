@@ -59,6 +59,15 @@ pub fn themed_shell() -> Shell {
   `.as_face(Face::Text | Face::Display | Face::Mono)`, linked with
   `Shell::font`; headings to `h3`, the page title and the brand draw in the
   display face when there is one.
+- `Sizes` in the shape sets heights and spacing in px:
+  `Sizes::new().controls(ControlSizes::new().sm(32).md(36).lg(48))
+  .fields(FieldSizes::new().md(40).lg(44).padding_x(14)).badge_height(22)
+  .sidebar(SidebarSizes::new().width(248).inset_y(16).inset_x(12).gap(18)
+  .item_height(36)).topbar(TopbarSizes::new().height(60).inset_x(32))
+  .page(PageSizes::new().padding_top(28).padding_x(32).padding_bottom(40)
+  .gap(24).max_width(1240)).cards(CardSizes::new().padding(18))`. A field
+  takes a step with `Input::size(Size::Lg)`, so a sign-in page can draw
+  44 px fields while the app draws 40.
 - Colours beyond the 31 tokens are `Roles`, given with
   `theme.with_roles(roles)`, each in light then dark: `card` and `field`
   (white cards and inputs beside an off-white sidebar, which keeps

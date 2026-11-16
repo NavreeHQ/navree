@@ -86,7 +86,7 @@ The same page after the button is pressed: the sidebar sits over the page and th
 
 ## The sidebar
 
-- **Width:** 16 rem open, 3 rem collapsed to its icons. Give every top-level item an icon: the collapsed sidebar shows only that.
+- **Width:** 16 rem open, 3 rem collapsed to its icons. Give every top-level item an icon: the collapsed sidebar shows only that. A theme of your own sets the open width, the sidebar's insets and the gap between its blocks, its links' height, and the top bar's height and padding with the [sizes](/docs/ui/themes/#sizes) of its shape.
 - **Collapsing:** the top bar's button and `Ctrl+B` (`Cmd+B` on a Mac) toggle it. The choice is kept in a cookie, so the next page renders the same way with no flash.
 - **Phones:** below 768 px it becomes a sheet that slides over the page.
 - **Items:** `.count(text)` puts a count at the end, `.sub(item)` nests an item under another, and `.current(true)` marks a link as the current page when several differ only in their query.

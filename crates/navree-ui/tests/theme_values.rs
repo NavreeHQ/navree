@@ -7,8 +7,9 @@
 //! any of them is a change to every app that sets nothing new, so each is held here.
 
 use navree_ui::theme::{
-    Corner, Corners, Face, ImportError, Inverse, Rgb, Roles, Shape, TextStyle, Theme, ThemeId,
-    Token, TypeScale, builder_layer, token_layer,
+    CardSizes, ControlSizes, Corner, Corners, Face, FieldSizes, ImportError, Inverse, PageSizes,
+    Rgb, Roles, Shape, SidebarSizes, Sizes, TextStyle, Theme, ThemeId, Token, TopbarSizes,
+    TypeScale, builder_layer, token_layer,
 };
 use navree_ui::{
     AppFont, Badge, Button, ButtonVariant, Card, Input, NavGroup, NavItem, Shell, Stat, UserMenu,
@@ -634,4 +635,125 @@ fn a_font_of_the_apps_own_can_be_the_display_text_or_mono_face() {
     let text = View::new("x").font(&BODY).to_html();
     assert!(text.contains(&BODY.face_url()));
     assert!(!text.contains("/_navree/ui/geist-"), "{text:.400}");
+}
+
+/// Controls and fields 44 px high, 22 px badges, a sidebar 248 px wide with 16 px and 12 px
+/// insets, a top bar 60 px high, a page padded 28, 32 and 40 px and at most 1240 px wide, and
+/// cards padded 18 px.
+fn shell_sizes() -> Sizes {
+    Sizes::new()
+        .controls(ControlSizes::new().sm(32).md(44).lg(48))
+        .fields(FieldSizes::new().md(44).lg(48).padding_x(14))
+        .badge_height(22)
+        .sidebar(
+            SidebarSizes::new()
+                .width(248)
+                .inset_y(16)
+                .inset_x(12)
+                .gap(18)
+                .item_height(36),
+        )
+        .topbar(TopbarSizes::new().height(60).inset_x(32))
+        .page(
+            PageSizes::new()
+                .padding_top(28)
+                .padding_x(32)
+                .padding_bottom(40)
+                .gap(24)
+                .max_width(1240),
+        )
+        .cards(
+            CardSizes::new()
+                .padding(18)
+                .stat_padding_y(16)
+                .stat_padding_x(18),
+        )
+}
+
+#[test]
+fn sizes_set_controls_fields_the_shell_and_the_page_in_pixels() {
+    let theme = agra(&Theme::NAVREE)
+        .with_shape(Shape::new().sizes(shell_sizes()))
+        .unwrap();
+    let said = said(&theme);
+    for (name, value) in [
+        ("control-md", "44px"),
+        ("field-md", "44px"),
+        ("field-px", "14px"),
+        ("badge-h", "22px"),
+        ("sidebar-w", "248px"),
+        ("sidebar-pad-y", "16px"),
+        ("sidebar-pad-x", "12px"),
+        ("sidebar-gap", "18px"),
+        ("sidebar-item-h", "36px"),
+        ("topbar-h", "60px"),
+        ("topbar-px", "32px"),
+        ("page-pad-top", "28px"),
+        ("page-max", "1240px"),
+        ("card-pad", "18px"),
+        ("stat-pad-x", "18px"),
+    ] {
+        assert!(
+            said.contains(&(name.to_owned(), value.to_owned())),
+            "{name}: {said:?}"
+        );
+    }
+    // The token layer writes the sidebar's width and the top bar's height for every theme, so
+    // a part of the page drawn in another theme gets its own from there.
+    let reset = theme.css().unwrap().lines().next().unwrap().to_owned();
+    assert!(reset.contains("--control-md:initial"), "{reset}");
+    assert!(
+        !reset.contains("--sidebar-w") && !reset.contains("--topbar-h"),
+        "{reset}"
+    );
+    let back = Theme::from_short_form(theme.short_form()).unwrap();
+    assert_eq!(back.shape(), theme.shape());
+    let stored = Theme::from_json(&theme.to_json()).unwrap();
+    assert_eq!(stored.shape(), theme.shape());
+    let rust = theme.to_rust("navree::ui");
+    for call in [
+        ".controls(ControlSizes::new().sm(32).md(44).lg(48))",
+        ".fields(FieldSizes::new().md(44).lg(48).padding_x(14))",
+        "\n                .badge_height(22)",
+        ".sidebar(SidebarSizes::new().width(248).inset_y(16).inset_x(12).gap(18).item_height(36))",
+        ".topbar(TopbarSizes::new().height(60).inset_x(32))",
+        ".cards(CardSizes::new().padding(18).stat_padding_y(16).stat_padding_x(18))",
+        "PageSizes, Palette, Radius, Rgb, Shape, SidebarSizes, Sizes, Theme",
+    ] {
+        assert!(rust.contains(call), "{call}: {rust}");
+    }
+    // A size out of range is refused by its name.
+    let narrow = Shape::new().sizes(Sizes::new().sidebar(SidebarSizes::new().width(100)));
+    match agra(&Theme::NAVREE).with_shape(narrow) {
+        Err(ImportError::Fields(fields)) => assert_eq!(
+            fields,
+            vec![(
+                "sidebar-w".to_owned(),
+                "This takes 160 to 400 px.".to_owned()
+            )]
+        ),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn every_size_is_read_by_the_stylesheet() {
+    let theme = agra(&Theme::NAVREE)
+        .with_shape(
+            Shape::new().sizes(
+                shell_sizes()
+                    .controls(ControlSizes::new().xs(24).sm(32).md(44).lg(48))
+                    .fields(FieldSizes::new().xs(24).sm(32).md(44).lg(48).padding_x(14)),
+            ),
+        )
+        .unwrap();
+    let names = said(&theme);
+    assert_eq!(names.len(), 25, "{names:?}");
+    let css = sources();
+    for (name, _) in &names {
+        assert!(
+            css.contains(&format!("var(--{name}")),
+            "{name} is read by no rule"
+        );
+    }
 }
