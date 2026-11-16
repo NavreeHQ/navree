@@ -154,7 +154,28 @@ public sealed class WebProfiles
     /// Whether nothing the web view kept for a session that ended can be reached by this run: false only when a new folder was needed and could
     /// not be made, and then no web page is shown in this run.
     /// </returns>
+    /// <remarks>
+    /// It is <see cref="Choose"/> and then <see cref="Tidy"/>. Only the first has to be done before a web view starts, and it deletes nothing;
+    /// the second may take as long as deleting a profile takes, so a caller on a window's thread does the two apart and the second elsewhere.
+    /// </remarks>
     public bool Open(bool lastSessionEnded)
+    {
+        if (!Choose(lastSessionEnded))
+        {
+            return false;
+        }
+
+        Tidy(lastSessionEnded ? AtStart : LeftOver);
+        return true;
+    }
+
+    /// <summary>
+    /// At the start, before any web view: names the folder of the session now, and makes a new one first when the last run left a sign-out
+    /// unfinished. Nothing is deleted and nothing waits.
+    /// </summary>
+    /// <param name="lastSessionEnded">Whether the last run's session ended (its sign-out is being finished by this start).</param>
+    /// <returns>False only when a new folder was needed and could not be made; no web page is shown in this run then.</returns>
+    public bool Choose(bool lastSessionEnded)
     {
         lock (gate)
         {
@@ -179,8 +200,31 @@ public sealed class WebProfiles
                 return false;
             }
 
-            DeleteOthers(names, lastSessionEnded ? AtStart : LeftOver);
             return true;
+        }
+    }
+
+    /// <summary>
+    /// Deletes every thing in the web folder that is not the folder of the session now: the folders of sessions that ended, and what an earlier
+    /// build kept directly in it. A folder that cannot be deleted is left, said, never used, and tried again at the end of a session and at
+    /// the next start. It may run on any thread while web views run: nothing here keeps a web page waiting for its folder.
+    /// </summary>
+    /// <param name="limit">How long to keep trying to delete one folder that something still holds.</param>
+    public void Tidy(TimeSpan limit)
+    {
+        IReadOnlyList<string> names;
+        string mine;
+        lock (gate)
+        {
+            names = folders.Names(root);
+            mine = Name(current);
+        }
+
+        List<string> still = DeleteOthers(names, mine, limit);
+        lock (gate)
+        {
+            left.Clear();
+            left.AddRange(still);
         }
     }
 
@@ -231,11 +275,22 @@ public sealed class WebProfiles
     public bool Finish(string ended, bool taken)
     {
         ArgumentException.ThrowIfNullOrEmpty(ended);
+        IReadOnlyList<string> names;
+        string mine;
+        lock (gate)
+        {
+            names = folders.Names(root);
+            mine = Name(current);
+        }
+
+        // Not while the folder's name is held: deleting a profile takes as long as it takes, and a web page of whoever comes next that asks
+        // for its folder meanwhile is not kept waiting.
+        List<string> still = DeleteOthers(names, mine, LeftOver);
         lock (gate)
         {
             left.Clear();
-            DeleteOthers(folders.Names(root), LeftOver);
-            bool gone = !left.Contains(Path.GetFileName(ended), StringComparer.Ordinal);
+            left.AddRange(still);
+            bool gone = !still.Contains(Path.GetFileName(ended), StringComparer.Ordinal);
             if (!taken && !gone)
             {
                 refused = true;
@@ -248,10 +303,11 @@ public sealed class WebProfiles
         }
     }
 
-    // Deletes everything in the web folder that is not the folder of the session now; what stays is noted and said.
-    private void DeleteOthers(IReadOnlyList<string> names, TimeSpan limit)
+    // Deletes everything named that is not the folder of the session; what stays is said and given back. The names and the session's folder
+    // were read together, so a folder made after that (for whoever comes next, by a session that ended meanwhile) is not among them.
+    private List<string> DeleteOthers(IReadOnlyList<string> names, string mine, TimeSpan limit)
     {
-        string mine = Name(current);
+        List<string> still = [];
         foreach (string name in names)
         {
             if (string.Equals(name, mine, StringComparison.Ordinal))
@@ -261,10 +317,12 @@ public sealed class WebProfiles
 
             if (!folders.Delete(Path.Combine(root, name), limit))
             {
-                left.Add(name);
+                still.Add(name);
                 Say("an older folder of the web view could not be deleted yet (" + name + "): it is not used again, and is tried again later");
             }
         }
+
+        return still;
     }
 
     // Says it to whoever listens. What a listener throws changes nothing here: the folders are settled before anybody is told.

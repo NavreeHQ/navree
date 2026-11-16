@@ -61,15 +61,24 @@ public sealed partial class ShellHost : IDisposable
         // person who left is taken in. No web view runs yet, so the web view's folders can be deleted; one that cannot be is never used
         // again, because the session of this run keeps its web data in a folder of its own (WebProfiles).
         session = new SessionKeeper(kept, cookies);
-        webProfiles = new WebProfiles(options.WebFolder ?? WebData.DefaultFolder(options.AppName), say: Note);
+        webProfiles = new WebProfiles(options.WebFolder ?? WebData.DefaultFolder(options.AppName), say: what => dispatcher.TryEnqueue(() => Note(what)));
+        bool webNamed = true;
         FinishedSignOutAtStart = session.Open(() =>
         {
             Files.Clear();
-            return webProfiles.Open(lastSessionEnded: true);
+            return webNamed = webProfiles.Choose(lastSessionEnded: true);
         });
         if (!FinishedSignOutAtStart)
         {
-            _ = webProfiles.Open(lastSessionEnded: false);
+            webNamed = webProfiles.Choose(lastSessionEnded: false);
+        }
+
+        // Only naming the session's folder has to be done before a web view starts. The older folders are deleted off the window's thread: a
+        // profile of thousands of files, or one whose browser is still ending, would otherwise keep the window from showing.
+        if (webNamed)
+        {
+            TimeSpan each = FinishedSignOutAtStart ? WebProfiles.AtStart : WebProfiles.LeftOver;
+            _ = Task.Run(() => webProfiles.Tidy(each));
         }
 
         // The list of the files set aside was there and could not be trusted: nothing that was kept was read, and the start is clean.
@@ -648,7 +657,8 @@ public sealed partial class ShellHost : IDisposable
         }
         finally
         {
-            finished = webProfiles.Finish(ended, taken);
+            // Off the window's thread: deleting what is left of older folders takes as long as it takes, and the window is not kept waiting.
+            finished = await Task.Run(() => webProfiles.Finish(ended, taken));
         }
 
         if (!finished)

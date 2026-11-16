@@ -13,6 +13,12 @@ internal sealed class FakeWebFolders : IWebFolders
 
     internal List<string> Asked { get; } = [];
 
+    /// <summary>Done when a delete has begun.</summary>
+    internal TaskCompletionSource Deleting { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>When given, a delete waits for it: a folder that takes long to delete.</summary>
+    internal Task? Slow { get; set; }
+
     public IReadOnlyList<string> Names(string root) =>
         [.. There.Where(path => Path.GetDirectoryName(path) == root).Select(path => Path.GetFileName(path)).Order(StringComparer.Ordinal)];
 
@@ -35,6 +41,8 @@ internal sealed class FakeWebFolders : IWebFolders
     public bool Delete(string path, TimeSpan limit)
     {
         Asked.Add(path);
+        _ = Deleting.TrySetResult();
+        _ = Slow?.Wait(TimeSpan.FromSeconds(10));
         if (Held.Contains(path))
         {
             return false;
@@ -77,6 +85,74 @@ public sealed class WebProfilesTests
         Assert.IsFalse(profiles.Finish(ended, taken: true));
         Assert.IsFalse(disk.There.Contains(In("1")), "the folder of the person who left is still on disk though nothing held it");
         Assert.IsNull(profiles.Folder);
+    }
+
+    [TestMethod]
+    public void Naming_the_folder_at_a_start_deletes_nothing_and_the_older_folders_are_deleted_apart()
+    {
+        FakeWebFolders disk = new();
+        _ = disk.There.Add(In("3"));
+        _ = disk.There.Add(In("4"));
+        _ = disk.There.Add(In("EBWebView"));
+        WebProfiles profiles = new(Root, disk);
+
+        // Before any web view: the session's folder is named, and nothing waits on a delete.
+        Assert.IsTrue(profiles.Choose(lastSessionEnded: false));
+        Assert.AreEqual(In("4"), profiles.Folder);
+        Assert.AreEqual(0, disk.Asked.Count, "naming the folder deleted something: the window would wait for it");
+
+        // Then, wherever it is run: everything else goes, and the session's folder stays.
+        profiles.Tidy(WebProfiles.LeftOver);
+        CollectionAssert.AreEquivalent(new[] { In("4") }, disk.There.ToArray());
+
+        // A start that finishes a sign-out names a new folder, on disk, and deletes nothing in doing so.
+        FakeWebFolders after = new();
+        _ = after.There.Add(In("4"));
+        WebProfiles finishing = new(Root, after);
+        Assert.IsTrue(finishing.Choose(lastSessionEnded: true));
+        Assert.AreEqual(In("5"), finishing.Folder);
+        Expect.That(after.There.Contains(In("5")), "the new folder is not on disk: a later start would take the old one for the session's");
+        Assert.AreEqual(0, after.Asked.Count);
+        finishing.Tidy(WebProfiles.AtStart);
+        CollectionAssert.AreEquivalent(new[] { In("5") }, after.There.ToArray(), "the folder of the person who left is still on disk though nothing held it");
+    }
+
+    [TestMethod]
+    public async Task A_web_page_is_not_kept_waiting_for_its_folder_while_an_older_folder_is_being_deleted()
+    {
+        FakeWebFolders disk = new();
+        WebProfiles profiles = new(Root, disk);
+        Assert.IsTrue(profiles.Open(lastSessionEnded: false));
+        _ = disk.There.Add(In("1"));
+
+        // The person signs out. Their folder takes long to delete (a profile of thousands of files).
+        string ended = profiles.MoveOn();
+        TaskCompletionSource slow = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        disk.Slow = slow.Task;
+        Task<bool> finishing = Task.Run(() => profiles.Finish(ended, taken: true));
+        try
+        {
+            Expect.That(await Task.WhenAny(disk.Deleting.Task, Task.Delay(TimeSpan.FromSeconds(5))) == disk.Deleting.Task, "the folder of the person who left was never asked to be deleted");
+
+            // Whoever comes next opens a web page meanwhile: it is given its folder at once.
+            Task<string?> asking = Task.Run(() => profiles.Folder);
+            Expect.That(await Task.WhenAny(asking, Task.Delay(TimeSpan.FromSeconds(2))) == asking, "a web page waits for its folder until an older folder has been deleted");
+            Assert.AreEqual(In("2"), await asking);
+
+            // And they sign out in their turn while the delete is still running: the folder moves on at once too.
+            Task<string> moving = Task.Run(() => profiles.MoveOn());
+            Expect.That(await Task.WhenAny(moving, Task.Delay(TimeSpan.FromSeconds(2))) == moving, "the end of a session waits until an older folder has been deleted");
+            Assert.AreEqual(In("2"), await moving);
+            Assert.AreEqual(In("3"), profiles.Folder);
+        }
+        finally
+        {
+            _ = slow.TrySetResult();
+        }
+
+        Assert.IsTrue(await finishing.WaitAsync(TimeSpan.FromSeconds(5)));
+        Expect.That(!disk.There.Contains(In("1")), "the folder of the person who left is still on disk");
+        Expect.That(disk.There.Contains(In("3")), "the folder made for whoever comes next, while an older one was being deleted, was deleted with it");
     }
 
     [TestMethod]

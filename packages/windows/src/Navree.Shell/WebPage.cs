@@ -132,7 +132,9 @@ internal sealed class WebPage : Grid, ILiveWebView
         }
 
         Environments.Remove(folder);
-        return await WebData.DeleteAsync(folder, TimeSpan.FromSeconds(2));
+
+        // Off the window's thread: a profile is thousands of files.
+        return await Task.Run(() => WebData.DeleteAsync(folder, TimeSpan.FromSeconds(2)));
     }
 
     /// <inheritdoc />
