@@ -21,6 +21,13 @@ import { E, T, all, attr, body, byId, cookie, emit, every, fetchHere, fresh, has
 /** A UI extension's file: at the extension route, by namespace, name and content hash. */
 const FILE = /^\/_navree\/ui\/ext\/[a-z][a-z0-9_]{0,63}\.[a-z0-9-]{1,64}-[0-9a-f]{12}\.(js|css)$/;
 /**
+ * A route prefix as the server writes one: it starts and ends with `/`, has one segment or more, none empty,
+ * `.` or `..`, of lower-case letters, digits and `_ . -`, and is not under `/_navree/`. The server writes at
+ * most `PREFIXES` of them.
+ */
+const ROUTE = /^\/(?!_navree\/)((?!\.\.?\/)[a-z0-9_.-]+\/)+$/;
+const PREFIXES = 8;
+/**
  * The form a sealed field names. The page's first element with this id is one of the runtime's own, which is
  * no form, so a sealed field joins none, whatever form a library writes with the same id.
  */
@@ -139,12 +146,14 @@ function helpers(el, src, signal) {
    * The address `url` names, when this element's script may reach it: this origin, no user name or
    * password, and a path, as parsed, under one of the route prefixes the server wrote on the element, or
    * equal to one of its exact addresses. They are read from the element as the call is made; a string in
-   * the props opens nothing.
+   * the props opens nothing. Only what the server can write counts: a prefix outside its rules is none, and
+   * an element that names more prefixes than it writes reaches none of them.
    * @param {string} url
    */
   const allowed = (url) => {
     const to = new URL(url, location.href), path = to.pathname;
-    if (to.origin === location.origin && !to.username && !to.password && (attr(el, "data-ui-ext-routes") || "").split(" ").some((r) => (r[0] === "=" ? r.slice(1) === path : r[0] === "/" && path.startsWith(r)))) return to.href;
+    const routes = (attr(el, "data-ui-ext-routes") || "").split(" "), prefixes = routes.filter((r) => r && r[0] !== "=");
+    if (to.origin === location.origin && !to.username && !to.password && routes.some((r) => (r[0] === "=" ? r.slice(1) === path : prefixes.length <= PREFIXES && ROUTE.test(r) && path.startsWith(r)))) return to.href;
     throw new TypeError("not a route of this extension");
   };
   /** @param {string} tone @param {string} text */

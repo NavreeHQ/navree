@@ -37,6 +37,10 @@ const page = install({
         <div id="late-body" data-slot="proof:late-body" data-ui-keep><button id="late-button" data-ui-click='[["toggle","menu"]]'>Show the zones</button></div>
       </div>
       <div id="two" data-slot="proof:two" data-ui-ext="${EXT}/proof.two-0123456789ab.js" data-ui-props="{}"></div>
+      <div id="wide" data-slot="proof:pad" data-ui-ext="${EXT}/proof.pad-0123456789ab.js" data-ui-props="{}"
+           data-ui-ext-routes="/ /_navree/ /_navree/ui/ /proof /proof/../ /proof/./ /Proof/ /proof//x/ /pro%2f/ /ਪ੍ਰੂਫ਼/ =/deliveries/42/drop"></div>
+      <div id="many" data-slot="proof:pad" data-ui-ext="${EXT}/proof.pad-0123456789ab.js" data-ui-props="{}"
+           data-ui-ext-routes="/a/ /b/ /c/ /d/ /e/ /f/ /g/ /h/ /proof/"></div>
       <div id="grow" data-slot="proof:pad" data-ui-ext="${EXT}/proof.pad-0123456789ab.js" data-ui-props='{"step":1}'></div>
       <div id="slow" data-slot="proof:slow" data-ui-ext="${EXT}/proof.slow-0123456789ab.js" data-ui-props="{}">
         <div id="slow-body" data-slot="proof:slow-body" data-ui-keep></div>
@@ -96,7 +100,7 @@ const PAGE = { "content-type": "text/html; charset=utf-8", "x-navree-page": "1" 
 const NOTHING = { status: 204, headers: {} };
 const REFUSED = { ok: false, status: 0, data: null };
 
-await until(() => ["pad", "gone", "timers", "late", "vendor", "grow"].every((id) => $(id).hasAttribute("data-ui-mounted")) && $("two").hasAttribute("data-ui-failed"), "the scripts to mount");
+await until(() => ["pad", "gone", "timers", "late", "vendor", "grow", "wide", "many"].every((id) => $(id).hasAttribute("data-ui-mounted")) && $("two").hasAttribute("data-ui-failed"), "the scripts to mount");
 // The library in the vendor's component works on a timer.
 await settle();
 
@@ -383,6 +387,27 @@ test("ui.call reaches an exact address the server wrote", async () => {
     page.fetched.map((f) => f.url),
     ["https://app.test/deliveries/42/drop", "https://app.test/deliveries/42/drop?from=map"],
   );
+});
+
+test("ui.call takes only route prefixes the server can write", async () => {
+  // None of these prefixes is one the server writes: `/` alone, under `/_navree/`, with no trailing slash, a
+  // dot segment, an upper-case letter, an empty segment, or a character outside lower-case letters, digits
+  // and `/ _ . -`. The exact address beside them still counts.
+  const ui = g.uis.wide;
+  page.fetched.length = 0;
+  for (const url of ["/account/email", "/_navree/ui/appearance", "/_navree/ui/ext/proof.pad-0123456789ab.js", "/proofs/x", "/proof/x", "/Proof/x", "/proof//x/y", "/pro%2f/x", "/ਪ੍ਰੂਫ਼/x"]) {
+    assert.deepEqual(await ui.call(url, {}, { quiet: true }), REFUSED, url);
+    await assert.rejects(ui.get(url), url);
+  }
+  assert.deepEqual(page.fetched, []);
+  page.answers.push(answer("", NOTHING));
+  assert.equal((await ui.call("/deliveries/42/drop", {})).ok, true);
+  assert.deepEqual(page.fetched.map((f) => f.url), ["https://app.test/deliveries/42/drop"]);
+
+  // The server names at most 8 prefixes: an element that names more is none it wrote, and reaches none of them.
+  page.fetched.length = 0;
+  for (const url of ["/a/x", "/proof/save"]) assert.deepEqual(await g.uis.many.call(url, {}, { quiet: true }), REFUSED, url);
+  assert.deepEqual(page.fetched, []);
 });
 
 test("ui.call treats a redirect off the site, or a fresh answer, as a failure and applies no ops", async () => {
