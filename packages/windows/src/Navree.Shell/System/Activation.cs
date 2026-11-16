@@ -30,7 +30,10 @@ public static class Activation
     /// </summary>
     /// <param name="key">The key of the app's one instance.</param>
     /// <param name="ownScheme">The app's own scheme, or null.</param>
-    /// <param name="single">Whether a second start is handed to the first; false lets every start run.</param>
+    /// <param name="single">
+    /// Whether a second start is handed to the first; false lets every start run, which is for walks that run several at once and not for an
+    /// app: two running apps share what is kept and the web view's folder, and a sign-out in one does not reach the other.
+    /// </param>
     /// <returns>Whether this start goes on.</returns>
     public static bool Claim(string key, string? ownScheme, bool single = true)
     {

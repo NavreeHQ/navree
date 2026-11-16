@@ -36,6 +36,7 @@ public sealed record ShellOptions
     /// <summary>
     /// Where the web views keep what a web page leaves (cookies, storage, cache); the app's folder under the local application data when left
     /// out. Each session keeps it in a folder of its own inside this one, which is never used for another session; signing out takes it away.
+    /// The folder has to be the web view's alone: everything else in it is deleted at every start and at every sign-out.
     /// </summary>
     public string? WebFolder { get; init; }
 
