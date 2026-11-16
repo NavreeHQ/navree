@@ -173,7 +173,10 @@ mod navree_plugin_announcements {
 
     impl Module for NoticeSubjects {
         fn register(&self, m: &mut ModuleBuilder) {
-            m.plugin(super::plugin("navree-plugin-announcements", "announcements"));
+            m.plugin(super::plugin(
+                "navree-plugin-announcements",
+                "announcements",
+            ));
             (self.0)(m);
         }
     }
@@ -184,9 +187,12 @@ mod navree_plugin_announcements {
 
     impl<P: Policy> Module for PolicyModule<P> {
         fn register(&self, m: &mut ModuleBuilder) {
-            m.plugin(super::plugin("navree-plugin-announcements", "announcements"))
-                .import(AccessModule::for_subject::<Announcement>())
-                .import(AccessModule::for_policy::<P>());
+            m.plugin(super::plugin(
+                "navree-plugin-announcements",
+                "announcements",
+            ))
+            .import(AccessModule::for_subject::<Announcement>())
+            .import(AccessModule::for_policy::<P>());
         }
     }
 
@@ -672,13 +678,16 @@ async fn a_plugin_subject_with_a_permission_prefix_outside_its_namespace_fails_t
         .expect("a subject of the app boots");
 }
 
+/// How a case of the test below registers its subject.
+type Register = fn(&mut ModuleBuilder);
+
 #[tokio::test(flavor = "current_thread")]
 async fn a_plugin_subject_outside_its_namespace_fails_the_boot() {
     let warnings = Warnings::default();
     let _guard = warnings.install();
     // Each beside the support app, whose `GET /reports/sales` asks for `reports.view`, a
     // permission no subject maps: a plugin's subject `reports` would be what it checks.
-    let cases: [(fn(&mut ModuleBuilder), &str, &str); 3] = [
+    let cases: [(Register, &str, &str); 3] = [
         (subject_of::<Unnamed>, "Announcement", "Unnamed"),
         (subject_of::<Everything>, "all", "Everything"),
         (
@@ -730,7 +739,9 @@ async fn the_app_may_register_a_plugins_subject() {
     let _guard = warnings.install();
     // The app registers the plugin's subject `reports` from its own root: its own line.
     let app = builder()
-        .module(AccessModule::for_subject::<navree_plugin_announcements::Reports>())
+        .module(AccessModule::for_subject::<
+            navree_plugin_announcements::Reports,
+        >())
         .module(ANNOUNCEMENTS)
         .try_build()
         .await
@@ -829,7 +840,10 @@ async fn a_plugin_policy_on_all_fails_the_boot() {
         "{error}"
     );
     // `all` is no subject the app could apply it to.
-    assert!(!error.contains("register it from a module of the app"), "{error}");
+    assert!(
+        !error.contains("register it from a module of the app"),
+        "{error}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
