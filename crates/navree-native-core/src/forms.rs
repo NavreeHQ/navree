@@ -1349,14 +1349,14 @@ impl Core {
         let mut told = false;
         // Whether the answer left the screen as it was: ops that lead nowhere.
         let mut kept = false;
+        // Whether a write happened is decided once, from the answer's status,
+        // whom it names and its hop, whatever its body: what is kept can't be
+        // trusted after any write the server may have run.
+        if self.inner.write_may_have_run {
+            self.wrote(id);
+        }
         match answer {
             Answer::Failed(failure) => {
-                // The server may have written before the answer failed or
-                // was too large to read: what is kept can't be trusted. Not
-                // so when the request never left the device.
-                if self.inner.write_may_have_run {
-                    self.wrote(id);
-                }
                 // A write the server took is saved, even when what it
                 // answered with is too large to read: only the screen could
                 // not be brought up to date.
@@ -1369,17 +1369,9 @@ impl Core {
             }
             Answer::Left(url) => self.open_outside(&url, false, By::Answer("redirect")),
             Answer::Empty => {
-                if write {
-                    self.wrote(id);
-                }
                 kept = true;
             }
             Answer::Html { url } => {
-                // Decided from the status, whatever the body: a page that
-                // refuses a write for its size is no write.
-                if self.inner.write_may_have_run {
-                    self.wrote(id);
-                }
                 if alive && front {
                     let shown = crate::reduce::Shown::Web {
                         url: url.clone(),
@@ -1414,12 +1406,9 @@ impl Core {
                     return;
                 }
                 let worked = status < 400;
-                if write && worked {
-                    self.wrote(id);
-                    // A screen with no chrome is a sign-in or the like: who is signed in may have changed.
-                    if !chrome {
-                        self.fetch_shell();
-                    }
+                // A screen with no chrome is a sign-in or the like: who is signed in may have changed.
+                if write && worked && !chrome {
+                    self.fetch_shell();
                 }
                 let reload = read.reload;
                 let shown = self.shown(&url, status, &mut read, body);
