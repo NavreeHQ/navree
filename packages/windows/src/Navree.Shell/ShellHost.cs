@@ -62,7 +62,7 @@ public sealed partial class ShellHost : IDisposable
             return WebData.DeleteAsync(webFolder, TimeSpan.FromSeconds(3)).GetAwaiter().GetResult();
         });
 
-        client = new CoreClient(ClientEnvironment.Config(options), OnUpdate, OnProblem);
+        client = new CoreClient(ClientEnvironment.Config(options), OnUpdate, OnProblem, () => dispatcher.TryEnqueue(NoteStop));
 
         // What the system says is told to the core when it changes, not only when the core is made.
         environment = new EnvironmentWatcher(
@@ -216,12 +216,7 @@ public sealed partial class ShellHost : IDisposable
     /// <param name="what">What went wrong, by its kind: never the server's words or a person's.</param>
     internal void ReportProblem(string what) => dispatcher.TryEnqueue(() => Problem?.Invoke(what));
 
-    private void OnProblem(string what) =>
-        dispatcher.TryEnqueue(() =>
-        {
-            Problem?.Invoke(what);
-            NoteStop(what);
-        });
+    private void OnProblem(string what) => dispatcher.TryEnqueue(() => Problem?.Invoke(what));
 
     // On the core's thread: the state is handed to the UI thread, and then each effect, in order.
     // A window that cannot show the state, or an effect that fails, does not cost the rest of the update.

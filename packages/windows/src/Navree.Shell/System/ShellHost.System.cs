@@ -27,9 +27,18 @@ public sealed partial class ShellHost
     /// <summary>Whether the core has said it stopped.</summary>
     public bool HasStopped => coreStopped;
 
-    /// <summary>Tells the host a problem the core's answer was found to say, as the core's own thread does; a stop is offered to the person.</summary>
-    /// <param name="what">The problem, in the client's words.</param>
-    public void ReportCoreProblem(string what) => OnProblem(what);
+    /// <summary>
+    /// Tells the host an answer of the core, as the core's own thread reads one: when it says the core has stopped
+    /// (<see cref="CoreAnswers.IsStop(string)"/>), the person is told the app must be started again and offered it.
+    /// </summary>
+    /// <param name="answer">The core's answer, as JSON.</param>
+    public void ReportCoreAnswer(string answer)
+    {
+        if (CoreAnswers.IsStop(answer))
+        {
+            _ = dispatcher.TryEnqueue(NoteStop);
+        }
+    }
 
     /// <summary>What was kept under a key for the next launch, or null.</summary>
     /// <param name="key">The key.</param>
@@ -282,9 +291,9 @@ public sealed partial class ShellHost
     }
 
     // Offered to the person once: the core has stopped and nothing it held can be used again.
-    private void NoteStop(string what)
+    private void NoteStop()
     {
-        if (coreStopped || !CoreFault.IsStop(what))
+        if (coreStopped)
         {
             return;
         }

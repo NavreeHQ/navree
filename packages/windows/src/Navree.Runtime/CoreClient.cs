@@ -45,12 +45,17 @@ public sealed class CoreClient : IDisposable
     /// It must not block: an effect that takes time is started, and what comes of it is sent as a later event.
     /// </param>
     /// <param name="onProblem">Called when the core or a part of its state does not read.</param>
-    public CoreClient(byte[] config, Action<Update> onUpdate, Action<string>? onProblem = null)
+    /// <param name="onStopped">
+    /// Called once, on the core's thread, when an answer says the core has stopped for good after a failure inside it
+    /// (<see cref="CoreAnswers.IsStop(JsonElement)"/>): the app must be started again.
+    /// </param>
+    public CoreClient(byte[] config, Action<Update> onUpdate, Action<string>? onProblem = null, Action? onStopped = null)
     {
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(onUpdate);
         this.onUpdate = onUpdate;
         this.onProblem = onProblem ?? (static _ => { });
+        this.onStopped = onStopped ?? (static () => { });
         thread = new Thread(() => Run(config), StackBytes) { IsBackground = true, Name = "Navree core" };
         thread.Start();
         started.Task.GetAwaiter().GetResult();
@@ -58,9 +63,14 @@ public sealed class CoreClient : IDisposable
 
     private readonly Action<Update> onUpdate;
     private readonly Action<string> onProblem;
+    private readonly Action onStopped;
+    private volatile bool hasStopped;
 
     /// <summary>The newest view state the core's thread finished. Safe to read from any thread.</summary>
     public ViewState State => published;
+
+    /// <summary>Whether an answer of the core has said it stopped for good. Safe to read from any thread.</summary>
+    public bool HasStopped => hasStopped;
 
     /// <summary>Tells the core one thing that happened, and returns at once.</summary>
     /// <param name="eventJson">The event, as <see cref="Events"/> writes it.</param>
@@ -155,7 +165,8 @@ public sealed class CoreClient : IDisposable
             JsonElement update = document.RootElement;
             if (update.ValueKind == JsonValueKind.Object && update.TryGetProperty("error", out JsonElement error))
             {
-                onProblem("the core refused an event: " + error.GetString());
+                onProblem("the core refused an event: " + (error.ValueKind == JsonValueKind.String ? error.GetString() : error.ToString()));
+                NoteStop(update);
                 return new Update(state, effects, answer);
             }
 
@@ -281,6 +292,14 @@ public sealed class CoreClient : IDisposable
                 return;
             }
 
+            // An answer that is an error is not a view state: the state stays as it was.
+            if (all.TryGetProperty("error", out _))
+            {
+                onProblem("the core refused the whole view");
+                NoteStop(all);
+                return;
+            }
+
             AppPart? app = Reading.TryField(all, "app", out JsonElement appPart) ? ViewReading.ReadApp(appPart) : null;
             NavPart nav = ViewReading.ReadNav(all);
             ImmutableDictionary<long, ScreenView>.Builder screens = ImmutableDictionary.CreateBuilder<long, ScreenView>();
@@ -306,6 +325,25 @@ public sealed class CoreClient : IDisposable
 
     private static string Part(string name) => "{\"part\":\"" + name + "\"}";
 
+    // Said once: the core has stopped for good.
+    private void NoteStop(JsonElement answer)
+    {
+        if (hasStopped || !CoreAnswers.IsStop(answer))
+        {
+            return;
+        }
+
+        hasStopped = true;
+        try
+        {
+            onStopped();
+        }
+        catch (Exception problem)
+        {
+            onProblem("the stop was not handled: " + problem.GetType().Name);
+        }
+    }
+
     // Reads one part: null when the core has none, or when it does not read.
     private T? Query<T>(string query, Func<JsonElement, T> read)
         where T : class
@@ -320,9 +358,13 @@ public sealed class CoreClient : IDisposable
                 return null;
             }
 
-            if (answer.ValueKind == JsonValueKind.Object && answer.TryGetProperty("error", out JsonElement error) && answer.EnumerateObject().Count() == 1)
+            // An error, with or without the mark of a stopped core beside it, is never read as a part.
+            if (answer.ValueKind == JsonValueKind.Object
+                && answer.TryGetProperty("error", out JsonElement error)
+                && answer.EnumerateObject().All(property => property.NameEquals("error") || property.NameEquals("stopped")))
             {
-                onProblem("the core refused a view: " + error.GetString());
+                onProblem("the core refused a view: " + (error.ValueKind == JsonValueKind.String ? error.GetString() : error.ToString()));
+                NoteStop(answer);
                 return null;
             }
 
@@ -390,6 +432,15 @@ public sealed class CoreClient : IDisposable
             {
                 byte[] bytes = client.core!.View("{\"part\":\"snapshot\"}"u8);
                 string text = Encoding.UTF8.GetString(bytes);
+                using JsonDocument document = Reading.Open(bytes);
+                if (document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty("error", out _))
+                {
+                    // An error is not a snapshot: nothing is kept.
+                    client.NoteStop(document.RootElement);
+                    done.SetResult(null);
+                    return;
+                }
+
                 done.SetResult(text == "null" ? null : text);
             }
             catch (Exception problem)

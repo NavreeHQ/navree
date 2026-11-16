@@ -170,7 +170,8 @@ internal sealed class SystemWalker(ShellHost host, ShellWindow window, SystemPla
 
             await Step("the offer to start again", async () =>
             {
-                host.ReportCoreProblem("the core stopped after an earlier failure");
+                // What a core answers once it has stopped, as today's core writes it (its words, with no mark).
+                host.ReportCoreAnswer("{\"error\":" + System.Text.Json.JsonSerializer.Serialize(CoreAnswers.StoppedWords) + "}");
                 await Task.Delay(1500);
                 await Content(prefix, "stopped");
             });

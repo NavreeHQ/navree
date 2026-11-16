@@ -171,15 +171,4 @@ public sealed class NotificationTests
         Assert.IsFalse(SnapshotRules.ShouldKeep("not json"));
         Assert.IsFalse(SnapshotRules.ShouldKeep("[1,2]"));
     }
-
-    [TestMethod]
-    public void OnlyTheCoresOwnWordsThatItStoppedAreAStop()
-    {
-        Assert.IsTrue(CoreFault.IsStop("the core refused an event: the core stopped after an earlier failure"));
-        Assert.IsTrue(CoreFault.IsStop("the core refused an event: the core failed on this event"));
-        Assert.IsTrue(CoreFault.IsStop("the core refused a view: the core failed on this query"));
-        Assert.IsFalse(CoreFault.IsStop("the core refused an event: the event does not read: expected value"));
-        Assert.IsFalse(CoreFault.IsStop("the core refused a view: no core"));
-        Assert.IsFalse(CoreFault.IsStop(null));
-    }
 }

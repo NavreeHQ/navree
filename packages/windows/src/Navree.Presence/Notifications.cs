@@ -301,18 +301,3 @@ public static class SnapshotRules
         }
     }
 }
-
-/// <summary>What the core says when it has stopped for good.</summary>
-public static class CoreFault
-{
-    /// <summary>
-    /// Whether a problem the client was told of is the core saying it stopped: a failure inside it stops it for good, and every
-    /// later call answers an error, so the app must be started again. A call whose input merely did not read is only an error: the core goes on.
-    /// </summary>
-    /// <param name="problem">The client's own words for what the core answered.</param>
-    /// <returns>Whether the core has stopped.</returns>
-    public static bool IsStop(string? problem) =>
-        problem is not null
-        && (problem.Contains("the core stopped after an earlier failure", StringComparison.Ordinal)
-            || problem.Contains("the core failed on this", StringComparison.Ordinal));
-}
