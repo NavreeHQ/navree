@@ -7,7 +7,8 @@
 //! any of them is a change to every app that sets nothing new, so each is held here.
 
 use navree_ui::theme::{
-    Corner, Corners, ImportError, Shape, Theme, ThemeId, builder_layer, token_layer,
+    Corner, Corners, ImportError, Inverse, Rgb, Roles, Shape, Theme, ThemeId, Token, builder_layer,
+    token_layer,
 };
 use navree_ui::{
     Badge, Button, ButtonVariant, Card, Input, NavGroup, NavItem, Shell, Stat, UserMenu, View, el,
@@ -318,4 +319,154 @@ fn every_corner_is_read_by_the_stylesheet_with_todays_corner_behind_it() {
     }
     // A checkbox keeps the control corner: a round box reads as a radio.
     assert!(css.contains("[data-slot=checkbox]{border-radius:var(--radius);"));
+}
+
+/// A light design's spec: Neutral, with a tinted sidebar (`ink-1`) under white cards.
+fn tinted() -> Theme {
+    let mut spec = *Theme::NEUTRAL.spec();
+    spec.light.set(Token::Ink1, Rgb::hex(0xfafaf9));
+    Theme::custom(ThemeId::parse("agra").unwrap(), "Agra", spec).unwrap()
+}
+
+/// White cards and fields, a ghost button in the text's colour, the sidebar's quieter text,
+/// and a near-black inverse surface with white text on a light page.
+fn design_roles() -> Roles {
+    Roles::new()
+        .card(Rgb::hex(0xffffff), Rgb::hex(0x121212))
+        .field(Rgb::hex(0xffffff), Rgb::hex(0x121212))
+        .ghost_text(Rgb::hex(0x0a0a0a), Rgb::hex(0xf2f2f2))
+        .shell_muted(Rgb::hex(0x5e5e5a), Rgb::hex(0xb7b7b2))
+        .inverse(
+            Inverse::new()
+                .surface(Rgb::hex(0x0a0a0a), Rgb::hex(0xffffff))
+                .raised(Rgb::hex(0x161615), Rgb::hex(0xf2f2f0))
+                .line(Rgb::hex(0x2a2a28), Rgb::hex(0xc4c4bf))
+                .text(Rgb::hex(0xffffff), Rgb::hex(0x0a0a0a))
+                .muted(Rgb::hex(0xb5b5b0), Rgb::hex(0x3d3d3a)),
+        )
+}
+
+#[test]
+fn roles_set_white_cards_on_a_tinted_sidebar_and_an_inverse_surface_whose_text_reads() {
+    let plain = tinted();
+    let theme = plain.clone().with_roles(design_roles()).unwrap();
+    assert_eq!(theme.spec(), plain.spec(), "the palettes are untouched");
+    assert_eq!(theme.roles(), &design_roles());
+    assert!(plain.roles().is_default() && Theme::NAVREE.roles().is_default());
+    let said = said(&theme);
+    for (name, value) in [
+        ("card", "light-dark(#ffffff,#121212)"),
+        ("field", "light-dark(#ffffff,#121212)"),
+        ("ghost-fg", "light-dark(#0a0a0a,#f2f2f2)"),
+        ("shell-muted", "light-dark(#5e5e5a,#b7b7b2)"),
+    ] {
+        assert!(
+            said.contains(&(name.to_owned(), value.to_owned())),
+            "{name}: {said:?}"
+        );
+    }
+    let css = theme.css().unwrap();
+    assert!(
+        css.contains(";--ink-1:light-dark(#fafaf9,"),
+        "the sidebar keeps its tint"
+    );
+    // The inverse surface is drawn on the other palette with the theme's colours in place:
+    // its scheme is flipped, so each colour is written in the other order.
+    let scope = css
+        .lines()
+        .find(|line| {
+            line.starts_with(&format!(
+                ":where([data-theme={}] [data-inverse]){{",
+                theme.key()
+            ))
+        })
+        .expect("the inverse surface's block");
+    for part in [
+        "--ink-1:light-dark(#ffffff,#0a0a0a)",
+        "--card:light-dark(#ffffff,#0a0a0a)",
+        "--fg:light-dark(#0a0a0a,#ffffff)",
+        "--fg-2:light-dark(#3d3d3a,#b5b5b0)",
+        "--line:light-dark(#c4c4bf,#2a2a28)",
+        "--accent:light-dark(#0a0a0a,#ffffff)",
+        "--accent-ink:light-dark(#ffffff,#0a0a0a)",
+    ] {
+        assert!(scope.contains(part), "{part}: {scope}");
+    }
+    // A part of the page drawn in another theme loses the roles too.
+    assert!(
+        css.lines().next().unwrap().contains("--card:initial"),
+        "{css:.200}"
+    );
+    // The short form, the stored theme and the Rust export carry them.
+    let back = Theme::from_short_form(theme.short_form()).unwrap();
+    assert_eq!(back.roles(), theme.roles());
+    assert_eq!(back.short_form(), theme.short_form());
+    assert!(theme.short_form().starts_with(plain.short_form()));
+    let stored = Theme::from_json(&theme.to_json()).unwrap();
+    assert_eq!((stored.roles(), stored.key()), (theme.roles(), theme.key()));
+    let rust = theme.to_rust("navree::ui");
+    assert!(
+        rust.contains("Inverse, Palette, Radius, Rgb, Roles, Theme"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains(".card(rgb(0xffffff), rgb(0x121212))"),
+        "{rust}"
+    );
+    assert!(rust.contains(".inverse(Inverse::new()"), "{rust}");
+    assert!(rust.contains("        .with_roles(roles)\n"), "{rust}");
+    assert_eq!(
+        theme
+            .renamed(ThemeId::parse("kesar").unwrap(), "Kesar")
+            .roles(),
+        theme.roles()
+    );
+    // A shape and roles go together.
+    let both = theme.with_shape(every_corner()).unwrap();
+    assert_eq!(
+        (both.roles(), both.shape()),
+        (&design_roles(), &every_corner())
+    );
+    let back = Theme::from_short_form(both.short_form()).unwrap();
+    assert_eq!((back.roles(), back.shape()), (both.roles(), both.shape()));
+}
+
+#[test]
+fn a_role_whose_text_falls_short_is_refused_in_light_and_in_dark() {
+    let refused = |roles: Roles| match tinted().with_roles(roles) {
+        Err(ImportError::Fields(fields)) => fields,
+        other => panic!("{other:?}"),
+    };
+    // Cards too dark for the light palette's hints.
+    let fields = refused(Roles::new().card(Rgb::hex(0xa0a0a0), Rgb::hex(0x121212)));
+    assert!(
+        fields.iter().any(|(at, what)| at == "card"
+            && what.contains(" on card is ")
+            && what.contains(" in light;")),
+        "{fields:?}"
+    );
+    // A ghost button too dim to read on a dark page.
+    let fields = refused(Roles::new().ghost_text(Rgb::hex(0x0a0a0a), Rgb::hex(0x404040)));
+    assert!(
+        fields
+            .iter()
+            .any(|(at, what)| at == "ghost-fg" && what.contains(" in dark;")),
+        "{fields:?}"
+    );
+    // Text on the inverse surface that doesn't read, on a dark page.
+    let fields = refused(
+        Roles::new().inverse(
+            Inverse::new()
+                .surface(Rgb::hex(0x0a0a0a), Rgb::hex(0xffffff))
+                .text(Rgb::hex(0xffffff), Rgb::hex(0xdddddd)),
+        ),
+    );
+    assert!(
+        fields.iter().any(|(at, what)| at == "inverse-fg"
+            && what.starts_with("inverse-fg on inverse is ")
+            && what.contains(" in dark, on the inverse surface;")),
+        "{fields:?}"
+    );
+    // A built-in theme ships as it is.
+    assert!(Theme::NEUTRAL.with_roles(design_roles()).is_err());
 }

@@ -27,6 +27,24 @@ every `@navree/*` package carries the same version.
   test. `Theme::with_shape` and `Theme::shape` are new inherent methods: an app whose own
   extension trait gives `Theme` a method of either name calls it through the trait
   (`MyExt::shape(&theme)`).
+- A theme of your own can give colours of their own to things one token paints today:
+  `Roles`, given with `Theme::with_roles` and read back with `Theme::roles`, each in light and
+  in dark. `card` paints cards, stats, tables, dialogs, popovers and menus and `field` paints
+  inputs, selects and checkboxes, so they can be white while the sidebar and a table's header
+  keep `ink-1`; `ghost_text`, `shell_muted`, `segment_track`, `segment_on` and `selected_row`
+  paint a ghost button's text, the sidebar's quieter text, segmented tabs and a selected row.
+  Each is a custom property (`--card`, `--field`, `--ghost-fg`, `--shell-muted`,
+  `--segment-track`, `--segment-on`, `--row-selected`) that the stylesheet reads with its token
+  behind it. A part marked `data-inverse` is the inverse surface: the stylesheet flips its
+  colour scheme, so it is drawn on the theme's other palette and any component in it reads,
+  and `Roles::inverse` with `Inverse` sets its surface, raised panels, lines, text and muted
+  text to colours of its own. `with_roles` measures every text pair a role's token draws again
+  with the role in its place, beside each other role that can sit with it, and the inverse
+  surface as a palette of its own, in light and in dark, and refuses one that falls short of
+  WCAG AA, naming the role, the pair and its ratio. The short form, stored theme and Rust
+  export carry the roles; a theme without them, and every built-in theme, is written and drawn
+  as before. `Theme::with_roles` and `Theme::roles` are new inherent methods: an app whose own
+  extension trait gives `Theme` a method of either name calls it through the trait.
 
 ## [1.7.0] - 2026-11-27
 

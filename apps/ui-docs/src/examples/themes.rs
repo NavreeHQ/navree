@@ -1,7 +1,8 @@
 //! Themes, modes, the theme menu, the shell's layouts and the theme builder.
 
 use navree::ui::theme::{
-    Appearance, BuilderDraft, Corner, Corners, Mode, Shape, Theme, ThemeBuilder, ThemeId, ThemeMenu,
+    Appearance, BuilderDraft, Corner, Corners, Mode, Rgb, Roles, Shape, Theme, ThemeBuilder,
+    ThemeId, ThemeMenu,
 };
 use navree::ui::*;
 
@@ -178,7 +179,8 @@ fn shell_header() -> AppPage {
 }
 
 /// Ocean with a shape of its own: pill buttons, badges, toggles and avatars, 12 px fields,
-/// panels and popups, 10 px rows and 16 px cards.
+/// panels and popups, 10 px rows and 16 px cards; and white cards and fields beside its
+/// tinted sidebar.
 fn shaped_theme() -> Theme {
     let shape = Shape::new().corners(
         Corners::new()
@@ -192,9 +194,13 @@ fn shaped_theme() -> Theme {
             .panel(Corner::Px(12))
             .overlay(Corner::Px(12)),
     );
+    let roles = Roles::new()
+        .card(Rgb::hex(0xffffff), Rgb::hex(0x0a0d12))
+        .field(Rgb::hex(0xffffff), Rgb::hex(0x0a0d12));
     Theme::OCEAN
         .renamed(ThemeId::parse("rounded").unwrap(), "Rounded")
         .with_shape(shape)
+        .and_then(|theme| theme.with_roles(roles))
         .unwrap()
 }
 

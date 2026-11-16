@@ -79,6 +79,7 @@ pub const FILES: &[&str] = &[
     "op.rs",
     "theme/mod.rs",
     "theme/shape.rs",
+    "theme/roles.rs",
     "theme/colour.rs",
     "theme/appearance.rs",
     "theme/menu.rs",

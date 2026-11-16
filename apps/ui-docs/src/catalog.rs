@@ -1006,6 +1006,8 @@ pub const COMPONENTS: &[Component] = &[
             "Shape",
             "Corners",
             "Corner",
+            "Roles",
+            "Inverse",
             "Appearance",
             "Mode",
             "ThemeSetting",

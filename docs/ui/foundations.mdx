@@ -23,6 +23,8 @@ Every token has a light value and a dark one, and a page shows one or the other 
 | `violet`, `cyan`, `rose` | Tones for labels |
 | `chart-1` to `chart-8`, `bar` | Chart series, in the order series take them, and neutral bars |
 
+A theme of your own can give some of what one token paints a colour of its own, with its [colour roles](/docs/ui/themes/#colour-roles): cards and fields apart from the sidebar (`--card`, `--field`, behind which stays `ink-1`), a ghost button's text (`--ghost-fg`), the sidebar's quieter text (`--shell-muted`), segmented tabs (`--segment-track`, `--segment-on`) and a selected row (`--row-selected`). Each is checked as the token it stands in for. A part marked as the inverse surface is drawn on the theme's other palette: a dark card on a light page.
+
 - **Green is for one thing at a time:** the primary action of a view, the focus ring, and good news (a won deal, a rising figure). Navigation, selection and hover use the ink steps, never green.
 - **Amber warns, red fails or destroys.** A destructive button and a failed alert are red; a warning is amber.
 - **Contrast is tested.** Every text and background pair the toolkit uses reaches 4.5:1 in both modes of every built-in theme, and the focus ring and chart colours reach 3:1, checked by a test in the crate and measured again in real browsers. The chart colours are also measured as a set: each stays apart from the next for readers with protanopia or deuteranopia and for everyone else, sits in one band of lightness, and has enough colour not to read as grey.

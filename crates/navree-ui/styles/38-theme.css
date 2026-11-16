@@ -4,6 +4,12 @@
  */
 /* A part of a page drawn in another theme: its text and face are the theme's, not inherited. */
 :where([data-theme][data-mode]){color:var(--fg-1);font-family:var(--font-sans)}
+/* The inverse surface: a part drawn on the theme's other palette, a dark card on a light page. Its scheme
+   is flipped, so every token in it reads its other value and the parts inside read with no work of their
+   own; a theme's own inverse colours are set on it by the theme's sheet. */
+:where([data-inverse]){color-scheme:light;color:var(--fg-1)}
+:where([data-mode=light] [data-inverse]){color-scheme:dark}
+@media (prefers-color-scheme:light){:where([data-mode=system] [data-inverse]){color-scheme:dark}}
 /* What only works with no script: the menu's Apply, the builder's Preview. */
 html[data-ui-js] [data-theme-apply]{display:none}
 [data-slot=theme-card-input],[data-slot=theme-mode-input],[data-slot=theme-choice-input]{position:absolute;width:1px;height:1px;margin:0;opacity:0;pointer-events:none}

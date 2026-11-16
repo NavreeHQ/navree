@@ -5,8 +5,9 @@
 //! list. The built-in themes are written into the toolkit's stylesheet; a
 //! theme of your own is served as a small stylesheet of its own, at a URL that
 //! is the theme itself, so it costs no storage and is cached for good. A theme
-//! of your own can say more than its spec with a [`Shape`]: the corners of each
-//! kind of part.
+//! of your own can say more than its spec with a [`Shape`] (the corners of each
+//! kind of part) and [`Roles`] (colours for what one token paints today, and the
+//! inverse surface).
 //!
 //! An [`Appearance`] is a theme and a [`Mode`] (light, dark or the device's
 //! choice). The server writes it on `<html>` and links the theme's stylesheet
@@ -35,6 +36,7 @@ mod colour;
 mod css;
 mod menu;
 mod pairs;
+mod roles;
 mod shape;
 
 use std::sync::{Arc, LazyLock};
@@ -48,6 +50,7 @@ pub use colour::{ColourError, Rgb};
 pub use css::{builder_layer, token_layer};
 pub use menu::ThemeMenu;
 pub use pairs::{Paint, Pair, PairKind, SURFACES, TONES, pairs};
+pub use roles::{Inverse, Roles};
 pub use shape::{Corner, Corners, Shape};
 
 pub(crate) use appearance::{read_setting, respond_setting};
@@ -732,8 +735,9 @@ pub struct Shortfall {
 }
 
 /// A theme: an id, a name and a [`ThemeSpec`]. The built-in ones are
-/// associated constants; [`Theme::custom`] makes your own, and
-/// [`with_shape`](Self::with_shape) gives it a [`Shape`].
+/// associated constants; [`Theme::custom`] makes your own,
+/// [`with_shape`](Self::with_shape) gives it a [`Shape`] and
+/// [`with_roles`](Self::with_roles) its [`Roles`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Theme(Repr);
 
@@ -762,12 +766,15 @@ struct Custom {
 pub(crate) struct Extras {
     /// The corners of each kind of part.
     pub(crate) shape: Shape,
+    /// Colours for what one token paints today, and the inverse surface.
+    pub(crate) roles: Roles,
 }
 
 impl Extras {
     /// What every built-in theme says: nothing.
     pub(crate) const NONE: Self = Self {
         shape: Shape::new(),
+        roles: Roles::new(),
     };
 }
 
@@ -848,7 +855,39 @@ impl Theme {
             return Err(ImportError::Fields(errors));
         }
         let custom = self.mine()?;
-        let extras = Extras { shape };
+        let extras = Extras {
+            shape,
+            ..custom.extras
+        };
+        Ok(Self::unchecked_with(
+            custom.id.clone(),
+            custom.name.clone(),
+            custom.spec,
+            extras,
+        ))
+    }
+
+    /// This theme with `roles`: colours for what one token paints today (cards apart from
+    /// the sidebar, fields, a ghost button's text, the sidebar's quieter text, segmented
+    /// tabs, a selected row) and the inverse surface. Refused for a built-in theme, which
+    /// ships as it is (make it yours first with [`renamed`](Self::renamed)), and when any
+    /// text pair a role draws falls short of WCAG AA in either palette: each such pair is
+    /// named under its role, with its ratio, as [`ImportError::Fields`].
+    ///
+    /// A role is checked as the token it stands in for: every text pair drawn with the token
+    /// is measured again with the role in its place, beside each other role that can sit
+    /// with it. The inverse surface is checked as a palette of its own: the theme's other
+    /// palette with the surface's colours in place.
+    pub fn with_roles(self, roles: Roles) -> Result<Self, ImportError> {
+        let custom = self.mine()?;
+        let errors = roles.errors(&custom.spec);
+        if !errors.is_empty() {
+            return Err(ImportError::Fields(errors));
+        }
+        let extras = Extras {
+            roles,
+            ..custom.extras
+        };
         Ok(Self::unchecked_with(
             custom.id.clone(),
             custom.name.clone(),
@@ -881,6 +920,11 @@ impl Theme {
     /// [`with_shape`](Self::with_shape) gave it one.
     pub fn shape(&self) -> &Shape {
         &self.extras().shape
+    }
+
+    /// Its [`Roles`]: none set, unless [`with_roles`](Self::with_roles) gave it some.
+    pub fn roles(&self) -> &Roles {
+        &self.extras().roles
     }
 
     /// The built-in theme with the id `id`.
@@ -979,7 +1023,7 @@ impl Theme {
 
     /// This theme with `extras`, each part checked as its own method checks it.
     pub(crate) fn with_extras(self, extras: Extras) -> Result<Self, ImportError> {
-        self.with_shape(extras.shape)
+        self.with_shape(extras.shape)?.with_roles(extras.roles)
     }
 
     /// The same look under another id and name: its spec, and what it says beyond.

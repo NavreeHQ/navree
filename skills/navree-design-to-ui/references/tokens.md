@@ -48,6 +48,9 @@ theme sets the same tokens to other values.
 | `radius` | `4px` | `4px` | controls: buttons, inputs, badges |
 | `radius-lg` | `6px` | `6px` | surfaces: cards, dialogs, tables |
 | `radius-button` to `radius-overlay` | unset | unset | a kind of part's own corner, from a theme's shape (below) |
+| `card`, `field` | unset (`ink-1`) | unset (`ink-1`) | cards and fields apart from the sidebar: a theme's roles (below) |
+| `ghost-fg`, `shell-muted` | unset (`fg-2`, `fg-3`) | unset | a ghost button's text; the sidebar's quieter text |
+| `segment-track`, `segment-on`, `row-selected` | unset (`ink-2`, `ink-3`) | unset | segmented tabs' track and chosen tab; a selected row |
 | `sidebar-w` | `16rem` | `16rem` | the open sidebar |
 | `sidebar-w-icon` | `3rem` | `3rem` | the sidebar as icons |
 | `topbar-h` | `3rem` | `3rem` | the top bar |
@@ -88,6 +91,9 @@ Group the values by role, then give each role its Navree token:
 |---|---|
 | page background | `ink-0` |
 | card, panel, sidebar | `ink-1` |
+| cards and inputs apart from the sidebar (white cards on an off-white sidebar) | `card`, `field`: a theme's `Roles`; the sidebar and a table's header keep `ink-1` |
+| a dark card, band, code panel or side panel on a light page (or the other way) | the inverse surface: `Inverse` in a theme's `Roles` |
+| a ghost or icon button's text, the sidebar's secondary lines, a segment's track and chosen tab, a selected row | `ghost-fg`, `shell-muted`, `segment-track`, `segment-on`, `row-selected`: a theme's `Roles` |
 | hover, raised | `ink-2` |
 | selected, pressed | `ink-3` |
 | borders, dividers, input outlines | `line`, `line-2`, `line-3` |
@@ -115,11 +121,15 @@ For each `DT-` row, write one of:
   theme of the app's own (below).
 - **Gap:** a role a theme cannot hold: a gradient, a font outside the list
   (Geist and the System, Humanist, Geometric and Serif stacks), a colour
-  token the table does not have. It goes to `GAPS.md`.
-- **Theme:** a corner other than 4 or 6 px, a pill, a 16 px card. A theme
-  of the app's own holds it: its shape's `Corners` sets a corner for each
-  kind of part, from 0 to 32 px or a pill (`Corner::Px(16)`,
-  `Corner::Pill`). Record it as a mapping to the theme's value.
+  for a thing neither a token nor a role paints. It goes to `GAPS.md`.
+- **Theme:** a corner other than 4 or 6 px, a pill, a 16 px card, white
+  cards beside an off-white sidebar, a dark card on a light page. A theme of
+  the app's own holds it: its shape's `Corners` sets a corner for each kind
+  of part, from 0 to 32 px or a pill (`Corner::Px(16)`, `Corner::Pill`), and
+  its `Roles` a colour for cards, fields and the other things one token
+  paints, and the inverse surface. Record it as a mapping to the theme's
+  value. `with_roles` refuses a role whose text fails WCAG AA, as the
+  palette's own check does.
 - **Refused:** a value that breaks the app rules: glow or other shadows on
   surfaces, letter tiles. It becomes a deviation with the Navree form, for
   the owner to approve.

@@ -218,7 +218,7 @@ pub(crate) fn sheet(theme: &Theme) -> String {
     let mut out = String::with_capacity(4096);
     let key = theme.key();
     let extras = theme.extras();
-    let mut names = extras.shape.names().peekable();
+    let mut names = extras.shape.names().chain(extras.roles.names()).peekable();
     if names.peek().is_some() {
         let _ = write!(out, ":where([data-theme={key}] [data-theme]){{");
         for (at, name) in names.enumerate() {
@@ -227,6 +227,7 @@ pub(crate) fn sheet(theme: &Theme) -> String {
         out.push_str("}\n");
     }
     theme_rules(&mut out, key, theme.spec(), None, extras);
+    extras.roles.inverse_css(key, theme.spec(), &mut out);
     out
 }
 
@@ -244,6 +245,7 @@ fn theme_rules(
     colours(out, spec, base);
     corners_and_font(out, spec, base);
     extras.shape.css(out);
+    extras.roles.css(out);
     if base.is_none_or(|base| {
         base.light.hover_mix() != spec.light.hover_mix()
             || base.dark.hover_mix() != spec.dark.hover_mix()
@@ -395,6 +397,9 @@ pub(crate) fn sheet_build() -> &'static str {
                         .button(super::Corner::Pill)
                         .card(super::Corner::Px(16)),
                 ),
+                roles: super::Roles::new()
+                    .card(Rgb::WHITE, Rgb::BLACK)
+                    .inverse(super::Inverse::new().surface(Rgb::BLACK, Rgb::WHITE)),
             },
         );
         let mut text = String::from(crate::assets::BUILD);

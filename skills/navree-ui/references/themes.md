@@ -49,6 +49,14 @@ pub fn themed_shell() -> Shell {
   `overlay`. A part it doesn't set keeps the spec's `Radius`. Never write a
   stylesheet that restyles a component: a value the design needs goes in
   the theme.
+- Colours beyond the 31 tokens are `Roles`, given with
+  `theme.with_roles(roles)`, each in light then dark: `card` and `field`
+  (white cards and inputs beside an off-white sidebar, which keeps
+  `ink-1`), `ghost_text`, `shell_muted`, `segment_track`, `segment_on`,
+  `selected_row`, and `inverse(Inverse::new().surface(..).raised(..)
+  .line(..).text(..).muted(..))`, the colours of the inverse surface: a
+  part drawn on the theme's other palette, such as a dark card on a light
+  page. A role whose text fails WCAG AA is refused, in light or in dark.
 
 ```rust
 use navree::ui::theme::{Corner, Corners, Shape, Theme, ThemeId};

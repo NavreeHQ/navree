@@ -1,7 +1,7 @@
 /* Phone input: a country picker and the number, in one box. Without the phone
    module the picker is the browser's select; with it, a button opening a
    searchable list. The number is always written left to right. */
-[data-slot=phone-input]{position:relative;display:flex;align-items:stretch;height:2rem;border:1px solid var(--line-2);border-radius:var(--radius-field,var(--radius));background:var(--ink-1);
+[data-slot=phone-input]{position:relative;display:flex;align-items:stretch;height:2rem;border:1px solid var(--line-2);border-radius:var(--radius-field,var(--radius));background:var(--field,var(--ink-1));
   &:hover{border-color:var(--line-3)}
   &:focus-within{outline:2px solid var(--ring);outline-offset:-1px;border-color:transparent}
   &:has([aria-invalid=true]){border-color:var(--danger)}
@@ -14,7 +14,7 @@
 [data-slot=phone-country]{flex:none;width:10.5rem;max-width:50%;height:100%;padding:0 1.5rem 0 .5rem;border:0;border-inline-end:1px solid var(--line-2);border-radius:var(--radius-field,var(--radius)) 0 0 var(--radius-field,var(--radius));background:transparent;color:var(--fg);font-size:13px;text-overflow:ellipsis;
   &:dir(rtl){border-radius:0 var(--radius-field,var(--radius)) var(--radius-field,var(--radius)) 0}
   &:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
-  & option,& optgroup{background:var(--ink-1);color:var(--fg)}
+  & option,& optgroup{background:var(--field,var(--ink-1));color:var(--fg)}
 }
 [data-slot=phone-country-trigger]{display:flex;flex:none;align-items:center;gap:.375rem;height:100%;padding-inline:.5rem .375rem;border:0;border-inline-end:1px solid var(--line-2);background:transparent;color:var(--fg);font:inherit;font-size:13px;font-variant-numeric:tabular-nums;cursor:pointer;border-start-start-radius:var(--radius);border-end-start-radius:var(--radius);
   &:hover{background:var(--ink-2)}
@@ -26,7 +26,7 @@
 [data-slot=phone-dial]{color:var(--fg-1);direction:ltr;unicode-bidi:isolate}
 [data-slot=phone-dial]:empty,[data-slot=phone-flag]:empty{display:none}
 [data-slot=phone-status]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-[data-slot=phone-countries]{position:fixed;inset:auto;display:none;flex-direction:column;align-items:stretch;margin:0;padding:0;width:min(20rem,calc(100vw - 1rem));max-height:min(22rem,calc(100vh - 2rem));overflow:hidden;border:1px solid var(--line-2);border-radius:var(--radius-overlay,var(--radius-lg));background:var(--ink-1);color:var(--fg-1);
+[data-slot=phone-countries]{position:fixed;inset:auto;display:none;flex-direction:column;align-items:stretch;margin:0;padding:0;width:min(20rem,calc(100vw - 1rem));max-height:min(22rem,calc(100vh - 2rem));overflow:hidden;border:1px solid var(--line-2);border-radius:var(--radius-overlay,var(--radius-lg));background:var(--card,var(--ink-1));color:var(--fg-1);
   &:popover-open{display:flex;animation:ui-in .1s ease-out}
   &:not([style]){margin:auto;inset:0;height:fit-content}
 }

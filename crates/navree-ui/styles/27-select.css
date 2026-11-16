@@ -12,7 +12,7 @@
 [data-slot=select-status]{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 
 /* The control: a button, or a box holding an input. */
-[data-slot=select-trigger],[data-slot=combobox-control],[data-slot=multiselect-control]{display:flex;align-items:center;gap:.5rem;width:100%;min-height:var(--ctl);border:1px solid var(--line-2);border-radius:var(--radius-field,var(--radius));background:var(--ink-1);color:var(--fg);font-size:14px;line-height:1.25;text-align:start;transition:border-color .1s;
+[data-slot=select-trigger],[data-slot=combobox-control],[data-slot=multiselect-control]{display:flex;align-items:center;gap:.5rem;width:100%;min-height:var(--ctl);border:1px solid var(--line-2);border-radius:var(--radius-field,var(--radius));background:var(--field,var(--ink-1));color:var(--fg);font-size:14px;line-height:1.25;text-align:start;transition:border-color .1s;
   &:hover{border-color:var(--line-3)}
   & > [data-slot=icon]{color:var(--fg-3)}
 }
@@ -50,7 +50,7 @@
 [data-readonly] [data-slot=select-trigger],[data-readonly] [data-slot=combobox-control],[data-readonly] [data-slot=multiselect-control]{background:var(--ink-2)}
 
 /* The popup: the browser's popover, placed by the overlay module. */
-[data-slot=select-popup]{position:fixed;inset:auto;margin:0;padding:.25rem;width:max-content;min-width:8rem;max-width:min(32rem,calc(100vw - 1rem));max-height:min(22rem,calc(100dvh - 1rem));border:1px solid var(--line-2);border-radius:var(--radius-overlay,var(--radius-lg));background:var(--ink-1);color:var(--fg-1);overflow:hidden;
+[data-slot=select-popup]{position:fixed;inset:auto;margin:0;padding:.25rem;width:max-content;min-width:8rem;max-width:min(32rem,calc(100vw - 1rem));max-height:min(22rem,calc(100dvh - 1rem));border:1px solid var(--line-2);border-radius:var(--radius-overlay,var(--radius-lg));background:var(--card,var(--ink-1));color:var(--fg-1);overflow:hidden;
   &:popover-open{display:flex;flex-direction:column;align-items:stretch;animation:ui-in .1s ease-out}
 }
 [data-slot=select-list],[data-slot=command-list]{position:relative;flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
@@ -85,7 +85,7 @@
 ::highlight(ui-match){background:color-mix(in oklab,var(--accent) 30%,transparent);color:inherit}
 
 /* The command palette: a modal dialog with a combobox and a list. */
-[data-slot=command-dialog]{padding:0;border:1px solid var(--line-2);border-radius:var(--radius-overlay,var(--radius-lg));background:var(--ink-1);color:var(--fg-1);overflow:hidden;
+[data-slot=command-dialog]{padding:0;border:1px solid var(--line-2);border-radius:var(--radius-overlay,var(--radius-lg));background:var(--card,var(--ink-1));color:var(--fg-1);overflow:hidden;
   &::backdrop{background:var(--scrim,rgb(1 3 2/.72))}
   &[open]{display:flex;flex-direction:column;width:calc(100% - 2rem);max-width:36rem;max-height:min(30rem,calc(100dvh - 4rem));margin:12vh auto auto;animation:ui-in .1s ease-out}
 }

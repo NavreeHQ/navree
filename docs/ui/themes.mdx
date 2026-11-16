@@ -5,7 +5,7 @@ description: "Seven built-in themes in light, dark or the device's mode, themes 
 
 <UiPreview example="themes/built-in" />
 
-A theme is a typed Rust value: a palette of colour tokens for light and one for dark, the corners, the density and a font from a safe list. A theme of your own can say more with a [shape](#a-themes-shape): the corners of each kind of part. The server writes the reader's theme and mode on `<html>` and links what the page needs in the head, so the first paint is already right. No script decides how a page looks, and a page with nothing set renders exactly as it always did: dark Navree.
+A theme is a typed Rust value: a palette of colour tokens for light and one for dark, the corners, the density and a font from a safe list. A theme of your own can say more with a [shape](#a-themes-shape) (the corners of each kind of part) and [colour roles](#colour-roles) (white cards beside an off-white sidebar, the inverse surface). The server writes the reader's theme and mode on `<html>` and links what the page needs in the head, so the first paint is already right. No script decides how a page looks, and a page with nothing set renders exactly as it always did: dark Navree.
 
 ## Built-in themes
 
@@ -87,13 +87,13 @@ Build one in the [theme builder](/docs/ui/theme-builder/) and paste its Rust exp
 let theme = Theme::custom(ThemeId::parse("agra")?, "Agra", spec)?;
 ```
 
-`Theme::custom` refuses a theme whose text fails WCAG AA in either palette. A theme of your own is served as a small stylesheet of its own at `/_navree/ui/theme/<theme>-<build>.css`, where the file's name is the theme's values in a short form, then the toolkit's build. The server reads that name with a strict parser and writes the stylesheet itself, so the URL can carry nothing but colours, corners, a density, a font from the list and the values of a [shape](#a-themes-shape), each in range. It is cached for good, and two readers of one theme share one file; when you upgrade the toolkit, the build in the name changes, so no reader keeps an old sheet. A name from another build is still answered, as this build writes the sheet, and checked again each time.
+`Theme::custom` refuses a theme whose text fails WCAG AA in either palette. A theme of your own is served as a small stylesheet of its own at `/_navree/ui/theme/<theme>-<build>.css`, where the file's name is the theme's values in a short form, then the toolkit's build. The server reads that name with a strict parser and writes the stylesheet itself, so the URL can carry nothing but colours, corners, a density, a font from the list and the values of a [shape](#a-themes-shape) and [roles](#colour-roles), each in range. It is cached for good, and two readers of one theme share one file; when you upgrade the toolkit, the build in the name changes, so no reader keeps an old sheet. A name from another build is still answered, as this build writes the sheet, and checked again each time.
 
 A stored theme is JSON: `theme.to_json()` writes it, and `Theme::from_json` reads it back, checking every field and naming each one that is wrong.
 
 ## A theme's shape
 
-A theme of your own can say more than its spec. `ThemeSpec` is a struct that apps and the Rust export build field by field, so it can't gain a field in a minor release. What a theme says beyond it is a `Shape`, a value of its own that the theme carries beside its spec, given with `Theme::with_shape`. Every value a theme can say beyond its spec is a part of the shape.
+A theme of your own can say more than its spec. `ThemeSpec` is a struct that apps and the Rust export build field by field, so it can't gain a field in a minor release, and a `Palette` is an array of exactly 31 colours. What a theme says beyond them is a value of its own that the theme carries beside its spec: a `Shape`, given with `Theme::with_shape`, for everything but colours, and [colour roles](#colour-roles), given with `Theme::with_roles`, for colours. Every value a theme can say beyond its spec is a part of one of the two.
 
 ```rust title="src/theme.rs"
 use navree::ui::theme::{Corner, Corners, Shape, Theme, ThemeId};
@@ -137,6 +137,61 @@ The spec's `Radius` sets two corners: one for controls, one for surfaces. `Corne
 | `overlay` | Popovers, hover cards, menus, the select's list, dialogs, drawers | `--radius-overlay` | `--radius-lg` |
 
 A checkbox keeps `--radius`: a round box reads as a radio.
+
+## Colour roles
+
+One token paints several things: `ink-1` paints cards, inputs, the sidebar and a table's header, so a theme can't make its cards white beside an off-white sidebar by its palette alone. `Roles` gives such a thing a colour of its own, in light and in dark, falling back to the token it stands in for. The stylesheet reads each as `var(--card,var(--ink-1))`, and the theme's stylesheet writes a role only when it is set.
+
+```rust title="src/theme.rs"
+use navree::ui::theme::{Inverse, Rgb, Roles, Theme, ThemeId};
+
+pub fn agra_theme() -> Theme {
+    let rgb = Rgb::hex;
+    let roles = Roles::new()
+        .card(rgb(0xffffff), rgb(0x0f1411)) // light, then dark
+        .field(rgb(0xffffff), rgb(0x0f1411))
+        .ghost_text(rgb(0x0a0e0c), rgb(0xe9efeb))
+        .inverse(
+            Inverse::new()
+                .surface(rgb(0x0a0a0a), rgb(0xffffff))
+                .text(rgb(0xffffff), rgb(0x0a0a0a))
+                .muted(rgb(0xb5b5b0), rgb(0x3d3d3a)),
+        );
+    Theme::NAVREE
+        .renamed(ThemeId::parse("agra").expect("a theme id"), "Agra")
+        .with_roles(roles)
+        .expect("every colour role reads")
+}
+```
+
+| Method | Paints | Token | Without it |
+|---|---|---|---|
+| `card` | Cards, stats, fact cards, tables, dialogs, sheets, popovers, menus | `--card` | `ink-1`, which the sidebar and a table's header keep |
+| `field` | Inputs, text areas, selects, input groups, checkboxes and radios, the select and combobox controls, the phone input | `--field` | `ink-1` |
+| `ghost_text` | A ghost button's text, such as the top bar's icon buttons | `--ghost-fg` | `fg-2` |
+| `shell_muted` | The sidebar's quieter text: the brand's context line, the user's email, group labels, counts | `--shell-muted` | `fg-3` |
+| `segment_track` | The track of segmented tabs | `--segment-track` | `ink-2` |
+| `segment_on` | The chosen tab on that track | `--segment-on` | `ink-3` |
+| `selected_row` | A selected row of a table | `--row-selected` | `ink-3` |
+| `inverse` | The inverse surface, below | | the other palette |
+
+`with_roles` checks each role as the token it stands in for: every text pair the components draw with that token is measured again with the role in its place, beside each other role that can sit with it (a ghost button on a card), in light and in dark. A role whose text falls short of WCAG AA is refused, named with its pair and ratio, such as `fg-3 on card is 3.21:1 in light`, as `ImportError::Fields`. (A role can't be named by a `Shortfall`, whose pair is made of tokens.) The short form, the stored theme (a `roles` object) and the Rust export carry the roles, and a part of the page drawn in another theme is drawn without them.
+
+### The inverse surface
+
+The inverse surface is a part of a page drawn on the theme's other palette: a dark card on a light page, a light one on a dark page. A part that draws it, such as an inverse card, is marked `data-inverse`, and the stylesheet flips its colour scheme, so every token in it reads its other value and any component inside reads with no work of its own. A theme with no inverse colours shows its other palette there, which passes every pair already.
+
+`Inverse` sets the surface's own colours, each for a page in light mode and then in dark mode. Each part you set takes the place of tokens inside the surface; the tones, the charts and anything else stay the other palette's.
+
+| Method | Sets inside the surface |
+|---|---|
+| `surface` | `ink-0`, `ink-1`, `card`, `field`, and `accent-ink` |
+| `raised` | `ink-2`, `ink-3`, `segment-track`, `segment-on`, `row-selected` |
+| `line` | `line`, `line-2` |
+| `text` | `fg`, `fg-1`, `ghost-fg`, and the accent: `accent`, `accent-text`, `ring`, so a primary button there is the text's colour with the surface's text on it |
+| `muted` | `fg-2`, `fg-3`, `shell-muted` |
+
+The surface is checked as a palette of its own: the other palette with these colours in place, every text pair, in both modes. A colour that doesn't read on it is refused under the part that sets it, such as `inverse-fg on inverse is 1.36:1 in dark, on the inverse surface`.
 
 ## Layouts
 
@@ -202,6 +257,14 @@ Charts read `--chart-1` to `--chart-8` and `--bar`; status reads `--success`, `-
 ### Corner
 
 <UiProps type="Corner" />
+
+### Roles
+
+<UiProps type="Roles" />
+
+### Inverse
+
+<UiProps type="Inverse" />
 
 ### Appearance
 

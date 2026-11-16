@@ -640,3 +640,22 @@ fn the_reader_sees_tints_states_and_custom_properties() {
     // Body text on the page.
     assert!(has(Paint::Token(Token::Fg1), Paint::Token(Token::Ink0)));
 }
+
+/// A colour role is read as the token behind it (`var(--field,var(--ink-1))` is `ink-1`
+/// here): the pairs it draws are the token's, and `Theme::with_roles` measures each of them
+/// again with the role's colour in the token's place.
+#[test]
+fn the_reader_takes_the_token_behind_a_colour_role() {
+    let found = drawn();
+    let at = |selector: &str, text: Token, on: Token| {
+        found.iter().any(|d| {
+            d.selector.contains(selector)
+                && d.text == Paint::Token(text)
+                && d.on == Paint::Token(on)
+        })
+    };
+    // An input's text on its field.
+    assert!(at("[data-slot=input]", Token::Fg, Token::Ink1));
+    // A ghost button's text, on whatever it sits on.
+    assert!(at("[data-variant=ghost]", Token::Fg2, Token::Ink0));
+}
