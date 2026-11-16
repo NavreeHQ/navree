@@ -29,7 +29,8 @@ import org.junit.runner.RunWith
  * tablet the navigation at the start, the top bar, the content. Shift+Tab is
  * the exact mirror, entering each part at its last control. The one-dimensional
  * focus search goes by the order the layout nodes are placed in, so the order
- * of the parts is the order the layouts place them.
+ * of the parts is the order the layouts place them. The windows are drawn in
+ * the run's look, so the right to left look walks them laid out right to left.
  */
 @RunWith(AndroidJUnit4::class)
 class WindowOrderTest {
@@ -81,9 +82,11 @@ class WindowOrderTest {
     @Test
     fun aPhonesWindowIsGoneThroughTopContentBottomAndBackTheOtherWay() {
         compose.setContent {
-            BottomNavigationWindow(bottomBar = { Part("Bottom") }) {
-                ScreenFrame(topBarShown = true, topBar = { Part("Top") }, snackbarHost = {}) { padding ->
-                    Box(Modifier.padding(padding)) { Part("Content") }
+            Shots.Looked {
+                BottomNavigationWindow(bottomBar = { Part("Bottom") }) {
+                    ScreenFrame(topBarShown = true, topBar = { Part("Top") }, snackbarHost = {}) { padding ->
+                        Box(Modifier.padding(padding)) { Part("Content") }
+                    }
                 }
             }
         }
@@ -94,9 +97,11 @@ class WindowOrderTest {
     @Test
     fun aTabletsWindowIsGoneThroughNavigationTopContentAndBackTheOtherWay() {
         compose.setContent {
-            SideNavigationWindow(rail = { Column { Button(onClick = {}) { Text("Rail 1") }; Button(onClick = {}) { Text("Rail 2") } } }) {
-                ScreenFrame(topBarShown = true, topBar = { Part("Top") }, snackbarHost = {}) { padding ->
-                    Box(Modifier.padding(padding)) { Part("Content") }
+            Shots.Looked {
+                SideNavigationWindow(rail = { Column { Button(onClick = {}) { Text("Rail 1") }; Button(onClick = {}) { Text("Rail 2") } } }) {
+                    ScreenFrame(topBarShown = true, topBar = { Part("Top") }, snackbarHost = {}) { padding ->
+                        Box(Modifier.padding(padding)) { Part("Content") }
+                    }
                 }
             }
         }

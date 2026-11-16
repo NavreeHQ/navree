@@ -302,16 +302,20 @@ class LiveDemosTest {
         settled(app)
         val tablet = Shots.device.startsWith("tablet")
         val stops = ArrayList<String>()
+        val where = ArrayList<String>()
         repeat(14) {
             Shots.pressTab()
             compose.waitForIdle()
-            stops += compose.onAllNodes(isFocused()).fetchSemanticsNodes().joinToString(" + ") { nameOf(it).take(28) }
+            val node = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
+            stops += node.joinToString(" + ") { nameOf(it).take(28) }
+            where += node.joinToString(" + ") { nameOf(it).take(20) + "@" + (it.boundsInRoot.left / it.layoutInfo.density.density).toInt() + "," + (it.boundsInRoot.top / it.layoutInfo.density.density).toInt() }
         }
         val first = stops.first()
+        val things = focusableThings()
         if (tablet) {
-            assertTrue("on a tablet the first stop is in the navigation at the start (the window was in touch mode before the walk: $touch, look ${Shots.look}): $stops", navigation.any { first.startsWith(it) })
+            assertTrue("on a tablet the first stop is in the navigation at the start (the window was in touch mode before the walk: $touch, look ${Shots.look}): $stops; where they stand: $where; everything that can take the focus, from the top: $things", navigation.any { first.startsWith(it) })
         } else {
-            assertTrue("on a phone the first stop is in the top bar, where Search and the account are (the window was in touch mode before the walk: $touch, look ${Shots.look}): $stops", first.contains("Search", ignoreCase = true) || first.contains("Account", ignoreCase = true))
+            assertTrue("on a phone the first stop is in the top bar, where Search and the account are (the window was in touch mode before the walk: $touch, look ${Shots.look}): $stops; where they stand: $where; everything that can take the focus, from the top: $things", first.contains("Search", ignoreCase = true) || first.contains("Account", ignoreCase = true))
         }
         val search = stops.indexOfFirst { it.contains("Search", ignoreCase = true) }
         val row = stops.indexOfFirst { it.startsWith("Units of") || it.contains("Restock") }
