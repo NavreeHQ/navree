@@ -528,10 +528,11 @@ pub const RESERVED_NAMESPACES: &[&str] = &[
 ];
 
 /// The providers that decide who may do what in the app, the app's shell, its
-/// clock, the observers of every commit and the sink of its audit records, by
-/// type name: a module of a plugin that is not first-party may not register
-/// one (value, factory or multi-binding, exported or not). Not public API;
-/// Navree's own crates and tests use it.
+/// clock, the observers of every commit, the sink of its audit records, what
+/// carries its broadcasts and what silences its model listeners, by type
+/// name: a module of a plugin that is not first-party may not register one
+/// (value, factory or multi-binding, named or not, exported or not). Not
+/// public API; Navree's own crates and tests use it.
 pub const APP_ONLY_PROVIDERS: &[&str] = &[
     "dyn navree_access::workspace_gate::WorkspaceGate",
     "dyn navree_auth::strategy::Strategy",
@@ -541,11 +542,14 @@ pub const APP_ONLY_PROVIDERS: &[&str] = &[
     "dyn navree_db::uow::ChangeObserver",
     "dyn navree_http::auth::Authenticator",
     "dyn navree_http::auth::RouteAuthorizer",
+    "dyn navree_mongo::uow::MongoChangeObserver",
+    "dyn navree_realtime::backplane::Backplane",
     "dyn navree_ui::shell::contribute::NativeShellPart",
     "navree_access::factory::AbilityFactory",
     "navree_access::options::AccessOptions",
     "navree_auth::options::AuthOptions",
     "navree_helm::options::HelmOptions",
+    "navree_orm::events::fake::ModelEventFake",
     "navree_ui::shell::Shell",
     "navree_workspace::config::WorkspaceConfig",
 ];
@@ -570,6 +574,12 @@ pub(crate) fn app_only_role(provider: &str) -> &'static str {
         }
         "dyn navree_http::auth::Authenticator" => "which decides who a request is signed in as",
         "dyn navree_http::auth::RouteAuthorizer" => "which decides who may open the app's routes",
+        "dyn navree_mongo::uow::MongoChangeObserver" => {
+            "which sees, and can change, every MongoDB write the app commits"
+        }
+        "dyn navree_realtime::backplane::Backplane" => {
+            "which carries every broadcast of the app's channels between its processes"
+        }
         "dyn navree_ui::shell::contribute::NativeShellPart" => {
             "which says where the app's native clients sign in"
         }
@@ -579,6 +589,9 @@ pub(crate) fn app_only_role(provider: &str) -> &'static str {
         }
         "navree_auth::options::AuthOptions" => "which sets the options of the app's sign-in",
         "navree_helm::options::HelmOptions" => "which sets the options of the app's admin panel",
+        "navree_orm::events::fake::ModelEventFake" => {
+            "which silences the listeners of every model of the app"
+        }
         "navree_ui::shell::Shell" => "which is the app's shell",
         "navree_workspace::config::WorkspaceConfig" => {
             "which sets the options of the app's workspaces"

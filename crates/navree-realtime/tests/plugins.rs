@@ -4,15 +4,16 @@
 #[path = "realtime/support.rs"]
 mod support;
 
+use std::any::type_name;
 use std::collections::HashMap;
 
 use http::StatusCode;
 use navree_contracts::Principal;
 use navree_kernel::{AppContext, BoxError, BoxFuture, Module, ModuleBuilder};
-use navree_realtime::{ChannelDecision, ModuleBuilderRealtimeExt};
+use navree_realtime::{Backplane, ChannelDecision, ModuleBuilderRealtimeExt};
 use uuid::Uuid;
 
-use navree_plugin_chat::ChatModule;
+use navree_plugin_chat::{ChatBackplane, ChatModule};
 use navree_plugin_notice_board::BoardModule;
 use support::{Server, signature};
 
@@ -129,10 +130,13 @@ async fn the_app_may_authorize_any_channel_with_a_plugins_function() {
 /// `chat.{room}`.
 mod navree_plugin_chat {
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     use navree_contracts::Principal;
-    use navree_kernel::{AppContext, BoxError, BoxFuture, Module, ModuleBuilder, PluginInfo};
-    use navree_realtime::{ChannelDecision, ModuleBuilderRealtimeExt};
+    use navree_kernel::{
+        AppContext, BoxError, BoxFuture, Factory, Module, ModuleBuilder, PluginInfo,
+    };
+    use navree_realtime::{Backplane, ChannelDecision, MemoryBackplane, ModuleBuilderRealtimeExt};
 
     /// The plugin's info: its namespace is `chat`.
     const ROOMS: PluginInfo =
@@ -153,6 +157,21 @@ mod navree_plugin_chat {
     impl Module for ChatModule {
         fn register(&self, m: &mut ModuleBuilder) {
             m.plugin(ROOMS).channel("chat.{room}", anyone);
+        }
+    }
+
+    /// The plugin's backplane, for a module of the app to register.
+    pub fn backplane() -> Factory<dyn Backplane> {
+        Factory::new(|_| async { Ok(Arc::new(MemoryBackplane::new()) as Arc<dyn Backplane>) })
+    }
+
+    /// A module of the plugin that registers its backplane: with `realtime.backplane = none`,
+    /// the app's broadcasts would go through it.
+    pub struct ChatBackplane;
+
+    impl Module for ChatBackplane {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(ROOMS).factory(backplane());
         }
     }
 }
@@ -248,4 +267,42 @@ async fn the_apps_channels_under_words_no_plugin_holds_boot_beside_a_plugin() {
     let own = format!("private-users.{harpreet}");
     let reply = server.auth(Some(harpreet), SOCKET, &own).await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
+}
+
+/// A module of the app: it registers the chat plugin's backplane as the app's.
+struct AppBackplane;
+
+impl Module for AppBackplane {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.factory(navree_plugin_chat::backplane());
+    }
+}
+
+#[tokio::test]
+async fn a_plugin_may_not_provide_the_apps_backplane() {
+    // With `realtime.backplane = none` the app takes the backplane a module provides, so the
+    // plugin's would carry every private and presence broadcast of the app.
+    let refused = support::app(support::options())
+        .module(ChatBackplane)
+        .validate()
+        .expect_err("the plugin provides a backplane")
+        .to_string();
+    let expected = format!(
+        "plugin `navree-plugin-chat` provides `{}` in `ChatBackplane`, which carries every broadcast of the app's channels between its processes; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and to use the plugin's, register it from a module of the app",
+        type_name::<dyn Backplane>()
+    );
+    assert!(refused.contains(&expected), "{refused}");
+
+    // A module of the app registers the plugin's backplane beside the plugin, as before.
+    let server = Server::serve(
+        support::app(support::options())
+            .module(ChatModule)
+            .module(AppBackplane),
+    )
+    .await;
+    let backplane = server.app.ctx().try_get::<dyn Backplane>().await;
+    assert!(
+        backplane.is_some(),
+        "the app's module registered the plugin's backplane"
+    );
 }

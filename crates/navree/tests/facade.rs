@@ -1343,7 +1343,7 @@ fn the_app_only_providers_match_their_types() {
         .iter()
         .copied()
         .collect();
-    let types: BTreeSet<&str> = [
+    let mut types: BTreeSet<&str> = [
         type_name::<dyn navree::contracts::PermissionCheck>(),
         type_name::<dyn navree::http::RouteAuthorizer>(),
         type_name::<dyn navree::http::Authenticator>(),
@@ -1359,9 +1359,17 @@ fn the_app_only_providers_match_their_types() {
         type_name::<dyn navree::contracts::Clock>(),
         type_name::<dyn navree::db::ChangeObserver>(),
         type_name::<dyn navree::contracts::AuditSink>(),
+        type_name::<dyn navree::realtime::Backplane>(),
+        type_name::<navree::orm::events::ModelEventFake>(),
     ]
     .into_iter()
     .collect();
+    // navree-mongo is not in `full`: its own test refuses a plugin's observer by this name
+    // (`crates/navree-mongo/tests/mongo/module.rs`).
+    #[cfg(feature = "mongo")]
+    types.insert(type_name::<dyn navree::mongo::MongoChangeObserver>());
+    #[cfg(not(feature = "mongo"))]
+    types.insert("dyn navree_mongo::uow::MongoChangeObserver");
     assert_eq!(listed, types);
     assert_eq!(
         type_name::<dyn navree::orm::hooks::ModelHook<navree::workspace::Member>>(),

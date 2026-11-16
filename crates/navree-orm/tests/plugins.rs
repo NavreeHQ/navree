@@ -15,6 +15,7 @@ use navree_db::Executor as _;
 use navree_kernel::{
     BoxError, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, Navree, Resolver,
 };
+use navree_orm::events::ModelEventFake;
 use navree_orm::hooks::{ModelEvent, ModelHook};
 use navree_orm::{Model, ModelLifecycle, ModuleBuilderOrmExt, Observer};
 use navree_plugin_ledger::{LedgerModule, Titled, entry, live, open, stamp};
@@ -281,4 +282,39 @@ async fn the_app_may_register_a_plugins_scope_and_hook_on_another_crates_model()
         .unwrap();
     assert_eq!(deal.title, "Jalandhar dairy");
     app.shutdown().await.unwrap();
+}
+
+/// A module of the app: it puts a model event fake in the app, as a test does.
+struct RecordsEvents;
+
+impl Module for RecordsEvents {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.value(ModelEventFake::new());
+    }
+}
+
+#[test]
+fn a_plugin_may_not_silence_the_apps_model_listeners() {
+    // A fake in a plugin's module would stop every listener and observer of the app's models,
+    // on every model, and only record what they would have heard.
+    let refused = Navree::app()
+        .module(LedgerModule(|m| {
+            m.value(ModelEventFake::new());
+        }))
+        .validate()
+        .expect_err("the plugin silences the app's listeners")
+        .to_string();
+    let provider = type_name::<ModelEventFake>();
+    assert_eq!(
+        refused,
+        format!(
+            "plugin `navree-plugin-ledger` provides `{provider}` in `LedgerModule`, which silences the listeners of every model of the app; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and to use the plugin's, register it from a module of the app"
+        )
+    );
+    // A module of the app puts one in the app beside the plugin, as before.
+    Navree::app()
+        .module(LedgerModule(|_| {}))
+        .module(RecordsEvents)
+        .validate()
+        .expect("the app's own fake");
 }
