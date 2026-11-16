@@ -10,12 +10,16 @@ mod support;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
+use http::Method;
 use navree_access::{
     AbilityCtx, AbilityFactory, AccessModule, AccessService, Policy, READ, Rule, Rules, Subject,
     UPDATE,
 };
 use navree_contracts::{ModuleBuilderPermissionsExt, Permission, permission_catalog, permitted};
-use navree_kernel::{Module, ModuleBuilder, ModuleId, PluginInfo};
+use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef};
+use navree_kernel::{
+    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ModuleId, PluginInfo, Resolver,
+};
 use navree_testing::{TestApp, TestAppBuilder, TestResponse, principal};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -651,6 +655,93 @@ async fn a_plugin_whose_namespace_is_another_modules_permission_prefix_fails_the
         .try_build()
         .await
         .expect("a plugin's own subject boots");
+}
+
+/// What a module of the app describes under the word `khata`, which no subject maps.
+const KHATA_EXPORT: &[Permission] = &[Permission::new(
+    "khata.export",
+    "Export the khata of the Ludhiana office as a spreadsheet",
+)];
+
+/// `GET /ledger/summary`, a route of the app that checks `read` on `ledger`, a subject no
+/// module registers.
+struct LedgerController;
+
+impl Injectable for LedgerController {
+    fn construct(_: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(LedgerController) })
+    }
+}
+
+impl Controller for LedgerController {
+    fn prefix(&self) -> &'static str {
+        "!/ledger"
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        vec![
+            RouteDef::on(Method::GET, "/summary", || async { "Ludhiana" })
+                .can(READ, "ledger", None),
+        ]
+    }
+}
+
+/// A module of the app with [`LedgerController`].
+struct LedgerModule;
+
+impl Module for LedgerModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.controller::<LedgerController>();
+    }
+}
+
+/// The tail of every refusal of a plugin whose namespace is the first word of what another
+/// module declares.
+const HOLDS: &str = "; a plugin's policies decide the names under its namespace, so they would decide who may use it: remove the plugin, or name it under another word in the app";
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_whose_namespace_is_the_first_word_of_the_apps_permission_fails_the_boot() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+
+    // A permission a module of the app describes.
+    let khata = Plugin(plugin("navree-plugin-khata", "khata"), &[]);
+    let app = builder()
+        .module(Plain("Khata", KHATA_EXPORT))
+        .module(khata);
+    let error = boot_error(app).await;
+    let expected = format!(
+        "plugin `navree-plugin-khata` uses the namespace `khata`, the first word of the permission `khata.export` that `Khata` describes{HOLDS}"
+    );
+    assert!(error.contains(&expected), "{error}");
+
+    // A permission a route of the app requires: the support app's `GET /reports/sales` asks
+    // for `reports.view`, which no subject maps, so a policy of the plugin writing
+    // `can(VIEW, "reports")` would open it to everyone.
+    let reports = Plugin(plugin("navree-plugin-reports", "reports"), &[]);
+    let error = boot_error(builder().module(reports)).await;
+    let expected = format!(
+        "plugin `navree-plugin-reports` uses the namespace `reports`, the first word of the permission `reports.view` that the route `GET /reports/sales` of `PostsModule` requires{HOLDS}"
+    );
+    assert!(error.contains(&expected), "{error}");
+
+    // A subject a route of the app checks.
+    let ledger = Plugin(plugin("navree-plugin-ledger", "ledger"), &[]);
+    let error = boot_error(builder().module(LedgerModule).module(ledger)).await;
+    let expected = format!(
+        "plugin `navree-plugin-ledger` uses the namespace `ledger`, the first word of the subject `ledger` that the route `GET /ledger/summary` of `LedgerModule` checks{HOLDS}"
+    );
+    assert!(error.contains(&expected), "{error}");
+
+    // Under its own namespace the plugin describes what it likes, and the app's permissions and
+    // subjects under other words boot beside it.
+    let khata = Plugin(plugin("navree-plugin-khata", "khata"), KHATA_EXPORT);
+    builder()
+        .module(LedgerModule)
+        .module(khata)
+        .try_build()
+        .await
+        .expect("the plugin's own permission, beside the app's routes under other words");
 }
 
 #[tokio::test(flavor = "current_thread")]

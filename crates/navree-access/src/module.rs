@@ -7,7 +7,10 @@ use std::sync::Arc;
 use navree_contracts::PermissionCheck;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::{ModuleBuilderHttpExt, RouteAuthorizer};
-use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
+use navree_kernel::{
+    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Lifecycle, Module, ModuleBuilder,
+    ProviderKey, Resolver,
+};
 
 use crate::authorizer::AccessAuthorizer;
 use crate::commands::commands;
@@ -188,9 +191,23 @@ fn register(m: &mut ModuleBuilder, options: AccessOptions) {
         .controller::<AbilitiesController>()
         .controller::<AccessAdminController>()
         .migrations(migrations())
-        .map_error::<AccessError>(map_access_error);
+        .map_error::<AccessError>(map_access_error)
+        // Once every controller is built: no route of the app under a plugin's namespace.
+        .value(RouteNamespaces)
+        .lifecycle::<RouteNamespaces>();
     for command in commands() {
         m.command(command);
+    }
+}
+
+/// Checks at boot, once every controller is built, the permissions and
+/// subjects the app's routes declare against the namespaces of community
+/// plugins (`catalog::check_routes`).
+struct RouteNamespaces;
+
+impl Lifecycle for RouteNamespaces {
+    fn on_bootstrap(&self, ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
+        Box::pin(async move { Ok(crate::catalog::check_routes(&ctx).await?) })
     }
 }
 

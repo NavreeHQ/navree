@@ -430,9 +430,10 @@ pub const FIRST_PARTY: &[(&str, &str)] = &[
 
 /// The namespaces the framework keeps for itself, sorted: a plugin that is
 /// not first-party may not use one. They are the first words of the
-/// framework's configuration sections and permission prefixes, a few words
-/// of its own, the folders the framework reads below the plugins' folders
-/// (`layouts` for templates, `fonts` for documents), and the Windows device
+/// framework's configuration sections, of its permission prefixes and of the
+/// permissions it declares, a few words of its own, the folders the
+/// framework reads below the plugins' folders (`layouts` for templates,
+/// `fonts` for documents), and the Windows device
 /// names a namespace could spell (`con`, `prn`, `aux`, `nul`, `com0` to
 /// `com9`, `lpt0` to `lpt9`), which no folder may be called. Not public API;
 /// Navree's own crates and tests use it.
@@ -443,6 +444,7 @@ pub const RESERVED_NAMESPACES: &[&str] = &[
     "app",
     "audit",
     "auth",
+    "automations",
     "aux",
     "billing",
     "cache",
@@ -786,7 +788,7 @@ mod tests {
         for (package, krate) in FIRST_PARTY {
             assert_eq!(package.replace('-', "_"), *krate);
         }
-        assert_eq!(RESERVED_NAMESPACES.len(), 86);
+        assert_eq!(RESERVED_NAMESPACES.len(), 87);
         assert!(RESERVED_NAMESPACES.windows(2).all(|w| w[0] < w[1]));
         assert!(RESERVED_NAMESPACES.iter().all(|ns| is_namespace(ns)));
         // Sorted, each name once, each a type path.

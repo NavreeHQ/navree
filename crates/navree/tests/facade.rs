@@ -1272,6 +1272,7 @@ fn the_reserved_namespaces_match_the_framework_sections_and_permission_prefixes(
         "organization",
         "subscriptions",
         "operations",
+        "automations",
     ]);
     // Folders the framework reads below the plugins' folders: `layouts` for templates,
     // `fonts` for documents.
@@ -1289,6 +1290,46 @@ fn the_reserved_namespaces_match_the_framework_sections_and_permission_prefixes(
     for (file, prefix) in permission_prefixes() {
         let word = prefix.split('.').next().unwrap();
         assert!(reserved.contains(word), "{file}: `{prefix}`");
+    }
+}
+
+/// A community plugin's policy decides the names under its namespace, so the first word of every
+/// permission a framework crate declares, and of every subject its routes check, is reserved or
+/// the first word of a framework subject's permission prefix: no plugin can take it.
+#[test]
+fn every_permission_a_framework_crate_declares_is_under_a_reserved_word() {
+    let prefixes = permission_prefixes();
+    let mut kept: BTreeSet<&str> = navree::kernel::__private::RESERVED_NAMESPACES
+        .iter()
+        .copied()
+        .collect();
+    kept.extend(
+        prefixes
+            .iter()
+            .map(|(_, prefix)| prefix.split('.').next().unwrap()),
+    );
+    let declared = declared_permissions();
+    for (file, permission) in &declared {
+        let word = permission.split('.').next().unwrap();
+        assert!(
+            kept.contains(word),
+            "{file}: `{permission}`: a plugin whose namespace is `{word}` would decide it"
+        );
+    }
+    // The scan finds a permission of each form it reads.
+    let found: BTreeSet<&str> = declared
+        .iter()
+        .map(|(_, permission)| permission.as_str())
+        .collect();
+    for known in [
+        "automations.manage",
+        "roles.manage",
+        "billing.manage",
+        "users.impersonate",
+        "operations.view",
+        "workspace.members.read",
+    ] {
+        assert!(found.contains(known), "{known} is not found: {found:?}");
     }
 }
 
@@ -1377,6 +1418,156 @@ fn permission_prefixes() -> Vec<(String, String)> {
         }
     }
     prefixes
+}
+
+/// Every permission declared in `crates/navree-*/src/**/*.rs`, but for navree-cli, navree-macros
+/// and navree-orm-macros, with its file, read up to a file's tests (`#[cfg(test)]` before a
+/// `mod`) and without comment lines:
+///
+/// - a string, or a string constant of the crate, in `.permissions(&[..])` (routes, mounts) and
+///   `#[permissions(..)]`;
+/// - the first argument of `Permission::new(..)` (what a module describes);
+/// - the string after `permission: "` (the default of an option such as
+///   `impersonation.permission` or `view_permission`);
+/// - a string constant whose name holds `PERMISSION` but is no `PERMISSION_PREFIX`, when it is
+///   two or more words joined by `.`;
+/// - the subject of `.can(action, "subject", ..)` when it is a string whose first word is
+///   lower-case (a capitalised subject is never a namespace).
+///
+/// A permission a crate builds at run time (`format!`) escapes it.
+fn declared_permissions() -> Vec<(String, String)> {
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut folders: Vec<std::path::PathBuf> = std::fs::read_dir(&crates)
+        .expect("the crates folder")
+        .map(|entry| entry.expect("a folder entry").path())
+        .collect();
+    folders.sort();
+    let mut declared: Vec<(String, String)> = Vec::new();
+    for folder in folders {
+        let name = folder
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let left_out =
+            ["navree-cli", "navree-macros", "navree-orm-macros"].contains(&name.as_str());
+        let src = folder.join("src");
+        if !name.starts_with("navree-") || left_out || !src.is_dir() {
+            continue;
+        }
+        let mut files = Vec::new();
+        rust_files(&src, &mut files);
+        files.sort();
+        // Each file's code, up to its tests and without comment lines.
+        let mut code: Vec<(String, String)> = Vec::new();
+        for file in &files {
+            let text = std::fs::read_to_string(file).expect("a source file");
+            let lines: Vec<&str> = text.lines().collect();
+            let end = lines
+                .windows(2)
+                .position(|pair| {
+                    pair[0].trim() == "#[cfg(test)]" && pair[1].trim_start().starts_with("mod ")
+                })
+                .unwrap_or(lines.len());
+            let kept: Vec<&str> = lines[..end]
+                .iter()
+                .copied()
+                .filter(|line| !line.trim_start().starts_with("//"))
+                .collect();
+            let shown = file
+                .strip_prefix(&crates)
+                .unwrap_or(file)
+                .display()
+                .to_string();
+            code.push((shown, kept.join("\n")));
+        }
+        // The crate's string constants: (name, file, value).
+        let mut constants: Vec<(String, String, String)> = Vec::new();
+        for (file, text) in &code {
+            for (at, _) in text.match_indices("const ") {
+                let Some((name, rest)) = text[at + "const ".len()..].split_once(':') else {
+                    continue;
+                };
+                let value = rest
+                    .strip_prefix(" &str = \"")
+                    .or_else(|| rest.strip_prefix(" &'static str = \""));
+                if let Some(value) = value {
+                    let value = until(value, '"').to_owned();
+                    constants.push((name.trim().to_owned(), file.clone(), value));
+                }
+            }
+        }
+        // A string, or a constant of the crate.
+        let resolve = |item: &str| -> Option<String> {
+            match item.strip_prefix('"') {
+                Some(text) => Some(until(text, '"').to_owned()),
+                None => constants
+                    .iter()
+                    .find(|(name, _, _)| name == item)
+                    .map(|(_, _, value)| value.clone()),
+            }
+        };
+        for (file, text) in &code {
+            for (needle, end) in [(".permissions(&[", ']'), ("#[permissions(", ')')] {
+                for (at, _) in text.match_indices(needle) {
+                    let list = until(&text[at + needle.len()..], end);
+                    for item in list.split(',').map(str::trim) {
+                        if let Some(permission) = resolve(item) {
+                            declared.push((file.clone(), permission));
+                        }
+                    }
+                }
+            }
+            for (at, _) in text.match_indices("Permission::new(") {
+                let rest = text[at + "Permission::new(".len()..].trim_start();
+                let item = until(until(rest, ','), ')').trim();
+                if let Some(permission) = resolve(item) {
+                    declared.push((file.clone(), permission));
+                }
+            }
+            for (at, _) in text.match_indices("permission: \"") {
+                let permission = until(&text[at + "permission: \"".len()..], '"');
+                declared.push((file.clone(), permission.to_owned()));
+            }
+            for (at, _) in text.match_indices(".can(") {
+                let arguments = until(&text[at + ".can(".len()..], ')');
+                let Some(subject) = arguments.split(',').nth(1) else {
+                    continue;
+                };
+                let Some(subject) = subject.trim().strip_prefix('"') else {
+                    continue;
+                };
+                let subject = until(subject, '"');
+                if subject.starts_with(|first: char| first.is_ascii_lowercase()) {
+                    declared.push((file.clone(), subject.to_owned()));
+                }
+            }
+        }
+        for (name, file, value) in &constants {
+            let named = name.contains("PERMISSION") && !name.ends_with("PERMISSION_PREFIX");
+            if named && is_dotted(value) {
+                declared.push((file.clone(), value.clone()));
+            }
+        }
+    }
+    declared.sort();
+    declared
+}
+
+/// `text` up to its first `end`, or all of it.
+fn until(text: &str, end: char) -> &str {
+    text.split(end).next().unwrap_or_default()
+}
+
+/// Whether `text` is two or more words joined by `.`, each of lower-case letters, digits and `_`.
+fn is_dotted(text: &str) -> bool {
+    let words: Vec<&str> = text.split('.').collect();
+    words.len() >= 2 && words.iter().all(|word| is_word(word))
+}
+
+/// Whether `word` is one or more lower-case letters, digits and `_`.
+fn is_word(word: &str) -> bool {
+    let mut bytes = word.bytes();
+    !word.is_empty() && bytes.all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'_'))
 }
 
 /// Every `.rs` file below `folder`, at any depth.

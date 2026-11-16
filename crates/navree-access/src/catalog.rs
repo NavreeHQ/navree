@@ -5,13 +5,16 @@
 //! a permission grants it to nobody; these checks grant nothing either.
 //! They run where the app has AccessModule: without it nothing checks the
 //! catalog and nothing reads the descriptions, while a workspace role still
-//! holds what `workspace.roles` lists. Last, the boot asks each policy of a
-//! community plugin what it writes, as each principal it knows.
+//! holds what `workspace.roles` lists. Then the boot asks each policy of a
+//! community plugin what it writes, as each principal it knows, and, once
+//! every controller is built, reads what the app's routes require under a
+//! community plugin's namespace.
 
 use std::collections::BTreeSet;
 
 use navree_config::Config;
 use navree_contracts::permission_catalog;
+use navree_http::{HttpOptions, RouteMeta, route_table};
 use navree_kernel::{AppContext, ModuleId, PluginReport};
 use uuid::Uuid;
 
@@ -46,6 +49,9 @@ const ROLE_SECTIONS: [&str; 2] = ["workspace.roles.", "workspace.organizations.r
 ///    subject of another crate nor `all`;
 /// 4. a name two modules describe is an error when either module belongs to
 ///    a community plugin, and otherwise a warning at target `navree::access`;
+///    a name under a community plugin's namespace that a module not acting
+///    for the plugin describes is an error, since the plugin's policies
+///    decide the names under its namespace;
 /// 5. a community plugin's policy is called as a guest, as a signed-in user
 ///    with no role, as a user with each of `roles` alone, and as a user with
 ///    no role who holds every permission the plugin's modules describe: a
@@ -167,6 +173,22 @@ pub(crate) fn check(
         }
     }
 
+    // A permission that a module not acting for a community plugin describes under the
+    // plugin's namespace would be one of the plugin's subjects.
+    for (module, permission) in &catalog {
+        let acting = community_plugin(&plugins, module.id);
+        for plugin in plugins.iter().filter(|plugin| !plugin.first_party) {
+            let own = acting.is_some_and(|acting| acting.info.name == plugin.info.name);
+            if !own && is_under(permission.name, plugin.info.namespace) {
+                let declared = format!(
+                    "the permission `{}` that `{}` describes",
+                    permission.name, module.name
+                );
+                return Err(namespace_holds(plugin, &declared));
+            }
+        }
+    }
+
     for registered in &subjects.policies {
         let Some(policy) = &registered.plugin else {
             continue;
@@ -270,6 +292,75 @@ pub(crate) fn community_plugin(
 pub(crate) fn is_under(name: &str, namespace: &str) -> bool {
     name.strip_prefix(namespace)
         .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
+}
+
+/// Checks, once every controller is built, that no route of a module that
+/// does not act for a community plugin requires a permission, or checks a
+/// subject, under the plugin's namespace: a permission prefix no subject
+/// registers stands for itself, and the plugin's policies decide the names
+/// under its namespace, so they would decide who may open the route. An app
+/// with no community plugin, or without HttpModule, has nothing to check.
+/// Mounts are not read.
+pub(crate) async fn check_routes(ctx: &AppContext) -> Result<(), AccessError> {
+    let plugins = ctx.plugins().plugins;
+    if plugins.iter().all(|plugin| plugin.first_party) {
+        return Ok(());
+    }
+    // Without HttpModule the app has no routes.
+    if ctx.try_get::<HttpOptions>().await.is_none() {
+        return Ok(());
+    }
+    let routes = route_table(ctx)
+        .await
+        .map_err(|error| AccessError::Config(error.to_string()))?;
+    routes_under_namespaces(&plugins, &routes)
+}
+
+/// The first route of `routes` whose module does not act for a community
+/// plugin of `plugins` and that requires a permission, or checks a subject,
+/// under that plugin's namespace.
+fn routes_under_namespaces(
+    plugins: &[PluginReport],
+    routes: &[RouteMeta],
+) -> Result<(), AccessError> {
+    for route in routes {
+        let acting = route
+            .module_id
+            .and_then(|module| community_plugin(plugins, module));
+        let module = route.module.unwrap_or("?");
+        let (method, path) = (&route.method, &route.full_path);
+        for plugin in plugins.iter().filter(|plugin| !plugin.first_party) {
+            if acting.is_some_and(|acting| acting.info.name == plugin.info.name) {
+                continue;
+            }
+            let namespace = plugin.info.namespace;
+            let label = format!("the route `{method} {path}` of `{module}`");
+            for permission in &route.access.permissions {
+                if is_under(permission, namespace) {
+                    let declared = format!("the permission `{permission}` that {label} requires");
+                    return Err(namespace_holds(plugin, &declared));
+                }
+            }
+            if let Some(can) = &route.access.can
+                && is_under(&can.subject, namespace)
+            {
+                let subject = &can.subject;
+                let declared = format!("the subject `{subject}` that {label} checks");
+                return Err(namespace_holds(plugin, &declared));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The refusal of the community plugin `plugin`, whose namespace is the
+/// first word of `declared` (a permission or a subject, with who declares
+/// it): the plugin's policies decide the names under its namespace.
+fn namespace_holds(plugin: &PluginReport, declared: &str) -> AccessError {
+    AccessError::Config(format!(
+        "plugin `{}` uses the namespace `{}`, the first word of {declared}; a plugin's policies decide the names under its namespace, so they would decide who may use it: remove the plugin, or name it under another word in the app",
+        plugin.info.name, plugin.info.namespace
+    ))
 }
 
 /// The refusal of a community plugin whose namespace is the permission
