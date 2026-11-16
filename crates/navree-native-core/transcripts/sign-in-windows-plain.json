@@ -1,0 +1,71 @@
+{
+  "about": "On Windows the sign-in in the browser has the browser's cookies, never the app's: with no hand-over routes in the shell the browser is not used for signing in, and an address on the app's scheme that comes back from it is not opened as a page with the app's cookies.",
+  "config": {"app_id":"CharkhaSupply_8wekyb3d8bbwe","client":{"form":"desktop","platform":"windows","text_percent":100,"vocab":0},"sign_in":{"callback":"charkha","paths":["/auth/*"]}},
+  "steps": [
+    {
+      "note": "The app starts and asks for its shell.",
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=windows; form=desktop; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The shell names no hand-over.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=windows; form=desktop; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The first page.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=windows; form=desktop; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "\"Sign in with Google\" leads to an address the app's build named as the start of a sign-in. On this system that needs the hand-over: no session is asked for, the person is told it failed and a report says why.",
+      "send": {"t":"act","screen":1,"action":{"t":"navigate","href":"/auth/google"}},
+      "expect": {
+        "changed": [
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"message","id":1,"tone":"danger","notice":"failed"},
+          {"t":"report","what":"sign_in","detail":"a sign-in in the browser needs the hand-over's routes on this system, and the shell names none"}
+        ]
+      },
+      "check": [
+        {"at":"/messages/0/notice","is":"failed"}
+      ]
+    },
+    {
+      "note": "An address on the app's scheme handed back as a session's end is not opened.",
+      "send": {"t":"sign_in_done","url":"charkha://signed-in?token=PLANTED000"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2","is":null}
+      ]
+    }
+  ]
+}

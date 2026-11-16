@@ -150,7 +150,43 @@ impl Core {
             | Platform::Tvos
             | Platform::Visionos => Some(SignInPlatform::Apple),
             Platform::Android | Platform::Wearos => Some(SignInPlatform::Android),
+            Platform::Windows => Some(SignInPlatform::Windows),
             _ => None,
+        }
+    }
+
+    /// Whether the system's sign-in session runs in the person's own browser,
+    /// whose cookies are not the app's. A sign-in there signs the app in only
+    /// by the hand-over: anything else that comes back would have to carry
+    /// what signs the app in itself, and any page can send the person to an
+    /// address on the app's scheme.
+    fn browser_is_not_the_apps(&self) -> bool {
+        self.config.client.platform == Platform::Windows
+    }
+
+    /// Whether an address is on the way back the sign-in names: the shell's
+    /// callback, or, when it names none, the scheme the app was built with.
+    fn on_the_way_back(&self, address: &str) -> bool {
+        let Some(routes) = &self.inner.sign_in else {
+            return false;
+        };
+        let place = |address: &str| {
+            address
+                .split(['?', '#'])
+                .next()
+                .unwrap_or("")
+                .trim_end_matches('/')
+                .to_owned()
+        };
+        match &routes.callback {
+            Some(callback) => place(address) == place(callback),
+            None => {
+                let scheme = self.config.sign_in.callback.as_deref().unwrap_or("");
+                !scheme.is_empty()
+                    && address
+                        .strip_prefix(scheme)
+                        .is_some_and(|rest| rest.starts_with(':'))
+            }
         }
     }
 
@@ -160,6 +196,13 @@ impl Core {
     /// the session opens at `url`, an address inside.
     pub(crate) fn sign_in_session(&mut self, url: &str, ephemeral: bool) {
         if self.inner.sign_in.is_none() {
+            if self.browser_is_not_the_apps() {
+                self.notice(Notice::Failed, self.front());
+                return self.report(
+                    "sign_in",
+                    "a sign-in in the browser needs the hand-over's routes on this system, and the shell names none".to_owned(),
+                );
+            }
             // A session opens only at an address on one of the app's origins.
             let Some(url) = self.inner.origin.absolute(url) else {
                 return self.notice(Notice::Failed, self.front());
@@ -230,12 +273,14 @@ impl Core {
         }
         let verifier = base64url(&bytes[..32]);
         let state = base64url(&bytes[32..RANDOM_BYTES]);
-        let family = match family {
-            SignInPlatform::Android => "android",
-            _ => "apple",
+        let Some(family) = serde_json::to_value(family)
+            .ok()
+            .and_then(|family| family.as_str().map(str::to_owned))
+        else {
+            return;
         };
         let mut said = vec![
-            text("platform", family),
+            text("platform", &family),
             text("app", &self.config.app_id),
             text("code_challenge", &challenge_of(&verifier)),
             text("code_challenge_method", "S256"),
@@ -283,33 +328,19 @@ impl Core {
         });
     }
 
-    /// Whether an address is the one a sign-in session comes back on.
+    /// Whether an address is the one a sign-in session comes back on: the
+    /// shell's callback, or, when it names none, a link on the app's own
+    /// scheme that carries what a return carries (a code, a state or an
+    /// error).
     pub(crate) fn is_return(&self, address: &str) -> bool {
         let Some(routes) = &self.inner.sign_in else {
             return false;
         };
-        let place = |address: &str| {
-            address
-                .split(['?', '#'])
-                .next()
-                .unwrap_or("")
-                .trim_end_matches('/')
-                .to_owned()
-        };
-        match &routes.callback {
-            Some(callback) => place(address) == place(callback),
-            // The client knows its own link: a link on the app's own scheme
-            // that carries a code and a state is one.
-            None => {
-                let scheme = self.config.sign_in.callback.as_deref().unwrap_or("");
-                let own = !scheme.is_empty()
-                    && address
-                        .strip_prefix(scheme)
-                        .is_some_and(|rest| rest.starts_with(':'));
-                own && query_value(address, "code").is_some()
-                    && query_value(address, "state").is_some()
-            }
-        }
+        self.on_the_way_back(address)
+            && (routes.callback.is_some()
+                || ["code", "state", "error"]
+                    .iter()
+                    .any(|name| query_value(address, name).is_some()))
     }
 
     /// A return of a sign-in session that came as a link from outside. It
@@ -347,9 +378,16 @@ impl Core {
             self.inner.hand_over = None;
             return;
         };
-        // A return is this sign-in's only with this sign-in's state, compared
-        // before anything else is read of it. One with another state, or none,
-        // changes nothing: the sign-in stays open.
+        // A return is this sign-in's only on the way back it named, and with
+        // this sign-in's state, compared before anything else is read of it.
+        // Anything else changes nothing: the sign-in stays open.
+        if !self.on_the_way_back(url) {
+            return self.report(
+                "sign_in",
+                "a sign-in's return came back another way than the sign-in named, and was not used"
+                    .to_owned(),
+            );
+        }
         let returned = query_value(url, "state").unwrap_or_default();
         if !same(&returned, &state) {
             return self.report(
@@ -447,7 +485,7 @@ impl Core {
     /// A session with no hand-over ended: where it came back to is opened
     /// with the app's own cookies.
     fn session_returned(&mut self, url: Option<&str>) {
-        if !std::mem::take(&mut self.inner.signing_in) {
+        if !std::mem::take(&mut self.inner.signing_in) || self.browser_is_not_the_apps() {
             return;
         }
         // The person gave up: nothing changed.

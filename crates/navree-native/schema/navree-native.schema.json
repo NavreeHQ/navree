@@ -11138,7 +11138,8 @@
     "SignInPlatform": {
       "enum": [
         "apple",
-        "android"
+        "android",
+        "windows"
       ],
       "type": "string",
       "x-kind": "enum",

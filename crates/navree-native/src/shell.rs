@@ -171,9 +171,10 @@ pub struct Device {
 ///    `A-Za-z0-9-._~`), the `code_challenge` (the unpadded base64url of the
 ///    verifier's SHA-256) and a random `state`.
 /// 2. It opens the system's sign-in session (`ASWebAuthenticationSession` on
-///    Apple systems, an Auth Tab or a Custom Tab on Android) at `start` with the
-///    query `platform` (`apple` or `android`), `app` (the app's bundle id or
-///    package name), `code_challenge`, `code_challenge_method=S256` and `state`,
+///    Apple systems, an Auth Tab or a Custom Tab on Android, the person's
+///    browser on Windows) at `start` with the query `platform` (`apple`,
+///    `android` or `windows`), `app` (the app's bundle id, package name or
+///    package family name), `code_challenge`, `code_challenge_method=S256` and `state`,
 ///    and `redirect_uri` when it sends one, which must be `callback`. The route
 ///    answers `400` (`invalid_hand_over`) for an app it does not know, an app
 ///    with no callback, a missing, malformed or `plain` challenge, or another
@@ -239,6 +240,9 @@ pub enum SignInPlatform {
     Apple,
     /// Android: the app is named by its package name.
     Android,
+    /// Windows: the app is named by its package family name when it is
+    /// packaged, and by the id it was built with when it is not.
+    Windows,
 }
 
 /// What a client posts to [`SignIn::exchange`], as JSON: the code the callback
@@ -449,13 +453,18 @@ mod tests {
             !shown.contains("k3xq") && !shown.contains("verifier-of"),
             "{shown}"
         );
-        // The server refuses a platform it has no app list for.
+        // A family the protocol does not name does not read.
         assert!(
             serde_json::from_str::<SignInExchange>(
-                r#"{"platform":"windows","app":"a","code":"c","code_verifier":"v"}"#
+                r#"{"platform":"linux","app":"a","code":"c","code_verifier":"v"}"#
             )
             .is_err()
         );
+        let windows: SignInExchange = serde_json::from_str(
+            r#"{"platform":"windows","app":"CharkhaSupply_8wekyb3d8bbwe","code":"c","code_verifier":"v"}"#,
+        )
+        .unwrap();
+        assert_eq!(windows.platform, SignInPlatform::Windows);
     }
 
     #[test]

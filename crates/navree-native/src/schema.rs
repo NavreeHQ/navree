@@ -1088,7 +1088,11 @@ object!(Theme {} { name, accent, accent_dark });
 object!(Push { register } {});
 object!(Device {} { caps, push, lock });
 object!(SignIn { start, exchange } { callback, second_step });
-names!(SignInPlatform { Apple, Android });
+names!(SignInPlatform {
+    Apple,
+    Android,
+    Windows
+});
 object!(SignInExchange { platform, app, code, code_verifier } {});
 
 // The descriptor.
