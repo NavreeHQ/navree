@@ -20,6 +20,8 @@ import androidx.activity.ComponentActivity
 import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.app.NotificationManagerCompat
+import androidx.webkit.WebStorageCompat
+import androidx.webkit.WebViewFeature
 import com.navree.client.BuildConfig
 import com.navree.client.R
 import com.navree.client.core.Driver
@@ -32,17 +34,25 @@ import okhttp3.HttpUrl
 import java.security.SecureRandom
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 /**
- * Empties what the system's web views keep for the app: what the page's
- * scripts stored ([WebStorage.deleteAllData]), the resource cache on disk,
- * the back and forward list, the form data and the saved sign-ins for sites.
- * Cookies are the cookie store's ([WebViewCookies.clear]). Call on the main
- * thread.
+ * Empties what the system's web views keep for the app: the resource cache on
+ * disk, the back and forward list, the form data, the saved sign-ins for
+ * sites, and what sites stored. Where the system's web view has it
+ * (`WebViewFeature.DELETE_BROWSING_DATA`), what sites stored goes by
+ * `WebStorageCompat.deleteBrowsingData`, which deletes "all data stored by
+ * websites", "network cache, cookies, and any JavaScript-readable storage"
+ * (service workers, Cache Storage and IndexedDB among it), and says when it is
+ * done: [done] runs then. Where it has not, the only call left is
+ * [WebStorage.deleteAllData], which its reference says covers the Web SQL
+ * database and Web Storage and which says nothing when it is done: [done]
+ * runs at once. Cookies are also the cookie store's ([WebViewCookies.clear]).
+ * Call on the main thread; [done] runs on it, once. Answers whether every
+ * kind of site data was asked to go.
  */
-fun clearWebViews(context: Context) {
-    WebStorage.getInstance().deleteAllData()
+fun clearWebViews(context: Context, done: () -> Unit = {}): Boolean {
     val database = WebViewDatabase.getInstance(context)
     @Suppress("DEPRECATION")
     database.clearFormData()
@@ -54,6 +64,14 @@ fun clearWebViews(context: Context) {
         clearHistory()
         destroy()
     }
+    val storage = WebStorage.getInstance()
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)) {
+        WebStorageCompat.deleteBrowsingData(storage) { done() }
+        return true
+    }
+    storage.deleteAllData()
+    done()
+    return false
 }
 
 /**
@@ -175,8 +193,9 @@ class AndroidEffects(
     /**
      * The session ended on this device. In the store's turn, after whatever
      * was asked before: the sealed page cache and the snapshot go; then, on
-     * the main thread, the web view's storage, its cache, history, form data
-     * and saved sign-ins for sites, the app's notifications in the shade, and
+     * the main thread, the web view's cache, history, form data and saved
+     * sign-ins for sites, and what sites stored ([clearWebViews]); once the
+     * web view says that is done, the app's notifications in the shade, and
      * every cookie of the one store the web view shares. Nothing kept for the
      * session after runs before the cookie store says its cookies are gone,
      * or five seconds have passed (a limit armed before anything else, so a
@@ -201,31 +220,38 @@ class AndroidEffects(
             // A file that could not be deleted is sealed under a key only this app holds.
         }
         main.post {
-            try {
-                clearWebViews(app)
-            } catch (_: Throwable) {
-                // No web view on this device: nothing of it to clear.
-            }
-            try {
-                // Every notification of the app, also those the push service drew itself.
-                NotificationManagerCompat.from(app).cancelAll()
-            } catch (_: Throwable) {
-                // Nothing shown.
-            }
-            try {
-                cookies.clear {
-                    // Written to disk before the wipe is done, off the main thread: nothing after it,
-                    // the end of the session's thread included, comes first.
-                    thread(name = "navree-cookie-flush", isDaemon = true) {
-                        try {
-                            cookies.flush()
-                        } finally {
-                            done()
+            // The rest goes on once, when the web view says what sites stored is gone, or at once when it cannot say.
+            val started = AtomicBoolean(false)
+            val rest = {
+                if (started.compareAndSet(false, true)) {
+                    try {
+                        // Every notification of the app, also those the push service drew itself.
+                        NotificationManagerCompat.from(app).cancelAll()
+                    } catch (_: Throwable) {
+                        // Nothing shown.
+                    }
+                    try {
+                        cookies.clear {
+                            // Written to disk before the wipe is done, off the main thread: nothing after it,
+                            // the end of the session's thread included, comes first.
+                            thread(name = "navree-cookie-flush", isDaemon = true) {
+                                try {
+                                    cookies.flush()
+                                } finally {
+                                    done()
+                                }
+                            }
                         }
+                    } catch (_: Throwable) {
+                        done()
                     }
                 }
+            }
+            try {
+                clearWebViews(app) { rest() }
             } catch (_: Throwable) {
-                done()
+                // No web view on this device: nothing of it to clear.
+                rest()
             }
         }
     }
