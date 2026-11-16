@@ -68,6 +68,8 @@ pub struct View {
     app_sheets: Vec<AppSheet>,
     app_fonts: Vec<AppFont>,
     mark_build: bool,
+    /// Starts from a clean document: see [`fresh`](Self::fresh).
+    fresh: bool,
     /// The page in the app's shell this view was made from while a native
     /// client asked: its body is then built only if the view is written as HTML.
     #[cfg(feature = "native-preview")]
@@ -93,6 +95,7 @@ impl View {
             app_sheets: Vec::new(),
             app_fonts: Vec::new(),
             mark_build: false,
+            fresh: false,
             #[cfg(feature = "native-preview")]
             note: None,
             seo: None,
@@ -328,6 +331,35 @@ impl View {
         self
     }
 
+    /// This page starts from a clean document and keeps the toolkit's strict policy: in an app
+    /// with a UI extension, a plugin's island script or an allowed policy source, entering or
+    /// leaving it is a full page load, no answer it gives is drawn into a page that is not fresh,
+    /// it is served with [`PAGE_CSP`], and no extension mounts on it. In any other app it does
+    /// nothing. Mark the pages that take a password, a code or a PIN: sign-in, re-authentication
+    /// and the like.
+    ///
+    /// [`Tab::fresh`](crate::Tab::fresh) is another thing: it marks a lazy tab panel that loads
+    /// again each time its tab is shown.
+    ///
+    /// A fresh page says so on the document's root element and in a header, and only while a
+    /// request is answered in such an app: written outside a request, or in an app that has none
+    /// of those, the page is the page it always was.
+    ///
+    /// ```
+    /// use navree_ui::{View, el};
+    ///
+    /// let html = View::new("Sign in")
+    ///     .fresh()
+    ///     .body(el("main").child("Harpreet Sandhu"))
+    ///     .to_html();
+    /// // Outside a request nothing is written.
+    /// assert!(!html.contains("data-ui-fresh-page"));
+    /// ```
+    pub fn fresh(mut self) -> Self {
+        self.fresh = true;
+        self
+    }
+
     /// Adds a `Set-Cookie` header.
     pub(crate) fn cookie(mut self, cookie: HeaderValue) -> Self {
         self.cookies.push(cookie);
@@ -358,7 +390,14 @@ impl View {
     }
 
     fn write(&self, out: &mut String, found: &Measure) {
-        let uses = found.uses;
+        // A page that starts clean, in a request of an app where such pages are on, says so, links
+        // no extension file and loads no extensions module: no plugin code runs on it.
+        let fresh = self.fresh && crate::policy::in_scope();
+        let uses = if fresh {
+            found.uses.without_extensions()
+        } else {
+            found.uses
+        };
         out.push_str("<!doctype html><html lang=\"");
         out.push_str(self.lang);
         out.push('"');
@@ -374,6 +413,11 @@ impl View {
             out.push_str(" data-build=\"");
             out.push_str(assets::BUILD);
             out.push('"');
+        }
+        // The mark of a page that starts clean, last of the attributes: the runtime reads it to
+        // enter and leave the page by a full load.
+        if fresh {
+            out.push_str(" data-ui-fresh-page");
         }
         out.push_str("><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"color-scheme\" content=\"");
         out.push_str(self.color_scheme());
@@ -417,6 +461,20 @@ impl View {
             out.push_str(&url);
             out.push_str("\" data-ui-theme>");
         }
+        // The files of the extensions the page's elements name (those in table rows too): their
+        // sheets after the toolkit's and the theme's and before the app's own, so the app's rules
+        // win at equal weight. Only the address of a served file is ever written, which holds
+        // lower-case letters, digits and `/ . _ -` only.
+        let named = uses
+            .meets(Uses::EXTENSIONS.with(Uses::EXTENSION_SHEETS))
+            .then(|| crate::extension::named(self.body_node()));
+        if let Some(named) = &named {
+            for url in &named.sheets {
+                out.push_str("<link rel=\"stylesheet\" href=\"");
+                out.push_str(url);
+                out.push_str("\" data-ui-ext-link>");
+            }
+        }
         // The app's own, last of the sheets: its fonts' rules, then its stylesheets.
         for font in &self.app_fonts {
             out.push_str("<link rel=\"stylesheet\" href=\"");
@@ -431,6 +489,15 @@ impl View {
         out.push_str("<link rel=\"icon\" href=\"");
         out.push_str(assets::FAVICON_URL);
         out.push_str("\">");
+        // The scripts of those extensions are fetched ahead, so they are there when the runtime
+        // mounts them.
+        if let Some(named) = &named {
+            for url in &named.scripts {
+                out.push_str("<link rel=\"modulepreload\" href=\"");
+                out.push_str(url);
+                out.push_str("\">");
+            }
+        }
         for url in assets::scripts(uses) {
             out.push_str("<script type=\"module\" src=\"");
             out.push_str(url);
@@ -671,12 +738,22 @@ impl View {
 
 impl IntoResponse for View {
     fn into_response(mut self) -> Response {
+        // Whether the app has pages that start clean, as this request is answered, and whether
+        // this is one.
+        let in_scope = crate::policy::in_scope();
+        let fresh = self.fresh && in_scope;
         // A native client, or its web view, gets its own answer; a browser's
         // request goes on as it always has.
         #[cfg(feature = "native-preview")]
         {
             self = match crate::native::swap::view(self) {
-                Ok(response) => return response,
+                Ok(mut response) => {
+                    // A web view's page keeps the toolkit's policy as a browser's does.
+                    if fresh {
+                        crate::policy::mark_fresh(&mut response);
+                    }
+                    return response;
+                }
                 Err(view) => view,
             };
             // A view made while a native client asked, given to a browser: the
@@ -688,6 +765,11 @@ impl IntoResponse for View {
         cap_eager(&mut self.body);
         let uses = self.uses();
         let html = self.to_html();
+        // A page that is not fresh and holds a password field is named in the log, once for its
+        // route, in an app where pages that start clean are on.
+        if in_scope && !fresh && crate::policy::holds_password(self.body_node()) {
+            crate::policy::note_page_password();
+        }
         let mut response = (
             self.status,
             [
@@ -719,6 +801,10 @@ impl IntoResponse for View {
         }
         // Whether a region's fetch was answered with a page the toolkit drew: see `ViewAnswer`.
         response.extensions_mut().insert(ViewAnswer);
+        // A page that starts clean says so in a header, and keeps the toolkit's policy.
+        if fresh {
+            crate::policy::mark_fresh(&mut response);
+        }
         response
     }
 }

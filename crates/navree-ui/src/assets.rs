@@ -93,6 +93,7 @@ fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::PARTS, PARTS_URL),
         (Uses::GENUI, GENUI_URL),
         (Uses::COUNT_UP, COUNT_UP_URL),
+        (Uses::EXTENSIONS, EXTENSIONS_URL),
         #[cfg(feature = "phone")]
         (Uses::PHONE, PHONE_URL),
     ]

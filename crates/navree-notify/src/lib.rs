@@ -13,7 +13,9 @@
 //!   [`to_slack`](Notification::to_slack), [`to_teams`](Notification::to_teams),
 //!   [`to_sms`](Notification::to_sms), [`to_whatsapp`](Notification::to_whatsapp),
 //!   [`to_web_push`](Notification::to_web_push) and
-//!   [`to_push`](Notification::to_push). A [`Notifiable`]
+//!   [`to_push`](Notification::to_push), and for a channel a module adds
+//!   ([`ChannelDriver`], [`Channel::named`])
+//!   [`to_channel`](Notification::to_channel). A [`Notifiable`]
 //!   (usually a user) names the owner of stored notifications and routes
 //!   each channel (`route_mail`, `route_slack`, `route_sms`...).
 //! - [`NotifyModule`] is global: it provides and exports [`Notifier`]
@@ -32,7 +34,9 @@
 //!   `notify.<channel>` configures ([`SlackApi`], [`TeamsApi`],
 //!   [`TwilioSms`], [`VonageSms`], [`SnsSms`], [`TwilioWhatsApp`],
 //!   [`MetaWhatsApp`], [`VapidWebPush`], and for native apps [`ApnsPush`]
-//!   and [`FcmPush`] from section `notify.push`). Numbers are
+//!   and [`FcmPush`] from section `notify.push`), or an SMS or WhatsApp
+//!   driver a module registers under a name
+//!   ([`ModuleBuilderNotifyChannelsExt`]). Numbers are
 //!   read as E.164; opted-out numbers are skipped; each attempt is a
 //!   [`NotificationDelivery`] row, moved forward by provider callbacks
 //!   ([`ChannelCallback`], [`DeliveryLog::ingest`]).
@@ -193,6 +197,7 @@ mod overrides;
 mod preferences;
 mod push;
 mod recipient;
+mod registered;
 mod schema;
 mod store;
 mod stored;
@@ -217,6 +222,7 @@ pub use devices::{
 };
 pub use digest::{DIGEST_TYPE, DigestItem};
 pub use drivers::apns::ApnsPush;
+pub use drivers::channel::ChannelDriver;
 pub use drivers::fcm::FcmPush;
 pub use drivers::log::{LogSms, LogWhatsApp};
 pub use drivers::meta::MetaWhatsApp;
@@ -267,6 +273,7 @@ pub use preferences::{
 };
 pub use push::{NewPushSubscription, PushKeys, PushSubscription, PushSubscriptions};
 pub use recipient::RecipientScope;
+pub use registered::ModuleBuilderNotifyChannelsExt;
 pub use stored::{DatabaseNotification, NotificationList};
 pub use timing::{Digest, QuietHours};
 pub use tokens::ConnectionTokens;

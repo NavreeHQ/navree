@@ -15,6 +15,7 @@ description: "Send notifications over Slack, Teams, SMS, WhatsApp, web push and 
 | `Channel::WhatsApp` | `to_whatsapp` → `WhatsAppMessage` | `route_whatsapp`, read as E.164 | Twilio or the WhatsApp Cloud API |
 | `Channel::WebPush` | `to_web_push` → `WebPushMessage` | Every push subscription of the notifiable | The browsers' push services, encrypted and signed with your VAPID key |
 | `Channel::Push` | `to_push` → `PushMessage` | Every push device of the notifiable whose session is still signed in | Apple's push service (iOS) and Firebase Cloud Messaging (Android) |
+| `Channel::named("..")` | `to_channel` → a JSON value | `route_channel` | A channel a module adds (see [a channel a module adds](#a-channel-a-module-adds)) |
 
 Every delivery over these channels is a row in `notification_deliveries`. Status callbacks from the providers move it to delivered, read or failed, a reply of STOP opts the number out, and each channel has a fake for tests.
 
@@ -175,6 +176,72 @@ fn to_slack(&self, _notifiable: &dyn Notifiable) -> Option<SlackMessage> {
 
 The new channels go out like mail and broadcasts: after the request's transaction commits, or as one `notify.send` job each with `notify.queue` on (see [queueing](/docs/digging-deeper/notifications/#queueing-notifications)). The job carries the rendered message, so a worker sends exactly what the request rendered. For web push and push, the subscriptions and devices are read when the job runs.
 
+### A channel a module adds
+
+A destination Navree has no channel for (a team chat, a pager, a regional messenger) is a `ChannelDriver` that a module adds under a name. The container builds it, so it can inject what it needs:
+
+```rust title="src/doot.rs"
+use navree::BoxFuture;
+use navree::notify::{ChannelDriver, ChannelError, SentMessage};
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use serde_json::Value;
+
+/// Posts notifications to a Doot chat room.
+#[injectable]
+pub struct DootChannel {}
+
+impl ChannelDriver for DootChannel {
+    const NAME: &'static str = "doot";
+
+    fn send<'a>(&'a self, to: &'a str, message: &'a Value) -> BoxFuture<'a, Result<SentMessage, ChannelError>> {
+        Box::pin(async move {
+            // Post `message` to the room `to`.
+            Ok(SentMessage::new("doot"))
+        })
+    }
+}
+
+pub struct DootModule;
+
+impl Module for DootModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.notification_channel::<DootChannel>();
+    }
+}
+```
+
+A notification lists it with `Channel::named("doot")` and renders its message with `to_channel`; the notifiable gives its address with `route_channel`. Both get the channel's name, so one notification can serve several channels a module adds, and either returning `None` skips the channel for that recipient:
+
+```rust
+const DOOT: Channel = Channel::named("doot");
+
+impl Notification for InvoicePaid {
+    const TYPE: &'static str = "invoice.paid";
+
+    fn via(&self, _notifiable: &dyn Notifiable) -> Vec<Channel> {
+        vec![Channel::Database, DOOT]
+    }
+
+    fn to_channel(&self, channel: DriverName, _notifiable: &dyn Notifiable) -> Option<Value> {
+        (channel.as_str() == "doot").then(|| json!({ "text": format!("{} paid ₹1,00,000", self.customer) }))
+    }
+}
+
+impl Notifiable for Employee {
+    // ...
+    fn route_channel(&self, channel: DriverName) -> Option<String> {
+        (channel.as_str() == "doot").then(|| self.doot_room.clone()).flatten()
+    }
+}
+```
+
+Declare the channel as a `const`: `Channel::named` panics on a name that is not a lower-case letter followed by lower-case letters, digits or `_`, and in a `const` that fails the build instead. `Channel::named("mail")` is `Channel::Mail`: a built-in channel's name always gives the built-in channel.
+
+A channel a module adds goes out like the built-in ones: after the commit, or queued as `notify.send` with the rendered message in the job. People switch it in their preferences once `notify.preferences.channels` lists it, and `notify.deferred.channels` holds it for quiet hours once it lists it; both name a channel a module adds only when written as a list, because the comma-separated form of an environment variable reads the built-in channels only. A notification that lists a channel no module adds fails that delivery (``no module registers the notification channel `doot` with m.notification_channel``), recorded as failed; the other channels still go out. A queued `notify.send` job that names a channel the worker's process does not know does not read, and fails with ``unknown notification channel `<name>` ``. A name that is not a lower-case word, a built-in channel's name, a key of `[notify]` and a name two modules add fail the boot, naming `m.notification_channel`.
+
+Names read from outside the code never add a channel, and a name is a channel only when a module adds a channel under it: the name of another kind's driver (a cache store, a mail transport) is as unknown as a made-up one. A preference request naming a channel the app does not know is refused like any other bad value, a `400` with the code `validation_failed` and the text ``unknown notification channel `<name>` `` under `errors.preferences`; a text that is not a name at all gets a message that lists the built-in channels and does not repeat it. A stored preference that names one no module adds any more keeps its other choices (the unknown one is skipped with a warning), and a held delivery of such a channel is dropped with a warning while the other held deliveries still go out.
+
 ## Configuration
 
 Each channel reads its own table of the `notify` section. A channel with nothing configured still works where it needs nothing (Slack and Teams webhooks); the others fail with `NotifyError::Unavailable` until they have a driver.
@@ -225,11 +292,11 @@ access_token = ""                 # APP_NOTIFY__META__ACCESS_TOKEN
 | `notify.teams.app_password` | empty | Its client secret. Required with `app_id`. |
 | `notify.teams.tenant` | `botframework.com` | The tenant that issues the bot's tokens: `botframework.com` for a multi-tenant bot, your tenant id for a single-tenant one. |
 | `notify.teams.token_url` | `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` | The token endpoint. |
-| `notify.sms.driver` | none | `twilio`, `vonage`, `sns` (also spelled `aws_sns`) or `log`. Without one, the SMS channel is unavailable. |
+| `notify.sms.driver` | none | `twilio`, `vonage`, `sns` (also spelled `aws_sns`) or `log`, or the name of a driver a module registers with `m.sms_driver`. Without one, the SMS channel is unavailable. |
 | `notify.sms.from` | none | The default sender. |
 | `notify.sms.default_region` | none | The ISO 3166-1 country numbers without a country code are read in. Without it, such numbers are invalid. |
 | `notify.sms.status_callback` | none | The URL the provider reports statuses to: Twilio's `StatusCallback`, Vonage's `webhook_url`. |
-| `notify.whatsapp.driver` | none | `twilio`, `meta` or `log`. |
+| `notify.whatsapp.driver` | none | `twilio`, `meta` or `log`, or the name of a driver a module registers with `m.whatsapp_driver`. |
 | `notify.whatsapp.from` | none | The sender's number (Twilio). |
 | `notify.whatsapp.status_callback` | none | Twilio's `StatusCallback` for WhatsApp. |
 | `notify.web_push.public_key` | none | The VAPID public key (base64url). Web push is on when it is set. |
@@ -317,6 +384,62 @@ Numbers are read as E.164 with navree-validation's [`Phone`](/docs/basics/valida
 | `.from(sender)` | The sender instead of `notify.sms.from` |
 | `.to(number)` | The recipient instead of `route_sms` |
 
+### A driver a module registers
+
+A gateway Navree has no driver for is an `SmsDriver` of your own that a module registers under a name; `notify.sms.driver` then names it, and its settings are the table under that name, `[notify.<name>]`:
+
+```rust title="src/sandesh.rs"
+use navree::BoxFuture;
+use navree::notify::{ChannelError, SentMessage, SmsDriver, SmsMessage};
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use serde::Deserialize;
+
+/// The settings of the driver: `[notify.sandesh]`.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct SandeshSettings {
+    sender_id: String,
+}
+
+/// Texts through the Sandesh gateway.
+struct Sandesh {
+    sender_id: String,
+}
+
+impl SmsDriver for Sandesh {
+    fn send<'a>(&'a self, to: &'a str, message: &'a SmsMessage) -> BoxFuture<'a, Result<SentMessage, ChannelError>> {
+        Box::pin(async move {
+            // Post `message.body` to `to` (E.164) as `self.sender_id`.
+            Ok(SentMessage::new("sandesh"))
+        })
+    }
+}
+
+pub struct SandeshModule;
+
+impl Module for SandeshModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.sms_driver("sandesh", |ctx| async move {
+            let settings: SandeshSettings = ctx.settings()?;
+            Ok(Sandesh { sender_id: settings.sender_id })
+        });
+    }
+}
+```
+
+```toml title="config/app.toml"
+[notify.sms]
+driver = "sandesh"
+from = "+911612345678"
+default_region = "IN"
+
+[notify.sandesh]
+sender_id = "NAVREE"
+```
+
+The channel reads numbers, skips opted-out ones and records each delivery as it does for the built-in drivers, with the `provider` the driver's `SentMessage` names. An app's own `dyn SmsDriver` (a fake in a test) still wins over the configured driver. A name is a lower-case letter followed by lower-case letters, digits or `_`; a registration under a built-in name (`twilio`, `vonage`, `sns`, `aws_sns`, `log`) or a key of `[notify]` (`slack`, `meta`, `push`), one name registered by two modules, a `notify.sms.driver` naming a driver no module registers and a factory that fails each fail the boot, naming `m.sms_driver`; `config:check` reports the same. A factory's error is shown in the boot error as written, so it must not contain a secret from the driver's settings.
+
 ### Opt-outs
 
 Text messages must stop when the recipient asks. The SMS and WhatsApp channels keep an opt-out list per channel, `notification_opt_outs`, and skip a number on it: its delivery is recorded as `opted_out`, and `send` succeeds.
@@ -345,7 +468,7 @@ Numbers are normalized the same way as for sending, so every format of one numbe
 
 ## WhatsApp
 
-Pick a driver with `notify.whatsapp.driver`: `twilio` (the Messages API with `whatsapp:` addresses, sharing `notify.twilio`'s credentials with SMS), `meta` (the WhatsApp Cloud API, `POST /{api_version}/{phone_number_id}/messages`) or `log`.
+Pick a driver with `notify.whatsapp.driver`: `twilio` (the Messages API with `whatsapp:` addresses, sharing `notify.twilio`'s credentials with SMS), `meta` (the WhatsApp Cloud API, `POST /{api_version}/{phone_number_id}/messages`) or `log`. A `WhatsAppDriver` of your own registers the same way as an SMS driver, with `m.whatsapp_driver("baat", ..)`, and `notify.whatsapp.driver = "baat"` selects it (see [a driver a module registers](#a-driver-a-module-registers)).
 
 WhatsApp takes free text only inside the 24-hour window after the recipient last wrote to you. Outside it, send an approved template:
 
@@ -604,7 +727,7 @@ Apple's provider token (an ES256 JWT of your team and key) is signed once and us
 
 ## The delivery log
 
-With `notify.deliveries` on and `DatabaseModule` in the app, every attempt over the six channels is a row of `notification_deliveries`, the navree-orm model `NotificationDelivery`:
+With `notify.deliveries` on and `DatabaseModule` in the app, every attempt over the six channels is a row of `notification_deliveries`, the navree-orm model `NotificationDelivery`. So is every attempt over a [channel a module adds](#a-channel-a-module-adds): its `channel` is the channel's name, its `provider` what its `SentMessage` names, and its `recipient` the address `route_channel` gave, or `webhook:<host>` when that address is an `http` or `https` URL:
 
 | Column | |
 |---|---|

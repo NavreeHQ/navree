@@ -137,6 +137,9 @@ impl Walk<'_> {
             return Node::Empty;
         }
         self.kept += 1;
+        // An extension's attributes go with the other `data-ui-` attributes below; with them go
+        // the bits that would have the page link its files and load its module.
+        element.uses = element.uses.without_extensions();
         let attrs = std::mem::take(&mut element.attrs);
         element.attrs = attrs
             .into_iter()
@@ -431,6 +434,55 @@ mod tests {
         assert!(!html.contains("data-ui-src"), "{html}");
         assert!(!html.contains("popovertarget"), "{html}");
         assert!(!html.contains("<form"), "{html}");
+    }
+
+    #[test]
+    fn defuse_drops_extension_attributes_and_clears_their_bits() {
+        use crate::extension::{ExtensionFile, UiExtension};
+        use crate::node::Uses;
+        use crate::render::measure;
+
+        static MAP: UiExtension = UiExtension::new("geo", "map")
+            .script(ExtensionFile::__new(
+                b"export const contract = 1;",
+                "1a2b3c4d5e6f",
+                None,
+            ))
+            .sheet(ExtensionFile::__new(
+                b"/* scoped for geo */",
+                "0f9e8d7c6b5a",
+                Some("geo"),
+            ))
+            .contract(1)
+            .keeps(&["data-moving"])
+            .routes(&["/geo/"]);
+
+        let body: Node = el("div")
+            .child(
+                el("div")
+                    .slot("geo:map")
+                    .extension_with(&MAP, &serde_json::json!({ "zoom": 15 }))
+                    .extension_call("/deliveries/42/drop"),
+            )
+            .into();
+        let named = measure(&body).uses;
+        assert!(named.has(Uses::EXTENSIONS) && named.has(Uses::EXTENSION_SHEETS));
+
+        let kept = defuse(body, "s1");
+        let html = render(&kept);
+        assert!(
+            html.contains(r#"data-slot="geo:map""#),
+            "the element stays: {html}"
+        );
+        assert!(!html.contains("data-ui-ext"), "{html}");
+        assert!(!html.contains("data-ui-props"), "{html}");
+        assert!(!html.contains("data-ui-keep-attrs"), "{html}");
+        assert!(
+            !measure(&kept)
+                .uses
+                .meets(Uses::EXTENSIONS.with(Uses::EXTENSION_SHEETS)),
+            "no page links its files or loads its module for it"
+        );
     }
 
     #[test]

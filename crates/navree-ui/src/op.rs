@@ -188,9 +188,19 @@ pub enum Op {
     Native(crate::native::NodeOp),
 }
 
+/// Notes, in an app where pages that start clean are on, that the operations being built carry a
+/// password field: they draw it into a page that may hold plugin code, and the log names the
+/// route once. Outside such an app, and outside a request, it does nothing.
+fn note_password_sent(node: &Node) {
+    if crate::policy::in_scope() && crate::policy::holds_password(node) {
+        crate::policy::note_ops_password();
+    }
+}
+
 impl Op {
     /// Morphs element `target` into `node`.
     pub fn morph(target: impl Into<String>, node: &Node) -> Self {
+        note_password_sent(node);
         let target = target.into();
         #[cfg(feature = "native-preview")]
         if let Some(op) = crate::native::swap::node_op(crate::native::How::Morph, &target, node) {
@@ -204,6 +214,7 @@ impl Op {
 
     /// Replaces element `target` with `node`.
     pub fn replace(target: impl Into<String>, node: &Node) -> Self {
+        note_password_sent(node);
         let target = target.into();
         #[cfg(feature = "native-preview")]
         if let Some(op) = crate::native::swap::node_op(crate::native::How::Replace, &target, node) {
@@ -217,6 +228,7 @@ impl Op {
 
     /// Adds `node` at the end of `target`.
     pub fn append(target: impl Into<String>, node: &Node) -> Self {
+        note_password_sent(node);
         let target = target.into();
         #[cfg(feature = "native-preview")]
         if let Some(op) = crate::native::swap::node_op(crate::native::How::Append, &target, node) {
@@ -230,6 +242,7 @@ impl Op {
 
     /// Adds `node` at the start of `target`.
     pub fn prepend(target: impl Into<String>, node: &Node) -> Self {
+        note_password_sent(node);
         let target = target.into();
         #[cfg(feature = "native-preview")]
         if let Some(op) = crate::native::swap::node_op(crate::native::How::Prepend, &target, node) {
@@ -508,6 +521,13 @@ impl Reply {
     fn fallback_response(self) -> (Response, Envelope, StatusCode) {
         let mut envelope = Envelope::new(self.ops);
         envelope.modules = assets::scripts(self.uses).collect();
+        // An extension with a stylesheet only has no script of its own, but the extensions
+        // module links the stylesheet of an element that arrives in a reply.
+        if self.uses.meets(crate::node::Uses::EXTENSION_SHEETS)
+            && !envelope.modules.contains(&assets::EXTENSIONS_URL)
+        {
+            envelope.modules.push(assets::EXTENSIONS_URL);
+        }
         let signed_out = self.signed_out;
         let mut response = match self.fallback {
             Fallback::Redirect(href) => {

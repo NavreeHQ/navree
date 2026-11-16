@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/board-demo", "apps/store-demo", "apps/inbox-demo", "apps/system-app", "apps/theme-demo", "apps/ui-docs", "apps/ui-proof", "apps/ui-table-proof", "apps/agent-demo", "xtask"]
+members = ["crates/*", "plugins/*", "apps/board-demo", "apps/store-demo", "apps/inbox-demo", "apps/system-app", "apps/theme-demo", "apps/ui-docs", "apps/ui-proof", "apps/ui-table-proof", "apps/agent-demo", "xtask"]
 # The benchmark apps (Navree's and other Rust frameworks') are separate projects,
 # and so is the fuzzing workspace (it needs a nightly toolchain).
 exclude = ["bench", "fuzz"]
@@ -51,6 +51,7 @@ navree-session = { path = "crates/navree-session", version = "=1.2.4" }
 navree-validation = { path = "crates/navree-validation", version = "=1.2.4" }
 navree-validation-macros = { path = "crates/navree-validation-macros", version = "=1.2.4" }
 navree-ui-macros = { path = "crates/navree-ui-macros", version = "=1.2.4" }
+navree-ui-ext-macros = { path = "crates/navree-ui-ext-macros", version = "=1.2.4" }
 navree-queue = { path = "crates/navree-queue", version = "=1.2.4" }
 navree-audit = { path = "crates/navree-audit", version = "=1.2.4" }
 navree-access = { path = "crates/navree-access", version = "=1.2.4" }
@@ -317,6 +318,8 @@ lettre = { version = "0.11.23", default-features = false, features = [
 # remote stylesheets, no CLI).
 css-inline = { version = "0.23.0", default-features = false }
 html2text = { version = "0.17.4", default-features = false }
+# extension_sheet! parses a plugin's stylesheet as browsers do (navree-ui-ext-macros only).
+cssparser = "0.38.0"
 # DNS TXT lookups for navree-mail's sending-domain checks (SPF, DKIM,
 # DMARC): pure Rust, the system's resolver configuration, no DNS over TLS.
 hickory-resolver = { version = "0.26.3", default-features = false, features = ["system-config", "tokio"] }

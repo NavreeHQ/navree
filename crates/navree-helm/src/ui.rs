@@ -37,6 +37,7 @@ mod record;
 /// The Settings screens (feature `settings`).
 #[cfg(feature = "settings")]
 pub(crate) mod settings;
+mod widgets;
 
 pub(crate) use actions::{destroy, run_action};
 pub(crate) use frame::{counted_in, menu_fragment};

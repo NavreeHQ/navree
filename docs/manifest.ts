@@ -320,6 +320,9 @@ export const sections: DocsSection[] = [
       "live-hub",
       "drag-and-drop",
       "islands",
+      "your-own-components",
+      "extension-contract",
+      "page-policy",
       // Native apps
       "native",
       // What is next
@@ -589,6 +592,12 @@ export const sections: DocsSection[] = [
       { title: "Files and documents", from: "documents" },
       { title: "Testing", from: "browser-testing" },
     ],
+  },
+  {
+    slug: "plugins",
+    title: "Plugins",
+    description: "Package a feature as a crate an app adds with one command, and connect existing Rust crates to an app.",
+    pages: ["existing-crates"],
   },
   {
     slug: "tools",

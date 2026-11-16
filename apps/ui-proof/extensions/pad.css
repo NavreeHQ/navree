@@ -1,0 +1,46 @@
+/*
+ * The pad's own rules. The build scopes every rule to the app's components: a rule that starts with a
+ * selector styles what is inside a component, and `&` is the component's own root.
+ */
+
+/* The pad: a box of its own, its parts one under another. */
+&[data-slot="app:pad"] {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+/* The body the script draws into: its lines one under another. */
+[data-slot="app:pad-body"] {
+  display: grid;
+  gap: 0.25rem;
+  min-block-size: 1.5rem;
+}
+
+/* A button a library writes into the body takes the browser's own button colours, in either colour scheme:
+   the page gives a button the colour of the text around it, which is not chosen for a button's own face. */
+[data-slot="app:pad-body"] button {
+  color: ButtonText;
+  background: ButtonFace;
+}
+
+[data-slot="app:pad-line"] {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: 0.875rem;
+}
+
+/* The cells the proof page writes in one go: small squares, side by side. */
+[data-slot="app:cells"] {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+[data-slot="app:cell"] {
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
+  margin: 1px;
+  background: var(--line-2);
+}

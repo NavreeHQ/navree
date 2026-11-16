@@ -6,8 +6,12 @@ use std::sync::Arc;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use http::Method;
-use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RouteDef};
-use navree_kernel::{BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver};
+use http::request::Parts;
+use navree_db::Uow;
+use navree_http::{AppError, Controller, Json, ModuleBuilderHttpExt, RequestWorkspace, RouteDef};
+use navree_kernel::{
+    AppContext, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, Resolver,
+};
 use navree_workspace::{CurrentWorkspace, PinnedWorkspace};
 use serde_json::{Value, json};
 
@@ -292,6 +296,146 @@ async fn a_pinned_request_uses_its_workspace_and_no_other() {
         .send()
         .await
         .assert_status(200);
+}
+
+/// `GET /api/which`: the workspace `dyn RequestWorkspace` finds for the
+/// request, the workspace the request's unit of work is in, and whether a
+/// `CurrentWorkspace` is kept. `GET /api/which/current` takes
+/// `CurrentWorkspace` first.
+struct WhichController;
+
+impl Injectable for WhichController {
+    fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(WhichController) })
+    }
+}
+
+async fn which(mut parts: Parts) -> Result<Json<Value>, AppError> {
+    let ctx = parts
+        .extensions
+        .get::<AppContext>()
+        .cloned()
+        .ok_or_else(|| AppError::internal("no app in the request"))?;
+    let resolver = ctx
+        .try_get::<dyn RequestWorkspace>()
+        .await
+        .ok_or_else(|| AppError::internal("no dyn RequestWorkspace in the app"))?;
+    let id = resolver.resolve(&mut parts).await;
+    Ok(Json(json!({
+        "id": id,
+        "entered": parts.extensions.get::<Uow>().and_then(Uow::workspace),
+        "current": parts.extensions.get::<CurrentWorkspace>().is_some(),
+    })))
+}
+
+async fn which_after_current(_: CurrentWorkspace, parts: Parts) -> Result<Json<Value>, AppError> {
+    which(parts).await
+}
+
+impl Controller for WhichController {
+    fn prefix(&self) -> &'static str {
+        "/"
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        vec![
+            RouteDef::on(Method::GET, "/which", which).public(),
+            RouteDef::on(Method::GET, "/which/current", which_after_current).authenticated(),
+        ]
+    }
+}
+
+struct WhichModule;
+
+impl Module for WhichModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.controller::<WhichController>();
+    }
+}
+
+#[tokio::test]
+async fn a_request_workspace_is_the_one_current_workspace_resolves_and_is_left_unentered() {
+    let world = World::with(builder().module(WhichModule).module(PinModule)).await;
+    let harpreet = world.user("Harpreet Sandhu", "harpreet@example.com").await;
+    let meera = world.user("Meera Sharma", "meera@example.com").await;
+    let kuldeep = world.user("Kuldeep Gill", "kuldeep@example.com").await;
+    let ludhiana = world.workspace(harpreet, "Ludhiana office").await;
+    let amritsar = world.workspace(meera, "Amritsar office").await;
+    world.join(ludhiana.id, meera, "member").await;
+    let named = ludhiana.id.to_string();
+
+    // A member naming the workspace: its id, with nothing entered or kept.
+    world
+        .as_user(meera)
+        .get("/api/which")
+        .header("x-workspace", named.as_str())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("id", json!(ludhiana.id))
+        .assert_json_path("entered", Value::Null)
+        .assert_json_path("current", json!(false));
+    // Someone who is not a member, a guest, and an unknown workspace: none.
+    world
+        .as_user(kuldeep)
+        .get("/api/which")
+        .header("x-workspace", named.as_str())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("id", Value::Null)
+        .assert_json_path("current", json!(false));
+    world
+        .app
+        .client()
+        .get("/api/which")
+        .header("x-workspace", named.as_str())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("id", Value::Null);
+    world
+        .as_user(meera)
+        .get("/api/which")
+        .header("x-workspace", uuid::Uuid::now_v7().to_string())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("id", Value::Null);
+    // A credential pinned to another workspace than the one named: none.
+    // Pinned and naming none: the pinned one, still not entered.
+    let pin = amritsar.id.to_string();
+    world
+        .as_user(meera)
+        .get("/api/which")
+        .header("x-test-pin", pin.as_str())
+        .header("x-workspace", named.as_str())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("id", Value::Null);
+    world
+        .as_user(meera)
+        .get("/api/which")
+        .header("x-test-pin", pin.as_str())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("id", json!(amritsar.id))
+        .assert_json_path("entered", Value::Null)
+        .assert_json_path("current", json!(false));
+    // After the `CurrentWorkspace` extractor, the answer is the extractor's, and the unit
+    // of work is in the workspace: what `entered` reads above does report an entered one.
+    world
+        .as_user(meera)
+        .get("/api/which/current")
+        .header("x-workspace", named.as_str())
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("id", json!(ludhiana.id))
+        .assert_json_path("entered", json!(ludhiana.id))
+        .assert_json_path("current", json!(true));
 }
 
 #[test]

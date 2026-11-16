@@ -19,7 +19,7 @@ use navree_ui::{
 };
 
 use super::frame::Frame;
-use super::{cells, forms, metrics, page_error};
+use super::{cells, forms, metrics, page_error, widgets};
 use crate::api::{parse_range, resource};
 use crate::cx::Cx;
 use crate::field::{Field, FieldKind};
@@ -331,7 +331,15 @@ pub(crate) async fn dashboard(panel: Panel, headers: HeaderMap) -> Response {
             );
         }
     }
-    let body: Node = if core.registry.resources().is_empty() {
+    // The cards other modules add, after the metric cards: only those the user may see.
+    let cards = if core.options.dashboard {
+        widgets::cards(cx).await
+    } else {
+        Vec::new()
+    };
+    let body: Node = if !cards.is_empty() {
+        Stack::gap(6).children(sections).children(cards).into()
+    } else if core.registry.resources().is_empty() {
         Empty::new("No resources yet")
             .icon(icons::INBOX)
             .description(Stack::gap(2).children((

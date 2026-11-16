@@ -1,17 +1,28 @@
 //! [`Telemetry`]: the registry of an app's sinks, held by every emitter.
 
 use std::cell::Cell;
+use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use chrono::Utc;
 use navree_kernel::AppContext;
 
+use crate::event::is_event_name;
 use crate::{
     EventContext, EventKind, ExceptionReported, Interest, TelemetryContext, TelemetryEvent,
     TelemetryRecord, TelemetrySink,
 };
+
+/// The most malformed custom event names one registry remembers having
+/// warned about. Past that, a malformed name is still not delivered, and
+/// is not logged again.
+const WARNED_NAMES: usize = 1024;
+
+/// The longest part of a malformed custom event name a registry remembers
+/// and logs, in bytes.
+const WARNED_NAME_BYTES: usize = 256;
 
 /// The app's telemetry registry: the sinks registered in the container and
 /// the union of their [`Interest`]s. A cheap, cloneable handle.
@@ -53,6 +64,42 @@ struct Registry {
     /// The union of the sinks' interests while active; 0 before the app
     /// booted and after it shut down.
     interest: AtomicU32,
+    /// The malformed custom event names already warned about: at most
+    /// [`WARNED_NAMES`], each cut to [`WARNED_NAME_BYTES`].
+    warned: Mutex<BTreeSet<String>>,
+}
+
+impl Registry {
+    /// Drops a custom event named `name`, which is not lower-case words
+    /// joined by `.`, and logs a warning the first time this registry sees
+    /// the name, while it remembers fewer than [`WARNED_NAMES`] names.
+    fn refuse(&self, name: &str) {
+        let name = bounded(name);
+        let first = {
+            let mut warned = self.warned.lock().unwrap_or_else(PoisonError::into_inner);
+            warned.len() < WARNED_NAMES && warned.insert(name.to_owned())
+        };
+        if first {
+            // Quoted and escaped: the name may be built from request data.
+            tracing::warn!(
+                target: "navree::telemetry",
+                "telemetry event name {name:?} is not lower-case words joined by `.`; the event was not delivered"
+            );
+        }
+    }
+}
+
+/// `name`, cut to at most [`WARNED_NAME_BYTES`] bytes at a character
+/// boundary.
+fn bounded(name: &str) -> &str {
+    if name.len() <= WARNED_NAME_BYTES {
+        return name;
+    }
+    let mut end = WARNED_NAME_BYTES;
+    while !name.is_char_boundary(end) {
+        end -= 1;
+    }
+    &name[..end]
 }
 
 /// A sink and the interest it declared.
@@ -104,6 +151,7 @@ impl Telemetry {
             registry: Some(Arc::new(Registry {
                 sinks: OnceLock::new(),
                 interest: AtomicU32::new(0),
+                warned: Mutex::new(BTreeSet::new()),
             })),
         }
     }
@@ -224,11 +272,22 @@ impl Telemetry {
     }
 
     /// Hands `record` to the sinks that want it, unless a sink on this
-    /// thread is already receiving one.
+    /// thread is already receiving one. A custom event whose name is not
+    /// lower-case words joined by `.` goes to no sink (see
+    /// [`CustomEvent`](crate::CustomEvent)).
     fn deliver(&self, record: TelemetryRecord) {
-        let Some(sinks) = self.registry.as_ref().and_then(|r| r.sinks.get()) else {
+        let Some(registry) = self.registry.as_ref() else {
             return;
         };
+        let Some(sinks) = registry.sinks.get() else {
+            return;
+        };
+        if let TelemetryEvent::Custom(event) = &record.event
+            && !is_event_name(&event.name)
+        {
+            registry.refuse(&event.name);
+            return;
+        }
         if DELIVERING.with(|delivering| delivering.replace(true)) {
             return;
         }
@@ -275,7 +334,7 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
 
     use super::*;
-    use crate::{LogLevel, LogRecord};
+    use crate::{CustomEvent, LogLevel, LogRecord};
 
     /// A sink that emits from `record`, as a sink that logs would.
     struct Echo {
@@ -323,6 +382,68 @@ mod tests {
         assert!(a.same_registry(&a.clone()));
         assert!(!a.same_registry(&Telemetry::pending()));
         assert!(!Telemetry::disabled().same_registry(&Telemetry::disabled()));
+    }
+
+    /// A sink that counts what it receives.
+    #[derive(Default)]
+    struct Counter {
+        seen: AtomicUsize,
+    }
+
+    impl TelemetrySink for Counter {
+        fn record(&self, _record: &TelemetryRecord) {
+            self.seen.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    /// The names `telemetry`'s registry warned about.
+    fn warned(telemetry: &Telemetry) -> BTreeSet<String> {
+        let registry = telemetry.registry.as_ref().expect("a registry");
+        registry.warned.lock().unwrap().clone()
+    }
+
+    fn custom(name: impl Into<String>) -> TelemetryEvent {
+        TelemetryEvent::Custom(CustomEvent::new(name))
+    }
+
+    #[test]
+    fn a_custom_event_with_a_bad_name_is_not_delivered_and_warns_once() {
+        let counter = Arc::new(Counter::default());
+        let telemetry = Telemetry::with_sinks(vec![counter.clone()]);
+        let bad = [
+            "Announcements.Published",
+            "published",
+            "announcements..published",
+        ];
+        for _ in 0..2 {
+            for name in bad {
+                telemetry.emit(custom(name));
+            }
+        }
+        assert_eq!(counter.seen.load(Ordering::SeqCst), 0, "none is delivered");
+        let expected: BTreeSet<String> = bad.iter().map(|name| (*name).to_owned()).collect();
+        assert_eq!(warned(&telemetry), expected, "each is warned about once");
+
+        telemetry.emit(custom("announcements.published"));
+        assert_eq!(counter.seen.load(Ordering::SeqCst), 1);
+
+        // At most 1,024 names are remembered: past that a bad name is still
+        // not delivered, and the set does not grow.
+        for i in 0..2000 {
+            telemetry.emit(custom(format!("Made_Up_{i}")));
+        }
+        assert_eq!(warned(&telemetry).len(), WARNED_NAMES);
+        assert_eq!(counter.seen.load(Ordering::SeqCst), 1);
+
+        // A long name is remembered cut short, at a character boundary.
+        let telemetry = Telemetry::with_sinks(vec![counter.clone()]);
+        let long = format!("Ludhiana.{}", "ਪ".repeat(200));
+        telemetry.emit(custom(long.clone()));
+        let kept = warned(&telemetry);
+        let kept = kept.iter().next().expect("one name");
+        assert!(kept.len() <= WARNED_NAME_BYTES, "{}", kept.len());
+        assert!(long.starts_with(kept.as_str()));
+        assert_eq!(counter.seen.load(Ordering::SeqCst), 1);
     }
 
     #[test]

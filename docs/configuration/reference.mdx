@@ -212,7 +212,7 @@ More: [/docs/digging-deeper/cache/](/docs/digging-deeper/cache/).
 
 | Key | Type | Default | Environment variable | Description |
 |---|---|---|---|---|
-| `store` | memory \| redis | `"memory"` | `APP_CACHE__STORE` | The backend (default `memory`; `redis` needs navree-redis's `RedisModule`). |
+| `store` | memory \| redis \| a name registered with m.cache_store | `"memory"` | `APP_CACHE__STORE` | The backend (default `memory`; `redis` needs navree-redis's `RedisModule`). |
 | `prefix` | string | `""` | `APP_CACHE__PREFIX` | Prepended to every cache key and lock name (default empty). |
 | `default_ttl_secs` | integer | `3600` | `APP_CACHE__DEFAULT_TTL_SECS` | The TTL of `Ttl::Default`, in seconds; must be greater than 0 (default 3600). |
 
@@ -747,7 +747,7 @@ More: [/docs/digging-deeper/mail/](/docs/digging-deeper/mail/).
 | Key | Type | Default | Environment variable | Description |
 |---|---|---|---|---|
 | `from` | string | `"hello@example.com"` | `APP_MAIL__FROM` | The default sender, `hello@example.com` or `Agra <hello@acme.test>` (default `hello@example.com`). Empty means no default: every message must then set its own sender. |
-| `transport` | TransportConfig | `"log"` | `APP_MAIL__TRANSPORT` | How messages are delivered (default [`TransportConfig::Log`]). |
+| `transport` | TransportConfig | `"log"` | `APP_MAIL__TRANSPORT` | How messages are delivered (default [`TransportConfig::Log`]), or the name of a transport registered with m.mail_transport. |
 | `queue` | string |  | `APP_MAIL__QUEUE` | The queue `Mailer::queue` dispatches to (default: the job's own queue, `default`). |
 | `transports` | table of TransportConfig | `"{}"` | `APP_MAIL__TRANSPORTS` | Named transports that `Mailer::via` selects (lanes such as `simulation` and `notifications`). |
 | `render` | table |  | `APP_MAIL__RENDER` | CSS inlining and the generated text body. |
@@ -953,12 +953,12 @@ More: [/docs/digging-deeper/notifications/](/docs/digging-deeper/notifications/)
 | `teams.tenant` | string | `"botframework.com"` | `APP_NOTIFY__TEAMS__TENANT` | The tenant that issues the bot's tokens: `botframework.com` for a multi-tenant bot (default), the tenant id for a single-tenant one. |
 | `teams.token_url` | string |  | `APP_NOTIFY__TEAMS__TOKEN_URL` | The token endpoint (default `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token`). |
 | `sms` | table |  | `APP_NOTIFY__SMS` | The SMS channel. |
-| `sms.driver` | twilio \| vonage \| sns \| log |  | `APP_NOTIFY__SMS__DRIVER` | The driver; without one the SMS channel is unavailable. |
+| `sms.driver` | twilio \| vonage \| sns \| aws_sns \| log \| a name registered with m.sms_driver |  | `APP_NOTIFY__SMS__DRIVER` | The driver; without one the SMS channel is unavailable. |
 | `sms.from` | string |  | `APP_NOTIFY__SMS__FROM` | The default sender: a number in E.164, an alphanumeric sender id, or a Twilio messaging service (`MG...`). |
 | `sms.default_region` | string |  | `APP_NOTIFY__SMS__DEFAULT_REGION` | The region numbers without a country code are read in (`US`, `GB`); without it such numbers are invalid. |
 | `sms.status_callback` | string |  | `APP_NOTIFY__SMS__STATUS_CALLBACK` | The URL the provider reports delivery statuses to (Twilio's `StatusCallback`, Vonage's `webhook_url`), e.g. `https://api.acme.test/api/webhooks/notify/twilio`. |
 | `whatsapp` | table |  | `APP_NOTIFY__WHATSAPP` | The WhatsApp channel. |
-| `whatsapp.driver` | twilio \| meta \| log |  | `APP_NOTIFY__WHATSAPP__DRIVER` | The driver; without one the WhatsApp channel is unavailable. |
+| `whatsapp.driver` | twilio \| meta \| log \| a name registered with m.whatsapp_driver |  | `APP_NOTIFY__WHATSAPP__DRIVER` | The driver; without one the WhatsApp channel is unavailable. |
 | `whatsapp.from` | string |  | `APP_NOTIFY__WHATSAPP__FROM` | The sender's number in E.164 (Twilio). |
 | `whatsapp.status_callback` | string |  | `APP_NOTIFY__WHATSAPP__STATUS_CALLBACK` | The URL Twilio reports delivery statuses to. |
 | `web_push` | table |  | `APP_NOTIFY__WEB_PUSH` | The web push channel. |
@@ -1123,7 +1123,7 @@ More: [/docs/digging-deeper/queues/](/docs/digging-deeper/queues/).
 
 | Key | Type | Default | Environment variable | Description |
 |---|---|---|---|---|
-| `driver` | database \| memory \| redis | `"database"` | `APP_QUEUE__DRIVER` | Where jobs are stored (default [`QueueDriver::Database`]). |
+| `driver` | database \| memory \| redis \| a name registered with m.queue_store | `"database"` | `APP_QUEUE__DRIVER` | Where jobs are stored (default [`QueueDriver::Database`]). |
 | `default_queue` | string | `"default"` | `APP_QUEUE__DEFAULT_QUEUE` | The queue of jobs dispatched with an empty queue name, and the queue workers process when `queues` is empty (default `default`, the queue `JobOptions` names by default). |
 | `workers` | integer | `4` | `APP_QUEUE__WORKERS` | How many jobs one `Queue::work` call runs at the same time (default 4). |
 | `poll_interval_ms` | integer | `1000` | `APP_QUEUE__POLL_INTERVAL_MS` | How long an idle worker waits before polling again, in milliseconds (default 1000). |
@@ -1153,7 +1153,7 @@ More: [/docs/digging-deeper/broadcasting/](/docs/digging-deeper/broadcasting/).
 | `allowed_origins` | list of string | `[]` | `APP_REALTIME__ALLOWED_ORIGINS` | Exact origins (`https://app.example.com`) whose pages may connect; `*` allows any. Empty (the default) means the `http.cors` allowed origins. A request without an `Origin` header (not a browser) or from the server's own origin is always accepted. From the environment, a comma-separated list. |
 | `activity_timeout_secs` | integer | `120` | `APP_REALTIME__ACTIVITY_TIMEOUT_SECS` | Seconds of silence after which the server pings a client (default 120, sent to clients as `activity_timeout`). A client that then stays silent for another `min(activity_timeout, 30 s)` is disconnected. |
 | `relay_url` | string | `""` | `APP_REALTIME__RELAY_URL` | Where a process that does not serve the WebSockets (`queue:work`, `schedule:work`, a command) sends its broadcasts: the base URL of the `serve` process, e.g. `http://127.0.0.1:8080`, whose `POST /apps/{app_id}/events` delivers them to its connections. `auto` means `http://` plus `http.addr` (a wildcard address as loopback). Empty (the default): broadcasts stay in the process, which only reaches sockets when it serves them itself. Relayed messages are signed with a key derived from `realtime.secret`, or from the app key when there is no secret, so every process of the app must share one of them. |
-| `backplane` | none \| redis | `"none"` | `APP_REALTIME__BACKPLANE` | What connects the app's processes (default [`BackplaneKind::None`]). With [`BackplaneKind::Redis`], every process shares broadcasts, presence members and user disconnections over Redis; it needs `RedisModule` and a `secret`, because a subscription signed by one process is checked by another. |
+| `backplane` | none \| redis \| a name registered with m.backplane | `"none"` | `APP_REALTIME__BACKPLANE` | What connects the app's processes (default [`BackplaneKind::None`]). With [`BackplaneKind::Redis`], every process shares broadcasts, presence members and user disconnections over Redis; it needs `RedisModule` and a `secret`, because a subscription signed by one process is checked by another. |
 | `streams` | table |  | `APP_REALTIME__STREAMS` | The live streams pages listen to (`realtime.streams`). |
 | `streams.names` | integer | `32` | `APP_REALTIME__STREAMS__NAMES` | The topics and channels one stream may name together (default 32). A stream that names more is refused with 400. |
 | `streams.per_user` | integer | `16` | `APP_REALTIME__STREAMS__PER_USER` | The streams one signed-in user may hold open at once (default 16): one per open tab. One more is refused with 429, which a page tries again later. Guests are held by the server's connection limits. |
@@ -1201,7 +1201,7 @@ More: [/docs/packages/search/](/docs/packages/search/).
 
 | Key | Type | Default | Environment variable | Description |
 |---|---|---|---|---|
-| `engine` | postgres \| meilisearch \| typesense \| tantivy \| memory | `"postgres"` | `APP_SEARCH__ENGINE` | The engine: `postgres` (default; `database` is the same), `meilisearch`, `typesense`, `tantivy` or `memory`. |
+| `engine` | postgres \| database \| meilisearch \| typesense \| tantivy \| memory \| a name registered with m.search_engine | `"postgres"` | `APP_SEARCH__ENGINE` | The engine: `postgres` (default; `database` is the same), `meilisearch`, `typesense`, `tantivy` or `memory`. |
 | `url` | string |  | `APP_SEARCH__URL` | The server URL (`meilisearch` and `typesense`). |
 | `key` | string | secret | `APP_SEARCH__KEY` | The API key of the server (`meilisearch`; required by `typesense`). |
 | `nodes` | list of string | `[]` | `APP_SEARCH__NODES` | The other nodes of a Typesense cluster (a list, or a comma-separated string). |
@@ -1234,7 +1234,7 @@ More: [/docs/basics/sessions-and-csrf/](/docs/basics/sessions-and-csrf/).
 
 | Key | Type | Default | Environment variable | Description |
 |---|---|---|---|---|
-| `store` | memory \| database \| redis | `"memory"` | `APP_SESSION__STORE` | Where records are kept (default memory). |
+| `store` | memory \| database \| redis \| a name registered with m.session_store | `"memory"` | `APP_SESSION__STORE` | Where records are kept (default memory). |
 | `cookie` | string | `"navree_session"` | `APP_SESSION__COOKIE` | The session cookie name (default `navree_session`). |
 | `lifetime_minutes` | integer | `120` | `APP_SESSION__LIFETIME_MINUTES` | How long an idle session lives, in minutes (default 120). Requests extend it (at most one store write per minute when nothing else changed); the cookies carry the same `Max-Age`. |
 | `secure` | boolean | `true` | `APP_SESSION__SECURE` | The `Secure` cookie attribute (default `true`; set it to `false` to develop over plain HTTP on a host other than `localhost`). |
@@ -1353,7 +1353,7 @@ More: [/docs/digging-deeper/storage/](/docs/digging-deeper/storage/).
 | Key | Type | Default | Environment variable | Description |
 |---|---|---|---|---|
 | `default` | string | `"local"` | `APP_STORAGE__DEFAULT` | The name of the default disk (default `local`). |
-| `disks` | table of DiskConfig | `"{\"local\": Local { root: \"storage/app\", public_url: None }}"` | `APP_STORAGE__DISKS` | The disks, by name (`[A-Za-z0-9_-]`). Each has a `driver`: `local`, `memory`, `s3`, `gcs` or `azure`. |
+| `disks` | table of DiskConfig | `"{\"local\": Local { root: \"storage/app\", public_url: None }}"` | `APP_STORAGE__DISKS` | The disks, by name (`[A-Za-z0-9_-]`). Each has a `driver`: `local`, `memory`, `s3`, `gcs`, `azure` or the name of a driver a module registers with `m.disk_driver`. |
 | `base_url` | string |  | `APP_STORAGE__BASE_URL` | An absolute base URL (`https://api.example.com`) prepended to the links the app serves itself (temporary URLs and presigned uploads of local and memory disks); without one they are path-only (`/storage/<disk>/<path>?expires=...&signature=...`). |
 
 ## `time`
@@ -1382,6 +1382,17 @@ More: [/docs/ui/errors-and-states/](/docs/ui/errors-and-states/).
 | `home` | string |  | `APP_UI__HOME` | Where "Go to home" leads (default `/`). |
 | `sign_in_redirect` | boolean |  | `APP_UI__SIGN_IN_REDIRECT` | Send a guest who asks for a page straight to sign in, instead of showing the sign-in state (default off). |
 | `debug` | boolean |  | `APP_UI__DEBUG` | Add the status, code, message and cause to error pages, marked "Development only" (default: on in a build with debug assertions, off in a release build). Always off in `production` and `staging`. |
+
+## `ui.policy`
+
+The `ui.policy` section of the configuration: what the app allows its pages to load beyond their own origin. Nothing is allowed until it says so, and only four kinds of source can be allowed (see [`Directive`]): never a script, a style, a worker or a frame.
+
+More: [/docs/ui/page-policy/](/docs/ui/page-policy/).
+
+| Key | Type | Default | Environment variable | Description |
+|---|---|---|---|---|
+| `wasm` | boolean | `false` | `APP_UI__POLICY__WASM` | WebAssembly on every page but the fresh ones, for every script ('wasm-unsafe-eval'). Off unless set. |
+| `allow` | table of PolicySources | `"{}"` | `APP_UI__POLICY__ALLOW` | The sources each plugin may load, by the plugin's namespace, or `app` for the app's own. |
 
 ## `validation`
 

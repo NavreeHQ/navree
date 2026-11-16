@@ -1,0 +1,1 @@
+announcements-title = ਸੂਚਨਾਵਾਂ

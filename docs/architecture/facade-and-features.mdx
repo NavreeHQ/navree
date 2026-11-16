@@ -59,6 +59,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::glob` | navree-glob | always | The glob matcher for configured patterns: `*` any run of characters, `?` one, everything else literal |
 | `navree::contracts` | navree-contracts | always | Cross-module traits: `Principal`, `Job`, `Clock`, `AuditSink`, ... |
 | `navree::config` | navree-config | always | `ConfigModule`, `.env`, TOML, JSON and `APP_*` sources |
+| `navree::plugin` | navree-kernel, navree-config | always | What a plugin names: `PluginInfo`, `Publishable`, `PublishTag`, the plugins report, `ClientModule`, and `navree::plugin::prelude` for the extension traits plugins use |
 | `navree::telemetry` | navree-telemetry | `telemetry` | Typed telemetry events, sinks and W3C trace context (turned on by the modules that emit them) |
 | `navree::http` | navree-http | `http` | `HttpModule`, controllers, `AppError` |
 | `navree::log` | navree-log | `log` | `LoggerModule` |
@@ -196,7 +197,7 @@ The facade has one feature per module crate, named after it (`http-client` for `
 navree = { version = "1", default-features = false, features = ["http", "log"] }
 ```
 
-`navree-kernel`, `navree-bounded`, `navree-glob`, `navree-contracts`, `navree-config`, `navree-openapi` and `navree-macros` are always included. A module's feature also turns on the features of the modules its crate builds on, so `navree::<that module>` is always there to name their types:
+`navree-kernel`, `navree-bounded`, `navree-glob`, `navree-contracts`, `navree-config`, `navree-openapi`, `navree-macros` and `navree-i18n-macros` are always included. A module's feature also turns on the features of the modules its crate builds on, so `navree::<that module>` is always there to name their types:
 
 | Feature | Also turns on |
 |---|---|
@@ -221,6 +222,7 @@ navree = { version = "1", default-features = false, features = ["http", "log"] }
 | `notify` | `http`, `db`, `mail`, `view`, `orm`, `crypto`, `http-client`, `validation`, `time`, `schedule`, `realtime`; with `webhooks`, `integrations` or `settings` on too, their notification features |
 | `ui` | `http`, `telemetry`, `validation`, `markdown`; with `orm` on too, the data table's backend; with `ai` on too, the assistant's pages (`navree::ai::ui`) |
 | `ui-image` (opt-in, not in `full`) | `ui`, and charts as PNG pictures drawn on the server (`navree::ui::image`): resvg on tiny-skia, with the toolkit's typeface built in |
+| `ui-extension-files` (opt-in, not in `full`) | `ui`, and `navree::ui::extension_script!` and `extension_sheet!`: a UI extension's files read, scoped and hashed when the crate compiles (navree-ui-ext-macros, on cssparser); a plugin crate that ships a component turns it on |
 | `orm` | `db`, `events`, `http`, `telemetry`, `crypto`, `api` |
 | `auth` | `http`, `telemetry`, `db`, `crypto`, `validation`, `cache`, `mail`, `access`, `http-client`, `orm` |
 | `workspace` | `http`, `db`, `crypto`, `events`, `mail`, `access`, `time`, `schedule`, `orm` |

@@ -14,6 +14,10 @@
 //!   [`authenticated`](RouteDef::authenticated), [`roles`](RouteDef::roles),
 //!   [`permissions`](RouteDef::permissions) or [`can`](RouteDef::can) fails
 //!   the boot.
+//! - Modules serve any tower service under a path prefix with a [`Mount`]
+//!   ([`ModuleBuilderMountExt::mount`]), behind the same pipeline and access
+//!   check as a route, and put a tower layer whose service can fail on the
+//!   app with [`FallibleLayer`].
 //! - Routes are matched by Navree's [`routing::Router`]: no path
 //!   normalization (dot segments and backslashes are refused), strict
 //!   percent-decoding of parameters, static before parameter before
@@ -112,12 +116,14 @@ pub mod csrf;
 mod error;
 mod error_pages;
 pub mod extract;
+mod fallible;
 pub mod handler;
 mod limiter;
 pub mod list;
 mod maintenance;
 pub mod middleware;
 mod module;
+mod mount;
 mod network;
 mod options;
 mod pipeline;
@@ -127,6 +133,7 @@ mod router;
 pub mod routing;
 pub mod serve;
 mod signed;
+mod workspace;
 pub mod ws;
 
 pub use app::AppRouter;
@@ -141,10 +148,12 @@ pub use error_pages::{
 pub use extract::{
     ClientIp, Extension, Form, Json, Multipart, MultipartLimits, Path, Query, RawQuery, Scoped,
 };
+pub use fallible::{FallibleLayer, FallibleService};
 pub use handler::Handler;
 pub use limiter::{KeyedRateLimiter, Limited, MemoryRateLimitStore, RateLimitStore, StoreVerdict};
 pub use maintenance::{MaintenanceInfo, MaintenanceMode};
 pub use module::{HttpModule, HttpServer};
+pub use mount::{ModuleBuilderMountExt, Mount};
 pub use network::{DEFAULT_IPV6_PREFIX, rate_limit_key};
 pub use options::{CorsOptions, ErrorOptions, HttpOptions, ServerOptions};
 pub use response::{Created, IntoResponse, NoContent, Response};
@@ -156,3 +165,4 @@ pub use router::{RouteErrors, build_router, route_table};
 pub use routing::PathParams;
 pub use serve::serve;
 pub use signed::{UrlSigner, ValidSignature};
+pub use workspace::RequestWorkspace;

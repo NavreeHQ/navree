@@ -6,16 +6,21 @@
 //     <div data-slot="island-body" data-ui-keep>…</div>
 //   </div>
 //
+// A plugin's script is named under its namespace: `{namespace}.{name}-{hash}.js`.
+//
 // This imports the script, one of the app's own and nothing else, and calls its
 // `mount(body, props, island)` once. A morph never touches the body (it is kept), so
 // what the script drew stays. What `mount` returns (or resolves to) says the rest: a
 // function is called when the island leaves the page; an object's `update(props)` takes
 // new props from the server in place and its `leave()` is called when it leaves. Without
 // `update`, new props mount the island again. Props are JSON: data, never markup or code.
-import { attr, every, on } from "./dom.js";
+import { attr, every, fresh, on } from "./dom.js";
 
-/** An island script's address: this origin, under the mount, named by its content hash. */
-const SCRIPT = /^\/_navree\/ui\/island\/[a-z0-9-]{1,64}-[0-9a-f]{12}\.js$/;
+/**
+ * An island script's address: this origin, under the mount, named by its content hash, with
+ * a plugin's namespace and a dot before the name when the script is a plugin's.
+ */
+const SCRIPT = /^\/_navree\/ui\/island\/([a-z][a-z0-9_]{0,63}\.)?[a-z0-9-]{1,64}-[0-9a-f]{12}\.js$/;
 
 /**
  * Every island the page has mounted or is mounting: its script, its props as written,
@@ -25,11 +30,15 @@ const SCRIPT = /^\/_navree\/ui\/island\/[a-z0-9-]{1,64}-[0-9a-f]{12}\.js$/;
  */
 const islands = new Map();
 
-/** The address to import for `src`, when it is one of the app's island scripts. @param {string} src */
+/**
+ * The address to import for `src`, when it is one of the app's island scripts. A page that starts
+ * clean imports the app's own and no plugin's. @param {string} src
+ */
 function script(src) {
   try {
     const url = new URL(src, location.href);
-    return url.origin === location.origin && SCRIPT.test(url.pathname) && !url.search && !url.hash ? url.href : null;
+    const named = SCRIPT.exec(url.pathname);
+    return url.origin === location.origin && named && !(named[1] && fresh()) && !url.search && !url.hash ? url.href : null;
   } catch {
     return null;
   }

@@ -140,6 +140,106 @@ pub enum KernelError {
         /// The underlying error.
         source: BoxError,
     },
+    /// A module calls `m.plugin(..)` more than once.
+    #[error("module `{module}` calls m.plugin(..) twice; call it once in its register")]
+    PluginTwice {
+        /// The module.
+        module: &'static str,
+    },
+    /// A plugin's namespace is not a lower-case letter followed by up to 63
+    /// lower-case letters, digits or `_`.
+    #[error(
+        "plugin `{plugin}` in module `{module}` has the namespace `{namespace}`, which is not a lower-case letter followed by up to 63 lower-case letters, digits or _; set one with plugin_info!(namespace = \"..\")"
+    )]
+    InvalidNamespace {
+        /// The module that names the plugin.
+        module: &'static str,
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The namespace it gives.
+        namespace: &'static str,
+    },
+    /// A module names a plugin of another crate: its type names no path of the
+    /// plugin's crate, or another module gives the plugin another crate.
+    #[error(
+        "module `{module}` names the plugin `{plugin}`, which is another crate's; a plugin's modules are in its own crate (a ClientModule names it through an options type of the plugin's crate)"
+    )]
+    PluginOfAnotherCrate {
+        /// The module.
+        module: &'static str,
+        /// The plugin's name.
+        plugin: &'static str,
+    },
+    /// A plugin that is not first-party uses a namespace the framework keeps.
+    #[error(
+        "plugin `{plugin}` uses the namespace `{namespace}`, which the framework keeps for itself; set another with plugin_info!(namespace = \"..\")"
+    )]
+    NamespaceReserved {
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The reserved namespace.
+        namespace: &'static str,
+    },
+    /// Two modules name one plugin at two versions.
+    #[error(
+        "plugin `{plugin}` is in the app at two versions ({first} in `{first_module}`, {second} in `{second_module}`); depend on one version"
+    )]
+    PluginVersions {
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The version the first module gives.
+        first: &'static str,
+        /// The first module.
+        first_module: &'static str,
+        /// The other version.
+        second: &'static str,
+        /// The module that gives it.
+        second_module: &'static str,
+    },
+    /// Two modules describe one plugin (one name, crate and version) differently.
+    #[error(
+        "plugin `{plugin}` is described differently by `{first_module}` and `{second_module}`; give every module of a plugin the same plugin_info!(..)"
+    )]
+    PluginInfoDiffers {
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The module whose description counts.
+        first_module: &'static str,
+        /// A module that describes the plugin otherwise.
+        second_module: &'static str,
+    },
+    /// Two plugins use one namespace.
+    #[error(
+        "plugins `{first}` and `{second}` both use the namespace `{namespace}`; set another with plugin_info!(namespace = \"..\") in one of them"
+    )]
+    NamespaceTaken {
+        /// The namespace.
+        namespace: &'static str,
+        /// The plugin that uses it first.
+        first: &'static str,
+        /// The plugin that uses it too.
+        second: &'static str,
+    },
+    /// A module that does not name itself a plugin has files to publish.
+    #[error(
+        "module `{module}` has files to publish but does not name itself a plugin; call m.plugin(plugin_info!()) in its register"
+    )]
+    PublishableOutsidePlugin {
+        /// The module.
+        module: &'static str,
+    },
+    /// A file a plugin ships has a path that is not safe inside its folder.
+    #[error(
+        "plugin `{plugin}`: the {tag} file `{path}` is not a safe relative path inside its folder (no `..`, no leading `/`, no `\\`, no `:`, none of `<>\"|?*`, no segment ending in `.` or a space, no device name such as `con` or `nul`, no two names that differ only in case, no file that is also a folder); fix the path in the plugin"
+    )]
+    UnsafePublishPath {
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The file's tag: `views`, `locales` or `files`.
+        tag: &'static str,
+        /// The file's path, as the plugin gives it.
+        path: String,
+    },
 }
 
 /// Every error found while booting or validating an app.

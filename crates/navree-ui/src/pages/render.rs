@@ -154,6 +154,10 @@ pub const STATE_HEADER: &str = "x-navree-state";
 /// It runs only for an error, and it has one second: a builder that is slower, that panics or
 /// that returns `None` leaves the page on its own, with no sidebar.
 ///
+/// A module of a plugin that is not one of the framework's own packages may not contribute
+/// one: `UiModule` stops the boot if one does, and the app contributes such a plugin's shell
+/// from a module of its own.
+///
 /// ```
 /// use navree_http::ErrorContext;
 /// use navree_kernel::ModuleBuilder;
@@ -293,6 +297,11 @@ async fn render(request: &ErrorContext, error: &AppError) -> Option<Response> {
         HeaderValue::from_static("accept, x-navree-ui, x-navree-native"),
     );
     headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    // The pipeline draws an error outside every layer of the app, so no layer gives its page the
+    // app's page policy: it is given here, as it is to any other page.
+    if let Some(policy) = request.ctx.try_get::<crate::policy::PagePolicy>().await {
+        crate::policy::apply(&policy, &mut response);
+    }
     Some(response)
 }
 

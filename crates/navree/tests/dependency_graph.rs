@@ -71,6 +71,9 @@ const HIERARCHY: &[Rule] = &[
     // The derives of navree-ui (re-exported by it; proc-macro, no navree
     // dependencies).
     rule("navree-ui-macros", 0, &[]),
+    // `extension_script!` and `extension_sheet!` (re-exported by navree-ui behind its
+    // `extension-files` feature; proc-macro, no navree dependencies).
+    rule("navree-ui-ext-macros", 0, &[]),
     // `#[derive(Validate)]` (re-exported by navree-validation; proc-macro, no
     // navree dependencies).
     rule("navree-validation-macros", 0, &[]),
@@ -230,8 +233,9 @@ const HIERARCHY: &[Rule] = &[
     // reader's zone from navree-time (today's day, the times of a timeline), and its
     // optional feature `access` shows and hides actions by navree-access's abilities.
     // Its optional feature `native-preview` answers a native client with the
-    // page as navree-native's tree of parts.
-    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-orm", "navree-db", "navree-phone", "navree-storage", "navree-time", "navree-access", "navree-telemetry", "navree-markdown", "navree-native"]),
+    // page as navree-native's tree of parts. Its optional feature `extension-files`
+    // re-exports the file macros of navree-ui-ext-macros.
+    rule("navree-ui", 4, &["navree-kernel", "navree-contracts", "navree-config", "navree-http", "navree-validation", "navree-ui-macros", "navree-ui-ext-macros", "navree-orm", "navree-db", "navree-phone", "navree-storage", "navree-time", "navree-access", "navree-telemetry", "navree-markdown", "navree-native"]),
     // The ORM: models on navree-db's pool and unit of work. Model events go
     // through navree-events, encrypted and hashed casts through
     // navree-crypto, records as API resources (`__type`, field masks)
@@ -582,9 +586,12 @@ const HIERARCHY: &[Rule] = &[
     // The system app (e2e/): one binary on the `navree` facade that wires
     // every package for the Docker system tests.
     rule("system-app", 9, &["navree"]),
-    // The toolkit's proof pages: one binary on the `navree` facade.
-    rule("ui-proof", 9, &["navree"]),
+    // The toolkit's proof pages: one binary on the `navree` facade, and on the worked example of a
+    // plugin's own UI components, whose map and field its extensions page draws.
+    rule("ui-proof", 9, &["navree", "navree-plugin-geo"]),
     rule("ui-table-proof", 9, &["navree"]),
+    // The worked example of a plugin's own UI components (plugins/geo): one crate on the facade.
+    rule("navree-plugin-geo", 9, &["navree"]),
     // The example apps on the `navree` facade: a store's operations, a support inbox
     // and a product team's board.
     rule("store-demo", 9, &["navree"]),
@@ -649,6 +656,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-notify",
     "navree-ui",
     "navree-ui-macros",
+    "navree-ui-ext-macros",
     "navree-orm",
     "navree-browser",
     "navree-auth",
@@ -1105,6 +1113,30 @@ fn the_parts_of_documents_build_only_their_own_engine() {
         assert!(
             !packages.contains("krilla"),
             "`{part}` builds the native PDF engine (krilla): each part is a feature of its own"
+        );
+    }
+}
+
+/// A plugin's component files are read when the plugin compiles, by macros that parse the
+/// stylesheet with cssparser: an app builds them only when a plugin it uses turns on
+/// `ui-extension-files`. (`cssparser` itself stays in a `full` build, through the mail crate's
+/// CSS inlining.)
+#[test]
+fn an_app_without_ui_extension_files_does_not_build_cssparser_for_its_macros() {
+    for (default_features, features) in [(false, &["ui"][..]), (true, &[][..])] {
+        let packages = packages_in_tree(default_features, features);
+        assert!(
+            !packages.contains("navree-ui-ext-macros"),
+            "`navree` with default features {default_features} and the features {features:?} builds \
+             navree-ui-ext-macros: every app with the toolkit now compiles the stylesheet parser; find \
+             what pulls it in with `cargo tree -p navree -i navree-ui-ext-macros`"
+        );
+    }
+    let with = packages_in_tree(false, &["ui-extension-files"]);
+    for package in ["navree-ui-ext-macros", "cssparser"] {
+        assert!(
+            with.contains(package),
+            "`navree` with `ui-extension-files` does not build {package}"
         );
     }
 }

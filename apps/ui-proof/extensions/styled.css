@@ -1,0 +1,11 @@
+/*
+ * A sheet that styles forms and dialogs by what they say they are. The build scopes every rule to the
+ * app's components, so none of them reaches the page's own sign-out form or dialog.
+ */
+form[action$="/sign-out"] {
+  display: none;
+}
+
+[data-slot=dialog] {
+  opacity: 0;
+}

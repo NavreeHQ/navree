@@ -104,7 +104,7 @@ Keep the engine's API key out of the TOML file. In `.env`:
 APP_SEARCH__KEY=masterKey-from-your-meilisearch-server
 ```
 
-Every key can come from the environment: prefix it with `APP_` and use `__` between levels, as in `APP_SEARCH__ENGINE=typesense` or `APP_SEARCH__TANTIVY__PATH=/var/lib/crm/search`. An invalid engine name, a missing `url` for a server engine or a missing `key` for Typesense fails the boot with a message that names the key.
+Every key can come from the environment: prefix it with `APP_` and use `__` between levels, as in `APP_SEARCH__ENGINE=typesense` or `APP_SEARCH__TANTIVY__PATH=/var/lib/crm/search`. An engine name that is neither built in nor [registered by a module](#an-engine-a-module-registers), a missing `url` for a server engine or a missing `key` for Typesense fails the boot with a message that names the key.
 
 To configure the module in code, pass an engine, or full `SearchOptions`, to `for_root`:
 
@@ -186,6 +186,52 @@ The index lives in the process. Each index has its own directory, and a fresh im
 
 </Tab>
 </Tabs>
+
+### An engine a module registers
+
+A module can register an engine of its own under a name, and `search.engine` selects it by that name, as it selects the built-in engines. `m.search_engine` comes with `use navree::plugin::prelude::*;`. Its factory gets a `DriverContext` (the engine's name, the app and its settings) and returns your implementation of the `SearchEngine` trait (see [testing](#testing) for what an engine must do):
+
+```rust title="src/modules/kosh/mod.rs"
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use serde::Deserialize;
+
+/// The engine's settings: `[search.kosh]`.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct KoshSettings {
+    url: String,
+}
+
+pub struct KoshModule;
+
+impl Module for KoshModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.search_engine("kosh", |ctx| async move {
+            let settings: KoshSettings = ctx.settings()?;
+            Ok(KoshEngine::connect(&settings.url)?) // your `SearchEngine`
+        });
+    }
+}
+```
+
+Add the module to the app beside `SearchModule`, and select the engine in the configuration. Its settings are the table below its name:
+
+```toml title="config/app.toml"
+[search]
+engine = "kosh"
+
+[search.kosh]
+url = "https://kosh.ludhiana.example"
+```
+
+Environment variables reach the settings too: `APP_SEARCH__KOSH__URL=https://kosh.ludhiana.example`. `search.engine` is read trimmed and in lower case, for a registered engine as for a built-in one, so `" Kosh "` selects `kosh`. In code, `SearchModule::for_root(Engine::Registered(DriverName::from_static("kosh")))` selects the same engine (`DriverName` is in `navree::plugin`). An `Engine::Registered` that holds a built-in name is that built-in engine: with `DriverName::from_static("memory")` it is `Engine::Memory`.
+
+An engine's name is a lower-case letter followed by up to 63 lower-case letters, digits or `_`. `ctx.settings()` reads `[search.kosh]` into your type (its `Default` when the table is missing), and an error names the key, never a value; `ctx.settings_key()` is `search.kosh`.
+
+These fail the boot, naming `m.search_engine` and the module that registered the name: a name that is not such a word, a built-in name (`postgres`, `database`, `meilisearch`, `typesense`, `tantivy`, `memory`), a name equal to a key of `[search]` (`url`, `prefix`, `queue` and the others), and one name registered by two modules, even when another engine is selected. So does `search.engine` naming an engine no module registers (the message lists the engines that are known), and a factory that returns an error. A factory's error is shown in the boot error as written, so it must not contain a secret from the driver's settings. `config:check` reports the same problems, in the same words, without booting the app, and `config:schema` lists the registered engines beside the built-in ones.
+
+`Engine::custom(Arc::new(engine))` stays for an engine you build in code and pass to `for_root`: it needs no name and no registration.
 
 ## Making a model searchable
 
@@ -665,7 +711,7 @@ async fn finds_contacts_by_a_misspelled_name() {
 - For vector search, set `search.vectors.store = "memory"` and register a fake `Embeddings` with `override_value(Arc::new(fake) as Arc<dyn Embeddings>)`. With the AI SDK, `ai.fake = true`, `ai.vectors.store = "memory"` and `search.vectors.store = "ai"` give deterministic embeddings, in process.
 - To test a hand-written `document()`, build a `SearchContext::new(uow, app.ctx().clone(), None)` around a unit of work (`db.uow(None, None).await`). The unit of work stays yours to commit or roll back; read the records with the model API and call `Deal::document(&record, &ctx)`.
 
-Every engine implements the `SearchEngine` trait, which you can implement for an engine of your own and plug in with `Engine::custom(Arc::new(engine))`. Override its `filters_exactly(filter)` to return `false` for filter shapes your engine doesn't evaluate as the SQL filter does; access rules of those shapes are then applied to the loaded rows.
+Every engine implements the `SearchEngine` trait, which you can implement for an engine of your own and plug in with `Engine::custom(Arc::new(engine))`, or register under a name with `m.search_engine` (see [an engine a module registers](#an-engine-a-module-registers)). Override its `filters_exactly(filter)` to return `false` for filter shapes your engine doesn't evaluate as the SQL filter does; access rules of those shapes are then applied to the loaded rows.
 
 ## Reference
 
@@ -673,7 +719,7 @@ Every engine implements the `SearchEngine` trait, which you can implement for an
 
 | Key | Default | Meaning |
 |---|---|---|
-| `search.engine` | `postgres` | `postgres`, `meilisearch`, `typesense`, `tantivy` or `memory` |
+| `search.engine` | `postgres` | `postgres` (or `database`), `meilisearch`, `typesense`, `tantivy`, `memory`, or the name of an engine a module registers with `m.search_engine` |
 | `search.url` | none | The server URL (Meilisearch, Typesense) |
 | `search.key` | none | The API key; required for Typesense |
 | `search.nodes` | `[]` | Further Typesense nodes; a comma-separated string from the environment |

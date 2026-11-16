@@ -15,6 +15,9 @@
 //! | [`glob`] | navree-glob | always | the glob matcher for configured patterns: `*` any run of characters, `?` one, everything else literal |
 //! | [`contracts`] | navree-contracts | always | cross-module traits: `Principal`, `Job`, `Clock`, `AuditSink`, ... |
 //! | [`config`] | navree-config | always | `ConfigModule`, `.env`, TOML, JSON and `APP_*` sources |
+//! | [`embed_locales!`] | navree-i18n-macros | always | Fluent files embedded in a binary, for any crate's translations (also `navree::i18n::embed_locales`) |
+//! | [`embed_templates!`] | navree-macros | always | a folder of templates embedded in a plugin's binary, for `m.plugin_templates(..)` (feature `view`) |
+//! | [`plugin`] | navree-kernel, navree-config | always | what a plugin names: `PluginInfo`, `Publishable`, `PublishTag`, the plugins report, `ClientModule`, and `navree::plugin::prelude` |
 //! | `telemetry` | navree-telemetry | `telemetry` | typed telemetry events, sinks, W3C trace context |
 //! | `http` | navree-http | `http` | `HttpModule`, controllers, `AppError` (JSON errors) |
 //! | `log` | navree-log | `log` | `LoggerModule` (tracing) |
@@ -108,7 +111,9 @@
 //! expansions name the runtime crates through this facade (`::navree::kernel`,
 //! `::navree::http`, `::navree::access`), so an app depends on `navree` alone
 //! (plus `serde`, whose derives name its own crate; `#[derive(Validate)]`
-//! names `::navree::validation`).
+//! names `::navree::validation`). [`plugin_info!`] (what a plugin says about
+//! itself), [`embed_locales!`] (Fluent files embedded in the binary, with
+//! no `i18n` feature) and [`embed_templates!`] sit at the root too.
 //!
 //! ```no_run
 //! # // Inside this crate's own doctests the macros name `crate::kernel` and
@@ -164,6 +169,7 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+pub mod plugin;
 pub mod prelude;
 
 // L0-L1: always present.
@@ -398,6 +404,16 @@ pub use navree_navigator as navigator;
 /// The attribute macros: `#[module]`, `#[injectable]`, `#[controller]` and
 /// its route attributes.
 pub use navree_macros::{controller, delete, get, injectable, module, patch, post, put};
+
+/// `plugin_info!`: what a plugin says about itself (see `navree_kernel::plugin_info`).
+pub use navree_kernel::plugin_info;
+
+/// `embed_locales!`: Fluent files embedded in a binary, for any crate's
+/// translations; it needs no `i18n` feature.
+pub use navree_i18n_macros::embed_locales;
+
+/// `embed_templates!`: a folder of templates embedded in a plugin's binary, for `m.plugin_templates(..)`.
+pub use navree_macros::embed_templates;
 
 /// `#[navree::test]`: an `async fn` test on a runtime of its own, given a
 /// database of its own when it takes one (`db: TestDb`, from a

@@ -140,6 +140,10 @@ pub trait ModuleBuilderHelmExt {
     /// request can name a workspace, and nothing checks that the workspace
     /// exists unless `may_enter` does.
     ///
+    /// Only the app decides who works as staff: the panel stops the boot when
+    /// a module of a plugin that is not one of the framework's own packages
+    /// calls this.
+    ///
     /// ```no_run
     /// # use navree_helm::ModuleBuilderHelmExt;
     /// # fn register(m: &mut navree_kernel::ModuleBuilder) {
@@ -157,6 +161,10 @@ pub trait ModuleBuilderHelmExt {
     /// they are not members of, on the Settings screens. Without this nobody does.
     /// Each request made that way writes a `helm.organization.staff` audit entry,
     /// reads included. Register it once.
+    ///
+    /// Only the app decides who works as staff: the panel stops the boot when a
+    /// module of a plugin that is not one of the framework's own packages calls
+    /// this.
     fn helm_staff_organizations<F, Fut>(&mut self, may_enter: F) -> &mut Self
     where
         F: Fn(StaffOrganizationEntry) -> Fut + Send + Sync + 'static,

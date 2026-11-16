@@ -1,9 +1,9 @@
 //! Every public item the Helm docs page names
 //! (`docs/tools/helm.mdx`): the module and its
 //! options, the `Resource` trait and its constants, every field, filter,
-//! action and metric builder, the contexts, custom pages, the job, the
-//! cookie, the subject, the configuration keys and the JSON API routes. A
-//! rename fails this file.
+//! action and metric builder, the contexts, custom pages, the links and cards
+//! other modules add, the job, the cookie, the subject, the configuration keys
+//! and the JSON API routes. A rename fails this file.
 
 #[path = "helm/servers.rs"]
 mod servers;
@@ -15,9 +15,10 @@ use navree_config::ConfigSection;
 use navree_contracts::Job;
 use navree_helm::{
     Action, ActionContext, ActionResult, DEFAULT_MAX_FILE_BYTES, Field, Filter, FormData,
-    HELM_SUBJECT, Helm, HelmActionJob, HelmModule, HelmOptions, HelmPage, Metric, MetricRange,
-    ModelOf, ModuleBuilderHelmExt, PageContext, RecordOf, Resource, SaveContext, StaffEntry,
-    StaffOrganizationEntry, VIEW, WORKSPACE_COOKIE, Workspaces,
+    HELM_SUBJECT, Helm, HelmActionJob, HelmLink, HelmModule, HelmOptions, HelmPage, HelmWidget,
+    Metric, MetricRange, ModelOf, ModuleBuilderHelmExt, ModuleBuilderHelmPanelExt, PageContext,
+    RecordOf, Resource, SaveContext, StaffEntry, StaffOrganizationEntry, VIEW, WORKSPACE_COOKIE,
+    Workspaces,
 };
 use navree_http::AppError;
 use navree_kernel::{BoxFuture, ModuleBuilder};
@@ -202,6 +203,35 @@ fn wiring(m: &mut ModuleBuilder) {
                 let _ = (ctx.uow(), ctx.user_id(), ctx.get::<HelmOptions>().await?);
                 Ok(json!({ "columns": [] }))
             }),
+    );
+}
+
+#[test]
+fn links_and_cards_are_named() {
+    let link = HelmLink::new("Sales report", "/reports/sales")
+        .group("Sales")
+        .icon("chart-line")
+        .can("read", "Deal");
+    let card = HelmWidget::new("open-deals", "Open deals")
+        .template("admin/widgets/open-deals")
+        .can("read", "Deal")
+        .order(10)
+        .data(|ctx: PageContext| async move {
+            let _ = (ctx.uow(), ctx.user_id(), ctx.get::<HelmOptions>().await?);
+            Ok(json!({ "open": 12 }))
+        });
+    // `m.helm_nav(..)` and `m.helm_widget(..)`.
+    let wire = move |m: &mut ModuleBuilder| {
+        m.helm_nav(link.clone()).helm_widget(card.clone());
+    };
+    let _ = wire;
+    let shown = format!(
+        "{:?}",
+        HelmWidget::new("open-deals", "Open deals").order(10)
+    );
+    assert!(
+        shown.contains("open-deals") && shown.contains("10"),
+        "{shown}"
     );
 }
 

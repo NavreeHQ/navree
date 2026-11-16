@@ -24,7 +24,9 @@
 //!   `ids` or `count`. [`Search::across`] searches several indexes at once.
 //! - **Engines** ([`SearchEngine`]): `postgres` (PostgreSQL full text; FTS5
 //!   on SQLite), `meilisearch` and `typesense` over HTTP, `tantivy`
-//!   embedded (the `tantivy` feature) and `memory` for tests.
+//!   embedded (the `tantivy` feature) and `memory` for tests. A module can
+//!   register one under a name of its own ([`ModuleBuilderSearchExt`]),
+//!   which `search.engine` selects.
 //! - **Vectors**: `#[searchable(embed)]` fields are embedded by the app's
 //!   [`Embeddings`] provider and stored in pgvector, Qdrant or memory
 //!   ([`VectorStore`]); [`Search::similar`], [`Search::similar_to`] and
@@ -58,6 +60,7 @@
 mod ai;
 mod commands;
 mod document;
+mod drivers;
 mod engine;
 mod error;
 mod filter;
@@ -80,6 +83,7 @@ mod vector;
 #[cfg(feature = "ai")]
 pub use ai::AiVectorStore;
 pub use document::Document;
+pub use drivers::ModuleBuilderSearchExt;
 #[cfg(feature = "tantivy")]
 pub use engine::TantivyEngine;
 pub use engine::{

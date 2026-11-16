@@ -1,7 +1,8 @@
 //! The gRPC docs page (`microservices/grpc`) through the facade: the deals
 //! service written as the page writes it (`navree::grpc::{Request,
 //! Response, grpc_service}` and `navree::prelude::*`), its interceptor and
-//! client examples, and the page's test.
+//! client examples, the page's test, and a server built elsewhere served
+//! with `TonicService`.
 //!
 //! Run with `cargo test -p navree --features grpc,sqlite --test grpc`.
 // The page's code declares public items, as an app crate would.
@@ -10,9 +11,13 @@
 use std::sync::Arc;
 
 use navree::grpc::testing::TestChannel;
-use navree::grpc::{Code, GrpcChannels, GrpcOptions, Request, Response, Status, grpc_service};
+use navree::grpc::{
+    Code, GrpcChannels, GrpcMethod, GrpcOptions, Request, Response, Status, TonicService,
+    grpc_service,
+};
 use navree::http::CurrentPrincipal;
 use navree::orm::access::AccessibleQuery as _;
+use navree::plugin::prelude::*;
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
 use uuid::Uuid;
@@ -380,6 +385,121 @@ async fn get_deal_checks_access() {
         .await
         .expect_err("no client named deals");
     assert_eq!(error.status.as_u16(), 500);
+
+    app.shutdown().await.unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// The page's "A server built elsewhere": the generated `DealsServer` around
+// an implementation of `Deals` written without `#[grpc_service]`.
+// ---------------------------------------------------------------------------
+
+/// A crate's own implementation of the generated `Deals` trait.
+pub struct KhataDeals;
+
+#[tonic::async_trait]
+impl Deals for KhataDeals {
+    async fn get_deal(
+        &self,
+        request: Request<pb::GetDealRequest>,
+    ) -> Result<Response<pb::Deal>, Status> {
+        Ok(Response::new(pb::Deal {
+            id: request.into_inner().id,
+            title: "Ludhiana renewal".into(),
+            ..pb::Deal::default()
+        }))
+    }
+
+    async fn list_deals(
+        &self,
+        _request: Request<pb::ListDealsRequest>,
+    ) -> Result<Response<pb::ListDealsResponse>, Status> {
+        Ok(Response::new(pb::ListDealsResponse::default()))
+    }
+
+    async fn move_deal(
+        &self,
+        _request: Request<pb::MoveDealRequest>,
+    ) -> Result<Response<pb::Deal>, Status> {
+        Err(Status::unimplemented("deals move in the CRM"))
+    }
+
+    type WatchDealsStream = DealEvents;
+
+    async fn watch_deals(
+        &self,
+        _request: Request<pb::WatchDealsRequest>,
+    ) -> Result<Response<Self::WatchDealsStream>, Status> {
+        Ok(Response::new(Box::pin(tokio_stream::empty()) as DealEvents))
+    }
+
+    async fn import_deals(
+        &self,
+        _request: Request<navree::grpc::Streaming<pb::Deal>>,
+    ) -> Result<Response<pb::ImportDealsResponse>, Status> {
+        Err(Status::unimplemented("deals are imported in the CRM"))
+    }
+
+    type EchoStream = DealEvents;
+
+    async fn echo(
+        &self,
+        request: Request<navree::grpc::Streaming<pb::DealEvent>>,
+    ) -> Result<Response<Self::EchoStream>, Status> {
+        Ok(Response::new(Box::pin(request.into_inner()) as DealEvents))
+    }
+}
+
+/// Serves the generated server behind the app's access checks: every
+/// method needs a signed-in caller, except `GetDeal`.
+pub struct KhataDealsModule;
+
+impl Module for KhataDealsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.tonic_service(
+            TonicService::new(DealsServer::new(KhataDeals))
+                .authenticated()
+                .method(GrpcMethod::new("get_deal").public()),
+        );
+    }
+}
+
+/// The page's "A server built elsewhere": a guest's `GetDeal` is served by
+/// the wrapped server, a guest's `ListDeals` is refused before it.
+#[tokio::test]
+async fn a_tonic_server_built_elsewhere_is_served_as_the_grpc_page_shows() {
+    let app = TestApp::builder()
+        .module(GrpcModule::from_config())
+        .module(KhataDealsModule)
+        .build()
+        .await;
+    let mut guest = pb::deals_client::DealsClient::new(TestChannel::new(&app));
+    let deal = guest
+        .get_deal(pb::GetDealRequest {
+            id: "khata-1".into(),
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(
+        (deal.id.as_str(), deal.title.as_str()),
+        ("khata-1", "Ludhiana renewal")
+    );
+    let status = guest
+        .list_deals(pb::ListDealsRequest::default())
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), Code::Unauthenticated);
+
+    let mut harpreet = pb::deals_client::DealsClient::new(
+        TestChannel::new(&app).acting_as(principal(Uuid::now_v7())),
+    );
+    let list = harpreet
+        .list_deals(pb::ListDealsRequest::default())
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(list.total, 0);
 
     app.shutdown().await.unwrap();
 }

@@ -82,6 +82,15 @@ impl Templates {
         self.dirs.iter().any(|dir| dir.join(&path).is_file()) || self.embedded.contains_key(&path)
     }
 
+    /// Whether a template directory (not an embedded file) holds a file at
+    /// `path`: what wins over every embedded file of that path.
+    pub(crate) fn has_file(&self, path: &str) -> bool {
+        let Some(path) = normalize(path) else {
+            return false;
+        };
+        self.dirs.iter().any(|dir| dir.join(&path).is_file())
+    }
+
     /// The contents of the file at `path`, `None` when no directory and no
     /// embedded file has it. Blocking file-system I/O.
     pub fn read(&self, path: &str) -> std::io::Result<Option<Bytes>> {

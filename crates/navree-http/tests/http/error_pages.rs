@@ -14,7 +14,7 @@ use navree_http::{
     AppError, ErrorContext, ErrorPages, GlobalLayer, IntoResponse, LayerSlot, ModuleBuilderHttpExt,
     RouteDef, RouteKind,
 };
-use navree_kernel::BoxFuture;
+use navree_kernel::{BoxFuture, Module, ModuleBuilder, PluginInfo};
 
 use crate::support::Setup;
 
@@ -220,6 +220,76 @@ async fn an_app_without_the_module_answers_in_json_as_before() {
     let response = app.get("/nowhere").await;
     response.assert_error(404);
     assert!(!varies_on_accept(&response), "{:?}", response.headers);
+}
+
+/// The pretty pages plugin, a community plugin of this test crate.
+const PRETTY: PluginInfo = PluginInfo::new(
+    "navree-plugin-pretty",
+    env!("CARGO_CRATE_NAME"),
+    "pretty",
+    "1.0.0",
+);
+
+/// A module of the pretty pages plugin that answers the app's errors with `.0`.
+struct PrettyPages(Pages);
+
+impl Module for PrettyPages {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(PRETTY).error_pages(self.0.clone());
+    }
+}
+
+/// A module of the app that answers its errors with `.0`, the pages the plugin offers.
+struct AppPages(Pages);
+
+impl Module for AppPages {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.error_pages(self.0.clone());
+    }
+}
+
+/// Pages that answer every error with a page.
+fn pretty_pages() -> Pages {
+    Pages {
+        mode: Mode::Page,
+        seen: Arc::new(Mutex::new(Vec::new())),
+    }
+}
+
+#[tokio::test]
+async fn a_plugins_error_pages_fail_the_boot() {
+    let refusal = "plugin `navree-plugin-pretty` answers the app's errors (m.error_pages in `PrettyPages`); only the app chooses that: register the plugin's pages from a module of the app";
+    let alone = Setup::new(routes())
+        .authenticated()
+        .module(PrettyPages(pretty_pages()))
+        .boot_error()
+        .await;
+    // Whatever the order, beside the app's own pages.
+    let after_the_apps = Setup::new(routes())
+        .authenticated()
+        .module(AppPages(pretty_pages()))
+        .module(PrettyPages(pretty_pages()))
+        .boot_error()
+        .await;
+    let before_the_apps = Setup::new(routes())
+        .authenticated()
+        .module(PrettyPages(pretty_pages()))
+        .module(AppPages(pretty_pages()))
+        .boot_error()
+        .await;
+    for error in [alone, after_the_apps, before_the_apps] {
+        assert!(error.contains(refusal), "{error}");
+    }
+
+    // The app registers the same pages from a module of its own: it boots, and they answer.
+    let app = Setup::new(routes())
+        .authenticated()
+        .module(AppPages(pretty_pages()))
+        .boot()
+        .await;
+    let response = app.get("/nowhere").await;
+    assert_eq!(response.status, StatusCode::NOT_FOUND);
+    assert_eq!(response.text(), "<h1>404</h1>");
 }
 
 #[tokio::test]

@@ -1,0 +1,66 @@
+/* The rating's stylesheet. The build scopes every rule below to the app's components: a rule
+   can reach the rating and what is inside it, and nothing else on the page. */
+
+/* The root. `&` is the element a rule is scoped to, so the slot says which component's root. */
+&[data-slot="app:rating"] {
+  --app--size: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+&[data-slot="app:rating"][data-size="lg"] {
+  --app--size: 1.75rem;
+}
+
+/* A rating that is waiting for the server's answer. */
+&[data-slot="app:rating"][data-busy] {
+  opacity: 0.6;
+}
+
+/* The parts inside the root: a selector with no `&` is read as a descendant of it. */
+[data-slot="app:rating-stars"] {
+  display: inline-flex;
+  gap: 0.125rem;
+}
+
+[data-slot="app:rating-star"] {
+  border: 0;
+  padding: 0;
+  background: none;
+  font-size: var(--app--size);
+  line-height: 1;
+  color: var(--line);
+}
+
+[data-slot="app:rating-star"][data-selected] {
+  color: var(--accent);
+}
+
+/* The stars a script draws are buttons: they can be pressed and focused. */
+button[data-slot="app:rating-star"] {
+  cursor: pointer;
+}
+
+button[data-slot="app:rating-star"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  button[data-slot="app:rating-star"]:hover {
+    animation: app--pulse 0.3s ease-out;
+  }
+}
+
+@keyframes app--pulse {
+  from {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+  to {
+    transform: scale(1);
+  }
+}

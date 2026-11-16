@@ -104,8 +104,10 @@ impl Injectable for Routes {
 
 /// The shell of the request of `parts`, as an error page's is built: the
 /// app's `ErrorShell`, given the person signed in, or the `Shell` it
-/// registered for everyone.
-async fn shell_of(ctx: &AppContext, parts: &Parts) -> Option<crate::shell::AppShell> {
+/// registered for everyone. A shell that asks for the links other modules
+/// add gets those the request's reader may open, as the `AppShell` extractor
+/// gives a page, so the document's stamp is the stamp of the pages in it.
+async fn shell_of(ctx: &AppContext, parts: &mut Parts) -> Option<crate::shell::AppShell> {
     let shell = match parts.extensions.get::<Arc<ErrorContext>>() {
         Some(context) => {
             let mut context = context.as_ref().clone();
@@ -116,7 +118,8 @@ async fn shell_of(ctx: &AppContext, parts: &Parts) -> Option<crate::shell::AppSh
         }
         None => ctx.try_get::<Shell>().await.map(|shell| (*shell).clone()),
     }?;
-    Some(shell.for_request("/", &parts.headers))
+    let applied = shell.for_request("/", &parts.headers);
+    Some(applied.with_contributed(parts).await)
 }
 
 /// The value of [`navree_native::PERSON_HEADER`] for the person signed in,
@@ -139,7 +142,7 @@ pub(crate) fn person(user: Option<uuid::Uuid>) -> Option<HeaderValue> {
 
 /// The app's shell as a native client draws it, for this request: the
 /// person signed in and their menu are theirs.
-async fn document(ctx: &AppContext, parts: &Parts) -> Response {
+async fn document(ctx: &AppContext, parts: &mut Parts) -> Response {
     let sign_in = ctx
         .try_get::<PagesOptions>()
         .await
@@ -201,9 +204,9 @@ impl Controller for Routes {
             RouteDef::on(
                 Method::GET,
                 format!("!{}", navree_native::SHELL_PATH),
-                move |parts: Parts| {
+                move |mut parts: Parts| {
                     let ctx = ctx.clone();
-                    async move { document(&ctx, &parts).await }
+                    async move { document(&ctx, &mut parts).await }
                 },
             )
             .name("native.shell")

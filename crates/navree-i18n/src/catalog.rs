@@ -2,7 +2,7 @@
 //! locale, with the fallback chains, lenient tag matching, and the
 //! `i18n:check` report.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -14,6 +14,7 @@ use unic_langid::LanguageIdentifier;
 
 use crate::args::{datetime, format_value};
 use crate::options::{BidiIsolation, I18nOptions};
+use crate::plugins::PluginSource;
 use crate::{shipped, tag};
 
 /// One locale's Fluent bundle.
@@ -28,6 +29,15 @@ pub(crate) struct SourceFile {
     pub(crate) source: String,
 }
 
+/// A Fluent file a plugin ships, parsed once: its path as shown in messages
+/// (`navree-plugin-announcements:locales/en/announcements.ftl`), its source and
+/// what it parsed to.
+struct PluginFile {
+    path: String,
+    source: String,
+    resource: Arc<FluentResource>,
+}
+
 /// Where an app message is defined.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Definition {
@@ -35,11 +45,12 @@ pub(crate) struct Definition {
     pub(crate) line: usize,
 }
 
-/// One locale: its bundle (the app's files, then the shipped validation
-/// messages) and the app's message ids.
+/// One locale: its bundle (the app's files, then the plugins' files, then the
+/// shipped messages) and the message ids of the app and the plugins.
 pub(crate) struct LocaleBundle {
     pub(crate) bundle: Bundle,
-    /// The app's messages and terms (not the shipped ones), by id.
+    /// The messages and terms of the app and of the plugins (not the shipped
+    /// ones), by id.
     pub(crate) messages: BTreeMap<String, Definition>,
 }
 
@@ -64,12 +75,30 @@ pub(crate) struct Catalog {
 }
 
 impl Catalog {
-    /// Loads `files` for the locales of `options`. Any problem fails the
-    /// load unless `lenient` (then broken entries are skipped and the
+    /// Loads `files` for the locales of `options`, with no plugin. Any problem
+    /// fails the load unless `lenient` (then broken entries are skipped and the
     /// problems kept in [`problems`](Catalog::problems)).
+    #[cfg(test)]
     pub(crate) fn build(
         options: &I18nOptions,
         files: Vec<SourceFile>,
+        lenient: bool,
+    ) -> Result<Catalog, Vec<String>> {
+        Catalog::build_with(options, files, &[], lenient)
+    }
+
+    /// Loads `files` for the locales of `options`, then the files of
+    /// `plugins`. In each locale's bundle the app's files come first, then the
+    /// plugins' in module order, then the shipped messages, and Fluent keeps
+    /// the first definition of an id: the app's message wins over a plugin's,
+    /// and a plugin's over a shipped one. An id the app and a plugin both
+    /// define is no problem; one id in the files of two plugins is. Any
+    /// problem fails the load unless `lenient` (then broken entries are
+    /// skipped and the problems kept in [`problems`](Catalog::problems)).
+    pub(crate) fn build_with(
+        options: &I18nOptions,
+        files: Vec<SourceFile>,
+        plugins: &[PluginSource],
         lenient: bool,
     ) -> Result<Catalog, Vec<String>> {
         let supported = options
@@ -94,12 +123,41 @@ impl Catalog {
             }
         }
 
+        // The plugins' files, each parsed once, by the canonical tag of their
+        // locale. A plugin of its own making holds its ids to its namespace.
+        let mut plugin_files: BTreeMap<String, Vec<PluginFile>> = BTreeMap::new();
+        for plugin in plugins {
+            for &(locale, path, source) in plugin.files {
+                let file = SourceFile {
+                    locale: locale.to_owned(),
+                    path: format!("{}:{path}", plugin.plugin),
+                    source: source.to_owned(),
+                };
+                let resource = parse_file(&file, &mut problems);
+                if plugin.checked {
+                    namespace_problems(plugin, path, &resource, &mut problems);
+                }
+                let Ok(canonical) = tag::canonical(locale) else {
+                    problems.push(format!(
+                        "{}: `{locale}` is not a locale directory (a BCP 47 tag such as `fr` or `pt-BR`)",
+                        file.path
+                    ));
+                    continue;
+                };
+                plugin_files.entry(canonical).or_default().push(PluginFile {
+                    path: file.path,
+                    source: file.source,
+                    resource: Arc::new(resource),
+                });
+            }
+        }
+
         // The supported locales, and their parents that have files.
         let mut needed: Vec<LanguageIdentifier> = Vec::new();
         for locale in supported.iter().chain(std::iter::once(&default)) {
             let langid = tag::parse(locale).map_err(|error| vec![error])?;
             for parent in tag::parents(&langid) {
-                if by_locale.contains_key(&parent) {
+                if by_locale.contains_key(&parent) || plugin_files.contains_key(&parent) {
                     needed.push(tag::parse(&parent).map_err(|error| vec![error])?);
                 }
             }
@@ -112,7 +170,8 @@ impl Catalog {
                 continue;
             }
             let files = by_locale.remove(&key).unwrap_or_default();
-            let bundle = locale_bundle(options, langid, &files, &mut problems);
+            let from_plugins = plugin_files.remove(&key).unwrap_or_default();
+            let bundle = locale_bundle(options, langid, &files, &from_plugins, &mut problems);
             bundles.insert(key, bundle);
         }
         if !problems.is_empty() && !lenient {
@@ -342,12 +401,64 @@ pub(crate) fn format_in(
     })
 }
 
-/// The bundle of `langid`: the app's `files`, then the shipped validation
-/// messages for its language. Problems are added to `problems`.
+/// `file` parsed. A syntax error is a problem naming the file and line; what
+/// parsed before and after it is kept.
+fn parse_file(file: &SourceFile, problems: &mut Vec<String>) -> FluentResource {
+    match FluentResource::try_new(file.source.clone()) {
+        Ok(resource) => resource,
+        Err((resource, errors)) => {
+            for error in errors {
+                let at = error
+                    .slice
+                    .as_ref()
+                    .map_or(error.pos.start, |slice| slice.start);
+                problems.push(format!(
+                    "{}:{}: syntax error: {}",
+                    file.path,
+                    line_of(&file.source, at),
+                    error.kind
+                ));
+            }
+            resource
+        }
+    }
+}
+
+/// A problem for each message of a plugin's file whose id does not start with
+/// the plugin's namespace (`announcements-title`), and for each term whose id
+/// does not start with it either (`-announcements-brand`: a bundle keeps terms
+/// and messages in one table, so an unprefixed term could replace another
+/// module's). `path` is the file as the plugin embedded it.
+fn namespace_problems(
+    plugin: &PluginSource,
+    path: &str,
+    resource: &FluentResource,
+    problems: &mut Vec<String>,
+) {
+    for id in entry_ids(resource) {
+        let prefix = if id.starts_with('-') {
+            format!("-{}-", plugin.namespace)
+        } else {
+            format!("{}-", plugin.namespace)
+        };
+        if !id.starts_with(&prefix) {
+            problems.push(format!(
+                "plugin `{}`: message `{id}` in {path} does not start with `{prefix}`",
+                plugin.plugin
+            ));
+        }
+    }
+}
+
+/// The bundle of `langid`: the app's `files`, then the plugins' `plugin_files`,
+/// then the shipped messages for its language. Fluent keeps the first
+/// definition of an id, so an app's message wins over a plugin's and a plugin's
+/// over a shipped one. Problems are added to `problems`.
 fn locale_bundle(
     options: &I18nOptions,
     langid: LanguageIdentifier,
     files: &[SourceFile],
+    plugin_files: &[PluginFile],
     problems: &mut Vec<String>,
 ) -> LocaleBundle {
     let mut bundle: Bundle = FluentBundle::new_concurrent(vec![langid.clone()]);
@@ -363,24 +474,7 @@ fn locale_bundle(
 
     let mut messages: BTreeMap<String, Definition> = BTreeMap::new();
     for file in files {
-        let resource = match FluentResource::try_new(file.source.clone()) {
-            Ok(resource) => resource,
-            Err((resource, errors)) => {
-                for error in errors {
-                    let at = error
-                        .slice
-                        .as_ref()
-                        .map_or(error.pos.start, |slice| slice.start);
-                    problems.push(format!(
-                        "{}:{}: syntax error: {}",
-                        file.path,
-                        line_of(&file.source, at),
-                        error.kind
-                    ));
-                }
-                resource
-            }
-        };
+        let resource = parse_file(file, problems);
         let lines = entry_lines(&file.source);
         for id in entry_ids(&resource) {
             let definition = Definition {
@@ -400,10 +494,36 @@ fn locale_bundle(
         // Duplicates are reported above; the first definition is kept.
         let _ = bundle.add_resource(Arc::new(resource));
     }
+    // A plugin's message is below the app's: an id the app defines is left to
+    // the app, with no problem. One id in the files of two plugins is a problem.
+    let from_app: HashSet<String> = messages.keys().cloned().collect();
+    for file in plugin_files {
+        let lines = entry_lines(&file.source);
+        for id in entry_ids(&file.resource) {
+            if from_app.contains(&id) {
+                continue;
+            }
+            let definition = Definition {
+                path: file.path.clone(),
+                line: lines.get(&id).copied().unwrap_or(1),
+            };
+            match messages.get(&id) {
+                Some(first) => problems.push(format!(
+                    "{}:{}: `{id}` is already defined in {}:{}",
+                    definition.path, definition.line, first.path, first.line
+                )),
+                None => {
+                    messages.insert(id, definition);
+                }
+            }
+        }
+        // The first definition is kept: the app's, else the first plugin's.
+        let _ = bundle.add_resource(file.resource.clone());
+    }
     if let Some(source) = shipped::validation_for(&langid)
         && let Ok(resource) = FluentResource::try_new(source.to_owned())
     {
-        // The app's own messages win over the shipped ones.
+        // The app's and the plugins' messages win over the shipped ones.
         let _ = bundle.add_resource(Arc::new(resource));
     }
     #[cfg(feature = "ui")]
@@ -850,5 +970,104 @@ mod tests {
         );
         assert!(read_dir(&dir.path().join("missing")).unwrap().is_empty());
         assert_eq!(fingerprint(dir.path()).len(), 3);
+    }
+
+    fn plugin(
+        files: &'static [(&'static str, &'static str, &'static str)],
+        checked: bool,
+    ) -> PluginSource {
+        PluginSource {
+            plugin: "navree-plugin-announcements",
+            namespace: "announcements",
+            checked,
+            files,
+        }
+    }
+
+    const NOTICES: &[(&str, &str, &str)] = &[(
+        "en",
+        "locales/en/announcements.ftl",
+        "announcements-title = Notices\nannouncements-fee = Fee for Ludhiana: ₹1,00,000\n",
+    )];
+
+    #[test]
+    fn a_plugins_messages_rank_below_the_apps_and_two_plugins_may_not_share_an_id() {
+        let catalog = Catalog::build_with(
+            &options(&["en", "hi"], "en"),
+            vec![file(
+                "en",
+                "main.ftl",
+                "announcements-title = Notices from Harpreet Sandhu\n",
+            )],
+            &[plugin(NOTICES, true)],
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            text(catalog.format("en", "announcements-title", None)),
+            "Notices from Harpreet Sandhu"
+        );
+        assert_eq!(
+            text(catalog.format("en", "announcements-fee", None)),
+            "Fee for Ludhiana: ₹1,00,000"
+        );
+        assert_eq!(
+            catalog.report("locales").lines,
+            [
+                "locales/hi  announcements-fee: missing (defined in navree-plugin-announcements:locales/en/announcements.ftl:2)",
+                "locales/hi  announcements-title: missing (defined in locales/en/main.ftl:1)",
+                "2 problem(s) in 2 locale(s)",
+            ]
+        );
+        let second = PluginSource {
+            plugin: "navree-plugin-notice-board",
+            namespace: "notice_board",
+            checked: false,
+            files: NOTICES,
+        };
+        assert_eq!(
+            Catalog::build_with(
+                &options(&["en"], "en"),
+                vec![],
+                &[plugin(NOTICES, true), second],
+                false,
+            )
+            .err()
+            .unwrap(),
+            [
+                "navree-plugin-notice-board:locales/en/announcements.ftl:1: `announcements-title` is already defined in navree-plugin-announcements:locales/en/announcements.ftl:1",
+                "navree-plugin-notice-board:locales/en/announcements.ftl:2: `announcements-fee` is already defined in navree-plugin-announcements:locales/en/announcements.ftl:2",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_first_party_plugins_ids_are_not_held_to_its_namespace() {
+        const ZONES: &[(&str, &str, &str)] = &[(
+            "en",
+            "locales/en/time.ftl",
+            "zone-ist = India Standard Time\n",
+        )];
+        let first_party = PluginSource {
+            plugin: "navree-time",
+            namespace: "time",
+            checked: false,
+            files: ZONES,
+        };
+        assert!(
+            Catalog::build_with(&options(&["en"], "en"), vec![], &[first_party], false).is_ok()
+        );
+        let held = PluginSource {
+            checked: true,
+            ..first_party
+        };
+        assert_eq!(
+            Catalog::build_with(&options(&["en"], "en"), vec![], &[held], false)
+                .err()
+                .unwrap(),
+            [
+                "plugin `navree-time`: message `zone-ist` in locales/en/time.ftl does not start with `time-`"
+            ]
+        );
     }
 }

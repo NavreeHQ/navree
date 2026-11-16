@@ -122,7 +122,7 @@ impl fmt::Display for UnusedKey {
 
 /// Whether `inner` is `outer` or lies below it (`a.b` and `a.b[0].c` lie
 /// below `a`; `ab` does not).
-fn covers(outer: &str, inner: &str) -> bool {
+pub(crate) fn covers(outer: &str, inner: &str) -> bool {
     outer.is_empty()
         || inner == outer
         || inner

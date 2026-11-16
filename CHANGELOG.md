@@ -7,6 +7,309 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Added
+
+- Plugins: a module names itself a plugin with `m.plugin(navree::plugin_info!())`. The boot checks
+  each plugin's crate, version and namespace, and tells the framework's own packages from others
+  by itself. `plugins [--json]` lists an app's plugins and what each module adds without starting
+  the app, and `plugin:publish <plugin>` copies a plugin's templates, translations and files into
+  the app's folders and writes its configuration sections, commented out. It checks every file
+  before it writes one and refuses any path that could leave those folders or two files that would
+  be one, so a refusal leaves nothing written; `--dry-run` shows what it would write.
+  `config:publish --plugin <namespace>` publishes every section of a plugin.
+  `navree::embed_locales!` works without the `i18n` feature. A plugin that is not one of the
+  framework's own packages may not answer the app's errors, build the shell of its error pages or
+  register the panel's staff policies; a dashboard card renders only an `.html` template.
+- Plugins ship templates, translations and static files. `m.plugin_templates(navree::embed_templates!("views"))`
+  embeds a folder of templates in the plugin's binary under its namespace (`announcements/list.html`);
+  a file of that name in the app's template folders (`resources/views/announcements/list.html`)
+  still wins. `m.locales(navree::embed_locales!("locales"))` adds a plugin's Fluent files after the
+  app's own, whose message wins; the message ids of a plugin that is not one of the framework's own
+  start with its namespace, and a plugin needs no `i18n` feature. `i18n:publish <plugin>` copies a
+  plugin's translations into `i18n.dir`. `AppSheet`, `AppFont`, `AppImage` and `IslandScript` take
+  `.namespace(..)` and are then served as `{namespace}.{name}`.
+- `ClientModule` (`navree::plugin::ClientModule`) makes a client crate a module in a few lines:
+  `ClientModule::<T>::new(name).options::<O>().connect(..)` reads section `O::KEY` at boot (or
+  takes the options in code with `for_root`), builds the client once and exports it as `T` and
+  under its name; `.health(..)` adds a readiness check and `.shutdown(..)` a hook at graceful
+  shutdown. With `.plugin(navree::plugin_info!())` the module belongs to the plugin whose crate
+  defines the options type.
+- `FallibleLayer` (`navree::http::FallibleLayer`) puts a tower layer whose service can fail, such
+  as `tower::timeout::TimeoutLayer`, on `AppRouter::layer`, `Endpoint::layer` and
+  `Router::route_layer`; the service's error answers as a 500 through the app's `m.map_error`
+  mappings, in any `LayerSlot` but `Edge`, which sits outside error rendering.
+- `m.mount(Mount::new("/khata", service).authenticated())` serves any tower service under a path
+  prefix inside the app's pipeline: request id, context, client address, session and CSRF,
+  authentication, the mount's access check on every request, throttle, timeout and body limit.
+  The service sees the rest of the path, as received, below `/`. A 4xx it writes goes out as
+  written; a 5xx with no body or a short plain-text one takes the app's error shape, its text
+  logged, never sent. A mount without an access declaration, a prefix under `/_`, and a prefix
+  that a route or another mount reaches fail the boot. A request with an `Upgrade` header or
+  `CONNECT` never reaches the service: the mount answers it 501. With `.methods(..)`, a method
+  the list leaves out is the router's 405, as for a route; `HEAD` runs the `GET` answer when
+  `GET` is listed, and `OPTIONS` is a 204 with `Allow`. `routes` lists mounts.
+  `use navree::plugin::prelude::*;` brings `m.mount`.
+- `TonicService` (`navree::grpc::TonicService`) serves a tonic server built elsewhere, such as a
+  crate's generated `DealsServer`, through `GrpcModule` with the authentication, access checks,
+  guards, deadline and unit of work of a `#[grpc_service]` method, checked before the server
+  reads a message. A method without a declaration of its own or a service default is refused
+  with `PERMISSION_DENIED`, and a service with no declaration fails the boot, as does a method
+  declared under another name than the one the generated server trait spells (`GetDeal` for
+  `get_deal`). `use navree::plugin::prelude::*;` brings `m.tonic_service`.
+- Links in the sidebar from any module: `m.nav_item(ShellNavItem::new(..))` (`navree::ui`), drawn by
+  a shell built with `Shell::contributed()` after its own groups, each only for readers who hold its
+  permission, decided on the server for every request, app-wide or in the request's workspace.
+  `GET /_navree/ui/navigation` answers the same links as JSON, and exists only when a module adds
+  one. A link whose address is not a path of the app stops the boot.
+- Helm takes links and dashboard cards from any module: `m.helm_nav(HelmLink::new(..))` and
+  `m.helm_widget(HelmWidget::new(..))`, each shown only to users who pass its check; a card's data
+  is read only for them.
+- Modules describe their permissions with `m.permissions(&[Permission::new(..)])`
+  (`navree::contracts`, also `navree::plugin::Permission`); `permission_catalog` lists them and
+  `access:explain` prints a permission's description. Describing a permission grants it to nobody.
+  A plugin's permissions and its own subjects' permission prefixes start with its namespace, and
+  its namespace may not be another module's permission prefix. A plugin that reads a configuration
+  section outside its namespace is warned about at boot. Without `AccessModule` the permissions
+  modules describe are not checked, and a route cannot require one. The roles that already hold
+  every permission hold a plugin's too: a workspace's owner, an organization's owner in each of its
+  workspaces, the app's super-admin role and any role granted `all.*`; a role granted `all.read`
+  holds every plugin's `read` permissions.
+- `navree::http::RequestWorkspace`: the workspace a request names, resolved without entering it;
+  `WorkspaceModule` provides it.
+- Drivers by name: a module registers a driver under a name of its own for each driver kind, with
+  `m.cache_store`, `m.queue_store`, `m.session_store`, `m.backplane`, `m.mail_transport`,
+  `m.disk_driver`, `m.sms_driver`, `m.whatsapp_driver`, `m.search_engine` and `m.ai_provider`, all
+  through `navree::plugin::prelude`, and the kind's setting takes that name: `cache.store`,
+  `queue.driver`, `session.store`, `realtime.backplane`, `mail.transport` (also in a failover's
+  list and in `mail.transports`), `storage.disks.{disk}.driver`, `notify.sms.driver`,
+  `notify.whatsapp.driver`, `search.engine` and `ai.providers.{name}.driver`. The driver reads its
+  own settings from the table named after it (`cache.{name}`), or, for a disk or an AI provider,
+  from that disk's or provider's table as its module runs with it, whether the module read it from
+  the configuration or was given it in code; a registered backplane needs `realtime.secret`, as
+  Redis does. `m.notification_channel`, from the same prelude, adds a delivery channel instead: a
+  notification lists it with `Channel::named("..")`, renders its message with `to_channel`, and
+  the notifiable gives its address with `route_channel`. A name that is not a lower-case letter
+  followed by up to 63 lower-case letters, digits or `_`, a registration under a built-in name,
+  one name registered by two modules and, where a driver's settings sit below the kind's section,
+  a name equal to a key of that section (`cache.prefix`, `notify.push`) fail the boot, naming the
+  registration method and the module, whichever driver is selected. A setting that names a driver
+  no module registers fails the boot too, listing the names that are known (a bare
+  `mail.transport` name that no module registers as a mail transport keeps
+  `unknown mail transport (expected ..)`, and so does a bare built-in type such as `smtp`); a
+  notification that lists a channel no module adds fails that delivery, which is recorded as
+  failed. `config:check` reports the same problems of the registrations and of the setting each
+  kind reads, in the same words, without booting the app. It reads the names in a failover's list
+  and in `mail.transports` only as the `mail` section is read, where an unknown one is
+  `unknown mail transport (expected ..)` as at boot; it does not check the registration of a
+  notification channel, a registration that takes the name of a key of the section of a module
+  given its options in code, or a driver's factory: only the boot does. `config:schema` lists the
+  built-in and registered names of `cache.store`, `queue.driver`, `session.store`,
+  `realtime.backplane`, `notify.sms.driver`, `notify.whatsapp.driver` and `search.engine`. A
+  factory's error is shown as it wrote it in the boot error, so it must not contain a secret from
+  the driver's settings. A factory that asks the app for the service its driver is being built
+  for (`Storage` for a disk driver, `Cache` for a cache store), or for one built on it, fails the
+  boot, naming the driver and the cycle. The new public traits `DiskDriver`, `AiDriver` and `ChannelDriver`
+  describe a disk, an AI provider and a notification channel, with `DiskUpload`, `OpenedFile`,
+  `DiskDriverError`, `RegisteredDisk`, `AiCapabilities`, `AiDriverRequest`, `AiTool`,
+  `AiDriverAnswer`, `AiDriverChunk`, `AiDriverStream`, `AiEmbedRequest`, `AiEmbedAnswer`,
+  `Channel::named`, `Channel::from_name` and `Delivery::Registered`; `DriverName` and
+  `DriverContext` are in `navree::plugin`. A registered AI driver brings its own HTTP client, and
+  `AiModule` builds registered AI drivers also with `ai.fake = true`, so a provider table that
+  names a driver no module registers fails the boot in tests too. `CustomEvent` is a telemetry
+  event a module names itself (`TelemetryEvent::Custom`, of kind `EventKind::Custom`;
+  `EventKind::EVERY` lists all twenty kinds, `EventKind::ALL` still the nineteen); an event whose
+  name is not two or more lower-case words joined by `.` is not delivered, and the registry logs a
+  warning the first time it sees the name.
+- Components of your own in Navree UI. A struct with `navree::ui::component_methods!` and
+  `component_node!` is a component as the toolkit's are, and `navree::ui::kit` checks it against the
+  toolkit's rules (`kit::problems`, `assert_component`, `assert_control` and `stored_twin`). A
+  `UiExtension` names a component's script and stylesheet under a namespace. With the facade's
+  `ui-extension-files`, `extension_script!` and `extension_sheet!` read and hash the files when the
+  crate compiles, and scope the stylesheet, so a plugin's stylesheet applies only inside its
+  components. The macros live in the new crate `navree-ui-ext-macros`, which only an app with that
+  feature compiles. `Element::extension`, `extension_with` and `extension_call` name the files on an
+  element: the page links the stylesheets it names (those in table rows and replies too), and a new
+  runtime module mounts the script, seals what it draws and lets it call only the routes the server
+  named (browser contract 1). `GET /_navree/ui/ext/{file}` serves the files of an app that
+  contributes one. `navree::plugin` names `UiExtension`, `ExtensionFile`, `FieldControl`, `Control`,
+  `ControlCx`, `ControlField`, `EditedValue`, `PageSources`, `Directive` and `PagePolicy` for a
+  plugin's modules.
+- A form field of your own: a `FieldControl`, drawn with `#[form(control = ..)]` in a derived form,
+  `Widget::Control` in a described one and `EditCell::control` in a table. Its server check runs on
+  every path a value arrives by (`Submit`, wizard steps, drafts read with `Draft::read_for`,
+  `EditedValue::read` and `check_controls`) and can read the app's configuration through
+  `ControlCx`. A control's ids take the form's prefix (`FormView::id_prefix`) as the other fields'
+  do.
+- The page policy, `ui.policy`: an app allows image, media, connection and font sources for a
+  plugin by its namespace (`ui.policy.allow.geo.img_src`), and WebAssembly with one switch; a plugin
+  says what it needs with `PageSources`, and the boot says what was asked and what was allowed.
+  Script, style, worker and frame sources cannot be allowed. With nothing allowed, every answer
+  keeps the toolkit's policy.
+- `View::fresh` and `AppPage::fresh`: in an app with a UI extension, a plugin's island script or an
+  allowed source, a page that must start clean is entered and left by a full page load, keeps the
+  toolkit's policy, and no answer it gives is drawn into another page. The sign-in and account
+  pages, the OAuth consent page, Helm and Lighthouse are fresh, and the log names a page or a reply
+  that sends a password field outside one.
+- `Page::assert_no_policy_violations` (navree-browser) fails when a page reported a content security
+  policy violation.
+
+### Changed
+
+- `introspect --json` gives each module its `type` and lists the plugins under `plugins`; its
+  `commands` list includes `plugins` and `plugin:publish` unless a module registers a command of
+  that name, which then runs instead, so a tool that reads the commands by position finds two more
+  entries before the app's own. `help` lists the two among the built-in commands, so its first
+  column is wider.
+- An app with `CacheModule`, `QueueModule`, `SessionModule`, `RealtimeModule`, `MailModule`,
+  `StorageModule`, `NotifyModule`, `SearchModule` or `AiModule` lists one more provider of that
+  module in `check --graph` and `introspect --json`: the one the boot builds to check the drivers
+  modules register, whether or not a test replaces the module's service (`ChosenBackend` for the
+  cache, which also builds a registered store once; `CheckedStores` for the queue and the
+  sessions; `CheckedBackplanes`; `TransportRegistrations` for mail; `CheckedDrivers` for storage,
+  notifications and AI; `CheckedEngines` for search). A tool that reads a module's providers by
+  position finds one more.
+- Six inherent methods are new on existing types: `ModuleBuilder::plugin`, `AppContext::plugin`,
+  `AppContext::plugins`, `AppBuilder::plugin_report`, `ModuleId::named` and `ModuleId::type_name`.
+  An app whose own extension trait gives these types a method named `plugin`, `plugins`,
+  `plugin_report`, `named` or `type_name` no longer reaches it with method syntax, because Rust
+  picks the inherent method first: call it through the trait (`MyExt::plugin(m, ..)`).
+- `config:publish <section>` writes through the same checked writer as `plugin:publish`: a section
+  key that is not a safe file name, or a link in the file's place, is refused, also with `--force`,
+  and an existing file is replaced by a rename instead of being written through. Its usage line and
+  description name `--plugin <namespace>`.
+- Two modules that use one name say so at boot: an embedded template or a static file with
+  different content, a job name (also for one job type registered in two modules) and a
+  configuration section read by two types each log a warning (`config:check` lists the section
+  too). The boot fails instead when one of the two modules belongs to a plugin that is not one of
+  the framework's own; for a static file it also fails when one of the two is under a plugin's
+  namespace and comes from a module that is not one of the framework's own plugins. Which one is
+  used does not change. A module that replaces a template of a module it imports is now an `info`
+  line (in 1.2 it was a `debug` event), except a module of a plugin that is not one of the
+  framework's own: that is a warning when the template is another plugin's, and fails the boot for
+  any other template while the plugin's version is the one rendered. It is not when the app has a
+  file of that name in a template folder (the name letter for letter), or a module of the app
+  registers the template after the plugin's module, with the plugin's text or its own; an `info`
+  line then says so. A module of the app is one that names no plugin and is in no crate that a
+  plugin of the app names. `i18n:publish validation` writes through the same checked writer as
+  `plugin:publish`: a link in a file's place, or in the place of one of its folders, is refused,
+  and a file that `--force` replaces is replaced by a rename; its usage line names `<plugin>`, and
+  the text for an unknown name lists the plugins that ship translations. `AppSheet`, `AppFont`,
+  `AppImage` and `IslandScript` have a new inherent method `namespace`: an app whose own extension
+  trait gives them a method of that name calls it through the trait (`MyExt::namespace(sheet, ..)`).
+  Their `Debug` output now has a `namespace` field. A glob import of `navree::contracts::*` or
+  `navree::view::*` brings in the two new extension traits, so an app's own `ModuleBuilder` method
+  called `locales` or `plugin_templates` is ambiguous there. One listener type subscribed to one
+  event in two modules registers one job name twice, and now logs the job warning.
+- A module of a plugin that is not one of the framework's own keeps to the plugin's namespace in
+  what it registers for the app's templates and documents: a template it registers with
+  `m.templates` starts with the namespace and a slash (or is exactly the name of a template that a
+  module it imports registers, which the replacement rule decides); a template under the namespace
+  may not stand beside a template of the app with the same name but for its extension, unless the
+  app has the plugin's name too; its `m.view_environment` may only add filters, tests, functions
+  and globals whose names start with the namespace and an underscore; and its
+  `m.document_files` paths are under the namespace. Each refusal fails the boot, names the plugin
+  and the change, and says what to do instead. Replacing a document file of a module it imports
+  follows the template rule, with a file in a `documents.templates` folder or a later module of the
+  app as the ways out. A module that replaces a document file of a module it imports with other
+  contents, and is not a module of a plugin that is not one of the framework's own, now says so in
+  an `info` line (in 1.2 nothing was logged); the later module's file is still the one used. Two
+  modules of an app that embed one document file path with different contents now log a warning at
+  boot; the later module's file is still the one used. The app's own modules, the framework's
+  packages and first-party plugins register as before.
+- `Shell::contributed` is a new inherent method: an app whose own trait gives `Shell` a method named
+  `contributed` calls it through the trait (`MyExt::contributed(shell)`).
+- `AppShell::context` is a new inherent method: an app whose own trait gives `AppShell` a method
+  named `context` calls it through the trait.
+- An app with `WorkspaceModule` lists one more provider and export, `dyn RequestWorkspace`, in
+  `check --graph` and `introspect --json`.
+- Helm warns at boot about a custom page whose template is not an HTML one (a `.txt` or `.md`
+  template prints values as they are); the page still renders. A page of a plugin that is not one
+  of the framework's own packages renders only an HTML template, and one that names another stops
+  the boot.
+- A driver setting (`cache.store`, `queue.driver`, `session.store`, `realtime.backplane`,
+  `notify.sms.driver`, `notify.whatsapp.driver`, `search.engine`, a disk's `driver` and an AI
+  provider's `driver`) now reads any lower-case name, and a name no module registers fails the
+  boot, naming the setting, the method that registers one and the names that are known, never the
+  value, where it failed as the configuration was read. A value that is not such a name fails as
+  the configuration is read, as before, with a message that lists the built-in names and never
+  repeats the value. Values that worked before read, print and
+  boot as before, and so does a table of one key that is a built-in name
+  (`cache.store = { memory = {} }`), which never selects a registered driver. `config:check` reads
+  `search.engine` trimmed and in lower case, as the boot does. `config:schema` describes
+  `cache.store`, `queue.driver`, `session.store`, `realtime.backplane`, `notify.sms.driver`,
+  `notify.whatsapp.driver` and `search.engine` as built-in names or a registered one, with
+  `x-navree-register`, and `ConfigSection::schema()` reports them as `FieldType::Driver`, where it
+  reported `Choice`.
+- `mail.transport`, the transports of a failover and `mail.transports` take the bare name of a
+  registered transport. A bare name reads as one only when a module registered a mail transport
+  under it; any other bare name, the name of another kind's driver included, keeps
+  `unknown mail transport (expected ..)`, and so does a bare built-in type such as `smtp`. A
+  tenant's mail transport, from a request or a stored row, reads a registered name but cannot
+  name a registered transport: saving or checking it fails, and `TransportConfig::build` refuses
+  it. Reading a name never adds one.
+- `CacheStoreKind`, `QueueDriver`, `SessionStoreKind`, `BackplaneKind`, `TransportConfig`,
+  `DiskConfig`, `SmsDriverKind`, `WhatsAppDriverKind`, `Channel`, `Engine`, `EventKind`,
+  `TelemetryEvent`, `Delivery`, `FieldType` and `ConfigError` gain a variant (they are
+  `#[non_exhaustive]`). A `Registered` selector that holds a built-in name is that built-in:
+  `Engine::Registered` holding `memory` is `Engine::Memory`, as `CacheStoreKind`, `QueueDriver`,
+  `SessionStoreKind`, `BackplaneKind`, `SmsDriverKind`, `WhatsAppDriverKind` and `Channel` do.
+- `Notification::to_channel` and `Notifiable::route_channel` are new provided methods: a type that
+  also implements another trait with a method of that name in scope must call it through that
+  trait.
+- `Channel`'s error for a name it does not know is now ``unknown notification channel `{name}` ``,
+  where it said `unknown variant`, and for a text that is not a name at all a message that lists
+  the built-in channels without repeating the text. A name is a channel only when a module adds a
+  channel under it, so the name of another kind's driver gets the same error. The notification preference routes
+  answer it as they answer any other bad value, with status 400 and the code `validation_failed`,
+  the text under `errors.preferences`. A stored preference that names a channel no module adds
+  keeps its other choices (the unknown one is skipped with a warning), and a held delivery of such
+  a channel is dropped with a warning. A queued `notify.send` job that names a channel the
+  worker's process does not know does not read: it fails with the same error.
+  `notify.preferences.channels` and `notify.deferred.channels` name a channel a module adds only
+  when written as a list: the comma-separated form of an environment variable reads the built-in
+  channels only.
+- `Storage::new` refuses a disk whose driver is not built in: only `StorageModule` builds a driver
+  a module registers, at boot.
+- `Interest::ALL` now includes `EventKind::Custom`, so a sink that takes every kind receives a
+  module's custom events. A 1.2 process cannot read a telemetry event of type `custom`, or a
+  `notify.send` job whose `via` is `registered`, so during a rolling upgrade use neither until
+  every process runs 1.3.
+- `AiOptions::check()` still reports a registered driver's name as an unknown driver, and so does
+  `Ai::new`; only the configuration and `AiModule` accept it. A provider table's `url` whose
+  driver a module registers is not added to the hosts the built-in drivers' client may reach.
+- `Channel`, `CacheStoreKind`, `QueueDriver`, `SmsDriverKind` and `WhatsAppDriverKind` serialize as
+  their name in every format. 1.2's derive wrote a variant index in binary formats such as bincode
+  or postcard, so a value 1.2 wrote in such a format does not read back in 1.3. JSON, TOML and the
+  configuration read as before.
+- New inherent items: `Element::extension`, `Element::extension_with`, `Element::extension_call`,
+  `View::fresh`, `AppPage::fresh`, `EditCell::control`, `TestView::uses_extension`,
+  `Uses::EXTENSIONS`, `Uses::EXTENSION_SHEETS` and `Page::assert_no_policy_violations`. An app whose
+  own trait gives these types an item of one of these names reaches it through the trait.
+- New names at the root of `navree::ui` (`UiExtension`, `ExtensionFile`, `Control`, `ControlCx`,
+  `ControlField`, `FieldControl`, `EditedValue`, `EditRefused`, `Directive`, `PagePolicy`,
+  `PagePolicyOptions`, `PolicySources`, `PageSources`, `kit`, and the macros `component_methods!`
+  and `component_node!`; with `ui-extension-files`, `extension_script!` and `extension_sheet!`) can
+  make two glob imports ambiguous where the name is used.
+- `Widget` gains `Control`, and the `Form` derive's message for an unknown option lists `control`.
+- The configuration section `ui.policy` and the provider `PagePolicy` show in
+  `config:show --defaults`, `config:schema`, `check --graph` and `introspect --json`.
+- The core runtime grows by 121 bytes gzip (12,939 to 13,060) and acts on a `ui:core` event whose
+  detail is an object; `extensions-*.js` joins the toolkit's files; the tree module takes no
+  children from a page that starts clean.
+- In an app with a UI extension, a plugin's island script or an allowed source, the sign-in and
+  account pages, the consent page, Helm and Lighthouse are entered and left by a full load, carry
+  `data-ui-fresh-page` on the document's root element and the header `x-navree-fresh`, and their
+  answers are not drawn into other pages' regions. An app with none of these keeps the pages,
+  headers and navigation of 1.2.2.
+
+### Fixed
+
+- Helm reports the real error when the app's templates cannot be built. It used to stop the boot
+  saying the app needs `ViewModule`, although the app had it.
+- A lazy region whose fetch failed stayed marked busy (`aria-busy="true"`), so a screen reader was
+  told to wait for content that was not coming. A region that fails now drops the mark as it shows
+  the failure.
+
 ## [1.2.4] - 2026-11-15
 
 ### Fixed

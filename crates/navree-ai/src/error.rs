@@ -230,7 +230,9 @@ pub(crate) enum ProviderError {
     /// The provider can't do this (an attachment type, embeddings): the
     /// model is skipped.
     Unsupported { message: String },
-    /// A scripted failure of [`AiFake`](crate::AiFake), replayed as is.
+    /// An `AiError` returned as it is: a scripted failure of
+    /// [`AiFake`](crate::AiFake), or a registered driver's error of no
+    /// other class.
     Scripted(AiError),
 }
 

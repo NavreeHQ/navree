@@ -40,7 +40,7 @@ default_ttl_secs = 3600  # what Ttl::Default means
 
 | Key | Default | Meaning |
 |---|---|---|
-| `cache.store` | `memory` | The backend: `memory`, or `redis` (needs [`RedisModule`](#the-redis-store)). Any other value fails the boot. |
+| `cache.store` | `memory` | The backend: `memory`, `redis` (needs [`RedisModule`](#the-redis-store)), or the name of a store a module registers with `m.cache_store` (see [a store a module registers](#a-store-a-module-registers)). Any other value fails the boot. |
 | `cache.prefix` | empty | Prepended to every cache key and lock name. |
 | `cache.default_ttl_secs` | `3600` | The TTL of `Ttl::Default`, in seconds. `0` fails the boot. |
 
@@ -402,7 +402,63 @@ Navree::app()
     .override_value::<dyn LockStore>(Arc::new(MyLockStore::new()))
 ```
 
-`cache.store` names a built-in store (`memory` or `redis`); leave it at `memory` when you override the stores. To build a `Cache` or `Locks` by hand over any store, use `Cache::new(store, prefix, default_ttl)` and `Locks::new(store, prefix)`.
+`cache.store` names a built-in store (`memory` or `redis`) or [a store a module registers](#a-store-a-module-registers); leave it at `memory` when you override the stores. To build a `Cache` or `Locks` by hand over any store, use `Cache::new(store, prefix, default_ttl)` and `Locks::new(store, prefix)`.
+
+### A store a module registers
+
+A module can register a store of its own under a name, and `cache.store` selects it by that name, as it selects `memory` or `redis`. `m.cache_store` comes with `use navree::plugin::prelude::*;`. Its factory gets a `DriverContext` (the store's name, the app and its settings) and returns a `CacheBackend`, the entry store and the lock store together:
+
+```rust title="src/modules/two_tier/mod.rs"
+use navree::cache::{CacheBackend, MemoryLockStore, MemoryStore};
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use serde::Deserialize;
+
+/// The store's settings: `[cache.two_tier]`.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct TwoTierSettings {
+    capacity: usize,
+}
+
+pub struct TwoTierModule;
+
+impl Module for TwoTierModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.cache_store("two_tier", |ctx| async move {
+            let settings: TwoTierSettings = ctx.settings()?;
+            let store = Arc::new(MemoryStore::with_capacity(settings.capacity.max(1)));
+            Ok(CacheBackend::new(store, Arc::new(MemoryLockStore::new())))
+        });
+    }
+}
+```
+
+Add the module to the app beside `CacheModule`, and select the store in the configuration. Its settings are the table below its name:
+
+```rust title="src/app.rs"
+Navree::app()
+    .module(ConfigModule::for_root(ConfigSources::defaults()))
+    .module(CacheModule::from_config())
+    .module(TwoTierModule)
+```
+
+```toml title="config/app.toml"
+[cache]
+store = "two_tier"
+prefix = "crm:"
+
+[cache.two_tier]
+capacity = 500
+```
+
+Environment variables reach the settings too: `APP_CACHE__TWO_TIER__CAPACITY=500`. In code, `CacheModule::for_root(CacheOptions { store: CacheStoreKind::Registered(DriverName::from_static("two_tier")), ..CacheOptions::default() })` selects the same store (`DriverName` is in `navree::plugin`).
+
+A store's name is a lower-case letter followed by up to 63 lower-case letters, digits or `_`. `ctx.settings()` reads `[cache.two_tier]` into your type (its `Default` when the table is missing), and an error names the key, never a value; `ctx.settings_key()` is `cache.two_tier`.
+
+These fail the boot, naming `m.cache_store` and the module that registered the name: a name that is not such a word, a built-in name (`memory`, `redis`), a name equal to a key of `[cache]` (`store`, `prefix`, `default_ttl_secs`), and one name registered by two modules, even when another store is selected. So does `cache.store` naming a store no module registers (the message lists the stores that are known), and a factory that returns an error. A factory's error is shown in the boot error as written, so it must not contain a secret from the driver's settings.
+
+`config:check` reports the same problems, in the same words, without booting the app, and `config:schema` lists the registered stores beside the built-in ones.
 
 ## Caches of your own
 

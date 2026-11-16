@@ -1,0 +1,207 @@
+---
+title: "The browser contract"
+description: "What a component's script is given and what it may do in the browser: mount, update and leave, owned bodies the runtime seals, helpers that reach only the routes the server named, and the contract's version."
+---
+
+A component of your own can bring a script. The toolkit's `extensions` module (under 4 KB gzip) loads it, mounts it on the component's element and gives it a small set of helpers. This page is that contract, as the runtime keeps it: what the server writes, what the script is given, what the runtime does for the script and what it refuses. It is contract 1. [Build your own component](/docs/ui/your-own-components/) builds a component that follows it, and `assets/rating.js` there is a script that does.
+
+## The module
+
+A script is a JavaScript module that exports the number of its contract and a `mount` function:
+
+```ts
+export const contract: 1;
+export function mount(el: HTMLElement, props: unknown, ui: Ui):
+  void | (() => void) | Mounted | Promise<void | (() => void) | Mounted>;
+interface Mounted { update?(props: unknown): void; leave?(): void; }
+```
+
+- `el` is the component's root: the element the server gave `Element::extension`.
+- `props` is the JSON the server wrote, parsed. Text that doesn't parse is `null`.
+- `ui` is the set of helpers below. Each mounted element gets its own.
+- What `mount` returns is the script's way to undo what it did. A function is called when the element leaves. An object may have `update(props)` and `leave()`. A script with nothing to undo returns nothing.
+
+The server writes what the module reads as attributes on the root, with `Element::extension`, `extension_with` and `extension_call`:
+
+| Attribute | What it holds |
+|---|---|
+| `data-ui-ext` | the address of the script |
+| `data-ui-ext-sheet` | the address of the stylesheet |
+| `data-ui-ext-routes` | the route prefixes the script may call, and its exact addresses, each written `=` and a path |
+| `data-ui-keep-attrs` | the attributes a morph leaves as the script set them |
+| `data-ui-props` | the props, as JSON |
+
+The module imports an address on this page's own origin and nothing else, whatever a page's markup says. The address is `/_navree/ui/ext/`, a namespace (a lower-case letter followed by up to 63 lower-case letters, digits or `_`), a dot, a name (1 to 64 lower-case letters, digits and `-`), a dash, 12 lower-case hex digits and `.js`, with no query, no fragment, no user name or password and no other origin. A stylesheet's address is the same with `.css`. The page's policy allows scripts from its own origin only (`script-src 'self'`), so a script that imports another origin fails to load.
+
+When the module starts, it links the stylesheets the page's elements name, and it does so again after every `ui:swap`. It removes the extension stylesheet links that no element names after a page swap. It does nothing on a page that starts clean (see [fresh pages](/docs/ui/page-policy/#fresh-pages)).
+
+## mount, update and leave
+
+The module scans the page when it starts and after every `ui:swap`.
+
+- **Mount.** Each element is mounted once. The module seals the element's owned bodies, then imports the script. A script whose `contract` is not `1`, or that has no `mount` function, is not mounted. The module awaits `mount(el, props, ui)`, and on success sets `data-ui-mounted` on the element.
+- **update(props).** The script's `update` is called with the parsed props when the element's props change, and when a morph reaches the element: one rooted at it, or one that holds it. A script with no `update` is mounted again when its props text changed, and left alone for a morph that changed nothing.
+- **leave().** The element leaves when it is gone from the page, when it goes into stored content, or when it names another script (a new hash after a deploy). The module aborts `ui.signal`, so every listener made with `ui.on` and every timer made with `ui.later` ends, and calls the function `mount` returned or its `leave`.
+
+An element is never mounted inside stored content, inside a sealed body, on an island (an element that carries `data-ui-island`), at an address outside the grammar above, or on a page that starts clean.
+
+## Owned bodies and the seal
+
+A script that draws, or a library the script bundles, writes markup the server never saw. The server marks the part where it may draw: an element inside the component's root marked `data-ui-keep`, with no other extension's element, island or kept element between. That element is the script's **owned body**. A morph from the server leaves an owned body, its attributes and what is in it, as they are.
+
+Each owned body is sealed when the module begins to mount its element, before it imports the script. The seal has four steps:
+
+1. **Scrub.** Every `data-ui-*` attribute already inside the body is removed, and so is a `meta` with `http-equiv` and a `base`, as the runtime removes them from a page it fetches.
+2. **Mark.** The body gets `data-ui-stored`, so the runtime treats it as stored content.
+3. **Detach from forms.** Every `input`, `select`, `textarea`, `button`, `fieldset`, `output` and `object` inside gets `form="ui-sealed"`, an id no element has, so none joins a form.
+4. **Watch.** A `MutationObserver` on the body keeps the first three true for whatever is written later, however. It removes `data-ui-*` from every element added or changed inside, and sets `form="ui-sealed"` on every form field added, and on one whose `form` attribute is changed. It puts `data-ui-stored` back whenever it is removed, and removes any other `data-ui-*` from the body itself but `data-ui-keep`.
+
+From then on, nothing written inside an owned body drives the runtime, stands in for one of the page's ids, mounts an extension, or joins a form around the component. A command, a hotkey, a region, a form marker or an island written there does nothing.
+
+The seal stays for the life of the body. A body stays sealed when its script fails, so put server hooks outside it. A control's posted form field is drawn outside its owned bodies for the same reason (see [a form field of your own](/docs/ui/your-own-components/#a-form-field-of-your-own-and-its-check)). A body the server adds to a mounted element with a later morph is sealed when the element is mounted again.
+
+The observer judges a change to an attribute by its name first, so the styles and classes a library moves on every frame cost a comparison each. It looks inside a node only when one was added.
+
+Measured on the toolkit's proof page, in Chromium and in Firefox on a shared test machine: two seconds of dragging a map called the observer about 185 times and cost it 3 ms in all, 1 ms at most for one call. 2,000 cells written in one go, each carrying a hook, were all scrubbed within 4 ms, before the task that wrote them gave way, so none was left when the next frame began.
+
+`ui.find`, `ui.findAll` and `ui.closest` search the owned bodies. Anywhere else they skip stored content.
+
+A script writes its own markup only into an owned body. Markup it writes into the server's other children lasts until the next morph removes it, and is not sealed.
+
+## The ui helpers
+
+`mount` is given one `ui` for each element, frozen:
+
+```ts
+interface Ui {
+  readonly contract: 1;
+  readonly namespace: string;
+  find(selector: string): Element | null;
+  findAll(selector: string): Element[];
+  closest(node: Node, selector: string): Element | null;
+  stored(node: Node): boolean;
+  on(target: EventTarget, type: string, listener: (event: Event) => void,
+     options?: AddEventListenerOptions | boolean): () => void;
+  readonly signal: AbortSignal;
+  later(ms: number, run: () => void): () => void;
+  call(url: string, data?: FormData | URLSearchParams | Record<string, string>,
+       options?: { method?: string; quiet?: boolean; page?: boolean }):
+    Promise<{ ok: boolean; status: number; data: unknown }>;
+  get(url: string, headers?: Record<string, string>): Promise<Response>;
+  emit(name: string, detail?: unknown): boolean;
+  toast(tone: string, text: string): void;
+  announce(text: string): void;
+  refresh(id: string): void;
+}
+```
+
+| Helper | What it does |
+|---|---|
+| `contract`, `namespace` | `1`, and the namespace the script's address names |
+| `find(selector)`, `findAll(selector)` | the first match, and every match, inside the root. Stored content is left out, except the root's own owned bodies. |
+| `closest(node, selector)` | from `node` up to the root, with the same rule. It is `null` when `node` is not inside the root, as an event's target may be the window. |
+| `stored(node)` | whether the node is stored content the script may not reach |
+| `on(target, type, listener, options)` | `addEventListener` with the element's signal, so it ends when the element leaves. It returns a function that removes the listener. |
+| `signal` | an `AbortSignal` that is aborted when the element leaves |
+| `later(ms, run)` | a timer that does not run once the element has left. It returns a function that cancels it. |
+| `call(url, data, options)` | a write to one of the element's routes (see the next section) |
+| `get(url, headers)` | a read of one of the element's routes |
+| `emit(name, detail)` | dispatches the event `namespace:name` from the root, bubbling and cancelable, and returns what `dispatchEvent` returns |
+| `toast(tone, text)` | shows a toast: the tone is `info`, `success`, `warning` or `danger` |
+| `announce(text)` | says the text through the page's live region |
+| `refresh(id)` | asks the region with that id to fetch again |
+
+## Calling your routes
+
+A script calls only addresses the server wrote on its element. `.routes(..)` on the extension names route prefixes, and `Element::extension_call(href)` adds one exact address, written `=` and a path, for a route only the server can name (such as `/deliveries/42/drop`).
+
+`ui.call` and `ui.get` read the element's routes as each call is made. They parse `url` against the page and require this origin and no user name or password. They then require the parsed path to start with one of the prefixes, or to equal one of the exact addresses, and send the parsed address. So `/geo/../account/email` and `/geo/%2e%2e/account/email` are read as `/account/email` and refused, `/geo` with no trailing slash is not under `/geo/`, and `//other.example/geo/x` and `https://user:password@app.test/geo/x` are another origin and credentials. An address outside the routes is refused before anything is sent. A string in the props opens nothing.
+
+```rust
+use navree::ui::{Element, UiExtension, el, extension_script, extension_sheet};
+
+static RATING: UiExtension = UiExtension::new("app", "rating")
+    .script(extension_script!("assets/rating.js", 16 * 1024))
+    .sheet(extension_sheet!("assets/rating.css", "app", 8 * 1024))
+    .contract(1)
+    .routes(&["/ratings/"]);
+
+/// A rating root whose script may call the routes under `/ratings/` and one delivery's own.
+fn delivery_rating(id: u64) -> Element {
+    el("div")
+        .slot("app:rating")
+        .extension(&RATING)
+        .extension_call(format!("/deliveries/{id}/rating"))
+}
+```
+
+`ui.call` sends a `POST` unless `options.method` says another. The request goes through the runtime's write path, with the session's token, so what was fetched before a write is not shown after it. The headers are `x-navree-ui: 1`, `x-navree-from` with the page's address, an `accept` for ops, JSON and HTML, and `x-xsrf-token` when the session has one. `data` is a `FormData` or a `URLSearchParams` as given, or an object of strings.
+
+It resolves `{ ok, status, data }`, never rejects, and answers by what the server sent:
+
+- **Ops** (`application/vnd.navree.ops+json`): applied, as a form's are. `data` is `null` and `ok` is whether the status was a success. The ops carry their own words, so a failure status brings no second toast.
+- **JSON:** parsed into `data`, with `ok` for the status.
+- **HTML:** a failure, unless `options.page` is true. Then the page at the answer's address is loaded in full.
+- **A redirect off the site, or an answer of a page that starts clean:** a failure, and nothing is applied.
+- **Any other failure** shows the toast "That didn't work. Try again." unless `options.quiet` is true.
+
+`ui.get` sends a `GET` with `x-navree-ui: 1` and the headers you give, less any named `x-navree-*`. It resolves the `Response`. It rejects when the address is outside the routes, and refuses the answer of a page that starts clean.
+
+## Errors on a hidden field
+
+The `errors` op marks the field box (the element with `data-slot="field"`) that holds the form field named after the field, with `data-invalid`, and writes the message in it. It sets `aria-invalid` and `aria-describedby` on that form field itself. When a control's posted field is hidden, the focusable part a person uses is another element, and the op does not reach it. The control watches its field box's `data-invalid` and sets `aria-invalid` on its focusable part itself.
+
+## Events
+
+A script hears the runtime's events with `ui.on(document, ..)`:
+
+- `ui:swap` is sent after the page or a part of it was swapped, morphed or replaced.
+- `ui:before-swap` is sent before a morph. Its `detail` is the element being morphed.
+- `ui:sent` is sent when a form's post is over. It is cancelable, and its `detail` is `{ form, ok, status }`: the form element, whether the post succeeded, and the status.
+- `ui:stale` is sent when what was fetched before may be from before a change, so a script that fetches on its own can fetch again.
+
+The events a script sends are its own: `ui.emit("moved", detail)` dispatches `geo:moved` for a script of the namespace `geo`. Every other `ui:*` event is the runtime's own, and a script doesn't rely on it.
+
+## What a script may and may not do
+
+A plugin is code the app's owner chose to compile into the app. Its script runs with the authority of the signed-in person: it can read the session's token and post as that person. The helpers limit what the toolkit gives a script, and the seal limits what a library draws. They are not a sandbox.
+
+| A script | Held by |
+|---|---|
+| imports another file or another origin, uses `eval`, or writes a `style` element or a `style` attribute | the page's policy, and what the extension route serves |
+| writes markup inside an owned body that drives the runtime or joins a surrounding form | the seal |
+| calls a path outside its prefixes and exact addresses | `ui.call` and `ui.get` |
+| writes `data-ui-*` outside its owned bodies | nothing: the next morph removes it |
+| posts with `fetch` and the token it read itself | nothing |
+| queries `document` for its own markup | nothing: the stored twin in a test (see [testing a component](/docs/ui/your-own-components/#testing-it-and-the-stored-twin)) catches the usual mistake |
+| handles `message` events without checking `event.origin` | nothing |
+| puts popups on `<body>` | nothing: the popup sits outside the component, so its scoped styles don't reach it |
+| lets a key or a `change` it handles itself reach an inline editor | nothing: stop Enter, Escape and inner `change` events with `stopPropagation()` |
+| cancels `ui:sent` for a form outside its own element | nothing |
+| uses a library option that writes HTML from data without escaping it | nothing: what is written inside a sealed body is inert |
+
+## Versions
+
+The script's contract is `export const contract = 1`, and the extension says the same with `.contract(1)`. The number changes only when a contract-1 script would break. Every 1.x runtime runs every contract a 1.x release shipped, so a script written for contract 1 runs on every 1.x release. A script should accept the props of its plugin's previous release.
+
+The boot checks the contract of each extension that has a script. An extension with a script and no contract stops the boot, and so does a contract the toolkit doesn't run:
+
+```text
+UI extension `geo.tour` has a script but declares no contract: add .contract(1)
+UI extension `geo.tour` is written for extension contract 2, and this navree-ui runs contract 1: update navree, or use a release of `navree-plugin-geo` written for contract 1
+```
+
+In the browser, a script whose own `contract` is not `1` is not mounted.
+
+## When a script fails
+
+A script that can't be loaded, whose contract is not `1`, that has no `mount`, or whose `mount` throws, is not mounted. The element gets `data-ui-failed` and keeps what the server drew, so write a fallback the page can live with. Its owned bodies stay sealed. A later mount, such as the same element with a new hash, removes the mark and tries again.
+
+The runtime writes one line to the console for it. The lines are diagnostics, not API:
+
+```text
+navree-ui: /_navree/ui/ext/geo.map-0123456789ab.js could not be loaded
+navree-ui: /_navree/ui/ext/geo.map-0123456789ab.js has no mount
+navree-ui: /_navree/ui/ext/geo.map-0123456789ab.js failed to mount
+navree-ui: /_navree/ui/ext/geo.map-0123456789ab.js is written for contract 2; this page runs contract 1
+```

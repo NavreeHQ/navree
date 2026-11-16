@@ -338,6 +338,18 @@ impl Notifier {
         for row in claimed {
             let job = match row.send_job() {
                 Ok(job) => job,
+                // A channel no module adds any more: skipped, and the
+                // other held deliveries still go out.
+                Err(_) if Channel::from_name(&row.channel).is_none() => {
+                    tracing::warn!(
+                        target: "navree::notify",
+                        channel = %row.channel,
+                        "skipping a stored notification channel that no module registers"
+                    );
+                    self.forget_rows(&exec, &[row.id]).await?;
+                    released.dropped += 1;
+                    continue;
+                }
                 Err(error) => {
                     tracing::warn!(
                         target: "navree::notify",

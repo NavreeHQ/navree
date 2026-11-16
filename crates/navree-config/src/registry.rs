@@ -129,6 +129,10 @@ pub struct SectionInfo {
 #[derive(Clone, Debug)]
 pub struct ConfigRegistry {
     sections: Vec<SectionInfo>,
+    /// The driver selectors whose choice is closed to the names that boot:
+    /// the slot's key, its names and its registration method
+    /// ([`with_drivers`](ConfigRegistry::with_drivers)).
+    drivers: Vec<(&'static str, Vec<String>, &'static str)>,
 }
 
 impl ConfigRegistry {
@@ -151,7 +155,10 @@ impl ConfigRegistry {
             });
         }
         sections.sort_by(|a, b| a.key.cmp(b.key));
-        ConfigRegistry { sections }
+        ConfigRegistry {
+            sections,
+            drivers: Vec::new(),
+        }
     }
 
     /// The sections, by key.
@@ -250,7 +257,23 @@ impl ConfigRegistry {
                 insert_section(&mut root, &path, schema.json_schema());
             }
         }
+        crate::driver::close_choices(&mut root, &self.drivers);
         root
+    }
+
+    /// The registry, with the choice of each driver selector of `slots`
+    /// closed to the names that boot in this app: in
+    /// [`schema_document`](ConfigRegistry::schema_document), the selector
+    /// lists its built-in names, then the names `drivers` registers for it,
+    /// instead of accepting any driver name. `config:schema` calls it with
+    /// the app's contributions.
+    pub fn with_drivers(
+        mut self,
+        slots: &[crate::DriverSlot],
+        drivers: &[crate::RegisteredDriver],
+    ) -> ConfigRegistry {
+        self.drivers = crate::driver::slot_names(slots, drivers);
+        self
     }
 }
 
@@ -316,6 +339,75 @@ pub(crate) fn boot_error(
     }
 }
 
+/// The sections that two different types read, as the lines `config:check`
+/// and the boot say about them: an error when one of the two modules belongs
+/// to a plugin that is not one of the framework's own, a warning otherwise.
+#[derive(Debug, Default)]
+pub(crate) struct SectionCollisions {
+    /// The pairs that fail the boot and `config:check`.
+    pub(crate) errors: Vec<String>,
+    /// The pairs that are only warned about.
+    pub(crate) warnings: Vec<String>,
+}
+
+/// The sections that two different types read. From the registrations in
+/// dependency order it pairs the first type of each key with every later type
+/// of that key, also when one module registers both. A type that two modules
+/// register is one section and says nothing.
+pub(crate) fn section_collisions(ctx: &navree_kernel::AppContext) -> SectionCollisions {
+    // The (key, type) pairs seen, and for each key the first type and its module.
+    let mut seen: Vec<(&'static str, &'static str)> = Vec::new();
+    let mut firsts: Vec<(&'static str, &'static str, navree_kernel::ModuleInfo)> = Vec::new();
+    let mut collisions = SectionCollisions::default();
+    for contributed in ctx.contributions::<SectionRegistration>() {
+        let key = contributed.value.key();
+        let type_name = contributed.value.type_name();
+        if seen.contains(&(key, type_name)) {
+            continue;
+        }
+        seen.push((key, type_name));
+        let module = contributed.module;
+        let Some(first) = firsts.iter().position(|first| first.0 == key) else {
+            firsts.push((key, type_name, module));
+            continue;
+        };
+        let (_, first_type, first_module) = &firsts[first];
+        let (first_name, second_name) = (first_module.name, module.name);
+        let community = navree_kernel::__private::is_community_plugin(ctx, first_module.id)
+            || navree_kernel::__private::is_community_plugin(ctx, module.id);
+        let ending = if community {
+            "a section belongs to one type"
+        } else {
+            "this becomes an error in 2.0"
+        };
+        let text = format!(
+            "configuration section `{key}` is read by two types: `{first_type}` ({first_name}) and `{type_name}` ({second_name}); {ending}"
+        );
+        if community {
+            collisions.errors.push(text);
+        } else {
+            collisions.warnings.push(text);
+        }
+    }
+    collisions
+}
+
+/// Logs each warning of [`section_collisions`] and fails with its errors, one
+/// line each.
+pub(crate) fn check_section_collisions(
+    ctx: &navree_kernel::AppContext,
+) -> Result<(), navree_kernel::BoxError> {
+    let collisions = section_collisions(ctx);
+    for warning in &collisions.warnings {
+        tracing::warn!(target: "navree::config", "{warning}");
+    }
+    if collisions.errors.is_empty() {
+        Ok(())
+    } else {
+        Err(collisions.errors.join("\n").into())
+    }
+}
+
 /// The top-level sections, and the nested sections, that the framework's
 /// modules read. `config:check` has no booted app to ask which of them a
 /// given app uses, so it does not report them as unknown.
@@ -373,6 +465,7 @@ pub const FRAMEWORK_SECTIONS: &[&str] = &[
     "storage",
     "time",
     "ui",
+    "ui.policy",
     "validation",
     "view",
     "webhooks",

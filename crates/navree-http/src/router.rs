@@ -14,7 +14,7 @@ use http::request::Parts;
 use http::{Method, StatusCode};
 use navree_config::Config;
 use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
-use navree_kernel::{AppContext, BoxError, BoxFuture};
+use navree_kernel::{AppContext, BoxError, BoxFuture, Contributed, ModuleId, PluginReport};
 use navree_telemetry::{EventKind, Telemetry, TracePolicy, TracePolicySection};
 use tower::Service;
 use tower::util::BoxCloneSyncService;
@@ -28,6 +28,7 @@ use crate::extract::{ProxyTrust, Request};
 use crate::handler::{BoxedService, Endpoint};
 use crate::limiter::{Limiter, RateLimitStore};
 use crate::middleware::from_fn_with_state;
+use crate::mount::{MountEndpoint, MountEntry, check_mounts, collect_mounts};
 use crate::network::rate_limit_key;
 use crate::pipeline::{
     self, CheckStages, ContextState, GuardStages, Requester, Stages, TimeoutOverride, X_REQUEST_ID,
@@ -41,17 +42,18 @@ use crate::{
     RouteMeta, routing,
 };
 
-/// Builds the app's full router: every controller route on Navree's
-/// [`Router`](routing::Router) behind its per-route pipeline, the single 404,
-/// the contributed [`GlobalLayer`]s and the fixed global layers. Used by
-/// `serve` and by tests.
+/// Builds the app's full router: every controller route and every
+/// [`Mount`](crate::Mount) on Navree's [`Router`](routing::Router) behind its
+/// per-route pipeline, the single 404, the contributed [`GlobalLayer`]s and
+/// the fixed global layers. Used by `serve` and by tests.
 ///
 /// Fails, listing every problem, when a route has no access declaration, is
 /// mounted twice (the same method on paths that differ only in parameter
 /// names counts) or has an invalid path, or when routes need an
-/// [`Authenticator`] or a [`RouteAuthorizer`] that is not registered.
-/// `HttpModule` runs this check at boot, so these mistakes stop the app
-/// before it binds a port.
+/// [`Authenticator`] or a [`RouteAuthorizer`] that is not registered; and
+/// when a mount has no access declaration, needs either of them, has a bad
+/// prefix or overlaps a route or another mount. `HttpModule` runs this check
+/// at boot, so these mistakes stop the app before it binds a port.
 pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
     let server = ctx
         .get::<HttpServer>()
@@ -59,10 +61,16 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
         .map_err(|error| format!("build_router needs HttpModule in the app: {error}"))?;
     let options = server.options();
     let routes = collect_routes(ctx, options).await?;
+    let mounts = collect_mounts(ctx);
 
     let authenticator = ctx.try_get::<dyn Authenticator>().await;
     let authorizer = ctx.try_get::<dyn RouteAuthorizer>().await;
-    validate(&routes, authenticator.is_some(), authorizer.is_some())?;
+    validate(
+        &routes,
+        &mounts,
+        authenticator.is_some(),
+        authorizer.is_some(),
+    )?;
     // Audit actions, and security events (rate limiting, denials no
     // `RouteAuthorizer` saw).
     let audit = ctx.try_get::<dyn AuditSink>().await;
@@ -75,19 +83,23 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
         ipv6_prefix: options.rate_limit_ipv6_prefix,
         rate_limits,
     };
-    // The module that answers errors with pages, if any.
-    let pages = ctx
-        .contributions::<crate::ErrorPagesHandle>()
-        .into_iter()
-        .next()
-        .map(|c| (*c.value).clone());
+    // The module that answers errors with pages, if any. Only the app chooses it: pages
+    // from a module of a plugin the kernel does not find first-party stop the boot,
+    // wherever that module is in the order.
+    let contributed = ctx.contributions::<crate::ErrorPagesHandle>();
+    let mut errors = error_pages_of_plugins(ctx, &contributed);
+    let pages = contributed.into_iter().next().map(|c| (*c.value).clone());
     let mut routes_router = routing::Router::new();
     // With such a module, a second router with the same paths that finds a request's route
     // without running it, for an error raised before the route did.
     let mut finder = pages.is_some().then(RouteFinder::new);
-    let mut errors = Vec::new();
     for route in routes {
         if let Err(error) = mount(&mut routes_router, finder.as_mut(), route, &shared) {
+            errors.push(error);
+        }
+    }
+    for entry in mounts {
+        if let Err(error) = mount_service(&mut routes_router, entry, &shared) {
             errors.push(error);
         }
     }
@@ -174,6 +186,39 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
     });
     router = with_stages(router, &mut stages);
     apply_edge(ctx, router)
+}
+
+/// The refusal of each [`ErrorPages`](crate::ErrorPages) in `contributed` that a module of
+/// a plugin the kernel does not find first-party registered, in module order: only the app
+/// chooses what answers its errors, so it registers such a plugin's pages from a module of
+/// its own. A module of the app, a module that names no plugin and a first-party plugin's
+/// module are not refused.
+fn error_pages_of_plugins(
+    ctx: &AppContext,
+    contributed: &[Contributed<crate::ErrorPagesHandle>],
+) -> Vec<String> {
+    if contributed.is_empty() {
+        return Vec::new();
+    }
+    let plugins = ctx.plugins().plugins;
+    contributed
+        .iter()
+        .filter_map(|pages| {
+            let plugin = community_plugin(&plugins, pages.module.id)?;
+            Some(format!(
+                "plugin `{}` answers the app's errors (m.error_pages in `{}`); only the app chooses that: register the plugin's pages from a module of the app",
+                plugin.info.name, pages.module.name
+            ))
+        })
+        .collect()
+}
+
+/// The plugin the kernel does not find first-party that `module` belongs to, if it
+/// belongs to one.
+fn community_plugin(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
+    plugins.iter().find(|plugin| {
+        !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
+    })
 }
 
 /// The store `http.rate_limit_store` names, where the per-IP limit and route
@@ -346,7 +391,12 @@ impl fmt::Display for RouteErrors {
 
 impl std::error::Error for RouteErrors {}
 
-fn validate(routes: &[Mounted], authenticator: bool, authorizer: bool) -> Result<(), RouteErrors> {
+fn validate(
+    routes: &[Mounted],
+    mounts: &[MountEntry],
+    authenticator: bool,
+    authorizer: bool,
+) -> Result<(), RouteErrors> {
     let mut errors = Vec::new();
     // (method, shape) → (path, controller): two routes of one shape match
     // the same paths.
@@ -378,44 +428,70 @@ fn validate(routes: &[Mounted], authenticator: bool, authorizer: bool) -> Result
                 }
             }
         }
-        let access = &meta.access;
-        if !access.is_declared() {
-            errors.push(format!(
-                "{label} has no access declaration: add .public(), .authenticated(), .roles(..), .permissions(..) or .can(..) (deny by default)"
-            ));
-            continue;
-        }
-        if access.public && (access.authenticated || access.needs_authorizer()) {
-            errors.push(format!(
-                "{label} is public but also declares {}; remove one of them",
-                access.describe()
-            ));
-        }
-        if !access.public && !authenticator {
-            errors.push(format!(
-                "{label} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the route public)"
-            ));
-        }
-        if access.needs_authorizer() && !authorizer {
-            errors.push(format!(
-                "{label} declares {} but no `dyn RouteAuthorizer` is registered (import the access module)",
-                access.describe()
-            ));
-        }
-        if let Some(throttle) = meta.throttle
-            && (throttle.limit == 0 || throttle.per.is_zero())
-        {
-            errors.push(format!(
-                "{label} has a throttle of {} per {:?}; both must be non-zero",
-                throttle.limit, throttle.per
-            ));
-        }
+        errors.extend(access_problems(
+            &label,
+            "route",
+            meta,
+            authenticator,
+            authorizer,
+        ));
     }
+    let metas: Vec<&RouteMeta> = routes.iter().map(|route| &route.meta).collect();
+    errors.extend(check_mounts(&metas, mounts, authenticator, authorizer));
     if errors.is_empty() {
         Ok(())
     } else {
         Err(RouteErrors(errors))
     }
+}
+
+/// The access rule a route and a mount are both checked by, in this order: no
+/// access declaration (and then nothing else), public with another
+/// declaration, no [`Authenticator`] for a declaration that needs a user, no
+/// [`RouteAuthorizer`] for roles, permissions or an ability, and a throttle
+/// with a zero. `label` names the route or mount; `noun` (`route`, `mount`)
+/// is what the authenticator text tells the developer to mark public.
+pub(crate) fn access_problems(
+    label: &str,
+    noun: &str,
+    meta: &RouteMeta,
+    authenticator: bool,
+    authorizer: bool,
+) -> Vec<String> {
+    let mut problems = Vec::new();
+    let access = &meta.access;
+    if !access.is_declared() {
+        problems.push(format!(
+            "{label} has no access declaration: add .public(), .authenticated(), .roles(..), .permissions(..) or .can(..) (deny by default)"
+        ));
+        return problems;
+    }
+    if access.public && (access.authenticated || access.needs_authorizer()) {
+        problems.push(format!(
+            "{label} is public but also declares {}; remove one of them",
+            access.describe()
+        ));
+    }
+    if !access.public && !authenticator {
+        problems.push(format!(
+            "{label} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the {noun} public)"
+        ));
+    }
+    if access.needs_authorizer() && !authorizer {
+        problems.push(format!(
+            "{label} declares {} but no `dyn RouteAuthorizer` is registered (import the access module)",
+            access.describe()
+        ));
+    }
+    if let Some(throttle) = meta.throttle
+        && (throttle.limit == 0 || throttle.per.is_zero())
+    {
+        problems.push(format!(
+            "{label} has a throttle of {} per {:?}; both must be non-zero",
+            throttle.limit, throttle.per
+        ));
+    }
+    problems
 }
 
 /// Values every per-route pipeline shares.
@@ -428,15 +504,10 @@ struct Shared {
     rate_limits: Option<Arc<dyn RateLimitStore>>,
 }
 
-/// Mounts a route on `router` behind its per-route pipeline.
-fn mount(
-    router: &mut routing::Router,
-    finder: Option<&mut RouteFinder>,
-    route: Mounted,
-    shared: &Shared,
-) -> Result<(), String> {
-    let meta = Arc::new(route.meta);
-    let runtime = Arc::new(RouteRuntime {
+/// The per-route state of a route or a mount with `meta`.
+fn runtime(meta: RouteMeta, shared: &Shared) -> Arc<RouteRuntime> {
+    let meta = Arc::new(meta);
+    Arc::new(RouteRuntime {
         throttle: meta.throttle.map(|t| {
             let name = format!("http:route:{} {}", meta.method, meta.full_path);
             Limiter::new(name, t.limit, t.per, shared.rate_limits.clone())
@@ -454,7 +525,18 @@ fn mount(
         body_limit: meta.body_limit.unwrap_or(shared.body_limit),
         ipv6_prefix: shared.ipv6_prefix,
         meta: meta.clone(),
-    });
+    })
+}
+
+/// Mounts a route on `router` behind its per-route pipeline.
+fn mount(
+    router: &mut routing::Router,
+    finder: Option<&mut RouteFinder>,
+    route: Mounted,
+    shared: &Shared,
+) -> Result<(), String> {
+    let runtime = runtime(route.meta, shared);
+    let meta = runtime.meta.clone();
     let method = meta
         .method
         .parse::<Method>()
@@ -479,6 +561,44 @@ fn mount(
                 meta.module.unwrap_or("?")
             )
         })
+}
+
+/// Mounts a mount on `router` as one route: one per-route pipeline (one
+/// [`RouteRuntime`], so one throttle budget) in front of its
+/// [`MountEndpoint`], at `{prefix}` and `{prefix}/{*rest}`, for every method
+/// or for each declared one. Not in the error pages' route finder.
+fn mount_service(
+    router: &mut routing::Router,
+    entry: MountEntry,
+    shared: &Shared,
+) -> Result<(), String> {
+    let MountEntry {
+        prefix,
+        service,
+        meta,
+        methods,
+        module,
+    } = entry;
+    let endpoint = BoxCloneSyncService::new(RouteService {
+        runtime: runtime(meta, shared),
+        inner: BoxCloneSyncService::new(MountEndpoint::new(&prefix, service)),
+    });
+    let failed = |error: routing::RouteError| format!("mount `{prefix}` in `{module}`: {error}");
+    for pattern in [prefix.clone(), format!("{prefix}/{{*rest}}")] {
+        match &methods {
+            None => router
+                .try_route_any(&pattern, || endpoint.clone())
+                .map_err(failed)?,
+            Some(methods) => {
+                for method in methods {
+                    router
+                        .try_route_service(method.clone(), &pattern, || endpoint.clone())
+                        .map_err(failed)?;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The per-route state: metadata, throttle, authorizer, audit sink.
@@ -872,6 +992,7 @@ fn cors_layer(options: &CorsOptions) -> Result<Option<CorsLayer>, BoxError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Throttle;
 
     #[test]
     fn full_paths_join_prefix_version_and_path() {
@@ -910,6 +1031,53 @@ mod tests {
     fn short_names_drop_the_module_path() {
         assert_eq!(short_name("app::deals::DealController"), "DealController");
         assert_eq!(short_name("Plain"), "Plain");
+    }
+
+    #[test]
+    fn the_access_rule_reads_the_same_for_a_route_and_a_mount() {
+        let route = "route `GET /api/x` (LedgerController in module `LedgerModule`)";
+        assert_eq!(
+            access_problems(route, "route", &RouteMeta::default(), true, true),
+            [format!(
+                "{route} has no access declaration: add .public(), .authenticated(), .roles(..), .permissions(..) or .can(..) (deny by default)"
+            )]
+        );
+        let mut confused = RouteMeta::default();
+        confused.access.public = true;
+        confused.access.roles = vec!["munshi".into()];
+        assert_eq!(
+            access_problems(route, "route", &confused, true, false),
+            [
+                format!(
+                    "{route} is public but also declares public roles:munshi; remove one of them"
+                ),
+                format!(
+                    "{route} declares public roles:munshi but no `dyn RouteAuthorizer` is registered (import the access module)"
+                ),
+            ]
+        );
+        let mut signed_in = RouteMeta::default();
+        signed_in.access.authenticated = true;
+        signed_in.throttle = Some(Throttle {
+            limit: 0,
+            per: Duration::from_secs(60),
+        });
+        assert_eq!(
+            access_problems(route, "route", &signed_in, false, true),
+            [
+                format!(
+                    "{route} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the route public)"
+                ),
+                format!("{route} has a throttle of 0 per 60s; both must be non-zero"),
+            ]
+        );
+        let mount = "mount `/khata` in `LedgerModule`";
+        assert_eq!(
+            access_problems(mount, "mount", &signed_in, false, true)[0],
+            format!(
+                "{mount} requires authentication but no `dyn Authenticator` is registered (import the auth module, or mark the mount public)"
+            )
+        );
     }
 }
 

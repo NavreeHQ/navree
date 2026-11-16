@@ -275,6 +275,8 @@ impl BillingModule {
 failed to construct `planner::modules::billing::config::BillingConfig`: configuration section `billing` failed validation: currency must be a 3-letter ISO code
 ```
 
+A section belongs to one type: two different types that read one key log a warning at boot and in `config:check`, and both fail when one of the modules belongs to a plugin that is not one of the framework's own. Each type still reads the section.
+
 Wrap secrets in `Secret<T>`. It deserializes like `T`, prints `[redacted]` in `Debug` and `Display`, and has no `Serialize` impl, so it can't leak into a response or a log line. Read the value with `.expose()`.
 
 ### How values convert

@@ -1,15 +1,19 @@
 //! `config:publish <section>`: a file for one section, with every key
 //! commented out beside its default and its documentation, ready to edit.
+//! `config:publish --plugin <namespace>`: such a file for every section a
+//! plugin registers, written through the checked writer `plugin:publish`
+//! uses.
 
 use std::fmt::Write as _;
 use std::path::Path;
 
+use navree_kernel::__private::{Published, publish_files};
 use serde_json::Value as Json;
 
 use crate::registry::ConfigRegistry;
 use crate::schema::{FieldSchema, FieldType, SectionSchema};
 
-const USAGE: &str = "usage: config:publish <section> [--force] [--stdout]";
+const USAGE: &str = "usage: config:publish <section> [--force] [--stdout] | config:publish --plugin <namespace> [--force]";
 
 /// What `config:publish` was asked.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -21,16 +25,30 @@ pub struct PublishOptions {
     pub force: bool,
     /// Print the file instead of writing it.
     pub stdout: bool,
+    /// The namespace of the plugin whose sections to publish
+    /// (`--plugin announcements`): every section its modules register.
+    pub plugin: Option<String>,
 }
 
 impl PublishOptions {
-    /// Reads the command line after `config:publish`.
+    /// Reads the command line after `config:publish`: a section, or
+    /// `--plugin <namespace>`.
     pub fn parse(args: &[String]) -> Result<Self, String> {
         let mut options = PublishOptions::default();
-        for arg in args {
+        let mut words = args.iter();
+        while let Some(arg) = words.next() {
             match arg.as_str() {
                 "--force" => options.force = true,
                 "--stdout" => options.stdout = true,
+                "--plugin" => {
+                    let Some(namespace) = words.next().filter(|word| !word.starts_with('-')) else {
+                        return Err(format!("--plugin needs a namespace; {USAGE}"));
+                    };
+                    if options.plugin.is_some() {
+                        return Err(format!("only one plugin can be published; {USAGE}"));
+                    }
+                    options.plugin = Some(namespace.clone());
+                }
                 option if option.starts_with('-') => {
                     return Err(format!("unknown option `{option}`; {USAGE}"));
                 }
@@ -42,7 +60,14 @@ impl PublishOptions {
                 }
             }
         }
-        if options.section.is_empty() {
+        if options.plugin.is_some() {
+            if !options.section.is_empty() {
+                return Err(format!("give a section or --plugin, not both; {USAGE}"));
+            }
+            if options.stdout {
+                return Err(format!("--stdout prints one section; {USAGE}"));
+            }
+        } else if options.section.is_empty() {
             return Err(format!("name the section to publish; {USAGE}"));
         }
         Ok(options)
@@ -52,12 +77,29 @@ impl PublishOptions {
 /// Publishes the section `options.section` of `registry` into `dir`
 /// (`dir/<section>.toml`), or returns the text when `options.stdout` is set.
 /// The result is what the command prints. A file that exists is not
-/// replaced without `force`.
+/// replaced without `force`. The file goes through the checked writer of
+/// `plugin:publish`, with `dir` as its root: `<section>.toml` must be a safe
+/// relative path, a link in its place is refused, and an existing file is
+/// replaced by a rename, never written through.
+///
+/// With `options.plugin` set, `registry` holds the sections of that plugin
+/// only, and each of them that describes its keys is published as
+/// `<dir name>/<key>.toml` below `dir`'s parent, all through the checked
+/// writer of `plugin:publish`: every path is checked before the first write
+/// (two sections that would be one file are refused), an existing file is
+/// kept without `force` and the others are still written, and each file is
+/// written beside its place and renamed over it. The result
+/// has one line per file, in path order (`wrote config/<key>.toml`, or
+/// `config/<key>.toml: exists, kept (use --force to replace it)`), then one
+/// per section that does not describe its keys.
 pub fn run(
     options: &PublishOptions,
     registry: &ConfigRegistry,
     dir: &Path,
 ) -> Result<String, String> {
+    if let Some(namespace) = &options.plugin {
+        return run_plugin(namespace, options.force, registry, dir);
+    }
     let section = registry.section(&options.section).ok_or_else(|| {
         format!(
             "no section `{}` is registered; `config:show --defaults` lists the sections of the app",
@@ -74,7 +116,8 @@ pub fn run(
     if options.stdout {
         return Ok(text);
     }
-    let path = dir.join(format!("{}.toml", options.section));
+    let file = format!("{}.toml", options.section);
+    let path = dir.join(&file);
     if path.exists() && !options.force {
         return Err(format!(
             "{} already exists; --force replaces it",
@@ -82,9 +125,84 @@ pub fn run(
         ));
     }
     std::fs::create_dir_all(dir)
-        .and_then(|()| std::fs::write(&path, &text))
         .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
-    Ok(format!("wrote {}\n", path.display()))
+    // The checked writer, with `dir` as its root: the file's name is checked
+    // (a section key comes from any crate), a link in its place is refused,
+    // and an existing file is replaced by a rename, never written through.
+    let published = publish_files(
+        dir,
+        &[(file.as_str(), text.as_bytes())],
+        options.force,
+        false,
+    )
+    .map_err(|refused| format!("config:publish: {refused}"))?;
+    match published.first() {
+        Some((_, Published::Kept)) => Err(format!(
+            "{} already exists; --force replaces it",
+            path.display()
+        )),
+        _ => Ok(format!("wrote {}\n", path.display())),
+    }
+}
+
+/// [`run`] with `--plugin <namespace>`: every section of `registry` (the
+/// plugin's) that describes its keys, written through the checked writer.
+fn run_plugin(
+    namespace: &str,
+    force: bool,
+    registry: &ConfigRegistry,
+    dir: &Path,
+) -> Result<String, String> {
+    if registry.sections().is_empty() {
+        return Ok(format!(
+            "config: plugin `{namespace}` has nothing to publish\n"
+        ));
+    }
+    // The writer is given `<dir name>/<key>.toml` below `dir`'s parent, so
+    // it checks the folder `dir` itself as well as the files in it.
+    let Some(folder) = dir.file_name().and_then(|name| name.to_str()) else {
+        return Err(format!(
+            "config:publish: {} does not end in a folder name",
+            dir.display()
+        ));
+    };
+    let root = match dir.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    let mut files: Vec<(String, String)> = Vec::new();
+    let mut left_out = Vec::new();
+    for section in registry.sections() {
+        let path = format!("{folder}/{}.toml", section.key);
+        match &section.schema {
+            Some(schema) => files.push((path, render(schema, section.defaults.as_ref()))),
+            None => left_out.push(format!(
+                "{path}: section `{}` does not describe its keys, so it is not published",
+                section.key
+            )),
+        }
+    }
+    // Two sections in one file (one key read by two types, or two keys that
+    // differ only in case) are refused by the writer before anything is
+    // written.
+    let listed: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(path, text)| (path.as_str(), text.as_bytes()))
+        .collect();
+    let published = publish_files(root, &listed, force, false)
+        .map_err(|refused| format!("config:publish: {refused}"))?;
+    let mut out = String::new();
+    for (path, outcome) in &published {
+        let line = match outcome {
+            Published::Written => format!("wrote {path}"),
+            other => other.line(path),
+        };
+        let _ = writeln!(out, "{line}");
+    }
+    for line in &left_out {
+        let _ = writeln!(out, "{line}");
+    }
+    Ok(out)
 }
 
 /// The text of the file of `schema`: every key commented out, with its
@@ -185,6 +303,9 @@ fn placeholder(ty: &FieldType) -> String {
         FieldType::Duration => "\"30s\"".to_owned(),
         FieldType::String | FieldType::Any | FieldType::Table | FieldType::Other(_) => {
             "\"\"".to_owned()
+        }
+        FieldType::Driver { built_in, .. } => {
+            json_to_toml(&Json::String(built_in.first().cloned().unwrap_or_default()))
         }
     }
 }
@@ -300,6 +421,15 @@ mod tests {
     }
 
     #[test]
+    fn a_driver_field_publishes_its_first_built_in() {
+        let ty = FieldType::Driver {
+            built_in: vec!["memory".into(), "redis".into()],
+            register: "m.cache_store".into(),
+        };
+        assert_eq!(placeholder(&ty), "\"memory\"");
+    }
+
+    #[test]
     fn the_command_line_is_read() {
         let args = |list: &[&str]| list.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
         let options = PublishOptions::parse(&args(&["mail", "--force"])).expect("valid");
@@ -308,5 +438,29 @@ mod tests {
         assert!(PublishOptions::parse(&args(&[])).is_err());
         assert!(PublishOptions::parse(&args(&["a", "b"])).is_err());
         assert!(PublishOptions::parse(&args(&["a", "--nope"])).is_err());
+    }
+
+    #[test]
+    fn the_command_line_takes_a_plugin() {
+        let args = |list: &[&str]| list.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
+        let options =
+            PublishOptions::parse(&args(&["--plugin", "announcements", "--force"])).expect("valid");
+        assert_eq!(options.plugin.as_deref(), Some("announcements"));
+        assert!(options.force && options.section.is_empty());
+        assert!(
+            PublishOptions::parse(&args(&["--plugin"]))
+                .unwrap_err()
+                .starts_with("--plugin needs a namespace; usage:")
+        );
+        assert!(
+            PublishOptions::parse(&args(&["mail", "--plugin", "x"]))
+                .unwrap_err()
+                .starts_with("give a section or --plugin, not both; usage:")
+        );
+        assert!(
+            PublishOptions::parse(&args(&["--plugin", "x", "--stdout"]))
+                .unwrap_err()
+                .starts_with("--stdout prints one section; usage:")
+        );
     }
 }

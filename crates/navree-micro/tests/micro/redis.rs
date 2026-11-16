@@ -298,10 +298,7 @@ async fn wildcards_dead_letters_and_names() {
 
 #[tokio::test]
 async fn a_server_that_is_not_there_is_a_transport_error() {
-    let unused = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap();
+    let (_held, unused) = crate::support::nobody_listens();
     let transport = RedisTransport::new(
         format!("redis://{unused}"),
         &RedisOptions::default(),

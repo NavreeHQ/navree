@@ -71,20 +71,28 @@ pub struct Router {
 struct Methods {
     /// `(method, endpoint)` in the order added.
     endpoints: Vec<(Method, BoxedService)>,
+    /// One endpoint for every method (a mount's): a shape with it has no
+    /// endpoint of a method of its own.
+    any: Option<BoxedService>,
     /// The `Allow` header: the methods, plus `HEAD` with `GET` and `OPTIONS`.
     allow: Option<HeaderValue>,
 }
 
 impl Methods {
+    /// The method's own endpoint, else the endpoint of every method.
     fn get(&self, method: &Method) -> Option<&BoxedService> {
         self.endpoints
             .iter()
             .find(|(candidate, _)| candidate == method)
             .map(|(_, endpoint)| endpoint)
+            .or(self.any.as_ref())
     }
 
+    /// Whether the method has an endpoint of its own.
     fn has(&self, method: &Method) -> bool {
-        self.get(method).is_some()
+        self.endpoints
+            .iter()
+            .any(|(candidate, _)| candidate == method)
     }
 
     /// `GET, HEAD, POST, ...` in the order of RFC 9110, then extension
@@ -196,7 +204,8 @@ impl Router {
         self.try_route_service(method, pattern, || endpoint.into_service())
     }
 
-    /// Routes `method` on `pattern` to the service `mount` builds.
+    /// Routes `method` on `pattern` to the service `mount` builds. A shape
+    /// that takes every method at one endpoint takes no other.
     pub(crate) fn try_route_service(
         &mut self,
         method: Method,
@@ -206,7 +215,7 @@ impl Router {
         let parsed = PathPattern::parse(pattern).map_err(RouteError::Pattern)?;
         let tree = Arc::make_mut(&mut self.tree);
         if let Some((existing, methods)) = tree.same_shape_mut(&parsed) {
-            if methods.has(&method) {
+            if methods.any.is_some() || methods.has(&method) {
                 return Err(RouteError::Conflict {
                     method,
                     pattern: parsed.as_str().to_owned(),
@@ -219,6 +228,42 @@ impl Router {
         }
         let mut methods = Methods {
             endpoints: vec![(method, mount())],
+            any: None,
+            allow: None,
+        };
+        methods.compute_allow();
+        tree.insert_parsed(parsed, methods)
+            .map_err(|error| match error {
+                InsertError::Pattern(error) => RouteError::Pattern(error),
+                InsertError::Conflict { .. } => unreachable!("checked by shape above"),
+            })
+    }
+
+    /// Routes every method on `pattern` to the one service `mount` builds:
+    /// `HEAD` and `OPTIONS` reach it too, as any other method does. A shape
+    /// that already has an endpoint is a conflict, named by the first method
+    /// routed there (`GET` for a shape that takes every method).
+    pub(crate) fn try_route_any(
+        &mut self,
+        pattern: &str,
+        mount: impl FnOnce() -> BoxedService,
+    ) -> Result<(), RouteError> {
+        let parsed = PathPattern::parse(pattern).map_err(RouteError::Pattern)?;
+        let tree = Arc::make_mut(&mut self.tree);
+        if let Some((existing, methods)) = tree.same_shape_mut(&parsed) {
+            let method = methods
+                .endpoints
+                .first()
+                .map_or(Method::GET, |(method, _)| method.clone());
+            return Err(RouteError::Conflict {
+                method,
+                pattern: parsed.as_str().to_owned(),
+                existing: existing.as_str().to_owned(),
+            });
+        }
+        let mut methods = Methods {
+            endpoints: Vec::new(),
+            any: Some(mount()),
             allow: None,
         };
         methods.compute_allow();
@@ -244,6 +289,9 @@ impl Router {
         let tree = Arc::make_mut(&mut self.tree);
         for methods in tree.values_mut() {
             for (_, endpoint) in &mut methods.endpoints {
+                *endpoint = BoxedService::new(layer.layer(endpoint.clone()));
+            }
+            if let Some(endpoint) = &mut methods.any {
                 *endpoint = BoxedService::new(layer.layer(endpoint.clone()));
             }
         }
@@ -396,6 +444,7 @@ impl std::fmt::Debug for Router {
                     .endpoints
                     .iter()
                     .map(move |(method, _)| format!("{method} {pattern}"))
+                    .chain(methods.any.iter().map(move |_| format!("* {pattern}")))
             }))
             .finish()
     }
@@ -576,5 +625,70 @@ mod tests {
         assert_eq!(send(&router, report, "/cal").await.2, "report");
         let (_, headers, _) = send(&router, Method::DELETE, "/cal").await;
         assert_eq!(headers["allow"], "GET, HEAD, OPTIONS, REPORT");
+    }
+
+    #[tokio::test]
+    async fn a_path_can_take_every_method_at_one_endpoint() {
+        let echo = || {
+            Endpoint::new(|request: Request| async move {
+                format!("{} {}", request.method(), request.uri().path())
+            })
+            .into_service()
+        };
+        let mut router = Router::new();
+        router.try_route_any("/khata", echo).unwrap();
+        router.try_route_any("/khata/{*rest}", echo).unwrap();
+        router
+            .try_route(Method::GET, "/deals", Endpoint::new(|| async { "deals" }))
+            .unwrap();
+        let propfind = Method::from_bytes(b"PROPFIND").unwrap();
+        for method in [
+            Method::GET,
+            Method::POST,
+            Method::DELETE,
+            Method::PATCH,
+            Method::OPTIONS,
+            Method::HEAD,
+            propfind,
+        ] {
+            assert_eq!(
+                send(&router, method.clone(), "/khata/a").await.2,
+                format!("{method} /khata/a")
+            );
+        }
+        assert_eq!(send(&router, Method::PUT, "/khata").await.2, "PUT /khata");
+        // A path without such an endpoint keeps its 405 and its Allow.
+        let (status, headers, _) = send(&router, Method::POST, "/deals").await;
+        assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+        assert_eq!(headers["allow"], "GET, HEAD, OPTIONS");
+        assert_eq!(
+            format!("{router:?}"),
+            r#"["* /khata", "* /khata/{*rest}", "GET /deals"]"#
+        );
+    }
+
+    #[test]
+    fn every_method_at_one_endpoint_and_a_method_on_the_same_shape_conflict() {
+        let any = || Endpoint::new(|| async {}).into_service();
+        let mut router = Router::new();
+        router
+            .try_route(Method::GET, "/khata/{*rest}", Endpoint::new(|| async {}))
+            .unwrap();
+        assert_eq!(
+            router
+                .try_route_any("/khata/{*path}", any)
+                .unwrap_err()
+                .to_string(),
+            "`GET /khata/{*path}` matches the same paths as `GET /khata/{*rest}` (only parameter names differ)"
+        );
+        let mut router = Router::new();
+        router.try_route_any("/khata", any).unwrap();
+        assert_eq!(
+            router
+                .try_route(Method::POST, "/khata", Endpoint::new(|| async {}))
+                .unwrap_err()
+                .to_string(),
+            "`POST /khata` is routed twice"
+        );
     }
 }

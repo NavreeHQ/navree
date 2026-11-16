@@ -602,6 +602,8 @@ impl CertificatesModule {
 
 Embedded files are templates and assets like any other: a file at the same path in a template directory overrides them.
 
+Two modules that embed one path with different contents log a warning at boot, and the later module's file is used. A module of a plugin that is not one of the framework's own embeds paths under the plugin's namespace (`announcements/certificates/course.html`); any other path fails the boot, except the exact path of a module it imports, and so does a path that a plugin and another module both embed with different contents. A plugin that replaces a file of the app or of the framework fails the boot while its version is the one used. Put a file at that path in a `documents.templates` folder, or embed the path from a module of your own that comes after the plugin's module (with the plugin's contents or yours), and the boot goes on with an `info` line saying which one is used.
+
 ## Commands
 
 | Command | What it does |

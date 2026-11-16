@@ -21,7 +21,9 @@ pub(crate) const fn gap_name(gap: u8) -> &'static str {
     }
 }
 
-pub(crate) const fn span_name(columns: u8) -> &'static str {
+/// The value of the `data-span` attribute for `columns` columns of a grid. Only the toolkit's
+/// exported macros call it, through the hidden `__private` module.
+pub const fn span_name(columns: u8) -> &'static str {
     match columns {
         0 | 1 => "1",
         2 => "2",

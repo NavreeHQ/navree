@@ -832,7 +832,9 @@ fn page(paths: &Paths, title: &'static str, description: &'static str, body: Nod
             layout = layout.aside_label(format!("About {name}"));
         }
     }
-    let mut view = View::new(dressing.title(title));
+    // Every page here takes a password, a code or a key: it starts from a clean document, in an
+    // app that has plugin code to keep off it.
+    let mut view = View::new(dressing.title(title)).fresh();
     let menu = dressing.theme_menu
         || dressing
             .shell

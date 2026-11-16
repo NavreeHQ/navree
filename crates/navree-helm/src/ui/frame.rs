@@ -44,8 +44,9 @@ struct MenuGroup {
     entries: Vec<Entry>,
 }
 
-/// The menu the user may see: each resource they may read and each page that lets
-/// them in, by group, then Settings.
+/// The menu the user may see: each resource they may read, each page that lets
+/// them in and each link of another module whose check they pass, by group, then
+/// Settings.
 async fn menu(cx: &Cx) -> Vec<MenuGroup> {
     let core = &cx.core;
     let base = core.options.base();
@@ -83,6 +84,23 @@ async fn menu(cx: &Cx) -> Vec<MenuGroup> {
                 label: page.title.clone(),
                 url: format!("{base}/pages/{}", page.slug),
                 icon: icon(&page.icon),
+                counted: None,
+            },
+        );
+    }
+    // The links other modules add: decided for this request, and left out for a user who
+    // fails the link's check.
+    for entry in core.registry.links() {
+        let link = &entry.link;
+        if link.can.as_ref().is_some_and(|(a, s)| !cx.can(a, s, None)) {
+            continue;
+        }
+        push(
+            link.group.as_deref().unwrap_or("Pages"),
+            Entry {
+                label: link.label.clone(),
+                url: link.href.clone(),
+                icon: icon(&link.icon),
                 counted: None,
             },
         );
@@ -255,7 +273,9 @@ impl<'a> Frame<'a> {
             app = app.csrf(token.to_owned());
         }
         let title: String = title.into();
-        app.page(title)
+        // Staff act on every tenant here, and the panel draws no plugin component: its pages
+        // start from a clean document, in an app that has plugin code to keep off them.
+        app.page(title).fresh()
     }
 }
 

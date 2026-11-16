@@ -45,7 +45,7 @@ transport = "log"
 | Key | Default | Meaning |
 |---|---|---|
 | `mail.from` | `hello@example.com` | The default sender, `crm@navree.test` or `Navree CRM <crm@navree.test>`. Empty means no default: every message must then set its own. |
-| `mail.transport` | `log` | How mail is delivered: see [transports](#transports). |
+| `mail.transport` | `log` | How mail is delivered: see [transports](#transports), or the name of a transport a module registers with `m.mail_transport` (see [a transport a module registers](#a-transport-a-module-registers)). |
 | `mail.queue` | none | The queue `Mailer::queue` dispatches to. Without it, queued mail goes on the `default` queue. |
 | `mail.transports.<name>` | none | More transports, picked per message with `mailer.via("<name>")` (see [named transports](/docs/digging-deeper/mail-delivery/#named-transports)). |
 | `mail.render.inline_css` | `true` | Move `<style>` rules into `style` attributes (see [rendering](#rendering)). |
@@ -94,6 +94,7 @@ Navree::app()
 | log | `"log"` | `{ type = "log" }` |
 | array | `"array"` | `{ type = "array" }` |
 | failover | none | `{ type = "failover", transports = ["smtps://user:pass@host", "log"] }` |
+| A transport a module registers | `"dakghar"`, its name | none |
 
 The email API transports and SMTP's `dkim` settings are described under [mail delivery](/docs/digging-deeper/mail-delivery/#email-api-transports).
 
@@ -141,6 +142,76 @@ APP_MAIL__TRANSPORT__TRANSPORTS=smtps://user:pass@smtp.navree.test,log
 ```
 
 `transports` takes a list in TOML, or one comma-separated string of short forms.
+
+#### A transport a module registers
+
+A gateway Navree has no transport for (a regional provider, an in-house relay) is a `MailTransport` of your own that a module registers under a name. `use navree::plugin::prelude::*;` brings the method:
+
+```rust title="src/dakghar.rs"
+use navree::BoxFuture;
+use navree::mail::{MailError, MailTransport, Message};
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use serde::Deserialize;
+
+/// The settings of the transport: `[mail.dakghar]`.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct DakgharSettings {
+    sender_id: String,
+}
+
+/// Hands each message to the Dakghar gateway.
+struct Dakghar {
+    sender_id: String,
+}
+
+impl MailTransport for Dakghar {
+    fn send<'a>(&'a self, message: &'a Message) -> BoxFuture<'a, Result<(), MailError>> {
+        Box::pin(async move {
+            // Post `message.subject` and its bodies to the gateway as
+            // `self.sender_id` here.
+            Ok(())
+        })
+    }
+
+    fn name(&self) -> &'static str {
+        "dakghar"
+    }
+}
+
+pub struct DakgharModule;
+
+impl Module for DakgharModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.mail_transport("dakghar", |ctx| async move {
+            let settings: DakgharSettings = ctx.settings()?;
+            Ok(Dakghar { sender_id: settings.sender_id })
+        });
+    }
+}
+```
+
+The bare name selects it wherever a transport goes: `mail.transport`, a failover's list and `mail.transports.<name>`. Its own settings are the table under its name:
+
+```toml title="config/app.toml"
+[mail]
+transport = "dakghar"
+
+[mail.transports]
+otp = { type = "failover", transports = ["dakghar", "log"] }
+
+[mail.dakghar]
+sender_id = "NAVREE"
+```
+
+As environment variables: `APP_MAIL__TRANSPORT=dakghar` and `APP_MAIL__DAKGHAR__SENDER_ID=NAVREE`.
+
+A name is a lower-case letter followed by lower-case letters, digits or `_`, and it is a bare name only: never a table type (`{ type = "dakghar" }` is refused) and never a URL scheme.
+
+A registration under a built-in type (`log`, `array`, `smtp`, `smtps`, `ses`, `mailgun`, `postmark`, `resend`, `failover`), under a key of `[mail]` (`from`, `queue`), and one name registered by two modules fail the boot, naming `m.mail_transport` and the module, even when another transport is selected; so does a factory that returns an error. A factory's error is shown in the boot error as written, so it must not contain a secret from the driver's settings. `config:check` reports the same registrations.
+
+A bare name reads as a registered transport only when a module registered a mail transport under it, which its registration does before the configuration is read. Any other bare name keeps the `unknown mail transport` error, the name of another kind's driver (a cache store, a disk driver) included, and so does a bare built-in type such as `smtp` (write an SMTP transport as a URL or a table) and a `MailOptions` your code reads before the app's modules register. Reading a name never adds one: a request body or a stored row cannot make up names, and it gets the same answer for another kind's driver name as for a made-up one. A tenant's own transport (see [mail delivery](/docs/digging-deeper/mail-delivery/)) cannot name a registered transport: saving or checking one fails, saying the transport is registered by a module and `MailModule` builds it at boot, and so does `TransportConfig::build`.
 
 ## Mail templates
 

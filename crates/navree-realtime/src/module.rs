@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use navree_config::ModuleBuilderConfigExt;
+use navree_config::__private::{build_driver, check_registrations, contribute_slot};
+use navree_config::{ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::{Broadcaster, Principal};
 use navree_crypto::Encrypter;
 use navree_http::{HttpOptions, HttpServer, ModuleBuilderHttpExt};
@@ -16,6 +17,7 @@ use navree_kernel::{
 use serde_json::Value;
 
 use crate::controller::RealtimeController;
+use crate::drivers::{CheckedBackplanes, SLOT};
 use crate::realtime::Relay;
 use crate::relay::{self, RelayClient};
 use crate::{Backplane, BackplaneKind, Live, Realtime, RealtimeOptions};
@@ -87,13 +89,23 @@ impl Module for RealtimeModule {
 
 fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
     m.global();
+    contribute_slot(m, SLOT);
     match options {
         Some(options) => m.value(options),
         None => m.config::<RealtimeOptions>(),
     };
     m.factory(
+        // Every registration of a backplane is checked, whichever is
+        // selected and whether or not `Realtime` is replaced.
+        Factory::<CheckedBackplanes>::new(|r: Resolver| async move {
+            check_registrations(&r.app(), &SLOT, RealtimeOptions::schema())?;
+            Ok(Arc::new(CheckedBackplanes))
+        }),
+    )
+    .factory(
         Factory::<Realtime>::new(|r: Resolver| async move {
             let options = r.get::<RealtimeOptions>().await?;
+            r.get::<CheckedBackplanes>().await?;
             let app = r.app();
             let cors_origins = match app.try_get::<HttpOptions>().await {
                 Some(http) => http.cors.allowed_origins.clone(),
@@ -107,14 +119,17 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
                 app.tracker(),
             )?
             .with_relay(relay_of(&options, &app).await?);
-            if let Some(backplane) = backplane_of(&options, &app).await? {
+            if let Some(backplane) = backplane_of(&options, &r).await? {
                 realtime = realtime.with_backplane(backplane);
             }
             let realtime = Arc::new(realtime);
             realtime.start_backplane().await?;
             Ok(realtime)
         })
-        .deps(vec![ProviderKey::of::<RealtimeOptions>()]),
+        .deps(vec![
+            ProviderKey::of::<RealtimeOptions>(),
+            ProviderKey::of::<CheckedBackplanes>(),
+        ]),
     )
     .exports::<Realtime>()
     .factory(
@@ -137,14 +152,29 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
 }
 
 /// The backplane of this process: the `dyn Backplane` provider named after
-/// `realtime.backplane` (`redis`), or, with `none`, an unnamed one the app
-/// provides (a test's [`MemoryBackplane`](crate::MemoryBackplane)).
+/// `realtime.backplane` (`redis`), the backplane a module registered under
+/// that name, or, with `none`, an unnamed one the app provides (a test's
+/// [`MemoryBackplane`](crate::MemoryBackplane)).
 async fn backplane_of(
     options: &RealtimeOptions,
-    app: &AppContext,
+    r: &Resolver,
 ) -> Result<Option<Arc<dyn Backplane>>, BoxError> {
-    match options.backplane {
+    let app = r.app();
+    match options.backplane.resolved() {
         BackplaneKind::None => Ok(app.try_get::<dyn Backplane>().await),
+        BackplaneKind::Registered(name) => {
+            let backplane = build_driver::<dyn Backplane>(
+                r,
+                &SLOT,
+                "realtime.backplane",
+                name,
+                format!("realtime.{name}"),
+                None,
+                None,
+            )
+            .await?;
+            Ok(Some(backplane))
+        }
         kind => {
             let name = kind.as_str();
             let backplane = app.get_named::<dyn Backplane>(name).await.map_err(|error| {

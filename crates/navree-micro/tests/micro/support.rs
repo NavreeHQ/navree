@@ -29,6 +29,17 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+/// An address on this machine where no server answers, for as long as the returned socket
+/// lives: the socket is bound and never listens, so a connection to it is refused and no other
+/// test is given its port. A listener bound to a free port and dropped is not enough: another
+/// test's server can be given that port before the connection is made, and then it answers.
+pub fn nobody_listens() -> (tokio::net::TcpSocket, std::net::SocketAddr) {
+    let socket = tokio::net::TcpSocket::new_v4().unwrap();
+    socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let address = socket.local_addr().unwrap();
+    (socket, address)
+}
+
 /// The `deals` model: the access subject `Deal`.
 pub mod deal {
     use serde::Serialize;

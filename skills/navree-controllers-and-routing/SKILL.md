@@ -219,6 +219,68 @@ Declare access with `.public()`, `.authenticated()`, `.roles(&[..])`,
 `.permissions(&[..])` or `.can("update", "Post", Some("id"))`; the app
 refuses to boot with an undeclared hand-written route.
 
+## A service under a path
+
+A tower service another crate gives answers under a path prefix with
+`m.mount(Mount::new(prefix, service))`, behind the same pipeline as a route.
+Its access declaration is required, as a route's:
+
+```rust
+use navree::plugin::prelude::*; // brings `m.mount`
+
+/// Another crate's ledger service under `/khata`, for signed-in users.
+pub struct LedgerModule;
+
+impl Module for LedgerModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let khata = navree::http::AppRouter::from_handler(|| async { "the khata" });
+        m.mount(navree::http::Mount::new("/khata", khata).authenticated());
+    }
+}
+```
+
+- The prefix is absolute (not under `/api`); the service answers it and
+  every path below, for every method unless `.methods(&[..])` names some.
+- The service sees `/` plus the rest of the path as sent (`/khata/a%2Fb` is
+  `/a%2Fb`), nothing decoded, the query kept. `//` below the prefix is a 400.
+- Boot fails for a mount without access, a prefix under `/_` or not a plain
+  path, and a route or another mount at, under or above the prefix.
+- A request with `Upgrade` or `CONNECT` never reaches it: the mount answers
+  501 after the access check. With `.methods(..)`, a method left out
+  (`CONNECT` among them) is the router's 405 first, as for a route; `HEAD`
+  runs the `GET` answer when `GET` is listed, `OPTIONS` is a 204 with
+  `Allow`.
+- A 4xx the service writes goes out as written; a 5xx with no body or a
+  short plain-text one takes the app's error shape, its text logged, never
+  sent.
+- Details: https://navree.com/docs/plugins/existing-crates/
+
+## A layer whose service can fail
+
+`router.layer(..)` and `Endpoint::layer(..)` take layers whose service
+can't fail. Wrap one whose service can (a timeout, a load shedder) in
+`FallibleLayer`: its error answers as a 500 `AppError` with the error as its
+source, which `m.map_error` can turn into another answer in any slot but
+`LayerSlot::Edge` (outside error rendering: there it is neither mapped nor
+logged).
+
+```rust,ignore
+use std::time::Duration;
+
+use navree::http::{FallibleLayer, GlobalLayer, LayerSlot};
+
+m.http_layer(GlobalLayer::new(LayerSlot::Context, "timeout", |_ctx, router| {
+    Ok(router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
+        Duration::from_secs(10),
+    ))))
+}))
+.map_error::<tower::timeout::error::Elapsed>(|_| {
+    Some(AppError::service_unavailable("The khata took too long."))
+});
+```
+
+Details: https://navree.com/docs/plugins/existing-crates/
+
 ## Test
 
 ```rust,ignore

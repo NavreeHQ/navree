@@ -61,6 +61,10 @@ Only a script of your app's own runs. The `islands` module imports an address on
 
 `IslandScript::new` takes the script's ceiling in bytes. A script that grows past it fails the app's build, so each island has a budget of its own, checked by the compiler.
 
+A plugin's script takes `.namespace("announcements")`, as a plugin's [stylesheet does](/docs/ui/app-styles/#files-of-a-plugin): it is served as `/_navree/ui/island/announcements.depots-1a2b3c4d5e6f.js`, and its `name()` stays `depots`.
+
+An `IslandScript` is hashed while the app compiles, and the compiler gives that work a limit. A script past about 500 KB stops the build with `constant evaluation is taking a long time` (the lint `long_running_const_eval`). Put `#[allow(long_running_const_eval)]` on the script's `static` and it builds: a script of 2 MB then adds a few seconds to each build of its crate. Or ship a large script as a UI extension, whose macro hashes the file as it reads it (see [Build your own component](/docs/ui/your-own-components/#behaviour-in-the-browser)).
+
 ## With no script
 
 With JavaScript off, or before the script has run, the island shows its fallback: the same numbers as a table, a picture, a link. Write one that says what the island would show.

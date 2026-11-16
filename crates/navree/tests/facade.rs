@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
 
 use navree::prelude::*;
+use navree::{KernelError, ModuleId};
 use serde_json::Value;
 
 /// `navree::<module>::<Item>` is the very item of the underlying crate.
@@ -602,7 +603,7 @@ const OPT_IN: &[&str] = &[
 ];
 
 /// Always compiled into the facade (not behind a feature).
-const ALWAYS: [&str; 7] = [
+const ALWAYS: [&str; 8] = [
     "navree-kernel",
     "navree-bounded",
     "navree-glob",
@@ -610,15 +611,15 @@ const ALWAYS: [&str; 7] = [
     "navree-config",
     "navree-macros",
     "navree-openapi",
+    "navree-i18n-macros",
 ];
 
 /// Proc-macro crates that a module crate re-exports, as (macro crate,
 /// module crate): they come with the module crate's feature (`orm` brings
 /// navree-orm-macros through navree-orm, `ui` navree-ui-macros through navree-ui),
 /// so the facade does not name them.
-const COMPANION_MACROS: [(&str, &str); 4] = [
+const COMPANION_MACROS: [(&str, &str); 3] = [
     ("navree-orm-macros", "navree-orm"),
-    ("navree-i18n-macros", "navree-i18n"),
     ("navree-ui-macros", "navree-ui"),
     ("navree-validation-macros", "navree-validation"),
 ];
@@ -1127,4 +1128,1087 @@ fn ui_module_is_in_the_prelude_and_country_flags_have_their_own_name() {
         navree::ui::flags::CountryCode,
     >());
     assert_eq!(navree::ui::country_flags::IN.to_string(), "IN");
+}
+
+/// `navree::plugin` is the kernel's plugin types, and `navree::plugin_info!` describes the
+/// crate that calls it.
+#[test]
+fn the_plugin_module_brings_the_kernels_plugin_types() {
+    assert!(same::<navree::plugin::PluginInfo, navree::kernel::PluginInfo>());
+    assert!(same::<
+        navree::plugin::PluginsReport,
+        navree::kernel::PluginsReport,
+    >());
+    assert!(same::<
+        navree::plugin::PluginReport,
+        navree::kernel::PluginReport,
+    >());
+    assert!(same::<
+        navree::plugin::PluginModuleReport,
+        navree::kernel::PluginModuleReport,
+    >());
+    assert!(same::<
+        navree::plugin::Publishable,
+        navree::kernel::Publishable,
+    >());
+    assert!(same::<navree::plugin::PublishTag, navree::kernel::PublishTag>());
+    let info = navree::plugin_info!();
+    assert_eq!(
+        (info.name, info.crate_name, info.namespace),
+        ("navree", "facade", "navree")
+    );
+}
+
+/// `navree::embed_locales!` embeds a crate's Fluent files without the `i18n` feature. `full`,
+/// the default this file needs, leaves `i18n` out (see
+/// `full_is_the_default_and_turns_on_every_module_but_the_opt_in_ones`); with `i18n` turned on
+/// the test would prove nothing, so it is left out.
+#[test]
+#[cfg_attr(
+    feature = "i18n",
+    ignore = "proves the facade without its i18n feature; run it with the default features"
+)]
+fn embed_locales_works_through_the_facade_without_i18n() {
+    let files: &'static [(&str, &str, &str)] =
+        navree::embed_locales!("tests/fixtures/plugin-locales");
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].0, "en");
+    assert!(files[0].2.contains("₹1,00,000"));
+}
+
+/// The kernel's first-party list is the `kind = "module"` packages of the first-party index,
+/// each behind a facade feature of its own name.
+#[test]
+fn the_kernels_first_party_list_matches_the_cli_index() {
+    assert!(
+        !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../navree-cli/src/plugin/index.toml")
+            .exists(),
+        "index.toml exists: compare FIRST_PARTY and RESERVED_NAMESPACES with it instead of the pinned rows"
+    );
+    // The `kind = "module"` packages of the first-party index, pinned until
+    // crates/navree-cli/src/plugin/index.toml exists.
+    const INDEXED: [&str; 31] = [
+        "ai",
+        "audit",
+        "billing",
+        "directory",
+        "documents",
+        "domains",
+        "flags",
+        "fleet",
+        "graphql",
+        "grpc",
+        "helm",
+        "http-client",
+        "i18n",
+        "integrations",
+        "mcp",
+        "media",
+        "micro",
+        "mongo",
+        "notify",
+        "oauth",
+        "realtime",
+        "redis",
+        "search",
+        "settings",
+        "sheets",
+        "social",
+        "sso",
+        "storage",
+        "time",
+        "webhooks",
+        "workflows",
+    ];
+    let listed: Vec<(String, String)> = navree::kernel::__private::FIRST_PARTY
+        .iter()
+        .map(|(package, krate)| ((*package).to_owned(), (*krate).to_owned()))
+        .collect();
+    let expected: Vec<(String, String)> = INDEXED
+        .iter()
+        .map(|name| {
+            (
+                format!("navree-{name}"),
+                format!("navree_{}", name.replace('-', "_")),
+            )
+        })
+        .collect();
+    assert_eq!(listed, expected);
+    let features = Features::read();
+    for (package, _) in &listed {
+        assert_eq!(
+            features.feature_of.get(package).map(String::as_str),
+            Some(package.trim_start_matches("navree-")),
+            "{package} is behind its own facade feature"
+        );
+    }
+}
+
+/// The namespaces the kernel keeps for the framework are the first words of the framework's
+/// configuration sections, a few words of its own, the folders the framework reads below the
+/// plugins' folders and the Windows device names, and they hold every permission prefix a
+/// framework crate declares.
+#[test]
+fn the_reserved_namespaces_match_the_framework_sections_and_permission_prefixes() {
+    assert!(
+        !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../navree-cli/src/plugin/index.toml")
+            .exists(),
+        "index.toml exists: compare FIRST_PARTY and RESERVED_NAMESPACES with it instead of the pinned rows"
+    );
+    let reserved: BTreeSet<&str> = navree::kernel::__private::RESERVED_NAMESPACES
+        .iter()
+        .copied()
+        .collect();
+    let mut expected: BTreeSet<&str> = navree::config::FRAMEWORK_SECTIONS
+        .iter()
+        .map(|key| key.split('.').next().unwrap())
+        .collect();
+    expected.extend(["navree", "views", "roles", "env", "plugins"]);
+    expected.extend([
+        "all",
+        "users",
+        "organization",
+        "subscriptions",
+        "operations",
+    ]);
+    // Folders the framework reads below the plugins' folders: `layouts` for templates,
+    // `fonts` for documents.
+    expected.extend(["layouts", "fonts"]);
+    // The Windows device names a namespace could spell: no folder may be called one.
+    expected.extend(["con", "prn", "aux", "nul"]);
+    expected.extend([
+        "com0", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+    ]);
+    expected.extend([
+        "lpt0", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+    ]);
+    assert_eq!(reserved, expected);
+    // Every permission prefix a framework crate declares in its source is reserved.
+    for (file, prefix) in permission_prefixes() {
+        let word = prefix.split('.').next().unwrap();
+        assert!(reserved.contains(word), "{file}: `{prefix}`");
+    }
+}
+
+/// Every permission prefix declared in `crates/navree-*/src/**/*.rs`, but for navree-cli,
+/// navree-macros and navree-orm-macros, with its file: the text after
+/// `PERMISSION_PREFIX: &'static str = "` or after `permission_prefix = "`, up to the next `"`,
+/// on a line that is not a comment. (Every first-party `#[model(subject ..)]` sets
+/// `permission_prefix` today; one that relied on its table as the default would escape this
+/// scan.)
+fn permission_prefixes() -> Vec<(String, String)> {
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(&crates).expect("the crates folder") {
+        let entry = entry.expect("a folder entry");
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let left_out =
+            ["navree-cli", "navree-macros", "navree-orm-macros"].contains(&name.as_str());
+        let src = entry.path().join("src");
+        if name.starts_with("navree-") && !left_out && src.is_dir() {
+            rust_files(&src, &mut files);
+        }
+    }
+    files.sort();
+    let mut prefixes = Vec::new();
+    for file in files {
+        let text = std::fs::read_to_string(&file).expect("a source file");
+        let shown = file
+            .strip_prefix(&crates)
+            .unwrap_or(&file)
+            .display()
+            .to_string();
+        for line in text
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+        {
+            for needle in [
+                "PERMISSION_PREFIX: &'static str = \"",
+                "permission_prefix = \"",
+            ] {
+                for (at, _) in line.match_indices(needle) {
+                    let rest = &line[at + needle.len()..];
+                    let prefix = rest.split('"').next().unwrap_or_default();
+                    prefixes.push((shown.clone(), prefix.to_owned()));
+                }
+            }
+        }
+    }
+    prefixes
+}
+
+/// Every `.rs` file below `folder`, at any depth.
+fn rust_files(folder: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    for entry in std::fs::read_dir(folder).expect("a source folder") {
+        let path = entry.expect("a folder entry").path();
+        if path.is_dir() {
+            rust_files(&path, out);
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            out.push(path);
+        }
+    }
+}
+
+/// Whether `error` comes from the boot checks of plugins.
+fn is_plugin_error(error: &KernelError) -> bool {
+    matches!(
+        error,
+        KernelError::PluginTwice { .. }
+            | KernelError::InvalidNamespace { .. }
+            | KernelError::PluginVersions { .. }
+            | KernelError::NamespaceTaken { .. }
+            | KernelError::PublishableOutsidePlugin { .. }
+            | KernelError::UnsafePublishPath { .. }
+            | KernelError::NamespaceReserved { .. }
+            | KernelError::PluginOfAnotherCrate { .. }
+            | KernelError::PluginInfoDiffers { .. }
+    )
+}
+
+/// Every module the facade's features bring, each in an app of its own, passes the boot
+/// checks of plugins, and a plugin it names is first-party: a framework package that named
+/// itself a plugin while off the kernel's first-party list, or from a module type of another
+/// crate (a `ClientModule`, say), would fail every app's boot in its reserved namespace. A
+/// module that needs other modules does not validate alone; it must not fail for a plugin.
+#[test]
+fn every_framework_module_passes_the_plugin_checks_and_names_only_first_party_plugins() {
+    // The opt-in modules are added only with their features.
+    #[allow(unused_mut)]
+    let mut apps: Vec<(&str, AppBuilder)> = vec![
+        (
+            "ConfigModule",
+            Navree::app().module(ConfigModule::for_root(ConfigSources::new())),
+        ),
+        (
+            "LoggerModule",
+            Navree::app().module(LoggerModule::from_config()),
+        ),
+        (
+            "CryptoModule",
+            Navree::app().module(CryptoModule::from_config()),
+        ),
+        (
+            "HttpModule",
+            Navree::app().module(HttpModule::from_config()),
+        ),
+        (
+            "HttpClientModule",
+            Navree::app().module(HttpClientModule::from_config()),
+        ),
+        (
+            "DatabaseModule",
+            Navree::app().module(DatabaseModule::from_config()),
+        ),
+        ("OrmModule", Navree::app().module(OrmModule::from_config())),
+        (
+            "CacheModule",
+            Navree::app().module(CacheModule::from_config()),
+        ),
+        (
+            "EventsModule",
+            Navree::app().module(EventsModule::for_root()),
+        ),
+        (
+            "ViewModule",
+            Navree::app().module(ViewModule::from_config()),
+        ),
+        ("UiModule", Navree::app().module(UiModule::from_config())),
+        (
+            "TimeModule",
+            Navree::app().module(TimeModule::from_config()),
+        ),
+        (
+            "MailModule",
+            Navree::app().module(MailModule::from_config()),
+        ),
+        (
+            "QueueModule",
+            Navree::app().module(QueueModule::from_config()),
+        ),
+        (
+            "ScheduleModule",
+            Navree::app().module(ScheduleModule::for_root()),
+        ),
+        (
+            "ValidationModule",
+            Navree::app().module(ValidationModule::from_config()),
+        ),
+        (
+            "StorageModule",
+            Navree::app().module(StorageModule::from_config()),
+        ),
+        (
+            "AuthModule",
+            Navree::app().module(AuthModule::from_config()),
+        ),
+        (
+            "AccessModule",
+            Navree::app().module(AccessModule::for_root(AccessOptions::default())),
+        ),
+        (
+            "WorkspaceModule",
+            Navree::app().module(WorkspaceModule::from_config()),
+        ),
+        (
+            "SessionModule",
+            Navree::app().module(SessionModule::from_config()),
+        ),
+        (
+            "AuthPages",
+            Navree::app().module(navree::auth::AuthPages::new()),
+        ),
+        (
+            "AuditModule",
+            Navree::app().module(AuditModule::from_config()),
+        ),
+        (
+            "NotifyModule",
+            Navree::app().module(NotifyModule::from_config()),
+        ),
+        (
+            "RealtimeModule",
+            Navree::app().module(RealtimeModule::from_config()),
+        ),
+        (
+            "SettingsModule",
+            Navree::app().module(SettingsModule::from_config()),
+        ),
+        (
+            "WebhooksModule",
+            Navree::app().module(WebhooksModule::from_config()),
+        ),
+        (
+            "IntegrationsModule",
+            Navree::app().module(IntegrationsModule::from_config()),
+        ),
+        (
+            "DirectoryModule",
+            Navree::app().module(DirectoryModule::from_config()),
+        ),
+        (
+            "DomainsModule",
+            Navree::app().module(DomainsModule::from_config()),
+        ),
+        ("SsoModule", Navree::app().module(SsoModule::from_config())),
+        (
+            "SheetsModule",
+            Navree::app().module(SheetsModule::from_config()),
+        ),
+        (
+            "WorkflowsModule",
+            Navree::app().module(WorkflowsModule::from_config()),
+        ),
+        ("ApiModule", Navree::app().module(ApiModule::from_config())),
+        (
+            "ObserveModule",
+            Navree::app().module(ObserveModule::from_config()),
+        ),
+        (
+            "HelmModule",
+            Navree::app().module(HelmModule::from_config()),
+        ),
+        (
+            "LighthouseModule",
+            Navree::app().module(LighthouseModule::from_config()),
+        ),
+        (
+            "LogbookModule",
+            Navree::app().module(LogbookModule::from_config()),
+        ),
+        (
+            "FleetModule",
+            Navree::app().module(FleetModule::from_config()),
+        ),
+    ];
+    #[cfg(feature = "redis")]
+    apps.push((
+        "RedisModule",
+        Navree::app().module(RedisModule::from_config()),
+    ));
+    #[cfg(feature = "mongo")]
+    apps.push((
+        "MongoModule",
+        Navree::app().module(MongoModule::from_config()),
+    ));
+    #[cfg(feature = "search")]
+    apps.push((
+        "SearchModule",
+        Navree::app().module(SearchModule::from_config()),
+    ));
+    #[cfg(feature = "billing")]
+    apps.push((
+        "BillingModule",
+        Navree::app().module(BillingModule::from_config()),
+    ));
+    #[cfg(feature = "social")]
+    apps.push((
+        "SocialModule",
+        Navree::app().module(SocialModule::from_config()),
+    ));
+    #[cfg(feature = "flags")]
+    apps.push((
+        "FlagsModule",
+        Navree::app().module(FlagsModule::from_config()),
+    ));
+    #[cfg(feature = "oauth")]
+    apps.push((
+        "OAuthServerModule",
+        Navree::app().module(OAuthServerModule::from_config()),
+    ));
+    #[cfg(feature = "documents")]
+    apps.push((
+        "DocumentsModule",
+        Navree::app().module(DocumentsModule::from_config()),
+    ));
+    #[cfg(feature = "media")]
+    apps.push((
+        "MediaModule",
+        Navree::app().module(MediaModule::from_config()),
+    ));
+    #[cfg(feature = "i18n")]
+    apps.push((
+        "I18nModule",
+        Navree::app().module(I18nModule::from_config()),
+    ));
+    #[cfg(feature = "ai")]
+    apps.push(("AiModule", Navree::app().module(AiModule::from_config())));
+    #[cfg(feature = "graphql")]
+    apps.push((
+        "GraphqlModule",
+        Navree::app().module(GraphqlModule::from_config()),
+    ));
+    #[cfg(feature = "grpc")]
+    apps.push((
+        "GrpcModule",
+        Navree::app().module(GrpcModule::from_config()),
+    ));
+    #[cfg(feature = "micro")]
+    apps.push((
+        "MicroModule",
+        Navree::app().module(MicroModule::from_config()),
+    ));
+    #[cfg(feature = "mcp")]
+    apps.push(("McpModule", Navree::app().module(McpModule::from_config())));
+    for (name, app) in apps {
+        match app.plugin_report() {
+            Ok(report) => {
+                for plugin in &report.plugins {
+                    assert!(
+                        plugin.first_party,
+                        "{name} names the plugin `{}`, which the kernel does not find first-party",
+                        plugin.info.name
+                    );
+                }
+            }
+            Err(errors) => {
+                for error in &errors.0 {
+                    assert!(!is_plugin_error(error), "{name}: {error}");
+                }
+            }
+        }
+    }
+}
+
+/// Only the packages on the kernel's first-party list name themselves plugins, and each from
+/// a module type of its own crate, never through a `ClientModule` (whose type is another
+/// crate's, so the plugin would not be first-party). Read from the source of every
+/// `crates/navree-*/src`, but for navree-kernel, which defines plugins, and navree-cli and
+/// navree-macros, which write plugin code for apps.
+#[test]
+fn only_first_party_packages_name_themselves_plugins_and_from_their_own_module_types() {
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut problems = Vec::new();
+    for entry in std::fs::read_dir(&crates).expect("the crates folder") {
+        let entry = entry.expect("a folder entry");
+        let package = entry.file_name().to_string_lossy().into_owned();
+        let left_out = ["navree-kernel", "navree-cli", "navree-macros"].contains(&package.as_str());
+        let src = entry.path().join("src");
+        if !package.starts_with("navree-") || left_out || !src.is_dir() {
+            continue;
+        }
+        let mut files = Vec::new();
+        rust_files(&src, &mut files);
+        for file in files {
+            let text = std::fs::read_to_string(&file).expect("a source file");
+            // A test's stand-in plugin is not the package's.
+            let names_a_plugin = before_unit_tests(&text)
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("//"))
+                .map(without_strings)
+                .any(|line| line.contains("plugin_info!") || line.contains("PluginInfo::new("));
+            if !names_a_plugin {
+                continue;
+            }
+            let listed = navree::kernel::__private::FIRST_PARTY
+                .iter()
+                .any(|(name, _)| *name == package);
+            if !listed {
+                problems.push(format!(
+                    "{}: {package} names itself a plugin but is not on the kernel's first-party list",
+                    file.display()
+                ));
+            }
+            if text.contains("ClientModule") {
+                problems.push(format!(
+                    "{}: a first-party package names itself a plugin from a module type of its own crate, not through ClientModule",
+                    file.display()
+                ));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// A source file up to its unit tests: the text before the first `#[cfg(test)]` that marks a
+/// module. A `#[cfg(test)]` on a function, an import or a field ends nothing, so the code after
+/// it is still read.
+fn before_unit_tests(text: &str) -> &str {
+    const MARK: &str = "#[cfg(test)]";
+    let mut from = 0;
+    while let Some(found) = text[from..].find(MARK) {
+        let at = from + found;
+        let item = text[at + MARK.len()..]
+            .lines()
+            .map(str::trim_start)
+            .find(|line| !line.is_empty() && !line.starts_with("#[") && !line.starts_with("//"));
+        let is_module = item.is_some_and(|line| {
+            ["mod ", "pub mod ", "pub(crate) mod "]
+                .iter()
+                .any(|start| line.starts_with(start))
+        });
+        if is_module {
+            return &text[..at];
+        }
+        from = at + MARK.len();
+    }
+    text
+}
+
+#[test]
+fn only_a_test_module_ends_the_part_of_a_file_that_is_read() {
+    let file = "fn a() {}\n#[cfg(test)]\nuse std::fmt;\nfn b() {}\n\n#[cfg(test)]\nmod tests {\n    fn c() {}\n}\n";
+    let read = before_unit_tests(file);
+    assert!(
+        read.contains("fn b()") && !read.contains("fn c()"),
+        "{read}"
+    );
+    assert_eq!(before_unit_tests("fn a() {}\n"), "fn a() {}\n");
+    let one_line = "fn a() {}\n#[cfg(test)] mod tests { fn c() {} }\n";
+    assert_eq!(before_unit_tests(one_line), "fn a() {}\n");
+    // An attribute or a comment between the mark and the module hides neither.
+    let spaced =
+        "fn a() {}\n#[cfg(test)]\n#[allow(dead_code)]\n// stand-ins\npub(crate) mod tests {}\n";
+    assert_eq!(before_unit_tests(spaced), "fn a() {}\n");
+}
+
+/// A line of source without the text inside its string literals, so a message that tells the
+/// reader to write `plugin_info!(..)` is not read as a call of it.
+fn without_strings(line: &str) -> String {
+    // A quote written as a character opens no string.
+    let line = line.replace("'\"'", "' '");
+    let mut code = String::with_capacity(line.len());
+    let mut inside = false;
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if inside => {
+                chars.next();
+            }
+            '"' => inside = !inside,
+            _ if !inside => code.push(c),
+            _ => {}
+        }
+    }
+    code
+}
+
+#[test]
+fn a_message_that_mentions_the_macro_is_not_a_call_of_it() {
+    assert!(
+        !without_strings(r#"    "set another with plugin_info!(namespace = \"..\")","#)
+            .contains("plugin_info!")
+    );
+    assert!(
+        without_strings("        m.plugin(navree_kernel::plugin_info!());")
+            .contains("plugin_info!")
+    );
+    assert!(
+        without_strings(r#"let info = PluginInfo::new("navree-flags", "x");"#)
+            .contains("PluginInfo::new(")
+    );
+    assert!(
+        without_strings(r#"if c == '"' { m.plugin(navree_kernel::plugin_info!()); }"#)
+            .contains("plugin_info!")
+    );
+}
+
+/// A module that takes a first-party module type's id and names a plugin by hand.
+struct Probe(ModuleId, navree::plugin::PluginInfo);
+
+impl Module for Probe {
+    fn id(&self) -> ModuleId {
+        self.0
+    }
+
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(self.1.clone());
+    }
+}
+
+/// A module type whose path names a first-party crate only in a generic argument.
+struct Holder<T>(std::marker::PhantomData<T>);
+
+/// Whether an app of `probe` alone reports its plugin first-party, or the text of its boot
+/// errors.
+fn first_party(probe: Probe) -> Result<bool, String> {
+    Navree::app()
+        .module(probe)
+        .plugin_report()
+        .map(|report| report.plugins[0].first_party)
+        .map_err(|errors| errors.to_string())
+}
+
+#[test]
+fn only_the_indexed_crates_at_the_kernels_version_and_in_their_own_crate_are_first_party() {
+    use navree::plugin::PluginInfo;
+    let version = env!("CARGO_PKG_VERSION");
+    let time = ModuleId::of::<navree::time::TimeModule>();
+    assert_eq!(
+        first_party(Probe(
+            time,
+            PluginInfo::new("navree-time", "navree_time", "time", version)
+        )),
+        Ok(true)
+    );
+    assert!(
+        first_party(Probe(
+            time,
+            PluginInfo::new("navree-time", "navree_time", "time", "1.0.0")
+        ))
+        .unwrap_err()
+        .contains("which the framework keeps for itself"),
+        "another version"
+    );
+    assert_eq!(
+        first_party(Probe(
+            time,
+            PluginInfo::new("navree-clock", "navree_time", "clock", version)
+        )),
+        Ok(false)
+    );
+    let wrapped = ModuleId::of::<Holder<navree::time::TimeModule>>();
+    assert!(
+        first_party(Probe(
+            wrapped,
+            PluginInfo::new("navree-time", "navree_time", "time", version)
+        ))
+        .unwrap_err()
+        .contains("which the framework keeps for itself"),
+        "generic arguments do not count"
+    );
+}
+
+#[test]
+fn a_first_party_plugin_keeps_its_reserved_namespace_and_a_community_plugin_does_not() {
+    use navree::plugin::PluginInfo;
+    let version = env!("CARGO_PKG_VERSION");
+    // A first-party plugin keeps its section's namespace and is reported first-party, which is
+    // what every crate's collision check reads to treat it as one of today's modules.
+    let time = Probe(
+        ModuleId::of::<navree::time::TimeModule>(),
+        PluginInfo::new("navree-time", "navree_time", "time", version),
+    );
+    let report = Navree::app().module(time).plugin_report().expect("boots");
+    assert!(report.plugins[0].first_party);
+    // A community plugin in that namespace fails the boot.
+    struct CommunityTime;
+    impl Module for CommunityTime {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PluginInfo::new(
+                "navree-plugin-time",
+                "facade",
+                "time",
+                "1.0.0",
+            ));
+        }
+    }
+    assert_eq!(
+        Navree::app()
+            .module(CommunityTime)
+            .validate()
+            .unwrap_err()
+            .to_string(),
+        "plugin `navree-plugin-time` uses the namespace `time`, which the framework keeps for itself; set another with plugin_info!(namespace = \"..\")"
+    );
+}
+
+/// A plugin embeds its templates and its translations with the macros at the facade's root, and
+/// the traits and types that take them are in `navree::plugin`.
+#[test]
+fn a_plugin_ships_templates_and_translations_through_the_facade() {
+    use navree::plugin::prelude::*;
+    struct Announcements;
+    impl Module for Announcements {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(navree::plugin_info!(namespace = "announcements"))
+                .plugin_templates(navree::embed_templates!("tests/fixtures/plugin-views"))
+                .locales(navree::embed_locales!("tests/fixtures/plugin-locales"));
+        }
+    }
+    assert!(same::<
+        navree::plugin::EmbeddedLocales,
+        navree::contracts::EmbeddedLocales,
+    >());
+    assert!(same::<navree::plugin::TemplateDir, navree::view::TemplateDir>());
+    let report = Navree::app()
+        .module(Announcements)
+        .plugin_report()
+        .expect("valid");
+    assert_eq!(
+        report.plugins[0].modules[0].publishable,
+        [
+            (navree::plugin::PublishTag::Views, 1),
+            (navree::plugin::PublishTag::Locales, 1)
+        ]
+    );
+}
+
+/// `navree::plugin` brings `ClientModule`, and `navree::plugin::prelude` the mount extension.
+#[test]
+fn the_plugin_module_brings_the_client_module_and_the_mount_extension() {
+    assert!(same::<
+        navree::plugin::ClientModule<String, ()>,
+        navree::config::ClientModule<String, ()>,
+    >());
+    use navree::plugin::prelude::*;
+    struct Ledger;
+    impl Module for Ledger {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.mount(
+                navree::http::Mount::new(
+                    "/khata",
+                    navree::http::AppRouter::from_handler(|| async { "khata" }),
+                )
+                .public(),
+            );
+        }
+    }
+    Navree::app()
+        .module(Ledger)
+        .validate()
+        .expect("a module mounts through the plugin prelude");
+}
+
+/// An app's own `mount` on `ModuleBuilder` stays the one called under `navree::prelude::*`.
+/// In a module of its own, so its trait is not in scope beside the plugin prelude above.
+mod own_mount {
+    use navree::prelude::*;
+
+    trait OwnMount {
+        fn mount(&mut self, path: &'static str) -> &mut Self;
+    }
+
+    impl OwnMount for ModuleBuilder {
+        fn mount(&mut self, _path: &'static str) -> &mut Self {
+            self
+        }
+    }
+
+    #[test]
+    fn an_apps_own_mount_method_stays_unambiguous_under_the_prelude() {
+        struct Ledger;
+        impl Module for Ledger {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.mount("/khata");
+            }
+        }
+        Navree::app()
+            .module(Ledger)
+            .validate()
+            .expect("compiles and registers nothing");
+    }
+}
+
+/// A queue store that is only registered: checking the graph never builds a driver, so no method
+/// of it runs.
+struct UnreachableQueue;
+
+impl navree::queue::QueueStore for UnreachableQueue {
+    fn insert(
+        &self,
+        _: navree::queue::NewJob,
+    ) -> navree::BoxFuture<'_, Result<String, navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn reserve<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        _: i64,
+    ) -> navree::BoxFuture<'a, Result<Option<navree::queue::ReservedJob>, navree::queue::QueueError>>
+    {
+        unreachable!()
+    }
+
+    fn complete<'a>(
+        &'a self,
+        _: &'a navree::queue::ReservedJob,
+    ) -> navree::BoxFuture<'a, Result<(), navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn release<'a>(
+        &'a self,
+        _: &'a navree::queue::ReservedJob,
+        _: &'a str,
+        _: i64,
+    ) -> navree::BoxFuture<'a, Result<bool, navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn fail<'a>(
+        &'a self,
+        _: &'a navree::queue::ReservedJob,
+        _: &'a str,
+        _: &'a str,
+        _: i64,
+    ) -> navree::BoxFuture<'a, Result<bool, navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn failed(
+        &self,
+    ) -> navree::BoxFuture<'_, Result<Vec<navree::queue::FailedJob>, navree::queue::QueueError>>
+    {
+        unreachable!()
+    }
+
+    fn retry<'a>(
+        &'a self,
+        _: &'a navree::queue::RetryTarget,
+        _: i64,
+    ) -> navree::BoxFuture<'a, Result<u64, navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn flush_failed(&self) -> navree::BoxFuture<'_, Result<u64, navree::queue::QueueError>> {
+        unreachable!()
+    }
+
+    fn pending_count<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<'a, Result<u64, navree::queue::QueueError>> {
+        unreachable!()
+    }
+}
+
+/// A disk driver that is only registered.
+struct UnreachableDisk;
+
+impl navree::storage::DiskDriver for UnreachableDisk {
+    fn describe(&self) -> String {
+        unreachable!()
+    }
+
+    fn put<'a>(
+        &'a self,
+        _: &'a str,
+        _: navree::http::body::Bytes,
+    ) -> navree::BoxFuture<'a, Result<(), navree::storage::DiskDriverError>> {
+        unreachable!()
+    }
+
+    fn begin_upload<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<
+        'a,
+        Result<Box<dyn navree::storage::DiskUpload>, navree::storage::DiskDriverError>,
+    > {
+        unreachable!()
+    }
+
+    fn read<'a>(
+        &'a self,
+        _: &'a str,
+        _: Option<std::ops::Range<u64>>,
+    ) -> navree::BoxFuture<'a, Result<navree::http::body::Bytes, navree::storage::DiskDriverError>>
+    {
+        unreachable!()
+    }
+
+    fn open<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<'a, Result<navree::storage::OpenedFile, navree::storage::DiskDriverError>>
+    {
+        unreachable!()
+    }
+
+    fn head<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<'a, Result<navree::storage::FileMeta, navree::storage::DiskDriverError>>
+    {
+        unreachable!()
+    }
+
+    fn delete<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<'a, Result<(), navree::storage::DiskDriverError>> {
+        unreachable!()
+    }
+
+    fn list<'a>(
+        &'a self,
+        _: &'a str,
+    ) -> navree::BoxFuture<
+        'a,
+        Result<Vec<navree::storage::FileMeta>, navree::storage::DiskDriverError>,
+    > {
+        unreachable!()
+    }
+}
+
+/// A notification channel that is only registered; the container would build it.
+#[injectable]
+struct UnreachableChannel;
+
+impl navree::notify::ChannelDriver for UnreachableChannel {
+    const NAME: &'static str = "pune_channel";
+
+    fn send<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a Value,
+    ) -> navree::BoxFuture<'a, Result<navree::notify::SentMessage, navree::notify::ChannelError>>
+    {
+        unreachable!()
+    }
+}
+
+/// An AI driver that is only registered.
+#[cfg(feature = "ai")]
+struct UnreachableAi;
+
+#[cfg(feature = "ai")]
+impl navree::ai::AiDriver for UnreachableAi {
+    fn capabilities(&self) -> navree::ai::AiCapabilities {
+        unreachable!()
+    }
+
+    fn chat<'a>(
+        &'a self,
+        _: &'a navree::ai::AiDriverRequest,
+    ) -> navree::BoxFuture<'a, Result<navree::ai::AiDriverAnswer, navree::ai::AiError>> {
+        unreachable!()
+    }
+
+    fn stream<'a>(
+        &'a self,
+        _: &'a navree::ai::AiDriverRequest,
+    ) -> navree::BoxFuture<'a, Result<navree::ai::AiDriverStream, navree::ai::AiError>> {
+        unreachable!()
+    }
+}
+
+/// `navree::plugin` names a driver's name and context as the config crate does, and
+/// `navree::plugin::prelude` alone brings the method that registers a driver of every kind. A
+/// module that registers drivers names no plugin, and registering one builds nothing.
+#[test]
+fn the_plugin_module_brings_the_driver_names_and_every_registration_method() {
+    use navree::plugin::prelude::*;
+
+    assert!(same::<navree::plugin::DriverName, navree::config::DriverName>());
+    assert!(same::<
+        navree::plugin::DriverContext,
+        navree::config::DriverContext,
+    >());
+
+    struct EveryDriverModule;
+
+    impl Module for EveryDriverModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.cache_store("pune_cache", |_| async {
+                Ok::<_, navree::BoxError>(navree::cache::CacheBackend::new(
+                    Arc::new(navree::cache::MemoryStore::with_capacity(100)),
+                    Arc::new(navree::cache::MemoryLockStore::new()),
+                ))
+            });
+            m.queue_store("pune_queue", |_| async {
+                Ok::<_, navree::BoxError>(UnreachableQueue)
+            });
+            m.session_store("pune_session", |_| async {
+                Ok::<_, navree::BoxError>(navree::session::MemoryStore::new())
+            });
+            m.backplane("pune_backplane", |_| async {
+                Ok::<_, navree::BoxError>(navree::realtime::MemoryBackplane::new())
+            });
+            m.mail_transport("pune_post", |_| async {
+                Ok::<_, navree::BoxError>(navree::mail::LogTransport)
+            });
+            m.disk_driver("pune_disk", |_| async {
+                Ok::<_, navree::BoxError>(UnreachableDisk)
+            });
+            m.sms_driver("pune_sms", |_| async {
+                Ok::<_, navree::BoxError>(navree::notify::LogSms::new(None))
+            });
+            m.whatsapp_driver("pune_whatsapp", |_| async {
+                Ok::<_, navree::BoxError>(navree::notify::LogWhatsApp::new())
+            });
+            m.notification_channel::<UnreachableChannel>();
+            #[cfg(feature = "search")]
+            m.search_engine("pune_search", |_| async {
+                Ok::<_, navree::BoxError>(navree::search::MemoryEngine::new())
+            });
+            #[cfg(feature = "ai")]
+            m.ai_provider("pune_ai", |_| async {
+                Ok::<_, navree::BoxError>(UnreachableAi)
+            });
+        }
+    }
+
+    let report = Navree::app()
+        .module(EveryDriverModule)
+        .plugin_report()
+        .expect("registering a driver of every kind passes the graph check");
+    assert!(report.plugins.is_empty(), "{:?}", report.plugins);
+}
+
+/// `navree::plugin` names what a plugin's UI components are made of, and each name is the one
+/// `navree::ui` has (`cargo test -p navree --test facade`).
+#[cfg(feature = "ui")]
+#[test]
+fn the_plugin_module_brings_the_ui_extension_names() {
+    assert!(same::<navree::plugin::UiExtension, navree::ui::UiExtension>());
+    assert!(same::<
+        navree::plugin::ExtensionFile,
+        navree::ui::ExtensionFile,
+    >());
+    assert!(same::<navree::plugin::PageSources, navree::ui::PageSources>());
+    assert!(same::<navree::plugin::Directive, navree::ui::Directive>());
+    assert!(same::<navree::plugin::PagePolicy, navree::ui::PagePolicy>());
+    assert!(same::<
+        dyn navree::plugin::FieldControl,
+        dyn navree::ui::FieldControl,
+    >());
+    assert!(same::<
+        navree::plugin::ControlCx<'static>,
+        navree::ui::ControlCx<'static>,
+    >());
+    assert!(same::<navree::plugin::Control, navree::ui::Control>());
+    // What `FieldControl::draw` is given: a plugin names it to write the method.
+    assert!(same::<
+        navree::plugin::ControlField<'static>,
+        navree::ui::ControlField<'static>,
+    >());
+    assert!(same::<
+        navree::plugin::EditedValue<String>,
+        navree::ui::EditedValue<String>,
+    >());
 }

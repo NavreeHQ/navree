@@ -97,6 +97,7 @@ pub mod components;
 pub mod compress;
 pub mod dates;
 pub mod described;
+pub mod extension;
 pub mod flags;
 pub mod flow;
 pub mod form;
@@ -106,6 +107,7 @@ pub mod icons;
 #[cfg(feature = "image")]
 pub mod image;
 pub mod island;
+pub mod kit;
 pub mod localize;
 pub mod markdown;
 pub mod marketing;
@@ -117,6 +119,7 @@ pub mod op;
 pub mod pages;
 #[cfg(feature = "phone")]
 pub mod phone;
+pub mod policy;
 pub mod render;
 pub mod select;
 pub mod seo;
@@ -134,6 +137,7 @@ mod zone;
 pub use app_files::{AppFont, AppImage, AppSheet, FontDisplay, ImageKind};
 pub use cmd::{Cmd, Commands, Trigger};
 pub use components::*;
+pub use extension::{ExtensionFile, UiExtension};
 /// Country flags under the name the facade documents: `navree::flags` is feature flags,
 /// so an app that has both writes `navree::ui::country_flags::IN`.
 pub use flags as country_flags;
@@ -142,13 +146,16 @@ pub use flow::{
     StepState, Stepper, StepperLabels, Toolbar, ToolbarItem, Tree, TreeChildren, TreeNode,
     TreeSelect, TreeSelection, TreeState, Wizard, WizardOutcome, WizardPage, WizardStep,
 };
-pub use form::{FormView, Money, Submit};
+pub use form::{Control, ControlCx, ControlField, FieldControl, FormView, Money, Submit};
 pub use hint::{Presented, Role, Standard};
 pub use html::{Href, HrefError, LocalHref, SafeHtml};
 pub use island::{Island, IslandScript};
 pub use localize::{Localizer, ReaderWords};
 pub use markdown::{CodeBlock, Markdown, MarkdownLabels, MarkdownTrust};
 pub use module::{UiModule, UiNeed, UiOnDemand};
+#[cfg(feature = "extension-files")]
+#[cfg_attr(docsrs, doc(cfg(feature = "extension-files")))]
+pub use navree_ui_ext_macros::{extension_script, extension_sheet};
 pub use navree_ui_macros::{FilterBar, Form, Options, TableRow, icon_file, icon_set};
 pub use navree_validation::Validate;
 pub use node::{Attr, AttrValue, Element, IntoNodes, Node, Uses, el};
@@ -159,6 +166,7 @@ pub use pages::{
 };
 #[cfg(feature = "phone")]
 pub use phone::{PhoneInput, PhoneLabels};
+pub use policy::{Directive, PagePolicy, PagePolicyOptions, PageSources, PolicySources};
 pub use render::{Measure, measure, render, render_into};
 #[cfg(feature = "orm")]
 pub use select::OptionSource;
@@ -167,8 +175,9 @@ pub use select::{
     Select, SelectLabels,
 };
 pub use shell::{
-    AppPage, AppShell, Collapse, NativeClient, NativeFamily, NativeShellPart, NativeShellParts,
-    NativeSignIn, NavGroup, NavItem, Shell, ShellLayout, UserMenu,
+    AppPage, AppShell, Collapse, ModuleBuilderShellExt, NativeClient, NativeFamily,
+    NativeShellPart, NativeShellParts, NativeSignIn, NavGroup, NavItem, Shell, ShellLayout,
+    ShellNavItem, UserMenu,
 };
 pub use sortable::{
     Arranged, GridColumns, GridFit, GridOrder, GridTile, Landing, ListState, Move, MoveError,
@@ -176,11 +185,17 @@ pub use sortable::{
     SortLayout, SortList, Sortable, SortableGrid, SortableGridLabels, Spot,
 };
 pub use table::{
-    BulkAction, BulkRequest, DataTable, FilterOption, Region, RowAction, TableDensity, TableHeight,
-    TableLabels, TablePage, TableQuery,
+    BulkAction, BulkRequest, DataTable, EditRefused, EditedValue, FilterOption, Region, RowAction,
+    TableDensity, TableHeight, TableLabels, TablePage, TableQuery,
 };
 pub use test_view::TestView;
 #[cfg(feature = "storage")]
 pub use upload::{ChunkStart, ChunkTicket, Received, Refused, UploadCode, UploadError, Uploads};
 pub use upload::{Upload, UploadLabels, UploadLimits, UploadedFile};
 pub use view::{PAGE_CSP, View};
+
+/// Not public API: what the toolkit's exported macros call.
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::components::layout::span_name;
+}

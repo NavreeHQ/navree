@@ -2,10 +2,11 @@
 
 use std::sync::Arc;
 
+use crate::disk_driver_store::DriverStore;
 use crate::path::normalize;
 use crate::provider::Provider;
 use crate::store::{Local, Memory, Prefixed, Store};
-use crate::{DiskConfig, StorageError};
+use crate::{DiskConfig, DiskDriver, RegisteredDisk, StorageError};
 
 /// A disk's store, and the provider that signs its URLs (cloud disks).
 pub(crate) struct Backend {
@@ -14,8 +15,14 @@ pub(crate) struct Backend {
 }
 
 /// Builds the store of disk `name`. Blocking: creates local roots and may
-/// read credential files.
-pub(crate) fn build(name: &str, config: &DiskConfig) -> Result<Backend, StorageError> {
+/// read credential files. `registered` is the driver a module registered
+/// for a disk of [`DiskConfig::Registered`], which `StorageModule` built at
+/// boot.
+pub(crate) fn build(
+    name: &str,
+    config: &DiskConfig,
+    registered: Option<Arc<dyn DiskDriver>>,
+) -> Result<Backend, StorageError> {
     let backend = match config {
         DiskConfig::Local { root, .. } => {
             let local_root =
@@ -34,6 +41,16 @@ pub(crate) fn build(name: &str, config: &DiskConfig) -> Result<Backend, StorageE
         DiskConfig::Memory => Backend {
             store: Arc::new(Memory::new()),
             provider: None,
+        },
+        // Its driver's factory is async and needs the app: only the module
+        // builds it. Such a disk has no URL provider, so its links go
+        // through the app's own signed routes, as a memory disk's do.
+        DiskConfig::Registered(disk) => match registered {
+            Some(driver) => Backend {
+                store: Arc::new(DriverStore(driver)),
+                provider: None,
+            },
+            None => return Err(not_built_in(name, disk)),
         },
         #[cfg(feature = "s3")]
         DiskConfig::S3(config) => cloud::s3(name, config, &cloud::process_env())?,
@@ -67,6 +84,16 @@ pub(crate) fn build(name: &str, config: &DiskConfig) -> Result<Backend, StorageE
             .provider
             .map(|provider| provider.with_prefix(prefix)),
     })
+}
+
+/// The error of disk `name`, whose driver is not built in, where no driver
+/// was built for it (`Storage::new`, which has no app). It does not say a
+/// module registered the driver: nothing has checked that here.
+pub(crate) fn not_built_in(name: &str, disk: &RegisteredDisk) -> StorageError {
+    StorageError::InvalidOptions(format!(
+        "disk `{name}`: the `{}` driver is not built in, and only StorageModule builds a driver a module registers, at boot",
+        disk.driver()
+    ))
 }
 
 #[cfg(any(feature = "s3", feature = "gcs", feature = "azure"))]

@@ -30,7 +30,21 @@ use crate::{ViewError, ViewOptions, filters};
 ///
 /// **Precedence**: the first directory holding a name wins, and any file
 /// wins over an embedded template; among embedded templates the last one
-/// given wins.
+/// given wins. [`ViewModule`](crate::ViewModule) gives the templates of the
+/// modules an app has in dependency order, so a module's template replaces
+/// one of the same name from a module it imports; two other modules that
+/// embed one name log a warning (the later one's is used), and fail the boot
+/// when one of them belongs to a plugin that is not one of the framework's
+/// own. A module of such a plugin may replace a template of a module it
+/// imports when that template is another plugin's, and is then warned about.
+/// Replacing a template of the app or of the framework fails the boot while
+/// the plugin's version is the one rendered: it is not when a template folder
+/// holds a file of that name (letter for letter, with or without reloading), or
+/// when a module of the app registers the name after the plugin's module, with
+/// the plugin's text or with its own. A module of the app is one that names no
+/// plugin and is in no crate that a plugin of the app names; it is after the
+/// plugin's module when it imports it or is registered after it. The
+/// replacement is then said at `info` and the boot goes on.
 ///
 /// **Escaping**: a template's name picks its mode, in any case and also before
 /// a trailing `.j2`, `.jinja` or `.jinja2`. `.txt` and `.md` print values as they
@@ -192,6 +206,22 @@ impl Views {
     /// ```
     pub fn configure(&mut self, configure: impl FnOnce(&mut Environment)) {
         configure(&mut self.env);
+    }
+
+    /// Which of the template `names` a template file provides, and so wins
+    /// over an embedded template of that name (see `Sources::provided_by_files`).
+    pub(crate) fn provided_by_files(&self, names: &[String]) -> Result<Vec<String>, ViewError> {
+        self.sources.provided_by_files(names)
+    }
+
+    /// The name of every template file in the template directories.
+    pub(crate) fn file_names(&self) -> Result<Vec<String>, ViewError> {
+        self.sources.file_names()
+    }
+
+    /// What the environment holds now, to tell what a hook changed.
+    pub(crate) fn fingerprint(&self) -> navree_template::__private::Fingerprint {
+        navree_template::__private::fingerprint(&self.env)
     }
 
     /// The first candidate for `name` that exists, with its full name.

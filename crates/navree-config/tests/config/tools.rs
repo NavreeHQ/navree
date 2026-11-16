@@ -2,7 +2,7 @@
 
 use navree_config::{
     ConfigModule, ConfigRegistry, ConfigSection, ConfigSources, ModuleBuilderConfigExt,
-    PublishOptions, SectionRegistration, publish_section, show,
+    PublishOptions, SectionRegistration, SectionSchema, publish_section, show,
 };
 use navree_contracts::Secret;
 use navree_kernel::{Module, ModuleBuilder, Navree};
@@ -94,6 +94,49 @@ fn publish_can_print_and_refuses_what_it_cannot_describe() {
     let by_hand = PublishOptions::parse(&args(&["toolhand"])).expect("valid");
     let error = publish_section(&by_hand, &registry(), dir.path()).expect_err("no schema");
     assert!(error.contains("does not describe its keys"), "{error}");
+}
+
+/// A section written by hand whose key leaves the `config` folder.
+#[derive(Deserialize)]
+struct Escaping;
+
+impl ConfigSection for Escaping {
+    const KEY: &'static str = "../escape";
+
+    fn schema() -> Option<SectionSchema> {
+        Some(SectionSchema::new("../escape", "", Vec::new()))
+    }
+}
+
+#[test]
+fn publish_checks_the_file_name_and_never_writes_through_a_link() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let config = dir.path().join("config");
+    let escaping = ConfigRegistry::new(&[SectionRegistration::of::<Escaping>()]);
+    let forced = PublishOptions::parse(&args(&["../escape", "--force"])).expect("valid");
+    assert_eq!(
+        publish_section(&forced, &escaping, &config).expect_err("outside the folder"),
+        "config:publish: ../escape.toml is not a safe relative path; nothing was written"
+    );
+    assert!(!dir.path().join("escape.toml").exists());
+
+    // A link in the file's place is refused, also with --force: what it points at keeps
+    // its text.
+    #[cfg(unix)]
+    {
+        let outside = dir.path().join("outside.toml");
+        std::fs::write(&outside, "# Simran Kaur's notes\n").unwrap();
+        std::os::unix::fs::symlink(&outside, config.join("toolcache.toml")).unwrap();
+        let forced = PublishOptions::parse(&args(&["toolcache", "--force"])).expect("valid");
+        assert_eq!(
+            publish_section(&forced, &registry(), &config).expect_err("a link"),
+            "config:publish: toolcache.toml is a symbolic link or inside one; nothing was written"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&outside).unwrap(),
+            "# Simran Kaur's notes\n"
+        );
+    }
 }
 
 #[test]

@@ -14,6 +14,7 @@ use crate::format::Formats;
 use crate::locale::Locale;
 use crate::migration::LocalePreferenceRow;
 use crate::options::{I18nOptions, Missing};
+use crate::plugins::PluginSource;
 use crate::{Args, I18nError, tag};
 
 /// Whose saved locale.
@@ -37,6 +38,9 @@ impl Owner {
 pub(crate) struct Shared {
     pub(crate) options: Arc<I18nOptions>,
     catalog: RwLock<Arc<Catalog>>,
+    /// The Fluent files the app's plugins ship, read again with the app's own
+    /// on a reload.
+    plugins: Vec<PluginSource>,
     db: Option<Arc<Db>>,
     /// `(locale, id)` pairs already warned about.
     warned: Mutex<HashSet<(String, String)>>,
@@ -228,22 +232,25 @@ impl I18n {
     /// problem in the files (a syntax error, a message defined twice),
     /// naming the file and line.
     pub fn new(options: I18nOptions) -> Result<I18n, I18nError> {
-        I18n::load(Arc::new(options), None, false)
+        I18n::load(Arc::new(options), None, Vec::new(), false)
     }
 
-    /// Loads the files; `lenient` keeps going past problems in them (for
-    /// the `i18n:*` commands).
+    /// Loads the files, and the Fluent files of `plugins` below the app's own;
+    /// `lenient` keeps going past problems in them (for the `i18n:*`
+    /// commands).
     pub(crate) fn load(
         options: Arc<I18nOptions>,
         db: Option<Arc<Db>>,
+        plugins: Vec<PluginSource>,
         lenient: bool,
     ) -> Result<I18n, I18nError> {
         options.check().map_err(I18nError::Files)?;
-        let catalog = load_catalog(&options, lenient)?;
+        let catalog = load_catalog(&options, &plugins, lenient)?;
         Ok(I18n {
             shared: Arc::new(Shared {
                 options,
                 catalog: RwLock::new(Arc::new(catalog)),
+                plugins,
                 db,
                 warned: Mutex::new(HashSet::new()),
                 formats: Mutex::new(HashMap::new()),
@@ -349,7 +356,7 @@ impl I18n {
     /// Reads the Fluent files again (what `i18n.reload` does when a file
     /// changes). On a problem the current messages stay.
     pub fn reload(&self) -> Result<(), I18nError> {
-        let catalog = load_catalog(&self.shared.options, false)?;
+        let catalog = load_catalog(&self.shared.options, &self.shared.plugins, false)?;
         *self
             .shared
             .catalog
@@ -392,9 +399,13 @@ impl fmt::Debug for I18n {
     }
 }
 
-fn load_catalog(options: &I18nOptions, lenient: bool) -> Result<Catalog, I18nError> {
+fn load_catalog(
+    options: &I18nOptions,
+    plugins: &[PluginSource],
+    lenient: bool,
+) -> Result<Catalog, I18nError> {
     let files = catalog::load_files(options).map_err(I18nError::Files)?;
-    Catalog::build(options, files, lenient).map_err(I18nError::Files)
+    Catalog::build_with(options, files, plugins, lenient).map_err(I18nError::Files)
 }
 
 #[cfg(test)]

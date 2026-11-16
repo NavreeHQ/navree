@@ -604,8 +604,8 @@ async fn update_record(
     }
 }
 
-/// `{id, name, email}` of the signed-in user, for a page's template.
-async fn user_json(cx: &Cx) -> Value {
+/// `{id, name, email}` of the signed-in user, for a page's or a card's template.
+pub(super) async fn user_json(cx: &Cx) -> Value {
     if let Some(auth) = cx.app.try_get::<navree_auth::AuthService>().await
         && let Ok(Some(user)) = auth.find_user(cx.user_id).await
     {
@@ -645,7 +645,8 @@ pub(crate) async fn custom_page(
             .ok_or_else(|| AppError::internal("custom pages need ViewModule"))?;
         let base = cx.core.options.base();
         let frame = Frame::new(&panel, &headers, format!("{base}/pages/{}", page.slug));
-        let template = page.template.as_deref().unwrap_or_default();
+        // The name the boot settled: an `.html` template for a plugin's page.
+        let template = entry.template.as_str();
         // The session's token, masked afresh for this page.
         let csrf_token = frame
             .csrf()

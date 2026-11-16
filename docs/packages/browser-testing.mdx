@@ -233,11 +233,14 @@ page.assert_missing("@spinner").await?;
 page.assert_count("@deal-card", 3).await?;
 page.assert_enabled("Save").await?;
 page.assert_no_console_errors().await?;
+page.assert_no_policy_violations().await?;
 ```
 
 Assertions retry until they pass or the timeout ends: `assert_see("Deal saved")` passes as soon as the toast appears, and `assert_missing("@spinner")` as soon as loading finishes. `assert_see` looks at visible text only; text in hidden elements doesn't count. `assert_count` counts visible matches, and `assert_value` on a select accepts the option's value or its text.
 
 `assert_no_console_errors` is a check, not a wait: it fails if the page has logged a `console.error` or thrown an uncaught exception since it opened. Failed network requests are written to the console log but don't fail it, since apps often expect some (a 401 before signing in).
+
+`assert_no_policy_violations` is a check too: it fails when the page reported a content security policy violation since it loaded, and its message names each blocked address and directive.
 
 ### Waiting
 

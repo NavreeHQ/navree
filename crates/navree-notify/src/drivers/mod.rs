@@ -1,7 +1,9 @@
 //! The drivers behind the Slack, Teams, SMS, WhatsApp, web push and push
-//! channels: one trait per channel, the HTTP drivers, and their helpers.
+//! channels: one trait per channel, the HTTP drivers, and their helpers;
+//! and the trait of a channel a module adds.
 
 pub(crate) mod apns;
+pub(crate) mod channel;
 pub(crate) mod fcm;
 pub(crate) mod log;
 pub(crate) mod meta;

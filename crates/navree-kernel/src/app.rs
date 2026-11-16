@@ -12,9 +12,12 @@ use crate::builder::{ProviderDef, value_def};
 use crate::command::help_text;
 use crate::container::{AppInner, RequestScope};
 use crate::graph::{Graph, GraphReport, ROOT};
+use crate::introspect::introspect_json;
+use crate::publish;
+use crate::resolver::Stack;
 use crate::{
-    BootErrors, BoxError, CommandSpec, KernelError, Lifecycle, Module, ModuleId, ProviderKey,
-    Resolver, Scope,
+    BootErrors, BoxError, CommandSpec, KernelError, Lifecycle, Module, ModuleId, PluginInfo,
+    PluginsReport, ProviderKey, Resolver, Scope,
 };
 
 /// Default time allowed for each phase of a graceful shutdown.
@@ -78,6 +81,31 @@ impl AppBuilder {
         self.graph().map(|graph| graph.report())
     }
 
+    /// Validates the module graph (as [`validate`](AppBuilder::validate)) and
+    /// reports its plugins and what each of their modules adds. Nothing is
+    /// built.
+    ///
+    /// ```no_run
+    /// use navree_kernel::{Module, ModuleBuilder, Navree};
+    ///
+    /// struct AnnouncementsModule;
+    ///
+    /// impl Module for AnnouncementsModule {
+    ///     fn register(&self, m: &mut ModuleBuilder) {
+    ///         m.plugin(navree_kernel::plugin_info!(title = "Announcements"));
+    ///     }
+    /// }
+    ///
+    /// fn main() -> Result<(), navree_kernel::BootErrors> {
+    ///     let report = Navree::app().module(AnnouncementsModule).plugin_report()?;
+    ///     println!("{report}");
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn plugin_report(&self) -> Result<PluginsReport, BootErrors> {
+        self.graph().map(|graph| graph.plugins_report())
+    }
+
     /// Validates the graph, constructs every singleton (modules in dependency
     /// order), then runs `on_init` and `on_bootstrap` hooks.
     pub async fn boot(self) -> Result<App, BootErrors> {
@@ -126,11 +154,30 @@ impl AppBuilder {
     ///   and prints a summary (or the module tree);
     /// - `help` / `list` prints the commands;
     /// - `introspect [--json]` validates the graph without constructing
-    ///   anything and prints it as JSON ([`GraphReport::to_json`]);
+    ///   anything and prints it as JSON ([`GraphReport::to_json`], with a
+    ///   `"plugins"` array as [`PluginsReport::to_json`] writes it);
+    /// - `plugins [--json]` validates the graph without constructing anything
+    ///   and prints its plugins and what each adds ([`PluginsReport`], or its
+    ///   JSON with `--json`);
+    /// - `plugin:publish <plugin> [--tag views|locales|config|files] [--force]
+    ///   [--dry-run]` validates the graph without constructing anything and
+    ///   copies the files the plugin (a namespace or a plugin's name) ships
+    ///   into the app's folders below the current directory, one line per
+    ///   file; an existing file is kept without `--force`, every path is
+    ///   checked before the first write, and `--dry-run` writes nothing. The
+    ///   `config` tag (and no `--tag`) runs the app's
+    ///   `config:publish --plugin <namespace>`, when the app has that command,
+    ///   after the files are checked and before they are written, so a
+    ///   refusal from either leaves nothing written;
     /// - `<name> [args...]` boots the app, runs the registered command, then
     ///   shuts the app down gracefully; a command marked
     ///   [offline](CommandSpec::offline) skips the boot and the shutdown hooks;
     /// - no command runs `serve` if a module registers it, else `help`.
+    ///
+    /// The built-ins `plugins` and `plugin:publish` yield: when a module
+    /// registers a command of one of these names, that command runs instead,
+    /// with its arguments, and `help` and `introspect` no longer list the
+    /// built-in.
     pub async fn run_with_args(self, args: Vec<String>) -> Result<(), BoxError> {
         let mut args = args.into_iter();
         let command = args.next();
@@ -150,7 +197,60 @@ impl AppBuilder {
                 Ok(())
             }
             Some("introspect") => {
-                println!("{}", self.validate()?.to_json());
+                let graph = self.graph()?;
+                println!(
+                    "{}",
+                    introspect_json(&graph.report(), &graph.plugins_report())
+                );
+                Ok(())
+            }
+            Some("plugins") => {
+                let graph = self.graph()?;
+                if graph.has_command("plugins") {
+                    return self.boot_and_run(graph, "plugins".to_owned(), rest).await;
+                }
+                let mut json = false;
+                for arg in &rest {
+                    if arg == "--json" && !json {
+                        json = true;
+                    } else {
+                        return Err(format!(
+                            "plugins: unexpected argument `{arg}`; usage: plugins [--json]"
+                        )
+                        .into());
+                    }
+                }
+                let report = graph.plugins_report();
+                if json {
+                    println!("{}", report.to_json());
+                } else {
+                    println!("{report}");
+                }
+                Ok(())
+            }
+            Some("plugin:publish") => {
+                let graph = self.graph()?;
+                if graph.has_command("plugin:publish") {
+                    return self
+                        .boot_and_run(graph, "plugin:publish".to_owned(), rest)
+                        .await;
+                }
+                let root = std::env::current_dir()?;
+                // Every file is checked first and the app's `config:publish`
+                // (which checks before it writes) runs next; the files are
+                // written last, so a refusal from either leaves nothing
+                // written.
+                let planned = publish::run(&graph, &rest, &root)?;
+                if let Some(args) = planned.config_args.clone() {
+                    self.boot_and_run(graph, "config:publish".to_owned(), args)
+                        .await?;
+                }
+                for line in publish::write(&root, &planned)? {
+                    println!("{line}");
+                }
+                if planned.dry_run {
+                    println!("Nothing was written (--dry-run).");
+                }
                 Ok(())
             }
             Some("help" | "list" | "--help" | "-h") => {
@@ -412,11 +512,23 @@ pub struct ModuleInfo {
 #[derive(Clone)]
 pub struct AppContext {
     pub(crate) inner: Arc<AppInner>,
+    /// The singletons that were being built when this handle was handed out
+    /// (see `app_in_chain`), which its resolutions continue; empty for every
+    /// other handle.
+    chain: Stack,
 }
 
 impl AppContext {
     pub(crate) fn from_inner(inner: Arc<AppInner>) -> Self {
-        Self { inner }
+        Self {
+            inner,
+            chain: Stack::default(),
+        }
+    }
+
+    /// A handle to the app whose resolutions continue `chain`.
+    pub(crate) fn in_chain(inner: Arc<AppInner>, chain: Stack) -> Self {
+        Self { inner, chain }
     }
 
     /// A handle that does not keep the app alive. Providers that need the
@@ -480,9 +592,9 @@ impl AppContext {
         let graph = &self.inner.graph;
         let mut collected = Vec::new();
         for &m in &graph.order {
-            for (type_id, value) in &graph.modules[m].contributions {
-                if *type_id == TypeId::of::<C>()
-                    && let Ok(value) = value.clone().downcast::<C>()
+            for contribution in &graph.modules[m].contributions {
+                if contribution.type_id == TypeId::of::<C>()
+                    && let Ok(value) = contribution.value.clone().downcast::<C>()
                 {
                     collected.push(Contributed {
                         module: self.module_info(m),
@@ -530,6 +642,61 @@ impl AppContext {
             .collect()
     }
 
+    /// The plugin `module` names itself, if it does.
+    ///
+    /// ```no_run
+    /// use navree_kernel::{Module, ModuleBuilder, ModuleId, Navree};
+    ///
+    /// struct AnnouncementsModule;
+    ///
+    /// impl Module for AnnouncementsModule {
+    ///     fn register(&self, m: &mut ModuleBuilder) {
+    ///         m.plugin(navree_kernel::plugin_info!(title = "Announcements"));
+    ///     }
+    /// }
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), navree_kernel::BootErrors> {
+    ///     let app = Navree::app().module(AnnouncementsModule).boot().await?;
+    ///     let info = app.ctx().plugin(ModuleId::of::<AnnouncementsModule>());
+    ///     assert_eq!(info.and_then(|info| info.title), Some("Announcements"));
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn plugin(&self, module: ModuleId) -> Option<&PluginInfo> {
+        let graph = &self.inner.graph;
+        graph
+            .module_of(module)
+            .and_then(|m| graph.modules[m].plugin.as_ref())
+    }
+
+    /// Every plugin of the app and what each of their modules adds, read
+    /// from the module graph without building anything.
+    ///
+    /// ```no_run
+    /// use navree_kernel::{Module, ModuleBuilder, Navree};
+    ///
+    /// struct AnnouncementsModule;
+    ///
+    /// impl Module for AnnouncementsModule {
+    ///     fn register(&self, m: &mut ModuleBuilder) {
+    ///         m.plugin(navree_kernel::plugin_info!(title = "Announcements"));
+    ///     }
+    /// }
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), navree_kernel::BootErrors> {
+    ///     let app = Navree::app().module(AnnouncementsModule).boot().await?;
+    ///     for plugin in app.ctx().plugins().plugins {
+    ///         println!("{} {}", plugin.info.name, plugin.info.version);
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn plugins(&self) -> PluginsReport {
+        self.inner.graph.plugins_report()
+    }
+
     /// Cancelled when the app shuts down; long-running tasks should watch it.
     pub fn shutdown_token(&self) -> CancellationToken {
         self.inner.shutdown.clone()
@@ -557,9 +724,11 @@ impl AppContext {
         self.root_resolver().resolve_as::<T>(index, &key).await
     }
 
-    /// A resolver with the visibility of the implicit app root.
+    /// A resolver with the visibility of the implicit app root, continuing
+    /// this handle's chain.
     fn root_resolver(&self) -> Resolver {
         Resolver::new(self.inner.clone(), self.inner.graph.modules[ROOT].id, None)
+            .continuing(self.chain.clone())
     }
 
     /// Constructs every singleton (modules in dependency order), then runs

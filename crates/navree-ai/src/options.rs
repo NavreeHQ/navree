@@ -3,9 +3,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use navree_config::{ConfigSection, ConfigTable};
+use navree_config::__private::selector_error;
+use navree_config::{ConfigSection, ConfigTable, DriverName};
 use navree_contracts::Secret;
 use serde::{Deserialize, Serialize};
+
+use crate::drivers::SLOT;
 
 /// The provider drivers Navree ships, which are also the built-in provider
 /// names.
@@ -119,6 +122,10 @@ pub struct ProviderConfig {
     /// The driver: `anthropic`, `openai`, `gemini`, `mistral`, `ollama` or
     /// `bedrock`. Defaults to the table's name, so `[ai.providers.openai]`
     /// needs none; a second account names it (`driver = "openai"`).
+    #[config(
+        driver = "anthropic, openai, gemini, mistral, ollama, bedrock",
+        register = "m.ai_provider"
+    )]
     pub driver: Option<String>,
     /// The API key (Anthropic, OpenAI, Gemini, Mistral). Never serialized.
     #[serde(skip_serializing)]
@@ -440,9 +447,10 @@ impl Default for MemoryOptions {
 }
 
 impl AiOptions {
-    /// Checks the values (the boot calls this).
+    /// Checks the values (the boot calls this, when it reads the section):
+    /// a provider's driver may be one a module registers.
     fn check_values(&self) -> Result<(), String> {
-        let errors = self.check();
+        let errors = self.check_with(true);
         if errors.is_empty() {
             Ok(())
         } else {
@@ -450,18 +458,37 @@ impl AiOptions {
         }
     }
 
-    /// Every problem with these options, each naming its key.
+    /// Every problem with these options, each naming its key. A provider
+    /// whose driver is not one of the built-in drivers is a problem here
+    /// (`Ai::new` builds only those); `AiModule` also takes a driver a
+    /// module registers with `m.ai_provider`.
     pub fn check(&self) -> Vec<String> {
+        self.check_with(false)
+    }
+
+    /// [`check`](AiOptions::check), and with `open` a provider's driver
+    /// may also be the name of a driver a module registers (a lower-case
+    /// letter, then lower-case letters, digits or `_`), which `AiModule`
+    /// resolves at boot.
+    pub(crate) fn check_with(&self, open: bool) -> Vec<String> {
         let mut errors = Vec::new();
         if self.timeout_secs == 0 {
             errors.push("ai.timeout_secs must be at least 1".to_owned());
         }
         for (name, provider) in &self.providers {
             let driver = provider.driver_for(name);
-            if !DRIVERS.contains(&driver) {
+            if DRIVERS.contains(&driver) {
+                continue;
+            }
+            if !open {
                 errors.push(format!(
                     "ai.providers.{name}.driver: unknown driver `{driver}` (expected one of {})",
                     DRIVERS.join(", ")
+                ));
+            } else if !DriverName::is_valid(driver) {
+                errors.push(format!(
+                    "ai.providers.{name}.driver: {}",
+                    selector_error("driver", &SLOT)
                 ));
             }
         }
@@ -621,12 +648,15 @@ impl AiOptions {
     }
 
     /// The hosts of every configured provider URL (and the Qdrant URL):
-    /// the operator chose them, so the SSRF guard lets them through.
+    /// the operator chose them, so the SSRF guard lets them through. A
+    /// provider whose driver a module registers brings its own client, so
+    /// its URL is not among them.
     pub(crate) fn configured_hosts(&self) -> Vec<String> {
         let mut hosts: BTreeSet<String> = self
             .providers
-            .values()
-            .filter_map(|provider| provider.url.as_deref())
+            .iter()
+            .filter(|(name, provider)| DRIVERS.contains(&provider.driver_for(name)))
+            .filter_map(|(_, provider)| provider.url.as_deref())
             .chain(self.vectors.url.as_deref())
             .filter_map(|url| url::Url::parse(url).ok())
             .filter_map(|url| url.host_str().map(str::to_owned))
@@ -735,6 +765,94 @@ mod tests {
                 "missing `{expected}` in:\n{errors}"
             );
         }
+
+        // `Ai::new` keeps the strict check and its text for `cohere`; the
+        // configuration takes it as a driver a module may register, and
+        // refuses what is not a driver name, without repeating it.
+        let unknown = "ai.providers.weird.driver: unknown driver `cohere` (expected one of anthropic, openai, gemini, mistral, ollama, bedrock)";
+        let error = crate::Ai::new(o.clone()).unwrap_err().to_string();
+        assert!(error.contains(unknown), "{error}");
+        let open = o.check_with(true).join("\n");
+        assert!(!open.contains("ai.providers.weird"), "{open}");
+        assert!(open.contains("ai.default: unknown model `nope`"), "{open}");
+        let o = options(json!({ "providers": { "weird": { "driver": "Co here" } } }));
+        let open = o.check_with(true).join("\n");
+        assert_eq!(
+            open,
+            "ai.providers.weird.driver: the driver must be `anthropic`, `openai`, `gemini`, `mistral`, `ollama`, `bedrock` or the name of an AI provider driver registered with m.ai_provider (a lower-case letter, then lower-case letters, digits or _)"
+        );
+        assert!(!open.contains("Co here"), "{open}");
+    }
+
+    #[test]
+    fn ai_config_of_today_reads_as_before() {
+        let o = options(json!({
+            "default": "fast",
+            "providers": {
+                "openai": { "api_key": "sk-proj-1" },
+                "local": { "driver": "ollama", "url": "http://127.0.0.1:11434" }
+            },
+            "models": {
+                "fast": { "provider": "openai", "model": "gpt-5" },
+                "private": { "provider": "local", "model": "llama3.3" }
+            }
+        }));
+        assert_eq!(o.providers["openai"].driver, None);
+        assert_eq!(o.providers["openai"].driver_for("openai"), "openai");
+        assert_eq!(o.providers["local"].driver_for("local"), "ollama");
+        assert!(o.check().is_empty(), "{:?}", o.check());
+        assert!(o.check_with(true).is_empty(), "{:?}", o.check_with(true));
+        assert_eq!(o.validate(), Ok(()));
+        assert!(AiOptions::default().check().is_empty());
+        let defaults = AiOptions::defaults().expect("defaults");
+        assert_eq!(defaults["timeout_secs"], 60);
+        assert_eq!(defaults["max_retries"], 2);
+
+        // `Ai::new`'s texts are unchanged.
+        let error = crate::Ai::new(options(
+            json!({ "providers": { "weird": { "driver": "cohere" } } }),
+        ))
+        .unwrap_err()
+        .to_string();
+        assert_eq!(
+            error,
+            "AI configuration error: ai.providers.weird.driver: unknown driver `cohere` (expected one of anthropic, openai, gemini, mistral, ollama, bedrock)"
+        );
+    }
+
+    #[test]
+    fn the_public_check_stays_strict_while_the_configuration_takes_a_registered_driver() {
+        let o = options(json!({ "providers": { "backup": { "driver": "vaani" } } }));
+        assert_eq!(
+            o.check(),
+            [
+                "ai.providers.backup.driver: unknown driver `vaani` (expected one of anthropic, openai, gemini, mistral, ollama, bedrock)"
+            ]
+        );
+        // The section's validation, which the configuration runs.
+        assert_eq!(o.validate(), Ok(()));
+        assert!(o.check_with(true).is_empty());
+        // Named after its driver, a table needs no `driver`.
+        let o = options(json!({ "providers": { "vaani": {} } }));
+        assert_eq!(o.validate(), Ok(()));
+        assert_eq!(o.check().len(), 1);
+
+        let o = options(json!({ "providers": { "backup": { "driver": "Co here" } } }));
+        assert_eq!(
+            o.validate(),
+            Err("ai.providers.backup.driver: the driver must be `anthropic`, `openai`, `gemini`, `mistral`, `ollama`, `bedrock` or the name of an AI provider driver registered with m.ai_provider (a lower-case letter, then lower-case letters, digits or _)".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_registered_providers_url_is_not_let_through_the_guard() {
+        let o = options(json!({
+            "providers": {
+                "vaani": { "url": "https://ai.ludhiana.example" },
+                "local": { "driver": "openai", "url": "http://10.0.0.5:8000/v1" }
+            }
+        }));
+        assert_eq!(o.configured_hosts(), ["10.0.0.5"]);
     }
 
     #[test]

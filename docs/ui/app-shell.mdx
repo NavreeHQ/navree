@@ -45,7 +45,20 @@ async fn show(shell: AppShell) -> AppPage {
 }
 ```
 
-A module that serves pages of its own and has no business registering a shell for the whole app, such as a debugging tool, builds its own `Shell` and applies it with `Shell::for_request(path, &headers)`, which does what the extractor does.
+A module that serves pages of its own and has no business registering a shell for the whole app, such as a debugging tool, builds its own `Shell` and applies it with `Shell::for_request(path, &headers)`, which does what the extractor does, except drawing the links other modules add (`Shell::contributed`): those need the request's reader, so only the `AppShell` extractor draws them.
+
+### The person and the workspace of a request
+
+The shell you register is the whole app's, so what belongs to one request is set on the `AppShell` the extractor gives: `AppShell::context(text)` puts the line below the app's name for this request (the workspace's name) in place of `Shell::context`, and `AppShell::user_menu(menu)` puts the person signed in at the foot. The app's one `Shell` stays as it is. An app made by `navree new` does both in one extractor, `Desk`, in `src/ui/shell.rs`:
+
+```rust title="src/ui/shell.rs"
+let shell = AppShell::from_request_parts(parts)
+    .await?
+    .context(workspace.name.clone())
+    .user_menu(menu.action("Sign out", "/sign-out"));
+```
+
+A `Desk` from an app made before 1.3 clones the registered `Shell`, sets `.context(..)` and `.user(..)` on the clone and applies it with `Shell::for_request`. It still works, but it draws none of the [links other modules add](#links-other-modules-add). To draw them, take `AppShell::from_request_parts(parts)` in place of the clone and `for_request`, set `.context(..)` and `.user_menu(..)` on it as above, and add `.contributed()` to the shell you register.
 
 ## A whole page
 
@@ -78,7 +91,7 @@ The same page after the button is pressed: the sidebar sits over the page and th
 - **Phones:** below 768 px it becomes a sheet that slides over the page.
 - **Items:** `.count(text)` puts a count at the end, `.sub(item)` nests an item under another, and `.current(true)` marks a link as the current page when several differ only in their query.
 - **The user menu:** `.link` adds a page to read; `.action` adds a button that posts, for signing out or switching workspace. It works with JavaScript off and carries the session's CSRF token when there is one.
-- **For one request:** `AppShell::user_menu(menu)` puts the person signed in at the foot, `AppShell::header_slot(node)` puts something under the app's name (a workspace switcher; `Shell::header_slot` for every page), and `AppShell::csrf(token)` gives the shell's own forms the session's token. The app's one `Shell` stays as it is.
+- **For one request:** `AppShell::user_menu(menu)` puts the person signed in at the foot, `AppShell::context(text)` sets the line below the app's name, `AppShell::header_slot(node)` puts something under the app's name (a workspace switcher; `Shell::header_slot` for every page), and `AppShell::csrf(token)` gives the shell's own forms the session's token. The app's one `Shell` stays as it is.
 - **Counts that come later:** `NavGroup::lazy(id, src)` makes a group a region fetched once the page is up, so a page never waits for its counts; `Shell::live_group(id, path)` draws the answer, the group with its counts. The source is an address on your site: one that is not a `LocalHref` (or is `#`) leaves the group with no source, and it is never fetched.
 - **Your mark:** `Shell::logo(src)` draws a picture of yours in place of Navree's.
 
@@ -101,6 +114,63 @@ let actions = ability.only([
 ```
 
 `show` keeps one part or drops it, and `nav_group(group, items)` returns the group with the items the reader may use, or `None` when none are left, so an empty group is not drawn. The check is on the kind of subject, so a reader who may edit some deals sees the Edit button; the server still decides each record, and a route's guard refuses a request the page should not have offered.
+
+## Links other modules add
+
+A module, a plugin's among them, adds links to the app's sidebar with `m.nav_item(..)`, and asks for a [permission](/docs/security/authorization/#describing-permissions) a link needs. The module below is a plugin's, and belongs in the plugin's own crate (`navree-plugin-announcements`): `m.plugin(navree::plugin_info!(..))` names the crate it is written in, so pasted into an app's crate it would treat every subject of the app as the plugin's. A module of the app adds links the same way, without `m.plugin`:
+
+```rust
+use navree::plugin::Permission;
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use navree::ui::{ShellNavItem, icons};
+
+struct Announcements;
+
+impl Module for Announcements {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(navree::plugin_info!(title = "Announcements"))
+            .permissions(&[
+                Permission::new("announcements.read", "Read the workspace's announcements"),
+                Permission::new(
+                    "announcements.publish",
+                    "Publish an announcement to the workspace",
+                ),
+            ])
+            .nav_item(
+                ShellNavItem::new("Announcements", "/announcements")
+                    .icon(icons::MEGAPHONE)
+                    .permission("announcements.read"),
+            )
+            .nav_item(
+                ShellNavItem::new("New announcement", "/announcements/new")
+                    .permission("announcements.publish")
+                    .order(-1),
+            )
+            .nav_item(ShellNavItem::new("Notice board", "/notice-board"));
+    }
+}
+```
+
+The app draws them by building its shell with `Shell::contributed()`: `Shell::new("Kesar").contributed()`. Without it the shell draws only its own groups, whatever modules add. The links come after the shell's own groups and are never merged into them. Each goes in the group it names with `.group(..)`, else in a group with the plugin's title, else in **More**; the groups come in the order of their first link, and inside a group the links come by `.order(n)`, lower first, then in the order the modules added them. A group none of whose links the reader may open is not drawn.
+
+A link with a permission is drawn only for a reader who holds it, app-wide or in the workspace the request names, decided on the server for every request. A link without `.permission(..)` is public: every reader sees it, a guest too. Hiding a link is not access control: the page it leads to declares its own access, and a route without one fails the boot.
+
+What that costs, and two readers who see only the links granted app-wide:
+
+- Each link with a permission is one permission check per request, on every page drawn in the shell and every call of `GET /_navree/ui/navigation`; in a workspace each check reads the workspace and the reader's role there again, so keep such links few.
+- A demo workspace's guest (`workspace.demo.guest_role`) holds no permission through that role, so a link that needs one is drawn for them only when it is granted app-wide.
+- With `workspace.session_default`, a browser that has not chosen a workspace yet sees only the links granted app-wide, unless the handler takes `CurrentWorkspace` (or the starter kit's `Desk`) before `AppShell`, which gives it its first workspace.
+
+An address that is not a path of the app (another site, a relative path, an empty one) stops the boot, and a link that asks for a permission no module describes with `m.permissions` is warned about at boot.
+
+A front end that draws its own sidebar asks `GET /_navree/ui/navigation`, with the reader's cookie, for the same links: those the caller may open, and nothing about the others. Each link's icon comes as its view box and shapes, or `null`:
+
+```json
+{"items": [{"label": "Notice board", "href": "/notice-board", "group": "Announcements", "order": 0, "icon": null}]}
+```
+
+The answer is never kept by a cache (`Cache-Control: private, no-store`), and the route exists only when a module adds a link.
 
 ## Layouts and folding
 

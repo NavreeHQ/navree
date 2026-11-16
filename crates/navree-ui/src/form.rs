@@ -10,13 +10,14 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::marker::PhantomData;
-#[cfg(feature = "storage")]
+use std::panic::RefUnwindSafe;
 use std::sync::Arc;
 
 use chrono::{NaiveDate, NaiveTime};
 use http::header::{ALLOW, CONTENT_TYPE, COOKIE, ORIGIN};
 use http::request::Parts;
 use http::{HeaderValue, Method, StatusCode};
+use navree_config::Config;
 use navree_http::body::{BodyLimit, read_body};
 use navree_http::csrf::TokenChecked;
 use navree_http::extract::{FromRequest, Request, urlencoded};
@@ -99,12 +100,324 @@ pub enum Widget {
     /// refused unless the app signed it for the person posting and for the folder of the
     /// field's `Uploads`, it has not expired, and its file still fits the field's limits.
     File,
+    /// A field drawn by a control of your own ([`FieldControl`], written
+    /// `#[form(control = PATH)]` on a derived form): the control draws it, and the value it
+    /// posts is held to the control's own check, on every path the value arrives by, before the
+    /// field's type reads it.
+    Control(Control),
 }
 
 impl Widget {
     /// Whether it is the phone input, on a phone type or on text.
     pub fn is_phone(self) -> bool {
         matches!(self, Widget::Phone | Widget::PhoneText)
+    }
+}
+
+/// A form field of your own: what draws it, and the server's check of the value it posts.
+///
+/// A control is a plain value of a type you write, kept in a `static` so that a form can name
+/// it: `#[form(control = PIN_CODE)]` on a field of a derived form, [`Widget::Control`] on a
+/// form described at run time, and [`EditCell::control`](crate::table::EditCell::control) in a
+/// table cell. Its [`name`](FieldControl::name) is the namespace of the plugin that ships it, a
+/// dot and a name of its own: `geo.location`.
+///
+/// What a control draws is one form field named as the field is, drawn inside the field's own
+/// box, which gives it its label, its help and its error. When that field is hidden, the
+/// control marks the part a person uses `data-field-control` and labels it. A control keeps to
+/// the rules of the toolkit's parts: its own parts are elements with a slot of its namespace, a
+/// colon and a word, and every form field inside it is disabled when the field is.
+/// [`kit::assert_control`](crate::kit::assert_control) checks them in a test.
+///
+/// The check runs on every path a value arrives by: a derived form read with [`Submit`], a
+/// step of a [`Wizard`](crate::Wizard), a draft read back with
+/// [`Draft::read_for`](crate::Draft::read_for), a described form through [`check_controls`],
+/// and an inline edit through [`EditedValue::read`](crate::table::EditedValue::read).
+///
+/// A control is one value for the life of the program, shared by every request, so it is
+/// `Send`, `Sync` and [`RefUnwindSafe`]: a form that holds one can cross a caught panic as a
+/// form without one can. A unit struct, as below, is all three.
+///
+/// ```
+/// use navree_ui::form::{Control, ControlCx, ControlField, FieldControl};
+/// use navree_ui::{Node, el};
+/// use navree_validation::AppMessages;
+///
+/// /// A six-digit pin code, typed in one box.
+/// struct PinCode;
+///
+/// impl FieldControl for PinCode {
+///     fn name(&self) -> &'static str {
+///         "app.pin-code"
+///     }
+///
+///     fn draw(&self, field: &ControlField<'_>) -> Node {
+///         el("input")
+///             .attr("type", "text")
+///             .attr("name", field.name.to_owned())
+///             .attr("inputmode", "numeric")
+///             .into()
+///     }
+///
+///     fn check(&self, value: &str, _cx: &ControlCx<'_>) -> Result<(), String> {
+///         if value.len() == 6 && value.bytes().all(|byte| byte.is_ascii_digit()) {
+///             Ok(())
+///         } else {
+///             Err("Enter a six-digit pin code".to_owned())
+///         }
+///     }
+/// }
+///
+/// static PIN_CODE: PinCode = PinCode;
+///
+/// let control = Control::new(&PIN_CODE);
+/// let messages = AppMessages::default();
+/// let cx = ControlCx::new(&messages, None, None);
+/// assert!(control.check("141001", &cx).is_ok());
+/// assert_eq!(control.check("14100", &cx), Err("Enter a six-digit pin code".to_owned()));
+/// ```
+pub trait FieldControl: Send + Sync + RefUnwindSafe + 'static {
+    /// The control's name: the namespace of the plugin that ships it, a dot and a name of its
+    /// own, like `geo.location`.
+    fn name(&self) -> &'static str;
+
+    /// Draws the control. What posts is a form field named `field.name`, drawn outside the
+    /// control's owned bodies: it is the element a person uses, or the control marks that one
+    /// `data-field-control`. The field's box (its label, help and error) is drawn around what
+    /// this returns, and the first form field in it, or the first part marked
+    /// `data-field-control`, gets the field's id and its `aria-describedby`: the control sets
+    /// neither on that part.
+    fn draw(&self, field: &ControlField<'_>) -> Node;
+
+    /// The server's check of a posted value, before the field's type reads it: `Err` is the
+    /// message shown. It is called only through [`Control::check`], so it runs on every path the
+    /// value arrives by. In a form, when the check refuses a text that the field's type cannot
+    /// read either, the check's message is the field's one error; a text the check accepts and
+    /// the type cannot read gets the form's own words for a value that is not valid.
+    ///
+    /// A check that cannot do its work without the app or the configuration (`cx.app()` or
+    /// `cx.config()` is `None`) refuses the value: a value that could not be checked is not
+    /// accepted. [`decode`] and [`decode_with`] give a check neither, and neither does a
+    /// [`Language`] made with `new` or `english`, so a form whose controls need them is read
+    /// with a [`Language`] made by `Language::of`, as [`Submit`] reads it. The default check
+    /// accepts every value.
+    fn check(&self, value: &str, cx: &ControlCx<'_>) -> Result<(), String> {
+        let _ = (value, cx);
+        Ok(())
+    }
+}
+
+/// What a control's check may read: the app's validation messages, and, when the value arrives
+/// through an app, the app and its configuration.
+///
+/// ```
+/// use navree_ui::form::ControlCx;
+/// use navree_validation::AppMessages;
+///
+/// // A check run with no app, as `decode` runs it.
+/// let messages = AppMessages::default();
+/// let cx = ControlCx::new(&messages, None, None);
+/// assert!(cx.app().is_none());
+/// assert!(cx.config().is_none());
+/// ```
+pub struct ControlCx<'a> {
+    messages: &'a AppMessages,
+    app: Option<&'a AppContext>,
+    config: Option<&'a Config>,
+}
+
+impl<'a> ControlCx<'a> {
+    /// A context for a control's own tests, and for a reader that has no [`Language`].
+    pub fn new(
+        messages: &'a AppMessages,
+        app: Option<&'a AppContext>,
+        config: Option<&'a Config>,
+    ) -> ControlCx<'a> {
+        ControlCx {
+            messages,
+            app,
+            config,
+        }
+    }
+
+    /// The app's validation messages, in the reader's language.
+    pub fn messages(&self) -> &AppMessages {
+        self.messages
+    }
+
+    /// The app, when the value arrives through one: [`Submit`], `EditedValue::read`, a wizard
+    /// step, a draft read with `read_for`, [`check_controls`]. `None` from [`decode`] and
+    /// [`decode_with`], and from a [`Language`] made with `new` or `english`.
+    pub fn app(&self) -> Option<&AppContext> {
+        self.app
+    }
+
+    /// The app's configuration, read synchronously (`Config::section`), when the app has one.
+    /// It reads the configuration files: options a module sets in code reach a check through
+    /// `app()` and its `contributions` method, which is synchronous too.
+    pub fn config(&self) -> Option<&Config> {
+        self.config
+    }
+}
+
+/// A control of your own, as a form names it: a copy of a reference to a value of a type that
+/// implements [`FieldControl`], kept in a `static`.
+///
+/// ```
+/// use navree_ui::form::{Control, ControlField, FieldControl, Widget};
+/// use navree_ui::{Node, el};
+///
+/// struct Swatch;
+///
+/// impl FieldControl for Swatch {
+///     fn name(&self) -> &'static str {
+///         "app.swatch"
+///     }
+///
+///     fn draw(&self, field: &ControlField<'_>) -> Node {
+///         el("input")
+///             .attr("type", "color")
+///             .attr("name", field.name.to_owned())
+///             .into()
+///     }
+/// }
+///
+/// static SWATCH: Swatch = Swatch;
+///
+/// let control = Control::new(&SWATCH);
+/// assert_eq!(control.name(), "app.swatch");
+/// assert_eq!(Widget::Control(control), Widget::Control(Control::new(&SWATCH)));
+/// ```
+#[derive(Clone, Copy)]
+pub struct Control(&'static dyn FieldControl);
+
+impl Control {
+    /// A control for forms to name.
+    pub const fn new(control: &'static dyn FieldControl) -> Control {
+        Control(control)
+    }
+
+    /// The control's name, as [`FieldControl::name`] gives it.
+    pub fn name(&self) -> &'static str {
+        self.0.name()
+    }
+
+    /// The control itself.
+    pub fn get(&self) -> &'static dyn FieldControl {
+        self.0
+    }
+
+    /// The one function every path runs a control's check through: `Err` is the message the
+    /// field shows.
+    pub fn check(&self, value: &str, cx: &ControlCx<'_>) -> Result<(), String> {
+        self.0.check(value, cx)
+    }
+}
+
+/// Two controls are the same when their names are.
+impl PartialEq for Control {
+    fn eq(&self, other: &Self) -> bool {
+        self.name() == other.name()
+    }
+}
+
+impl Eq for Control {}
+
+impl std::fmt::Debug for Control {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Control").field(&self.name()).finish()
+    }
+}
+
+/// What a control is drawn for: one field of a form, or one cell of a table.
+///
+/// The struct is non-exhaustive, so a field can be added without breaking a control written
+/// before it: a control reads the fields it needs, and a caller builds one with
+/// [`new`](Self::new) and its setters.
+///
+/// ```
+/// use navree_ui::form::ControlField;
+///
+/// let field = ControlField::new("drop_at").value("Ludhiana").required(true);
+/// assert_eq!(field.name, "drop_at");
+/// assert_eq!(field.id, "drop_at");
+/// assert_eq!(field.value, Some("Ludhiana"));
+/// assert!(field.required);
+/// ```
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub struct ControlField<'a> {
+    /// The name the field's value posts as: the form field the control draws is named so.
+    pub name: &'a str,
+    /// The id the field gives the part it ties (the first form field in what the control
+    /// draws, or the first part marked `data-field-control`): unique per cell in a table.
+    pub id: &'a str,
+    /// The field's label.
+    pub label: &'a str,
+    /// The label element's id, for a part that is not an input (`aria-labelledby`). `None` in
+    /// a table cell, where the control uses `aria-label` with the label's text.
+    pub label_id: Option<&'a str>,
+    /// The value the field holds, as text.
+    pub value: Option<&'a str>,
+    /// Whether the field must be filled in.
+    pub required: bool,
+    /// Whether an error stands on the field.
+    pub invalid: bool,
+    /// Whether the field is read-only for this person: every form field the control draws is
+    /// disabled.
+    pub disabled: bool,
+    /// The hint while the field is empty.
+    pub placeholder: Option<&'a str>,
+    /// The ids of the field's help and error, for the control's parts other than the one the
+    /// field ties: the field gives that one its `aria-describedby` itself.
+    pub described_by: Option<&'a str>,
+}
+
+impl<'a> ControlField<'a> {
+    /// A field named `name`, its id and label `name`, nothing else set.
+    pub fn new(name: &'a str) -> ControlField<'a> {
+        ControlField {
+            name,
+            id: name,
+            label: name,
+            label_id: None,
+            value: None,
+            required: false,
+            invalid: false,
+            disabled: false,
+            placeholder: None,
+            described_by: None,
+        }
+    }
+
+    /// Sets the value the field holds.
+    pub fn value(mut self, value: &'a str) -> Self {
+        self.value = Some(value);
+        self
+    }
+
+    /// Sets whether the field must be filled in.
+    pub fn required(mut self, required: bool) -> Self {
+        self.required = required;
+        self
+    }
+
+    /// Sets whether an error stands on the field.
+    pub fn invalid(mut self, invalid: bool) -> Self {
+        self.invalid = invalid;
+        self
+    }
+
+    /// Sets whether the field is read-only.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Sets the id of the label element.
+    pub fn label_id(mut self, label_id: Option<&'a str>) -> Self {
+        self.label_id = label_id;
+        self
     }
 }
 
@@ -1012,7 +1325,7 @@ impl<T: Form> FormView<T> {
     /// Puts `prefix` and a hyphen before every id the form writes, and before every reference
     /// to one: the form's own, each field's (a label's `for`, `aria-describedby`,
     /// `aria-labelledby`), the ids of its help and its error, and those of the pickers,
-    /// uploads and sliders it draws. Two forms of one type on one page,
+    /// uploads, sliders and controls of your own it draws. Two forms of one type on one page,
     /// such as the same small entry form in two dialogs, then share no id. What the form posts
     /// is as it was, so the handler reads it as before.
     ///
@@ -1336,6 +1649,27 @@ impl<T: Form> FormView<T> {
                 }
                 upload.into()
             }
+            Widget::Control(control) => {
+                let id = self.field_id(field);
+                let label_id = format!("{id}-label");
+                // The ids `Field` gives the help and the error it draws below the control.
+                let described = match (field.help.is_some(), invalid) {
+                    (true, true) => Some(format!("{id}-help {id}-error")),
+                    (true, false) => Some(format!("{id}-help")),
+                    (false, true) => Some(format!("{id}-error")),
+                    (false, false) => None,
+                };
+                let mut drawn = ControlField::new(field.name)
+                    .required(rules.required)
+                    .invalid(invalid)
+                    .label_id(Some(label_id.as_str()));
+                drawn.id = id.as_str();
+                drawn.label = field.label;
+                drawn.value = value;
+                drawn.placeholder = field.placeholder;
+                drawn.described_by = described.as_deref();
+                control.get().draw(&drawn)
+            }
         }
     }
 
@@ -1506,6 +1840,10 @@ impl<T: Form> FormView<T> {
                 let mut box_field = Field::new(id, field.label)
                     .error_opt(error)
                     .control(control);
+                // A control's parts that are not inputs are labelled by the label's id.
+                if matches!(field.widget, Widget::Control(_)) {
+                    box_field = box_field.label_with_id();
+                }
                 // A date and time with no zone in it is read as UTC: the field says so.
                 let in_utc = field.instant && field.widget == Widget::Input(InputKind::DateTime);
                 match (field.help, in_utc) {
@@ -1836,6 +2174,9 @@ pub const FORM_MESSAGES: &[(&str, &str)] = &[
 pub struct Language {
     messages: AppMessages,
     words: ReaderWords,
+    /// The app and its configuration, for the check of a [`Control`]: what `of` finds.
+    app: Option<AppContext>,
+    config: Option<Arc<Config>>,
 }
 
 impl Language {
@@ -1845,15 +2186,33 @@ impl Language {
         Self::new(AppMessages::default(), ReaderWords::english())
     }
 
-    /// A language from the messages and the words of the reader.
+    /// A language from the messages and the words of the reader. It has no app: the check of a
+    /// [`Control`] gets neither the app nor its configuration (`Language::of` gives it both).
     pub fn new(messages: AppMessages, words: ReaderWords) -> Self {
-        Self { messages, words }
+        Self {
+            messages,
+            words,
+            app: None,
+            config: None,
+        }
     }
 
     /// The language of the request behind `ctx`: the app's validation messages and its
-    /// [`Localizer`](crate::localize::Localizer). Without an app, English.
+    /// [`Localizer`](crate::localize::Localizer). Without an app, English. The app and its
+    /// configuration come along, for the check of a [`Control`] to read.
     pub async fn of(ctx: Option<&AppContext>) -> Self {
-        Self::new(AppMessages::of(ctx).await, ReaderWords::of(ctx).await)
+        let mut language = Self::new(AppMessages::of(ctx).await, ReaderWords::of(ctx).await);
+        if let Some(ctx) = ctx {
+            language.config = ctx.try_get::<Config>().await;
+            language.app = Some(ctx.clone());
+        }
+        language
+    }
+
+    /// What a control's check reads, in this language: its messages, and the app and its
+    /// configuration when `of` found them.
+    pub(crate) fn control_cx(&self) -> ControlCx<'_> {
+        ControlCx::new(&self.messages, self.app.as_ref(), self.config.as_deref())
     }
 
     /// The app's validation messages.
@@ -1885,9 +2244,14 @@ impl std::fmt::Debug for Language {
 /// app's `validation.attributes`; a translator's own names still come first), and the
 /// form's own words fill the keys the app has no message for.
 fn words<T: Form>(messages: &AppMessages) -> AppMessages {
+    words_for(messages, T::FIELDS)
+}
+
+/// [`words`] for the fields of a form that is not a type: one described at run time.
+fn words_for(messages: &AppMessages, fields: &[FormField]) -> AppMessages {
     messages
         .clone()
-        .with_attributes(T::FIELDS.iter().map(|field| (field.name, field.label)))
+        .with_attributes(fields.iter().map(|field| (field.name, field.label)))
         .with_default_messages(FORM_MESSAGES.iter().copied())
 }
 
@@ -2354,18 +2718,40 @@ fn slider_spec_in(rules: &[FieldRules], field: &FormField) -> crate::flow::Slide
 /// value the picker drew as off is off here. Text that isn't a day or a time is left to the
 /// type's own error. The days' and times' words are the reader's (`reader`), or the field's
 /// own `error`; the decimal places' are the app's (`form.decimal_places`).
+///
+/// A field drawn by a control is held to the control's check, with `cx`. A control field that
+/// is not optional and was left out of the post reads as empty, as an input does, and the
+/// check holds that value too.
 fn refused_by_pickers<T: Form>(
     pairs: &[(String, String)],
     words: &AppMessages,
     reader: &ReaderWords,
+    cx: &ControlCx<'_>,
 ) -> FieldErrors {
     let dates = &reader.dates;
     let mut out = FieldErrors::new();
-    for (name, value) in pairs {
+    let left_out: Vec<(String, String)> = T::FIELDS
+        .iter()
+        .filter(|field| {
+            matches!(field.widget, Widget::Control(_))
+                && !field.optional
+                && !pairs.iter().any(|(name, _)| name == field.name)
+        })
+        .map(|field| (field.name.to_owned(), String::new()))
+        .collect();
+    for (name, value) in pairs.iter().chain(&left_out) {
         let Some(field) = T::FIELDS.iter().find(|field| field.name == name) else {
             continue;
         };
         let why = match field.widget {
+            // The control's own check, whatever else the field says of its type: a control
+            // over an instant is held to the control's rules, not to the calendar's.
+            Widget::Control(control) => {
+                if value.is_empty() && field.optional {
+                    continue;
+                }
+                control.check(value, cx).err()
+            }
             // A date and time has no picker rules of its own, but the calendar and the
             // time of day are the same: a year outside 1 to 9999, a leap second and a
             // fraction of a second are refused.
@@ -2451,30 +2837,118 @@ pub fn decode_with<T>(pairs: &[(String, String)], messages: &AppMessages) -> Res
 where
     T: Form + DeserializeOwned + Validate,
 {
-    decode_in::<T>(pairs, messages, &ReaderWords::english())
+    decode_in::<T>(pairs, messages, &ReaderWords::english(), None, None)
 }
 
 /// [`decode`] in the reader's language: the messages of the app, and the names of months
 /// and the words of the date, time and slider checks of the reader. What [`Submit`] uses
-/// ([`Language::of`] reads both from the request's app).
+/// ([`Language::of`] reads both from the request's app). It is the one decode that gives the
+/// check of a [`Control`] the app and its configuration, when the language has them.
 pub fn decode_for<T>(pairs: &[(String, String)], language: &Language) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
-    decode_in::<T>(pairs, &language.messages, &language.words)
+    decode_in::<T>(
+        pairs,
+        &language.messages,
+        &language.words,
+        language.app.as_ref(),
+        language.config.as_deref(),
+    )
+}
+
+/// Runs the check of every field in `fields` that a control draws, as [`decode_for`] does for
+/// a derived form: for the reader of a form described at run time, which has no type to decode
+/// into. The errors are by field name, a field's own `error` in place of the control's message.
+/// An optional field left empty is not checked, and a field that is not optional and is left
+/// out of `pairs` reads as empty, and is checked as that. The control reads the app and its
+/// configuration from `language` (`Language::of` finds both).
+///
+/// ```
+/// use navree_ui::form::{
+///     Control, ControlCx, ControlField, FieldControl, FormField, Language, Widget, check_controls,
+/// };
+/// use navree_ui::{Node, el};
+///
+/// struct Slot;
+///
+/// impl FieldControl for Slot {
+///     fn name(&self) -> &'static str {
+///         "app.slot"
+///     }
+///
+///     fn draw(&self, field: &ControlField<'_>) -> Node {
+///         el("input").attr("name", field.name.to_owned()).into()
+///     }
+///
+///     fn check(&self, value: &str, _cx: &ControlCx<'_>) -> Result<(), String> {
+///         match value {
+///             "morning" | "evening" => Ok(()),
+///             _ => Err("Choose morning or evening".to_owned()),
+///         }
+///     }
+/// }
+///
+/// static SLOT: Slot = Slot;
+///
+/// let fields = [FormField::new(
+///     "slot",
+///     "Delivery slot",
+///     Widget::Control(Control::new(&SLOT)),
+/// )];
+/// let posted = vec![("slot".to_owned(), "night".to_owned())];
+/// let errors = check_controls(&fields, &posted, &Language::english());
+/// assert_eq!(errors["slot"][0], "Choose morning or evening");
+/// ```
+pub fn check_controls(
+    fields: &[FormField],
+    pairs: &[(String, String)],
+    language: &Language,
+) -> FieldErrors {
+    let words = words_for(&language.messages, fields);
+    let cx = ControlCx::new(&words, language.app.as_ref(), language.config.as_deref());
+    let mut errors = FieldErrors::new();
+    for field in fields {
+        let Widget::Control(control) = field.widget else {
+            continue;
+        };
+        let mut posted: Vec<&str> = pairs
+            .iter()
+            .filter(|(name, _)| name == field.name)
+            .map(|(_, value)| value.as_str())
+            .collect();
+        if posted.is_empty() {
+            posted.push("");
+        }
+        for value in posted {
+            if value.is_empty() && field.optional {
+                continue;
+            }
+            if let Err(text) = control.check(value, &cx) {
+                let text = field.error.map_or(text, str::to_owned);
+                let list = errors.entry(field.name.to_owned()).or_default();
+                if !list.contains(&text) {
+                    list.push(text);
+                }
+            }
+        }
+    }
+    errors
 }
 
 fn decode_in<T>(
     pairs: &[(String, String)],
     messages: &AppMessages,
     reader: &ReaderWords,
+    app: Option<&AppContext>,
+    config: Option<&Config>,
 ) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
     let words = words::<T>(messages);
     let over = over_limit::<T>(pairs, &words);
-    match decode_values::<T>(pairs, &words, reader) {
+    match decode_values::<T>(pairs, &words, reader, app, config) {
         Ok(value) if over.is_empty() => Ok(value),
         Ok(_) => Err(over),
         Err(mut errors) => {
@@ -2519,6 +2993,8 @@ fn decode_values<T>(
     pairs: &[(String, String)],
     words: &AppMessages,
     reader: &ReaderWords,
+    app: Option<&AppContext>,
+    config: Option<&Config>,
 ) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
@@ -2529,7 +3005,8 @@ where
         .iter()
         .map(|(name, value)| (name.clone(), browser_text::<T>(name, value)))
         .collect();
-    let refused = refused_by_pickers::<T>(&pairs, words, reader);
+    let cx = ControlCx::new(words, app, config);
+    let refused = refused_by_pickers::<T>(&pairs, words, reader, &cx);
     let outcome = read::<T>(&pairs, words);
     if refused.is_empty() {
         return outcome;
@@ -2539,11 +3016,19 @@ where
     // the rules or the type already said what is wrong with it, that is the message.
     let mut errors = outcome.err().unwrap_or_default();
     for (name, texts) in refused {
-        let says_once = T::FIELDS
-            .iter()
-            .any(|field| field.name == name && (is_moment(field) || field.decimal));
+        let field = T::FIELDS.iter().find(|field| field.name == name);
+        let says_once = field.is_some_and(|field| is_moment(field) || field.decimal);
         if says_once && errors.contains_key(&name) {
             continue;
+        }
+        // A control that refuses a text has said what is wrong with it: when the field's type
+        // cannot read that text either, the form's own words for a value of the wrong type
+        // would say it a second time, less exactly.
+        if let Some(field) = field.filter(|field| matches!(field.widget, Widget::Control(_))) {
+            let of_the_type = words.render(field.name, type_error_key(field), &[]);
+            if let Some(list) = errors.get_mut(&name) {
+                list.retain(|text| *text != of_the_type);
+            }
         }
         let list = errors.entry(name).or_default();
         for text in texts {
@@ -2612,6 +3097,7 @@ where
         match field.widget {
             Widget::Checkbox | Widget::Switch => kept.push((field.name, "false")),
             Widget::Input(_)
+            | Widget::Control(_)
             | Widget::Textarea { .. }
             | Widget::Select
             | Widget::Listbox

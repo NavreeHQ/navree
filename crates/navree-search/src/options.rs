@@ -5,10 +5,12 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use navree_config::{ConfigSection, ConfigTable, SectionSchema};
+use navree_config::__private::selector_error;
+use navree_config::{ConfigSection, ConfigTable, DriverName, DriverNameError, SectionSchema};
 use navree_contracts::Secret;
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::drivers::SLOT;
 use crate::engine::SearchEngine;
 use crate::settings::valid_name;
 
@@ -106,6 +108,12 @@ pub enum Engine {
     Memory,
     /// An engine of the app's own.
     Custom(Arc<dyn SearchEngine>),
+    /// An engine a module registers under this name with
+    /// [`m.search_engine`](crate::ModuleBuilderSearchExt::search_engine)
+    /// (`"kosh"`); its settings are `search.{name}`, and `SearchModule`
+    /// builds it at boot. Holding a built-in name, it is that built-in
+    /// engine with its defaults.
+    Registered(DriverName),
 }
 
 impl Engine {
@@ -173,8 +181,9 @@ impl Engine {
         self
     }
 
-    /// `postgres`, `meilisearch`, `typesense`, `tantivy`, `memory` or the
-    /// custom engine's name.
+    /// `postgres`, `meilisearch`, `typesense`, `tantivy`, `memory`, the
+    /// custom engine's name, or the name a registered engine is selected
+    /// under.
     pub fn name(&self) -> &'static str {
         match self {
             Engine::Postgres(_) => "postgres",
@@ -183,6 +192,25 @@ impl Engine {
             Engine::Tantivy(_) => "tantivy",
             Engine::Memory => "memory",
             Engine::Custom(engine) => engine.name(),
+            Engine::Registered(name) => name.as_str(),
+        }
+    }
+
+    /// The engine, with a `Registered` built-in name turned into that
+    /// built-in engine with its defaults (`Registered("memory")` is
+    /// `Memory`, and `Registered("meilisearch")` a Meilisearch engine
+    /// without a URL, which the check refuses).
+    pub(crate) fn resolved(self) -> Engine {
+        match self {
+            Engine::Registered(name) => match name.as_str() {
+                "postgres" | "database" => Engine::postgres(),
+                "meilisearch" => Engine::meilisearch(""),
+                "typesense" => Engine::typesense(""),
+                "tantivy" => Engine::Tantivy(TantivyOptions::default()),
+                "memory" => Engine::Memory,
+                _ => Engine::Registered(name),
+            },
+            other => other,
         }
     }
 }
@@ -212,6 +240,7 @@ impl fmt::Debug for Engine {
             Engine::Tantivy(options) => f.debug_tuple("Tantivy").field(options).finish(),
             Engine::Memory => f.write_str("Memory"),
             Engine::Custom(engine) => f.debug_tuple("Custom").field(&engine.name()).finish(),
+            Engine::Registered(name) => f.debug_tuple("Registered").field(name).finish(),
         }
     }
 }
@@ -427,7 +456,8 @@ impl SearchOptions {
                     );
                 }
             }
-            Engine::Memory | Engine::Custom(_) => {}
+            // A registered engine reads its own settings when it is built.
+            Engine::Memory | Engine::Custom(_) | Engine::Registered(_) => {}
         }
         if let Some(vectors) = &self.vectors {
             if vectors.dimensions == 0 {
@@ -504,7 +534,10 @@ impl<'de> Deserialize<'de> for SearchOptions {
 struct RawSearchOptions {
     /// The engine: `postgres` (default; `database` is the same), `meilisearch`,
     /// `typesense`, `tantivy` or `memory`.
-    #[config(one_of = "postgres, meilisearch, typesense, tantivy, memory")]
+    #[config(
+        driver = "postgres, database, meilisearch, typesense, tantivy, memory",
+        register = "m.search_engine"
+    )]
     engine: String,
     /// The server URL (`meilisearch` and `typesense`).
     url: Option<String>,
@@ -609,11 +642,13 @@ impl RawSearchOptions {
             },
             "tantivy" => Engine::Tantivy(self.tantivy),
             "memory" => Engine::Memory,
-            other => {
-                return Err(format!(
-                    "`search.engine` must be postgres, meilisearch, typesense, tantivy or memory, not `{other}`"
-                ));
-            }
+            // Any other name is an engine a module registers, which the
+            // boot resolves; the error never repeats the value.
+            other => match DriverName::new(other) {
+                Ok(name) => Engine::Registered(name),
+                Err(DriverNameError::Invalid) => return Err(selector_error("engine", &SLOT)),
+                Err(error) => return Err(error.to_string()),
+            },
         };
         let vectors = self.vectors.store.map(|store| VectorOptions {
             store,
@@ -712,8 +747,13 @@ mod tests {
 
     #[test]
     fn invalid_options_name_the_key() {
-        let error = parse(json!({"engine": "elastic"})).unwrap_err();
-        assert!(error.contains("`search.engine`"), "{error}");
+        // A lower-case name is an engine a module registers: the boot
+        // resolves it (and fails naming `search.engine` when none does).
+        let options = parse(json!({"engine": "elastic"})).unwrap();
+        assert_eq!(options.engine.name(), "elastic");
+        let error = parse(json!({"engine": "elastic search"})).unwrap_err();
+        assert!(error.contains("the engine must be"), "{error}");
+        assert!(!error.contains("elastic search"), "{error}");
         let error = parse(json!({"engine": "meilisearch"})).unwrap_err();
         assert!(error.contains("`search.url`"), "{error}");
         let error = parse(json!({"engine": "typesense", "url": "http://ts:8108"})).unwrap_err();
@@ -722,6 +762,47 @@ mod tests {
         assert!(error.contains("`search.chunk_size`"), "{error}");
         let error = parse(json!({"vectors": {"store": "qdrant"}})).unwrap_err();
         assert!(error.contains("`search.vectors.url`"), "{error}");
+    }
+
+    #[test]
+    fn search_config_of_today_reads_as_before() {
+        let read = |value: &str| -> Engine {
+            let options: SearchOptions = serde_json::from_value(json!({"engine": value})).unwrap();
+            options.engine
+        };
+        assert!(matches!(read("postgres"), Engine::Postgres(_)));
+        assert!(matches!(read("database"), Engine::Postgres(_)));
+        assert!(matches!(read("Memory"), Engine::Memory));
+        assert!(matches!(read(" typesense "), Engine::Typesense { .. }));
+        assert!(matches!(read("meilisearch"), Engine::Meilisearch { .. }));
+        assert!(matches!(read("TANTIVY"), Engine::Tantivy(_)));
+        for (value, name) in [
+            ("postgres", "postgres"),
+            ("database", "postgres"),
+            ("Memory", "memory"),
+            (" typesense ", "typesense"),
+        ] {
+            assert_eq!(read(value).name(), name, "{value}");
+        }
+        assert_eq!(format!("{:?}", read("Memory")), "Memory");
+        let defaults = SearchOptions::defaults().expect("defaults");
+        assert_eq!(defaults["engine"], "postgres");
+        assert_eq!(SearchOptions::default().engine.name(), "postgres");
+
+        // Another lower-case name, written in any case, is a registered
+        // engine's; a built-in name held as one is that built-in engine.
+        let kosh = read(" Kosh ");
+        assert_eq!(kosh.name(), "kosh");
+        assert_eq!(format!("{kosh:?}"), "Registered(\"kosh\")");
+        assert!(matches!(kosh.resolved(), Engine::Registered(name) if name.as_str() == "kosh"));
+        assert!(matches!(
+            Engine::Registered(DriverName::from_static("memory")).resolved(),
+            Engine::Memory
+        ));
+        assert!(matches!(
+            Engine::Registered(DriverName::from_static("database")).resolved(),
+            Engine::Postgres(_)
+        ));
     }
 
     #[test]
@@ -822,13 +903,17 @@ mod tests {
         let engine = schema.fields.iter().find(|f| f.name == "engine").unwrap();
         assert_eq!(
             engine.ty,
-            navree_config::FieldType::choice(&[
-                "postgres",
-                "meilisearch",
-                "typesense",
-                "tantivy",
-                "memory"
-            ])
+            navree_config::FieldType::Driver {
+                built_in: vec![
+                    "postgres".into(),
+                    "database".into(),
+                    "meilisearch".into(),
+                    "typesense".into(),
+                    "tantivy".into(),
+                    "memory".into(),
+                ],
+                register: "m.search_engine".into(),
+            }
         );
         let defaults = SearchOptions::defaults().expect("defaults");
         assert_eq!(defaults["engine"], "postgres");

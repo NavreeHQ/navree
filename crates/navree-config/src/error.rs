@@ -99,6 +99,17 @@ pub enum ConfigError {
         /// The underlying error.
         source: std::io::Error,
     },
+    /// A driver selector names a driver that does not resolve, or a
+    /// registration is refused (see `CheckReport::with_drivers`).
+    #[error("{key}: {message}")]
+    Driver {
+        /// The key of the selector (`cache.store`,
+        /// `storage.disks.uploads.driver`).
+        key: String,
+        /// What is wrong, naming the driver and the method that registers
+        /// one: the sentence the boot fails with.
+        message: String,
+    },
 }
 
 /// Masks the strings a `Deserialize` implementation quotes in its errors
@@ -152,5 +163,45 @@ mod tests {
             redact_values("missing configuration field \"url\""),
             "missing configuration field \"url\""
         );
+    }
+
+    #[test]
+    fn driver_errors_name_the_key() {
+        use crate::check::{CheckOptions, CheckReport};
+        use crate::{ConfigSources, DriverSlot};
+
+        // What `config:check` holds for a setting that names no driver
+        // carries the setting's key, in its `Display` too: the selector's
+        // own, and a table's for a selector of a table of tables.
+        let kind = DriverSlot::new("vault.kind", &["memory"], "m.vault_kind", "vault kind");
+        let boxes = DriverSlot::new(
+            "vault.boxes.*.driver",
+            &["memory"],
+            "m.vault_box",
+            "vault box",
+        );
+        let sources = ConfigSources::new().set(
+            "vault",
+            serde_json::json!({"kind": "tijori", "boxes": {"almari": {"driver": "tijori"}}}),
+        );
+        let report = CheckReport::run(&sources, &[], &CheckOptions::default())
+            .unwrap()
+            .with_drivers(&sources, &[kind, boxes], &[]);
+        let errors: Vec<(String, String)> = report
+            .errors
+            .iter()
+            .filter_map(|error| match error {
+                super::ConfigError::Driver { key, .. } => Some((key.clone(), error.to_string())),
+                _ => None,
+            })
+            .collect();
+        let keys: Vec<&str> = errors.iter().map(|(key, _)| key.as_str()).collect();
+        assert_eq!(keys, ["vault.kind", "vault.boxes.almari.driver"]);
+        for (key, text) in &errors {
+            assert!(
+                text.starts_with(&format!("{key}: {key} does not name a built-in vault ")),
+                "{text}"
+            );
+        }
     }
 }

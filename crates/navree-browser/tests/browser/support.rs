@@ -7,7 +7,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use http::header::{COOKIE, SET_COOKIE};
+use http::header::{CONTENT_SECURITY_POLICY, COOKIE, SET_COOKIE};
 use http::{HeaderMap, Method};
 use navree_browser::{Browser, TestServer};
 use navree_http::response::{Html, IntoResponse, Redirect};
@@ -91,6 +91,21 @@ const TALL: &str = r#"<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Tall</title></head>
 <body style="margin:0"><div style="height:3000px;background:linear-gradient(red,blue)">Top</div><p>Bottom</p></body></html>"#;
 
+/// The policy navree-ui's `PAGE_CSP` holds, which pages of that toolkit are served with. This
+/// crate does not depend on navree-ui, so the text is written out; what the tests below need of
+/// it is `img-src 'self' data:`.
+const PAGE_POLICY: &str = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+
+/// A page that asks for a map tile from another host.
+const POLICY_IMAGE: &str = r#"<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Map tile</title></head>
+<body><h1>Map tile</h1><img src="https://tile.openstreetmap.org/0/0/0.png" alt=""></body></html>"#;
+
+/// The same page without the picture.
+const POLICY_CLEAN: &str = r#"<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>No map tile</title></head>
+<body><h1>No map tile</h1></body></html>"#;
+
 #[derive(Deserialize)]
 struct LoginForm {
     email: String,
@@ -119,6 +134,14 @@ fn page(path: &'static str, html: &'static str) -> RouteDef {
     RouteDef::on(Method::GET, path, move || async move { Html(html) }).public()
 }
 
+/// A page served with `PAGE_POLICY` in its `Content-Security-Policy` header.
+fn page_with_policy(path: &'static str, html: &'static str) -> RouteDef {
+    RouteDef::on(Method::GET, path, move || async move {
+        ([(CONTENT_SECURITY_POLICY, PAGE_POLICY)], Html(html))
+    })
+    .public()
+}
+
 impl Controller for FixtureController {
     fn prefix(&self) -> &'static str {
         ""
@@ -138,6 +161,8 @@ impl Controller for FixtureController {
             page("!/mobile", MOBILE),
             page("!/broken", BROKEN),
             page("!/tall", TALL),
+            page_with_policy("!/policy-image", POLICY_IMAGE),
+            page_with_policy("!/policy-clean", POLICY_CLEAN),
             RouteDef::on(Method::GET, "!/", |headers: HeaderMap| async move {
                 let signed_in = headers
                     .get_all(COOKIE)

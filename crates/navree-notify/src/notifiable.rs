@@ -1,5 +1,6 @@
 //! [`Notifiable`]: who receives notifications.
 
+use navree_config::DriverName;
 use uuid::Uuid;
 
 use crate::{SlackRoute, TeamsRoute};
@@ -73,6 +74,15 @@ pub trait Notifiable: Send + Sync {
     /// The WhatsApp number the WhatsApp channel sends to; `None` (the
     /// default) skips it.
     fn route_whatsapp(&self) -> Option<String> {
+        None
+    }
+
+    /// Where `channel`, a channel a module adds (`Channel::named("doot")`),
+    /// sends to: a room, a handle, or a webhook URL (recorded by its host
+    /// only, as a webhook's URL may be a secret); `None` (the default) skips
+    /// it.
+    fn route_channel(&self, channel: DriverName) -> Option<String> {
+        let _ = channel;
         None
     }
 

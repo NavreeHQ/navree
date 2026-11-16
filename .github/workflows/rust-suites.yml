@@ -336,6 +336,14 @@ jobs:
           npm ci --prefix e2e/oidc-jose --ignore-scripts
           cargo test --locked --all-features --package navree-oauth --test oauth             oidc::an_independent_jwt_library_verifies_the_id_tokens -- --ignored --exact --nocapture
 
+      - name: Drive the map plugin's components in Chrome
+        # The worked example of a plugin's own components (plugins/geo): its map, its
+        # drop-point field in a form and in a table cell, and the page policy, in the
+        # browser this job found above.
+        if: ${{ !cancelled() }}
+        run: |
+          cargo test --locked --all-features --package navree-plugin-geo --test browser -- --ignored --test-threads 1 --nocapture
+
       - name: Test billing on the Stripe test mode and the Paddle sandbox
         # Opt-in: runs only when the repository has the secrets (a Stripe
         # test-mode key, a Paddle sandbox API key); without them each test

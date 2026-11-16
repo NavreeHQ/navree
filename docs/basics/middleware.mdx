@@ -313,6 +313,36 @@ impl Controller for TokensController {
 
 A layer added this way runs inside the route pipeline: after the access checks, guards and authorization, within the route's timeout, right around the handler. A controller can't mix macro routes and hand-written ones, but a module can register both kinds of controller.
 
+## A layer whose service can fail
+
+`router.layer(..)` and `Endpoint::layer(..)` take layers whose service can't fail. Many Tower layers make a service that can, such as `tower::timeout::TimeoutLayer`, whose error says the request took too long. Wrap such a layer in `FallibleLayer::new(..)`: the service's error then answers as a 500 `AppError` with the error as its source, so the client sees `Internal server error`, and in any slot but `Edge` the log records the error and `m.map_error::<E>(..)` turns it into another answer. The `Edge` slot sits outside the app's error rendering: there the error answers as a 500 in the error format, neither mapped nor logged.
+
+```rust title="src/modules/khata_timeout.rs"
+use std::time::Duration;
+
+use navree::http::{FallibleLayer, GlobalLayer, LayerSlot};
+use navree::prelude::*;
+
+#[module(register = Self::wire)]
+pub struct KhataTimeoutModule;
+
+impl KhataTimeoutModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.http_layer(GlobalLayer::new(LayerSlot::Context, "timeout", |_ctx, router| {
+            Ok(router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
+                Duration::from_secs(1),
+            ))))
+        }))
+        // The timeout's error answers 503 instead of 500.
+        .map_error::<tower::timeout::error::Elapsed>(|_| {
+            Some(AppError::service_unavailable("The khata took too long."))
+        });
+    }
+}
+```
+
+A request that takes longer than a second gets a 503 in the [error format](/docs/basics/errors/), with the message `The khata took too long.`; a quicker one gets its own answer. The same `FallibleLayer` goes on one hand-written route with `Endpoint::layer(..)`, and on a router with `Router::route_layer(..)`. A service that is not ready answers as its error does. See [connecting an existing crate](/docs/plugins/existing-crates/#tower-middleware).
+
 ## The order, all together
 
 ```text

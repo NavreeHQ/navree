@@ -3,6 +3,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use navree_config::__private::lookup_in;
+use navree_config::DriverName;
 use navree_contracts::Secret;
 use serde::Deserialize;
 use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
@@ -10,6 +12,7 @@ use serde_json::{Map, Value, json};
 use url::Url;
 
 use crate::api::decoded;
+use crate::drivers::SLOT;
 use crate::{
     ArrayTransport, DkimConfig, DkimSigner, FailoverTransport, LogTransport, MailError,
     MailTransport, MailgunConfig, MailgunRegion, MailgunTransport, PostmarkConfig,
@@ -31,6 +34,7 @@ use crate::{
 /// | [`LogTransport`] | `{ type = "log" }` | `"log"` |
 /// | [`ArrayTransport`] | `{ type = "array" }` | `"array"` |
 /// | [`FailoverTransport`] | `{ type = "failover", transports = ["ses://...", "smtps://..."] }` | — |
+/// | A transport a module registers | — | `"dakghar"` |
 ///
 /// Every API transport takes an `endpoint` (`?endpoint=` in a shorthand)
 /// to reach another base URL. Percent-encode reserved characters in
@@ -38,6 +42,12 @@ use crate::{
 /// `transports` may also be one comma-separated string of shorthands
 /// (`APP_MAIL__TRANSPORT__TRANSPORTS=ses://...,log`). URLs, keys and tokens
 /// are [`Secret`]s: `Debug` never prints them.
+///
+/// A bare name is a transport a module registers with
+/// [`m.mail_transport`](crate::ModuleBuilderMailTransportExt::mail_transport)
+/// only when the process already knows the name: reading one never adds a
+/// name, so the same rule holds for a request body or a stored row, and a
+/// name no module registered keeps the `unknown mail transport` error.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[non_exhaustive]
 pub enum TransportConfig {
@@ -69,6 +79,12 @@ pub enum TransportConfig {
     Array,
     /// Try each transport in order until one delivers.
     Failover(Vec<TransportConfig>),
+    /// A transport a module registers under this name with
+    /// [`m.mail_transport`](crate::ModuleBuilderMailTransportExt::mail_transport)
+    /// (`"dakghar"`); its settings are `mail.{name}`.
+    /// [`MailModule`](crate::MailModule) builds it at boot, and
+    /// [`build`](TransportConfig::build) refuses it.
+    Registered(DriverName),
 }
 
 impl TransportConfig {
@@ -93,7 +109,8 @@ impl TransportConfig {
     }
 
     /// The transport's type: `smtp`, `ses`, `mailgun`, `postmark`,
-    /// `resend`, `log`, `array` or `failover`.
+    /// `resend`, `log`, `array`, `failover`, or the name a transport is
+    /// registered under.
     pub fn kind(&self) -> &'static str {
         match self {
             TransportConfig::Smtp { .. } => "smtp",
@@ -104,12 +121,15 @@ impl TransportConfig {
             TransportConfig::Log => "log",
             TransportConfig::Array => "array",
             TransportConfig::Failover(_) => "failover",
+            TransportConfig::Registered(name) => name.as_str(),
         }
     }
 
     /// Builds the transport. Makes no network connection; invalid settings
     /// (an SMTP URL, missing credentials, an empty failover list) are
-    /// [`MailError::Config`].
+    /// [`MailError::Config`], and so is a transport a module registers
+    /// (also inside a failover): [`MailModule`](crate::MailModule) builds
+    /// that one at boot.
     pub fn build(&self) -> Result<Arc<dyn MailTransport>, MailError> {
         Ok(match self {
             TransportConfig::Smtp { url, dkim, ca } => {
@@ -140,12 +160,39 @@ impl TransportConfig {
                     .collect::<Result<Vec<_>, _>>()?;
                 Arc::new(FailoverTransport::new(built))
             }
+            TransportConfig::Registered(name) => {
+                return Err(MailError::Config(format!(
+                    "mail transport `{name}` is registered by a module; MailModule builds it at boot"
+                )));
+            }
         })
+    }
+
+    /// Checks the settings as [`build`](TransportConfig::build) does,
+    /// without refusing a transport a module registers: its own factory
+    /// checks its settings when the boot builds it.
+    pub(crate) fn check_settings(&self) -> Result<(), MailError> {
+        match self {
+            TransportConfig::Registered(_) => Ok(()),
+            TransportConfig::Failover(transports) => {
+                if transports.is_empty() {
+                    return Err(MailError::Config(
+                        "a failover transport needs at least one transport".to_owned(),
+                    ));
+                }
+                transports
+                    .iter()
+                    .try_for_each(TransportConfig::check_settings)
+            }
+            other => other.build().map(drop),
+        }
     }
 
     /// The table form as JSON, credentials included: what
     /// [`TransportResolver`](crate::TransportResolver) encrypts into
     /// `mail_transports.config`. It reads back with `serde_json::from_value`.
+    /// A transport a module registers is its name (the short form), also
+    /// inside a failover.
     pub fn to_json(&self) -> Value {
         fn secret(value: &Secret<String>) -> Value {
             json!(value.expose())
@@ -154,6 +201,9 @@ impl TransportConfig {
             if let Some(value) = value {
                 map.insert(key.to_owned(), value);
             }
+        }
+        if let TransportConfig::Registered(name) = self {
+            return Value::String(name.as_str().to_owned());
         }
         let mut map = Map::new();
         map.insert("type".to_owned(), json!(self.kind()));
@@ -234,7 +284,7 @@ impl TransportConfig {
                     config.endpoint.as_ref().map(|s| json!(s)),
                 );
             }
-            TransportConfig::Log | TransportConfig::Array => {}
+            TransportConfig::Log | TransportConfig::Array | TransportConfig::Registered(_) => {}
             TransportConfig::Failover(transports) => {
                 map.insert(
                     "transports".to_owned(),
@@ -363,12 +413,22 @@ impl<'de> Visitor<'de> for TransportVisitor {
         write!(f, "a mail transport: {EXPECTED}")
     }
 
+    /// A shorthand, else the name of a transport a module registers that
+    /// is not a built-in type. The name is only looked up among the mail
+    /// transports, never added: this also reads request bodies and stored
+    /// rows, and the name of another kind's driver reads as any unknown
+    /// name does.
     fn visit_str<E: de::Error>(self, value: &str) -> Result<TransportConfig, E> {
         match TransportConfig::shorthand(value) {
             Ok(Some(config)) => Ok(config),
-            Ok(None) => Err(E::custom(format!(
-                "unknown mail transport (expected {EXPECTED})"
-            ))),
+            Ok(None) => match lookup_in(SLOT.key(), value.trim()) {
+                Some(name) if !SLOT.built_in().contains(&name.as_str()) => {
+                    Ok(TransportConfig::Registered(name))
+                }
+                _ => Err(E::custom(format!(
+                    "unknown mail transport (expected {EXPECTED})"
+                ))),
+            },
             Err(reason) => Err(E::custom(format!("invalid mail transport: {reason}"))),
         }
     }

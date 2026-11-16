@@ -36,6 +36,7 @@ mod attr;
 mod config_section;
 mod controller;
 mod duration;
+mod embed_templates;
 mod flag;
 mod grpc;
 mod injectable;
@@ -644,6 +645,8 @@ pub fn derive_searchable(input: TokenStream) -> TokenStream {
 /// | `skip` | field | leaves the field out of the description |
 /// | `env_fallback = ".."` | field | the environment variable the field falls back to |
 /// | `one_of = "a, b"` | field | the names the value can take |
+/// | `driver = "a, b"` | field | the built-in names of a driver selector; another name is one a module registers (with `register`) |
+/// | `register = ".."` | field | the method that registers more names (`m.cache_store`) |
 /// | `default = ".."` | field | the text shown as the default (types without `Debug`) |
 ///
 /// A field's name is its `serde` name (`rename`, `rename_all`), its type is
@@ -1053,4 +1056,34 @@ pub fn action(args: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(ToSchema, attributes(schema))]
 pub fn derive_to_schema(input: TokenStream) -> TokenStream {
     to_schema::expand(input.into()).into()
+}
+
+/// `embed_templates!("views")`: every file under a folder of the calling
+/// crate, embedded with `include_str!` as (path, source) pairs, for a plugin's
+/// `m.plugin_templates(..)` (re-exported as `navree::embed_templates!`).
+///
+/// The folder is relative to the crate's `Cargo.toml`: a plain relative path
+/// (no `..`, no leading `/`, no `\`, no `:`) that stays inside the crate. Every
+/// file below it, at any depth, is embedded, sorted by name; entries whose name
+/// starts with a `.` are skipped. File names and file texts must be UTF-8.
+/// Editing a file rebuilds the crate; a new file is picked up on the next build
+/// of the crate (touch a source file after adding one).
+///
+/// The build stops, naming the file, when the folder is outside the crate, when
+/// a symbolic link or a junction is anywhere below it, or when a file name is
+/// not a safe template path: none of `\`, `:`, `<`, `>`, `"`, `|`, `?`, `*` or a
+/// control character, no name ending in `.` or a space, no Windows device name
+/// such as `con` or `nul`, at most 255 bytes in all and 128 per name.
+///
+/// Used as `m.plugin_templates(navree::embed_templates!("views"))`, the files
+/// are registered as `{namespace}/{path}` (`announcements/list.html`), under the
+/// namespace of the plugin the module names.
+///
+/// ```ignore
+/// m.plugin(navree::plugin_info!())
+///     .plugin_templates(navree::embed_templates!("views"));
+/// ```
+#[proc_macro]
+pub fn embed_templates(input: TokenStream) -> TokenStream {
+    embed_templates::expand(input.into()).into()
 }

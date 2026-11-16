@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use navree_contracts::{BoxError, BoxFuture, Clock, Dispatcher, Job, JobEnvelope, JobRegistration};
 use navree_db::Uow;
-use navree_kernel::{AppContext, WeakAppContext};
+use navree_kernel::__private::is_community_plugin;
+use navree_kernel::{AppContext, ModuleInfo, WeakAppContext};
 use navree_telemetry::{Telemetry, TelemetryContext, TraceContext, TracePolicy};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -542,5 +543,46 @@ impl fmt::Debug for Queue {
             .field("driver", &self.inner.store.name())
             .field("job_types", &job_types)
             .finish_non_exhaustive()
+    }
+}
+
+/// Every job registration of the app's modules, in dependency order, so that
+/// [`Queue::new`] keeps the first module's handler of a name, as it always
+/// did. A name that a second, different module registers is reported once for
+/// that module: a warning, or an error when either module belongs to a plugin
+/// that is not one of the framework's own. A module that registers one name
+/// twice says nothing.
+pub(crate) fn job_registrations(app: &AppContext) -> Result<Vec<JobRegistration>, String> {
+    let mut registrations = Vec::new();
+    // The modules that registered each name, in order.
+    let mut owners: HashMap<&'static str, Vec<ModuleInfo>> = HashMap::new();
+    let mut errors = Vec::new();
+    for contributed in app.contributions::<JobRegistration>() {
+        let name = contributed.value.name;
+        registrations.push((*contributed.value).clone());
+        let module = contributed.module;
+        let modules = owners.entry(name).or_default();
+        if modules.iter().any(|known| known.id == module.id) {
+            continue;
+        }
+        if let Some(first) = modules.first() {
+            let (first_name, second_name) = (first.name, module.name);
+            if is_community_plugin(app, first.id) || is_community_plugin(app, module.id) {
+                errors.push(format!(
+                    "job `{name}` is registered by both `{first_name}` and `{second_name}`; give one another name"
+                ));
+            } else {
+                tracing::warn!(
+                    target: "navree::queue",
+                    "job `{name}` is registered by both `{first_name}` and `{second_name}`; `{first_name}`'s runs, and this becomes an error in 2.0"
+                );
+            }
+        }
+        modules.push(module);
+    }
+    if errors.is_empty() {
+        Ok(registrations)
+    } else {
+        Err(errors.join("\n"))
     }
 }

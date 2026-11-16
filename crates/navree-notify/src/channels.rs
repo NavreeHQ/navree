@@ -41,13 +41,17 @@ pub(crate) struct ChannelDrivers {
 
 impl ChannelDrivers {
     /// The drivers `options` configure; connection tokens come from `app`.
+    /// A driver a module registers is not built here: the notifier's
+    /// factory builds it and adds it with
+    /// [`with_registered`](ChannelDrivers::with_registered).
     pub(crate) fn from_options(
         options: &NotifyOptions,
         push: &PushOptions,
         app: &WeakAppContext,
     ) -> Result<Self, String> {
-        let sms: Option<Arc<dyn SmsDriver>> = match options.sms.driver {
-            None => None,
+        let sms: Option<Arc<dyn SmsDriver>> = match options.sms.driver.map(SmsDriverKind::resolved)
+        {
+            None | Some(SmsDriverKind::Registered(_)) => None,
             Some(SmsDriverKind::Twilio) => {
                 Some(Arc::new(TwilioSms::new(&options.twilio, &options.sms)?))
             }
@@ -57,15 +61,16 @@ impl ChannelDrivers {
             Some(SmsDriverKind::Sns) => Some(Arc::new(SnsSms::new(&options.sns, &options.sms)?)),
             Some(SmsDriverKind::Log) => Some(Arc::new(LogSms::new(options.sms.from.clone()))),
         };
-        let whatsapp: Option<Arc<dyn WhatsAppDriver>> = match options.whatsapp.driver {
-            None => None,
-            Some(WhatsAppDriverKind::Twilio) => Some(Arc::new(TwilioWhatsApp::new(
-                &options.twilio,
-                &options.whatsapp,
-            )?)),
-            Some(WhatsAppDriverKind::Meta) => Some(Arc::new(MetaWhatsApp::new(&options.meta)?)),
-            Some(WhatsAppDriverKind::Log) => Some(Arc::new(LogWhatsApp::new())),
-        };
+        let whatsapp: Option<Arc<dyn WhatsAppDriver>> =
+            match options.whatsapp.driver.map(WhatsAppDriverKind::resolved) {
+                None | Some(WhatsAppDriverKind::Registered(_)) => None,
+                Some(WhatsAppDriverKind::Twilio) => Some(Arc::new(TwilioWhatsApp::new(
+                    &options.twilio,
+                    &options.whatsapp,
+                )?)),
+                Some(WhatsAppDriverKind::Meta) => Some(Arc::new(MetaWhatsApp::new(&options.meta)?)),
+                Some(WhatsAppDriverKind::Log) => Some(Arc::new(LogWhatsApp::new())),
+            };
         let web_push = if options.web_push.is_configured() {
             Some(Arc::new(VapidWebPush::new(&options.web_push)?))
         } else {
@@ -93,6 +98,22 @@ impl ChannelDrivers {
             web_push,
             push,
         })
+    }
+
+    /// These drivers, with the SMS and WhatsApp drivers a module registers
+    /// that the options select (built at boot by their factories).
+    pub(crate) fn with_registered(
+        mut self,
+        sms: Option<Arc<dyn SmsDriver>>,
+        whatsapp: Option<Arc<dyn WhatsAppDriver>>,
+    ) -> Self {
+        if sms.is_some() {
+            self.sms = sms;
+        }
+        if whatsapp.is_some() {
+            self.whatsapp = whatsapp;
+        }
+        self
     }
 
     pub(crate) async fn slack(

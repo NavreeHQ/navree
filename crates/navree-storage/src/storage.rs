@@ -7,7 +7,7 @@ use std::sync::Arc;
 use navree_config::ConfigSection;
 
 use crate::signing::Signer;
-use crate::{Disk, StorageError, StorageOptions, drivers};
+use crate::{Disk, DiskConfig, DiskDriver, StorageError, StorageOptions, drivers};
 
 /// The app's disks, by name (what `StorageModule` provides).
 #[derive(Clone)]
@@ -25,12 +25,35 @@ impl Storage {
     /// read cloud credential files. Inside an async runtime call it from
     /// `tokio::task::spawn_blocking` (the module does). Cloud disks make no
     /// request until they are used.
+    ///
+    /// A disk whose driver is not built in is refused
+    /// ([`StorageError::InvalidOptions`]): only `StorageModule` builds a
+    /// driver a module registers, at boot, with the app.
     pub fn new(options: &StorageOptions, signing_key: &[u8]) -> Result<Self, StorageError> {
+        Storage::with_drivers(options, signing_key, BTreeMap::new())
+    }
+
+    /// [`new`](Storage::new), with the drivers `StorageModule` built at boot
+    /// for the disks whose driver a module registers, by disk name.
+    pub(crate) fn with_drivers(
+        options: &StorageOptions,
+        signing_key: &[u8],
+        mut registered: BTreeMap<String, Arc<dyn DiskDriver>>,
+    ) -> Result<Self, StorageError> {
         options.validate().map_err(StorageError::InvalidOptions)?;
+        // A disk without its driver is refused before any disk is built (no
+        // local root is created).
+        for (name, config) in &options.disks {
+            if let DiskConfig::Registered(disk) = config
+                && !registered.contains_key(name)
+            {
+                return Err(drivers::not_built_in(name, disk));
+            }
+        }
         let signer = Arc::new(Signer::new(signing_key));
         let mut disks = BTreeMap::new();
         for (name, config) in &options.disks {
-            let backend = drivers::build(name, config)?;
+            let backend = drivers::build(name, config, registered.remove(name))?;
             let disk = Disk::new(
                 name.clone(),
                 config.driver(),

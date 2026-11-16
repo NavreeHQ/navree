@@ -71,6 +71,12 @@ impl HelmPage {
     }
 
     /// The template rendered inside the panel's layout.
+    ///
+    /// Only an HTML template escapes what it writes. A page of a plugin that is not one of
+    /// the framework's own packages renders only one, as a dashboard card does: a name may
+    /// end in `.html`, a name without an extension stands for that name with `.html` added,
+    /// and any other name stops the boot. Any other page renders the name it gives, and one
+    /// that is not HTML (a `.txt` or `.md` template) is warned about at boot.
     pub fn template(mut self, name: &str) -> Self {
         self.template = Some(name.to_owned());
         self

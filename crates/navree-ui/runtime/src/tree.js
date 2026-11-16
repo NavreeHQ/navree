@@ -7,7 +7,7 @@
 // The list items are `role=none` and each item's row is the `treeitem`: its name is its
 // own label, not the text of everything under it, and its group is owned with
 // `aria-owns`. A row is what has the tab stop and the focus.
-import { active, all, attr, body, byId, clean, closest, every, fetchHere, has, make, on, sameOrigin, set, unset } from "./dom.js";
+import { active, all, attr, body, byId, clean, closest, every, fetchHere, fresh as freshPage, has, make, on, sameOrigin, set, unset } from "./dom.js";
 
 const ROOT = "[data-ui-tree]";
 const ITEM = "li[data-slot=tree-item],li[data-slot=tree-more],li[data-slot=tree-note]";
@@ -210,6 +210,8 @@ async function fetchItems(src) {
     redirect: "error",
     signal: typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(LIMIT) : undefined,
   });
+  // A fresh page's answer is never drawn into a plain page.
+  if (response.headers.has("x-navree-fresh") && !freshPage()) return null;
   if (!response.ok || !(response.headers.get("content-type") || "").startsWith("text/html")) return null;
   const doc = new DOMParser().parseFromString(await response.text(), "text/html");
   // The answer is read through the prototype: a named element in it can't stand in for `doc.body`.

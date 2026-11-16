@@ -52,7 +52,7 @@ relay_url = "auto"
 | `realtime.allowed_origins` | `[]` | Origins whose pages may connect, or `*`. Empty means `http.cors.allowed_origins`. See [Allowed origins](#allowed-origins). |
 | `realtime.activity_timeout_secs` | `120` | Seconds of silence before the server pings a client (at least 1). |
 | `realtime.relay_url` | empty | Where other processes send their broadcasts: empty, `auto` or a URL. See [Broadcasting from workers](#broadcasting-from-workers). |
-| `realtime.backplane` | `none` | `none`, or `redis` to share broadcasts and presence between processes. Needs `realtime.secret`. See [Several serving processes](#several-serving-processes). |
+| `realtime.backplane` | `none` | `none`, `redis` to share broadcasts and presence between processes, or the name of a backplane a module registers with `m.backplane`. Anything but `none` needs `realtime.secret`. See [Several serving processes](#several-serving-processes). |
 | `realtime.streams.*` | | The caps of the live streams pages listen to: `names` (32), `per_user` (16), `lifetime_secs` (3600) and `replay` (1024). See the [live hub](/docs/ui/live-hub/#backpressure-and-limits). |
 
 From the environment, lists are comma-separated: `APP_REALTIME__ALLOWED_ORIGINS=https://crm.example.com,https://admin.example.com`. Invalid options fail the boot, naming the key and never echoing the secret. In code, use `RealtimeModule::for_root(RealtimeOptions { key, allowed_origins, ..RealtimeOptions::default() })`.
@@ -339,6 +339,57 @@ What the processes share:
 How it holds together: each process has a random node id, says hello when it starts (the others answer with their presence members), sends a heartbeat every 5 seconds, resends all its members every 30 seconds and says goodbye when it shuts down. A process that stops sending heartbeats for 20 seconds, because it crashed, is forgotten along with its members, which are announced as removed. Redis pub/sub delivers at most once: a process that loses its connection to Redis misses the broadcasts sent meanwhile (it subscribes again by itself) and catches up on presence at the next 30-second resend. A process that starts while Redis is down boots anyway and keeps trying to subscribe.
 
 The backplane uses the connection `redis.connections.realtime` when you define one. Anyone who can publish to the channel `<redis.prefix>realtime:<app_id>` can broadcast to your users, so keep Redis on a private network with a password, as you would anyway. `Realtime::has_backplane()` tells whether the process is on one.
+
+### A backplane a module registers
+
+A module can also register a backplane under a name of its own, and `realtime.backplane` selects it by that name, as it selects `redis`. `m.backplane` comes with `use navree::plugin::prelude::*;`. Its factory gets a `DriverContext` (the backplane's name, the app and its settings) and returns your `Backplane`, the trait that moves bytes between the processes: `publish(topic, message)` queues a message for every subscriber of the topic, this process included, and `subscribe(topic, handler, shutdown)` hands each message to `handler` until `shutdown` is cancelled, and resolves once the subscription is active:
+
+```rust title="src/modules/dakiya/mod.rs"
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use serde::Deserialize;
+
+/// The backplane's settings: `[realtime.kabootar]`.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct KabootarSettings {
+    url: String,
+}
+
+pub struct DakiyaModule;
+
+impl Module for DakiyaModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.backplane("kabootar", |ctx| async move {
+            let settings: KabootarSettings = ctx.settings()?;
+            Ok(KabootarBackplane::connect(&settings.url).await?)
+        });
+    }
+}
+```
+
+Add the module to the app beside `RealtimeModule`, and select the backplane in the configuration. Its settings are the table below its name, and like Redis it needs `realtime.secret`:
+
+```toml title="config/app.toml"
+[realtime]
+key = "navree-crm-key"
+backplane = "kabootar"
+
+[realtime.kabootar]
+url = "kabootar://10.0.0.7:9000"
+```
+
+```env title=".env"
+APP_REALTIME__SECRET=a-long-random-string-shared-by-every-process
+```
+
+Environment variables reach the settings too: `APP_REALTIME__KABOOTAR__URL=kabootar://10.0.0.7:9000`. In code, `RealtimeOptions { backplane: BackplaneKind::Registered(DriverName::from_static("kabootar")), secret, ..RealtimeOptions::default() }` selects the same backplane (`DriverName` is in `navree::plugin`).
+
+A backplane's name is a lower-case letter followed by up to 63 lower-case letters, digits or `_`. `ctx.settings()` reads `[realtime.kabootar]` into your type (its `Default` when the table is missing), and an error names the key, never a value; `ctx.settings_key()` is `realtime.kabootar`. The hub subscribes to the topic `realtime:<app_id>` when the app boots, so a backplane whose `subscribe` fails stops the boot with `cannot subscribe to the realtime backplane`. `Backplane::publish` must not block or fail, and delivery may be at most once, as it is on Redis; the hub resends its presence members every 30 seconds, so presence converges again.
+
+These fail the boot, naming `m.backplane` and the module that registered the name: a name that is not such a word, a built-in name (`none`, `redis`), a name equal to a key of `[realtime]` (`app_id`, `key`, `secret`, `allowed_origins`, `activity_timeout_secs`, `relay_url`, `backplane`, `streams`), and one name registered by two modules, even when another backplane is selected. So does `realtime.backplane` naming a backplane no module registers (the message lists the backplanes that are known), and a factory that returns an error. A factory's error is shown in the boot error as written, so it must not contain a secret from the driver's settings.
+
+`config:check` reports the same problems, in the same words, without booting the app, and `config:schema` lists the registered backplanes beside the built-in ones. An unnamed `dyn Backplane` an app provides with `override_value` still serves `realtime.backplane = "none"`, as before.
 
 ## Client setup
 

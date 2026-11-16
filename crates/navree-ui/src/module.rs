@@ -24,6 +24,7 @@ use navree_kernel::{
 
 use crate::op::{Envelope, PendingOps, UI_HEADER, is_prefetch};
 use crate::pages::{PagesOptions, REGION_HEADER, Renderer, UiOptions};
+use crate::policy::{PagePolicy, PagePolicyOptions};
 use crate::shell::FLASH_COOKIE;
 use crate::{assets, compress};
 
@@ -123,8 +124,12 @@ impl UiNeed {
 pub(crate) struct UiAlways;
 
 /// The answer to "does anything need the toolkit", settled before the first
-/// request and read by the layer.
-pub(crate) struct UiGate(pub(crate) Arc<OnceLock<bool>>);
+/// request and read by the layer; and the links modules add to the sidebar,
+/// checked at boot.
+pub(crate) struct UiGate(
+    pub(crate) Arc<OnceLock<bool>>,
+    pub(crate) Arc<crate::shell::links::Links>,
+);
 
 fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     m.global();
@@ -132,6 +137,7 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     // The `ui` section is read by the factory below (an app need not have
     // `ConfigModule`), so it is registered here without a provider.
     m.config_section::<UiOptions>();
+    m.config_section::<PagePolicyOptions>();
     m.factory(Factory::<PagesOptions>::new(move |r: Resolver| {
         let explicit = pages.clone();
         async move {
@@ -143,6 +149,11 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             Ok(Arc::new(options.checked()))
         }
     }));
+    // The policy every page is served with: the toolkit's own, widened only by what the app's
+    // `ui.policy` section allows. A key or a source outside the rules stops the boot.
+    m.factory(Factory::<PagePolicy>::new(|r: Resolver| async move {
+        Ok(Arc::new(crate::policy::build(&r.app()).await?))
+    }));
     if always {
         m.contribute(UiAlways);
     }
@@ -150,11 +161,21 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     // Whether the app compresses its answers (`http.compression`), settled with the gate:
     // off, the toolkit compresses nothing either.
     let compressing: Arc<OnceLock<bool>> = Arc::new(OnceLock::new());
+    // The app's page policy, settled with the gate and read by the layer: the layer touches no
+    // response when the policy is the toolkit's own.
+    let policy: Arc<OnceLock<Arc<PagePolicy>>> = Arc::new(OnceLock::new());
+    // Whether pages that start clean are on in this app: it has a UI extension, a plugin's
+    // island script, or a policy other than the toolkit's.
+    let fresh: Arc<OnceLock<bool>> = Arc::new(OnceLock::new());
     let for_gate = slot.clone();
     let compressing_for_gate = compressing.clone();
+    let policy_for_gate = policy.clone();
+    let fresh_for_gate = fresh.clone();
     m.factory(Factory::<UiGate>::new(move |r: Resolver| {
         let slot = for_gate.clone();
         let compressing = compressing_for_gate.clone();
+        let policy = policy_for_gate.clone();
+        let fresh = fresh_for_gate.clone();
         async move {
             let ctx = r.app();
             let on = ctx
@@ -171,21 +192,46 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
                     }
                 }
             }
+            // Only the app chooses the shell of its error pages: one from a module of a
+            // plugin the kernel does not find first-party stops the boot.
+            error_shells_of_plugins(&ctx)?;
+            // The links modules add with `m.nav_item`, checked once: an address that is not
+            // a path of this app stops the boot.
+            let links = crate::shell::links::check(&ctx)?;
+            // The page policy is composed here, before any route is built: a key or a source of
+            // `ui.policy` outside the rules stops the boot.
+            let page_policy = r.get::<PagePolicy>().await?;
+            // Pages that start clean are on where plugin code can reach a page: an app with a UI
+            // extension, a plugin's island script, or a policy widened by the app.
+            let starts_clean = !ctx
+                .contributions::<crate::extension::UiExtension>()
+                .is_empty()
+                || plugin_islands(&ctx)
+                || !page_policy.is_the_toolkits();
+            let _ = policy.set(page_policy);
+            let _ = fresh.set(starts_clean);
             let _ = slot.set(wanted);
-            Ok(Arc::new(UiGate(slot)))
+            Ok(Arc::new(UiGate(slot, Arc::new(links))))
         }
     }));
     #[cfg(feature = "native-preview")]
     let for_context = slot.clone();
+    let for_fresh = slot.clone();
     m.http_layer(GlobalLayer::new(
         LayerSlot::Session,
         "ui.reply",
         move |_, router| {
             if slot.get().copied().unwrap_or(false) {
                 let compressing = compressing.get().copied().unwrap_or(true);
+                // The app's policy, when it is not the toolkit's own: the layer then puts it on
+                // every page and fragment that carries the toolkit's policy.
+                let policy = policy
+                    .get()
+                    .cloned()
+                    .filter(|policy| !policy.is_the_toolkits());
                 Ok(
                     router.layer(middleware::from_fn(move |request: Request, next: Next| {
-                        reply_layer(compressing, request, next)
+                        reply_layer(compressing, policy.clone(), request, next)
                     })),
                 )
             } else {
@@ -202,6 +248,27 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         move |_, router| {
             if for_context.get().copied().unwrap_or(false) {
                 Ok(router.layer(middleware::from_fn(crate::native::swap::context_layer)))
+            } else {
+                Ok(router)
+            }
+        },
+    ));
+    // Pages that start clean: where they are on (the app has a UI extension, a plugin's island
+    // script or a widened page policy), the handlers of a request run in a scope that lets a fresh
+    // page write its mark and header, and that notes a password field a page that is not fresh
+    // or a reply sends. Elsewhere the router is as it was.
+    let warned = Arc::new(crate::policy::Warned::default());
+    m.http_layer(GlobalLayer::new(
+        LayerSlot::Context,
+        "ui.fresh",
+        move |_, router| {
+            if for_fresh.get().copied().unwrap_or(false) && fresh.get().copied().unwrap_or(false) {
+                let warned = warned.clone();
+                Ok(
+                    router.layer(middleware::from_fn(move |request: Request, next: Next| {
+                        crate::policy::fresh_layer(warned.clone(), request, next)
+                    })),
+                )
             } else {
                 Ok(router)
             }
@@ -241,6 +308,32 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         )
         .stdio(),
     );
+}
+
+/// Refuses an [`ErrorShell`](crate::ErrorShell) that a module of a plugin the kernel does
+/// not find first-party contributes, wherever that module is in the order: the first one
+/// contributed builds the shell of every error page, so only the app chooses it, from a
+/// module of its own. A module of the app, a module that names no plugin and a first-party
+/// plugin's module contribute one as before.
+fn error_shells_of_plugins(ctx: &AppContext) -> Result<(), String> {
+    let contributed = ctx.contributions::<crate::ErrorShell>();
+    if contributed.is_empty() {
+        return Ok(());
+    }
+    let plugins = ctx.plugins().plugins;
+    for shell in &contributed {
+        let module = shell.module.id;
+        let plugin = plugins.iter().find(|plugin| {
+            !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
+        });
+        if let Some(plugin) = plugin {
+            return Err(format!(
+                "plugin `{}` builds the shell of the app's error pages (an ErrorShell in `{}`); only the app chooses that: contribute it from a module of the app",
+                plugin.info.name, shell.module.name
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// The most of a page `ui:render` reads.
@@ -305,10 +398,29 @@ pub(crate) async fn render_json(
     }))
 }
 
+/// Whether a plugin's island script is in the app: one built with a namespace, which is how a
+/// plugin's script is named, or one a module of a plugin that is not one of the framework's own
+/// contributes. Such an app has pages that start clean, as one with a UI extension has.
+fn plugin_islands(ctx: &AppContext) -> bool {
+    ctx.contributions::<crate::island::IslandScript>()
+        .iter()
+        .any(|script| {
+            script.value.namespace.is_some()
+                || navree_kernel::__private::is_community_plugin(ctx, script.module.id)
+        })
+}
+
 /// Swaps a reply's fallback for its ops when the request came from the runtime,
 /// and sends rendered responses in brotli to clients that take it, unless the
-/// app turned compression off (`compressing` is false).
-async fn reply_layer(compressing: bool, mut request: Request, next: Next) -> Response {
+/// app turned compression off (`compressing` is false). When the app widened its page policy
+/// (`policy` is its own, not the toolkit's), the pages and fragments that carry the toolkit's
+/// policy leave with the app's.
+async fn reply_layer(
+    compressing: bool,
+    policy: Option<Arc<PagePolicy>>,
+    mut request: Request,
+    next: Next,
+) -> Response {
     if !compressing {
         request.extensions_mut().insert(compress::Off);
     }
@@ -317,7 +429,10 @@ async fn reply_layer(compressing: bool, mut request: Request, next: Next) -> Res
     // a browser's is handed back untouched.
     #[cfg(feature = "native-preview")]
     let (request, next) = match crate::native::swap::layer(asked, request, next).await {
-        Ok(response) => return response,
+        Ok(mut response) => {
+            apply_policy(policy.as_deref(), &mut response);
+            return response;
+        }
         Err(back) => back,
     };
     let from_runtime = asked.is_runtime();
@@ -330,6 +445,7 @@ async fn reply_layer(compressing: bool, mut request: Request, next: Next) -> Res
         .then(|| operation_kind(&method, request.headers()));
     let started = std::time::Instant::now();
     let mut response = next.run(request).await;
+    apply_policy(policy.as_deref(), &mut response);
     let ops = response
         .extensions()
         .get::<PendingOps>()
@@ -365,6 +481,14 @@ async fn reply_layer(compressing: bool, mut request: Request, next: Next) -> Res
         record_operation(kind, &response, ops, started);
     }
     compress::encode(&method, &accept, response).await
+}
+
+/// Gives `response` the app's page policy, when the app has one that is not the toolkit's own
+/// and the response carries the toolkit's.
+fn apply_policy(policy: Option<&PagePolicy>, response: &mut Response) {
+    if let Some(policy) = policy {
+        crate::policy::apply(policy, response);
+    }
 }
 
 /// Records an operation the runtime or a native client asked for, in the
@@ -488,6 +612,8 @@ struct Assets {
     wanted: bool,
     islands: Arc<Vec<crate::island::Served>>,
     app_files: Arc<Vec<crate::app_files::Served>>,
+    extensions: Arc<crate::extension::Extensions>,
+    links: Arc<crate::shell::links::Links>,
 }
 
 impl Injectable for Assets {
@@ -498,30 +624,25 @@ impl Injectable for Assets {
     fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
         Box::pin(async move {
             let gate = r.get::<UiGate>().await?;
-            let scripts = r
-                .app()
-                .contributions::<crate::IslandScript>()
-                .into_iter()
-                .map(|contributed| *contributed.value);
-            let sheets = r
-                .app()
-                .contributions::<crate::AppSheet>()
-                .into_iter()
-                .map(|contributed| *contributed.value);
-            let fonts = r
-                .app()
-                .contributions::<crate::AppFont>()
-                .into_iter()
-                .map(|contributed| *contributed.value);
-            let images = r
-                .app()
-                .contributions::<crate::AppImage>()
-                .into_iter()
-                .map(|contributed| *contributed.value);
+            let (islands, app_files) =
+                crate::app_files::checked_files(&r.app()).map_err(|message| {
+                    KernelError::Construction {
+                        provider: std::any::type_name::<Assets>().to_owned(),
+                        source: message.into(),
+                    }
+                })?;
+            let extensions = crate::extension::checked(&r.app()).map_err(|message| {
+                KernelError::Construction {
+                    provider: std::any::type_name::<Assets>().to_owned(),
+                    source: message.into(),
+                }
+            })?;
             Ok(Self {
                 wanted: gate.0.get().copied().unwrap_or(false),
-                islands: Arc::new(crate::island::served(scripts)),
-                app_files: Arc::new(crate::app_files::served(sheets, fonts, images)),
+                islands: Arc::new(islands),
+                app_files: Arc::new(app_files),
+                extensions: Arc::new(extensions),
+                links: gate.1.clone(),
             })
         })
     }
@@ -536,7 +657,7 @@ impl Controller for Assets {
         if !self.wanted {
             return Vec::new();
         }
-        vec![
+        let mut routes = vec![
             RouteDef::on(
                 Method::GET,
                 format!("!{}/{{file}}", assets::MOUNT),
@@ -638,7 +759,58 @@ impl Controller for Assets {
                     &[400, 403],
                 )
             }),
-        ]
+        ];
+        // The files of the UI extensions the app's modules contributed, by namespace, name and
+        // content hash: there only when a module contributes one.
+        if !self.extensions.is_empty() {
+            let extensions = self.extensions.clone();
+            routes.push(
+                RouteDef::on(
+                    Method::GET,
+                    format!("!{}/{{file}}", crate::extension::EXTENSION_PATH),
+                    move |Path(file): Path<String>, headers: HeaderMap| {
+                        let extensions = extensions.clone();
+                        async move { crate::extension::respond(&file, &headers, &extensions) }
+                    },
+                )
+                .name("ui.extensions")
+                .public()
+                .api(api(
+                    "A UI extension's script or stylesheet",
+                    "A script or stylesheet a module contributed as a UI extension, by its \
+                     namespace, name and content hash; under an older hash it is still served, \
+                     uncached.",
+                    &[304, 404],
+                )),
+            );
+        }
+        // The links other modules add, those the caller may open: there only when a module
+        // adds one.
+        if !self.links.is_empty() {
+            let links = self.links.clone();
+            routes.push(
+                RouteDef::on(
+                    Method::GET,
+                    format!("!{}", crate::shell::links::NAVIGATION_PATH),
+                    move |mut parts: http::request::Parts| {
+                        let links = links.clone();
+                        async move { crate::shell::links::answer(&mut parts, &links).await }
+                    },
+                )
+                .name("ui.navigation")
+                .public()
+                .json_only()
+                .api(api(
+                    "The links of other modules the caller may open",
+                    "Every sidebar link a module adds with m.nav_item that the caller may open: \
+                     those with no permission for everyone, and those whose permission the \
+                     caller holds, app-wide or in the request's workspace. Nothing about the \
+                     others. Never cached.",
+                    &[],
+                )),
+            );
+        }
+        routes
     }
 }
 

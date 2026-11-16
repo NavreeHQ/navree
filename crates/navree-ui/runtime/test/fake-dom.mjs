@@ -6,6 +6,74 @@
 //   import { install } from "./fake-dom.mjs";
 //   const page = install({ html: "<main id=x></main>" });
 //   await import("../src/commands.js");
+//
+// `install({ observe: true })` makes `MutationObserver` record what changes, as a browser's does;
+// without it an observer hears nothing, which today's tests are written against.
+
+/* Mutation observers */
+
+/** The observers that record, while the page asks for them. @type {Set<FakeMutationObserver>} */
+const observing = new Set();
+let recording = false;
+
+/**
+ * Hands a change to every observer that watches it: one of `target` itself, or of what holds it
+ * when it watches the subtree, and of the kind it asked for.
+ * @param {any} target @param {{type: string, attributeName?: string, addedNodes?: any[], removedNodes?: any[]}} change
+ */
+function noted(target, change) {
+  if (!recording) return;
+  const record = { target, attributeName: null, addedNodes: [], removedNodes: [], ...change };
+  for (const observer of observing) {
+    for (const [node, options] of observer.watched) {
+      if (node !== target && !(options.subtree && node.contains(target))) continue;
+      const wanted = record.type === "attributes" ? options.attributes && (!options.attributeFilter || options.attributeFilter.includes(record.attributeName)) : options.childList;
+      if (wanted) observer.queue(record);
+      break;
+    }
+  }
+}
+
+class FakeMutationObserver {
+  /** @param {(records: any[], observer: FakeMutationObserver) => void} callback */
+  constructor(callback) {
+    this.callback = callback;
+    /** @type {Map<any, any>} */
+    this.watched = new Map();
+    /** @type {any[]} */
+    this.records = [];
+  }
+  /** @param {any} target @param {{subtree?: boolean, childList?: boolean, attributes?: boolean, attributeFilter?: string[]}} options */
+  observe(target, options) {
+    // As in a browser, a filter of attribute names asks for attributes.
+    this.watched.set(target, { ...options, attributes: options.attributes ?? !!options.attributeFilter });
+    observing.add(this);
+  }
+  disconnect() {
+    this.watched.clear();
+    this.records = [];
+    observing.delete(this);
+  }
+  takeRecords() {
+    return this.records.splice(0);
+  }
+  /** What waits is delivered in one microtask, after the code that made the changes: as a browser does. @param {any} record */
+  queue(record) {
+    if (!this.records.length) {
+      queueMicrotask(() => {
+        const records = this.takeRecords();
+        if (!records.length) return;
+        // An observer that throws is reported, and the page goes on.
+        try {
+          this.callback(records, this);
+        } catch (error) {
+          globalThis.page?.errors.push(error);
+        }
+      });
+    }
+    this.records.push(record);
+  }
+}
 
 /* Events */
 
@@ -40,11 +108,14 @@ class FakeCustomEvent extends FakeEvent {}
 class FakeEventTarget {
   /** @param {string} type @param {any} fn @param {any} [options] */
   addEventListener(type, fn, options) {
-    if (!fn) return;
+    const signal = typeof options === "object" ? options?.signal : undefined;
+    if (!fn || signal?.aborted) return;
     let mine = listeners.get(this);
     if (!mine) listeners.set(this, (mine = []));
     const capture = typeof options === "boolean" ? options : !!options?.capture;
     mine.push({ type, fn, capture, once: !!options?.once });
+    // A listener given a signal goes when it is aborted.
+    signal?.addEventListener("abort", () => this.removeEventListener(type, fn), { once: true });
   }
   /** @param {string} type @param {any} fn */
   removeEventListener(type, fn) {
@@ -290,15 +361,18 @@ class FakeNode extends FakeEventTarget {
     return out;
   }
   append(...nodes) {
-    for (const node of this._take(nodes)) {
+    const taken = this._take(nodes);
+    for (const node of taken) {
       node.parentNode = this;
       this.childNodes.push(node);
     }
+    if (taken.length) noted(this, { type: "childList", addedNodes: taken });
   }
   prepend(...nodes) {
     const taken = this._take(nodes);
     for (const node of taken) node.parentNode = this;
     this.childNodes.unshift(...taken);
+    if (taken.length) noted(this, { type: "childList", addedNodes: taken });
   }
   /** @param {any} node */
   appendChild(node) {
@@ -312,12 +386,14 @@ class FakeNode extends FakeEventTarget {
     const at = before ? this.childNodes.indexOf(before) : -1;
     if (at < 0) this.childNodes.push(taken);
     else this.childNodes.splice(at, 0, taken);
+    noted(this, { type: "childList", addedNodes: [taken] });
     return node;
   }
   /** @param {any} node */
   removeChild(node) {
     this.childNodes = this.childNodes.filter((n) => n !== node);
     node.parentNode = null;
+    noted(this, { type: "childList", removedNodes: [node] });
     return node;
   }
   remove() {
@@ -332,11 +408,14 @@ class FakeNode extends FakeEventTarget {
     for (const node of taken) node.parentNode = parent;
     parent.childNodes.splice(at, 1, ...taken);
     this.parentNode = null;
+    noted(parent, { type: "childList", addedNodes: taken, removedNodes: [this] });
   }
   /** @param {any[]} nodes */
   replaceChildren(...nodes) {
-    for (const kid of this.childNodes) kid.parentNode = null;
+    const gone = this.childNodes;
+    for (const kid of gone) kid.parentNode = null;
     this.childNodes = [];
+    if (gone.length) noted(this, { type: "childList", removedNodes: gone });
     this.append(...nodes);
   }
   get children() {
@@ -442,14 +521,18 @@ class FakeElement extends FakeNode {
   /** @param {string} name @param {string} value */
   setAttribute(name, value) {
     this._attrs.set(name.toLowerCase(), String(value));
+    noted(this, { type: "attributes", attributeName: name.toLowerCase() });
   }
   /** @param {string} name */
   hasAttribute(name) {
     return this._attrs.has(name.toLowerCase());
   }
-  /** @param {string} name */
+  /** As in a browser, taking away an attribute the element doesn't have changes nothing. @param {string} name */
   removeAttribute(name) {
-    this._attrs.delete(name.toLowerCase());
+    if (this._attrs.delete(name.toLowerCase())) noted(this, { type: "attributes", attributeName: name.toLowerCase() });
+  }
+  getAttributeNames() {
+    return [...this._attrs.keys()];
   }
   /** @param {string} name @param {boolean} [force] */
   toggleAttribute(name, force) {
@@ -594,6 +677,10 @@ class FakeInput extends FakeControl {
   get defaultValue() {
     return this.getAttribute("value") ?? "";
   }
+  // As in a browser, the default is the `value` attribute; a value already typed stays.
+  set defaultValue(v) {
+    this.setAttribute("value", v);
+  }
 }
 class FakeTextArea extends FakeControl {
   constructor() {
@@ -607,9 +694,31 @@ class FakeTextArea extends FakeControl {
     this._value = String(v);
   }
 }
+class FakeOption extends FakeHTMLElement {
+  constructor() {
+    super("option");
+    this._selected = null;
+  }
+  // As in a browser: chosen as drawn (the `selected` attribute) until a choice is made.
+  get defaultSelected() {
+    return this.hasAttribute("selected");
+  }
+  set defaultSelected(on) {
+    this.toggleAttribute("selected", !!on);
+  }
+  get selected() {
+    return this._selected ?? this.defaultSelected;
+  }
+  set selected(on) {
+    this._selected = !!on;
+  }
+}
 class FakeSelect extends FakeControl {
   constructor() {
     super("select");
+  }
+  get options() {
+    return this._descendants().filter((el) => el instanceof FakeOption);
   }
 }
 class FakeButton extends FakeControl {
@@ -671,7 +780,7 @@ class FakeTableCell extends FakeHTMLElement {
   }
 }
 
-const KINDS = { a: FakeAnchor, input: FakeInput, textarea: FakeTextArea, select: FakeSelect, button: FakeButton, dialog: FakeDialog, form: FakeForm, template: FakeTemplate, tr: FakeTableRow, td: FakeTableCell, th: FakeTableCell };
+const KINDS = { a: FakeAnchor, input: FakeInput, textarea: FakeTextArea, select: FakeSelect, option: FakeOption, button: FakeButton, dialog: FakeDialog, form: FakeForm, template: FakeTemplate, tr: FakeTableRow, td: FakeTableCell, th: FakeTableCell };
 
 /** @param {string} tag */
 function make(tag) {
@@ -829,11 +938,13 @@ export function answer(body, init = {}) {
 
 /**
  * Installs a page at `url` holding `html`, and the window around it: location, history, storage,
- * a `fetch` that answers what the test says, and timers that run when the test says.
- * @param {{html?: string, url?: string, cookie?: string}} [options]
+ * a `fetch` that answers what the test says, and timers that run when the test says. `observe`:
+ * mutation observers record what changes; without it they hear nothing.
+ * @param {{html?: string, url?: string, cookie?: string, observe?: boolean}} [options]
  */
 export function install(options = {}) {
   const g = /** @type {any} */ (globalThis);
+  recording = !!options.observe;
   const doc = documentOf(options.html ?? "");
   if (options.cookie) doc._cookie = options.cookie;
   const url = new URL(options.url || "https://app.test/");
@@ -964,13 +1075,15 @@ export function install(options = {}) {
       }
     },
     CSS: { escape: (/** @type {string} */ s) => s.replace(/["\\]/g, "\\$&") },
-    MutationObserver: class {
-      observe() {}
-      disconnect() {}
-      takeRecords() {
-        return [];
-      }
-    },
+    MutationObserver: options.observe
+      ? FakeMutationObserver
+      : class {
+          observe() {}
+          disconnect() {}
+          takeRecords() {
+            return [];
+          }
+        },
     IntersectionObserver: class {
       observe() {}
       disconnect() {}

@@ -463,7 +463,7 @@ m.helm_staff_workspaces(|entry| async move {
 });
 ```
 
-  Every request made that way writes a `helm.workspace.staff` entry to the [audit log](/docs/security/audit-log/), when the app has one, on the log's own connection: the entry stays when the request, or a queued action, fails. A workspace that doesn't exist is a 404 for staff. Staff are held to read-only demos like anyone else.
+  Every request made that way writes a `helm.workspace.staff` entry to the [audit log](/docs/security/audit-log/), when the app has one, on the log's own connection: the entry stays when the request, or a queued action, fails. A workspace that doesn't exist is a 404 for staff. Staff are held to read-only demos like anyone else. Only the app decides who works as staff: the panel stops the boot when a module of a plugin that is not one of the framework's own packages calls `helm_staff_workspaces` or `helm_staff_organizations`.
 
 A header that names a workspace the user may not enter is a 403, the same one whether the workspace exists or not. A cookie that does counts for nothing, so a removed user still reaches the sidebar, and the form says why it refuses. An app without `WorkspaceModule` or `helm_staff_workspaces` has no way to check, so naming a workspace is refused with a 403 (code `helm_workspace_unchecked`) and the panel never takes the request's word for it. 
 
@@ -550,9 +550,9 @@ per_page = 25
 
 The look is Navree UI's, dark, in the [theme](/docs/ui/themes/) `helm.theme` names: `navree` (the default), `neutral`, `ocean`, `violet`, `sunset`, `rose` or `contrast`. The layout is Navree UI's [app shell](/docs/ui/app-shell/), a sidebar and a top bar:
 
-- **The sidebar** lists the dashboard and your resources and pages, grouped by `GROUP`, then ordered by `const ORDER: i32` (lower first) and label, each with its `ICON`, a [Lucide](https://lucide.dev) icon by name (one of about 140 common ones, or any with `helm-all-icons`). Its header shows `helm.title` with `helm.logo` and, when a resource lives in workspaces, the form that picks one; its footer the signed-in user, with **Sign out**. `Ctrl+B` (`⌘B` on a Mac) or the button at the top left collapses it to its icons, and the next page opens the same way.
+- **The sidebar** lists the dashboard and your resources and pages, grouped by `GROUP`, then ordered by `const ORDER: i32` (lower first) and label, then the links other modules add, after the resources and pages of their group ([below](#links-and-cards-from-other-modules)), each with its `ICON`, a [Lucide](https://lucide.dev) icon by name (one of about 140 common ones, or any with `helm-all-icons`). Its header shows `helm.title` with `helm.logo` and, when a resource lives in workspaces, the form that picks one; its footer the signed-in user, with **Sign out**. `Ctrl+B` (`⌘B` on a Mac) or the button at the top left collapses it to its icons, and the next page opens the same way.
 - **Counts.** Each resource in the menu shows how many records it has, read for the signed-in user and the workspace they work in (it is what their list shows), cached for `helm.metrics_cache_secs` under the user, their access and the workspace, and capped: past 1,000 it says `1,000+`. A page never counts them: a group of the menu with counts fetches itself once the page is up (`GET /admin/counts`), so a list pays for none it does not show. The same address answers JSON for any other client: `{"counts": {"deals": {"value": 30, "capped": false, "text": "30"}}}`. Turn a resource's count off with `const SIDEBAR_COUNT: bool = false;`.
-- **The top bar** shows the breadcrumb and **Go to** (`Ctrl+K`, `⌘K` on a Mac), a command menu that opens any resource or page of the menu by name.
+- **The top bar** shows the breadcrumb and **Go to** (`Ctrl+K`, `⌘K` on a Mac), a command menu that opens any resource, page or link of the menu by name.
 - **On phones** the sidebar opens as a sheet over the page, and a table scrolls in its own box.
 
 ### Custom pages
@@ -571,7 +571,46 @@ m.helm_page(
 );
 ```
 
-The page is served at `/admin/pages/pipeline` and appears in the menu for users who pass its check. Its template is one of your app's templates, so the app needs `ViewModule`. It gets `title`, `user` (`{id, name, email}`), `csrf_token`, `path` (the panel's path) and `data`, and can call your API, or get its data from `.data(|ctx| async move { .. })`, which returns a `Result<serde_json::Value>`. `ctx` is a `PageContext` with `uow()`, `user_id()` and `get::<T>()`. The panel's Content Security Policy allows scripts from your app's origin only, so a page's script is a file your app serves, never inline.
+The page is served at `/admin/pages/pipeline` and appears in the menu for users who pass its check. Its template is one of your app's templates, so the app needs `ViewModule`. It gets `title`, `user` (`{id, name, email}`), `csrf_token`, `path` (the panel's path) and `data`, and can call your API, or get its data from `.data(|ctx| async move { .. })`, which returns a `Result<serde_json::Value>`. `ctx` is a `PageContext` with `uow()`, `user_id()` and `get::<T>()`. The panel's Content Security Policy allows scripts from your app's origin only, so a page's script is a file your app serves, never inline. Only an HTML template escapes what it writes: a page of a plugin that is not one of the framework's own packages renders only an HTML template, as a card does (a name without an extension is that name with `.html`, a name may end in `.html`, and any other stops the boot), and any other page whose template is not HTML (a `.txt` or `.md` one) is warned about at boot and still renders.
+
+### Links and cards from other modules
+
+Any module, a plugin's too, can add a link to the panel's menu and a card to its dashboard. The methods come with `use navree::plugin::prelude::*;`:
+
+```rust
+use navree::helm::{HelmLink, HelmWidget};
+use navree::plugin::prelude::*;
+use serde_json::json;
+
+m.helm_nav(
+    HelmLink::new("Sales report", "/reports/sales")
+        .group("Sales")
+        .icon("chart-line")
+        .can("read", "Deal"),
+)
+.helm_widget(
+    HelmWidget::new("open-deals", "Open deals")
+        .template("admin/widgets/open-deals")
+        .can("read", "Deal")
+        .data(|ctx| async move {
+            let open = Deal::query()
+                .where_(Deal::CLOSED_AT.is_null())
+                .count(ctx.uow())
+                .await?;
+            Ok(json!({ "open": open }))
+        }),
+);
+```
+
+```html title="templates/admin/widgets/open-deals.html"
+<p class="open-deals">{{ data.open }}</p>
+```
+
+A link joins the menu's group of the same label (**Pages** when it names none), after the resources and pages, and **Go to** lists it too. Its address must be a path on your app, such as `/reports/sales`: another site's, a relative path or an empty one stops the boot. An icon the panel does not know is warned about at boot and drawn as a generic one. Without `.can(..)`, every user allowed into the panel sees the link.
+
+A card comes after the metric cards while `helm.dashboard` is on, by `.order(n)` (lower first; cards of one order keep the order they were added in). Its key is lower-case letters, digits and `-`, unique in the app, and it needs a template, so the app needs `ViewModule`; the boot checks each. The template is an HTML one, so navree-view escapes what it writes: a name without an extension stands for that name with `.html` added (`admin/widgets/open-deals` is `admin/widgets/open-deals.html`, never a `.txt` file of that name), a name may end in `.html`, and the boot refuses any other, since a `.txt` or `.md` template prints values as they are. The template gets `title`, `user` (`{id, name, email}`), `path` (the panel's path) and `data`. Without `.can(..)`, every panel user sees the card. For a module of a plugin that is not one of the framework's own packages, the boot's hint for a card's template, and for a page's, names a template under the plugin's namespace, such as `.template("announcements/admin/widgets/latest")`.
+
+Both are decided on the server for every request: a user who fails the check gets a menu and a dashboard without them, and a card's data function runs only for a user who may see the card. A card whose data function or template fails is left out and logged, and the dashboard is drawn without it. Hiding a link is not access control: the page it leads to declares its own access.
 
 ### Settings
 

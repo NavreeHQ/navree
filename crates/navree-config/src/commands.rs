@@ -4,7 +4,7 @@
 //! Both are offline: they run against the module graph, without booting the
 //! app, so they open no database connection and start no server.
 
-use navree_kernel::{AppContext, BoxError, CommandSpec};
+use navree_kernel::{AppContext, BoxError, CommandSpec, ModuleId};
 
 use crate::check::{CheckOptions, CheckReport, WEB_APP_ENV};
 use crate::publish::{PublishOptions, run as publish_section};
@@ -19,12 +19,123 @@ fn registrations(ctx: &AppContext) -> Vec<SectionRegistration> {
         .collect()
 }
 
+/// The sections the modules of the plugin with `namespace` registered,
+/// without booting the app; an error when no plugin has that namespace.
+fn plugin_registrations(
+    ctx: &AppContext,
+    namespace: &str,
+) -> Result<Vec<SectionRegistration>, String> {
+    let report = ctx.plugins();
+    // A plugin has at least one module: no module, no plugin.
+    let modules: Vec<ModuleId> = report
+        .plugins
+        .iter()
+        .filter(|plugin| plugin.info.namespace == namespace)
+        .flat_map(|plugin| plugin.modules.iter().map(|module| module.id))
+        .collect();
+    if modules.is_empty() {
+        return Err(format!(
+            "config:publish: no plugin has the namespace `{namespace}`"
+        ));
+    }
+    Ok(ctx
+        .contributions::<SectionRegistration>()
+        .into_iter()
+        .filter(|contributed| modules.contains(&contributed.module.id))
+        .map(|contributed| (*contributed.value).clone())
+        .collect())
+}
+
 /// The keys the modules claimed.
 fn claims(ctx: &AppContext) -> Vec<String> {
     ctx.contributions::<ConfigClaim>()
         .into_iter()
         .map(|contributed| contributed.value.key().to_owned())
         .collect()
+}
+
+/// The driver selectors the modules contributed, each key once.
+pub(crate) fn slots(ctx: &AppContext) -> Vec<crate::DriverSlot> {
+    unique_slots(
+        ctx.contributions::<crate::DriverSlot>()
+            .into_iter()
+            .map(|contributed| (*contributed.value).clone()),
+    )
+}
+
+/// The driver selectors of the modules that read their section: a module
+/// given its options in code (`for_root(options)`) does not read the value
+/// of its selector.
+fn value_slots(ctx: &AppContext) -> Vec<crate::DriverSlot> {
+    let in_code: Vec<ModuleId> = ctx
+        .contributions::<navree_kernel::CodeConfigured>()
+        .into_iter()
+        .map(|contributed| contributed.module.id)
+        .collect();
+    unique_slots(
+        ctx.contributions::<crate::DriverSlot>()
+            .into_iter()
+            .filter(|contributed| !in_code.contains(&contributed.module.id))
+            .map(|contributed| (*contributed.value).clone()),
+    )
+}
+
+/// `slots`, each key once (the first wins).
+fn unique_slots(slots: impl Iterator<Item = crate::DriverSlot>) -> Vec<crate::DriverSlot> {
+    let mut unique: Vec<crate::DriverSlot> = Vec::new();
+    for slot in slots {
+        if !unique.iter().any(|known| known.key() == slot.key()) {
+            unique.push(slot);
+        }
+    }
+    unique
+}
+
+/// The drivers the modules registered.
+pub(crate) fn drivers(ctx: &AppContext) -> Vec<crate::RegisteredDriver> {
+    ctx.contributions::<crate::RegisteredDriver>()
+        .into_iter()
+        .map(|contributed| (*contributed.value).clone())
+        .collect()
+}
+
+/// What `config:check` reports for the app of `ctx`, without booting it:
+/// the sections, the unknown keys (none at or below a table a registered
+/// driver reads), the keys set twice, the web app's settings, each
+/// configured driver name that does not resolve, and each registration of
+/// a driver that is refused, in the words the boot uses.
+///
+/// Not public API: the command and Navree's tests call it.
+#[doc(hidden)]
+pub async fn check_report(
+    ctx: &AppContext,
+    options: &CheckOptions,
+) -> Result<CheckReport, BoxError> {
+    let sources = ctx.get::<ConfigSources>().await?;
+    let registrations = registrations(ctx);
+    let slots = slots(ctx);
+    let drivers = drivers(ctx);
+    let mut claims = claims(ctx);
+    if slots.iter().any(|slot| slot.key().contains('*'))
+        && let Ok(config) = Config::load(&sources)
+    {
+        claims.extend(crate::driver::registered_tables(&config, &slots, &drivers));
+    }
+    let mut report = CheckReport::run_with_claims(&sources, &registrations, &claims, options)?
+        .with_web_app(&sources, std::path::Path::new(WEB_APP_ENV))
+        .with_drivers(&sources, &value_slots(ctx), &drivers);
+    let registry = ConfigRegistry::new(&registrations);
+    let records = ctx.contributions::<crate::driver::DriverRecord>();
+    for slot in &slots {
+        let section_keys = crate::driver::section_keys(&registry, slot);
+        for message in crate::driver::registration_problems(slot, &section_keys, &records) {
+            report.errors.push(crate::ConfigError::Driver {
+                key: slot.key().to_owned(),
+                message,
+            });
+        }
+    }
+    Ok(report)
 }
 
 /// `config:show [section] [--defaults] [--origin] [--fallbacks] [--json]`.
@@ -59,7 +170,8 @@ pub(crate) fn schema() -> CommandSpec {
         "config:schema",
         "Print the JSON Schema of the configuration (for editors): [--out <file>]",
         |ctx: AppContext, args: Vec<String>| async move {
-            let registry = ConfigRegistry::new(&registrations(&ctx));
+            let registry = ConfigRegistry::new(&registrations(&ctx))
+                .with_drivers(&slots(&ctx), &drivers(&ctx));
             let mut text = serde_json::to_string_pretty(&registry.schema_document())?;
             text.push('\n');
             match args.as_slice() {
@@ -79,13 +191,19 @@ pub(crate) fn schema() -> CommandSpec {
 
 /// `config:publish <section> [--force] [--stdout]`: writes `config/<section>.toml`
 /// with every key commented out beside its default.
+/// `config:publish --plugin <namespace> [--force]`: writes such a file for
+/// every section the modules of that plugin register.
 pub(crate) fn publish() -> CommandSpec {
     CommandSpec::new(
         "config:publish",
-        "Write config/<section>.toml with every key commented out beside its default: <section> [--force] [--stdout]",
+        "Write config/<section>.toml with every key commented out beside its default: <section> [--force] [--stdout] | --plugin <namespace> [--force]",
         |ctx: AppContext, args: Vec<String>| async move {
             let options = PublishOptions::parse(&args)?;
-            let registry = ConfigRegistry::new(&registrations(&ctx));
+            let sections = match &options.plugin {
+                Some(namespace) => plugin_registrations(&ctx, namespace)?,
+                None => registrations(&ctx),
+            };
+            let registry = ConfigRegistry::new(&sections);
             print!(
                 "{}",
                 publish_section(&options, &registry, std::path::Path::new("config"))?
@@ -103,19 +221,14 @@ pub(crate) fn check() -> CommandSpec {
         "Check the configuration: invalid sections, unknown keys, keys set in .env and in a config file, settings web/.env.local repeats; --env <name> checks that environment (its config/env/<name>.toml is read), and production adds the production profile",
         |ctx: AppContext, args: Vec<String>| async move {
             let options = CheckOptions::parse(&args)?;
-            let sources = ctx.get::<ConfigSources>().await?;
-            let report = CheckReport::run_with_claims(
-                &sources,
-                &registrations(&ctx),
-                &claims(&ctx),
-                &options,
-            )?
-            .with_web_app(&sources, std::path::Path::new(WEB_APP_ENV));
-            print!("{}", report.render());
-            if report.is_ok() {
+            let sections = crate::registry::section_collisions(&ctx);
+            let report = check_report(&ctx, &options).await?;
+            print!("{}", report.render_with(&sections));
+            let problems = report.problems() + sections.errors.len();
+            if problems == 0 {
                 Ok(())
             } else {
-                Err(format!("config:check found {} problem(s)", report.problems()).into())
+                Err(format!("config:check found {problems} problem(s)").into())
             }
         },
     )

@@ -23,7 +23,7 @@ include = [
 ]
 
 [package.metadata.docs.rs]
-features = ["access", "image", "orm", "phone", "storage", "time"]
+features = ["access", "extension-files", "image", "orm", "phone", "storage", "time"]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [lints]
@@ -62,6 +62,8 @@ native-preview = ["dep:navree-native"]
 ## place that shows only an image. Pure Rust (resvg on tiny-skia), with the
 ## toolkit's own typeface built in. The facade's `ui-image` turns it on.
 image = ["dep:resvg"]
+## A plugin's UI extension files read, scoped and hashed when its crate compiles: extension_script! and extension_sheet! (navree-ui-ext-macros). The facade's ui-extension-files turns it on.
+extension-files = ["dep:navree-ui-ext-macros"]
 
 [dependencies]
 navree-native = { workspace = true, optional = true }
@@ -85,6 +87,7 @@ futures-util = { workspace = true }
 http = { workspace = true }
 http-body = { workspace = true }
 navree-config = { workspace = true }
+navree-contracts = { workspace = true }
 navree-http = { workspace = true }
 navree-kernel = { workspace = true }
 # `Markdown`: CommonMark read into safe events by navree-markdown (the reader the API reference
@@ -92,6 +95,8 @@ navree-kernel = { workspace = true }
 navree-markdown = { workspace = true }
 navree-telemetry = { workspace = true }
 navree-ui-macros = { workspace = true }
+# `extension-files`: the file macros of a plugin's components.
+navree-ui-ext-macros = { workspace = true, optional = true }
 navree-validation = { workspace = true }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
@@ -117,5 +122,6 @@ proptest = { workspace = true }
 # A paused clock, for a test of something that never answers.
 tokio = { workspace = true, features = ["test-util"] }
 tower = { workspace = true }
+tracing-subscriber = { workspace = true }
 # The independent URL parser the return address is checked against.
 url = { workspace = true }

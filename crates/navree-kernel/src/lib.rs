@@ -26,6 +26,11 @@
 //! Wiring errors (missing or private providers, cycles, scope inversions,
 //! modules configured twice) fail the boot and name the module and the type.
 //! The kernel has no global statics.
+//!
+//! A module names itself a plugin with [`ModuleBuilder::plugin`] and
+//! [`plugin_info!`]; [`AppContext::plugins`] reports the plugins, and the
+//! built-in commands `plugins` and `plugin:publish` list them and copy the
+//! files they ship into the app.
 #![forbid(unsafe_code)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -36,6 +41,7 @@ compile_error!(
 
 mod app;
 mod builder;
+mod collide;
 mod command;
 mod container;
 mod error;
@@ -45,6 +51,10 @@ mod key;
 mod lazy;
 mod lifecycle;
 mod module;
+mod plugin;
+mod plugin_graph;
+mod publish;
+mod report;
 mod resolver;
 
 pub use app::{App, AppBuilder, AppContext, Contributed, ModuleInfo, Navree, WeakAppContext};
@@ -57,7 +67,21 @@ pub use key::{ModuleId, ProviderKey, Scope};
 pub use lazy::Lazy;
 pub use lifecycle::Lifecycle;
 pub use module::{CodeConfigured, ConfiguredModule, Injectable, IntoModules, Module};
+pub use plugin::{PluginInfo, PublishTag, Publishable};
+pub use report::{PluginModuleReport, PluginReport, PluginsReport};
 pub use resolver::Resolver;
+
+/// Items Navree's own crates and macros use; not public API.
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::collide::{imports, is_app_module, is_community_plugin};
+    pub use crate::plugin::{
+        FIRST_PARTY, RESERVED_NAMESPACES, default_namespace, is_namespace, namespace_text,
+    };
+    pub use crate::publish::is_safe_relative_path;
+    pub use crate::publish::{PublishRefused, Published, publish_files};
+    pub use crate::resolver::app_in_chain;
+}
 
 /// A boxed error that can cross module and task boundaries.
 pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;

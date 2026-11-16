@@ -1,11 +1,13 @@
 //! [`SessionOptions`]: the `session` configuration section.
 
-use navree_config::ConfigSection;
-use serde::Deserialize;
+use navree_config::__private::{selector_error, selector_name};
+use navree_config::{ConfigSection, DriverName, DriverNameError};
+use serde::{Deserialize, Deserializer};
+
+use crate::drivers::SLOT;
 
 /// Where session records are kept.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SessionStoreKind {
     /// In the process ([`MemoryStore`](crate::MemoryStore)): lost on
@@ -18,6 +20,51 @@ pub enum SessionStoreKind {
     /// In Redis: the `dyn SessionStore` provider named `redis`, which
     /// navree-redis's `RedisModule` registers; needs it in the app.
     Redis,
+    /// A store a module registers under this name with
+    /// [`m.session_store`](crate::ModuleBuilderSessionExt::session_store)
+    /// (`"tijori"`); its settings are `session.{name}`. Holding a built-in
+    /// name, it is that built-in store.
+    Registered(DriverName),
+}
+
+impl SessionStoreKind {
+    /// The kind, with a `Registered` built-in name turned into that
+    /// built-in (`Registered("redis")` is `Redis`).
+    pub(crate) fn resolved(self) -> SessionStoreKind {
+        match self {
+            SessionStoreKind::Registered(name) => match name.as_str() {
+                "memory" => SessionStoreKind::Memory,
+                "database" => SessionStoreKind::Database,
+                "redis" => SessionStoreKind::Redis,
+                _ => self,
+            },
+            other => other,
+        }
+    }
+}
+
+/// `memory`, `database` and `redis` are the built-in stores, also when
+/// written as a table whose only key is the name (`{ database = {} }`); any
+/// other lower-case name (a letter, then letters, digits or `_`) is a store a
+/// module registers, which the boot resolves. Anything else, a table of any
+/// other key included, is an error that lists the names and never repeats
+/// the value.
+impl<'de> Deserialize<'de> for SessionStoreKind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = selector_name(deserializer, "store", &SLOT)?;
+        match name.as_str() {
+            "memory" => Ok(SessionStoreKind::Memory),
+            "database" => Ok(SessionStoreKind::Database),
+            "redis" => Ok(SessionStoreKind::Redis),
+            other => match DriverName::new(other) {
+                Ok(name) => Ok(SessionStoreKind::Registered(name)),
+                Err(DriverNameError::Invalid) => {
+                    Err(serde::de::Error::custom(selector_error("store", &SLOT)))
+                }
+                Err(error) => Err(serde::de::Error::custom(error)),
+            },
+        }
+    }
 }
 
 /// The `SameSite` attribute of the session and `XSRF-TOKEN` cookies.
@@ -38,7 +85,7 @@ pub enum SameSite {
 ///
 /// ```toml
 /// [session]
-/// store = "database"          # memory (default) | database | redis
+/// store = "database"          # memory (default) | database | redis | a store a module registers
 /// cookie = "navree_session"
 /// lifetime_minutes = 120      # idle lifetime; every request within it extends it
 /// secure = true               # send the cookies over HTTPS only
@@ -56,7 +103,7 @@ pub enum SameSite {
 #[serde(default)]
 pub struct SessionOptions {
     /// Where records are kept (default memory).
-    #[config(one_of = "memory, database, redis")]
+    #[config(driver = "memory, database, redis", register = "m.session_store")]
     pub store: SessionStoreKind,
     /// The session cookie name (default `navree_session`).
     #[config(public)]
@@ -245,7 +292,10 @@ mod tests {
         };
         assert_eq!(
             field("store").ty,
-            FieldType::choice(&["memory", "database", "redis"])
+            FieldType::Driver {
+                built_in: vec!["memory".into(), "database".into(), "redis".into()],
+                register: "m.session_store".into(),
+            }
         );
         assert_eq!(
             field("same_site").ty,
@@ -374,6 +424,115 @@ mod tests {
     fn the_redis_store_is_a_store_name() {
         let options = from(ConfigSources::new().set("session.store", "redis")).unwrap();
         assert_eq!(options.store, SessionStoreKind::Redis);
+    }
+
+    #[test]
+    fn session_store_kind_keeps_copy_and_resolves_a_built_in_name() {
+        fn copy<T: Copy>(_: T) {}
+        let kind = SessionStoreKind::Registered(DriverName::from_static("tijori"));
+        copy(kind);
+        assert_eq!(kind.resolved(), kind);
+        for (name, built_in) in [
+            ("memory", SessionStoreKind::Memory),
+            ("database", SessionStoreKind::Database),
+            ("redis", SessionStoreKind::Redis),
+        ] {
+            assert_eq!(
+                SessionStoreKind::Registered(DriverName::from_static(name)).resolved(),
+                built_in
+            );
+        }
+    }
+
+    #[test]
+    fn session_config_of_today_reads_as_before() {
+        for (text, kind) in [
+            ("memory", SessionStoreKind::Memory),
+            ("database", SessionStoreKind::Database),
+            ("redis", SessionStoreKind::Redis),
+        ] {
+            assert_eq!(
+                serde_json::from_value::<SessionStoreKind>(serde_json::json!(text)).unwrap(),
+                kind
+            );
+            assert_eq!(
+                from(ConfigSources::new().set("session.store", text))
+                    .unwrap()
+                    .store,
+                kind
+            );
+        }
+        assert_eq!(SessionStoreKind::default(), SessionStoreKind::Memory);
+        let defaults = SessionOptions::defaults().expect("defaults");
+        assert_eq!(defaults["store"], "memory");
+
+        // A lower-case word reads as a store a module registers; the boot
+        // looks for it.
+        let read: SessionStoreKind =
+            serde_json::from_value(serde_json::json!("tijori_vault")).unwrap();
+        assert_eq!(
+            read,
+            SessionStoreKind::Registered(DriverName::from_static("tijori_vault"))
+        );
+
+        // Anything else is refused with a text that lists the names and never
+        // repeats the value.
+        let error = serde_json::from_value::<SessionStoreKind>(serde_json::json!("carrier-pigeon"))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            error,
+            "the store must be `memory`, `database`, `redis` or the name of a session store registered with m.session_store (a lower-case letter, then lower-case letters, digits or _)"
+        );
+        assert!(!error.contains("carrier-pigeon"), "{error}");
+    }
+
+    #[test]
+    fn session_store_written_as_a_one_key_table_reads_as_before() {
+        for (table, kind) in [
+            (
+                serde_json::json!({"database": {}}),
+                SessionStoreKind::Database,
+            ),
+            (
+                serde_json::json!({"memory": null}),
+                SessionStoreKind::Memory,
+            ),
+            (
+                serde_json::json!({"redis": {"db": 2}}),
+                SessionStoreKind::Redis,
+            ),
+        ] {
+            assert_eq!(
+                serde_json::from_value::<SessionStoreKind>(table).unwrap(),
+                kind
+            );
+        }
+        let options = from(ConfigSources::new().set(
+            "session",
+            serde_json::json!({"store": {"database": {"pool": 4}}, "cookie": "crm_session"}),
+        ))
+        .unwrap();
+        assert_eq!(options.store, SessionStoreKind::Database);
+        assert_eq!(options.cookie, "crm_session");
+
+        // A table never names a store a module registers, and reading one
+        // adds no name to the process's names.
+        let refused = "the store must be `memory`, `database`, `redis` or the name of a session store registered with m.session_store (a lower-case letter, then lower-case letters, digits or _)";
+        for (table, name) in [
+            (serde_json::json!({"tijori": {}}), "tijori"),
+            (
+                serde_json::json!({"almirah_vault": {"ttl": 4}}),
+                "almirah_vault",
+            ),
+        ] {
+            let error = serde_json::from_value::<SessionStoreKind>(table)
+                .unwrap_err()
+                .to_string();
+            assert_eq!(error, refused);
+            assert!(!error.contains(name), "{error}");
+        }
+        assert_eq!(DriverName::lookup("almirah_vault"), None);
     }
 
     #[test]

@@ -5,7 +5,7 @@ description: "Named disks (local, memory, S3, Google Cloud Storage, Azure): stre
 
 <Badge feature="storage" /> `navree-storage` gives your app named **disks**: places to keep files, each with its own root. You write and read files by path on a disk, stream large files without loading them into memory, accept uploads with a size limit and a content check, let browsers upload straight to a bucket, hand out links that expire, and copy a disk's files to another. Local and memory disks are Navree's own; the S3, Google Cloud Storage and Azure disks talk to the provider through the [object_store](https://docs.rs/object_store) crate, which is compiled in only with their features.
 
-A disk uses one of five drivers. Your code is the same on all of them:
+A disk uses one of five built-in drivers, or a driver a module registers. Your code is the same on all of them:
 
 | Driver | Where files live | Facade feature |
 |---|---|---|
@@ -14,6 +14,7 @@ A disk uses one of five drivers. Your code is the same on all of them:
 | `s3` | An S3 bucket: AWS, or an S3-compatible store such as MinIO, Cloudflare R2 or DigitalOcean Spaces | `storage-s3` (in `full`) |
 | `gcs` | A Google Cloud Storage bucket | `storage-gcs` (opt-in) |
 | `azure` | An Azure Blob Storage container | `storage-azure` (opt-in) |
+| a name a module registers with `m.disk_driver` | Wherever its driver keeps them (see [a driver a module registers](#a-driver-a-module-registers)) | `storage` |
 
 ## Configuration
 
@@ -53,7 +54,7 @@ driver = "memory"
 | Key | Default | What it does |
 |---|---|---|
 | `storage.default` | `local` | The disk injected as `Disk` and returned by `Storage::default_disk()`. It must exist. |
-| `storage.disks.<name>.driver` | | `local`, `memory`, `s3`, `gcs` or `azure`. |
+| `storage.disks.<name>.driver` | | `local`, `memory`, `s3`, `gcs` or `azure`, or the name of a driver a module registers with `m.disk_driver`. |
 | `storage.disks.<name>.root` | | The directory of a local disk. It is created at boot if missing. |
 | `storage.disks.<name>.public_url` | none | Where the disk's files are publicly served (a CDN, a static file server, a public bucket), for `Disk::url`. |
 | `storage.base_url` | none | An absolute `http(s)` URL put in front of the links the app serves itself (temporary URLs and direct uploads of local and memory disks). Without it they are path-only (`/storage/...`). |
@@ -644,6 +645,86 @@ tracing::info!(copied = report.copied.len(), bytes = report.bytes, "documents sy
 ## Health check
 
 `StorageModule` registers a `storage` readiness check. On every disk it writes, reads back and deletes a small probe file under `.navree-health/`, and reports the disk as down if any step fails. The disks are probed at the same time, each within 1.5 seconds, so a slow bucket is named instead of holding up the report: ``disk `documents`: timed out after 1500 ms``. It shows up in `GET /health/ready`; see [Health and metrics](/docs/digging-deeper/health-and-metrics/). The probe writes to every disk, so the app's credentials need write access to each bucket it uses.
+
+## A driver a module registers
+
+A store Navree has no driver for (an SFTP server, a document archive, a regional object store) is a `DiskDriver` of your own that a module registers under a name. Every disk whose `driver` is that name is served by it:
+
+```rust title="src/sanduk.rs"
+use std::ops::Range;
+
+use bytes::Bytes;
+use navree::BoxFuture;
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use navree::storage::{DiskDriver, DiskDriverError, DiskUpload, FileMeta, OpenedFile};
+use serde::Deserialize;
+
+/// The settings of a `sanduk` disk: the disk's own table.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct SandukSettings {
+    host: String,
+    root: String,
+}
+
+/// A disk on the Sanduk file server at `host`.
+struct Sanduk {
+    host: String,
+    root: String,
+}
+
+impl DiskDriver for Sanduk {
+    fn describe(&self) -> String {
+        format!("sanduk disk at {}", self.host)
+    }
+
+    fn put<'a>(&'a self, path: &'a str, contents: Bytes) -> BoxFuture<'a, Result<(), DiskDriverError>> {
+        // Write `contents` under `self.root` on the server.
+        todo!()
+    }
+
+    // begin_upload, read, open, head, delete and list, each the whole
+    // operation, with `DiskDriverError::NotFound` for a missing file.
+}
+
+pub struct SandukModule;
+
+impl Module for SandukModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.disk_driver("sanduk", |ctx| async move {
+            let settings: SandukSettings = ctx.settings()?;
+            Ok(Sanduk { host: settings.host, root: settings.root })
+        });
+    }
+}
+```
+
+The disk's table is the driver's settings: `DriverContext::settings` reads the table of `storage.disks.<disk>` without `driver`, as the configuration gives it or as `StorageModule::for_root` was given it in code, with the configuration's conversions (`"2222"` from the environment fills a `u16`), and `ctx.instance()` is the disk's name. The factory runs once per disk at boot:
+
+```toml title="config/app.toml"
+[storage]
+default = "invoices"
+
+[storage.disks.invoices]
+driver = "sanduk"
+host = "files.ludhiana.example"
+root = "/srv/invoices"
+```
+
+What the disk promises, the driver keeps:
+
+- Every path it receives is already normalised: relative to the disk root, `/`-separated, with no empty, `.` or `..` segment and no control character. The disk refuses anything else before the driver is called.
+- `put` replaces a file whole; a file being uploaded with `begin_upload` appears only when it is finished, never when it is aborted.
+- `read` with a range is cut short at the end of the file; `read`, `open`, `head` and `delete` of a missing file are `DiskDriverError::NotFound`.
+- `list("")` is every file of the disk, `list("docs")` every file under the folder `docs` at any depth (not `docs2/`), and a folder that does not exist has none.
+- Each method is the whole operation. The disk does not retry, so the driver should not either, and its errors name what failed without the file's contents, passwords or tokens.
+
+Such a disk has no URL provider: its [temporary URLs](#temporary-urls) and [direct uploads](#direct-uploads) go through the app's own signed routes, as a memory disk's do, with the same checks. Navree's conformance suite runs the same cases on a registered driver as on the built-in ones.
+
+A name is a lower-case letter followed by lower-case letters, digits or `_`. A registration under a built-in name (`local`, `memory`, `s3`, `gcs`, `azure`), one name registered by two modules, a disk naming a driver no module registers and a factory that fails each fail the boot, naming `m.disk_driver` (and the module); `config:check` reports the same. A factory's error is shown in the boot error as written, so it must not contain a secret from the driver's settings. An error about a disk's table never quotes its values, and its `Debug` output names its keys only. `config:show` prints the configuration with its values and masks a value only when its key's name looks secret (it contains `key`, `password`, `secret`, `token`, `credential` or another word of the framework's list of secrets) or when it is the password of a URL, so give a driver's secret settings such names (`password`, `api_key`). `config:check` reports none of the table's keys as unknown once its driver is registered.
+
+A disk of a registered driver has no public constructor: `Storage::new`, which has no app, refuses it, and `StorageModule` builds its driver at boot.
 
 ## Testing
 

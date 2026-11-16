@@ -3,10 +3,10 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "0bdadb3d685b";
+pub const BUILD: &str = "04a3e9d915e3";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-af51383c393e.js";
+pub const CORE_URL: &str = "/_navree/ui/core-4e1f371102da.js";
 
 /// The URL of `sidebar.js`.
 pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-555764e6416c.js";
@@ -15,7 +15,7 @@ pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-555764e6416c.js";
 pub const OVERLAY_URL: &str = "/_navree/ui/overlay-2a7611c102e9.js";
 
 /// The URL of `table.js`.
-pub const TABLE_URL: &str = "/_navree/ui/table-a32b1c0c5469.js";
+pub const TABLE_URL: &str = "/_navree/ui/table-93c753bb18e0.js";
 
 /// The URL of `live.js`.
 pub const LIVE_URL: &str = "/_navree/ui/live-6dcce9d0765f.js";
@@ -30,7 +30,7 @@ pub const DATES_URL: &str = "/_navree/ui/dates-1da852fcdcea.js";
 pub const DATE_TEXT_URL: &str = "/_navree/ui/date-text-65d2182a2c11.js";
 
 /// The URL of `time.js`.
-pub const TIME_URL: &str = "/_navree/ui/time-3ac9f307022f.js";
+pub const TIME_URL: &str = "/_navree/ui/time-a6c9faa4c3f3.js";
 
 /// The URL of `menus.js`.
 pub const MENUS_URL: &str = "/_navree/ui/menus-b6bf70e3054f.js";
@@ -39,22 +39,22 @@ pub const MENUS_URL: &str = "/_navree/ui/menus-b6bf70e3054f.js";
 pub const SLIDER_URL: &str = "/_navree/ui/slider-5a68ba907d0b.js";
 
 /// The URL of `tree.js`.
-pub const TREE_URL: &str = "/_navree/ui/tree-bd3fabf0b96a.js";
+pub const TREE_URL: &str = "/_navree/ui/tree-baef56b95987.js";
 
 /// The URL of `toolbar.js`.
-pub const TOOLBAR_URL: &str = "/_navree/ui/toolbar-6880cc75368d.js";
+pub const TOOLBAR_URL: &str = "/_navree/ui/toolbar-27d5a6e17919.js";
 
 /// The URL of `split.js`.
 pub const SPLIT_URL: &str = "/_navree/ui/split-137f24de73bb.js";
 
 /// The URL of `keys.js`.
-pub const KEYS_URL: &str = "/_navree/ui/keys-cb756a2b6106.js";
+pub const KEYS_URL: &str = "/_navree/ui/keys-d8a5af53718c.js";
 
 /// The URL of `lazy.js`.
 pub const LAZY_URL: &str = "/_navree/ui/lazy-393be15981b3.js";
 
 /// The URL of `sortable.js`.
-pub const SORTABLE_URL: &str = "/_navree/ui/sortable-04d2a9b1b6c2.js";
+pub const SORTABLE_URL: &str = "/_navree/ui/sortable-2f0ddfe855c8.js";
 
 /// The URL of `sortable-grid.js`.
 pub const SORTABLE_GRID_URL: &str = "/_navree/ui/sortable-grid-eaf169ce84a6.js";
@@ -75,16 +75,19 @@ pub const MENUBAR_URL: &str = "/_navree/ui/menubar-23970a4cc4de.js";
 pub const CHARTS_URL: &str = "/_navree/ui/charts-803f2f250ec5.js";
 
 /// The URL of `count-up.js`.
-pub const COUNT_UP_URL: &str = "/_navree/ui/count-up-bdb42670676f.js";
+pub const COUNT_UP_URL: &str = "/_navree/ui/count-up-ab38e4353d29.js";
 
 /// The URL of `islands.js`.
-pub const ISLANDS_URL: &str = "/_navree/ui/islands-ef7aeb40a27f.js";
+pub const ISLANDS_URL: &str = "/_navree/ui/islands-d7e25f072c9b.js";
 
 /// The URL of `parts.js`.
 pub const PARTS_URL: &str = "/_navree/ui/parts-12dc2c8376c5.js";
 
 /// The URL of `genui.js`.
-pub const GENUI_URL: &str = "/_navree/ui/genui-23e3c91c85e6.js";
+pub const GENUI_URL: &str = "/_navree/ui/genui-0564c8ee102c.js";
+
+/// The URL of `extensions.js`.
+pub const EXTENSIONS_URL: &str = "/_navree/ui/extensions-02ad7296fc9f.js";
 
 /// The URL of `phone.js`.
 #[cfg(feature = "phone")]
@@ -193,7 +196,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "af51383c393e",
+        hash: "4e1f371102da",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -220,7 +223,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "table",
         ext: "js",
-        hash: "a32b1c0c5469",
+        hash: "93c753bb18e0",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/table.js"),
         gzip: Some(include_bytes!("../dist/table.js.gz")),
@@ -265,7 +268,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "time",
         ext: "js",
-        hash: "3ac9f307022f",
+        hash: "a6c9faa4c3f3",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/time.js"),
         gzip: Some(include_bytes!("../dist/time.js.gz")),
@@ -292,7 +295,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "tree",
         ext: "js",
-        hash: "bd3fabf0b96a",
+        hash: "baef56b95987",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/tree.js"),
         gzip: Some(include_bytes!("../dist/tree.js.gz")),
@@ -301,7 +304,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "toolbar",
         ext: "js",
-        hash: "6880cc75368d",
+        hash: "27d5a6e17919",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/toolbar.js"),
         gzip: Some(include_bytes!("../dist/toolbar.js.gz")),
@@ -319,7 +322,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "keys",
         ext: "js",
-        hash: "cb756a2b6106",
+        hash: "d8a5af53718c",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/keys.js"),
         gzip: Some(include_bytes!("../dist/keys.js.gz")),
@@ -337,7 +340,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "sortable",
         ext: "js",
-        hash: "04d2a9b1b6c2",
+        hash: "2f0ddfe855c8",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/sortable.js"),
         gzip: Some(include_bytes!("../dist/sortable.js.gz")),
@@ -400,7 +403,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "count-up",
         ext: "js",
-        hash: "bdb42670676f",
+        hash: "ab38e4353d29",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/count-up.js"),
         gzip: Some(include_bytes!("../dist/count-up.js.gz")),
@@ -409,7 +412,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "islands",
         ext: "js",
-        hash: "ef7aeb40a27f",
+        hash: "d7e25f072c9b",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/islands.js"),
         gzip: Some(include_bytes!("../dist/islands.js.gz")),
@@ -427,11 +430,20 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "genui",
         ext: "js",
-        hash: "23e3c91c85e6",
+        hash: "0564c8ee102c",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/genui.js"),
         gzip: Some(include_bytes!("../dist/genui.js.gz")),
         brotli: Some(include_bytes!("../dist/genui.js.br")),
+    },
+    Asset {
+        name: "extensions",
+        ext: "js",
+        hash: "02ad7296fc9f",
+        content_type: "text/javascript; charset=utf-8",
+        bytes: include_bytes!("../dist/extensions.js"),
+        gzip: Some(include_bytes!("../dist/extensions.js.gz")),
+        brotli: Some(include_bytes!("../dist/extensions.js.br")),
     },
     #[cfg(feature = "phone")]
     Asset {

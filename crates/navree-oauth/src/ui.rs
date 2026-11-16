@@ -234,9 +234,11 @@ impl Controller for ConsentController {
                 let title = ConsentLabels::default()
                     .title
                     .replace("{client}", &view.client.name);
+                // The consent page approves a client's access to the person's account: it starts
+                // from a clean document, in an app that has plugin code to keep off it.
                 Ok::<_, AppError>(match shell {
-                    Some(shell) => shell.page(title).body(card).to_view(),
-                    None => View::new(title).body(card),
+                    Some(shell) => shell.page(title).body(card).fresh().to_view(),
+                    None => View::new(title).body(card).fresh(),
                 })
             }
         };

@@ -59,10 +59,13 @@ pub enum EventKind {
     SignIn,
     /// [`UiOperation`].
     UiOperation,
+    /// [`CustomEvent`]: an event a module names itself.
+    Custom,
 }
 
 impl EventKind {
-    /// Every kind, in declaration order.
+    /// The kinds of the first releases: every kind but `Custom`. `EVERY`
+    /// lists them all.
     pub const ALL: [EventKind; 19] = [
         EventKind::RequestHandled,
         EventKind::QueryExecuted,
@@ -83,6 +86,30 @@ impl EventKind {
         EventKind::Search,
         EventKind::SignIn,
         EventKind::UiOperation,
+    ];
+
+    /// Every kind, in declaration order, `Custom` included.
+    pub const EVERY: &'static [EventKind] = &[
+        EventKind::RequestHandled,
+        EventKind::QueryExecuted,
+        EventKind::JobProcessed,
+        EventKind::JobFailed,
+        EventKind::ScheduledTaskRan,
+        EventKind::MailSent,
+        EventKind::NotificationSent,
+        EventKind::Cache,
+        EventKind::HttpClientRequest,
+        EventKind::ExceptionReported,
+        EventKind::Log,
+        EventKind::EventEmitted,
+        EventKind::AiCall,
+        EventKind::Broadcast,
+        EventKind::StorageOp,
+        EventKind::WebhookDelivery,
+        EventKind::Search,
+        EventKind::SignIn,
+        EventKind::UiOperation,
+        EventKind::Custom,
     ];
 
     /// The snake_case name, as in serialized records (`query_executed`).
@@ -107,6 +134,7 @@ impl EventKind {
             EventKind::Search => "search",
             EventKind::SignIn => "sign_in",
             EventKind::UiOperation => "ui_operation",
+            EventKind::Custom => "custom",
         }
     }
 
@@ -170,6 +198,8 @@ pub enum TelemetryEvent {
     SignIn(SignInEvent),
     /// A Navree UI operation was answered (navree-ui).
     UiOperation(UiOperation),
+    /// An event a module names itself (`announcements.published`).
+    Custom(CustomEvent),
 }
 
 impl TelemetryEvent {
@@ -195,8 +225,70 @@ impl TelemetryEvent {
             TelemetryEvent::Search(_) => EventKind::Search,
             TelemetryEvent::SignIn(_) => EventKind::SignIn,
             TelemetryEvent::UiOperation(_) => EventKind::UiOperation,
+            TelemetryEvent::Custom(_) => EventKind::Custom,
         }
     }
+}
+
+/// An event a module names itself: a name, lower-case words joined by `.`
+/// (`announcements.published`), and fields of its own. Emit it with
+/// [`Telemetry::emit`](crate::Telemetry::emit) as
+/// [`TelemetryEvent::Custom`]; a sink receives it when its interest
+/// includes [`EventKind::Custom`], as an interest in every kind does.
+///
+/// An event whose name is not two or more lower-case words (each a letter,
+/// then up to 63 letters, digits or `_`) joined by `.` is not delivered,
+/// and the registry logs a warning once for that name.
+///
+/// ```
+/// use navree_telemetry::{CustomEvent, Telemetry, TelemetryEvent};
+///
+/// let event = CustomEvent::new("announcements.published")
+///     .field("by", "Harpreet Sandhu")
+///     .field("amount", "₹1,00,000");
+/// assert_eq!(event.fields["by"], "Harpreet Sandhu");
+/// // Inside a request, job or task: the app's registry.
+/// Telemetry::current().emit(TelemetryEvent::Custom(event));
+/// ```
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct CustomEvent {
+    /// The event's name: `announcements.published`.
+    pub name: String,
+    /// The event's fields.
+    #[serde(default)]
+    pub fields: serde_json::Map<String, Value>,
+}
+
+impl CustomEvent {
+    /// An event named `name` (`announcements.published`), without fields.
+    pub fn new(name: impl Into<String>) -> CustomEvent {
+        CustomEvent {
+            name: name.into(),
+            fields: serde_json::Map::new(),
+        }
+    }
+
+    /// The event with the field `key` set to `value`.
+    #[must_use]
+    pub fn field(mut self, key: impl Into<String>, value: impl Into<Value>) -> CustomEvent {
+        self.fields.insert(key.into(), value.into());
+        self
+    }
+}
+
+/// Whether `name` is two or more lower-case words joined by `.`, each a
+/// lower-case letter followed by up to 63 lower-case letters, digits or
+/// `_`: the name of a [`CustomEvent`] that is delivered.
+pub(crate) fn is_event_name(name: &str) -> bool {
+    let mut words = 0usize;
+    for word in name.split('.') {
+        if !navree_kernel::__private::is_namespace(word) {
+            return false;
+        }
+        words += 1;
+    }
+    words >= 2
 }
 
 /// An HTTP request was answered: emitted by navree-http's outermost layer
@@ -570,7 +662,69 @@ pub(crate) mod millis {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
+    use crate::{Interest, Telemetry, TelemetryRecorder};
+
+    #[test]
+    fn custom_events_reach_sinks_and_all_keeps_nineteen_kinds() {
+        assert_eq!(EventKind::ALL.len(), 19);
+        assert_eq!(EventKind::EVERY.len(), 20);
+        assert_eq!(EventKind::EVERY[..19], EventKind::ALL);
+        assert_eq!(EventKind::EVERY[19], EventKind::Custom);
+        assert_eq!(EventKind::Custom.as_str(), "custom");
+        assert!(
+            EventKind::ALL
+                .iter()
+                .all(|kind| kind.bit() & EventKind::Custom.bit() == 0)
+        );
+        assert!(Interest::ALL.contains(EventKind::Custom));
+
+        let event = CustomEvent::new("announcements.published")
+            .field("by", "Harpreet Sandhu")
+            .field("amount", "₹1,00,000");
+        let json = serde_json::to_value(TelemetryEvent::Custom(event.clone())).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "type": "custom",
+                "name": "announcements.published",
+                "fields": { "by": "Harpreet Sandhu", "amount": "₹1,00,000" }
+            })
+        );
+        let back: TelemetryEvent = serde_json::from_value(json).unwrap();
+        assert_eq!(back, TelemetryEvent::Custom(event.clone()));
+        assert_eq!(back.kind(), EventKind::Custom);
+
+        let every = TelemetryRecorder::new();
+        let logs = TelemetryRecorder::only([EventKind::Log]);
+        let telemetry =
+            Telemetry::with_sinks(vec![Arc::new(every.clone()), Arc::new(logs.clone())]);
+        telemetry.emit(TelemetryEvent::Custom(event.clone()));
+        assert_eq!(every.events(), [TelemetryEvent::Custom(event)]);
+        assert_eq!(every.of_kind(EventKind::Custom).len(), 1);
+        assert!(logs.is_empty(), "a sink without the kind gets nothing");
+    }
+
+    #[test]
+    fn custom_event_names_are_dotted_lower_case_words() {
+        for good in ["announcements.published", "crm.deal.won", "notice_board.v2"] {
+            assert!(is_event_name(good), "{good}");
+        }
+        for bad in [
+            "",
+            "published",
+            "Announcements.Published",
+            "announcements..published",
+            ".announcements",
+            "announcements.",
+            "2fa.sent",
+            "announcements.pub-lished",
+        ] {
+            assert!(!is_event_name(bad), "{bad}");
+        }
+    }
 
     #[test]
     fn every_kind_has_its_own_bit() {

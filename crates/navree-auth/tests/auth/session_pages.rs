@@ -8,9 +8,10 @@ use std::sync::Arc;
 use navree_auth::testing::VirtualAuthenticator;
 use navree_auth::{AuthPages, User};
 use navree_contracts::{AuditSink, FixedClock};
+use navree_kernel::{Module, ModuleBuilder};
 use navree_session::{SessionModule, SessionOptions};
 use navree_testing::{TestApp, TestAppBuilder, TestClient, TestResponse};
-use navree_ui::UiModule;
+use navree_ui::{ExtensionFile, PAGE_CSP, UiExtension, UiModule};
 use serde_json::{Value, json};
 
 use crate::session_strategy::EveryoneTwoFactorModule;
@@ -828,4 +829,119 @@ async fn every_route_of_the_pages_is_documented() {
         assert_eq!(api.tags, ["Auth pages"], "{label}");
     }
     assert_eq!(pages, 24);
+}
+
+/// A component of the app's own, with a stylesheet: an app that contributes one has pages that
+/// start from a clean document.
+static PROOF: UiExtension = UiExtension::new("app", "proof").sheet(ExtensionFile::__new(
+    br#":where([data-slot^="app:"]){}"#,
+    "aaaaaaaaaaaa",
+    Some("app"),
+));
+
+/// The module that contributes [`PROOF`].
+struct ProofModule;
+
+impl Module for ProofModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(PROOF);
+    }
+}
+
+/// `builder` with the session layer, navree-ui and the pages with sign-up on.
+fn with_sign_up(builder: TestAppBuilder) -> TestAppBuilder {
+    builder
+        .module(SessionModule::for_root(SessionOptions::default()))
+        .module(UiModule)
+        .module(AuthPages::new().sign_up())
+}
+
+/// What the page at `path` says of itself: whether its root element holds the mark of a page
+/// that starts clean, the header that says so, and the content security policy.
+async fn fresh_mark(client: &TestClient, path: &str) -> (bool, Option<String>, Option<String>) {
+    let page = open(client, path).await.assert_status(200);
+    let html = page.text();
+    let start = html.find("<html").expect("a root element");
+    let root = &html[start..start + html[start..].find('>').expect("a closed tag")];
+    (
+        root.contains("data-ui-fresh-page"),
+        page.header("x-navree-fresh").map(str::to_owned),
+        page.header("content-security-policy").map(str::to_owned),
+    )
+}
+
+// The sign-in, sign-up and forgotten-password pages take a password: in an app with a UI
+// extension each starts from a clean document, whatever the app allows its pages to load; in an
+// app with none they are the pages they always were.
+#[tokio::test]
+async fn navree_auth_pages_are_fresh() {
+    let pages = ["/sign-in", "/sign-up", "/forgot-password"];
+
+    let app = with_sign_up(support::builder())
+        .module(ProofModule)
+        .build()
+        .await;
+    for path in pages {
+        let (marked, header, policy) = fresh_mark(&app.client(), path).await;
+        assert!(marked, "{path} is marked");
+        assert_eq!(header.as_deref(), Some("1"), "{path}");
+        assert_eq!(policy.as_deref(), Some(PAGE_CSP), "{path}");
+    }
+
+    // The app widens what its pages may load: the pages that start clean keep the toolkit's
+    // policy.
+    let app = with_sign_up(support::builder())
+        .module(ProofModule)
+        .config(
+            "ui.policy.allow.app.img_src",
+            json!(["https://cdn.ludhiana.example"]),
+        )
+        .build()
+        .await;
+    for path in pages {
+        let (marked, header, policy) = fresh_mark(&app.client(), path).await;
+        assert!(marked, "{path} is marked");
+        assert_eq!(header.as_deref(), Some("1"), "{path}");
+        assert_eq!(policy.as_deref(), Some(PAGE_CSP), "{path}");
+    }
+
+    // An app with no extension and nothing allowed: no mark and no header.
+    let app = with_sign_up(support::builder()).build().await;
+    for path in pages {
+        let (marked, header, policy) = fresh_mark(&app.client(), path).await;
+        assert!(!marked, "{path} is not marked");
+        assert_eq!(header, None, "{path}");
+        assert_eq!(policy.as_deref(), Some(PAGE_CSP), "{path}");
+    }
+}
+
+// Signing out answers a post from another page with a redirect to the sign-in page, and that
+// page is fresh: a boosted post from a page with plugin code ends in a full load of it.
+#[tokio::test]
+async fn signing_out_answers_with_a_redirect_to_the_fresh_sign_in_page() {
+    let app = with_sign_up(support::builder())
+        .module(ProofModule)
+        .build()
+        .await;
+    create_user(&app, "meera.sharma@example.com").await;
+    let browser = app.client();
+    post_form(
+        &browser,
+        "/sign-in",
+        &[
+            ("email", "meera.sharma@example.com"),
+            ("password", PASSWORD),
+        ],
+    )
+    .await
+    .assert_status(303);
+    let out = post_form(&browser, "/sign-out", &[])
+        .await
+        .assert_status(303);
+    let to = out.header("location").expect("a place to go").to_owned();
+    assert!(to.starts_with("/sign-in"), "{to}");
+    let (marked, header, policy) = fresh_mark(&browser, &to).await;
+    assert!(marked, "the page signing out leads to is marked");
+    assert_eq!(header.as_deref(), Some("1"));
+    assert_eq!(policy.as_deref(), Some(PAGE_CSP));
 }

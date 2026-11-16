@@ -3,12 +3,14 @@
 
 use std::time::Duration;
 
-use navree_config::{ConfigSection, ConfigTable};
-use serde::{Deserialize, Serialize};
+use navree_config::__private::{selector_error, selector_name};
+use navree_config::{ConfigSection, ConfigTable, DriverName, DriverNameError};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::drivers::SLOT;
 
 /// Where queued jobs are stored.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum QueueDriver {
     /// The `jobs` and `failed_jobs` tables of the app database
@@ -23,15 +25,67 @@ pub enum QueueDriver {
     /// which navree-redis's `RedisModule` registers; every process using
     /// the same Redis server shares the jobs. Needs `RedisModule`.
     Redis,
+    /// A store a module registers under this name with
+    /// [`m.queue_store`](crate::ModuleBuilderQueueExt::queue_store)
+    /// (`"amritsar_queue"`); its settings are `queue.{name}`. Holding a
+    /// built-in name, it is that built-in driver.
+    Registered(DriverName),
 }
 
 impl QueueDriver {
-    /// The configuration name: `database`, `memory` or `redis`.
+    /// The configuration name: `database`, `memory`, `redis`, or the name a
+    /// store is registered under.
     pub fn as_str(self) -> &'static str {
         match self {
             QueueDriver::Database => "database",
             QueueDriver::Memory => "memory",
             QueueDriver::Redis => "redis",
+            QueueDriver::Registered(name) => name.as_str(),
+        }
+    }
+
+    /// The driver, with a `Registered` built-in name turned into that
+    /// built-in (`Registered("memory")` is `Memory`).
+    pub(crate) fn resolved(self) -> QueueDriver {
+        match self {
+            QueueDriver::Registered(name) => match name.as_str() {
+                "database" => QueueDriver::Database,
+                "memory" => QueueDriver::Memory,
+                "redis" => QueueDriver::Redis,
+                _ => self,
+            },
+            other => other,
+        }
+    }
+}
+
+/// The configuration name, as [`as_str`](QueueDriver::as_str) gives it.
+impl Serialize for QueueDriver {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+/// `database`, `memory` and `redis` are the built-in drivers, also when
+/// written as a table whose only key is the name (`{ memory = {} }`); any
+/// other lower-case name (a letter, then letters, digits or `_`) is a store a
+/// module registers, which the boot resolves. Anything else, a table of any
+/// other key included, is an error that lists the names and never repeats
+/// the value.
+impl<'de> Deserialize<'de> for QueueDriver {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = selector_name(deserializer, "driver", &SLOT)?;
+        match name.as_str() {
+            "database" => Ok(QueueDriver::Database),
+            "memory" => Ok(QueueDriver::Memory),
+            "redis" => Ok(QueueDriver::Redis),
+            other => match DriverName::new(other) {
+                Ok(name) => Ok(QueueDriver::Registered(name)),
+                Err(DriverNameError::Invalid) => {
+                    Err(serde::de::Error::custom(selector_error("driver", &SLOT)))
+                }
+                Err(error) => Err(serde::de::Error::custom(error)),
+            },
         }
     }
 }
@@ -40,7 +94,7 @@ impl QueueDriver {
 ///
 /// ```toml
 /// [queue]
-/// driver = "database"          # or "memory", "redis"
+/// driver = "database"          # or "memory", "redis", or a store a module registers
 /// default_queue = "default"    # where jobs with an empty queue name go
 /// workers = 4                  # concurrent jobs per `queue:work` process
 /// poll_interval_ms = 1000      # how long an idle worker waits before polling again
@@ -56,7 +110,7 @@ impl QueueDriver {
 #[serde(default)]
 pub struct QueueOptions {
     /// Where jobs are stored (default [`QueueDriver::Database`]).
-    #[config(one_of = "database, memory, redis")]
+    #[config(driver = "database, memory, redis", register = "m.queue_store")]
     pub driver: QueueDriver,
     /// The queue of jobs dispatched with an empty queue name, and the queue
     /// workers process when [`queues`](QueueOptions::queues) is empty
@@ -298,8 +352,133 @@ mod tests {
             .map(QueueDriver::as_str),
             ["database", "memory", "redis"]
         );
+        // A name that is a lower-case word reads as a store a module
+        // registers; the boot looks for it.
         let sources = ConfigSources::new().env_vars("APP_", [("APP_QUEUE__DRIVER", "carrier")]);
+        let options = config(sources).typed::<QueueOptions>().expect("valid");
+        assert_eq!(options.driver.as_str(), "carrier");
+        assert!(matches!(options.driver, QueueDriver::Registered(_)));
+
+        // Anything else is refused as the configuration is read, with a text
+        // that lists the names and never repeats the value.
+        let error = serde_json::from_value::<QueueDriver>(serde_json::json!("carrier-pigeon"))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            error,
+            "the driver must be `database`, `memory`, `redis` or the name of a queue store registered with m.queue_store (a lower-case letter, then lower-case letters, digits or _)"
+        );
+        assert!(!error.contains("carrier-pigeon"), "{error}");
+        let sources =
+            ConfigSources::new().env_vars("APP_", [("APP_QUEUE__DRIVER", "carrier-pigeon")]);
         assert!(config(sources).typed::<QueueOptions>().is_err());
+    }
+
+    #[test]
+    fn queue_driver_keeps_copy_and_its_static_name() {
+        fn copy<T: Copy>(_: T) {}
+        let driver = QueueDriver::Registered(DriverName::from_static("amritsar_queue"));
+        copy(driver);
+        let name: &'static str = driver.as_str();
+        assert_eq!(name, "amritsar_queue");
+        assert_eq!(
+            QueueDriver::Registered(DriverName::from_static("memory")).resolved(),
+            QueueDriver::Memory
+        );
+        assert_eq!(
+            QueueDriver::Registered(DriverName::from_static("database")).resolved(),
+            QueueDriver::Database
+        );
+        assert_eq!(
+            QueueDriver::Registered(DriverName::from_static("redis")).resolved(),
+            QueueDriver::Redis
+        );
+        assert_eq!(driver.resolved(), driver);
+    }
+
+    #[test]
+    fn queue_config_of_today_reads_as_before() {
+        for (text, driver) in [
+            ("database", QueueDriver::Database),
+            ("memory", QueueDriver::Memory),
+            ("redis", QueueDriver::Redis),
+        ] {
+            assert_eq!(
+                serde_json::from_value::<QueueDriver>(serde_json::json!(text)).unwrap(),
+                driver
+            );
+            assert_eq!(serde_json::to_value(driver).unwrap(), text);
+            assert_eq!(driver.as_str(), text);
+        }
+        assert_eq!(QueueDriver::default(), QueueDriver::Database);
+        assert_eq!(
+            serde_json::to_value(QueueOptions::default()).unwrap()["driver"],
+            "database"
+        );
+        let defaults = QueueOptions::defaults().expect("defaults");
+        assert_eq!(defaults["driver"], "database");
+
+        // A whole section reads as it did.
+        let options: QueueOptions = serde_json::from_value(
+            serde_json::json!({"driver": "memory", "workers": 2, "queues": ["high", "default"]}),
+        )
+        .unwrap();
+        assert_eq!(options.driver, QueueDriver::Memory);
+        assert_eq!(options.workers, 2);
+        assert_eq!(options.queues, ["high", "default"]);
+
+        // A name no module has registered yet still reads, and prints as itself.
+        let read: QueueDriver = serde_json::from_value(serde_json::json!("dak_ludhiana")).unwrap();
+        assert_eq!(read.as_str(), "dak_ludhiana");
+        assert_eq!(serde_json::to_value(read).unwrap(), "dak_ludhiana");
+    }
+
+    #[test]
+    fn queue_driver_written_as_a_one_key_table_reads_as_before() {
+        for (table, driver, text) in [
+            (
+                serde_json::json!({"redis": {}}),
+                QueueDriver::Redis,
+                "redis",
+            ),
+            (
+                serde_json::json!({"memory": null}),
+                QueueDriver::Memory,
+                "memory",
+            ),
+            (
+                serde_json::json!({"database": {"pool": 4}}),
+                QueueDriver::Database,
+                "database",
+            ),
+        ] {
+            let read = serde_json::from_value::<QueueDriver>(table).unwrap();
+            assert_eq!(read, driver);
+            assert_eq!(serde_json::to_value(read).unwrap(), text);
+        }
+        let options: QueueOptions =
+            serde_json::from_value(serde_json::json!({"driver": {"memory": {}}, "workers": 3}))
+                .unwrap();
+        assert_eq!(options.driver, QueueDriver::Memory);
+        assert_eq!(options.workers, 3);
+
+        // A table never names a store a module registers, and reading one
+        // adds no name to the process's names.
+        let refused = "the driver must be `database`, `memory`, `redis` or the name of a queue store registered with m.queue_store (a lower-case letter, then lower-case letters, digits or _)";
+        for (table, name) in [
+            (serde_json::json!({"dak": {}}), "dak"),
+            (
+                serde_json::json!({"jalandhar_queue": {"depot": 4}}),
+                "jalandhar_queue",
+            ),
+        ] {
+            let error = serde_json::from_value::<QueueDriver>(table)
+                .unwrap_err()
+                .to_string();
+            assert_eq!(error, refused);
+            assert!(!error.contains(name), "{error}");
+        }
+        assert_eq!(DriverName::lookup("jalandhar_queue"), None);
     }
 
     #[test]
@@ -379,7 +558,10 @@ mod tests {
         };
         assert_eq!(
             field("driver").ty,
-            FieldType::choice(&["database", "memory", "redis"])
+            FieldType::Driver {
+                built_in: vec!["database".into(), "memory".into(), "redis".into()],
+                register: "m.queue_store".into(),
+            }
         );
         assert_eq!(field("queues").ty, FieldType::list(FieldType::String));
         let operations = field("operations");

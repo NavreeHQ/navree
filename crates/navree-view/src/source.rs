@@ -74,6 +74,32 @@ impl Sources {
         Ok(files)
     }
 
+    /// The name of every template file in the directories, as
+    /// [`read_all`](Sources::read_all) reads them.
+    pub(crate) fn file_names(&self) -> Result<Vec<String>, ViewError> {
+        Ok(self.files()?.into_keys().collect())
+    }
+
+    /// Which of `names` a template file provides, and so wins over an embedded
+    /// template of that name: the names in the listing of the directories,
+    /// which is what [`read_all`](Sources::read_all) reads. A name counts
+    /// letter for letter, with or without reloading: on a disk that ignores
+    /// case a file `Mail/Welcome.html` is another name than `mail/welcome.html`,
+    /// as it is where the listing is all there is, so the boot answers the same
+    /// in development and in production. Walks the directories only when there
+    /// is a name to look for.
+    pub(crate) fn provided_by_files(&self, names: &[String]) -> Result<Vec<String>, ViewError> {
+        if names.is_empty() {
+            return Ok(Vec::new());
+        }
+        let files = self.files()?;
+        Ok(names
+            .iter()
+            .filter(|name| files.contains_key(name.as_str()))
+            .cloned()
+            .collect())
+    }
+
     /// The file that provides template `name`, if any.
     fn file(&self, name: &str) -> Option<PathBuf> {
         if !is_template_name(name) {

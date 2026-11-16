@@ -35,6 +35,12 @@ impl Resolver {
         }
     }
 
+    /// This resolver, with `stack` as the providers being constructed.
+    pub(crate) fn continuing(mut self, stack: Stack) -> Self {
+        self.stack = stack;
+        self
+    }
+
     /// Resolves the unnamed provider of `T`.
     pub async fn get<T: ?Sized + Send + Sync + 'static>(&self) -> Result<Arc<T>, KernelError> {
         self.get_key::<T>(&ProviderKey::of::<T>()).await
@@ -203,6 +209,31 @@ impl fmt::Debug for Resolver {
     }
 }
 
+/// A handle to the whole app whose resolutions continue `resolver`'s chain:
+/// asking it for a singleton that is being built on the way to the caller
+/// (the provider whose factory holds `resolver`, or one that asked for that
+/// provider) is a [`KernelError::ProviderCycle`] naming the chain, where
+/// [`AppContext::get`] would wait for ever. Only the singletons of the chain
+/// are carried, and each is built once the app has booted, so a handle kept
+/// past the boot resolves as any other.
+///
+/// Not public API: what Navree's driver kinds hand a driver's factory.
+#[doc(hidden)]
+pub fn app_in_chain(resolver: &Resolver) -> AppContext {
+    let mut singletons: Vec<usize> = resolver
+        .stack
+        .frames()
+        .map(|frame| frame.provider)
+        .filter(|&provider| resolver.is_singleton(provider))
+        .collect();
+    // Innermost first: pushed from the outermost, they keep that order.
+    singletons.reverse();
+    let chain = singletons
+        .into_iter()
+        .fold(Stack::default(), |chain, provider| chain.push(provider));
+    AppContext::in_chain(resolver.inner.clone(), chain)
+}
+
 /// Extracts the `Arc<T>` stored in an instance.
 fn downcast<T: ?Sized + Send + Sync + 'static>(
     instance: &Instance,
@@ -223,7 +254,7 @@ fn downcast<T: ?Sized + Send + Sync + 'static>(
 
 /// The providers currently being constructed, innermost first (a persistent list).
 #[derive(Clone, Default)]
-struct Stack(Option<Arc<Frame>>);
+pub(crate) struct Stack(Option<Arc<Frame>>);
 
 struct Frame {
     provider: usize,

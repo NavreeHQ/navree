@@ -152,6 +152,25 @@ impl CheckReport {
         self
     }
 
+    /// Adds what the driver names that `sources` give the selectors of
+    /// `slots` say that `drivers` (the drivers the modules registered) do
+    /// not: a name that is neither built in nor registered for its slot is a
+    /// [`ConfigError::Driver`] with the sentence the boot fails with. A slot
+    /// whose section already has an error here is left out, so one value
+    /// gives one error. The tables of a `*` slot (`storage.disks.*.driver`)
+    /// whose driver is registered are read by that driver: none of their
+    /// keys is unknown.
+    #[must_use]
+    pub fn with_drivers(
+        mut self,
+        sources: &ConfigSources,
+        slots: &[crate::DriverSlot],
+        drivers: &[crate::RegisteredDriver],
+    ) -> CheckReport {
+        crate::driver::check_names(&mut self, sources, slots, drivers);
+        self
+    }
+
     /// How many things fail the check: invalid sections, unknown keys and
     /// failing profile settings. Keys set in both `.env` and a config file,
     /// what the web app's settings disagree on, and notes, are warnings and
@@ -181,6 +200,10 @@ impl CheckReport {
                         let _ = writeln!(out, "error    {problem}");
                     }
                 }
+                // The sentence names its key: the boot prints the same one.
+                ConfigError::Driver { message, .. } => {
+                    let _ = writeln!(out, "error    {message}");
+                }
                 other => {
                     let _ = writeln!(out, "error    {other}");
                 }
@@ -209,14 +232,41 @@ impl CheckReport {
                 let _ = writeln!(out, "  {level}  {}: {}", finding.key, finding.message);
             }
         }
-        let problems = self.problems();
-        if problems == 0 {
-            let _ = writeln!(out, "config:check: ok ({} sections read)", self.sections);
-        } else {
-            let plural = if problems == 1 { "problem" } else { "problems" };
-            let _ = writeln!(out, "config:check: {problems} {plural}");
-        }
+        out.push_str(&summary(self.problems(), self.sections));
         out
+    }
+
+    /// [`render`](CheckReport::render) with the sections that two types read:
+    /// the errors first, one line each, the warnings after the rest, and a
+    /// summary that counts the errors as problems.
+    pub(crate) fn render_with(&self, sections: &crate::registry::SectionCollisions) -> String {
+        let mut out = String::new();
+        for error in &sections.errors {
+            let _ = writeln!(out, "error    {error}");
+        }
+        // `render` ends with its own summary line, which does not count the
+        // sections' errors.
+        let rendered = self.render();
+        let own_summary = summary(self.problems(), self.sections);
+        let body = rendered.strip_suffix(own_summary.as_str());
+        out.push_str(body.unwrap_or(&rendered));
+        for warning in &sections.warnings {
+            let _ = writeln!(out, "warning  {warning}");
+        }
+        let problems = self.problems() + sections.errors.len();
+        out.push_str(&summary(problems, self.sections));
+        out
+    }
+}
+
+/// The last line of the report: how many sections were read, or how many
+/// problems there are.
+fn summary(problems: usize, sections: usize) -> String {
+    if problems == 0 {
+        format!("config:check: ok ({sections} sections read)\n")
+    } else {
+        let plural = if problems == 1 { "problem" } else { "problems" };
+        format!("config:check: {problems} {plural}\n")
     }
 }
 
@@ -331,4 +381,38 @@ pub fn production_profile(config: &Config) -> Vec<Finding> {
         }
     }
     findings
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::SectionCollisions;
+
+    #[test]
+    fn the_check_lists_section_collisions_as_errors_and_warnings() {
+        let report =
+            CheckReport::run(&ConfigSources::new(), &[], &CheckOptions::default()).unwrap();
+        let sections = SectionCollisions {
+            errors: vec![
+                "configuration section `notices` is read by two types: `a::Notices` (CrmModule) and `b::Notices` (AnnouncementsModule); a section belongs to one type".into(),
+            ],
+            warnings: vec![
+                "configuration section `deals` is read by two types: `a::Deals` (CrmModule) and `b::Deals` (SalesModule); this becomes an error in 2.0".into(),
+            ],
+        };
+        let text = report.render_with(&sections);
+        assert!(
+            text.starts_with("error    configuration section `notices` is read by two types"),
+            "{text}"
+        );
+        assert!(
+            text.contains("\nwarning  configuration section `deals` is read by two types"),
+            "{text}"
+        );
+        assert!(text.ends_with("config:check: 1 problem\n"), "{text}");
+        assert_eq!(
+            report.render_with(&SectionCollisions::default()),
+            report.render()
+        );
+    }
 }

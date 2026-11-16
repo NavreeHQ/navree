@@ -605,7 +605,7 @@ on("click", (e) => {
  * @param {HTMLFormElement} form @param {boolean} back
  */
 function restore(form, back) {
-  const control = /** @type {any} */ (form.querySelector("input:not([type=hidden]),select"));
+  const control = /** @type {any} */ (form.querySelector("[name=value]"));
   if (!control) return;
   if (control.nodeName === "SELECT") {
     for (const option of control.options) {
@@ -616,15 +616,17 @@ function restore(form, back) {
   else control.defaultValue = control.value;
 }
 
+// An edited cell is made of one field, the one named `value`. A control of the app's or a plugin's own can hold
+// other elements (a search box, buttons); their keys and changes are the control's, not the cell's.
 on("change", (e) => {
   const control = /** @type {HTMLInputElement} */ (e.target);
-  const form = control.closest?.("form[data-ui-edit]");
+  const form = control.name == "value" && control.closest?.("form[data-ui-edit]");
   if (form) HTMLFormElement.prototype.requestSubmit.call(form);
 });
 
 on("keydown", (e) => {
   const control = /** @type {HTMLInputElement} */ (e.target);
-  const form = /** @type {HTMLFormElement | null} */ (control.closest?.("form[data-ui-edit]"));
+  const form = /** @type {HTMLFormElement | null} */ (control.name == "value" && control.closest?.("form[data-ui-edit]"));
   if (!form) return;
   if (e.key === "Escape") {
     restore(form, true);

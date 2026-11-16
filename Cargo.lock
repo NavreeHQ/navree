@@ -4138,6 +4138,7 @@ dependencies = [
  "navree-http",
  "navree-http-client",
  "navree-i18n",
+ "navree-i18n-macros",
  "navree-integrations",
  "navree-kernel",
  "navree-lighthouse",
@@ -4191,6 +4192,7 @@ dependencies = [
  "tonic-prost",
  "tower",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -4487,6 +4489,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -4650,6 +4653,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tracing",
+ "tracing-subscriber",
  "unicode-bidi",
  "uuid",
  "zip",
@@ -5242,6 +5246,7 @@ dependencies = [
  "serde",
  "serde_json",
  "syn 3.0.9",
+ "tempfile",
  "tokio",
  "tower",
  "trybuild",
@@ -5705,6 +5710,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "navree-plugin-geo"
+version = "1.2.4"
+dependencies = [
+ "http",
+ "navree",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "navree-queue"
 version = "1.2.4"
 dependencies = [
@@ -6103,6 +6122,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -6184,6 +6204,7 @@ dependencies = [
  "http-body-util",
  "navree-access",
  "navree-config",
+ "navree-contracts",
  "navree-db",
  "navree-http",
  "navree-kernel",
@@ -6196,6 +6217,7 @@ dependencies = [
  "navree-testing",
  "navree-time",
  "navree-ui",
+ "navree-ui-ext-macros",
  "navree-ui-macros",
  "navree-validation",
  "proptest",
@@ -6209,8 +6231,20 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
+ "tracing-subscriber",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "navree-ui-ext-macros"
+version = "1.2.4"
+dependencies = [
+ "cssparser",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -6278,6 +6312,7 @@ dependencies = [
  "chrono",
  "navree-config",
  "navree-kernel",
+ "navree-macros",
  "navree-template",
  "serde",
  "serde_json",
@@ -6285,6 +6320,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -9937,6 +9973,7 @@ dependencies = [
  "futures-util",
  "http",
  "navree",
+ "navree-plugin-geo",
  "serde",
  "serde_json",
  "tokio",

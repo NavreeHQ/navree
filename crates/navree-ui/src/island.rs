@@ -67,6 +67,7 @@ use http::HeaderMap;
 use navree_http::response::{IntoResponse, Response};
 use serde::Serialize;
 
+use crate::app_files::{checked_namespace, stem_of};
 use crate::assets;
 use crate::node::{AttrValue, Element, IntoNodes, Node, Uses, el};
 
@@ -79,6 +80,8 @@ pub const ISLAND_PATH: &str = "/_navree/ui/island";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IslandScript {
     name: &'static str,
+    /// The namespace of the plugin it belongs to, if it was built with one.
+    pub(crate) namespace: Option<&'static str>,
     bytes: &'static [u8],
     hash: u64,
 }
@@ -87,6 +90,10 @@ impl IslandScript {
     /// The script `bytes`, named `name` (1 to 64 lowercase letters, digits and `-`), at
     /// most `most` bytes long. A script past its ceiling, or a name of anything else,
     /// fails the app's build.
+    ///
+    /// The script is hashed while the app compiles, and the compiler limits that work: a
+    /// script past about 500 KB stops the build (`long_running_const_eval`) unless the
+    /// `static` that holds it carries `#[allow(long_running_const_eval)]`.
     pub const fn new(name: &'static str, bytes: &'static [u8], most: usize) -> Self {
         let letters = name.as_bytes();
         assert!(
@@ -113,7 +120,31 @@ impl IslandScript {
             hash = hash.wrapping_mul(0x0100_0000_01b3);
             at += 1;
         }
-        Self { name, bytes, hash }
+        Self {
+            name,
+            namespace: None,
+            bytes,
+            hash,
+        }
+    }
+
+    /// Puts the script under `namespace`, a plugin's namespace (a lower-case letter followed
+    /// by up to 63 lower-case letters, digits or `_`): it is served as `{namespace}.{name}`,
+    /// and its name stays `name`. A namespace outside that grammar fails the build.
+    ///
+    /// ```
+    /// use navree_ui::IslandScript;
+    ///
+    /// static CLOCK: IslandScript =
+    ///     IslandScript::new("clock", b"export function mount(body, props) {}", 4 * 1024)
+    ///         .namespace("announcements");
+    ///
+    /// assert_eq!(CLOCK.name(), "clock");
+    /// assert!(CLOCK.url().starts_with("/_navree/ui/island/announcements.clock-"));
+    /// ```
+    pub const fn namespace(mut self, namespace: &'static str) -> Self {
+        self.namespace = Some(checked_namespace(namespace));
+        self
     }
 
     /// Its name.
@@ -133,9 +164,16 @@ impl IslandScript {
         out
     }
 
-    /// Where it is served: `/_navree/ui/island/{name}-{hash}.js`.
+    /// The name it is served under before its hash: `{namespace}.{name}`, or `{name}`.
+    pub(crate) fn stem(&self) -> String {
+        stem_of(self.namespace, self.name)
+    }
+
+    /// Where it is served: `/_navree/ui/island/{name}-{hash}.js`, or
+    /// `/_navree/ui/island/{namespace}.{name}-{hash}.js` after
+    /// [`namespace`](Self::namespace).
     pub fn url(&self) -> String {
-        format!("{ISLAND_PATH}/{}-{}.js", self.name, self.hash())
+        format!("{ISLAND_PATH}/{}-{}.js", self.stem(), self.hash())
     }
 }
 
@@ -209,6 +247,8 @@ impl From<Island> for Node {
 #[derive(Clone, Debug)]
 pub(crate) struct Served {
     script: IslandScript,
+    /// The name before the hash (`depots`, `announcements.clock`).
+    stem: String,
     hash: String,
     brotli: Bytes,
 }
@@ -218,6 +258,7 @@ impl Served {
     pub(crate) fn new(script: IslandScript) -> Self {
         Self {
             script,
+            stem: script.stem(),
             hash: script.hash(),
             brotli: Bytes::from(crate::compress::brotli(script.bytes)),
         }
@@ -228,7 +269,8 @@ impl Served {
 pub(crate) fn served(scripts: impl IntoIterator<Item = IslandScript>) -> Vec<Served> {
     let mut out: Vec<Served> = Vec::new();
     for script in scripts {
-        if !out.iter().any(|served| served.script.name == script.name) {
+        let stem = script.stem();
+        if !out.iter().any(|served| served.stem == stem) {
             out.push(Served::new(script));
         }
     }
@@ -245,7 +287,7 @@ pub(crate) fn respond(file: &str, request: &HeaderMap, scripts: &[Served]) -> Re
         .and_then(|(name, hash)| {
             scripts
                 .iter()
-                .find(|served| served.script.name == name)
+                .find(|served| served.stem == name)
                 .map(|served| (served, served.hash == hash))
         });
     let Some((served, current)) = found else {

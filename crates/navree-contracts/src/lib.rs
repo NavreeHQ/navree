@@ -6,7 +6,8 @@
 //! session sinks, the job contract ([`Job`], [`Dispatcher`],
 //! [`JobRegistration`], with progress and cancellation through
 //! [`JobMonitor`]), permission checks outside routes ([`PermissionCheck`],
-//! [`permitted`]), [`Clock`], the zone sources ([`ZoneSource`]), and the
+//! [`permitted`]) and the permissions modules describe ([`Permission`],
+//! [`permission_catalog`]), [`Clock`], the zone sources ([`ZoneSource`]), and the
 //! conformity checks behind `navree check` ([`ConformityCheck`],
 //! [`ConformityModule`]), ending a user's tokens and grants
 //! ([`CredentialRevoker`]), and the sealed one-time tickets of results a
@@ -24,6 +25,7 @@ mod conformity;
 mod events;
 mod health;
 mod jobs;
+mod locales;
 mod permissions;
 mod principal;
 mod redactor;
@@ -48,8 +50,11 @@ pub use jobs::{
     Backoff, Dispatcher, Job, JobCancelled, JobContext, JobEnvelope, JobMonitor, JobOptions,
     JobProgress, JobRegistration, ModuleBuilderJobsExt,
 };
+pub use locales::{EmbeddedLocales, ModuleBuilderLocalesExt};
 pub use navree_kernel::{BoxError, BoxFuture};
-pub use permissions::{PermissionCheck, permitted};
+pub use permissions::{
+    ModuleBuilderPermissionsExt, Permission, PermissionCheck, permission_catalog, permitted,
+};
 pub use principal::{AuthState, AuthVia, Impersonator, Principal};
 pub use redactor::Redactor;
 pub use request_id::RequestId;

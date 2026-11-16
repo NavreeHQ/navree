@@ -5,6 +5,9 @@
 use std::sync::Arc;
 
 use http::{Method, StatusCode};
+use navree_contracts::{
+    BoxError, ModuleBuilderPermissionsExt, Permission, PermissionCheck, Principal,
+};
 use navree_http::AppError;
 use navree_http::extract::Path;
 use navree_http::response::IntoResponse;
@@ -15,7 +18,7 @@ use navree_kernel::{
 use navree_native::input::{Input, TextKind};
 use navree_native::node::{self as n, Node as N};
 use navree_native::{Action, Client, Command, Envelope, FormFactor, Op as NativeOp, Platform};
-use navree_testing::TestApp;
+use navree_testing::{TestApp, principal};
 use navree_ui::form::{FormView, Money, Rejected, Submit};
 use navree_ui::native::{self, Stamp, TestNative, lower};
 use navree_ui::select::{Choice, ChoiceList};
@@ -24,12 +27,13 @@ use navree_ui::table::BulkRequest;
 use navree_ui::table::NoFilter;
 use navree_ui::upload::Received;
 use navree_ui::{
-    AppPage, AppShell, Badge, Button, DataTable, Dialog, Empty, Form, NavGroup, NavItem, Op,
-    Options, Reply, Sheet, Shell, TablePage, TableQuery, TableRow, Text, ToastTone, UiModule,
-    UserMenu, Validate, View, assets, el, icons, render,
+    AppPage, AppShell, Badge, Button, DataTable, Dialog, Empty, Form, ModuleBuilderShellExt,
+    NavGroup, NavItem, Op, Options, Reply, Sheet, Shell, ShellNavItem, TablePage, TableQuery,
+    TableRow, Text, ToastTone, UiModule, UserMenu, Validate, View, assets, el, icons, render,
 };
 use navree_ui::{LazyAsk, LazyEnd, LazyItem, LazyPage, LazyQuery};
 use serde::Deserialize;
+use uuid::Uuid;
 
 const NATIVE: &str = "x-navree-native";
 const CLIENT: &str = "x-navree-client";
@@ -1819,6 +1823,94 @@ async fn the_shell_comes_from_the_error_pages_builder() {
             .as_ref()
             .is_some_and(|theme| theme.accent.is_some() && theme.accent_dark.is_some())
     );
+}
+
+/// The store's app with a shell that takes the links other modules add: one to the
+/// announcements that only `.0` may open, and a notice board for everyone.
+struct Noticed(Uuid);
+
+impl Module for Noticed {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.factory(Factory::<Shell>::new(|_| async {
+            Ok(Arc::new(shell().contributed()))
+        }))
+        .exports::<Shell>();
+        m.controller::<Pages>();
+        m.permissions(&[Permission::new(
+            "announcements.read",
+            "Read the workspace's announcements",
+        )])
+        .nav_item(
+            ShellNavItem::new("Announcements", "/announcements")
+                .icon(icons::MEGAPHONE)
+                .permission("announcements.read"),
+        )
+        .nav_item(ShellNavItem::new("Notice board", "/notice-board"));
+        let reader = self.0;
+        m.multi(Factory::<dyn PermissionCheck>::new(move |_| async move {
+            Ok(Arc::new(Reader(reader)) as Arc<dyn PermissionCheck>)
+        }));
+    }
+}
+
+/// Who may read the announcements: the one person it names, app-wide.
+struct Reader(Uuid);
+
+impl PermissionCheck for Reader {
+    fn check<'a>(
+        &'a self,
+        principal: &'a Principal,
+        permission: &'a str,
+        _workspace: Option<Uuid>,
+    ) -> BoxFuture<'a, Result<Option<bool>, BoxError>> {
+        let held = principal.user_id == self.0 && permission == "announcements.read";
+        Box::pin(async move { Ok(Some(held)) })
+    }
+}
+
+#[tokio::test]
+async fn the_shell_document_has_the_links_its_reader_may_open_and_the_stamp_of_their_pages() {
+    let (harpreet, kuldeep) = (Uuid::now_v7(), Uuid::now_v7());
+    let app = TestApp::builder()
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule)
+        .module(Noticed(harpreet))
+        .build()
+        .await;
+    let mut stamps = Vec::new();
+    // Harpreet may open the announcements; Kuldeep may not.
+    for (reader, sees) in [(harpreet, true), (kuldeep, false)] {
+        let client = app.acting_as(principal(reader));
+        let response = client
+            .get(navree_native::SHELL_PATH)
+            .header(NATIVE, "1")
+            .header(CLIENT, PHONE)
+            .send()
+            .await;
+        let document: navree_native::Shell =
+            serde_json::from_str(&response.text()).expect("a shell");
+        let hrefs: Vec<&str> = document
+            .nav
+            .groups
+            .iter()
+            .flat_map(|group| group.items.iter())
+            .map(|item| item.href.as_str())
+            .collect();
+        assert_eq!(hrefs.contains(&"/announcements"), sees, "{hrefs:?}");
+        assert!(hrefs.contains(&"/notice-board"), "{hrefs:?}");
+        // A page drawn for the same reader says the document's stamp: the client keeps it.
+        let page = client
+            .get("/orders/1")
+            .header(NATIVE, "1")
+            .header(CLIENT, PHONE)
+            .send()
+            .await;
+        let page = envelope(&page.text());
+        assert_eq!(page.shell, document.stamp);
+        stamps.push(document.stamp);
+    }
+    // The two documents differ by the one link only Harpreet may open.
+    assert_ne!(stamps[0], stamps[1]);
 }
 
 /// A customer, as a table that says what its columns are to a record.

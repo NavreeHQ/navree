@@ -21,6 +21,9 @@
 //!   `store = "redis"` ([`CacheStoreKind::Redis`]) uses the stores
 //!   navree-redis's `RedisModule` registers under the name `redis`; any
 //!   other store implements the same traits.
+//! - A module registers a store of its own under a name with
+//!   [`ModuleBuilderCacheExt::cache_store`] (a [`CacheBackend`]), and
+//!   `store = "{name}"` selects it; its settings are `cache.{name}`.
 //! - [`CacheModule`] is global: `for_root(CacheOptions)` or `from_config()`
 //!   (section `cache`) provides and exports [`Cache`], [`Locks`],
 //!   `dyn CacheStore` and `dyn LockStore`, registers a `cache` health check
@@ -76,6 +79,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod cache;
+mod drivers;
 mod error;
 mod flight;
 mod lock;
@@ -85,6 +89,7 @@ mod store;
 mod tags;
 
 pub use cache::{Cache, DEFAULT_TTL, Ttl};
+pub use drivers::{CacheBackend, ModuleBuilderCacheExt};
 pub use error::CacheError;
 pub use lock::{Lock, LockGuard, LockStore, Locks, MemoryLockStore};
 pub use memory::{DEFAULT_MAX_ENTRIES, MemoryStore};

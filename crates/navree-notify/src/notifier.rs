@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::{DateTime, SubsecRound, Utc};
+use navree_config::DriverName;
 use navree_contracts::{Broadcaster, Clock, Dispatcher, JobEnvelope};
 use navree_db::{Db, Uow};
 use navree_kernel::{AppContext, WeakAppContext};
@@ -20,6 +21,7 @@ use crate::deliveries::Outcome;
 use crate::digest::DigestMail;
 use crate::overrides::StyledMail;
 use crate::recipient::within;
+use crate::registered::registered_channel;
 use crate::{
     Channel, ChannelError, Delivery, DeliveryLog, LiveSessions, Notifiable, Notification,
     NotificationDeferral, NotificationOverrides, NotificationPreferences, NotifyError,
@@ -291,6 +293,13 @@ impl Notifier {
         };
         let mut errors = Vec::new();
         for job in jobs {
+            // A channel no module adds fails here, and is not queued.
+            if let Delivery::Registered { channel, to, .. } = &job.delivery
+                && registered_channel(ctx, *channel).is_none()
+            {
+                errors.push(self.unregistered(ctx, job, *channel, to).await);
+                continue;
+            }
             let result = match &dispatcher {
                 Some(dispatcher) => dispatch(dispatcher.as_ref(), job).await,
                 None => self.deliver_with(ctx, job).await,
@@ -300,6 +309,32 @@ impl Notifier {
             }
         }
         errors
+    }
+
+    /// Records the delivery of `job` over `channel`, which no module adds,
+    /// as failed, and returns its error.
+    async fn unregistered(
+        &self,
+        ctx: &AppContext,
+        job: &SendNotificationJob,
+        channel: DriverName,
+        to: &str,
+    ) -> NotifyError {
+        let error = ChannelError::Config(format!(
+            "no module registers the notification channel `{channel}` with m.notification_channel"
+        ));
+        let outcome = Outcome::Failed {
+            provider: None,
+            error: error.to_string(),
+        };
+        let recipient = channel_recipient(to);
+        let channel = Channel::Registered(channel);
+        self.record(ctx, job, channel, Some(&recipient), outcome)
+            .await;
+        NotifyError::Channel {
+            channel,
+            source: error,
+        }
     }
 
     /// Delivers one rendered channel (what job `notify.send` runs).
@@ -442,6 +477,31 @@ impl Notifier {
             }
             Delivery::WebPush { message } => self.push_all(ctx, job, message).await,
             Delivery::Push { message } => self.push_devices(ctx, job, message).await,
+            Delivery::Registered {
+                channel,
+                to,
+                message,
+            } => {
+                let Some(registration) = registered_channel(ctx, *channel) else {
+                    return Err(self.unregistered(ctx, job, *channel, to).await);
+                };
+                let driver = (registration.resolve)(ctx).await.map_err(|error| {
+                    NotifyError::Unavailable {
+                        channel: Some(Channel::Registered(*channel)),
+                        reason: error.to_string(),
+                    }
+                })?;
+                let result = driver.send(to, message).await;
+                let recipient = channel_recipient(to);
+                self.finish(
+                    ctx,
+                    job,
+                    Channel::Registered(*channel),
+                    Some(&recipient),
+                    result,
+                )
+                .await
+            }
         }
     }
 
@@ -819,7 +879,11 @@ async fn render<N: Notification>(
     let created_at = now(ctx).await;
     let notifiable_id = notifiable.notifiable_id();
     let deliveries = within(ctx, notifiable.notifiable_type(), &notifiable_id, async {
-        let mut channels = notification.via(notifiable);
+        let mut channels: Vec<Channel> = notification
+            .via(notifiable)
+            .into_iter()
+            .map(Channel::resolved)
+            .collect();
         dedup(&mut channels);
         channels
             .into_iter()
@@ -891,6 +955,15 @@ fn render_channel<N: Notification>(
         Channel::Push => Some(Delivery::Push {
             message: notification.to_push(notifiable)?,
         }),
+        Channel::Registered(name) => {
+            let message = notification.to_channel(name, notifiable)?;
+            let to = notifiable.route_channel(name)?;
+            Some(Delivery::Registered {
+                channel: name,
+                to,
+                message,
+            })
+        }
     }
 }
 
@@ -1060,6 +1133,20 @@ fn teams_recipient(route: &TeamsRoute) -> String {
         TeamsRoute::Bot {
             conversation_id, ..
         } => conversation_id.clone(),
+    }
+}
+
+/// What the log records as the address of a channel a module adds: an
+/// `http` or `https` URL (a webhook, whose URL may be a secret) as
+/// `webhook:<host>`, any other address as given.
+fn channel_recipient(to: &str) -> String {
+    let scheme = to
+        .split_once("://")
+        .map(|(scheme, _)| scheme.trim().to_ascii_lowercase());
+    if matches!(scheme.as_deref(), Some("http" | "https")) {
+        webhook_recipient(to)
+    } else {
+        to.to_owned()
     }
 }
 
