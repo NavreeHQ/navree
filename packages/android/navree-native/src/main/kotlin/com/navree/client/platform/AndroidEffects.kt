@@ -44,7 +44,8 @@ import kotlin.concurrent.thread
  * (`WebViewFeature.DELETE_BROWSING_DATA`), what sites stored goes by
  * `WebStorageCompat.deleteBrowsingData`, which deletes "all data stored by
  * websites", "network cache, cookies, and any JavaScript-readable storage",
- * and says when it is done: [done] runs then, told that every kind went. Where
+ * and says when it is done: [done] runs then, told that every kind went (the
+ * reference gives that call no limit of time, so the caller sets its own). Where
  * it has not, the only call left is [WebStorage.deleteAllData], which its
  * reference says covers the Web SQL database and Web Storage and which says
  * nothing when it is done: [done] runs at once, told that not every kind went.
@@ -226,12 +227,13 @@ class AndroidEffects(
      * and a run of the app that ends anywhere after it leaves the next start
      * to do it. Then, in the store's turn, after whatever
      * was asked before: the sealed page cache and the snapshot go; then, on
-     * the main thread, the web view's cache, history, form data and saved
-     * sign-ins for sites, and what sites stored ([clearWebViews]); once the
-     * web view says that is done, the app's notifications in the shade, and
-     * every cookie of the one store the web view shares; then, where the web
-     * view could not delete every kind of site data itself, the service
-     * workers and the caches of each of the app's origins and web hosts
+     * the main thread, the app's notifications in the shade and every cookie
+     * of the one store the web view shares; then the web view's cache,
+     * history, form data and saved sign-ins for sites, and what sites stored
+     * ([clearWebViews]), whose word that it is done is waited for no longer
+     * than [SITES_WAIT_MS]; then, on either kind of web view, the service
+     * workers and the caches of each of the app's origins and web hosts,
+     * through a document of the client's own that also says what is left
      * ([SiteWipe.documents]). Nothing kept for the session after runs before
      * all of that is done, or five seconds have passed (a limit armed before
      * anything else, so a failure of any kind cannot hold the queue), and no
@@ -298,67 +300,68 @@ class AndroidEffects(
             // A copy that could not be deleted is in the cache folder, which no backup takes and the system may empty.
         }
         main.post {
-            // The rest goes on once, when the web view says what sites stored is gone, or at once when it cannot say.
-            val started = AtomicBoolean(false)
-            val rest = { everyKind: Boolean ->
-                if (started.compareAndSet(false, true)) {
+            try {
+                // Every notification of the app, also those the push service drew itself.
+                NotificationManagerCompat.from(app).cancelAll()
+            } catch (_: Throwable) {
+                // Nothing shown.
+            }
+            val last = { left: Set<String>? ->
+                thread(name = "navree-web-wipe", isDaemon = true) {
                     try {
-                        // Every notification of the app, also those the push service drew itself.
-                        NotificationManagerCompat.from(app).cancelAll()
-                    } catch (_: Throwable) {
-                        // Nothing shown.
+                        SiteWipe.over(left)
+                    } finally {
+                        done()
                     }
-                    try {
-                        cookies.clear {
-                            val last = { left: Set<String>? ->
-                                thread(name = "navree-web-wipe", isDaemon = true) {
-                                    try {
-                                        SiteWipe.over(left)
-                                    } finally {
-                                        done()
-                                    }
-                                }
-                                Unit
-                            }
-                            // The cookies are written to disk before the wipe is done, off the main thread: nothing after it,
-                            // the end of the session's thread included, comes first. Once they are, the mark owes only what
-                            // pages stored at the origins: a run of the app that ends before that does all of this again.
-                            thread(name = "navree-cookie-flush", isDaemon = true) {
-                                val flushed = try {
-                                    cookies.flush()
-                                    SiteWipe.narrow()
-                                    true
+                }
+                Unit
+            }
+            // What follows the web view's own deletion goes on once: when the web view says what sites stored is gone, at once
+            // where it cannot say, and after SITES_WAIT_MS where it has not said.
+            val started = AtomicBoolean(false)
+            val rest = {
+                if (started.compareAndSet(false, true)) {
+                    // The cookies are written to disk before the wipe is done, off the main thread: nothing after it, the end
+                    // of the session's thread included, comes first. Once they are, the mark owes only what pages stored at
+                    // the origins: a run of the app that ends before that does all of this again.
+                    thread(name = "navree-cookie-flush", isDaemon = true) {
+                        val flushed = try {
+                            cookies.flush()
+                            SiteWipe.narrow()
+                            true
+                        } catch (_: Throwable) {
+                            false
+                        }
+                        main.post {
+                            // Whatever the web view's own call took, and whether or not it has said so: a document of the
+                            // client's own on each origin unregisters its service workers, deletes its caches and says what
+                            // is left, so nothing is called gone on that call's word alone.
+                            if (!flushed) {
+                                last(null)
+                            } else {
+                                try {
+                                    SiteWipe.documents(app, origins) { left -> last(left) }
                                 } catch (_: Throwable) {
-                                    false
-                                }
-                                main.post {
-                                    // After the cookies and the storage: where the web view could not delete every kind itself, a document
-                                    // of the client's own on each origin unregisters its service workers and deletes its caches.
-                                    if (!flushed) {
-                                        last(null)
-                                    } else if (everyKind) {
-                                        last(emptySet())
-                                    } else {
-                                        try {
-                                            SiteWipe.documents(app, origins) { left -> last(left) }
-                                        } catch (_: Throwable) {
-                                            last(null)
-                                        }
-                                    }
+                                    last(null)
                                 }
                             }
                         }
-                    } catch (_: Throwable) {
-                        SiteWipe.over(null)
-                        done()
                     }
                 }
             }
             try {
-                clearWebViews(app) { everyKind -> rest(everyKind) }
+                // The cookies first: they do not wait for the web view's deletion of what sites stored, which has no limit of its own.
+                cookies.clear {
+                    main.postDelayed({ rest() }, SITES_WAIT_MS)
+                    try {
+                        clearWebViews(app) { rest() }
+                    } catch (_: Throwable) {
+                        // No web view on this device: nothing of it to clear, and no page of it to show.
+                        rest()
+                    }
+                }
             } catch (_: Throwable) {
-                // No web view on this device: nothing of it to clear, and no page of it to show.
-                rest(false)
+                last(null)
             }
         }
     }
@@ -516,5 +519,8 @@ class AndroidEffects(
 
         /** The longest the store waits for the cookie store to say its cookies are gone. */
         const val WIPE_WAIT_MS = 5_000L
+
+        /** The longest the web view is waited for to say that what sites stored is gone, before what follows goes on without its word. */
+        const val SITES_WAIT_MS = 4_000L
     }
 }
