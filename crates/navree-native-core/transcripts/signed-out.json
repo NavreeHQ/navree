@@ -63,7 +63,7 @@
       }
     },
     {
-      "note": "The reply says they signed out, says so in words, and says where to land. Every screen and everything kept goes; the token's removal is asked for; the cookies are not forgotten yet.",
+      "note": "The reply says they signed out, says so in words, and says where to land. Every screen and everything kept goes; the token's removal is asked for, and after it the client is told the session is ending; the cookies are not forgotten yet.",
       "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/signed-out.json",
       "expect": {
@@ -74,6 +74,7 @@
         ],
         "effects": [
           {"t":"fetch","request":5,"method":"delete","url":"https://shop.example/api/notifications/push-devices","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=push"],["accept","application/json"],["content-type","application/json"]],"body":{"t":"json","text":"{\"token\":\"fcm-A1b2C3d4E5f6G7h8\"}"},"timeout_ms":5000,"xsrf":true},
+          {"t":"session_ending"},
           {"t":"message","id":1,"tone":"neutral","text":"You are signed out"}
         ]
       },

@@ -505,6 +505,18 @@
           "additionalProperties": false,
           "properties": {
             "t": {
+              "const": "session_ending"
+            }
+          },
+          "required": [
+            "t"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "t": {
               "const": "forget_session"
             }
           },

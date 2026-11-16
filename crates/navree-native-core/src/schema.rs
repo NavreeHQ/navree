@@ -315,6 +315,7 @@ pub fn schema() -> Value {
             ],
         ),
         ("random", &[("request", integer()), ("bytes", integer())]),
+        ("session_ending", &[]),
         ("forget_session", &[]),
         ("cache_read", &[("key", string())]),
         ("cache_write", &[("key", string()), ("value?", string())]),

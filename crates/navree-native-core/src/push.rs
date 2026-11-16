@@ -142,7 +142,9 @@ impl Core {
 
     /// The reply said the person signed out. Everything of theirs goes at
     /// once; the session's cookies go when the push token's removal has been
-    /// answered, and then the app starts again from the shell.
+    /// answered, and then the app starts again from the shell. Meanwhile the
+    /// client is told the session is ending (`session_ending`, after the
+    /// removal's request), so it can begin what needs no network at once.
     pub(crate) fn signed_out_on_purpose(&mut self) {
         if self.inner.signing_out {
             return;
@@ -192,6 +194,8 @@ impl Core {
                     hops: 0,
                     region: None,
                 });
+                // After the removal's request, which has taken its cookies.
+                self.effects.push(Effect::SessionEnding);
             }
             None => self.session_forgotten(),
         }

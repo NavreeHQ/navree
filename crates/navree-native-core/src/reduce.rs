@@ -3696,6 +3696,66 @@ mod tests {
         }
     }
 
+    /// Signing out with a push token: the update that asks for the token's
+    /// removal says, after that request, that the session is ending; the
+    /// session is forgotten when the removal is answered, as before. With no
+    /// token nothing is said ahead of `forget_session`.
+    #[test]
+    fn a_sign_out_with_a_push_token_says_the_session_is_ending_after_the_removal() {
+        let mut core = started();
+        core.inner.push_route = Some("/api/notifications/push-devices".to_owned());
+        core.inner.push.registered = Some("fcm-token-2604".to_owned());
+        core.signed_out_on_purpose();
+        let effects = std::mem::take(&mut core.effects);
+        let removal = effects
+            .iter()
+            .position(
+                |effect| matches!(effect, Effect::Fetch(request) if request.method == Verb::Delete),
+            )
+            .unwrap_or_else(|| panic!("the token's removal is asked for: {effects:?}"));
+        let ending = effects
+            .iter()
+            .position(|effect| matches!(effect, Effect::SessionEnding))
+            .unwrap_or_else(|| panic!("the session is said to be ending: {effects:?}"));
+        assert!(removal < ending, "after the removal's request: {effects:?}");
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::ForgetSession)),
+            "the session is forgotten only when the removal is answered: {effects:?}"
+        );
+        let Effect::Fetch(request) = &effects[removal] else {
+            unreachable!()
+        };
+        let answered = core.send(Event::Response(Response {
+            request: request.request,
+            status: 204,
+            ..Response::default()
+        }));
+        assert!(
+            answered
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::ForgetSession)),
+            "forget_session still follows: {answered:?}"
+        );
+
+        // With no token, nothing is said ahead of forgetting the session.
+        let mut core = started();
+        core.inner.push_route = Some("/api/notifications/push-devices".to_owned());
+        core.signed_out_on_purpose();
+        let effects = std::mem::take(&mut core.effects);
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::SessionEnding))
+                && effects
+                    .iter()
+                    .any(|effect| matches!(effect, Effect::ForgetSession)),
+            "{effects:?}"
+        );
+    }
+
     /// Signing out ends what a snapshot waited for, as signing out on purpose
     /// does: the person who comes back is told by the shell, and the snapshot
     /// of the one who left is nobody's.

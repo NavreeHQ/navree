@@ -164,6 +164,17 @@ pub enum Effect {
         /// How many bytes, at least.
         bytes: u32,
     },
+    /// A session is ending: the person signed out, and the core is waiting
+    /// for the push token's removal before it says `forget_session`. It comes
+    /// in the same update as that removal's `fetch`, after it, so the removal
+    /// has taken its cookies before anything is wiped. The client writes down
+    /// durably that a sign-out is owed (a mark its next start finishes, if
+    /// the app is ended before `forget_session` comes) and begins removing
+    /// everything of the person that needs no network, without waiting. The
+    /// `forget_session` that follows finds that done or under way, and is
+    /// still sent, unchanged: a client that does not know this effect passes
+    /// over it and does what it does today.
+    SessionEnding,
     /// Forget the session: every cookie of the app's origins, in the web
     /// view's store too. The person signed out.
     ForgetSession,
