@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap5 mp rescap desktop com">
+
+  <Identity
+    Name="Navree.Demo"
+    Publisher="CN=Navree Demo"
+    Version="1.0.0.0" />
+
+  <mp:PhoneIdentity PhoneProductId="6d6f0bd0-5a1d-4e3b-9b6c-5d0e2f8a1c37" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+
+  <Properties>
+    <DisplayName>Navree Demo</DisplayName>
+    <PublisherDisplayName>Navree</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="x-generate"/>
+  </Resources>
+
+  <Applications>
+    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="Navree Demo"
+        Description="The Navree Native client for Windows, on recorded answers."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile />
+      </uap:VisualElements>
+
+      <Extensions>
+        <!-- No scheme of its own is claimed: signing in through the browser is not offered on Windows yet, and nothing would be taken on it. -->
+
+        <!-- Opening when the person signs in to Windows: off until the person turns it on. -->
+        <uap5:Extension Category="windows.startupTask">
+          <uap5:StartupTask TaskId="NavreeStartup" Enabled="false" DisplayName="Navree Demo" />
+        </uap5:Extension>
+
+        <!-- A click on one of the app's notifications starts the app. -->
+        <desktop:Extension Category="windows.toastNotificationActivation">
+          <desktop:ToastNotificationActivation ToastActivatorCLSID="8F5C1D2E-4B3A-4C6D-9E7F-2A1B3C4D5E6F" />
+        </desktop:Extension>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="Navree.Demo.exe" DisplayName="Navree Demo" Arguments="----AppNotificationActivated:">
+              <com:Class Id="8F5C1D2E-4B3A-4C6D-9E7F-2A1B3C4D5E6F" DisplayName="Navree Demo" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
