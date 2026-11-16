@@ -15,6 +15,12 @@ public enum Wire {
     /// page with the web view.
     public static let maxNesting = 127
 
+    /// The most bytes an answer's body may hold (`MAX_BODY` in the protocol,
+    /// 8 MiB). The runtime core refuses a longer one, but only after it was
+    /// handed over and copied; what keeps a very large body out of memory is
+    /// the client's transport, which stops reading at this many bytes.
+    public static let maxBody = 8 * 1024 * 1024
+
     /// The request header that says "answer me as a native client".
     public static let nativeHeader = "X-Navree-Native"
 

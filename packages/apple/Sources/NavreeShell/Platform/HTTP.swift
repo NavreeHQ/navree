@@ -1,4 +1,5 @@
 import Foundation
+import NavreeProtocol
 import NavreeRuntime
 
 /// What answers the runtime core's requests and opens its event streams.
@@ -28,7 +29,9 @@ extension Transport {
 /// headers it gives, the jar's cookies, `x-xsrf-token` when it asks, no
 /// redirect followed (a 3xx goes back to the core as it came, after its
 /// cookies are kept), and every answer handed back whatever its status, with
-/// the `x-navree-*` headers.
+/// the `x-navree-*` headers. An answer's body is read up to the protocol's
+/// limit (``NavreeProtocol/Wire/maxBody``) and no further: a longer one is
+/// answered as a request that failed, as the core's header asks of a client.
 ///
 /// Whether an address may be asked at all is the core's to decide: this sends
 /// what it is told, and nothing of its own. It asks one thing again itself:
@@ -116,9 +119,9 @@ public final class HTTPTransport: Transport {
         // The cookies an answer sets belong to the session it was asked in.
         let asked = cookies.session
         tasks[number] = Task { [weak self] in
-            let outcome: Result<(Data, URLResponse), any Error>
+            let outcome: Result<(Data?, URLResponse), any Error>
             do {
-                outcome = .success(try await session.data(for: urlRequest))
+                outcome = .success(try await Self.read(urlRequest, with: session, most: Wire.maxBody))
             } catch {
                 outcome = .failure(error)
             }
@@ -127,12 +130,42 @@ public final class HTTPTransport: Transport {
             case .success(let (data, response)):
                 guard let http = response as? HTTPURLResponse else { return answer(.failed(number, .other)) }
                 self.cookies.take(from: http, for: url, session: asked)
+                // A body past the protocol's limit was never read to its end:
+                // it is answered as any answer that could not be read.
+                guard let data else { return answer(.failed(number, .other)) }
                 answer(Self.response(number, http, data))
             case .failure(let error):
                 if (error as? URLError)?.code == .cancelled || Task.isCancelled { return }
                 answer(.failed(number, Self.failure(error)))
             }
         }
+    }
+
+    /// Asks `request` and reads the answer's body, at most `most` bytes of
+    /// it, away from the main actor. A body that announces more than `most`
+    /// (its `Content-Length`) is not read at all, and one that turns out
+    /// longer is given up at the byte past the limit: either way the body
+    /// comes back as `nil` and the load is cancelled, so an answer of any
+    /// size costs no more memory than the limit.
+    nonisolated static func read(
+        _ request: URLRequest, with session: URLSession, most: Int
+    ) async throws -> (Data?, URLResponse) {
+        let (bytes, response) = try await session.bytes(for: request)
+        let announced = response.expectedContentLength
+        if announced > Int64(most) {
+            bytes.task.cancel()
+            return (nil, response)
+        }
+        var body: [UInt8] = []
+        if announced > 0 { body.reserveCapacity(Int(announced)) }
+        for try await byte in bytes {
+            if body.count >= most {
+                bytes.task.cancel()
+                return (nil, response)
+            }
+            body.append(byte)
+        }
+        return (Data(body), response)
     }
 
     public func cancel(_ request: Int) {
