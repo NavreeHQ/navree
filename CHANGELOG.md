@@ -470,6 +470,10 @@ look at when you update:
   web view too old for them a web region is not shown and the rest of the app works.
 - Navree Native: an app tells the person when its runtime core has stopped and offers to start
   again (Android and Windows).
+- Navree Native: signing out of a native app that has a push token no longer leaves a gap in which
+  the app has not been told. The core says the session is ending at once
+  (`{"t":"session_ending"}`), so a client can write down that a sign-out is owed and begin removing
+  what it kept before the token's removal is answered.
 - Navree Native: the device tests' job sees a skipped test. A skip that is not on the job's list
   fails it.
 
