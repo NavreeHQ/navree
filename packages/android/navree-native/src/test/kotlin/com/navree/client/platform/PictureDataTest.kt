@@ -124,15 +124,57 @@ class PictureDataTest {
     @Test
     fun a_jpegs_extended_xmp_that_names_a_place_goes_even_when_the_name_is_split_between_its_parts() {
         val guid = ascii("0123456789ABCDEF0123456789ABCDEF")
-        val whole = ascii("<rdf:Description exif:GPSLongitude=\"75,51.44E\"/>")
+        val whole = ascii("<rdf:Description photoshop:City=\"Ludhiana\"/>")
         fun part(offset: Int, data: ByteArray) = segment(0xE1, concat(ascii("http://ns.adobe.com/xmp/extension/\u0000"), guid, bytes(0, 0, 0, whole.size), bytes(0, 0, 0, offset), data))
-        // "GPSLongitude" split as "G" and "PSLongitude": neither part names a place alone.
-        val cut = String(whole, Charsets.ISO_8859_1).indexOf("PSLongitude")
+        // "City" split as "Ci" and "ty": neither part names a place alone.
+        val cut = String(whole, Charsets.ISO_8859_1).indexOf("ty=")
         assertFalse(PictureData.namesPlace(whole.copyOfRange(0, cut)) || PictureData.namesPlace(whole.copyOfRange(cut, whole.size)))
         val picture = concat(soi, exif, xmpSegment(xmpPlain), part(0, whole.copyOfRange(0, cut)), part(cut, whole.copyOfRange(cut, whole.size)), dqt, sos, scan, eoi)
         val (found, after) = cleaned(picture, Picture.Jpeg)
         assertEquals(1, found.xmpWithPlace)
         assertArrayEquals("the main packet names no place and stays; its extended parts go", concat(soi, exif, xmpSegment(xmpPlain), dqt, sos, scan, eoi), after)
+    }
+
+    @Test
+    fun a_packet_names_a_place_whatever_its_writer_calls_the_property() {
+        val named = listOf(
+            // A drone's own namespace, with the spelling one maker's older cameras use.
+            "<rdf:Description drone-dji:GpsLatitude=\"+30.7333\" drone-dji:GpsLongtitude=\"+76.7794\" drone-dji:AbsoluteAltitude=\"+350.20\"/>",
+            "<rdf:Description drone-dji:RelativeAltitude=\"+120.00\"/>",
+            "<rdf:Description exif:GPSLatitude = \"30,44.0N\"/>",
+            "<rdf:Description exif:GPSLatitude\t=\r\n'30,44.0N'/>",
+            "<rdf:Description EXIF:gpslatitude=\"30,44.0N\"/>",
+            "<exif:GPSLatitude>30,44.0N</exif:GPSLatitude>",
+            "<GPSLatitude xmlns=\"http://ns.adobe.com/exif/1.0/\">30,44.0N</GPSLatitude>",
+            "<rdf:Description photoshop:city=\"Amritsar\" photoshop:Country=\"India\"/>",
+            "<Iptc4xmpCore:Location>Hall Bazaar</Iptc4xmpCore:Location>",
+            "<Iptc4xmpExt:ProvinceState>Punjab</Iptc4xmpExt:ProvinceState>",
+            "<rdf:Description Iptc4xmpExt:Sublocation=\"Lawrence Road\"/>",
+            "<rdf:Description xmpDM:shotLocation=\"Patiala\"/>",
+            "<rdf:Description geo:lat=\"30.73\" geo:long=\"76.77\"/>",
+            "<rdf:Description Iptc4xmpCore:CiAdrCity=\"Jalandhar\"/>",
+        )
+        for (packet in named) assertTrue(packet, PictureData.namesPlace(ascii(packet)))
+        // The same packet written two bytes to a letter.
+        assertTrue(PictureData.namesPlace("<rdf:Description exif:GPSLatitude=\"30,44.0N\"/>".toByteArray(Charsets.UTF_16LE)))
+        assertTrue(PictureData.namesPlace("<rdf:Description exif:GPSLatitude=\"30,44.0N\"/>".toByteArray(Charsets.UTF_16BE)))
+        val plain = listOf(
+            xmpPlain,
+            // Words a person wrote are not the names of properties.
+            "<dc:description>The city gate at Amritsar, latitude unknown, GPS switched off</dc:description>",
+            "<rdf:Description photoshop:Headline=\"Lohri in the old city, location to be named\"/>",
+            "<rdf:Description tiff:Make=\"DJI\" tiff:Model=\"FC7303\" xmp:Rating=\"5\" xmp:CreatorTool=\"Camera\"/>",
+            "<rdf:Description xmpMM:InstanceID=\"xmp.iid:1\" aux:Lens=\"24.0 mm\" crs:Translation=\"0\"/>",
+        )
+        for (packet in plain) assertFalse(packet, PictureData.namesPlace(ascii(packet)))
+    }
+
+    @Test
+    fun a_jpeg_whose_packet_holds_a_drones_coordinates_comes_out_without_the_packet() {
+        val drone = "$rdf<rdf:Description xmlns:drone-dji=\"http://www.dji.com/drone-dji/1.0/\" drone-dji:GpsLatitude=\"+30.7333\" drone-dji:GpsLongitude=\"+76.7794\" drone-dji:AbsoluteAltitude=\"+350.20\"/>$rdfEnd"
+        val (found, after) = cleaned(concat(soi, exif, xmpSegment(drone), dqt, sos, scan, eoi), Picture.Jpeg)
+        assertEquals(1, found.xmpWithPlace)
+        assertArrayEquals(concat(soi, exif, dqt, sos, scan, eoi), after)
     }
 
     @Test

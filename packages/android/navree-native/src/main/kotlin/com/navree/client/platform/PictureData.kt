@@ -75,15 +75,68 @@ internal object PictureData {
         return kindOf(head.copyOf(read))
     }
 
-    private val PLACE = Regex("GPS[A-Z]|Location|City|Country|Province|State\\b|Sublocation")
+    /**
+     * The names of properties that are a place whatever stands before or after
+     * them, in lower case: Photoshop's and IPTC's city, state, country and
+     * sublocation, IPTC's two lists of locations, the address of a creator or
+     * a licensor, Dublin Core's coverage, and the short names of a latitude
+     * and a longitude.
+     */
+    private val PLACE_NAMES = setOf(
+        "city", "state", "country", "countrycode", "countryname", "provincestate", "sublocation", "worldregion", "locationid", "locationname", "coverage",
+        "locationshown", "locationcreated",
+        "ciadrcity", "ciadrctry", "ciadrextadr", "ciadrpcode", "ciadrregion", "creatorcity", "creatorcountry", "creatoraddress", "creatorpostalcode",
+        "creatorregion", "licensorcity", "licensorcountry", "licensorextendedaddress", "licensorpostalcode", "licensorregion", "licensorstreetaddress",
+        "address", "postalcode", "streetaddress", "lat", "lon", "lng", "long",
+    )
+
+    /** What a property's name ends in when it is a place: `GPSDestLatitude`, `AbsoluteAltitude`, `shotLocation` and the like (one maker writes `Longtitude`). */
+    private val PLACE_ENDINGS = listOf("latitude", "longitude", "longtitude", "altitude", "location")
+
+    /** Whether a property's own name, without its prefix and in lower case, is about a place. */
+    internal fun isPlace(name: String): Boolean = name.startsWith("gps") || name in PLACE_NAMES || PLACE_ENDINGS.any { name.endsWith(it) }
+
+    private fun nameStart(c: Char) = c in 'a'..'z' || c in 'A'..'Z' || c == '_'
+
+    private fun nameChar(c: Char) = nameStart(c) || c in '0'..'9' || c == '-' || c == '.'
 
     /**
-     * Whether an XMP packet names a place: a GPS property of the Exif schema
-     * (`exif:GPSLatitude`, `GPSDestLongitude` and the rest), or a place by its
-     * name (IPTC's `LocationCreated` and `LocationShown`, Photoshop's `City`,
-     * `State` and `Country`).
+     * Whether an XMP packet names a place. A property is found by its own
+     * name, as an element or as an attribute, under any namespace prefix or
+     * none, in any letter case, with any white space round its `=`: so
+     * `exif:GPSLatitude`, a maker's own `GpsLatitude` and `AbsoluteAltitude`,
+     * IPTC's `LocationShown` and Photoshop's `City` are all one ([isPlace]),
+     * and words in what a person wrote (a title, a caption) are none. The
+     * packet is read without its zero bytes, so one written two or four bytes
+     * to a letter is read as well.
      */
-    fun namesPlace(xmp: ByteArray): Boolean = PLACE.containsMatchIn(String(xmp, Charsets.ISO_8859_1))
+    fun namesPlace(xmp: ByteArray): Boolean {
+        val text = String(xmp.filter { it != 0.toByte() }.toByteArray(), Charsets.ISO_8859_1)
+        var at = 0
+        while (at < text.length) {
+            if (!nameStart(text[at])) {
+                at++
+                continue
+            }
+            val start = at
+            while (at < text.length && nameChar(text[at])) at++
+            val before = if (start > 0) text[start - 1] else ' '
+            // The tail of a longer word (after a digit, a hyphen or a dot) is not a name of its own.
+            if (nameChar(before)) continue
+            val name = text.substring(start, at).lowercase()
+            if (at < text.length && text[at] == ':') {
+                // A prefix; one maker's phones write the place of their cell under one of its own.
+                if (name == "cell" && (before == '<' || before == '/' || before.isWhitespace())) return true
+                continue
+            }
+            var next = at
+            while (next < text.length && text[next].isWhitespace()) next++
+            val closing = before == '/' && start >= 2 && text[start - 2] == '<'
+            val named = before == ':' || before == '<' || closing || (next < text.length && text[next] == '=')
+            if (named && isPlace(name)) return true
+        }
+        return false
+    }
 
     /** What [inspect] found in a picture, or what [clean] left out of one. */
     data class Found(
