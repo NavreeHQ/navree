@@ -195,7 +195,7 @@ function helpers(el, src, signal) {
      * A write to one of the element's routes, through core's write path with the session's token. Ops
      * are applied; JSON is the script's; a page is shown only when asked for. Anything else fails. Once
      * the element has left, its answer is for a part of the page that is gone: nothing of it is applied,
-     * and nothing is said.
+     * and nothing is said. A call begun after it left is not sent, and takes no turn of the page's.
      * @param {string} url @param {FormData | URLSearchParams | Record<string, string>} [data]
      * @param {{method?: string, quiet?: boolean, page?: boolean} | null} [options]
      */
@@ -203,6 +203,7 @@ function helpers(el, src, signal) {
       const { method, quiet, page } = options || {};
       let ok = false, status = 0, answer = null;
       try {
+        signal.throwIfAborted();
         const href = allowed(url), given = /** @type {any} */ (hand());
         /** @type {Record<string, string>} */
         const headers = { "x-navree-ui": "1", "x-navree-from": location.pathname + location.search, accept: OPS + ", application/json, text/html" };

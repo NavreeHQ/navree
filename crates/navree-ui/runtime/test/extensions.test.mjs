@@ -533,6 +533,29 @@ test("the answer of a call or a read whose element has left is not applied", asy
   assert.deepEqual(toasts().slice(before), [], "a call whose element left showed a toast");
 });
 
+test("a ui.call begun once its element has left is not sent, and takes no turn of the page's", async () => {
+  // The element left in the test before this one.
+  const ui = g.uis.away;
+  assert.equal(ui.signal.aborted, true);
+  /** @type {() => void} */
+  let release = () => {};
+  const held = new Promise((/** @type {any} */ go) => (release = go));
+  page.fetched.length = 0;
+  // A region's answer is on its way when the script's own wait ends, and it calls.
+  page.answers.push(async () => {
+    await held;
+    return answer(`<!doctype html><html data-build="b1"><head></head><body><div id="zones" data-ui-region data-ui-src="/zones"><p id="zones-text">Civil Lines, on its way</p></div></body></html>`, { headers: PAGE });
+  });
+  fire($("zones"), "ui:refresh");
+  const before = toasts().length;
+  assert.deepEqual(await ui.call("/proof/save", { zone: "Civil Lines" }), REFUSED);
+  release();
+  await settle();
+  assert.equal($("zones-text").textContent, "Civil Lines, on its way", "a call that was not sent took the page's turn");
+  assert.deepEqual(page.fetched.map((f) => new URL(f.url).pathname), ["/zones"]);
+  assert.deepEqual(toasts().slice(before), [], "a call that was not sent showed a toast");
+});
+
 test("ui.on listeners and ui.later timers end when the element leaves", async () => {
   const ui = g.uis.timers;
   let clicks = 0, kept = 0, ticks = 0;

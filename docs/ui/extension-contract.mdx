@@ -164,7 +164,7 @@ It resolves `{ ok, status, data }`, never rejects, and answers by what the serve
 - **JSON:** parsed into `data`, with `ok` for the status.
 - **HTML:** a failure, unless `options.page` is true. Then the page at the answer's address is loaded in full.
 - **A redirect off the site, or an answer of a page that starts clean:** a failure, and nothing is applied.
-- **An answer that arrives once the element has left the page:** nothing of it is applied, no page is loaded and no toast is shown. The call resolves `ok: false`, with the answer's status.
+- **An answer that arrives once the element has left the page:** nothing of it is applied, no page is loaded and no toast is shown. The call resolves `ok: false`, with the answer's status. A call made once the element has left is not sent: it takes no turn of the page's and shows no toast, and resolves `ok: false` with status `0`.
 - **Any other failure** shows the toast "That didn't work. Try again." unless `options.quiet` is true.
 
 `options` may be left out, or be `null`.
