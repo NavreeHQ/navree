@@ -11,7 +11,7 @@ namespace Navree.Platform;
 /// <remarks>
 /// The core lets go of a person at one of two moments, each in its own order of things: when it is told the client ended the session
 /// (<see cref="CoreIsToldTheSessionEnded"/>, called on the core's thread just before it is told), or when it ends the session itself and says so
-/// with <see cref="ForgetSessionEffect"/> (seen by <see cref="Asked"/>: what follows that effect in the same update is for whoever comes next).
+/// with <see cref="ForgetSessionEffect"/> (seen by <see cref="Asked(IReadOnlyList{Effect})"/>: what follows that effect in the same update is for whoever comes next).
 /// The window's side moves once for each end of a session, as it begins (<see cref="SessionIsEnding"/>).
 /// <para>
 /// The core may say that the session is ending some time before it lets go (<see cref="SessionEndingEffect"/>): it waits for the answer to one
@@ -31,7 +31,17 @@ public sealed class SessionGate
     /// <summary>On the core's thread, as an update is taken off the core: the session each of its effects was asked in, in their order.</summary>
     /// <param name="effects">The update's effects.</param>
     /// <returns>A mark for each effect, to give to <see cref="Live"/> when the effect is carried out.</returns>
-    public long[] Asked(IReadOnlyList<Effect> effects)
+    public long[] Asked(IReadOnlyList<Effect> effects) => Asked(effects, out _);
+
+    /// <summary>
+    /// On the core's thread, as an update is taken off the core: the session each of its effects was asked in, and the session its state is
+    /// of. The state is what the core holds when it has asked all of this, so an update in which the core lets go of a person carries the
+    /// state of whoever comes next.
+    /// </summary>
+    /// <param name="effects">The update's effects.</param>
+    /// <param name="state">A mark for the update's state, to give to <see cref="OfSomeoneLeaving"/> when the state is shown.</param>
+    /// <returns>A mark for each effect, to give to <see cref="Live"/> when the effect is carried out.</returns>
+    public long[] Asked(IReadOnlyList<Effect> effects, out long state)
     {
         ArgumentNullException.ThrowIfNull(effects);
         long[] marks = new long[effects.Count];
@@ -58,9 +68,27 @@ public sealed class SessionGate
                     }
                 }
             }
+
+            state = asking;
         }
 
         return marks;
+    }
+
+    /// <summary>
+    /// Whether a state the core gave is that of a person who is signing out, or has signed out: the window's side has moved on past the
+    /// session the core held when it gave the state. The screens of such a state are still shown until the core lets go, but nothing is
+    /// begun for them that belongs to whoever comes next: a web page they ask for is not loaded, because the web view's folder is already
+    /// the next person's.
+    /// </summary>
+    /// <param name="state">The state's mark, from <see cref="Asked(IReadOnlyList{Effect}, out long)"/>.</param>
+    /// <returns>True from the moment the end of a session begins until a state the core gave after it let go is shown.</returns>
+    public bool OfSomeoneLeaving(long state)
+    {
+        lock (gate)
+        {
+            return state < live;
+        }
     }
 
     /// <summary>On the core's thread, just before the core is told the client ended the session: what it asks from now on is for whoever comes next.</summary>
@@ -119,12 +147,12 @@ public sealed class SessionGate
 
     /// <summary>Whether an effect is carried out now.</summary>
     /// <param name="effect">The effect.</param>
-    /// <param name="mark">Its mark, from <see cref="Asked"/>.</param>
+    /// <param name="mark">Its mark, from <see cref="Asked(IReadOnlyList{Effect})"/>.</param>
     /// <returns>False for what would start or keep something for a person who has signed out, or who is signing out.</returns>
     public bool MayRun(Effect effect, long mark) => Live(mark) || !StartsOrKeeps(effect);
 
     /// <summary>Whether what an effect asks may be done now: it was asked in the session that is the one now.</summary>
-    /// <param name="mark">The effect's mark, from <see cref="Asked"/>.</param>
+    /// <param name="mark">The effect's mark, from <see cref="Asked(IReadOnlyList{Effect})"/>.</param>
     /// <returns>False for what was asked for a person who has since signed out, and for what the core of the person who is leaving asks while it has not let go.</returns>
     public bool Live(long mark)
     {

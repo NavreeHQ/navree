@@ -30,6 +30,9 @@ public sealed partial class ShellHost : IDisposable
     private bool started;
     private Task? signingOut;
 
+    // The mark of the state the windows were last given, on the window's thread (SessionGate.OfSomeoneLeaving).
+    private long shownMark;
+
     // From the core's word that the session is ending until its word that the session is to be forgotten: completed at the second, which
     // tells the sign-out that began at the first that the core has let go.
     private TaskCompletionSource? coreLetsGo;
@@ -159,6 +162,13 @@ public sealed partial class ShellHost : IDisposable
 
     /// <summary>Whether a sign-out's steps are running: the web view asks nothing of the network meanwhile.</summary>
     internal bool Wiping => session.Wiping;
+
+    /// <summary>
+    /// Whether the state the windows show is that of a person who is signing out: the sign-out has begun and the core has not let go of
+    /// them, or its word that it has is not shown yet. A web page such a screen asks for is not loaded: the web view's folder is already
+    /// that of whoever comes next, and nothing of the person who is leaving is put there.
+    /// </summary>
+    internal bool ShowsSomeoneLeaving => asked.OfSomeoneLeaving(shownMark);
 
     /// <summary>
     /// The folder the web views of the session now keep their data in; null when no web page may be shown in this run, because what the web
@@ -317,12 +327,18 @@ public sealed partial class ShellHost : IDisposable
     // round to it is not started and not kept (SessionGate).
     private void OnUpdate(Update update)
     {
-        long[] marks = asked.Asked(update.Effects);
+        long[] marks = asked.Asked(update.Effects, out long stateMark);
         int at = 0;
         dispatcher.TryEnqueue(() =>
             Delivery.Deliver(
                 update,
-                state => StateChanged?.Invoke(state),
+                state =>
+                {
+                    // Whose state the windows are about to show: a web page its screens ask for is loaded only when it is not the state
+                    // of a person who is signing out (ShowsSomeoneLeaving).
+                    shownMark = stateMark;
+                    StateChanged?.Invoke(state);
+                },
                 effect =>
                 {
                     long mark = marks[at++];

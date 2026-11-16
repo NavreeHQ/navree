@@ -252,6 +252,45 @@ public sealed class SessionGateTests
     }
 
     [TestMethod]
+    public void A_state_is_of_someone_leaving_from_the_moment_a_sign_out_begins_until_the_core_gives_one_after_it_let_go()
+    {
+        // The person signs out in the client. A state the core gave before is shown as theirs until the core has been told.
+        SessionGate own = new();
+        _ = own.Asked([], out long before);
+        Expect.That(!own.OfSomeoneLeaving(before), "a state is of someone leaving though nobody signed out");
+        own.SessionIsEnding();
+        Expect.That(own.OfSomeoneLeaving(before), "a state given before the sign-out is not that of the person who is leaving");
+        _ = own.Asked([Get(1, "https://shop.example/orders")], out long during);
+        Expect.That(own.OfSomeoneLeaving(during), "a state the core gives while it has not been told is not that of the person who is leaving");
+        own.CoreIsToldTheSessionEnded();
+        _ = own.Asked([Get(2, "https://shop.example/_navree/native/shell")], out long after);
+        Expect.That(!own.OfSomeoneLeaving(after), "the state the core gives after it was told is still that of the person who left: no web page would load again");
+        Expect.That(own.OfSomeoneLeaving(during), "a state of the person who left, shown late, is taken for the next person's");
+
+        // The core ends the session itself, in one update: its state is already that of whoever comes next, when it is shown and after.
+        SessionGate core = new();
+        _ = core.Asked([Get(1, "https://shop.example/orders")], out long signedIn);
+        _ = core.Asked([new ForgetSessionEffect(), Get(2, "https://shop.example/_navree/native/shell")], out long forgotten);
+        Expect.That(!core.OfSomeoneLeaving(forgotten), "the state of the update in which the core lets go is taken for the leaving person's before the window has moved");
+        core.SessionIsEnding();
+        Expect.That(!core.OfSomeoneLeaving(forgotten), "the state of the update in which the core lets go is taken for the leaving person's");
+        Expect.That(core.OfSomeoneLeaving(signedIn), "a state of the person who left is taken for the next person's");
+
+        // The core says the session is ending and lets go later: every state in between is the leaving person's.
+        SessionGate early = new();
+        FetchEffect removal = new(1, "delete", "https://shop.example/_navree/native/devices/this", [], null, 5000, false);
+        _ = early.Asked([removal, new SessionEndingEffect()], out long ending);
+        Expect.That(!early.OfSomeoneLeaving(ending), "the state is the leaving person's before the window has carried the word out");
+        early.SessionIsEnding();
+        Expect.That(early.OfSomeoneLeaving(ending), "the state shown while the core waits is not the leaving person's: a web page of theirs would load into the next person's folder");
+        _ = early.Asked([], out long waiting);
+        Expect.That(early.OfSomeoneLeaving(waiting), "a state the core gives while it waits is not the leaving person's");
+        _ = early.Asked([new ForgetSessionEffect()], out long letGo);
+        Expect.That(!early.OfSomeoneLeaving(letGo), "the state of the update in which the core lets go is still the leaving person's");
+        Expect.That(early.OfSomeoneLeaving(waiting), "a state of the gap, shown late, is taken for the next person's");
+    }
+
+    [TestMethod]
     public void When_the_core_ends_the_session_itself_what_it_asks_after_saying_so_is_for_whoever_comes_next()
     {
         SessionGate gate = new();

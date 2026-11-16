@@ -221,6 +221,15 @@ internal sealed class WebPage : Grid, ILiveWebView
         loaded = web.Url;
         loadedSerial = web.Serial;
         wanted = web;
+
+        // A page asked for by a screen of a person who is signing out is theirs, and the web view's folder is already that of whoever
+        // comes next: the page is not loaded and no web view is started for it. The screen goes when the core lets go of the person.
+        if (host.ShowsSomeoneLeaving)
+        {
+            host.ReportProblem("a web page was not loaded: the screen that asked for it is of a person who is signing out");
+            return;
+        }
+
         try
         {
             // The web view is started and held once, whatever came while it was being started; the newest wish is the one carried out.
@@ -234,9 +243,16 @@ internal sealed class WebPage : Grid, ILiveWebView
                 await Task.Delay(50);
             }
 
-            // A web view whose session ended while it waited keeps the profile of the person who left: it is never sent anywhere again.
-            if (wanted != web || !host.Origins.Ours(web.Url) || OfAnEndedSession)
+            if (wanted != web || !host.Origins.Ours(web.Url))
             {
+                return;
+            }
+
+            // A web view whose session ended while it waited keeps the profile of the person who left: it is never sent anywhere again.
+            // It is said, so that a page that stays empty has its reason among the app's own words.
+            if (OfAnEndedSession)
+            {
+                host.ReportProblem("a web page was not loaded: its web view was started for a session that has ended");
                 return;
             }
 
