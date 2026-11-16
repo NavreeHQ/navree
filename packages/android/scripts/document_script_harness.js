@@ -59,6 +59,10 @@ global.origin = "http://localhost:8080";
 global.window = { stop() {} };
 global.MutationObserver = class { observe() {} };
 
+// The object the web view gives a document of the app, to say where it is.
+const posted = [];
+global.navreeSeen = { postMessage(m) { push(posted, m); } };
+
 let emptied = false;
 global.document.documentElement.remove = () => { emptied = true; };
 (0, eval)(source);
@@ -182,4 +186,4 @@ moving("base moved while the engine reads the list it is handed", () => {
 const kindsOf = (o) => each(keysOf(o), (k) => typeof o[k]);
 const plain = (o) => o !== undefined && o !== null && typeof o === "object" && !isArray(o) ? { plain: protoOf(o) === Object.prototype, keys: keysOf(o), kinds: kindsOf(o) } : o;
 const handed = each(given, (g) => (typeof g === "string" ? g : "not a string"));
-write(stringify({ change, results, sockets, workers, emptied, given: handed, protocols: each(protocols, (q) => (isArray(q) ? q : plain(q))), options: each(options, plain), optionName: last && last.name }) + "\n");
+write(stringify({ change, results, sockets, workers, emptied, posted, given: handed, protocols: each(protocols, (q) => (isArray(q) ? q : plain(q))), options: each(options, plain), optionName: last && last.name }) + "\n");

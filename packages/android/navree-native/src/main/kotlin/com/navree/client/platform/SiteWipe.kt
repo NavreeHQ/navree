@@ -58,8 +58,8 @@ object WipeRules {
     /**
      * The origins to clear, each once: the app's own that name one host, the
      * hosts it names for the web view that name one host, and every origin a
-     * page or a frame of the app was seen to load a document from (which is how
-     * a host under a `*.` pattern is known).
+     * document of the app was seen on (which is how a host under a `*.`
+     * pattern is known).
      */
     fun origins(own: List<String>, hosts: List<String>, seen: Collection<String>): List<String> = (own + hosts + seen.sorted()).distinct()
 
@@ -151,8 +151,8 @@ object WipeRules {
  * Where it does not, the older call leaves the service workers and Cache
  * Storage, and [documents] takes those away origin by origin ([WipeRules]).
  * The origins are the ones the app names that are one host each and every
- * origin a page or a frame of the app loaded a document from ([saw]), kept in a
- * second file until a deletion finished.
+ * origin a document of the app was on in the web view, however it got there
+ * ([saw]), kept in a second file until a deletion finished.
  */
 object SiteWipe {
     private const val OWED = "navree-web-wipe"
@@ -182,7 +182,14 @@ object SiteWipe {
     /** Whether a deletion is owed. */
     val owes: Boolean get() = synchronized(lock) { owed }
 
-    /** A page or a frame of the app is about to load a document from this address: its origin is one to clear. Any thread. */
+    /**
+     * A document of the app is, or is about to be, at this address or on this
+     * origin: its origin is one to clear, written to the file before this
+     * returns. The web view's client says so for a request for a document, for
+     * a redirect it follows and for a page that starts, and every document
+     * says it for itself ([guardDocuments]). An address that is not on the
+     * app's origins or its web hosts is not written. Any thread.
+     */
     fun saw(address: String) {
         val origin = synchronized(lock) { origins }?.originOf(address) ?: return
         synchronized(lock) {

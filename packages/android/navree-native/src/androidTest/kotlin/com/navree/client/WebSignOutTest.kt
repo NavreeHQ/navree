@@ -21,8 +21,10 @@ import com.navree.client.core.Driver
 import com.navree.client.core.Effect
 import com.navree.client.core.Engine
 import com.navree.client.platform.AndroidEffects
+import com.navree.client.platform.OriginWebClient
 import com.navree.client.platform.Origins
 import com.navree.client.platform.SiteWipe
+import com.navree.client.platform.guardDocuments
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
@@ -127,6 +129,8 @@ class WebSignOutTest {
                     MockResponse.Builder().code(204).build()
                 }
                 "/" -> page(stores)
+                // To the storing page on the app's second origin: the same server by its address.
+                "/enter" -> MockResponse.Builder().code(302).addHeader("Location", "http://127.0.0.1:${request.url.port}/").build()
                 "/look" -> page(looks)
                 "/sw.js" -> MockResponse.Builder().code(200).addHeader("Content-Type", "text/javascript").body(worker).build()
                 else -> MockResponse.Builder().code(204).build()
@@ -136,11 +140,14 @@ class WebSignOutTest {
         base = app.url("/").toString().trimEnd('/')
     }
 
+    /** The app's second origin: the same server by its address, which the web view keeps apart from the first. */
+    private fun second() = "http://127.0.0.1:${app.port}"
+
     private var shown by mutableStateOf<String?>(null)
 
     /** One web view at a time, made new for each address shown: as a web page of the app is. */
-    private fun show(path: String) {
-        compose.runOnUiThread { shown = "$base$path" }
+    private fun show(address: String) {
+        compose.runOnUiThread { shown = address }
     }
 
     /**
@@ -154,8 +161,16 @@ class WebSignOutTest {
         what()
     }
 
-    private fun start() {
+    /**
+     * Shows the page at [path] and waits until it has stored all five. With
+     * [origins], the web view has the client's own checks for them, as a web
+     * page of the app has, and the client is told which origins it is for;
+     * without, the web view's client is the system's own.
+     */
+    private fun start(path: String = "/", origins: (() -> Origins)? = null) {
         serve()
+        val checked = origins?.invoke()
+        if (checked != null) compose.runOnUiThread { SiteWipe.arm(compose.activity, checked) }
         // The service worker's script comes from the app's own origin; nothing in this test is about the guard on it.
         compose.runOnUiThread {
             ServiceWorkerController.getInstance().setServiceWorkerClient(object : ServiceWorkerClient() {
@@ -172,7 +187,12 @@ class WebSignOutTest {
                             WebView(context).apply {
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
-                                webViewClient = WebViewClient()
+                                if (checked != null) {
+                                    if (!guardDocuments(this, checked)) said += "the check at the start of every document was not added"
+                                    webViewClient = OriginWebClient(checked, onLink = {})
+                                } else {
+                                    webViewClient = WebViewClient()
+                                }
                                 loadUrl(address)
                             }
                         },
@@ -181,7 +201,7 @@ class WebSignOutTest {
                 }
             }
         }
-        show("/")
+        show("$base$path")
         assertTrue("the first page stored all five: $said", waitFor(30) { said.isNotEmpty() })
         assertEquals("the first page stored all five", listOf("stored"), said.toList())
         // The page that stored them is left, as a person leaves it before signing out.
@@ -190,9 +210,9 @@ class WebSignOutTest {
     }
 
     /** What the page shown next finds, read from what it said. */
-    private fun looked(file: String, what: String): JsonObject {
+    private fun looked(file: String, what: String, address: String = "$base/look"): JsonObject {
         val before = said.size
-        show("/look")
+        show(address)
         assertTrue("the second page said what it found: $said", waitFor(30) { said.size > before })
         val found = said.last()
         Shots.put(file, "$what\nthe system's web view deletes every kind of site data: ${WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)}\nthe second page found: $found\n")
@@ -258,7 +278,7 @@ class WebSignOutTest {
         start()
         // The control: while the worker is registered, a page of its origin is the worker's own, not the server's.
         val before = said.size
-        show("/look")
+        show("$base/look")
         assertTrue("a page shown while the worker is there said something: $said", waitFor(30) { said.size > before })
         assertEquals("the page shown while the worker is there is the worker's own", "answered by the worker", said.last())
         compose.runOnUiThread { shown = null }
@@ -267,5 +287,24 @@ class WebSignOutTest {
         // The client's own document on this origin was answered by the worker too, and still took it away.
         assertNothingLeft(looked("web-worker-after-sign-out.txt", "the session ended; the worker answered every page of its origin itself"))
         assertEquals("no page after the end of the session was the worker's: $said", 1, said.count { it == "answered by the worker" })
+    }
+
+    /**
+     * A page reached only through a redirect, on an origin the client knows
+     * of no other way. The app's first origin answers `/enter` with a redirect
+     * to a second origin of the app, and the page there stores what the first
+     * test's page does. The session is then ended by a client that names only
+     * the first origin, as an app does whose second origin is a host under a
+     * `*.` pattern, which nobody can list. What the page stored on the second
+     * origin is gone all the same: the web view's client wrote that origin
+     * down when the page went there. (The second origin is the same server by
+     * its address: plain `http` is an origin of the app only for the machine
+     * itself, never under a pattern.)
+     */
+    @Test
+    fun anOriginAPageReachedOnlyThroughARedirectIsClearedWhenTheSessionEnds() {
+        start(path = "/enter", origins = { Origins(base, also = listOf(second()), loopbackHttp = true) })
+        signOut()
+        assertNothingLeft(looked("web-storage-after-a-redirect.txt", "the session ended; the page that stored was reached through a redirect to ${second()}", address = second() + "/look"))
     }
 }

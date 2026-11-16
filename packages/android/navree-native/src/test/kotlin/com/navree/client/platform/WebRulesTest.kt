@@ -2,6 +2,7 @@ package com.navree.client.platform
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -152,6 +153,30 @@ class WebRulesTest {
             }
             assertFalse("a getter of the page's URL is read when a wrapper is called: $body", Regex("\\.(href|hostname|protocol|port)\\b").containsMatchIn(body))
         }
+    }
+
+    @Test
+    fun a_document_that_is_left_alone_says_where_it_is_and_one_that_is_emptied_does_not() {
+        val script = WebRules.documentScript(Origins("https://shop.example").documentOrigins())
+        assertTrue(script, script.contains("if(!at(o))stop();else{var J=W.${WebRules.SEEN};if(J)J.postMessage('')}return}"))
+        assertEquals("it is said in one place", script.indexOf("postMessage("), script.lastIndexOf("postMessage("))
+    }
+
+    @Test
+    fun the_object_a_document_says_where_it_is_through_is_given_to_the_apps_origins_and_no_other() {
+        val origins = Origins(
+            "https://shop.example",
+            also = listOf("https://*.shop.example", "https://pay.example:8443"),
+            webHosts = listOf("*.cdn.example", "maps.example:8444"),
+        )
+        assertEquals(
+            setOf("https://shop.example", "https://*.shop.example", "https://pay.example:8443", "https://*.cdn.example", "https://maps.example:8444"),
+            WebRules.listenerRules(origins.documentOrigins()),
+        )
+        assertEquals(setOf("http://localhost:8097"), WebRules.listenerRules(Origins("http://localhost:8097", loopbackHttp = true).documentOrigins()))
+        // A host under a pattern is the app's own, so a page that a redirect took there is written down; another host is not.
+        assertEquals("https://patiala.shop.example", origins.originOf("https://patiala.shop.example/orders?page=2"))
+        assertNull(origins.originOf("https://shop.example.other.example/orders"))
     }
 
     @Test

@@ -46,7 +46,7 @@ def script(source_path):
     end = text.index(end_text) + len(end_text)
     expression = "\n".join(line for line in text[start:end].splitlines() if not line.strip().startswith("//"))
     parts = re.findall(r'"((?:[^"\\]|\\.)*)"', expression)
-    return "".join(parts).replace("$rules", ORIGINS).replace('\\"', '"').replace("\\\\", "\\")
+    return "".join(parts).replace("$rules", ORIGINS).replace("$SEEN", "navreeSeen").replace('\\"', '"').replace("\\\\", "\\")
 
 
 def run(js, change):
@@ -128,6 +128,9 @@ class DocumentScriptTest(unittest.TestCase):
 
     def test_nothing_is_emptied_for_a_document_of_the_app(self):
         self.assertFalse(self.seen["emptied"])
+
+    def test_a_document_of_the_app_says_once_where_it_is(self):
+        self.assertEqual([""], self.seen["posted"])
 
     def test_what_a_page_replaces_after_the_script_ran_never_lets_a_socket_or_a_worker_go_elsewhere(self):
         for change, seen in self.runs.items():

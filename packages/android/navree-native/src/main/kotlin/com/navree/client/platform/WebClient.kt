@@ -120,6 +120,17 @@ object WebRules {
      */
     fun reloadAfterGone(times: Int): Boolean = times <= 1
 
+    /** The name of the object a document of the app says where it is through ([guardDocuments]). */
+    const val SEEN = "navreeSeen"
+
+    /**
+     * The origins a document may have ([Origins.documentOrigins]) as the
+     * rules a message listener of the web view takes: `scheme://host`, with
+     * the port where it is not the scheme's own; a host may start with `*.`.
+     */
+    fun listenerRules(origins: List<Triple<String, String, Int>>): Set<String> =
+        origins.mapTo(LinkedHashSet()) { (scheme, host, port) -> "$scheme://$host" + if (port == (if (scheme == "http") 80 else 443)) "" else ":$port" }
+
     /**
      * The script that runs at the start of every document in every frame,
      * before the document's own scripts: a document whose origin is not one
@@ -140,6 +151,13 @@ object WebRules {
      * just put in is prepared, so such a script is no longer in the document
      * and never runs; and the root element taken out if it is there already.
      * A failure of the check itself empties the document too.
+     *
+     * A document that is left alone says where it is: it posts an empty
+     * message through the object named [SEEN], which the web view gives only
+     * to the app's origins, and the web view itself names the origin the
+     * message came from. That is how the client knows of an origin a frame or
+     * a page reached through a redirect it was never asked about. A document
+     * that fails to say it is emptied, as by any other failure of the script.
      *
      * The same script puts a check in front of the page's own `WebSocket`,
      * `WebSocketStream`, `Worker` and `SharedWorker`, which are not requests the
@@ -212,7 +230,7 @@ object WebRules {
             "if(!at(a))throw K(E,['Not allowed','SecurityError']);return o===undefined?K(C,[a]):K(C,[a,o])};" +
             "N.prototype=C.prototype;C.prototype.constructor=N;var c=['CONNECTING','OPEN','CLOSING','CLOSED'];for(var j=0;j<c.length;j++)if(c[j] in C)N[c[j]]=C[c[j]];W[k]=N};" +
             "wrap('WebSocket',1);wrap('WebSocketStream',2);wrap('Worker');wrap('SharedWorker');" +
-            "var o=W.origin;if(o!=='null'){if(!at(o))stop();return}" +
+            "var o=W.origin;if(o!=='null'){if(!at(o))stop();else{var J=W.$SEEN;if(J)J.postMessage('')}return}" +
             "var l=location.href;if(l.indexOf('about:')===0)return;if(!at(l))stop()}catch(e){stop()}})();"
     }
 
@@ -224,24 +242,31 @@ object WebRules {
  * Adds [WebRules.documentScript] to a web view, to run at the start of every
  * document in every frame, the one check that also sees a document reached
  * by a redirect the web view's callbacks are never told of (a frame's, a
- * posted form's). Call before the first load. Where the system's web view
- * lacks the feature (`WebViewFeature.DOCUMENT_START_SCRIPT`), nothing is
- * added, and a web page is not shown without it ([WebRules.guardsInForce]).
- * That is said once here in the log, and every time by the page. Answers
- * whether the script was added.
+ * posted form's); and, before it, the listener through which each document
+ * of the app says where it is, so that its origin is written down as one to
+ * clear when the session ends ([SiteWipe.saw]). What a document posts is not
+ * read: the origin is the one the web view names for the message. Call before
+ * the first load. Where the system's web view lacks either feature
+ * (`WebViewFeature.DOCUMENT_START_SCRIPT`, `WebViewFeature.WEB_MESSAGE_LISTENER`),
+ * nothing is added, and a web page is not shown without them
+ * ([WebRules.guardsInForce]). That is said once here in the log, and every
+ * time by the page. Answers whether both were added.
  */
 fun guardDocuments(view: WebView, origins: Origins): Boolean = guardDocuments(view, origins, ClientLog.told)
 
 internal fun guardDocuments(view: WebView, origins: Origins, told: Told): Boolean {
-    if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) || !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
         told.once(
             "documents",
-            "this system's web view cannot run a script at the start of a document: a web page is not shown",
+            "this system's web view cannot run a script at the start of a document, or cannot hear from one: a web page is not shown",
         )
         return false
     }
     return try {
-        WebViewCompat.addDocumentStartJavaScript(view, WebRules.documentScript(origins.documentOrigins()), setOf("*"))
+        val allowed = origins.documentOrigins()
+        // The listener first: the script at the start of a document finds its object there (the reference of `addDocumentStartJavaScript` says so).
+        WebViewCompat.addWebMessageListener(view, WebRules.SEEN, WebRules.listenerRules(allowed)) { _, _, source, _, _ -> SiteWipe.saw(source.toString()) }
+        WebViewCompat.addDocumentStartJavaScript(view, WebRules.documentScript(allowed), setOf("*"))
         true
     } catch (e: Exception) {
         told.once("documents", "the script at the start of a document could not be added ($e): a web page is not shown")
@@ -398,7 +423,11 @@ open class OriginWebClient(
         val navigation = WebRules.navigation(origins.ours(url), origins.webHost(url), request.isForMainFrame, request.isRedirect, request.hasGesture())
         if (WebRules.leftByRedirect(request.isForMainFrame, request.isRedirect, navigation)) onLeft()
         return when (navigation) {
-            WebNavigation.Load -> false
+            WebNavigation.Load -> {
+                // A redirect that is followed, or a frame that goes on: a document is about to be on this origin.
+                SiteWipe.saw(url)
+                false
+            }
             WebNavigation.Core -> {
                 onLink(url)
                 true
@@ -429,6 +458,8 @@ open class OriginWebClient(
             onLeft()
             return
         }
+        // Where the page is now, whatever brought it there.
+        url?.let { SiteWipe.saw(it) }
         onLoading(true)
     }
 

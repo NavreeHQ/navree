@@ -58,7 +58,9 @@ internal val LocalWebGuards = staticCompositionLocalOf { WebGuards() }
  * requests' cookies (the system store is the one store), carries the
  * protocol's token at the end of its user agent so the server leaves out its
  * web chrome, and has no bridge to the app: no script interface, no file or
- * content access, no pop-ups, no mixed content.
+ * content access, no pop-ups, no mixed content. The one object a document of
+ * the app is given says only where the document is, and what is posted
+ * through it is not read ([guardDocuments]).
  *
  * The page stays on the app's origins, and what it loads inside it is asked
  * for only from them or from the app's web hosts, by the first address of each
