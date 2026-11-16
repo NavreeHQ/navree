@@ -86,12 +86,14 @@ function sameField(a, b) {
 }
 
 /**
- * Whether `node` is something the runtime keeps, or inside it: a page's element with the same
- * id never stands in for it.
+ * Whether `node` is something the runtime keeps, or inside it, or inside an element the morph keeps
+ * below `root` (a component's body, an island's): a page's element with the same id never stands in
+ * for it, and what a script or a library wrote there never stands in for the page's own. A kept
+ * element itself still moves whole.
  * @param {Node} node @param {Node} root
  */
 function kept(node, root) {
-  for (let at = /** @type {Node | null} */ (node); at && at !== root; at = parentOf(at)) if (persistent.has(at)) return true;
+  for (let at = /** @type {Node | null} */ (node); at && at !== root; at = parentOf(at)) if (persistent.has(at) || (at !== node && has(/** @type {Element} */ (at), "data-ui-keep"))) return true;
   return false;
 }
 
