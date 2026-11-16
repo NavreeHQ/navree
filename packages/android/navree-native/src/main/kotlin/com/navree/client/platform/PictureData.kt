@@ -340,7 +340,7 @@ internal object PictureData {
 
     /** The text of a PNG text chunk, inflated when it is compressed; null when it does not read. */
     private fun pngText(type: String, data: ByteArray): ByteArray? {
-        val keywordEnd = data.indexOf(0)
+        val keywordEnd = data.indexOfByte(0)
         if (keywordEnd < 0) return null
         return when (type) {
             "tEXt" -> data.copyOfRange(keywordEnd + 1, data.size)
@@ -348,8 +348,8 @@ internal object PictureData {
             else -> {
                 // keyword, 0, compressed, method, language, 0, translated keyword, 0, text
                 val compressed = data.getOrNull(keywordEnd + 1)?.toInt() == 1
-                val language = data.indexOf(0, keywordEnd + 3)
-                val translated = if (language < 0) -1 else data.indexOf(0, language + 1)
+                val language = data.indexOfByte(0, keywordEnd + 3)
+                val translated = if (language < 0) -1 else data.indexOfByte(0, language + 1)
                 if (translated < 0) return null
                 val text = data.copyOfRange(translated + 1, data.size)
                 if (compressed) inflate(text) else text
@@ -357,7 +357,7 @@ internal object PictureData {
         }
     }
 
-    private fun ByteArray.indexOf(value: Int, from: Int = 0): Int {
+    private fun ByteArray.indexOfByte(value: Int, from: Int = 0): Int {
         for (i in from until size) if (this[i].toInt() == value) return i
         return -1
     }
