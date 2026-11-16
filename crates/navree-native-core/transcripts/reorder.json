@@ -13,7 +13,7 @@
     },
     {
       "note": "The shell arrives: its destinations, and the first one's first screen is asked for.",
-      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "store/shell.json",
       "expect": {
         "changed": [
@@ -28,7 +28,7 @@
     },
     {
       "note": "The first page.",
-      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/packing.json",
       "expect": {
         "changed": [
@@ -57,7 +57,7 @@
     },
     {
       "note": "The server took it.",
-      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/gift-saved.json",
       "expect": {
         "changed": [
@@ -109,7 +109,7 @@
       ]
     },
     {
-      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/gift-saved.json",
       "expect": {
         "changed": [
@@ -139,7 +139,7 @@
     },
     {
       "note": "The server refuses, and says why. The row goes back where it was.",
-      "send": {"t":"response","request":5,"status":422,"content_type":"application/vnd.navree.native+json"},
+      "send": {"t":"response","request":5,"status":422,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/move-refused.json",
       "expect": {
         "changed": [

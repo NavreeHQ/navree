@@ -1188,7 +1188,8 @@ impl Core {
                     return;
                 }
                 if let Some(way_in) = Self::way_in(status, &read.envelope.ops) {
-                    if same {
+                    // The screen is fetched again once the person is back.
+                    if same && !ran {
                         self.put_back(id, item, from, at);
                     }
                     return self.session_ended(id, &way_in);
@@ -1196,9 +1197,14 @@ impl Core {
                 let ops = std::mem::take(&mut read.envelope.ops);
                 let taken = status < 400;
                 if !taken {
-                    // The server said no: the row goes back, and what it said why is said.
+                    // The server refused it and did nothing: the row goes back.
+                    // Otherwise it may have moved it: the page says where.
                     if same {
-                        self.put_back(id, item, from, at);
+                        if ran {
+                            self.fetch_page(id, false);
+                        } else {
+                            self.put_back(id, item, from, at);
+                        }
                     }
                     if ops.is_empty() {
                         self.notice(Notice::Failed, Some(id));
