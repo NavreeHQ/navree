@@ -388,13 +388,31 @@ pub(crate) fn envelope_with(
     config: &Config,
     pictures: Pictures<'_>,
 ) -> Result<Read, Failure> {
-    with_room(|| envelope_here(body, config, pictures)).unwrap_or(Err(Failure::Protocol))
+    envelope_sized(body, config, pictures).map_err(|(failure, _)| failure)
 }
 
-fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<Read, Failure> {
+/// As [`envelope_with`], and with a failure, whether the answer was refused
+/// for passing one of the protocol's caps (its size, its nodes, its ops, the
+/// work its ops ask, an id's length, its icons' shapes).
+fn envelope_sized(
+    body: &str,
+    config: &Config,
+    pictures: Pictures<'_>,
+) -> Result<Read, (Failure, bool)> {
+    with_room(|| envelope_here(body, config, pictures)).unwrap_or(Err((Failure::Protocol, false)))
+}
+
+/// What reading an envelope refuses for passing a cap.
+const PAST_A_CAP: (Failure, bool) = (Failure::Protocol, true);
+
+fn envelope_here(
+    body: &str,
+    config: &Config,
+    pictures: Pictures<'_>,
+) -> Result<Read, (Failure, bool)> {
     // An answer larger than the protocol allows is not read at all.
     if body.len() > MAX_BODY {
-        return Err(Failure::Protocol);
+        return Err(PAST_A_CAP);
     }
     let mut read = Read {
         envelope: blank(),
@@ -414,9 +432,10 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
                 read.missing.push("client:depth".to_owned());
                 return Ok(read);
             }
-            let value: Value = serde_json::from_str(body).map_err(|_| Failure::Protocol)?;
+            let value: Value =
+                serde_json::from_str(body).map_err(|_| (Failure::Protocol, false))?;
             if value.get("navree").and_then(Value::as_u64) != Some(u64::from(MAJOR)) {
-                return Err(Failure::Protocol);
+                return Err((Failure::Protocol, false));
             }
             // It is an envelope, and something in it has a shape this build
             // can't read: nothing of it is trusted.
@@ -426,13 +445,13 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
         }
     }
     if read.envelope.navree != MAJOR {
-        return Err(Failure::Protocol);
+        return Err((Failure::Protocol, false));
     }
     // Nor is one that holds more than it allows: what a client does with an
     // answer grows with its nodes and its ops, and a table's rows, a list of
     // facts' items and a chart's points weigh as nodes do.
     if read.envelope.ops.len() > MAX_OPS || !nodes_within(&read.envelope, MAX_NODES) {
-        return Err(Failure::Protocol);
+        return Err(PAST_A_CAP);
     }
     // A page that brings ops is read whole: its ops are held to the budgets
     // against its own screen, and an answer whose ops would be refused is not
@@ -446,19 +465,19 @@ fn envelope_here(body: &str, config: &Config, pictures: Pictures<'_>) -> Result<
             &read.envelope.ops,
             &brought,
         ) {
-            return Err(Failure::Protocol);
+            return Err(PAST_A_CAP);
         }
     }
     // What the core names things from is short, before anything is named.
     if !ids_within(&read.envelope) {
-        return Err(Failure::Protocol);
+        return Err(PAST_A_CAP);
     }
     // Icons the answer keeps in one place go back to where they are drawn, so
     // a screen stands on its own. Each icon that names a shape takes a copy of
     // it, so the shapes are added up first, and nothing is copied when they
     // come to more than a body may hold.
     if !read.envelope.inline_icons_within(MAX_BODY) {
-        return Err(Failure::Protocol);
+        return Err(PAST_A_CAP);
     }
     if let Some(screen) = &mut read.envelope.screen {
         check_screen(screen, config, &mut read.missing, pictures);
@@ -581,21 +600,48 @@ fn nodes_within(envelope: &Envelope, cap: usize) -> bool {
 }
 
 /// Reads a response. `asked` is the address the request went to. The core
-/// reads every answer with [`read_on`]; this is for the tests of the reading.
+/// reads every answer with [`read_sized`]; this is for the tests of the reading.
 #[cfg(test)]
 pub(crate) fn read(response: Response, asked: &str, origin: &Origin, config: &Config) -> Answer {
     read_on(response, asked, None, origin, config)
 }
 
-/// Reads a response for a part of the page at `page` (a region, a list's
-/// rows): its pictures are read against the page, as a browser reads them
-/// against the document. `None` reads them against the answer's own address.
+/// As [`read_sized`], without what it says of the caps.
+#[cfg(test)]
 pub(crate) fn read_on(
     response: Response,
     asked: &str,
     page: Option<&str>,
     origin: &Origin,
     config: &Config,
+) -> Answer {
+    read_sized(response, asked, page, origin, config).0
+}
+
+/// Reads a response for a part of the page at `page` (a region, a list's
+/// rows): its pictures are read against the page, as a browser reads them
+/// against the document. `None` reads them against the answer's own address.
+/// With it, whether an envelope was refused for passing one of the
+/// protocol's caps.
+pub(crate) fn read_sized(
+    response: Response,
+    asked: &str,
+    page: Option<&str>,
+    origin: &Origin,
+    config: &Config,
+) -> (Answer, bool) {
+    let mut past_a_cap = false;
+    let answer = read_answer(response, asked, page, origin, config, &mut past_a_cap);
+    (answer, past_a_cap)
+}
+
+fn read_answer(
+    response: Response,
+    asked: &str,
+    page: Option<&str>,
+    origin: &Origin,
+    config: &Config,
+    past_a_cap: &mut bool,
 ) -> Answer {
     if let Some(error) = response.error {
         return Answer::Failed(match error {
@@ -635,7 +681,7 @@ pub(crate) fn read_on(
             origin,
             from: page.unwrap_or(&url),
         };
-        return match envelope_with(&response.body, config, Some(&sources)) {
+        return match envelope_sized(&response.body, config, Some(&sources)) {
             Ok(mut read) => {
                 read.keep = keep;
                 let own = (!read.envelope.shell.is_empty()).then(|| read.envelope.shell.clone());
@@ -647,7 +693,10 @@ pub(crate) fn read_on(
                     body: response.body,
                 }
             }
-            Err(failure) => Answer::Failed(failure),
+            Err((failure, past)) => {
+                *past_a_cap = past;
+                Answer::Failed(failure)
+            }
         };
     }
     if status >= 500 {

@@ -717,7 +717,7 @@ impl Core {
     /// Shows a message of the core's own.
     pub(crate) fn notice(&mut self, notice: Notice, screen: Option<ScreenId>) {
         let tone = match notice {
-            Notice::Unsaved | Notice::SecondStep => Tone::Warning,
+            Notice::Unsaved | Notice::SecondStep | Notice::SavedNotRefreshed => Tone::Warning,
             Notice::Loading | Notice::Copied | Notice::Loaded => Tone::Neutral,
             _ => Tone::Danger,
         };
@@ -2301,13 +2301,16 @@ impl Core {
             }
             _ => None,
         };
-        let answer = decode::read_on(
+        let status = response.status;
+        let (answer, past_a_cap) = decode::read_sized(
             response,
             &asked.url,
             page.as_deref(),
             &self.inner.origin,
             &self.config,
         );
+        // A write the server took whose answer was too large to read.
+        let saved_unread = (past_a_cap && status < 400).then_some(status);
         // A redirect is measured against the address that was asked for first.
         let Asked {
             purpose,
@@ -2354,7 +2357,15 @@ impl Core {
                 key,
                 write,
                 in_place,
-            } => self.send_answered(screen, visit, &key, write, in_place, &asked, answer),
+            } => self.send_answered(
+                screen,
+                visit,
+                &key,
+                (write, saved_unread.is_some()),
+                in_place,
+                &asked,
+                answer,
+            ),
             Pending::Region {
                 screen,
                 visit,
@@ -2995,6 +3006,68 @@ mod tests {
                 counts,
                 "{what}: counted as a write, or not"
             );
+        }
+    }
+
+    /// A write that worked and is answered with a page too large to read is
+    /// saved: the person is told it was saved and that the screen could not
+    /// be brought up to date, not that it failed, and it counts as a write. A
+    /// write the server refused is a failure, whatever the size of its answer.
+    #[test]
+    fn a_write_that_worked_answered_too_large_to_read_says_it_was_saved() {
+        let page = r#"{"navree":1,"build":"b1","vocab":0,"screen":{"title":"Order","body":{"t":"form","id":"note","method":"post","action":"/orders/1/note","children":[{"t":"field","id":"text","name":"text","input":{"t":"text"}},{"t":"button","label":"Save","action":{"t":"submit"}}]}}}"#;
+        let too_large = format!("{page}{}", " ".repeat(navree_native::MAX_BODY));
+        for (status, said) in [
+            (200, "saved_not_refreshed"),
+            (303, "saved_not_refreshed"),
+            (422, "failed"),
+        ] {
+            let mut core = started();
+            core.send(Event::Response(Response {
+                request: 2,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: page.to_owned(),
+                ..Response::default()
+            }));
+            let epoch = core.inner.epoch;
+            let sent = core.send(Event::Act {
+                screen: Some(1),
+                action: serde_json::from_value(serde_json::json!({"t": "submit"}))
+                    .expect("an action"),
+                form: Some("note".to_owned()),
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            });
+            let request = sent
+                .effects
+                .iter()
+                .find_map(|effect| match effect {
+                    Effect::Fetch(request) if request.method == Verb::Post => Some(request.request),
+                    _ => None,
+                })
+                .expect("the form is sent");
+            let update = core.send(Event::Response(Response {
+                request,
+                status,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: too_large.clone(),
+                ..Response::default()
+            }));
+            let notices: Vec<serde_json::Value> = update
+                .effects
+                .iter()
+                .filter_map(|effect| match effect {
+                    Effect::Message(message) => message.notice,
+                    _ => None,
+                })
+                .map(|notice| serde_json::to_value(notice).expect("a notice writes"))
+                .collect();
+            assert_eq!(notices, [said], "{status}: {update:?}");
+            assert!(core.inner.epoch > epoch, "{status}: counts as a write");
         }
     }
 
