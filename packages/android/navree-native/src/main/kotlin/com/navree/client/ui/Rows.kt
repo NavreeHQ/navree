@@ -172,7 +172,7 @@ internal fun RowView(
     /** The moves of a row that can be moved, offered to TalkBack. */
     moves: List<CustomAccessibilityAction> = emptyList(),
 ) {
-    val began = System.nanoTime()
+    val began = cardClock()
     val ui = LocalUi.current
     val window = ui.window
     // A button that only says the row's title is the row's own tap, not a second line under it.

@@ -422,7 +422,7 @@ private fun MovingRowContent(
     modifier: Modifier,
     animation: Modifier,
 ) {
-    val began = System.nanoTime()
+    val began = cardClock()
     val ui = LocalUi.current
     val id = row.id ?: return
     val listId = list.id
@@ -440,7 +440,7 @@ private fun MovingRowContent(
     val handleName = stringResource(R.string.navree_move_card, row.title)
     val density = LocalDensity.current
     cardPartSince("card.words", began)
-    val wordsDone = System.nanoTime()
+    val wordsDone = cardClock()
 
     fun move(to: Navree.List, before: String?) {
         val from = listId ?: return

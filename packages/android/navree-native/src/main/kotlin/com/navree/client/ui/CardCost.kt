@@ -13,7 +13,10 @@ internal object CardCost {
     var tap: ((String, Long) -> Unit)? = null
 }
 
-/** Tells the tap how long a part of a card that is not a block of its own took, from `began` (a `System.nanoTime()`). */
+/** The time to measure a part from: nothing is read where no test listens. */
+internal fun cardClock(): Long = if (CardCost.tap != null) System.nanoTime() else 0L
+
+/** Tells the tap how long a part of a card that is not a block of its own took, from `began` (a `cardClock()`). */
 internal fun cardPartSince(name: String, began: Long) {
     CardCost.tap?.invoke(name, System.nanoTime() - began)
 }
