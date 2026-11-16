@@ -45,6 +45,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -374,5 +376,31 @@ class WebSignOutTest {
         File(compose.activity.noBackupFilesDir, "navree-web-wipe").writeText(WipeRules.EVERYTHING + "\n")
         client {}
         assertNothingLeft(looked("web-storage-after-an-unfinished-sign-out.txt", "a run of the app ended before the end of the session was done; the app started again"))
+    }
+
+    /**
+     * The end of a session is owed from the moment the client is told of it.
+     * The mark is on the disk when the effect returns, while the store is
+     * still busy with what was asked before and nothing has been deleted: a
+     * run of the app that ends there leaves the next start to do all of it
+     * (the test before this one).
+     */
+    @Test
+    fun theEndOfASessionIsWrittenDownTheMomentTheClientIsToldOfItBeforeAnythingIsWaitedFor() {
+        serve()
+        val mark = File(compose.activity.noBackupFilesDir, "navree-web-wipe")
+        val busy = CountDownLatch(1)
+        var written: String? = null
+        var whole = false
+        client {
+            // The store is held by what was asked of it before: the turn of the end of the session has not come.
+            it.state.always { busy.await(20, TimeUnit.SECONDS) }
+            it.run(Effect.ForgetSession)
+            written = runCatching { mark.readText() }.getOrNull()
+            whole = SiteWipe.owesAll
+            busy.countDown()
+        }
+        assertEquals("the mark was on the disk when the effect returned", WipeRules.EVERYTHING + "\n", written)
+        assertTrue("and it owed the whole of the end of the session", whole)
     }
 }

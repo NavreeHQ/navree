@@ -411,7 +411,9 @@ object SiteWipe {
     /**
      * A session ended: the whole of what that deletes is owed from now, what
      * its pages stored at every origin with it, and the deletion is on its
-     * way. It blocks on a small file: not on the main thread.
+     * way. Called the moment the client is told, on the thread it is told on,
+     * before anything is waited for: the mark is a few bytes, and it has
+     * reached the disk when this returns.
      */
     fun owe() {
         synchronized(lock) {

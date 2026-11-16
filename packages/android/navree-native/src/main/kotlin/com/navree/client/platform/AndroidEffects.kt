@@ -219,7 +219,11 @@ class AndroidEffects(
     }
 
     /**
-     * The session ended on this device. In the store's turn, after whatever
+     * The session ended on this device. At once, before anything is waited
+     * for, that is written down and forced to the disk ([SiteWipe.owe]): from
+     * that moment the whole of what follows is owed, and a run of the app that
+     * ends anywhere after it leaves the next start to do it. Then, in the
+     * store's turn, after whatever
      * was asked before: the sealed page cache and the snapshot go; then, on
      * the main thread, the web view's cache, history, form data and saved
      * sign-ins for sites, and what sites stored ([clearWebViews]); once the
@@ -242,6 +246,9 @@ class AndroidEffects(
      * push service's token for this install is deleted and a new one asked for.
      */
     private fun forget() {
+        // Owed from this moment and written down, whatever the store is still busy with: a page of the next session is not
+        // shown over what this one's pages left, and a start of the app after a run that ended here does all of it.
+        SiteWipe.owe()
         state.end { finished ->
             // The time limit is armed before anything it guards: whatever happens below, the queue goes on.
             endWithLimit(finished, arm = { release -> main.postDelayed({ release() }, WIPE_WAIT_MS) }) { done -> wipe(done) }
@@ -251,12 +258,6 @@ class AndroidEffects(
 
     /** The steps of [forget], in order; [done] when the cookie store says its cookies are gone and the web view that nothing of its pages is left. */
     private fun wipe(done: () -> Unit) {
-        try {
-            // Owed from here on, and written down: a page of the next session is not shown over what this one's pages left.
-            SiteWipe.owe()
-        } catch (_: Throwable) {
-            // A mark that could not be written is still held for as long as this process lives.
-        }
         try {
             cache.clear()
             snapshots.clear()
