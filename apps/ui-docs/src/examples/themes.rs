@@ -1,8 +1,8 @@
 //! Themes, modes, the theme menu, the shell's layouts and the theme builder.
 
 use navree::ui::theme::{
-    Appearance, BuilderDraft, Corner, Corners, Mode, Rgb, Roles, Shape, Theme, ThemeBuilder,
-    ThemeId, ThemeMenu,
+    Appearance, BuilderDraft, Corner, Corners, Face, Mode, Rgb, Roles, Shape, TextStyle, Theme,
+    ThemeBuilder, ThemeId, ThemeMenu, TypeScale,
 };
 use navree::ui::*;
 
@@ -179,21 +179,28 @@ fn shell_header() -> AppPage {
 }
 
 /// Ocean with a shape of its own: pill buttons, badges, toggles and avatars, 12 px fields,
-/// panels and popups, 10 px rows and 16 px cards; and white cards and fields beside its
-/// tinted sidebar.
+/// panels and popups, 10 px rows and 16 px cards; a 28 px page title, 15 px card titles and
+/// figures in the mono face; and white cards and fields beside its tinted sidebar.
 fn shaped_theme() -> Theme {
-    let shape = Shape::new().corners(
-        Corners::new()
-            .button(Corner::Pill)
-            .badge(Corner::Pill)
-            .toggle(Corner::Pill)
-            .avatar(Corner::Pill)
-            .field(Corner::Px(12))
-            .nav(Corner::Px(10))
-            .card(Corner::Px(16))
-            .panel(Corner::Px(12))
-            .overlay(Corner::Px(12)),
-    );
+    let shape = Shape::new()
+        .corners(
+            Corners::new()
+                .button(Corner::Pill)
+                .badge(Corner::Pill)
+                .toggle(Corner::Pill)
+                .avatar(Corner::Pill)
+                .field(Corner::Px(12))
+                .nav(Corner::Px(10))
+                .card(Corner::Px(16))
+                .panel(Corner::Px(12))
+                .overlay(Corner::Px(12)),
+        )
+        .type_scale(
+            TypeScale::new()
+                .page_title(TextStyle::px(28).line(1.15).weight(600).tracking(-0.025))
+                .card_title(TextStyle::px(15).line(1.4).tracking(-0.01))
+                .stat_value(TextStyle::px(22).weight(500).face(Face::Mono)),
+        );
     let roles = Roles::new()
         .card(Rgb::hex(0xffffff), Rgb::hex(0x0a0d12))
         .field(Rgb::hex(0xffffff), Rgb::hex(0x0a0d12));

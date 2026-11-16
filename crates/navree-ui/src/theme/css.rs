@@ -218,7 +218,11 @@ pub(crate) fn sheet(theme: &Theme) -> String {
     let mut out = String::with_capacity(4096);
     let key = theme.key();
     let extras = theme.extras();
-    let mut names = extras.shape.names().chain(extras.roles.names()).peekable();
+    let mut names = extras
+        .shape
+        .names()
+        .chain(extras.roles.names().map(str::to_owned))
+        .peekable();
     if names.peek().is_some() {
         let _ = write!(out, ":where([data-theme={key}] [data-theme]){{");
         for (at, name) in names.enumerate() {

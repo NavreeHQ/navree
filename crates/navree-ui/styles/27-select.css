@@ -12,7 +12,7 @@
 [data-slot=select-status]{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 
 /* The control: a button, or a box holding an input. */
-[data-slot=select-trigger],[data-slot=combobox-control],[data-slot=multiselect-control]{display:flex;align-items:center;gap:.5rem;width:100%;min-height:var(--ctl);border:1px solid var(--line-2);border-radius:var(--radius-field,var(--radius));background:var(--field,var(--ink-1));color:var(--fg);font-size:14px;line-height:1.25;text-align:start;transition:border-color .1s;
+[data-slot=select-trigger],[data-slot=combobox-control],[data-slot=multiselect-control]{display:flex;align-items:center;gap:.5rem;width:100%;min-height:var(--ctl);border:1px solid var(--line-2);border-radius:var(--radius-field,var(--radius));background:var(--field,var(--ink-1));color:var(--fg);font-size:var(--text-input-size,14px);line-height:1.25;text-align:start;transition:border-color .1s;
   &:hover{border-color:var(--line-3)}
   & > [data-slot=icon]{color:var(--fg-3)}
 }

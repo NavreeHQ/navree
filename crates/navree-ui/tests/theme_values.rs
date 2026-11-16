@@ -7,12 +7,12 @@
 //! any of them is a change to every app that sets nothing new, so each is held here.
 
 use navree_ui::theme::{
-    Corner, Corners, ImportError, Inverse, Rgb, Roles, Shape, Theme, ThemeId, Token, builder_layer,
-    token_layer,
+    Corner, Corners, Face, ImportError, Inverse, Rgb, Roles, Shape, TextStyle, Theme, ThemeId,
+    Token, TypeScale, builder_layer, token_layer,
 };
 use navree_ui::{
-    Badge, Button, ButtonVariant, Card, Input, NavGroup, NavItem, Shell, Stat, UserMenu, View, el,
-    icons,
+    AppFont, Badge, Button, ButtonVariant, Card, Input, NavGroup, NavItem, Shell, Stat, UserMenu,
+    View, el, icons,
 };
 use sha2::{Digest, Sha256};
 
@@ -469,4 +469,169 @@ fn a_role_whose_text_falls_short_is_refused_in_light_and_in_dark() {
     );
     // A built-in theme ships as it is.
     assert!(Theme::NEUTRAL.with_roles(design_roles()).is_err());
+}
+
+/// A page title of 32 px in the display face, 15 px card titles and stat figures in the mono
+/// face.
+fn a_type_scale() -> TypeScale {
+    TypeScale::new()
+        .page_title(
+            TextStyle::px(32)
+                .line(1.1)
+                .weight(600)
+                .tracking(-0.03)
+                .face(Face::Display),
+        )
+        .brand(TextStyle::px(18).weight(600).tracking(-0.03))
+        .card_title(TextStyle::px(15).line(1.4).tracking(-0.01))
+        .stat_value(TextStyle::px(22).weight(500).face(Face::Mono))
+        .h4(TextStyle::new().weight(500))
+}
+
+#[test]
+fn a_type_scale_sets_each_kind_of_text_and_travels_with_the_theme() {
+    let theme = agra(&Theme::NAVREE)
+        .with_shape(Shape::new().type_scale(a_type_scale()))
+        .unwrap();
+    let said = said(&theme);
+    for (name, value) in [
+        ("text-page-title-size", "32px"),
+        ("text-page-title-line", "1.1"),
+        ("text-page-title-weight", "600"),
+        ("text-page-title-tracking", "-0.03em"),
+        (
+            "text-page-title-face",
+            "var(--font-display,var(--font-sans))",
+        ),
+        ("text-brand-size", "18px"),
+        ("text-card-title-line", "1.4"),
+        ("text-stat-value-face", "var(--font-mono)"),
+        ("text-h4-weight", "500"),
+    ] {
+        assert!(
+            said.contains(&(name.to_owned(), value.to_owned())),
+            "{name}: {said:?}"
+        );
+    }
+    assert_eq!(said.len(), 15, "{said:?}");
+    let back = Theme::from_short_form(theme.short_form()).unwrap();
+    assert_eq!(back.shape(), theme.shape());
+    let stored = Theme::from_json(&theme.to_json()).unwrap();
+    assert_eq!(stored.shape(), theme.shape());
+    let rust = theme.to_rust("navree::ui");
+    assert!(
+        rust.contains(
+            ".page_title(TextStyle::px(32).line(1.1).weight(600).tracking(-0.03).face(Face::Display))"
+        ),
+        "{rust}"
+    );
+    assert!(rust.contains(".h4(TextStyle::new().weight(500))"), "{rust}");
+    assert!(
+        rust.contains("Face, Font, Palette, Radius, Rgb, Shape, TextStyle, Theme, ThemeId, ThemeSpec, TypeScale}"),
+        "{rust}"
+    );
+    // A size out of range is refused by its name.
+    let big = Shape::new().type_scale(TypeScale::new().page_title(TextStyle::px(80)));
+    match agra(&Theme::NAVREE).with_shape(big) {
+        Err(ImportError::Fields(fields)) => assert_eq!(
+            fields,
+            vec![(
+                "text-page-title-size".to_owned(),
+                "A text size takes 10 to 72 px.".to_owned()
+            )]
+        ),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn every_kind_of_text_is_read_by_the_stylesheet_and_headings_and_the_brand_take_the_display_face() {
+    let mut every = TypeScale::new();
+    let style = TextStyle::px(16)
+        .line(1.5)
+        .weight(500)
+        .tracking(0.01)
+        .face(Face::Text);
+    for step in [
+        TypeScale::page_title,
+        TypeScale::h1,
+        TypeScale::h2,
+        TypeScale::h3,
+        TypeScale::h4,
+        TypeScale::card_title,
+        TypeScale::brand,
+        TypeScale::body,
+        TypeScale::label,
+        TypeScale::button,
+        TypeScale::badge,
+        TypeScale::input,
+        TypeScale::breadcrumb,
+        TypeScale::stat_value,
+        TypeScale::table_head,
+        TypeScale::sidebar_user,
+    ] {
+        every = step(every, style);
+    }
+    let theme = agra(&Theme::NAVREE)
+        .with_shape(Shape::new().type_scale(every))
+        .unwrap();
+    let names = said(&theme);
+    assert_eq!(names.len(), 16 * 5);
+    let css = sources();
+    for (name, _) in &names {
+        assert!(
+            css.contains(&format!("var(--{name}")),
+            "{name} is read by no rule"
+        );
+    }
+    // With no display face given, these draw in the text face, as before; with one, in it.
+    for rule in [
+        "[data-slot=page-title]{",
+        "h1[data-slot=heading]{",
+        "h2[data-slot=heading]{",
+        "h3[data-slot=heading]{",
+        "[data-slot=sidebar-brand-name]{",
+        "[data-slot=site-brand]{",
+    ] {
+        let at = css.find(rule).unwrap_or_else(|| panic!("{rule}"));
+        let body = &css[at..at + css[at..].find('}').unwrap()];
+        assert!(body.contains("var(--font-display)"), "{rule}: {body}");
+    }
+    let at = css.find("h4[data-slot=heading]{").unwrap();
+    assert!(!css[at..at + css[at..].find('}').unwrap()].contains("font-display"));
+}
+
+#[test]
+fn a_font_of_the_apps_own_can_be_the_display_text_or_mono_face() {
+    static PLAIN: AppFont =
+        AppFont::new("tight", "Inter Tight", b"wOF2....", 1024).weights(500, 700);
+    static TIGHT: AppFont = AppFont::new("tight", "Inter Tight", b"wOF2....", 1024)
+        .weights(500, 700)
+        .as_face(Face::Display);
+    static BODY: AppFont = AppFont::new("body", "Inter", b"wOF2....", 1024).as_face(Face::Text);
+    static FIGURES: AppFont =
+        AppFont::new("figures", "Geist Mono", b"wOF2....", 1024).as_face(Face::Mono);
+    // A font that is no face of the page keeps the rule and the address it always had.
+    assert!(!PLAIN.face().contains(":root"), "{}", PLAIN.face());
+    assert_eq!(PLAIN.role(), None);
+    assert_eq!(TIGHT.url(), PLAIN.url(), "one file");
+    assert_ne!(TIGHT.face_url(), PLAIN.face_url(), "its own rule");
+    assert!(TIGHT.face().starts_with(&PLAIN.face()), "{}", TIGHT.face());
+    assert!(TIGHT.face().ends_with(
+        r#":root{--font-display:"Inter Tight",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}"#
+    ));
+    assert!(BODY.face().contains(r#":root{--font-sans:"Inter","#));
+    assert!(FIGURES.face().contains(
+        r#":root{--font-mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}"#
+    ));
+    // A page links its faces' rules; Geist is not asked for when the text face is the app's.
+    let display = View::new("x").font(&TIGHT).to_html();
+    assert!(display.contains(&TIGHT.face_url()));
+    assert!(
+        display.contains("/_navree/ui/geist-"),
+        "the text is still Geist"
+    );
+    let text = View::new("x").font(&BODY).to_html();
+    assert!(text.contains(&BODY.face_url()));
+    assert!(!text.contains("/_navree/ui/geist-"), "{text:.400}");
 }

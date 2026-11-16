@@ -56,7 +56,9 @@ theme sets the same tokens to other values.
 | `topbar-h` | `3rem` | `3rem` | the top bar |
 | `page-pad` | `1.5rem` | `1.5rem` | the page's padding |
 | `font-sans` | Geist, then the system stack | | all text |
+| `font-display` | unset: the text face | | headings to `h3`, the page title, the brand: an `AppFont` with `as_face(Face::Display)` |
 | `font-mono` | the system monospace stack | | code |
+| `text-<kind>-size`, `-line`, `-weight`, `-tracking`, `-face` | unset | unset | each kind of text, from a theme's `TypeScale` (below) |
 
 Control heights are fixed by `Size`: 24, 28, 32 (the default) and 36
 pixels. Gaps in `Stack`, `Row` and `Grid` are steps, not pixels. There
@@ -109,8 +111,10 @@ Group the values by role, then give each role its Navree token:
 | control corners | `radius` (4 px) |
 | card and dialog corners | `radius-lg` (6 px) |
 | one kind of part's corners: buttons, badges, toggles and segmented tabs, avatars, fields, nav and menu rows, cards, panels, popups | `radius-button`, `radius-badge`, `radius-toggle`, `radius-avatar`, `radius-field`, `radius-nav`, `radius-card`, `radius-panel`, `radius-overlay`: a theme's `Corners` |
-| body and heading font | `font-sans` (Geist, or the theme's system stack) |
-| code font | `font-mono` |
+| body and heading font | `font-sans` (Geist, or the theme's system stack, or an `AppFont` with `as_face(Face::Text)`) |
+| a second face for headings, the page title and the wordmark | `font-display`: an `AppFont` with `as_face(Face::Display)` |
+| code font, figures | `font-mono`, or an `AppFont` with `as_face(Face::Mono)` |
+| the size, line height, weight and tracking of a kind of text (page title 28 px, card titles 15 px, stat figures in mono) | a theme's `TypeScale`: `page_title`, `h1` to `h4`, `card_title`, `brand`, `body`, `label`, `button`, `badge`, `input`, `breadcrumb`, `stat_value`, `table_head`, `sidebar_user` |
 
 For each `DT-` row, write one of:
 
@@ -120,8 +124,9 @@ For each `DT-` row, write one of:
   is fine. In keep mode it is a deviation (`DV-`), with both swatches, or a
   theme of the app's own (below).
 - **Gap:** a role a theme cannot hold: a gradient, a font outside the list
-  (Geist and the System, Humanist, Geometric and Serif stacks), a colour
-  for a thing neither a token nor a role paints. It goes to `GAPS.md`.
+  (Geist and the System, Humanist, Geometric and Serif stacks, or a woff2
+  file of the app's own as an `AppFont`), a colour for a thing neither a
+  token nor a role paints. It goes to `GAPS.md`.
 - **Theme:** a corner other than 4 or 6 px, a pill, a 16 px card, white
   cards beside an off-white sidebar, a dark card on a light page. A theme of
   the app's own holds it: its shape's `Corners` sets a corner for each kind

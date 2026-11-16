@@ -49,6 +49,16 @@ pub fn themed_shell() -> Shell {
   `overlay`. A part it doesn't set keeps the spec's `Radius`. Never write a
   stylesheet that restyles a component: a value the design needs goes in
   the theme.
+- `TypeScale` in the shape sets each kind of text:
+  `.type_scale(TypeScale::new().page_title(TextStyle::px(28).line(1.15)
+  .weight(600).tracking(-0.025).face(Face::Display)))`, and the same for
+  `h1` to `h4`, `card_title`, `brand`, `body`, `label`, `button`, `badge`,
+  `input`, `breadcrumb`, `stat_value`, `table_head` and `sidebar_user`.
+  Sizes 10 to 72 px, line heights 1 to 2, weights 400 to 700, tracking
+  -0.06 to 0.1 em. A face of the app's own is an `AppFont` with
+  `.as_face(Face::Text | Face::Display | Face::Mono)`, linked with
+  `Shell::font`; headings to `h3`, the page title and the brand draw in the
+  display face when there is one.
 - Colours beyond the 31 tokens are `Roles`, given with
   `theme.with_roles(roles)`, each in light then dark: `card` and `field`
   (white cards and inputs beside an off-white sidebar, which keeps

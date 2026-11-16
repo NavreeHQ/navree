@@ -45,6 +45,21 @@ every `@navree/*` package carries the same version.
   export carry the roles; a theme without them, and every built-in theme, is written and drawn
   as before. `Theme::with_roles` and `Theme::roles` are new inherent methods: an app whose own
   extension trait gives `Theme` a method of either name calls it through the trait.
+- A page has a display face beside its text face: `AppFont::as_face(Face::Display)` makes a
+  font of the app's own the face of headings to `h3`, the page title and the brand, whose
+  rules now read `--font-display` and, with no display face given, draw in the text face as
+  before. `Face::Text` makes a font the page's text face (`--font-sans`, and Geist is no longer
+  preloaded) and `Face::Mono` its code and figures (`--font-mono`), so the app needs no
+  stylesheet of its own for either. The font's rule sets the face's custom property with a
+  system stack behind the family; a font that is no face keeps the rule and address it had.
+  `AppFont::role` returns the face a font is.
+- A shape's `TypeScale` sets how each kind of text is drawn: a `TextStyle` of a size (10 to
+  72 px), a line height (1 to 2), a weight (400 to 700), tracking (-0.06 to 0.1 em) and a
+  `Face`, for the page title, `h1` to `h4`, card titles, the brand, body text, labels, buttons,
+  badges, inputs, breadcrumbs, stat figures, table headings and the sidebar's user name. Each
+  value is a custom property (`--text-page-title-size` and so on) that the stylesheet reads
+  with the toolkit's value behind it, so a kind of text a scale doesn't set is drawn as before.
+  Sizes are pixels, so text keeps its size under every density.
 
 ## [1.7.0] - 2026-11-27
 

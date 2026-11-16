@@ -68,7 +68,7 @@ Controls are 32 px tall by default, on a 4 px grid. `Size::Xs`, `Sm` and `Lg` ma
 
 ## Type
 
-Body text is 14 px Geist and secondary text 13 px. A theme may set its text in a system stack instead (System, Humanist, Geometric or Serif), which downloads nothing. Headings are semibold: `h1` is 24 px, `h2` 20 px, `h3` 16 px and `h4` 14 px. Geist is the toolkit's one web font, self-hosted, preloaded and shown with `font-display: optional`, so text never reflows when it arrives. Code and other monospace text use the system's monospace font, which costs no download. See [Heading and Text](/docs/components/typography/).
+Body text is 14 px Geist and secondary text 13 px. A theme may set its text in a system stack instead (System, Humanist, Geometric or Serif), which downloads nothing. Headings are semibold: `h1` is 24 px, `h2` 20 px, `h3` 16 px and `h4` 14 px. Headings to `h3`, the page title and the brand draw in the display face, `--font-display`, which is the text face until the app gives one of its own (`AppFont::as_face`). A theme of your own sets the size, line height, weight, tracking and face of each kind of text with the [type scale](/docs/ui/themes/#type) of its shape. Geist is the toolkit's one web font, self-hosted, preloaded and shown with `font-display: optional`, so text never reflows when it arrives. Code and other monospace text use the system's monospace font, which costs no download. See [Heading and Text](/docs/components/typography/).
 
 ## Density
 

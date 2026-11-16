@@ -51,7 +51,7 @@ pub use css::{builder_layer, token_layer};
 pub use menu::ThemeMenu;
 pub use pairs::{Paint, Pair, PairKind, SURFACES, TONES, pairs};
 pub use roles::{Inverse, Roles};
-pub use shape::{Corner, Corners, Shape};
+pub use shape::{Corner, Corners, Face, Shape, TextStyle, TypeScale};
 
 pub(crate) use appearance::{read_setting, respond_setting};
 pub(crate) use css::respond as respond_sheet;
