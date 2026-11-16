@@ -287,22 +287,26 @@ struct SectionView: View {
 
     var body: some View {
         Section {
+            // Each row is known by its id, never by its place: what a row
+            // holds (a sheet open over it, words typed in it) stays with its
+            // record when rows arrive, leave or move.
+            let rows = IdentityRules.told(section.rows) { $0.identity }
             if let list = section.list, let id = list.id, let ids = EditRules.movable(list) {
                 // The list's rows, which the person drags into a new order.
-                ForEach(Array(section.rows.prefix(ids.count).enumerated()), id: \.offset) { _, row in
-                    RowView(item: row)
+                ForEach(Array(rows.prefix(ids.count))) { row in
+                    RowView(item: row.item)
                 }
                 .onMove { offsets, destination in
                     if let move = EditRules.move(ids: ids, from: Array(offsets), to: destination) {
                         context.send(.move(item: move.item, from: id, to: id, before: move.before))
                     }
                 }
-                ForEach(Array(section.rows.dropFirst(ids.count).enumerated()), id: \.offset) { _, row in
-                    RowView(item: row)
+                ForEach(Array(rows.dropFirst(ids.count))) { row in
+                    RowView(item: row.item)
                 }
             } else {
-                ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
-                    RowView(item: row)
+                ForEach(rows) { row in
+                    RowView(item: row.item)
                 }
             }
         } header: {

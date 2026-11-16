@@ -17,8 +17,11 @@ struct TableColumnsView: View {
     /// opened, while it stays chosen.
     var presenting = false
 
+    /// A record of the table, known by its own id (its place only when the
+    /// server gave it none): the row chosen stays the same record when rows
+    /// arrive before it, and what a cell holds stays with its record.
     struct Record: Identifiable {
-        let id: Int
+        let id: String
         let cells: [Navree.Node]
         let action: Navree.Action?
     }
@@ -40,7 +43,7 @@ struct TableColumnsView: View {
     private var target: String { region ?? table.id ?? "" }
 
     var body: some View {
-        let records = table.rows.enumerated().map { Record(id: $0.offset, cells: $0.element.cells, action: $0.element.action) }
+        let records = IdentityRules.told(table.rows) { $0.id }.map { Record(id: $0.id, cells: $0.item.cells, action: $0.item.action) }
         let columns = Self.columns(of: table, available: available)
         let givenUp = ContentRules.givenUp(table, fitted: columns.map(\.id))
         let last = records.last?.id

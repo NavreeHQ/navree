@@ -143,8 +143,10 @@ struct RecordRowView: View {
             }
         }
         .sheet(item: $formSheet) { sheet in
+            // The sheet names the record its form was taken from, never
+            // whichever record the row holds by now.
             if let form = sheet.form {
-                FormSheet(title: sheet.button.label, subtitle: row.title, form: form, confirm: sheet.button)
+                FormSheet(title: sheet.button.label, subtitle: sheet.subject, form: form, confirm: sheet.button)
             }
         }
     }
@@ -162,12 +164,12 @@ struct RecordRowView: View {
                         if case .button(let button) = inner, submit == nil { submit = button }
                         if case .field = inner { fields += 1 }
                     }
-                    if let submit { found.append(ActionForm(button: submit, form: form, fields: fields)) }
+                    if let submit { found.append(ActionForm(button: submit, form: form, fields: fields, subject: row.title)) }
                 }
             }
             if found.isEmpty {
                 cell.walk { node in
-                    if case .button(let button) = node { found.append(ActionForm(button: button, form: nil, fields: 0)) }
+                    if case .button(let button) = node { found.append(ActionForm(button: button, form: nil, fields: 0, subject: row.title)) }
                 }
             }
             return found
@@ -188,6 +190,8 @@ struct ActionForm: Identifiable {
     let button: Navree.Button
     let form: Navree.Form?
     let fields: Int
+    /// The title of the record the control belongs to.
+    let subject: String
     var id: String { (form?.action ?? "") + button.label }
 }
 
@@ -291,7 +295,7 @@ struct RowContent: View {
             .accessibilityElement(children: .combine)
             .modifier(RowOffersActions(offers: offers, opening: $opening, menu: row.menu))
             .sheet(item: $opening) { opening in
-                FormSheet(title: opening.label, subtitle: row.title, form: opening.form, confirm: opening.submit)
+                FormSheet(title: opening.label, subtitle: opening.subject, form: opening.form, confirm: opening.submit)
             }
     }
 
@@ -330,11 +334,13 @@ struct RowContent: View {
                     Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                ForEach(Array(RowRules.detailLines(RowRules.drawnDetail(row.detail, title: row.title, bar: .current)).enumerated()), id: \.offset) { _, line in
+                let lines = RowRules.detailLines(RowRules.drawnDetail(row.detail, title: row.title, bar: .current))
+                ForEach(IdentityRules.told(lines) { $0.first?.id }) { told in
+                    let line = told.item
                     if line.count > 1 {
                         // States one after another share a line, as Mail's flags do.
                         Flow(spacing: 12, lineSpacing: 4) {
-                            ForEach(Array(line.enumerated()), id: \.offset) { _, part in NodeView(part) }
+                            ForEach(line.told) { part in NodeView(part.item) }
                         }
                         .font(.subheadline).foregroundStyle(.secondary)
                     } else if let part = line.first {

@@ -123,6 +123,10 @@ public enum SpeechRules {
             public var label: String
             public var form: Navree.Form
             public var submit: Navree.Button
+            /// The title of the row the form belongs to: what a sheet that
+            /// holds the form names, taken with the form and never from
+            /// whatever row stands in its place later.
+            public var subject = ""
         }
 
         public var openings: [Opening] = []
@@ -142,7 +146,7 @@ public enum SpeechRules {
                     var form: Navree.Form?
                     for child in disclosure.children { child.walk { if case .form(let found) = $0, form == nil { form = found } } }
                     if let form, let submit = submit(of: form) {
-                        offers.openings.append(.init(label: disclosure.label, form: form, submit: submit))
+                        offers.openings.append(.init(label: disclosure.label, form: form, submit: submit, subject: row.title))
                     }
                 case .form(let form) where offers.titleButton == nil:
                     if formOnlyRepeats(form, title: row.title), let button = submit(of: form) {

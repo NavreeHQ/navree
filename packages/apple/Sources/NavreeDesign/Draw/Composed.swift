@@ -307,8 +307,8 @@ struct GroupHeading: View {
                     }
                 }
                 Spacer(minLength: 8)
-                ForEach(Array(section.actions.enumerated()), id: \.offset) { _, action in
-                    NodeView(action).font(.subheadline)
+                ForEach(section.actions.told) { action in
+                    NodeView(action.item).font(.subheadline)
                 }
             }
             .modifier(GroundWords())
