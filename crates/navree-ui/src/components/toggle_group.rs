@@ -94,6 +94,7 @@ pub struct ToggleGroup {
     joined: bool,
     disabled: bool,
     deselectable: bool,
+    form: Option<String>,
 }
 
 impl ToggleGroup {
@@ -113,6 +114,7 @@ impl ToggleGroup {
             joined: false,
             disabled: false,
             deselectable: false,
+            form: None,
         }
     }
 
@@ -182,6 +184,13 @@ impl ToggleGroup {
         self
     }
 
+    /// Ties the group's inputs to the form with the id `form`, for a group drawn outside it:
+    /// they post with that form, as a button with a `form` attribute does.
+    pub fn form(mut self, form: impl Into<String>) -> Self {
+        self.form = Some(form.into());
+        self
+    }
+
     /// Runs commands when the choice changes.
     pub fn on_change(mut self, commands: impl Into<Commands>) -> Self {
         self.el = self.el.on(Trigger::Change, commands);
@@ -214,6 +223,7 @@ impl ToggleGroup {
                         el("input")
                             .attr("type", kind)
                             .attr("name", self.name.clone())
+                            .attr_opt("form", self.form.clone())
                             .attr("value", item.value.clone())
                             .flag("checked", on)
                             .flag("disabled", off)

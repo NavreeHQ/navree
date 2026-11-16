@@ -43,6 +43,8 @@ A password input takes no value: `.value` does nothing on one, so a page never h
 Input::search("q").size(Size::Sm).clearable("Clear search")
 ```
 
+`.mono()` draws the field's text in the page's mono face (`--font-mono`, a theme's `Face::Mono` font), for a tax number, an account number or a key. A derived form's field says it with `#[form(mono)]`.
+
 ## Keyboard and accessibility
 
 <UiA11y>

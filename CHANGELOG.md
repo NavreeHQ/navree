@@ -192,6 +192,22 @@ every `@navree/*` package carries the same version.
   implements it by hand works as before, and a derived one with none of the new options draws,
   reads and writes what it did. `navree::ui::table` gains the functions the derive calls:
   `choice_control`, `chips_control`, `check_control`, `filter_choices` and `read_default`.
+- A form's submit button takes another look with `FormView::submit_variant(ButtonVariant)`, or
+  is a `Button` of the app's own with `FormView::submit_button(button)`, which the form makes
+  submit (a link it had is dropped); `FormView::without_actions()` draws the form with no
+  buttons, for buttons elsewhere that name `form_id()`, and `ToggleGroup::form(form_id)` ties a
+  group outside a form to it. A form that uses none of these is drawn as before. These are new inherent methods: an app whose own extension trait gives
+  `FormView` or `ToggleGroup` a method of the same name calls it through the trait.
+- `#[form(mono)]` draws a field typed into in the page's mono face (`--font-mono`, a theme's
+  `Face::Mono` font), through `Input::mono()`, and `#[form(size = lg)]`, on a field or on the
+  struct for every field, gives its inputs, selects, an addon's group and its pickers the
+  theme's field height of that step, through `NativeSelect::size` and `InputGroup::size`, which
+  are new; a text area, radios, a checkbox or switch, the slider, the date and time pickers,
+  the phone input, an upload and a field a `control` draws keep their own height. `FormField`
+  gains `mono` and `size`, with setters of those names; it is non-exhaustive, so a form derived
+  before is built as it was. The derive refuses `mono` on a field nobody types into or that a
+  `control` draws, and a size that isn't `xs`, `sm`, `md` or `lg`. The rules for both are in the
+  parts stylesheet.
 
 ### Fixed
 

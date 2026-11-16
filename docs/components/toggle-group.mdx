@@ -80,6 +80,8 @@ el("form")
 
 The Apply button is for JavaScript off; with it, the group filters the region as the choice changes.
 
+A group drawn outside its form joins it by the form's id: `.form(form_id)` writes `form` on each of its inputs. Inside a derived form, a group in a field's place is drawn by a `FieldControl` given with `#[form(control = ..)]`, which keeps it the field's (see [Build your own component](/docs/ui/your-own-components/#a-form-field-of-your-own-and-its-check)).
+
 ## Keyboard and accessibility
 
 <UiA11y>

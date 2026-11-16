@@ -32,8 +32,8 @@ pub use navree_validation::{FieldRules, RuleTable};
 
 use crate::charts::Grouping;
 use crate::components::{
-    Alert, AlertTone, Button, Checkbox, Field, Input, InputGroup, InputKind, NativeSelect,
-    RadioGroup, Switch, Textarea,
+    Alert, AlertTone, Button, ButtonVariant, Checkbox, Field, Input, InputGroup, InputKind,
+    NativeSelect, RadioGroup, Size, Switch, Textarea,
 };
 use crate::dates::{DateLocale, DatePicker, DateRules, TimePicker, TimeRules};
 use crate::html::Href;
@@ -565,6 +565,12 @@ pub struct FormField {
     /// a field whose control says its value is a secret ([`FieldControl::secret`]), are secrets
     /// without it.
     pub secret: bool,
+    /// Its text is drawn in the page's mono face (`#[form(mono)]`): a field typed into, such as
+    /// a tax number or a key.
+    pub mono: bool,
+    /// Its height, a step of the theme's field sizes (`#[form(size = lg)]` on the field, or on
+    /// the struct for every field). [`Size::Md`], the default, is the height fields have.
+    pub size: Size,
 }
 
 impl FormField {
@@ -591,6 +597,8 @@ impl FormField {
             time_rules: None,
             slider: None,
             secret: false,
+            mono: false,
+            size: Size::Md,
         }
     }
 
@@ -696,6 +704,18 @@ impl FormField {
         self.secret
             || self.widget == Widget::Input(InputKind::Password)
             || matches!(self.widget, Widget::Control(control) if control.get().secret())
+    }
+
+    /// Sets whether its text is drawn in the mono face.
+    pub const fn mono(mut self, mono: bool) -> Self {
+        self.mono = mono;
+        self
+    }
+
+    /// Sets its height's step.
+    pub const fn size(mut self, size: Size) -> Self {
+        self.size = size;
+        self
     }
 }
 
@@ -1214,6 +1234,8 @@ pub struct FormView<T> {
     rich: BTreeMap<&'static str, Vec<crate::select::Choice>>,
     searches: BTreeMap<&'static str, Href>,
     uploads: BTreeMap<&'static str, crate::Upload>,
+    /// What ends the form: its submit button in a look, a button of the app's own, or none.
+    actions: Actions,
     columns: bool,
     csrf: Option<String>,
     date_locale: DateLocale,
@@ -1249,6 +1271,7 @@ impl<T: Form> FormView<T> {
             rich: BTreeMap::new(),
             searches: BTreeMap::new(),
             uploads: BTreeMap::new(),
+            actions: Actions::Drawn(ButtonVariant::Primary),
             columns: true,
             csrf: None,
             date_locale: DateLocale::english(),
@@ -1331,6 +1354,51 @@ impl<T: Form> FormView<T> {
     /// Adds a link back.
     pub fn cancel(mut self, label: impl Into<Node>, href: impl Into<Href>) -> Self {
         self.cancel = Some((label.into(), href.into()));
+        self
+    }
+
+    /// Gives the submit button another look, such as [`ButtonVariant::Outline`]: it is primary
+    /// unless this says otherwise.
+    pub fn submit_variant(mut self, variant: ButtonVariant) -> Self {
+        self.actions = Actions::Drawn(variant);
+        self
+    }
+
+    /// Makes `button` the form's submit button, in the place of the one
+    /// [`submit`](Self::submit) labels: its look, size, icon and width are yours. The form
+    /// makes it submit, and a link it had is dropped.
+    ///
+    /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: these are its paths.
+    /// # use navree_ui::{InputKind, form};
+    /// use navree_ui::form::FormView;
+    /// use navree_ui::{Button, Form, Size, Validate, render};
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Deserialize, Validate, Form)]
+    /// struct Start {
+    ///     #[validate(email)]
+    ///     email: String,
+    /// }
+    ///
+    /// # fn main() {
+    /// let form = FormView::<Start>::new()
+    ///     .post("/start")
+    ///     .submit_button(Button::outline("Continue with email").size(Size::Lg).block());
+    /// let html = render(&form.into());
+    /// assert!(html.contains(r#"data-variant="outline" data-size="lg" data-block type="submit">Continue with email</button>"#));
+    /// # }
+    /// ```
+    pub fn submit_button(mut self, button: Button) -> Self {
+        self.actions = Actions::Own(Box::new(button));
+        self
+    }
+
+    /// Draws the form with no buttons: no submit button and no cancel link. A button elsewhere,
+    /// such as in a dialog's footer, submits it by naming [`form_id`](Self::form_id) in its
+    /// `form` attribute.
+    pub fn without_actions(mut self) -> Self {
+        self.actions = Actions::Without;
         self
     }
 
@@ -1712,7 +1780,8 @@ impl<T: Form> FormView<T> {
                     .id(self.picker_id(field))
                     .options(self.choices_of(field))
                     .required_if(rules.required)
-                    .invalid(invalid);
+                    .invalid(invalid)
+                    .size(field.size);
                 if let Some(prompt) = field.prompt.or(field.placeholder) {
                     select = select.placeholder(prompt);
                 }
@@ -1726,7 +1795,8 @@ impl<T: Form> FormView<T> {
                     .id(self.picker_id(field))
                     .options(self.choices_of(field))
                     .required_if(rules.required)
-                    .invalid(invalid);
+                    .invalid(invalid)
+                    .size(field.size);
                 if let Some(prompt) = field.placeholder.or(field.prompt) {
                     combo = combo.placeholder(prompt);
                 }
@@ -1749,6 +1819,7 @@ impl<T: Form> FormView<T> {
                     .options(self.choices_of(field))
                     .required_if(rules.required)
                     .invalid(invalid)
+                    .size(field.size)
                     .selected_values(selected);
                 if let Some(prompt) = field.placeholder.or(field.prompt) {
                     multi = multi.placeholder(prompt);
@@ -1926,6 +1997,12 @@ impl<T: Form> FormView<T> {
         if let Some(pattern) = rules.pattern {
             input = input.attr("pattern", pattern);
         }
+        if field.mono {
+            input = input.mono();
+        }
+        if field.widget != Widget::Input(InputKind::Hidden) {
+            input = input.size(field.size);
+        }
         input
     }
 
@@ -1956,7 +2033,7 @@ impl<T: Form> FormView<T> {
         if required {
             select = select.required();
         }
-        select
+        select.size(field.size)
     }
 
     fn field(&self, field: &FormField) -> Option<Element> {
@@ -2015,7 +2092,14 @@ impl<T: Form> FormView<T> {
                         *element =
                             std::mem::replace(element, el("x")).attr("aria-label", addon.label);
                     }
-                    control = InputGroup::new(control).end(select).into();
+                    if field.size != Size::Md {
+                        for part in [&mut control, &mut select] {
+                            if let Node::Element(element) = part {
+                                element.attrs.retain(|attr| attr.name != "data-size");
+                            }
+                        }
+                    }
+                    control = InputGroup::new(control).end(select).size(field.size).into();
                 }
                 let mut box_field = Field::new(id, field.label)
                     .error_opt(error)
@@ -2123,7 +2207,7 @@ impl<T: Form> FormView<T> {
     /// The form without its buttons: its id, where it posts, what it sends unseen
     /// and its fields. What a native client's form is read from.
     #[cfg(feature = "native-preview")]
-    pub(crate) fn without_actions(&self) -> Element {
+    pub(crate) fn bare(&self) -> Element {
         let hidden: Vec<Element> = self
             .hidden
             .iter()
@@ -2186,15 +2270,31 @@ impl<T: Form> FormView<T> {
                 token,
                 hidden,
                 fields,
-                el("div").slot("form-actions").children((
-                    self.cancel.map(|(label, href)| {
-                        Button::ghost(label).href(href).role(crate::Role::Cancel)
-                    }),
-                    Button::primary(self.submit).submit(),
-                )),
+                actions_of(self.actions, self.submit, self.cancel),
             ))
             .into()
     }
+}
+
+/// What ends a form: its submit button in a look, a button of the app's own, or nothing.
+#[derive(Clone, Debug)]
+enum Actions {
+    Drawn(ButtonVariant),
+    Own(Box<Button>),
+    Without,
+}
+
+/// The form's buttons: the cancel link and the submit button, unless the form has none.
+fn actions_of(actions: Actions, submit: Node, cancel: Option<(Node, Href)>) -> Option<Element> {
+    let submit = match actions {
+        Actions::Without => return None,
+        Actions::Drawn(variant) => Button::new(submit).variant(variant).submit(),
+        Actions::Own(button) => button.into_submit(),
+    };
+    Some(el("div").slot("form-actions").children((
+        cancel.map(|(label, href)| Button::ghost(label).href(href).role(crate::Role::Cancel)),
+        submit,
+    )))
 }
 
 /// The name of the field that carries the CSRF token in a plain form: the one the session

@@ -80,12 +80,30 @@ FormView::<NewDeal>::new()
 | `rows = 4` | a textarea's height |
 | `max = 3` | the most values a `Many<T>` field takes: the multi-select stops there, and a post with more is refused |
 | `autofocus`, `wide` | takes focus on load; takes the form's whole width |
+| `mono` | the text is drawn in the page's mono face (`--font-mono`, a theme's `Face::Mono` font): a tax number, an account number, a key. For a field typed into: text, a number, an amount, a date or a time |
+| `size = lg` | the field's height is the theme's step of that size (`FieldSizes`): `xs`, `sm`, `md` or `lg`. On the struct, every field takes it: `#[form(size = lg)]` before `struct SignIn` makes a form of 44 px fields in a theme whose large step is 44 px |
 | `skip` | not drawn and never read from the request |
 | `control = PATH` | draws the field with a control of your own, a `static` that implements `FieldControl`, and holds the posted value to the control's server check; it can't be combined with `widget`, nor put on a `Many<T>` field. See [Build your own component](/docs/ui/your-own-components/#a-form-field-of-your-own-and-its-check) |
 
 Fields sit in two columns where there is room, and a `wide` field takes both; `FormView::one_column()` puts each field on its own line.
 
 `FormView::label(field, text)` gives a field a label chosen when the page is drawn, in place of its doc comment or `label = "..."`: words an app's settings give, such as "Work email" for `email`. The label is text, escaped. The field still posts under its own name, so the handler reads it as before, and the messages of the form's own checks still name the field by the label its type gives; a name the form has no field of changes nothing.
+
+A size reaches the inputs, the browser's selects, the input groups of an `addon` and the select, combobox and multi-select pickers. A text area, the radios, a checkbox or a switch, the slider, the date and time pickers, the phone input, an upload and a field a `control` draws keep their own height, and `mono` is refused on a field a `control` draws: the control draws its own text.
+
+## The submit button
+
+A form ends with its submit button, primary, and a cancel link when it has one. `FormView::submit_variant(ButtonVariant::Outline)` gives the button another look, and `FormView::submit_button(button)` makes a [Button](/docs/components/button/) of your own the submit button: its look, its size, its icon, its width. The form makes it submit: a link it had is dropped. `FormView::without_actions()` draws the form with no buttons, for buttons elsewhere that name the form with `form_id()`, such as a dialog's footer.
+
+```rust
+FormView::<SocialStart>::new()
+    .post("/sign-in/social")
+    .submit_button(Button::outline("Continue with email").icon(icons::MAIL).size(Size::Lg).block())
+```
+
+<UiPreview example="forms/own-parts" />
+
+The preview is a `#[form(size = lg)]` form whose GSTIN field is `#[form(mono)]` and whose submit button is a block-wide `Button` of its own. A field drawn by something of your own in its place, such as option cards or a toggle group of plans, is a `FieldControl` given with `control = PATH` (see the table above). A group outside the form joins it by the form's id: `ToggleGroup::form(form_id)` writes `form` on the group's inputs, as `.attr("form", ..)` does on a button.
 
 ## Two forms of one type on a page
 

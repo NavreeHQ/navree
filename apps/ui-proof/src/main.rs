@@ -12,6 +12,7 @@
 //! | `/` | a dashboard: stats, a lazy region, a polling region |
 //! | `/deals?per_page=1000` | the 1,000-row table: sort, filter, page in the URL, morphed |
 //! | `/deals/new` | the deal form |
+//! | `/forms/parts` | a form's own parts: a submit button of the app's own, option cards in a field's place, a mono field and fields a size larger, in a theme that follows the device |
 //! | `/plain` | a page with nothing interactive: no script at all |
 //! | `/gallery` | every component in its states |
 //! | `/menus` | tabs, toggle groups, dropdown menus and toasts in their states |
@@ -67,6 +68,7 @@ mod deals;
 mod display;
 mod extensions;
 mod flow;
+mod form_parts;
 mod gallery;
 mod grids;
 mod icons_flags;
@@ -163,6 +165,7 @@ impl Module for ProofModule {
             .controller::<menubar::BarPages>()
             .controller::<phone::PhonePages>()
             .controller::<display::DisplayPages>()
+            .controller::<form_parts::FormPartsPages>()
             .controller::<themes::ThemePages>()
             .controller::<shell_options::ShellPages>()
             .controller::<pages::Pages>()

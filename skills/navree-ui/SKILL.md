@@ -488,14 +488,24 @@ picks the control:
 
 `#[form(...)]` takes `label`, `placeholder`, `help`, `prompt`, `error`
 (replaces any failed rule's message), `addon = "field"`, `rows`, `max`,
-`autofocus`, `wide` and `skip` (never drawn, never read). `FormView` draws
-the form: `.post(url)`, `.submit(label)`, `.cancel(label, href)`,
+`autofocus`, `wide`, `mono` (a field typed into, in the theme's mono face),
+`size = xs | sm | md | lg` (the theme's field height of that step; on the
+struct, for every field) and `skip` (never drawn, never read). `FormView`
+draws the form: `.post(url)`, `.submit(label)`, `.cancel(label, href)`,
 `.options(field, choices)`, `.choices(field, choices)`, `.search(field,
 url)`, `.one_column()`, `.label(field, text)` (a label chosen at run time,
 from words the app knows, never a reader's text), `.csrf(token)` and
 `.id_prefix(prefix)`, which keeps
 two forms of one type on a page (two dialogs) from repeating their ids; call
 `Rejected::id_prefix` with the same prefix when you answer a refusal.
+
+The submit button takes another look with `.submit_variant(ButtonVariant)`,
+or is a `Button` of your own with `.submit_button(button)` (the form makes it
+submit); `.without_actions()` draws no buttons, for a dialog's footer that
+names `form_id()`. A field drawn by something of your own (a `ToggleGroup`
+of plans, chips, option cards) is a `FieldControl` given with
+`#[form(control = PATH)]`: never write markup for a control the form can't
+draw.
 
 A picker reads back as text, and the form does not know the value was one of
 the options. Check it on the server before you save:

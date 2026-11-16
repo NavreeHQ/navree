@@ -66,8 +66,10 @@ pub fn themed_shell() -> Shell {
   .item_height(36)).topbar(TopbarSizes::new().height(60).inset_x(32))
   .page(PageSizes::new().padding_top(28).padding_x(32).padding_bottom(40)
   .gap(24).max_width(1240)).cards(CardSizes::new().padding(18))`. A field
-  takes a step with `Input::size(Size::Lg)`, so a sign-in page can draw
-  44 px fields while the app draws 40.
+  takes a step with `Input::size(Size::Lg)`, and a derived form's fields
+  with `#[form(size = lg)]` on its struct, so a sign-in page can draw 44 px
+  fields while the app draws 40. A field typed into takes the theme's mono
+  face with `#[form(mono)]` (`Input::mono()`).
 - `Shape::elevation(Elevation::Soft)` gives two soft shadows: under raised
   parts (the chosen segmented tab, the current link, a toggle that is on)
   and under floating ones (popovers, menus, dialogs). Flat is the default;

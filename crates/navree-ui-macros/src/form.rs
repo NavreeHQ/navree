@@ -32,6 +32,8 @@ struct FieldHints {
     slider: Option<syn::Path>,
     autofocus: bool,
     wide: bool,
+    mono: bool,
+    size: Option<Ident>,
     skip: bool,
 }
 
@@ -59,10 +61,12 @@ fn hints(attrs: &[syn::Attribute]) -> syn::Result<FieldHints> {
                 "slider" => out.slider = Some(meta.value()?.parse()?),
                 "autofocus" => out.autofocus = true,
                 "wide" => out.wide = true,
+                "mono" => out.mono = true,
+                "size" => out.size = Some(meta.value()?.parse()?),
                 "skip" => out.skip = true,
                 _ => {
                     return Err(meta.error(format!(
-                        "unknown `form` option `{key}`: expected label, placeholder, help, prompt, error, addon, rows, max, widget, control, date_rules, time_rules, slider, autofocus, wide or skip"
+                        "unknown `form` option `{key}`: expected label, placeholder, help, prompt, error, addon, rows, max, widget, control, date_rules, time_rules, slider, autofocus, wide, mono, size or skip"
                     )));
                 }
             }
@@ -149,6 +153,74 @@ fn inferred_widget(ui: &TokenStream, name: Option<&str>) -> Option<TokenStream> 
     })
 }
 
+/// The `Size` a `size = ...` names.
+fn named_size(ui: &TokenStream, size: &Ident) -> syn::Result<TokenStream> {
+    let step = match size.unraw().to_string().as_str() {
+        "xs" => "Xs",
+        "sm" => "Sm",
+        "md" => "Md",
+        "lg" => "Lg",
+        other => {
+            return Err(syn::Error::new(
+                size.span(),
+                format!("unknown size `{other}`: expected xs, sm, md or lg"),
+            ));
+        }
+    };
+    let step = Ident::new(step, size.span());
+    Ok(quote!(#ui::Size::#step))
+}
+
+/// Whether a field is typed into, so its text can be drawn in the mono face: the widget it
+/// names, or the one its type implies.
+fn typed_into(widget: Option<&Ident>, element: Option<&str>, many: bool) -> bool {
+    match widget.map(|widget| widget.unraw().to_string()) {
+        Some(widget) => matches!(
+            widget.as_str(),
+            "text"
+                | "email"
+                | "url"
+                | "tel"
+                | "password"
+                | "search"
+                | "number"
+                | "date"
+                | "time"
+                | "datetime"
+                | "money"
+        ),
+        None => {
+            !many
+                && matches!(
+                    element,
+                    Some(
+                        "String"
+                            | "str"
+                            | "Uuid"
+                            | "i8"
+                            | "i16"
+                            | "i32"
+                            | "i64"
+                            | "isize"
+                            | "u8"
+                            | "u16"
+                            | "u32"
+                            | "u64"
+                            | "usize"
+                            | "f32"
+                            | "f64"
+                            | "Decimal"
+                            | "Date"
+                            | "Time"
+                            | "DateTime"
+                            | "Timestamp"
+                            | "Money"
+                    )
+                )
+        }
+    }
+}
+
 fn opt(value: Option<impl ToTokens>) -> TokenStream {
     match value {
         Some(value) => quote!(::core::option::Option::Some(#value)),
@@ -161,6 +233,8 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
     let fields = named_fields(&input, "Form")?;
     let case = serde_rename_all(&input.attrs);
     let mut id = input.ident.to_string().to_kebab_case();
+    // The size every field takes unless it says its own.
+    let mut form_size: Option<Ident> = None;
     for attr in input
         .attrs
         .iter()
@@ -170,11 +244,20 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
             if meta.path.is_ident("id") {
                 id = meta.value()?.parse::<LitStr>()?.value();
                 Ok(())
+            } else if meta.path.is_ident("size") {
+                form_size = Some(meta.value()?.parse()?);
+                Ok(())
             } else {
-                Err(meta.error("unknown `form` option on a type: expected `id = \"...\"`"))
+                Err(meta.error(
+                    "unknown `form` option on a type: expected `id = \"...\"` or `size = lg`",
+                ))
             }
         })?;
     }
+    let form_size = form_size
+        .as_ref()
+        .map(|size| named_size(&ui, size))
+        .transpose()?;
     let mut specs = Vec::new();
     let mut values = Vec::new();
     for field in &fields.named {
@@ -271,6 +354,28 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
             opt(hint.addon),
         );
         let (autofocus, wide) = (hint.autofocus, hint.wide);
+        // A control draws the field itself, so the mono face is the control's to choose.
+        if hint.mono
+            && (hint.control.is_some()
+                || !typed_into(
+                    hint.widget.as_ref(),
+                    element_name.as_deref(),
+                    many.is_some(),
+                ))
+        {
+            return Err(syn::Error::new_spanned(
+                ident,
+                "`mono` is for a field typed into: text, a number, an amount, a date or a time",
+            ));
+        }
+        // Only what a field says beyond the defaults is written, so a form that says none of it
+        // builds its fields as before.
+        let mono = hint.mono.then(|| quote!(.mono(true)));
+        let size = match &hint.size {
+            Some(size) => Some(named_size(&ui, size)?),
+            None => form_size.clone(),
+        }
+        .map(|size| quote!(.size(#size)));
         let max = opt(hint.max);
         let rules_of = |path: &Option<syn::Path>, kind: &str| match path {
             Some(path) => {
@@ -305,7 +410,9 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
                 .date_rules(#date_rules)
                 .time_rules(#time_rules)
                 .slider(#slider)
-                .secret(#secret_control),
+                .secret(#secret_control)
+                #mono
+                #size,
         });
         values.push(quote! {
             for value in #ui::form::FieldValue::field_values(&self.#ident) {
@@ -427,7 +534,61 @@ pub(crate) fn options(input: DeriveInput) -> syn::Result<TokenStream> {
 
 #[cfg(test)]
 mod tests {
-    use super::is_secret_name;
+    use super::{is_secret_name, named_size, typed_into};
+    use syn::Ident;
+
+    fn ident(name: &str) -> Ident {
+        Ident::new(name, proc_macro2::Span::call_site())
+    }
+
+    #[test]
+    fn mono_is_for_a_field_typed_into() {
+        for (widget, element, many) in [
+            (None, Some("String"), false),
+            (None, Some("Money"), false),
+            (None, Some("i64"), false),
+            (Some("email"), Some("String"), false),
+            (Some("text"), Some("Uuid"), false),
+            (Some("number"), Some("Decimal"), false),
+            (None, Some("Date"), false),
+            (None, Some("Timestamp"), false),
+        ] {
+            let widget = widget.map(ident);
+            assert!(
+                typed_into(widget.as_ref(), element, many),
+                "{widget:?} {element:?}"
+            );
+        }
+        for (widget, element, many) in [
+            (None, Some("bool"), false),
+            (None, Some("Stage"), false),
+            (None, Some("String"), true),
+            (None, Some("Phone"), false),
+            (Some("textarea"), Some("String"), false),
+            (Some("select"), Some("String"), false),
+            (Some("combobox"), Some("String"), false),
+            (Some("date_picker"), Some("Date"), false),
+            (Some("file"), Some("String"), false),
+            (Some("hidden"), Some("String"), false),
+        ] {
+            let widget = widget.map(ident);
+            assert!(
+                !typed_into(widget.as_ref(), element, many),
+                "{widget:?} {element:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_size_is_one_of_the_four_steps() {
+        let ui = quote::quote!(::navree_ui);
+        for (step, variant) in [("xs", "Xs"), ("sm", "Sm"), ("md", "Md"), ("lg", "Lg")] {
+            let size = named_size(&ui, &ident(step)).unwrap().to_string();
+            assert!(size.ends_with(variant), "{size}");
+        }
+        let refused = named_size(&ui, &ident("xl")).unwrap_err().to_string();
+        assert!(refused.contains("expected xs, sm, md or lg"), "{refused}");
+    }
 
     #[test]
     fn a_name_that_ends_in_password_is_a_secret() {

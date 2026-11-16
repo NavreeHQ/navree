@@ -29,11 +29,14 @@ mod table;
 /// }
 /// ```
 ///
-/// On the type: `id = "..."`. On a field: `label`, `placeholder`, `help`,
-/// `prompt` and `error` (text), `rows` (a number), `addon = "other_field"`,
-/// `widget = text | email | url | tel | password | search | number | date |
-/// time | datetime | date_picker | time_picker | textarea | select | radio | checkbox |
-/// switch | hidden | money`, and the flags `autofocus`, `wide` and `skip`.
+/// On the type: `id = "..."` and `size = xs | sm | md | lg` (every field's
+/// height, a step of the theme's field sizes). On a field: `label`,
+/// `placeholder`, `help`, `prompt` and `error` (text), `rows` (a number),
+/// `addon = "other_field"`, `widget = text | email | url | tel | password |
+/// search | number | date | time | datetime | date_picker | time_picker |
+/// textarea | select | radio | checkbox | switch | hidden | money`, `size = lg`
+/// (its own height), and the flags `autofocus`, `wide`, `mono` (its text in the
+/// mono face, for a field typed into) and `skip`.
 #[proc_macro_derive(Form, attributes(form))]
 pub fn derive_form(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);

@@ -172,6 +172,13 @@ impl Button {
         self
     }
 
+    /// The button as a form's submit button: it submits, and a link it had is dropped.
+    pub(crate) fn into_submit(mut self) -> Self {
+        self.href = None;
+        self.kind = ButtonKind::Submit;
+        self
+    }
+
     /// Sets what it does in a form.
     pub fn kind(mut self, kind: ButtonKind) -> Self {
         self.kind = kind;

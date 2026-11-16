@@ -175,6 +175,10 @@ form can't be a struct.
 | Something with a prefix or unit | input group | `#[form(addon = "other_field")]`, or `InputGroup::new(input).start(..).end(..)` |
 | A file | upload | `String` with `widget = file`: the form posts `multipart/form-data` and `Submit<T>` stores the file through the app's `Uploads`, giving the handler its path (a field holds the first file posted under its name); `FormView::upload(field, Upload::new(..).send_to(route))` sends it first, and the route answers with `Received::into_keyed_response_for(&signer, owner.as_str())`, where `owner: UploadOwner` is the signed-in person's id (nothing for a guest): the field takes a file key only from that person, for a file directly in its own `Uploads` folder and still within its limits (`file_key` keys are not taken by a form's file field) |
 | A hidden value | hidden input | `widget = hidden`, or `#[form(skip)]` to keep it off the client |
+| An ID, a tax or account number, a key, in mono | text input in the mono face | `#[form(mono)]` on a field typed into; the face is the theme's `Face::Mono` font |
+| Taller fields than the page's (44 px inputs on a sign-in form) | the theme's field step | `#[form(size = lg)]` on the struct (or a field), with the theme's `FieldSizes::lg`; inputs, selects, addons and pickers take it |
+| The submit button in another look (outline, pill, full width, an icon) | the form's submit button | `FormView::submit_variant(ButtonVariant::Outline)`, or `FormView::submit_button(Button::outline(..).size(Size::Lg).block())`; `FormView::without_actions()` for buttons elsewhere (`form_id()`) |
+| A choice drawn as a toggle group, chips or segments inside the form | a control of the app's own in the field's place | a `FieldControl` given with `#[form(control = PATH)]` whose `draw` returns the component (`ToggleGroup`, `RadioGroup`, `Checkbox`es) under the field's name, and whose `check` holds the value on the server. Never markup. A group outside the form: `ToggleGroup::form(form_id)` |
 
 A form too long for one screen, one question at a time (an onboarding, a
 survey): `Questionnaire::new(action).question(Question::single(name, text)

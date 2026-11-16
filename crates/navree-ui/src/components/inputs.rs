@@ -94,6 +94,13 @@ impl Input {
         self
     }
 
+    /// Draws its text in the page's mono face (`--font-mono`, a theme's `Face::Mono` font): a
+    /// tax number, an account number, a key. It links the parts stylesheet.
+    pub fn mono(mut self) -> Self {
+        self.el = self.el.flag("data-mono", true).uses(Uses::PARTS_STYLES);
+        self
+    }
+
     /// Adds a button, named `label` for assistive technology, that empties the field and
     /// puts the caret back in it. It shows while the field holds something, and only
     /// where a script runs. The field is drawn inside an [`InputGroup`]'s frame.
@@ -347,6 +354,15 @@ impl NativeSelect {
     /// Adds an empty first choice that says what to do.
     pub fn prompt(mut self, prompt: impl Into<String>) -> Self {
         self.prompt = Some(prompt.into());
+        self
+    }
+
+    /// Sets the height, a step of the theme's field sizes, as an input's: the default needs
+    /// nothing more; the others link the parts stylesheet.
+    pub fn size(mut self, size: Size) -> Self {
+        if let Some(step) = size.as_str() {
+            self.el = self.el.attr("data-size", step).uses(Uses::PARTS_STYLES);
+        }
         self
     }
 
@@ -915,6 +931,16 @@ impl InputGroup {
     /// Adds something after the input.
     pub fn end(mut self, addon: impl Into<Node>) -> Self {
         self.end = Some(addon.into());
+        self
+    }
+
+    /// Sets the height, a step of the theme's field sizes, as an input's: the input and what is
+    /// before or after it fill the group. The default needs nothing more; the others link the
+    /// parts stylesheet.
+    pub fn size(mut self, size: Size) -> Self {
+        if let Some(step) = size.as_str() {
+            self.el = self.el.attr("data-size", step).uses(Uses::PARTS_STYLES);
+        }
         self
     }
 

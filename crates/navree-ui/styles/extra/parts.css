@@ -65,6 +65,12 @@ h6[data-slot=heading]{font-size:.75rem;letter-spacing:.04em;text-transform:upper
 [data-slot=input][data-size=xs]{height:var(--field-xs,1.5rem);padding:0 .5rem;font-size:12px}
 [data-slot=input][data-size=sm]{height:var(--field-sm,1.75rem);padding:0 .5rem;font-size:13px}
 [data-slot=input][data-size=lg]{height:var(--field-lg,2.25rem)}
+[data-slot=input][data-mono]{font-family:var(--font-mono)}
+[data-slot=native-select]{
+  &[data-size=xs]{height:var(--field-xs,1.5rem);font-size:12px}
+  &[data-size=sm]{height:var(--field-sm,1.75rem);font-size:13px}
+  &[data-size=lg]{height:var(--field-lg,2.25rem)}
+}
 [data-slot=input-group]{
   &[data-size=xs]{height:var(--field-xs,1.5rem)}
   &[data-size=sm]{height:var(--field-sm,1.75rem)}
