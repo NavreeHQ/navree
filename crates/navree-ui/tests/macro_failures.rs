@@ -187,6 +187,35 @@ fn cases() -> Vec<Case> {
             ]),
         },
         Case {
+            name: "a_control_on_a_list_field_does_not_compile",
+            code: r#"
+                use navree_ui::form::{ControlField, FieldControl, FieldRules, Many, RuleTable};
+                use navree_ui::{Form, Node, el};
+
+                struct Tags;
+                impl FieldControl for Tags {
+                    fn name(&self) -> &'static str { "app.tags" }
+                    fn draw(&self, field: &ControlField<'_>) -> Node {
+                        el("input").attr("name", field.name.to_owned()).into()
+                    }
+                }
+                static TAGS: Tags = Tags;
+
+                #[derive(Form)]
+                struct Visit {
+                    #[form(control = TAGS)]
+                    tags: Many<String>,
+                }
+                impl RuleTable for Visit { const FIELDS: &'static [FieldRules] = &[]; }
+
+                fn main() {}
+            "#,
+            files: &[],
+            expect: Expect::Fails(&[
+                "#[form(control = ..)] on a Many<..> field: a control posts one value, and its check holds that value only; keep control for a field of one value",
+            ]),
+        },
+        Case {
             name: "the_derive_with_control_needs_no_options_for_the_fields_type",
             code: r#"
                 use navree_ui::form::{ControlField, FieldControl, FieldRules, FieldValue, RuleTable};

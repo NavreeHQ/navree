@@ -437,7 +437,7 @@ pub struct Feedback {
 }
 ```
 
-The control's name is the namespace of the plugin that ships it, a dot and a name of its own (`app.rating`, `geo.location`). `#[form(control = RATING_FIELD)]` draws the field with the control, and the field's type reads the text the control posted: no `Options` lookup runs for it. A field takes `control` or `widget`, not both. A form described at run time names it with `Widget::Control(Control::new(&RATING_FIELD))`, and a cell of a table with `EditCell::control`.
+The control's name is the namespace of the plugin that ships it, a dot and a name of its own (`app.rating`, `geo.location`). `#[form(control = RATING_FIELD)]` draws the field with the control, and the field's type reads the text the control posted: no `Options` lookup runs for it. A field takes `control` or `widget`, not both, and a control draws a field of one value: on a `Many<T>` field, `control` stops the build. A form described at run time names it with `Widget::Control(Control::new(&RATING_FIELD))`, and a cell of a table with `EditCell::control`.
 
 A control whose value is a secret, such as a password with a strength meter or a one-time code in six boxes, says so with `fn secret(&self) -> bool { true }`. A field drawn by a control under a password's name (`password`, `new_password`) is a secret too, whatever its control says. The toolkit keeps a secret as it keeps a password input's value: a refused form never shows it again, `Rejected::values()` and `value(..)` never give it back, a wizard never keeps it in its draft, and `draw` is given no value for it, in a form and in a table cell.
 

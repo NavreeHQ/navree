@@ -207,6 +207,13 @@ pub(crate) fn form(input: DeriveInput) -> syn::Result<TokenStream> {
         };
         // A `Many<T>` is a multi-select; its options come from the element's type.
         let many = many_inner(inner);
+        // A control posts one value and its check holds that value: a list field reads several.
+        if hint.control.is_some() && many.is_some() {
+            return Err(syn::Error::new(
+                hint.control_at.unwrap_or_else(proc_macro2::Span::call_site),
+                "#[form(control = ..)] on a Many<..> field: a control posts one value, and its check holds that value only; keep control for a field of one value",
+            ));
+        }
         let element = many.unwrap_or(inner);
         let element_name = type_name(element);
         // A text field that holds a secret is drawn as a password input, which a refused form
