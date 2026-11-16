@@ -29,7 +29,7 @@ extension Transport {
 /// headers it gives, the jar's cookies, `x-xsrf-token` when it asks, no
 /// redirect followed (a 3xx goes back to the core as it came, after its
 /// cookies are kept), and every answer handed back whatever its status, with
-/// the `x-navree-*` headers. An answer's body is read up to the protocol's
+/// the `x-navree-*` headers and `cache-control`. An answer's body is read up to the protocol's
 /// limit (``NavreeProtocol/Wire/maxBody``) and no further: a longer one is
 /// answered as a request that failed, as the core's header asks of a client.
 ///
@@ -182,10 +182,14 @@ public final class HTTPTransport: Transport {
     }
 
     /// The `response` event for an answer: a redirect as it came, anything
-    /// else with its body as text.
+    /// else with its body as text. Its `x-navree-` headers and its
+    /// `cache-control` go with it (names in lower case, values as they came),
+    /// and no other header: the core keeps a page only when its
+    /// `cache-control` does not say `no-store`.
     nonisolated static func response(_ request: Int, _ http: HTTPURLResponse, _ data: Data) -> Response {
         let headers = http.allHeaderFields.compactMap { key, value -> [String]? in
-            guard let name = (key as? String)?.lowercased(), name.hasPrefix("x-navree-") else { return nil }
+            guard let name = (key as? String)?.lowercased(), name.hasPrefix("x-navree-") || name == "cache-control"
+            else { return nil }
             return [name, value as? String ?? "\(value)"]
         }.sorted { $0[0] < $1[0] }
         let redirect = Response.isRedirect(http.statusCode)

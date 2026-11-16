@@ -288,3 +288,16 @@ struct CookieTests {
         #expect(jar.xsrfToken(for: URL(string: "https://shop.example/orders")!) == "eyJpdiI6==")
     }
 }
+
+/// The core keeps a page only when its `cache-control` does not say `no-store`.
+@Test func anAnswersCacheControlGoesToTheCoreWithItsOwnHeadersAndNoOther() throws {
+    let http = try #require(HTTPURLResponse(
+        url: try #require(URL(string: "https://shop.example/orders")), statusCode: 200, httpVersion: "HTTP/1.1",
+        headerFields: [
+            "Cache-Control": "private, no-store", "X-Navree-Keep": "1", "Set-Cookie": "session=s3cret; Path=/",
+            "Content-Type": "application/vnd.navree.native+json",
+        ]
+    ))
+    let response = HTTPTransport.response(1, http, Data("{}".utf8))
+    #expect(response.headers == [["cache-control", "private, no-store"], ["x-navree-keep", "1"]])
+}
