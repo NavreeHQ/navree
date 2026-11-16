@@ -77,8 +77,9 @@ impl AccessModule {
     ///
     /// A plugin's module (one that is not one of the framework's own
     /// packages) names its subjects under the plugin's namespace, as its
-    /// permissions are (`announcements.Announcement`); no other module names
-    /// a subject of another crate under that namespace.
+    /// permissions are (`announcements.Announcement`), and gives them
+    /// permission prefixes under it, whatever crate their types are in; no
+    /// other module names a subject of another crate under that namespace.
     pub fn for_feature<S: SubjectRecords>() -> impl Module {
         AccessFeature::<S>(PhantomData)
     }
@@ -88,8 +89,9 @@ impl AccessModule {
     ///
     /// A plugin's module (one that is not one of the framework's own
     /// packages) names its subjects under the plugin's namespace, as its
-    /// permissions are (`announcements.Announcement`); no other module names
-    /// a subject of another crate under that namespace.
+    /// permissions are (`announcements.Announcement`), and gives them
+    /// permission prefixes under it, whatever crate their types are in; no
+    /// other module names a subject of another crate under that namespace.
     pub fn for_subject<S: Subject + Send + Sync + 'static>() -> impl Module {
         AccessSubject::<S>(PhantomData)
     }

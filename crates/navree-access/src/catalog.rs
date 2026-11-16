@@ -38,10 +38,12 @@ const ROLE_SECTIONS: [&str; 2] = ["workspace.roles.", "workspace.organizations.r
 /// 3. a subject that a module acting for a community plugin registers is
 ///    named under the plugin's namespace (the namespace, or the namespace,
 ///    `.` and a name), and no other module registers a subject of another
-///    crate under that namespace; a community plugin's own subjects (types
-///    of its crate) take permission prefixes inside its namespace, and its
-///    namespace is neither the first word of a permission prefix a subject
-///    of another crate registers nor `all`;
+///    crate under that namespace; a subject that a module acting for a
+///    community plugin registers, whatever crate its type is in, and the
+///    plugin's own subjects (types of its crate), wherever registered, take
+///    permission prefixes inside its namespace, and its namespace is neither
+///    the first word of a permission prefix another module registers for a
+///    subject of another crate nor `all`;
 /// 4. a name two modules describe is an error when either module belongs to
 ///    a community plugin, and otherwise a warning at target `navree::access`;
 /// 5. a community plugin's policy is called as a guest, as a signed-in user
@@ -117,12 +119,16 @@ pub(crate) fn check(
         let own = format!("{}::", plugin.info.crate_name);
         for contributed in &registrations {
             let registration = &contributed.value;
-            if registration.type_name.starts_with(&own) {
-                // Its own subject: a prefix outside its namespace would take over the
-                // meaning of permissions the app grants under that prefix.
-                let inside = registration.prefix == namespace
-                    || registration.prefix.starts_with(&format!("{namespace}."));
-                if !inside {
+            // What a module acting for the plugin registers is the plugin's, whatever crate
+            // its type is in (a `-core` crate, a `Box` of its own type), and so is its own
+            // subject, whichever module registers it.
+            let of_the_plugin = community_plugin(&plugins, contributed.module.id)
+                .is_some_and(|acting| acting.info.name == plugin.info.name)
+                || registration.type_name.starts_with(&own);
+            if of_the_plugin {
+                // A prefix outside its namespace would take over the meaning of permissions
+                // the app grants under that prefix.
+                if !is_under(registration.prefix, namespace) {
                     return Err(AccessError::Config(format!(
                         "plugin `{}` registers the subject `{}` with the permission prefix `{}`, outside its namespace `{namespace}`",
                         plugin.info.name, registration.subject, registration.prefix

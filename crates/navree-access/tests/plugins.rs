@@ -678,6 +678,85 @@ async fn a_plugin_subject_with_a_permission_prefix_outside_its_namespace_fails_t
         .expect("a subject of the app boots");
 }
 
+/// The types the CRM plugin keeps outside its own crate, as a `crm-core` crate would. A test
+/// binary is one crate, so that crate is this module, beside the plugin's.
+mod crm_core {
+    use navree_access::Subject;
+
+    /// A pipeline of the CRM plugin, named under its namespace, whose permissions would be the
+    /// app's `deals.*`.
+    pub struct Pipeline;
+
+    impl Subject for Pipeline {
+        const SUBJECT: &'static str = "crm.Pipeline";
+        const PERMISSION_PREFIX: &'static str = "deals";
+    }
+
+    /// A stage of the CRM plugin, its permission prefix the plugin's namespace.
+    pub struct Stage;
+
+    impl Subject for Stage {
+        const SUBJECT: &'static str = "crm.Stage";
+        const PERMISSION_PREFIX: &'static str = "crm";
+    }
+}
+
+/// The CRM plugin, a community plugin whose crate is this module.
+mod navree_plugin_crm {
+    use navree_access::Subject;
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    /// The plugin's info.
+    const CRM: PluginInfo = PluginInfo::new("navree-plugin-crm", module_path!(), "crm", "1.0.0");
+
+    /// The plugin's module: it names the plugin, then registers what `.0` adds.
+    pub struct CrmModule(pub fn(&mut ModuleBuilder));
+
+    impl Module for CrmModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(CRM);
+            (self.0)(m);
+        }
+    }
+
+    /// A lead of the plugin's own crate.
+    pub struct Lead;
+
+    /// A lead in a `Box`: its type path is `Box`'s, of no plugin's crate, and its permissions
+    /// would be the app's `deals.*`.
+    impl Subject for Box<Lead> {
+        const SUBJECT: &'static str = "crm.Lead";
+        const PERMISSION_PREFIX: &'static str = "deals";
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_subject_a_plugin_registers_takes_a_prefix_inside_its_namespace_whatever_its_crate() {
+    use navree_plugin_crm::{CrmModule, Lead};
+
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    // A type of its `-core` crate, and its own type in a `Box`: either would make every
+    // `deals.*` permission the app grants check the plugin's subject.
+    let cases: [(Register, &str); 2] = [
+        (subject_of::<crm_core::Pipeline>, "crm.Pipeline"),
+        (subject_of::<Box<Lead>>, "crm.Lead"),
+    ];
+    for (register, subject) in cases {
+        let error = boot_error(builder().module(CrmModule(register))).await;
+        let expected = format!(
+            "plugin `navree-plugin-crm` registers the subject `{subject}` with the permission prefix `deals`, outside its namespace `crm`"
+        );
+        assert!(error.contains(&expected), "{subject}: {error}");
+    }
+    // A type of its `-core` crate whose prefix is its namespace is the plugin's own: it boots.
+    builder()
+        .module(CrmModule(subject_of::<crm_core::Stage>))
+        .try_build()
+        .await
+        .expect("a subject of the plugin's `-core` crate under its namespace boots");
+}
+
 /// How a case of the test below registers its subject.
 type Register = fn(&mut ModuleBuilder);
 
