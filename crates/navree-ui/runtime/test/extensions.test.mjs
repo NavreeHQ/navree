@@ -41,6 +41,7 @@ const page = install({
            data-ui-ext-routes="/ /_navree/ /_navree/ui/ /proof /proof/../ /proof/./ /Proof/ /proof//x/ /pro%2f/ /ਪ੍ਰੂਫ਼/ =/deliveries/42/drop"></div>
       <div id="many" data-slot="proof:pad" data-ui-ext="${EXT}/proof.pad-0123456789ab.js" data-ui-props="{}"
            data-ui-ext-routes="/a/ /b/ /c/ /d/ /e/ /f/ /g/ /h/ /proof/"></div>
+      <div id="away" data-slot="proof:pad" data-ui-ext="${EXT}/proof.pad-0123456789ab.js" data-ui-ext-routes="/proof/" data-ui-props="{}"></div>
       <div id="grow" data-slot="proof:pad" data-ui-ext="${EXT}/proof.pad-0123456789ab.js" data-ui-props='{"step":1}'></div>
       <div id="slow" data-slot="proof:slow" data-ui-ext="${EXT}/proof.slow-0123456789ab.js" data-ui-props="{}">
         <div id="slow-body" data-slot="proof:slow-body" data-ui-keep></div>
@@ -100,7 +101,7 @@ const PAGE = { "content-type": "text/html; charset=utf-8", "x-navree-page": "1" 
 const NOTHING = { status: 204, headers: {} };
 const REFUSED = { ok: false, status: 0, data: null };
 
-await until(() => ["pad", "gone", "timers", "late", "vendor", "grow", "wide", "many"].every((id) => $(id).hasAttribute("data-ui-mounted")) && $("two").hasAttribute("data-ui-failed"), "the scripts to mount");
+await until(() => ["pad", "gone", "timers", "late", "vendor", "grow", "wide", "many", "away"].every((id) => $(id).hasAttribute("data-ui-mounted")) && $("two").hasAttribute("data-ui-failed"), "the scripts to mount");
 // The library in the vendor's component works on a timer.
 await settle();
 
@@ -469,6 +470,62 @@ test("ui.call gives a json answer to the script and shows no html page unless as
   page.answers.push(answer(`{"ops":[{"op":"toast","tone":"success","text":"Drop point saved for Simran Kaur"}]}`, { headers: OPS }));
   assert.deepEqual(await ui.call("/proof/save", {}), { ok: true, status: 200, data: null });
   assert.ok(toasts().includes("Drop point saved for Simran Kaur"), toasts().join("\n"));
+});
+
+test("a ui.get does not take the page's turn: a region fetched before it is shown", async () => {
+  const ui = g.uis.pad;
+  /** @type {() => void} */
+  let release = () => {};
+  const held = new Promise((/** @type {any} */ go) => (release = go));
+  page.fetched.length = 0;
+  page.answers.push(async () => {
+    await held;
+    return answer(`<!doctype html><html data-build="b1"><head></head><body><div id="zones" data-ui-region data-ui-src="/zones"><p id="zones-text">Model Town, read</p></div></body></html>`, { headers: PAGE });
+  });
+  fire($("zones"), "ui:refresh");
+  page.answers.push(answer(`{"tiles":null}`, { headers: { "content-type": "application/json" } }));
+  assert.deepEqual(await (await ui.get("/proof/tiles.json")).json(), { tiles: null });
+  release();
+  await settle();
+  assert.equal($("zones-text").textContent, "Model Town, read", "a read took the page's turn");
+  assert.deepEqual(page.fetched.map((f) => new URL(f.url).pathname), ["/zones", "/proof/tiles.json"]);
+});
+
+test("ui.call takes options of null as none", async () => {
+  page.answers.push(answer("", NOTHING));
+  assert.deepEqual(await g.uis.pad.call("/proof/save", { zone: "Civil Lines" }, /** @type {any} */ (null)), { ok: true, status: 204, data: null });
+});
+
+test("the answer of a call or a read whose element has left is not applied", async () => {
+  const ui = g.uis.away;
+  /** @type {(() => void)[]} */
+  const releases = [];
+  /** An answer that comes when the test says. @param {any} made */
+  const later = (made) => async () => {
+    await new Promise((/** @type {any} */ go) => releases.push(go));
+    return made;
+  };
+  page.answers.push(
+    later(answer(`{"ops":[{"op":"remove","target":"zones"},{"op":"toast","tone":"success","text":"Saved for Harpreet Sandhu"}]}`, { headers: OPS })),
+    later(answer(`{"total":"₹40"}`, { headers: { "content-type": "application/json" } })),
+    later(answer(`{"tiles":null}`, { headers: { "content-type": "application/json" } })),
+  );
+  const before = toasts().length;
+  const ops = ui.call("/proof/save", {});
+  const json = ui.call("/proof/total", {});
+  const read = ui.get("/proof/tiles.json");
+  await settle();
+  assert.equal(releases.length, 3, "the three requests were not sent");
+  $("away").remove();
+  swap();
+  assert.equal(ui.signal.aborted, true);
+  for (const go of releases) go();
+  assert.deepEqual(await ops, { ok: false, status: 200, data: null });
+  assert.deepEqual(await json, { ok: false, status: 200, data: null });
+  await assert.rejects(read);
+  await settle();
+  assert.ok($("zones"), "the ops of a call whose element left were applied");
+  assert.deepEqual(toasts().slice(before), [], "a call whose element left showed a toast");
 });
 
 test("ui.on listeners and ui.later timers end when the element leaves", async () => {
