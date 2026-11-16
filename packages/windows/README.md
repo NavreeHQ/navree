@@ -38,6 +38,8 @@ The product depends on the Windows App SDK and on what .NET itself ships. The te
 
 The DLL is copied next to every program that uses `Navree.Core`. The "Native clients" workflow does both on a Windows runner, and starts the demo from its build folder.
 
+A build without the DLL stops with an error that says where it was looked for. The DLL is built for x64 only. When the DLL is missing as the app starts, cannot be loaded, or is for another processor, making the `ShellHost` throws `CoreUnavailableException`, whose words name the file and the one folder it was looked for in (the program's own); the demo shows them in a `StartFailureWindow`, which ends the app when the person closes it, and an app does the same.
+
 ## The demo
 
 `Navree.Demo` runs the client on the store demo's recorded answers (`packages/android/fixtures/store-demo`, found above the program), or on a server with `--server https://...`. `--dark` and `--light` choose the theme, `--rtl` the direction. `--walk <folder>` walks it through its screens at three widths and writes a picture of the window's content and of each page whole, and `walk.txt` saying what was done. `scripts/take-pictures.ps1` runs the demo on a Windows machine with a desktop, pictures its window in each way there is, and walks it in light, dark and right to left.
@@ -62,6 +64,10 @@ Each feature is offered only where the build can do it, and the client's capabil
 Sign-in through the browser is not available on Windows yet; an app signs people in with its own sign-in page inside the app. That page comes to the client as any page of the app does: drawn by the client, its form sent with the client's own requests, so the session's cookie lands in the client's own cookie store. A sign-in page that holds a part the client does not draw is shown in the web view instead, and a sign-in there signs in the web view, not the app: the web view keeps its own cookies. A server that offers the hand-over to apps names its routes to every client, and on Windows that sign-in does not start, so such an app cannot sign people in on Windows yet.
 
 Until the hand-over is offered for Windows, the client starts no sign-in in the browser, listens on no port for one, registers and claims no scheme of its own, and drops any address that arrives on its scheme, with or without a sign-in open: it is never opened as a page and never taken as a sign-in's return. Whether it is offered is decided in one place, `Navree.Presence/BrowserSignIn.cs`.
+
+## What signing out does
+
+Signing out ends the session on this device for good. From its first moment nothing more is written for the person who is leaving: the cookies go from memory, the requests, streams and timers under way are cancelled, and an answer to a request made before cannot put a cookie back. Then, in this order: the cookie file; what the web view keeps (its pages are emptied, and it asks nothing of the network meanwhile); the core is told and lets go of the person; everything else kept; the copies of chosen photographs; the notifications that wait and those shown, the count on the taskbar button and the jump list; the pictures of the pages. A mark is written to disk before any of it and taken away only when all of it has finished and the core has let go, so an app that is ended in the middle (killed, or a power cut) finishes the sign-out at its next start, before it reads anything it kept. Not reached: what the person copied to the clipboard and files they saved.
 
 ## What is kept on the device
 
