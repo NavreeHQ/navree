@@ -52,6 +52,8 @@ struct CalendarHeatmapPart: View {
                     }
                     for day in days {
                         let place = HeatRules.cell(day.date, start: start, calendar: calendar)
+                        // A day outside the weeks drawn has no square.
+                        guard (0..<weeks).contains(place.week) else { continue }
                         let rect = CGRect(x: gutter + CGFloat(place.week) * step, y: top + CGFloat(place.day) * step, width: cell, height: cell)
                         let shape = Path(roundedRect: rect, cornerRadius: cell * 0.22)
                         if let shade = HeatRules.shade(day.value, steps: heatmap.steps, highest: highest) {

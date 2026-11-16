@@ -135,11 +135,15 @@ public enum RingRules {
     /// How far round a value goes: the whole laps past the goal and the part
     /// of the lap it is on. `nil` for no value (an empty ring and a dash).
     public static func sweep(value: Double?, max: Double) -> Sweep? {
-        guard let value else { return nil }
+        guard let value, !value.isNaN else { return nil }
         guard max > 0 else { return Sweep(laps: 0, part: value > 0 ? 1 : 0) }
+        // A value any number of times its goal is still only past it: the
+        // laps are counted as far as a whole number goes.
         let share = Swift.max(value / max, 0)
-        let laps = Int(share.rounded(.down))
-        let part = share - Double(laps)
+        guard share.isFinite else { return Sweep(laps: 1, part: 1) }
+        let whole = share.rounded(.down)
+        let laps = SafeNumbers.int(whole)
+        let part = share - whole
         // Exactly at the goal is one whole lap, not a second one starting.
         if laps >= 1, part == 0 { return Sweep(laps: laps - 1, part: 1) }
         return Sweep(laps: laps, part: part)
@@ -217,9 +221,14 @@ public enum NumberWords {
     /// A number with the decimals it needs and no more, grouped as the
     /// locale groups ("1,00,000" in India).
     public static func amount(_ value: Double, locale: Locale = .current) -> String {
+        guard value.isFinite else { return "–" }
+        // Past what a whole number holds, the system writes the number itself.
+        guard abs(value) < SafeNumbers.most else {
+            return value.formatted(.number.precision(.fractionLength(0)).locale(locale))
+        }
         let rounded = (value * 10).rounded() / 10
         if rounded == rounded.rounded() {
-            return Int(rounded).formatted(.number.locale(locale))
+            return SafeNumbers.int(rounded).formatted(.number.locale(locale))
         }
         return rounded.formatted(.number.precision(.fractionLength(0...1)).locale(locale))
     }
@@ -270,7 +279,10 @@ public enum ZoneRules {
     /// Where a value sits between two ends, 0 to 1; outside, at the nearer end.
     public static func position(_ value: Double, low: Double, high: Double) -> Double {
         guard high > low else { return 0 }
-        return Swift.min(Swift.max((value - low) / (high - low), 0), 1)
+        let place = (value - low) / (high - low)
+        // Ends so far apart that their difference is no number give no place.
+        guard !place.isNaN else { return 0 }
+        return Swift.min(Swift.max(place, 0), 1)
     }
 }
 
@@ -347,7 +359,8 @@ public enum ClockRules {
     /// A time of day in hours past midnight as the person's clock writes it:
     /// "7:07 AM" on a 12 hour clock, "07:07" on a 24 hour one.
     public static func timeLabel(_ at: Double, uses24: Bool, locale: Locale) -> String {
-        let minutes = Int((((at.truncatingRemainder(dividingBy: 24)) + 24).truncatingRemainder(dividingBy: 24) * 60).rounded()) % (24 * 60)
+        let at = at.isFinite ? at : 0
+        let minutes = SafeNumbers.int((((at.truncatingRemainder(dividingBy: 24)) + 24).truncatingRemainder(dividingBy: 24) * 60).rounded()) % (24 * 60)
         if uses24 { return String(format: "%02d:%02d", minutes / 60, minutes % 60) }
         let format = Date.FormatStyle(locale: locale, timeZone: utc).hour(.defaultDigits(amPM: .abbreviated)).minute(.twoDigits)
         return date(hours: Double(minutes) / 60).formatted(format)
@@ -449,7 +462,7 @@ public enum ShareRules {
 
     /// A share as a whole percentage, never 0 for a part that has some.
     public static func percent(_ share: Double) -> Int {
-        share <= 0 ? 0 : Swift.max(1, Int((share * 100).rounded()))
+        share <= 0 || share.isNaN ? 0 : Swift.max(1, SafeNumbers.int((share * 100).rounded()))
     }
 
     /// Whether a share's percentage fits inside its part of a bar `width` wide,
@@ -500,9 +513,15 @@ public enum HeatRules {
         return (week, ((days % 7) + 7) % 7)
     }
 
-    /// How many weeks the calendar spans.
+    /// The most weeks a calendar draws: two years of them. A page whose last
+    /// day is centuries after its first would otherwise have every one of
+    /// those weeks walked through each time the calendar is drawn.
+    public static let mostWeeks = 106
+
+    /// How many weeks the calendar spans: one at least, ``mostWeeks`` at most.
     public static func weeks(first: Date, last: Date, calendar: Calendar) -> Int {
-        cell(last, start: start(first, calendar: calendar), calendar: calendar).week + 1
+        let span = cell(last, start: start(first, calendar: calendar), calendar: calendar).week
+        return Swift.min(Swift.max(span, 0), mostWeeks - 1) + 1
     }
 
     /// The week each month's name stands over: the first week whose first
@@ -582,15 +601,36 @@ public enum AxisRules {
         let low = chart.y?.min ?? ((bars || (lowest >= 0 && lowest < highest * 0.5)) ? 0 : lowest - (highest - lowest) * 0.15)
         let high = chart.y?.max ?? (highest + (highest - low) * 0.05)
         let round = nice(low, high > low ? high : low + 1)
-        return Bounds(chart.y?.min ?? round.low, chart.y?.max ?? round.high)
+        return ordered(low: chart.y?.min, high: chart.y?.max, round: round)
+    }
+
+    /// The bounds an axis is given: the page's own end where it gives one,
+    /// the rounded one where it does not, and always the low end under the
+    /// high one, both of them numbers a scale can draw. A page may fix a top
+    /// its own values pass (a goal of 100 and a week at 120, 135, 150): the
+    /// low end worked out from those values is then over the top, and the
+    /// axis runs from zero to the page's top instead. Ends given the wrong
+    /// way round are put right.
+    static func ordered(low: Double?, high: Double?, round: Bounds) -> Bounds {
+        var bounds = Bounds(low ?? round.low, high ?? round.high)
+        if !(bounds.high > bounds.low) {
+            if low == nil, let high {
+                bounds = Bounds(Swift.min(0, high - 1), high)
+            } else if high == nil, let low {
+                bounds = Bounds(low, low + 1)
+            }
+        }
+        let range = SafeNumbers.range(bounds.low, bounds.high)
+        return Bounds(range.lowerBound, range.upperBound)
     }
 
     /// Two ends rounded out to a step of 1, 2, 2.5 or 5 times a power of ten,
     /// about five steps apart.
     public static func nice(_ low: Double, _ high: Double) -> Bounds {
         let span = high - low
-        guard span > 0 else { return Bounds(low, low + 1) }
+        guard span > 0, span.isFinite else { return Bounds(low, low + 1) }
         let step = niceStep(span / 5)
+        guard step > 0, step.isFinite else { return Bounds(low, high) }
         return Bounds((low / step).rounded(.down) * step, (high / step).rounded(.up) * step)
     }
 
@@ -609,7 +649,7 @@ public enum AxisRules {
             let high = values.max() ?? 1
             let pad = high > low ? (high - low) * 0.08 : 1
             let round = nice(low - pad, high + pad)
-            return Bounds(measure?.min ?? round.low, measure?.max ?? round.high)
+            return ordered(low: measure?.min, high: measure?.max, round: round)
         }
         let x = padded(points.map(\.x), plot.x)
         let y = padded(points.map(\.y), plot.y)
@@ -638,7 +678,7 @@ public enum AxisRules {
     /// a label and a half and a space. A width not yet known fits one.
     public static func most(width: Double, label: Double) -> Int {
         guard width.isFinite, label.isFinite, width > 0 else { return 1 }
-        return Swift.max(1, Int(width / (Swift.max(label, 0) * 1.5 + 12)))
+        return Swift.max(1, SafeNumbers.int(width / (Swift.max(label, 0) * 1.5 + 12)))
     }
 
     /// The runs of a series with no gap in them: a gap is a gap, so the line
@@ -665,7 +705,7 @@ public enum AxisRules {
         var out: [(level: Int, from: Int, to: Int)] = []
         for (index, value) in values.enumerated() {
             guard let value else { continue }
-            let level = Int(value.rounded())
+            let level = SafeNumbers.int(value.rounded())
             if let last = out.last, last.level == level, last.to == index - 1 {
                 out[out.count - 1].to = index
             } else {
@@ -732,7 +772,9 @@ public enum PagerRules {
     /// moves it to another day.
     public static func date(_ text: String) -> Date? {
         let parts = text.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
+        // A year, a month and a day a calendar has: no year 0 and no year 999999999.
+        guard parts.count == 3, (1...9999).contains(parts[0]), (1...12).contains(parts[1]), (1...31).contains(parts[2])
+        else { return nil }
         var components = DateComponents()
         components.year = parts[0]
         components.month = parts[1]

@@ -149,7 +149,7 @@ struct ChartPart: View {
         // whatever values it is given (a Mac's draws only those).
         return AxisMarks(values: domain) { value in
             let index = value.as(String.self).flatMap { Int($0) }
-            if let index, marks.contains(index), index < chart.labels.count {
+            if let index, marks.contains(index), chart.labels.indices.contains(index) {
                 AxisValueLabel(
                     anchor: bars ? .top : index == 0 ? .topLeading : index == last && index == count - 1 ? .topTrailing : .top,
                     collisionResolution: .disabled
@@ -302,7 +302,7 @@ struct ChartPart: View {
             }
         }
         .chartXScale(domain: domain)
-        .chartYScale(domain: (low - pad)...(high + pad))
+        .chartYScale(domain: SafeNumbers.range(low - pad, high + pad))
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
         .chartLegend(.hidden)
@@ -316,7 +316,8 @@ struct ChartPart: View {
             }
         } ?? []
         return Chart(Array(labelled.enumerated()), id: \.offset) { index, item in
-            SectorMark(angle: .value("Value", item.1), innerRadius: .ratio(0.62), angularInset: 1.5)
+            // A part of a whole is never less than nothing.
+            SectorMark(angle: .value("Value", max(item.1, 0)), innerRadius: .ratio(0.62), angularInset: 1.5)
                 .cornerRadius(3)
                 .foregroundStyle(by: .value("Label", item.0))
         }
@@ -365,8 +366,8 @@ struct ChartPart: View {
         .chartXAxis {
             AxisMarks(values: ticks(width: width).map { Double($0) }) { value in
                 AxisValueLabel(anchor: .topLeading, collisionResolution: .disabled) {
-                    if let place = value.as(Double.self), Int(place) < chart.labels.count {
-                        Text(chart.labels[Int(place)]).font(AxisType.font)
+                    if let place = value.as(Double.self), chart.labels.indices.contains(SafeNumbers.int(place)) {
+                        Text(chart.labels[SafeNumbers.int(place)]).font(AxisType.font)
                     }
                 }
             }
@@ -420,7 +421,7 @@ private struct BarAxes<X: AxisContent, Y: AxisContent>: ViewModifier {
                 .chartYAxis {
                     AxisMarks(position: .leading, values: domain) { value in
                         AxisValueLabel {
-                            if let key = value.as(String.self), let index = Int(key), index < chart.labels.count {
+                            if let key = value.as(String.self), let index = Int(key), chart.labels.indices.contains(index) {
                                 Text(chart.labels[index])
                             }
                         }

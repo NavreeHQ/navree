@@ -72,12 +72,13 @@ struct FieldControl: View {
         case .date(let input):
             DateControl(label: label, input: input, value: text)
         case .slider(let input):
-            let low = Double(input.min) ?? 0
-            let high = max(Double(input.max) ?? 100, low + 1)
+            // The ends and the step are the page's words: read as numbers a
+            // slider can be given (``SliderRules``), never as they came.
+            let scale = SliderRules.scale(min: input.min, max: input.max, step: input.step)
             LabeledContent(label) {
                 Slider(
-                    value: Binding(get: { Double(values.first ?? "") ?? low }, set: { set([Self.number($0)]) }),
-                    in: low...high, step: Double(input.step ?? "") ?? 1
+                    value: Binding(get: { SliderRules.value(values.first, in: scale) }, set: { set([SliderRules.text($0)]) }),
+                    in: scale.range, step: scale.step
                 )
             }
         case .colour:
@@ -102,7 +103,7 @@ struct FieldControl: View {
     }
 
     static func number(_ value: Double) -> String {
-        value == value.rounded() ? String(Int(value)) : String(value)
+        SliderRules.text(value)
     }
 }
 
