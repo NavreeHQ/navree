@@ -242,7 +242,9 @@ class LiveDemosTest {
             assertTrue("press ${press + 1}: \"${stop.name}\" is a stop for the second time", seen.none { it.id == stop.id })
             seen += stop
         }
-        val missed = fields.filter { id -> seen.none { it.id == id } }
+        // A field is told by its label (its value, a number, stands before it at the start and not when it has the focus), not by a node id the focus may change.
+        fun label(name: String) = name.replace(Regex("^[0-9.,\\s]+"), "").take(20)
+        val missed = fields.filter { id -> val wanted = label(named[id].orEmpty()); wanted.isNotEmpty() && seen.none { it.name.contains(wanted) } }
         assertTrue("fields that were in view at the start and were never a stop in ${seen.size} presses: ${missed.size} of ${fields.size}: ${missed.map { named[it] }}; the stops were ${seen.map { it.name.take(24) }}", missed.isEmpty())
     }
 
