@@ -242,7 +242,7 @@ extension_sheet!: assets/rating.css: the sheet does not parse the same once serv
 extension_sheet!: assets/rating.css is 9000 bytes once scoped, over its ceiling of 8 * 1024
 ```
 
-Some things stay yours to get right, because a stylesheet can't hold them: styles a script writes through the CSSOM, a component drawn with `position: fixed` over other content, and a popup that a library places on `<body>`, which sits outside the component and so loses the scoped styles.
+Some things stay yours to get right, because a stylesheet can't hold them: styles a script writes through the CSSOM, a component drawn with `position: fixed` over other content, a counter that a component's element increments or sets (`counter-increment`, `counter-set`), which can change the numbering of the app's elements after it, and a popup that a library places on `<body>`, which sits outside the component and so loses the scoped styles.
 
 A component with no behaviour names a stylesheet and no script: build its `UiExtension` with `.sheet(..)` and no `.script(..)`. The page then links the stylesheet and loads no script.
 
