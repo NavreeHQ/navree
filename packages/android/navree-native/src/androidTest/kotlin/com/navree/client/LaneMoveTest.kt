@@ -1,8 +1,8 @@
 package com.navree.client
 
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -21,13 +21,12 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.pressKey
 import com.navree.client.ui.LaneTrace
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.navree.client.core.Content
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
@@ -139,6 +138,16 @@ class LaneMoveTest {
         listOf(false, true).any { unmerged ->
             compose.onAllNodes(isFocused() and hasContentDescription("Move ${LaneBoard.title(at)}"), useUnmergedTree = unmerged).fetchSemanticsNodes().isNotEmpty()
         }
+
+    /**
+     * A key pressed as a keyboard presses it: the system is given the key (down and up), not the test's root. The test starts in touch mode,
+     * which `performKeyInput` leaves as it is, and a key the system is given takes the window out of it, where a button can take the focus.
+     * (The same helper is `Shots.pressTab()` on the branch of the screens' own Tab walks: when the two meet, one stays.)
+     */
+    private fun pressKey(code: Int) {
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(code)
+        compose.waitForIdle()
+    }
 
     /** What has the focus now, in words. */
     private fun stopNow(): String = compose.onAllNodes(isFocused()).fetchSemanticsNodes().joinToString(" + ") { node ->
@@ -261,8 +270,7 @@ class LaneMoveTest {
         val stops = ArrayList<String>()
         for (press in 1..10) {
             if (focused(0)) break
-            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
-            compose.waitForIdle()
+            pressKey(KeyEvent.KEYCODE_TAB)
             stops += stopNow()
         }
         val tabbed = focused(0)
@@ -285,7 +293,7 @@ class LaneMoveTest {
         assertTrue("the focus stays on the card that moved", focused(0))
 
         // Enter on the handle opens its menu.
-        handle(0).performKeyInput { pressKey(Key.Enter) }
+        pressKey(KeyEvent.KEYCODE_ENTER)
         chooseInMenu("Move down")
         waitFor("the card third") { shown().take(4) == listOf(1, 2, 0, 3) }
         told(1, item = 0, before = 3)
