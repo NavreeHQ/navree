@@ -52,8 +52,8 @@ pub use menu::ThemeMenu;
 pub use pairs::{Paint, Pair, PairKind, SURFACES, TONES, pairs};
 pub use roles::{Inverse, Roles};
 pub use shape::{
-    CardSizes, ControlSizes, Corner, Corners, Face, FieldSizes, PageSizes, Shape, SidebarSizes,
-    Sizes, TextStyle, TopbarSizes, TypeScale,
+    CardSizes, ControlSizes, Corner, Corners, Elevation, Face, FieldSizes, PageSizes, Shape,
+    SidebarSizes, Sizes, TextStyle, TopbarSizes, TypeScale,
 };
 
 pub(crate) use appearance::{read_setting, respond_setting};

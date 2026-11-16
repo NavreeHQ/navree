@@ -3,8 +3,9 @@
 //! A spec is a struct apps build literally, so it can't gain a field in 1.x. A shape is a
 //! value of its own that a theme of your own carries beside its spec
 //! ([`Theme::with_shape`](super::Theme::with_shape)): the corners of each kind of part
-//! ([`Corners`]), the type scale ([`TypeScale`]) and the sizes of controls, the shell and the
-//! page ([`Sizes`]). Each value is a CSS custom property that
+//! ([`Corners`]), the type scale ([`TypeScale`]), the sizes of controls, the shell and the
+//! page ([`Sizes`]), and how raised parts stand off the page ([`Elevation`]). Each value is a
+//! CSS custom property that
 //! the stylesheet reads with today's value as its fallback
 //! (`var(--radius-button,var(--radius))`), and a theme's stylesheet writes it only when the
 //! shape sets it. So a theme with the default shape, and every
@@ -818,6 +819,49 @@ const SIZE_BUILDERS: [(&str, &str); 6] = [
     ("CardSizes", "cards"),
 ];
 
+/// How raised and floating parts stand off the page. A part's shadow is derived from the
+/// palette's text colour in light mode and is a deeper black in dark mode; there is no glow.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Elevation {
+    /// Flat with a border, as the toolkit draws: no shadow.
+    #[default]
+    Flat,
+    /// Two soft shadows: a small one under a raised part (the chosen segmented tab, the
+    /// current sidebar link, a toggle that is on, the current button) and a wider one under a
+    /// floating one (popovers, menus, dialogs, sheets, the select's list and a chart's tip).
+    Soft,
+}
+
+impl Elevation {
+    const fn value(self) -> Option<i32> {
+        match self {
+            Self::Flat => None,
+            Self::Soft => Some(1),
+        }
+    }
+}
+
+/// The two shadows of [`Elevation::Soft`]: `;--shadow-raised:...;--shadow-floating:...`,
+/// each colour `light-dark()` of the light palette's text at a low alpha and black at a higher
+/// one.
+fn shadows(spec: &super::ThemeSpec, out: &mut String) {
+    let fg = spec.light.get(super::Token::Fg);
+    let shade = |out: &mut String, light: &str, dark: &str| {
+        let _ = write!(
+            out,
+            "light-dark(rgb({} {} {}/{light}),rgb(0 0 0/{dark}))",
+            fg.r, fg.g, fg.b
+        );
+    };
+    out.push_str(";--shadow-raised:0 1px 2px ");
+    shade(out, ".08", ".4");
+    out.push_str(";--shadow-floating:0 1px 2px ");
+    shade(out, ".04", ".3");
+    out.push_str(",0 16px 40px -16px ");
+    shade(out, ".14", ".55");
+}
+
 /// What kind of value a slot holds, and so how it is checked, written and read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
@@ -835,6 +879,8 @@ enum Kind {
     Face,
     /// A length from the first to the second px.
     Length(u16, u16),
+    /// An [`Elevation`] other than flat.
+    Elevation,
 }
 
 /// What the short form adds to a tracking value, so it is never negative.
@@ -844,7 +890,7 @@ impl Kind {
     /// How many characters a value takes in the short form.
     const fn width(self) -> usize {
         match self {
-            Self::Corner | Self::Weight | Self::Face => 1,
+            Self::Corner | Self::Weight | Self::Face | Self::Elevation => 1,
             Self::Size | Self::Line | Self::Tracking => 2,
             Self::Length(..) => 3,
         }
@@ -860,6 +906,7 @@ impl Kind {
             Self::Tracking => (-60..=100).contains(&value),
             Self::Face => Face::of(value).is_some(),
             Self::Length(least, most) => (i32::from(least)..=i32::from(most)).contains(&value),
+            Self::Elevation => value == 1,
         }
     }
 
@@ -873,6 +920,7 @@ impl Kind {
             Self::Tracking => "Tracking takes -0.06 to 0.1 em, to three places.".to_owned(),
             Self::Face => "A face is text, display or mono.".to_owned(),
             Self::Length(least, most) => format!("This takes {least} to {most} px."),
+            Self::Elevation => "An elevation is flat or soft.".to_owned(),
         }
     }
 
@@ -890,6 +938,7 @@ impl Kind {
                 let _ = write!(out, "{}em", decimal(value, 3));
             }
             Self::Face => out.push_str(Face::of(value).map_or("inherit", Face::css)),
+            Self::Elevation => {}
         }
     }
 
@@ -898,7 +947,7 @@ impl Kind {
         let digit = |n: i32| char::from_digit(n.unsigned_abs() % 36, 36).unwrap_or(UNSET);
         match self {
             Self::Corner if value == PILL => out.push('x'),
-            Self::Corner => out.push(digit(value)),
+            Self::Corner | Self::Elevation => out.push(digit(value)),
             Self::Weight => out.push(digit(value / 100)),
             Self::Face => out.push(Face::of(value).map_or(UNSET, Face::letter)),
             Self::Size | Self::Line | Self::Tracking => {
@@ -929,7 +978,9 @@ impl Kind {
         let number = || i32::try_from(u32::from_str_radix(text, 36).ok()?).ok();
         let value = match self {
             Self::Corner if text == "x" => PILL,
-            Self::Corner | Self::Size | Self::Line | Self::Length(..) => number()?,
+            Self::Corner | Self::Size | Self::Line | Self::Length(..) | Self::Elevation => {
+                number()?
+            }
             Self::Weight => number()? * 100,
             Self::Tracking => number()? - TRACKING_OFFSET,
             Self::Face => Face::ALL
@@ -949,6 +1000,7 @@ impl Kind {
             Self::Weight => value.to_string(),
             Self::Tracking => format!("{}em", decimal(value, 3)),
             Self::Face => Face::of(value).map_or("", Face::id).to_owned(),
+            Self::Elevation => "soft".to_owned(),
         }
     }
 
@@ -978,6 +1030,8 @@ impl Kind {
                 .into_iter()
                 .find(|face| face.id() == text)?
                 .value(),
+            Self::Elevation if text == "soft" => 1,
+            Self::Elevation => return None,
         };
         self.holds(value).then_some(value)
     }
@@ -1003,6 +1057,7 @@ impl Kind {
                 Some(Face::Mono) => "Face::Mono".to_owned(),
                 _ => "Face::Text".to_owned(),
             },
+            Self::Elevation => "Elevation::Soft".to_owned(),
         }
     }
 }
@@ -1096,11 +1151,14 @@ const TYPE_AT: usize = PARTS;
 /// Where the sizes' slots start.
 const SIZES_AT: usize = TYPE_AT + STEPS * FIELDS;
 
+/// Where the elevation's slot is.
+const ELEVATION_AT: usize = SIZES_AT + SIZES;
+
 /// How many slots there are.
-const SLOT_COUNT: usize = SIZES_AT + SIZES;
+const SLOT_COUNT: usize = ELEVATION_AT + 1;
 
 /// Every value a shape can set, in the order a sheet writes them: the corners, one slot a
-/// part, then the type scale, five slots a kind of text, then the sizes.
+/// part, then the type scale, five slots a kind of text, then the sizes and the elevation.
 fn slots() -> &'static [Slot] {
     static SLOTS: LazyLock<Vec<Slot>> = LazyLock::new(|| {
         let mut slots = Vec::with_capacity(SLOT_COUNT);
@@ -1139,13 +1197,22 @@ fn slots() -> &'static [Slot] {
                 layered,
             });
         }
+        slots.push(Slot {
+            stem: "elevation",
+            suffix: "",
+            kind: Kind::Elevation,
+            group: 'e',
+            key: 'a',
+            method: "elevation",
+            layered: false,
+        });
         slots
     });
     &SLOTS
 }
 
 /// The short form's groups, in the order they are written.
-const GROUPS: [char; 3] = ['c', 't', 's'];
+const GROUPS: [char; 4] = ['c', 't', 's', 'e'];
 
 /// The marker of a value left unset inside a short form's entry: a letter no value uses.
 const UNSET: char = 'z';
@@ -1185,6 +1252,7 @@ pub struct Shape {
     corners: Corners,
     type_scale: TypeScale,
     sizes: Sizes,
+    elevation: Elevation,
 }
 
 impl Shape {
@@ -1194,6 +1262,7 @@ impl Shape {
             corners: Corners::new(),
             type_scale: TypeScale::new(),
             sizes: Sizes::new(),
+            elevation: Elevation::Flat,
         }
     }
 
@@ -1216,6 +1285,12 @@ impl Shape {
         self
     }
 
+    /// How raised and floating parts stand off the page.
+    pub const fn elevation(mut self, elevation: Elevation) -> Self {
+        self.elevation = elevation;
+        self
+    }
+
     /// Whether it sets nothing.
     pub fn is_default(&self) -> bool {
         *self == Self::new()
@@ -1229,7 +1304,8 @@ impl Shape {
                 let at = at - TYPE_AT;
                 self.type_scale.0[at / FIELDS].0[at % FIELDS]
             }
-            SIZES_AT..SLOT_COUNT => self.sizes.0[at - SIZES_AT],
+            SIZES_AT..ELEVATION_AT => self.sizes.0[at - SIZES_AT],
+            ELEVATION_AT => self.elevation.value(),
             _ => None,
         }
     }
@@ -1242,7 +1318,8 @@ impl Shape {
                 let at = at - TYPE_AT;
                 self.type_scale.0[at / FIELDS].0[at % FIELDS] = Some(value);
             }
-            SIZES_AT..SLOT_COUNT => self.sizes.0[at - SIZES_AT] = Some(value),
+            SIZES_AT..ELEVATION_AT => self.sizes.0[at - SIZES_AT] = Some(value),
+            ELEVATION_AT if value == 1 => self.elevation = Elevation::Soft,
             _ => {}
         }
     }
@@ -1263,9 +1340,14 @@ impl Shape {
             .collect()
     }
 
-    /// `;--name:value` for every value it sets.
-    pub(crate) fn css(&self, out: &mut String) {
+    /// `;--name:value` for every value it sets; for an elevation, its two shadows, derived from
+    /// `spec`'s palettes.
+    pub(crate) fn css(&self, spec: &super::ThemeSpec, out: &mut String) {
         for (slot, value) in self.values() {
+            if slot.kind == Kind::Elevation {
+                shadows(spec, out);
+                continue;
+            }
             let _ = write!(out, ";--{}:", slot.name());
             slot.kind.css(value, out);
         }
@@ -1276,7 +1358,10 @@ impl Shape {
     pub(crate) fn names(&self) -> impl Iterator<Item = String> + '_ {
         self.values()
             .filter(|(slot, _)| !slot.layered)
-            .map(|(slot, _)| slot.name())
+            .flat_map(|(slot, _)| match slot.kind {
+                Kind::Elevation => vec!["shadow-raised".to_owned(), "shadow-floating".to_owned()],
+                _ => vec![slot.name()],
+            })
     }
 
     /// Its part of the short form: a `-` and a group's tag, then an entry for each key with a
@@ -1454,6 +1539,9 @@ impl Shape {
             }
             out.push_str(",\n        )");
         }
+        if self.elevation != Elevation::Flat {
+            out.push_str("\n        .elevation(Elevation::Soft)");
+        }
         out
     }
 
@@ -1480,6 +1568,9 @@ impl Shape {
         }
         if !self.sizes.is_empty() {
             names.push("Sizes");
+        }
+        if self.elevation != Elevation::Flat {
+            names.push("Elevation");
         }
         if !self.is_default() {
             names.push("Shape");
@@ -1561,7 +1652,7 @@ mod tests {
     fn a_shape_writes_its_values_and_reads_them_back() {
         let shape = every_corner().type_scale(a_type_scale());
         let mut css = String::new();
-        shape.css(&mut css);
+        shape.css(crate::theme::Theme::NAVREE.spec(), &mut css);
         assert!(css.starts_with(";--radius-button:999px;"), "{css}");
         assert!(css.contains(";--radius-card:16px;"), "{css}");
         assert!(css.contains(";--radius-panel:0px;"), "{css}");

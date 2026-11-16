@@ -248,7 +248,7 @@ fn theme_rules(
     let start = out.len();
     colours(out, spec, base);
     corners_and_font(out, spec, base);
-    extras.shape.css(out);
+    extras.shape.css(spec, out);
     extras.roles.css(out);
     if base.is_none_or(|base| {
         base.light.hover_mix() != spec.light.hover_mix()
@@ -396,11 +396,13 @@ pub(crate) fn sheet_build() -> &'static str {
             String::new(),
             spec,
             Extras {
-                shape: super::Shape::new().corners(
-                    super::Corners::new()
-                        .button(super::Corner::Pill)
-                        .card(super::Corner::Px(16)),
-                ),
+                shape: super::Shape::new()
+                    .corners(
+                        super::Corners::new()
+                            .button(super::Corner::Pill)
+                            .card(super::Corner::Px(16)),
+                    )
+                    .elevation(super::Elevation::Soft),
                 roles: super::Roles::new()
                     .card(Rgb::WHITE, Rgb::BLACK)
                     .inverse(super::Inverse::new().surface(Rgb::BLACK, Rgb::WHITE)),

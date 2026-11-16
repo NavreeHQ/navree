@@ -63,8 +63,9 @@ theme sets the same tokens to other values.
 
 Control heights come from `Size`: 24, 28, 32 (the default) and 36 pixels,
 unless a theme's shape says what each step is (`Sizes`, below). Gaps in
-`Stack`, `Row` and `Grid` are steps, not pixels. There are no shadows on
-app surfaces and no glow.
+`Stack`, `Row` and `Grid` are steps, not pixels. Surfaces are flat by
+default; a theme's `Elevation::Soft` gives raised and floating parts two
+soft shadows (`--shadow-raised`, `--shadow-floating`). There is no glow.
 
 `navree::ui::theme::pairs()` lists every colour pair the stylesheet draws:
 text must reach WCAG AA (4.5:1), and the focus ring, icons and chart colours
@@ -100,6 +101,7 @@ Group the values by role, then give each role its Navree token:
 | a ghost or icon button's text, the sidebar's secondary lines, a segment's track and chosen tab, a selected row | `ghost-fg`, `shell-muted`, `segment-track`, `segment-on`, `row-selected`: a theme's `Roles` |
 | control and field heights (40 px buttons, 44 px inputs on one page), a badge's height | a theme's `Sizes`: `ControlSizes`, `FieldSizes` with `Input::size` for a page's step, `badge_height` |
 | the sidebar's width and insets, the top bar's height, the page's padding and width, card padding | a theme's `Sizes`: `SidebarSizes`, `TopbarSizes`, `PageSizes`, `CardSizes` |
+| a soft shadow under a chosen segment, the current link, a popover or a dialog | a theme's `Elevation::Soft`: `shadow-raised`, `shadow-floating` |
 | hover, raised | `ink-2` |
 | selected, pressed | `ink-3` |
 | borders, dividers, input outlines | `line`, `line-2`, `line-3` |
@@ -139,9 +141,11 @@ For each `DT-` row, write one of:
   paints, and the inverse surface. Record it as a mapping to the theme's
   value. `with_roles` refuses a role whose text fails WCAG AA, as the
   palette's own check does.
-- **Refused:** a value that breaks the app rules: glow or other shadows on
-  surfaces, letter tiles. It becomes a deviation with the Navree form, for
-  the owner to approve.
+- **Refused:** a value that breaks the app rules: glow, a shadow other than
+  the theme's two soft levels (`Elevation::Soft`: a small one under the
+  chosen segment and the current link, a wider one under popovers, menus
+  and dialogs), letter tiles. It becomes a deviation with the Navree form,
+  for the owner to approve.
 
 ## Themes
 

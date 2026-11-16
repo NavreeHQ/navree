@@ -41,7 +41,8 @@ around them.
 5. **Corners are the theme's.** 4 px on controls and 6 px on surfaces by
    default; a theme of the app's own gives each kind of part its own corner,
    pills included, with its shape (`Theme::with_shape`,
-   `references/themes.md`). No letter tiles, no glow, and no stylesheet that
+   `references/themes.md`). Surfaces are flat unless the theme's shape says
+   `Elevation::Soft`. No letter tiles, no glow, and no stylesheet that
    restyles a component: a value the design needs goes in the theme.
 6. **Every page has its other states**: empty, loading, failed, read-only and
    forbidden. Build them with the components below.

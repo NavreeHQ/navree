@@ -7,9 +7,9 @@
 //! any of them is a change to every app that sets nothing new, so each is held here.
 
 use navree_ui::theme::{
-    CardSizes, ControlSizes, Corner, Corners, Face, FieldSizes, ImportError, Inverse, PageSizes,
-    Rgb, Roles, Shape, SidebarSizes, Sizes, TextStyle, Theme, ThemeId, Token, TopbarSizes,
-    TypeScale, builder_layer, token_layer,
+    CardSizes, ControlSizes, Corner, Corners, Elevation, Face, FieldSizes, ImportError, Inverse,
+    PageSizes, Rgb, Roles, Shape, SidebarSizes, Sizes, TextStyle, Theme, ThemeId, Token,
+    TopbarSizes, TypeScale, builder_layer, token_layer,
 };
 use navree_ui::{
     AppFont, Badge, Button, ButtonVariant, Card, Input, NavGroup, NavItem, Shell, Stat, UserMenu,
@@ -756,4 +756,146 @@ fn every_size_is_read_by_the_stylesheet() {
             "{name} is read by no rule"
         );
     }
+}
+
+#[test]
+fn a_soft_elevation_gives_raised_and_floating_parts_their_shadows_in_both_modes() {
+    let theme = agra(&Theme::NAVREE)
+        .with_shape(Shape::new().elevation(Elevation::Soft))
+        .unwrap();
+    let said = said(&theme);
+    let raised = said
+        .iter()
+        .find(|(name, _)| name == "shadow-raised")
+        .map(|(_, value)| value.clone())
+        .expect("a raised shadow");
+    // The light palette's text colour at 8%, and black at 40% in dark mode.
+    assert_eq!(
+        raised,
+        "0 1px 2px light-dark(rgb(10 14 12/.08),rgb(0 0 0/.4))"
+    );
+    assert!(said.iter().any(|(name, value)| name == "shadow-floating"
+        && value.starts_with("0 1px 2px light-dark(")
+        && value.contains(",0 16px 40px -16px light-dark(")));
+    assert!(!theme.css().unwrap().contains("glow"));
+    let back = Theme::from_short_form(theme.short_form()).unwrap();
+    assert_eq!(back.shape(), theme.shape());
+    let stored = Theme::from_json(&theme.to_json()).unwrap();
+    assert_eq!(stored.shape(), theme.shape());
+    assert!(theme.to_json().contains("\"elevation\": \"soft\""));
+    let rust = theme.to_rust("navree::ui");
+    assert!(rust.contains(".elevation(Elevation::Soft)"), "{rust}");
+    // A flat theme writes no shadow at all.
+    assert!(!agra(&Theme::NAVREE).css().unwrap().contains("shadow"));
+    // The current link and the chosen segmented tab are raised; popovers and dialogs float.
+    let css = sources();
+    for rule in [
+        "  &[aria-current=page]{background:var(--ink-3);color:var(--fg);font-weight:500;box-shadow:var(--shadow-raised)}",
+        "background:var(--segment-on,var(--ink-3));box-shadow:var(--shadow-raised)}",
+    ] {
+        assert!(css.contains(rule), "{rule}");
+    }
+    for slot in [
+        "\n[data-slot=popover-content],[data-slot=hover-card-content],",
+        "\n[data-slot=dialog],[data-slot=alert-dialog],",
+        "\n[data-slot=dropdown-menu]{",
+    ] {
+        let at = css.find(slot).unwrap_or_else(|| panic!("{slot}")) + 1;
+        let body = &css[at..at + css[at..].find('\n').unwrap()];
+        assert!(body.contains("box-shadow:var(--shadow-floating)"), "{body}");
+    }
+}
+
+/// What the theme of a design with pill buttons and 16 px cards says, all of it at once: the
+/// acceptance of everything a theme can say beyond its spec.
+#[test]
+fn a_theme_says_a_whole_design_and_its_stylesheet_carries_it() {
+    let shape = Shape::new()
+        .corners(
+            Corners::new()
+                .button(Corner::Pill)
+                .badge(Corner::Pill)
+                .toggle(Corner::Px(12))
+                .field(Corner::Px(12))
+                .nav(Corner::Px(12))
+                .card(Corner::Px(16)),
+        )
+        .type_scale(
+            TypeScale::new()
+                .page_title(TextStyle::px(32).face(Face::Display))
+                .h1(TextStyle::new().face(Face::Display))
+                .brand(TextStyle::new().face(Face::Display)),
+        )
+        .sizes(
+            Sizes::new()
+                .controls(ControlSizes::new().md(44))
+                .fields(FieldSizes::new().md(44))
+                .sidebar(SidebarSizes::new().width(248).inset_x(12))
+                .topbar(TopbarSizes::new().height(60)),
+        )
+        .elevation(Elevation::Soft);
+    let theme = tinted()
+        .with_shape(shape)
+        .unwrap()
+        .with_roles(design_roles())
+        .unwrap();
+    let said = said(&theme);
+    let says = |name: &str, value: &str| {
+        assert!(
+            said.contains(&(name.to_owned(), value.to_owned())),
+            "{name}: {value} in {said:?}"
+        );
+    };
+    // Corners of 12 px on controls, 16 px on cards, full pills on buttons and badges.
+    says("radius-field", "12px");
+    says("radius-toggle", "12px");
+    says("radius-nav", "12px");
+    says("radius-card", "16px");
+    says("radius-button", "999px");
+    says("radius-badge", "999px");
+    // A white card surface on a tinted sidebar.
+    says("card", "light-dark(#ffffff,#121212)");
+    let css = theme.css().unwrap();
+    assert!(
+        css.contains(";--ink-1:light-dark(#fafaf9,"),
+        "the sidebar's tint"
+    );
+    // An inverse surface, its text checked by with_roles.
+    assert!(css.contains(&format!(
+        ":where([data-theme={}] [data-inverse]){{--ink-0:light-dark(#ffffff,#0a0a0a)",
+        theme.key()
+    )));
+    // A display face for headings and the brand beside the text face, and a 32 px page title.
+    says("text-page-title-size", "32px");
+    for step in ["page-title", "h1", "brand"] {
+        says(
+            &format!("text-{step}-face"),
+            "var(--font-display,var(--font-sans))",
+        );
+    }
+    // Controls 44 px high; a sidebar 248 px wide with 12 px insets; a top bar 60 px high.
+    says("control-md", "44px");
+    says("field-md", "44px");
+    says("sidebar-w", "248px");
+    says("sidebar-pad-x", "12px");
+    says("topbar-h", "60px");
+    // One soft shadow on a raised element.
+    assert!(said.iter().any(|(name, _)| name == "shadow-raised"));
+    // The stylesheet reads every one of them.
+    let sources = sources();
+    for (name, _) in &said {
+        let read = sources.contains(&format!("var(--{name}"))
+            || sources.contains(&format!("var(--{name},"))
+            || Token::from_name(name).is_some();
+        assert!(read, "{name} is read by no rule");
+    }
+    // It travels whole, and every built-in theme and a page with nothing set are untouched:
+    // `a_theme_that_says_nothing_new_writes_what_it_wrote_at_1_7_0` holds the bytes.
+    let back = Theme::from_short_form(theme.short_form()).unwrap();
+    assert_eq!(
+        (back.spec(), back.shape(), back.roles()),
+        (theme.spec(), theme.shape(), theme.roles())
+    );
+    let stored = Theme::from_json(&theme.to_json()).unwrap();
+    assert_eq!(stored.key(), theme.key());
 }

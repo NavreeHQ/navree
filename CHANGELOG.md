@@ -69,6 +69,13 @@ every `@navree/*` package carries the same version.
   read with today's size behind it, so a size a shape doesn't set keeps following the theme's
   density; `--sidebar-w` and `--topbar-h`, which every theme shared, are now set by a theme
   whose shape says so.
+- `Shape::elevation(Elevation::Soft)` gives raised and floating parts two soft shadows:
+  `--shadow-raised` under the chosen segmented tab, the current sidebar link, a toggle that is
+  on and the current button, and `--shadow-floating` under popovers, menus, dialogs, sheets,
+  the select's list and a chart's tip. Their colour is the light palette's text colour at a low
+  alpha in light mode and black in dark mode, written with `light-dark()`; there is no glow and
+  no free value. `Elevation::Flat` is the default, and a part is drawn without a shadow, as
+  before.
 
 ## [1.7.0] - 2026-11-27
 

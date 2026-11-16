@@ -1016,6 +1016,7 @@ pub const COMPONENTS: &[Component] = &[
             "TopbarSizes",
             "PageSizes",
             "CardSizes",
+            "Elevation",
             "Roles",
             "Inverse",
             "Appearance",

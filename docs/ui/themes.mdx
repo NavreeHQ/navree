@@ -5,7 +5,7 @@ description: "Seven built-in themes in light, dark or the device's mode, themes 
 
 <UiPreview example="themes/built-in" />
 
-A theme is a typed Rust value: a palette of colour tokens for light and one for dark, the corners, the density and a font from a safe list. A theme of your own can say more with a [shape](#a-themes-shape) (the corners of each kind of part, the type scale and the sizes of controls, the shell and the page) and [colour roles](#colour-roles) (white cards beside an off-white sidebar, the inverse surface). The server writes the reader's theme and mode on `<html>` and links what the page needs in the head, so the first paint is already right. No script decides how a page looks, and a page with nothing set renders exactly as it always did: dark Navree.
+A theme is a typed Rust value: a palette of colour tokens for light and one for dark, the corners, the density and a font from a safe list. A theme of your own can say more with a [shape](#a-themes-shape) (the corners of each kind of part, the type scale, the sizes of controls, the shell and the page, and soft shadows) and [colour roles](#colour-roles) (white cards beside an off-white sidebar, the inverse surface). The server writes the reader's theme and mode on `<html>` and links what the page needs in the head, so the first paint is already right. No script decides how a page looks, and a page with nothing set renders exactly as it always did: dark Navree.
 
 ## Built-in themes
 
@@ -218,6 +218,21 @@ pub fn agra_theme() -> Theme {
 
 A field takes a step with `Input::size`, so one page can draw 44 px fields and the others 36 px, each as the theme says. Each size has bounds (controls 16 to 64 px, the sidebar 160 to 400 px wide, insets 0 to 64 px, a page at most 480 to 2400 px wide), and `with_shape` names one outside them.
 
+### Elevation
+
+The toolkit draws flat parts with borders and no shadow. `Shape::elevation(Elevation::Soft)` gives two soft shadows: a small one under a raised part (the chosen segmented tab, the current sidebar link, a toggle that is on, the current button), `--shadow-raised`, and a wider one under a floating part (popovers, menus, dialogs, sheets, the select's list and a chart's tip), `--shadow-floating`. Their colour is the light palette's text colour at a low alpha in light mode and black in dark mode, written with `light-dark()` like the colours, so the dark form comes with them. There are two levels and no free values, and no glow.
+
+```rust title="src/theme.rs"
+use navree::ui::theme::{Elevation, Shape, Theme, ThemeId};
+
+pub fn agra_theme() -> Theme {
+    Theme::NAVREE
+        .renamed(ThemeId::parse("agra").expect("a theme id"), "Agra")
+        .with_shape(Shape::new().elevation(Elevation::Soft))
+        .expect("every value of the shape in range")
+}
+```
+
 ## Colour roles
 
 One token paints several things: `ink-1` paints cards, inputs, the sidebar and a table's header, so a theme can't make its cards white beside an off-white sidebar by its palette alone. `Roles` gives such a thing a colour of its own, in light and in dark, falling back to the token it stands in for. The stylesheet reads each as `var(--card,var(--ink-1))`, and the theme's stylesheet writes a role only when it is set.
@@ -377,6 +392,10 @@ Charts read `--chart-1` to `--chart-8` and `--bar`; status reads `--success`, `-
 ### CardSizes
 
 <UiProps type="CardSizes" />
+
+### Elevation
+
+<UiProps type="Elevation" />
 
 ### Roles
 

@@ -68,6 +68,10 @@ pub fn themed_shell() -> Shell {
   .gap(24).max_width(1240)).cards(CardSizes::new().padding(18))`. A field
   takes a step with `Input::size(Size::Lg)`, so a sign-in page can draw
   44 px fields while the app draws 40.
+- `Shape::elevation(Elevation::Soft)` gives two soft shadows: under raised
+  parts (the chosen segmented tab, the current link, a toggle that is on)
+  and under floating ones (popovers, menus, dialogs). Flat is the default;
+  there is no glow.
 - Colours beyond the 31 tokens are `Roles`, given with
   `theme.with_roles(roles)`, each in light then dark: `card` and `field`
   (white cards and inputs beside an off-white sidebar, which keeps
