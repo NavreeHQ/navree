@@ -84,12 +84,14 @@ public static class Capabilities
             : new(SystemFeature.JumpList, false, "the taskbar button's jump list", "the jump list needs the app to be installed from a package", true),
         new(SystemFeature.Share, true, "the share sheet", null, false),
         new(SystemFeature.SeveralWindows, true, "windows of the one app", null, false),
-        new(
-            SystemFeature.ProtocolReturn,
-            true,
-            hasIdentity ? "the package's own scheme" : "a scheme registered for this person at run time",
-            null,
-            false),
+        BrowserSignIn.Offered
+            ? new(
+                SystemFeature.ProtocolReturn,
+                true,
+                hasIdentity ? "the package's own scheme" : "a scheme registered for this person at run time",
+                null,
+                false)
+            : new(SystemFeature.ProtocolReturn, false, "the app's own scheme", "signing in through the browser is not available on Windows yet, so nothing is taken on the app's scheme", false),
         new(SystemFeature.SingleInstance, true, "the app's own instance key", null, false),
         new(SystemFeature.FullScreen, true, "the full-screen window", null, false),
         new(SystemFeature.Passkeys, false, "Windows Hello and passkeys", "written behind one interface and not proven on a device", false),

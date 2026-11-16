@@ -42,12 +42,30 @@ internal static class ClientEnvironment
     /// <summary>What the system says now.</summary>
     internal static ClientSettings Settings() => new(IsDark, MoreContrast, TextPercent, Locale, TimeZone);
 
-    /// <summary>The configuration the core is made from.</summary>
+    /// <summary>The package family name when the app runs from a package, null when it does not.</summary>
+    internal static string? PackageFamilyName()
+    {
+        if (!Navree.Presence.PackageIdentity.Has())
+        {
+            return null;
+        }
+
+        try
+        {
+            return Windows.ApplicationModel.Package.Current.Id.FamilyName;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The configuration the core is made from. The app's id is its package family name when packaged, the configured id when not.</summary>
     internal static byte[] Config(ShellOptions options) =>
         ClientConfig.Json(
             options.Origin,
             options.Also,
-            options.AppId,
+            Navree.Presence.BrowserSignIn.AppId(PackageFamilyName(), options.AppId),
             Settings(),
             Environment.OSVersion.Version.ToString(),
             typeof(ClientEnvironment).Assembly.GetName().Version?.ToString(3) ?? "0.1.0",

@@ -15,8 +15,6 @@ public sealed partial class ShellHost
     private LoopbackReturn? loopback;
     private CancellationTokenSource? loopbackWait;
     private bool coreStopped;
-    private string? callbackText;
-    private ReturnKind returnKind;
 
     /// <summary>The app's place in Windows: set by the app once its main window exists; the device calls that need a window are answered through it.</summary>
     public SystemPlace? Place { get; set; }
@@ -86,11 +84,14 @@ public sealed partial class ShellHost
     }
 
     // The core asks for a sign-in in the system's browser: the one the person is signed in to Windows with, which shares what it keeps with the
-    // person's other sites. A session that must share nothing cannot be had in it, so it is not started.
+    // person's other sites. A session that must share nothing cannot be had in it, so it is not started. While signing in through the browser is
+    // not offered (BrowserSignIn), none is started at all: no browser is opened and no port is listened on.
     private void BeginSignIn(SignInEffect effect)
     {
         SignInReturn? comesBack = SignInReturn.Parse(effect.Callback);
-        string? why = comesBack is null
+        string? why = BrowserSignIn.WhyNotStart(BrowserSignIn.Offered) is string notOffered
+            ? notOffered
+            : comesBack is null
             ? "the return is not one this build knows"
             : effect.Ephemeral
                 ? "a session that shares nothing with the browser cannot be had in the system's browser"
@@ -105,8 +106,6 @@ public sealed partial class ShellHost
         }
 
         StopLoopback();
-        callbackText = effect.Callback;
-        returnKind = comesBack.Kind;
         if (comesBack.Kind == ReturnKind.Loopback)
         {
             try
@@ -199,25 +198,28 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// An address came back to the app on its own scheme (or on the loopback port). When a sign-in is open and it is that sign-in's return, the sign-in
-    /// ends with it; any other address of the app's scheme is handed to the core as a link from outside, which uses it only if it is a return
-    /// of a sign-in it has open, and says so when it did not.
+    /// An address came to the app on its own scheme (or on a loopback port). While signing in through the browser is not offered
+    /// (<see cref="BrowserSignIn"/>) it is dropped: never opened as a page, never taken as a sign-in's return, and the core is not told of it.
+    /// Once it is offered, it goes to the core as it came: as the return of the sign-in that is open, or as a link from outside when none is,
+    /// and the core takes it only with that sign-in's <c>state</c>, on the way back that sign-in named.
     /// </summary>
     /// <param name="address">The whole address.</param>
     public void HandleReturn(string address)
     {
         ArgumentNullException.ThrowIfNull(address);
-
-        // The platform-independent rule of the address (no white space, no control character, the callback's own scheme) is asked first.
-        bool plausible = returnKind != ReturnKind.Scheme || Origins.SignInReturn(address, callbackText);
-        if (plausible && signIn.Offer(address, out _) == SignInOffer.Taken)
+        switch (BrowserSignIn.Route(BrowserSignIn.Offered, signIn.IsOpen, address))
         {
-            StopLoopback();
-            client.Send(Events.SignInDone(address));
-            return;
+            case Arrival.SignInDone:
+                client.Send(Events.SignInDone(address));
+                break;
+            case Arrival.OpenLink:
+                client.Send(Events.OpenLink(address));
+                break;
+            default:
+                // Never the address itself in what is said: a return can carry a code.
+                Problem?.Invoke("an address that arrived on the app's scheme was not used: signing in through the browser is not offered");
+                break;
         }
-
-        client.Send(Events.OpenLink(address));
     }
 
     // A call from a tap or from the server's reply that is carried out with the system.

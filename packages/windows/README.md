@@ -55,7 +55,13 @@ A file field is a row: the label, a Choose button, and each file chosen with its
 
 ## The app's place in Windows
 
-Each feature is offered only where the build can do it, and the client's capability list and the About page say which. With a package: the taskbar badge, the jump list, the startup task. Without: an overlay icon on the taskbar button, the person's own list of programs to run at sign-in. Either way: the icon in the notification area with a small window by it, app notifications (not to an app that runs as an administrator), the share sheet, several windows over the one core, one running app (a second start hands what it was asked to the first), and a sign-in in the system's browser that comes back on the app's own scheme. `--system-walk <folder>` walks these and writes what each answered; `--probe <file>` runs the app for a while so a second start and an address on its scheme can be tried on it; `scripts/take-system-pictures.ps1` does both with and without a package.
+Each feature is offered only where the build can do it, and the client's capability list and the About page say which. With a package: the taskbar badge, the jump list, the startup task. Without: an overlay icon on the taskbar button, the person's own list of programs to run at sign-in. Either way: the icon in the notification area with a small window by it, app notifications (not to an app that runs as an administrator), the share sheet, several windows over the one core, and one running app (a second start hands what it was asked to the first). `--system-walk <folder>` walks these and writes what each answered; `--probe <file>` runs the app for a while so a second start can be tried on it; `scripts/take-system-pictures.ps1` does both with and without a package.
+
+## Signing in
+
+Sign-in through the browser is not available on Windows yet; an app signs people in with its own sign-in page inside the app. That page comes to the client as any page of the app does: drawn by the client, its form sent with the client's own requests, so the session's cookie lands in the client's own cookie store. A sign-in page that holds a part the client does not draw is shown in the web view instead, and a sign-in there signs in the web view, not the app: the web view keeps its own cookies. A server that offers the hand-over to apps names its routes to every client, and on Windows that sign-in does not start, so such an app cannot sign people in on Windows yet.
+
+Until the hand-over is offered for Windows, the client starts no sign-in in the browser, listens on no port for one, registers and claims no scheme of its own, and drops any address that arrives on its scheme, with or without a sign-in open: it is never opened as a page and never taken as a sign-in's return. Whether it is offered is decided in one place, `Navree.Presence/BrowserSignIn.cs`.
 
 ## What is kept on the device
 

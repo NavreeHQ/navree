@@ -9,7 +9,7 @@ namespace Navree.Demo;
 /// <summary>The demo app: the client on recorded answers (or a live server), in one window, with its place in Windows.</summary>
 public partial class App : Application
 {
-    /// <summary>The app's own scheme, which a sign-in in the browser comes back on.</summary>
+    /// <summary>The app's own scheme, which a sign-in in the browser comes back on once that is offered on Windows; until then nothing on it is taken.</summary>
     public const string Scheme = "navree-demo";
 
     /// <summary>The key a second start finds the running app by.</summary>

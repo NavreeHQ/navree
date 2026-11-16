@@ -42,12 +42,7 @@
       </uap:VisualElements>
 
       <Extensions>
-        <!-- The app's own scheme: a sign-in in the browser comes back on it. -->
-        <uap:Extension Category="windows.protocol">
-          <uap:Protocol Name="navree-demo">
-            <uap:DisplayName>Navree Demo</uap:DisplayName>
-          </uap:Protocol>
-        </uap:Extension>
+        <!-- No scheme of its own is claimed: signing in through the browser is not offered on Windows yet, and nothing would be taken on it. -->
 
         <!-- Opening when the person signs in to Windows: off until the person turns it on. -->
         <uap5:Extension Category="windows.startupTask">
