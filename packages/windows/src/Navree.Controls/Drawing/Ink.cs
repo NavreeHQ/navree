@@ -1,0 +1,471 @@
+using Microsoft.UI;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
+using Navree.Design;
+using Windows.Foundation;
+using ShapePath = Microsoft.UI.Xaml.Shapes.Path;
+
+namespace Navree.Controls.Drawing;
+
+/// <summary>Where a text stands against the point it is put at, across.</summary>
+internal enum Across
+{
+    /// <summary>The text starts at the point.</summary>
+    Start,
+
+    /// <summary>The text is centred on the point.</summary>
+    Middle,
+
+    /// <summary>The text ends at the point.</summary>
+    End,
+}
+
+/// <summary>Where a text stands against the point it is put at, down.</summary>
+internal enum Down
+{
+    /// <summary>The text hangs from the point.</summary>
+    Top,
+
+    /// <summary>The text is centred on the point.</summary>
+    Middle,
+
+    /// <summary>The text stands on the point.</summary>
+    Bottom,
+}
+
+/// <summary>The small drawing tools every drawn kind uses: shapes and their geometry, and texts put at a point. Everything is vector, so it is sharp at every scale.</summary>
+internal static class Ink
+{
+    /// <summary>A colour of ours as the system's colour type.</summary>
+    internal static Windows.UI.Color Colour(Rgb colour, double opacity = 1) =>
+        ColorHelper.FromArgb((byte)Math.Clamp((int)Math.Round(opacity * 255), 0, 255), colour.R, colour.G, colour.B);
+
+    /// <summary>A plain brush.</summary>
+    internal static SolidColorBrush Solid(Rgb colour, double opacity = 1) => new(Colour(colour, opacity));
+
+    /// <summary>Puts an element at a place on a canvas.</summary>
+    internal static T Put<T>(this Canvas canvas, T element, double x, double y)
+        where T : UIElement
+    {
+        Canvas.SetLeft(element, Guard.Finite(x));
+        Canvas.SetTop(element, Guard.Finite(y));
+        canvas.Children.Add(element);
+        return element;
+    }
+
+    /// <summary>A rectangle, with rounded corners when asked.</summary>
+    internal static Rectangle Box(double width, double height, Brush? fill, double radius = 0, Brush? stroke = null, double strokeWidth = 0)
+    {
+        Rectangle box = new()
+        {
+            Width = Guard.Length(width),
+            Height = Guard.Length(height),
+            Fill = fill,
+            RadiusX = Guard.Length(radius),
+            RadiusY = Guard.Length(radius),
+            IsHitTestVisible = false,
+        };
+        if (stroke is not null)
+        {
+            box.Stroke = stroke;
+            box.StrokeThickness = Guard.Length(strokeWidth);
+        }
+
+        return box;
+    }
+
+    /// <summary>A disc of a width.</summary>
+    internal static Ellipse Disc(double width, Brush? fill, Brush? stroke = null, double strokeWidth = 0)
+    {
+        Ellipse disc = new() { Width = Guard.Length(width), Height = Guard.Length(width), Fill = fill, IsHitTestVisible = false };
+        if (stroke is not null)
+        {
+            disc.Stroke = stroke;
+            disc.StrokeThickness = Guard.Length(strokeWidth);
+        }
+
+        return disc;
+    }
+
+    /// <summary>
+    /// The mark that stands for a series: a shape of a side, in a brush. A disc, a square, a diamond or a triangle is solid and a ring is
+    /// not; a plus and a cross are lines. The element is a square of that side, so it is put by its corner like any other.
+    /// </summary>
+    internal static UIElement Marker(MarkShape shape, double side, Brush ink)
+    {
+        double size = Math.Max(Guard.Length(side), 1);
+        switch (shape)
+        {
+            case MarkShape.Square:
+                return Box(size, size, ink);
+            case MarkShape.Ring:
+                return Disc(size - 2, null, ink, 2);
+            case MarkShape.Plus:
+            case MarkShape.Cross:
+                Canvas lines = new() { Width = size, Height = size, IsHitTestVisible = false };
+                if (shape == MarkShape.Plus)
+                {
+                    lines.Put(Rule(size / 2, 0, size / 2, size, ink, 2), 0, 0);
+                    lines.Put(Rule(0, size / 2, size, size / 2, ink, 2), 0, 0);
+                }
+                else
+                {
+                    lines.Put(Rule(0.5, 0.5, size - 0.5, size - 0.5, ink, 2), 0, 0);
+                    lines.Put(Rule(size - 0.5, 0.5, 0.5, size - 0.5, ink, 2), 0, 0);
+                }
+
+                return lines;
+            case MarkShape.Diamond:
+            case MarkShape.TriangleUp:
+            case MarkShape.TriangleDown:
+                Canvas corners = new() { Width = size, Height = size, IsHitTestVisible = false };
+                IReadOnlyList<Pt> points = [.. SeriesLooks.Corners(shape, size).Select(corner => new Pt(corner.X + (size / 2), corner.Y + (size / 2)))];
+                corners.Put(Filled(Lines(points, closed: true), ink), 0, 0);
+                return corners;
+            default:
+                return Disc(size, ink);
+        }
+    }
+
+    /// <summary>A line drawn along a geometry.</summary>
+    internal static ShapePath Stroked(Geometry geometry, Brush stroke, double width, PenLineCap cap = PenLineCap.Flat, double[]? dash = null)
+    {
+        ShapePath path = new()
+        {
+            Data = geometry,
+            Stroke = stroke,
+            StrokeThickness = Guard.Length(width),
+            StrokeStartLineCap = cap,
+            StrokeEndLineCap = cap,
+            StrokeLineJoin = PenLineJoin.Round,
+            IsHitTestVisible = false,
+        };
+        if (dash is not null)
+        {
+            DoubleCollection pattern = new();
+            foreach (double part in dash)
+            {
+                pattern.Add(Guard.Length(part));
+            }
+
+            path.StrokeDashArray = pattern;
+        }
+
+        return path;
+    }
+
+    /// <summary>A filled geometry.</summary>
+    internal static ShapePath Filled(Geometry geometry, Brush fill) =>
+        new() { Data = geometry, Fill = fill, IsHitTestVisible = false };
+
+    /// <summary>A straight line from one point to another.</summary>
+    internal static ShapePath Rule(double x1, double y1, double x2, double y2, Brush stroke, double width = 1, double[]? dash = null) =>
+        Stroked(Lines([new Pt(x1, y1), new Pt(x2, y2)]), stroke, width, PenLineCap.Flat, dash);
+
+    /// <summary>The points that are places: a point that is not a number is left out, so a geometry is always one that can be drawn.</summary>
+    private static List<Pt> Numbers(IReadOnlyList<Pt> points) => [.. points.Where(point => double.IsFinite(point.X) && double.IsFinite(point.Y))];
+
+    /// <summary>A rectangle in the drawing's frame whose size is never below nothing.</summary>
+    internal static Rect Area(double x, double y, double width, double height) =>
+        new(Guard.Finite(x), Guard.Finite(y), Guard.Length(width), Guard.Length(height));
+
+    /// <summary>A geometry of straight lines through points; closed when asked, or closed down to a level to fill under the line.</summary>
+    internal static PathGeometry Lines(IReadOnlyList<Pt> input, bool closed = false, double? fillTo = null)
+    {
+        IReadOnlyList<Pt> points = Numbers(input);
+        fillTo = fillTo is double level0 ? Guard.Finite(level0) : null;
+        PathFigure figure = new() { IsClosed = closed || fillTo.HasValue, IsFilled = closed || fillTo.HasValue };
+        if (fillTo is double level && points.Count > 0)
+        {
+            figure.StartPoint = new Point(points[0].X, level);
+            figure.Segments.Add(new LineSegment { Point = new Point(points[0].X, points[0].Y) });
+            for (int at = 1; at < points.Count; at++)
+            {
+                figure.Segments.Add(new LineSegment { Point = new Point(points[at].X, points[at].Y) });
+            }
+
+            figure.Segments.Add(new LineSegment { Point = new Point(points[^1].X, level) });
+        }
+        else
+        {
+            for (int at = 0; at < points.Count; at++)
+            {
+                Point point = new(points[at].X, points[at].Y);
+                if (at == 0)
+                {
+                    figure.StartPoint = point;
+                }
+                else
+                {
+                    figure.Segments.Add(new LineSegment { Point = point });
+                }
+            }
+        }
+
+        PathGeometry geometry = new();
+        geometry.Figures.Add(figure);
+        return geometry;
+    }
+
+    /// <summary>A smooth geometry through points that never goes past them; closed down to a level to fill under the line when asked.</summary>
+    internal static PathGeometry Smooth(IReadOnlyList<Pt> input, double? fillTo = null)
+    {
+        IReadOnlyList<Pt> points = Numbers(input);
+        fillTo = fillTo is double level0 ? Guard.Finite(level0) : null;
+        PathFigure figure = new() { IsClosed = fillTo.HasValue, IsFilled = fillTo.HasValue };
+        if (points.Count > 0)
+        {
+            Point first = new(points[0].X, points[0].Y);
+            if (fillTo is double level)
+            {
+                figure.StartPoint = new Point(first.X, level);
+                figure.Segments.Add(new LineSegment { Point = first });
+            }
+            else
+            {
+                figure.StartPoint = first;
+            }
+        }
+
+        foreach (Bezier piece in Curves.Monotone(points))
+        {
+            figure.Segments.Add(new BezierSegment
+            {
+                Point1 = new Point(piece.First.X, piece.First.Y),
+                Point2 = new Point(piece.Second.X, piece.Second.Y),
+                Point3 = new Point(piece.To.X, piece.To.Y),
+            });
+        }
+
+        if (fillTo is double bottom && points.Count > 0)
+        {
+            figure.Segments.Add(new LineSegment { Point = new Point(points[^1].X, bottom) });
+        }
+
+        PathGeometry geometry = new();
+        geometry.Figures.Add(figure);
+        return geometry;
+    }
+
+    /// <summary>An arc round a middle, clockwise from an angle (degrees from three o'clock), as far as a sweep (degrees).</summary>
+    internal static PathGeometry Arc(double cx, double cy, double radius, double startDegrees, double sweepDegrees)
+    {
+        radius = Guard.Length(radius);
+        cx = Guard.Finite(cx);
+        cy = Guard.Finite(cy);
+        startDegrees = Guard.Finite(startDegrees);
+        double sweep = Math.Clamp(Guard.Finite(sweepDegrees), 0, 359.99);
+        Point At(double degrees)
+        {
+            double angle = degrees * Math.PI / 180;
+            return new Point(cx + (radius * Math.Cos(angle)), cy + (radius * Math.Sin(angle)));
+        }
+
+        PathFigure figure = new() { IsClosed = false, IsFilled = false, StartPoint = At(startDegrees) };
+        double done = 0;
+        while (done < sweep - 1e-6)
+        {
+            double chunk = Math.Min(90, sweep - done);
+            done += chunk;
+            figure.Segments.Add(new ArcSegment
+            {
+                Point = At(startDegrees + done),
+                Size = new Size(radius, radius),
+                RotationAngle = 0,
+                IsLargeArc = false,
+                SweepDirection = SweepDirection.Clockwise,
+            });
+        }
+
+        PathGeometry geometry = new();
+        geometry.Figures.Add(figure);
+        return geometry;
+    }
+
+    /// <summary>The point at an angle and a distance from a middle.</summary>
+    internal static Pt Polar(double cx, double cy, double radius, double degrees)
+    {
+        double angle = Guard.Finite(degrees) * Math.PI / 180;
+        return new Pt(Guard.Finite(cx) + (Guard.Length(radius) * Math.Cos(angle)), Guard.Finite(cy) + (Guard.Length(radius) * Math.Sin(angle)));
+    }
+
+
+    /// <summary>The colour a fraction of the way from one colour to another.</summary>
+    internal static Windows.UI.Color Blend(Windows.UI.Color one, Windows.UI.Color other, double fraction)
+    {
+        double t = Math.Clamp(fraction, 0, 1);
+        return Windows.UI.Color.FromArgb(
+            (byte)Math.Round(one.A + ((other.A - one.A) * t)),
+            (byte)Math.Round(one.R + ((other.R - one.R) * t)),
+            (byte)Math.Round(one.G + ((other.G - one.G) * t)),
+            (byte)Math.Round(one.B + ((other.B - one.B) * t)));
+    }
+
+    /// <summary>
+    /// An arc from twelve o'clock clockwise, as far as a sweep, whose colour goes from one colour to another along its length (the box has
+    /// no angular gradient, so it is laid in short pieces), with round ends.
+    /// </summary>
+    internal static void BlendedArc(Canvas canvas, double cx, double cy, double radius, double stroke, double startDegrees, double sweepDegrees, Windows.UI.Color begin, Windows.UI.Color end)
+    {
+        if (!(sweepDegrees > 0) || !double.IsFinite(sweepDegrees))
+        {
+            return;
+        }
+
+        stroke = Guard.Length(stroke);
+        if (begin == end)
+        {
+            canvas.Put(Stroked(Arc(cx, cy, radius, startDegrees, sweepDegrees), new SolidColorBrush(begin), stroke, PenLineCap.Round), 0, 0);
+            return;
+        }
+
+        sweepDegrees = Math.Min(sweepDegrees, 359.99);
+        int pieces = Math.Clamp((int)Math.Ceiling(sweepDegrees / 5), 1, 72);
+        double each = sweepDegrees / pieces;
+        for (int at = 0; at < pieces; at++)
+        {
+            Windows.UI.Color colour = Blend(begin, end, (at + 0.5) / pieces);
+            double overlap = at < pieces - 1 ? 0.6 : 0;
+            canvas.Put(Stroked(Arc(cx, cy, radius, startDegrees + (at * each), each + overlap), new SolidColorBrush(colour), stroke, PenLineCap.Flat), 0, 0);
+        }
+
+        Pt first = Polar(cx, cy, radius, startDegrees);
+        Pt last = Polar(cx, cy, radius, startDegrees + sweepDegrees);
+        canvas.Put(Disc(stroke, new SolidColorBrush(begin)), first.X - (stroke / 2), first.Y - (stroke / 2));
+        canvas.Put(Disc(stroke, new SolidColorBrush(end)), last.X - (stroke / 2), last.Y - (stroke / 2));
+    }
+
+    /// <summary>
+    /// Parts of a whole laid end to end in a bar with rounded ends and a hair between them: along the bar (across, or up from the foot).
+    /// Each part's share of the length is given; a part with no share is not drawn.
+    /// </summary>
+    internal static void StackedBar(Canvas canvas, bool across, double x, double y, double width, double height, IReadOnlyList<(double Share, Brush Fill, Brush? Edge)> parts, double hair, double radius)
+    {
+        IReadOnlyList<(int Index, double Start, double Size)> slots = BarRules.Slots(across ? width : height, [.. parts.Select(part => part.Share)], hair);
+        for (int at = 0; at < slots.Count; at++)
+        {
+            (int index, double start, double size) = slots[at];
+            bool first = at == 0;
+            bool last = at == slots.Count - 1;
+            double px = across ? x + start : x;
+            double py = across ? y : (y + height) - start - size;
+            double w = across ? size : width;
+            double h = across ? height : size;
+            Brush fill = parts[index].Fill;
+            Brush? edge = parts[index].Edge;
+            double corner = Math.Min(Guard.Length(radius), Math.Min(w, h) / 2);
+            if (edge is not null)
+            {
+                // A part that is an outline (in a contrast theme) is one shape with its edge all round.
+                canvas.Put(Box(w, h, fill, corner, edge, 2), px, py);
+            }
+            else if (first && last)
+            {
+                canvas.Put(Box(w, h, fill, corner), px, py);
+            }
+            else if (first || last)
+            {
+                canvas.Put(Box(w, h, fill, corner), px, py);
+
+                // Square off the end that faces the next part.
+                double cover = Math.Min(Math.Max((across ? w : h) - corner, 0), Math.Max(across ? w : h, 0));
+                bool atStart = across ? last : first;
+                if (across)
+                {
+                    canvas.Put(Box(cover, h, fill), atStart ? px : px + (w - cover), py);
+                }
+                else
+                {
+                    // Up from the foot: the first part is at the bottom.
+                    canvas.Put(Box(w, cover, fill), px, first ? py : py + (h - cover));
+                }
+            }
+            else
+            {
+                canvas.Put(Box(w, h, fill), px, py);
+            }
+        }
+    }
+
+    /// <summary>A text, in a size and a brush, that stays on one line.</summary>
+    internal static TextBlock Words(string text, double size, Brush brush, bool strong = false)
+    {
+        TextBlock block = new()
+        {
+            Text = text,
+            FontSize = Math.Max(Guard.Finite(size, 12), 1),
+            Foreground = brush,
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            IsHitTestVisible = false,
+            TextReadingOrder = TextReadingOrder.DetectFromContent,
+        };
+
+        // What a drawing says is said once, by the drawing: its own words are not read again one by one.
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(block, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+        if (strong)
+        {
+            block.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+        }
+
+        return block;
+    }
+
+    private static readonly Dictionary<(string Text, double Size, int Weight, double MostWide), (int Version, Size Size)> Measures = [];
+    private static TextBlock? ruler;
+
+    /// <summary>
+    /// How big a text comes out at a size. A text that has been measured at that size is not measured again (a drawing made again for a
+    /// new width would otherwise measure every label of its axes at every step of a resize); what was measured is forgotten when the
+    /// person's text size or settings change.
+    /// </summary>
+    internal static Size Measure(string text, double size, bool strong = false, double mostWide = double.PositiveInfinity)
+    {
+        int version = ThemeState.Version;
+        (string, double, int, double) key = (text, size, strong ? 1 : 0, mostWide);
+        if (Measures.TryGetValue(key, out (int Version, Size Size) known) && known.Version == version)
+        {
+            return known.Size;
+        }
+
+        if (Measures.Count > 4000)
+        {
+            Measures.Clear();
+        }
+
+        ruler ??= new TextBlock { TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis };
+        ruler.Text = text;
+        ruler.FontSize = Math.Max(Guard.Finite(size, 12), 1);
+        ruler.FontWeight = strong ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
+        ruler.MaxWidth = double.IsNaN(mostWide) || mostWide <= 0 ? double.PositiveInfinity : mostWide;
+        ruler.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        Size measured = ruler.DesiredSize;
+        Measures[key] = (version, measured);
+        return measured;
+    }
+
+    /// <summary>How big a text comes out.</summary>
+    internal static Size Measured(TextBlock block) =>
+        Measure(block.Text, block.FontSize, block.FontWeight.Weight >= Microsoft.UI.Text.FontWeights.SemiBold.Weight, block.MaxWidth);
+
+    /// <summary>Puts a text on a canvas against a point.</summary>
+    internal static TextBlock Say(this Canvas canvas, TextBlock block, double x, double y, Across across = Across.Start, Down down = Down.Top)
+    {
+        Size size = Measured(block);
+        double left = across switch
+        {
+            Across.Middle => x - (size.Width / 2),
+            Across.End => x - size.Width,
+            _ => x,
+        };
+        double top = down switch
+        {
+            Down.Middle => y - (size.Height / 2),
+            Down.Bottom => y - size.Height,
+            _ => y,
+        };
+        return canvas.Put(block, left, top);
+    }
+}
