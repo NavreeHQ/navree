@@ -9,6 +9,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import kotlinx.serialization.json.Json
@@ -351,7 +352,10 @@ object SiteWipe {
     private var left: Set<String>? = null
 
     /** Grows with every deletion that becomes owed, so that a go begun for an earlier one says nothing about this one. */
-    private var round = 0L
+    private var debt = 0L
+
+    /** Grows whenever what is owed changes; kept as state, so a screen that reads [changes] is drawn again when it does. */
+    private val changed = mutableIntStateOf(0)
     private var seen: MutableSet<String>? = null
 
     /** The path of the address the go on its way loads. Read on the thread a service worker's requests are asked on. */
@@ -378,6 +382,15 @@ object SiteWipe {
 
     /** Whether a deletion is owed. */
     val owes: Boolean get() = synchronized(lock) { owed }
+
+    /**
+     * A number that is another one whenever what is owed has changed. A web
+     * page reads it where it is drawn and asks [shows] again when it differs:
+     * so a page that is on the screen when a session ends is taken down at
+     * once, with its web view, and one that was held back is shown when the
+     * deletion is done.
+     */
+    val changes: Int get() = changed.intValue
 
     /**
      * Whether the whole of the end of a session is owed: a run of the app was
@@ -421,7 +434,8 @@ object SiteWipe {
             all = true
             running = true
             left = null
-            round++
+            debt++
+            changed.intValue++
             app?.let { context -> runCatching { WipeRules.put(File(context.noBackupFilesDir, OWED), WipeRules.EVERYTHING + "\n") } }
         }
     }
@@ -451,10 +465,11 @@ object SiteWipe {
     private fun over(left: Set<String>?, of: Long?) {
         synchronized(lock) {
             // A go begun before a later end of a session says nothing about what that one owes.
-            if (of != null && of != round) return
+            if (of != null && of != debt) return
             running = false
             // While the whole is owed nothing a go says ends it: the cookies come first ([narrow]).
             if (!owed || all || left == null) return
+            changed.intValue++
             val folder = app?.noBackupFilesDir
             // A go at every origin, and no page shown since the deletion became owed: the list of origins seen starts again, from those that were left.
             if (this.left == null) {
@@ -482,7 +497,8 @@ object SiteWipe {
             all = false
             running = false
             left = null
-            round++
+            debt++
+            changed.intValue++
             seen = LinkedHashSet()
             app?.let { context -> for (name in listOf(OWED, SEEN)) runCatching { File(context.noBackupFilesDir, name).delete() } }
         }
@@ -525,7 +541,7 @@ object SiteWipe {
             val context = app ?: return
             val them = origins ?: return
             running = true
-            Triple(context, them, round)
+            Triple(context, them, debt)
         }
         try {
             // Once pages are shown again, what the web view holds is a later session's as well, and the older call takes everything: it is not made then.

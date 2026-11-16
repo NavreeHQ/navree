@@ -100,8 +100,11 @@ internal fun WebPage(
     // the web view itself, so its answer comes from the web view made for this attempt.
     val workers = remember(url, serial, attempt) { guards.workers() }
     var documents by remember(url, serial, attempt) { mutableStateOf(true) }
-    // Nor while the web view still holds what the pages of a session that ended stored: asked again each time, and asking sets it going.
-    val clean = remember(url, serial, attempt) { guards.clean(url) }
+    // Nor while the web view still holds what the pages of a session that ended stored: asked again each time, and asking sets
+    // it going. And asked again whenever what is owed changes: a page on the screen when a session ends goes at once, its web
+    // view with it, and one that was held back is shown when the deletion is done.
+    val owed = SiteWipe.changes
+    val clean = remember(url, serial, attempt, owed) { guards.clean(url) }
     val missing = WebRules.missingGuards(workers, documents, clean)
     LaunchedEffect(url, serial, attempt, missing) {
         if (missing.isNotEmpty()) ClientLog.say("a web page was not shown: " + missing.joinToString("; "))
