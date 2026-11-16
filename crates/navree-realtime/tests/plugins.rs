@@ -88,10 +88,9 @@ async fn a_plugin_channel_outside_its_namespace_fails_the_boot() {
     }
 
     // Under its namespace, the plugin's authorizer decides its own channels.
-    let server = Server::serve(
-        support::app(support::options()).module(BoardModule("notice_board.{id}")),
-    )
-    .await;
+    let server =
+        Server::serve(support::app(support::options()).module(BoardModule("notice_board.{id}")))
+            .await;
     let channel = "private-notice_board.7";
     let reply = server.auth(Some(Uuid::now_v7()), SOCKET, channel).await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
