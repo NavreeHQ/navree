@@ -5,6 +5,7 @@ import com.navree.client.core.Body
 import com.navree.client.core.Effect
 import com.navree.client.core.Events
 import com.navree.client.core.Part
+import com.navree.client.design.FileRules
 import kotlinx.serialization.json.JsonObject
 import okhttp3.Call
 import okhttp3.Callback
@@ -146,7 +147,9 @@ fun fetchRequest(
                 for (part in sent.parts) {
                     when (part) {
                         is Part.Text -> addFormDataPart(part.name, part.value)
-                        is Part.File -> files(part.token)?.let { addFormDataPart(part.name, part.filename, it) }
+                        // The file's name as the client shows it: never a path, no control or format character. OkHttp
+                        // writes it quoted, with a line break and a quote written as %0D, %0A and %22.
+                        is Part.File -> files(part.token)?.let { addFormDataPart(part.name, FileRules.displayName(part.filename), it) }
                     }
                 }
             }.build()

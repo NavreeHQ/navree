@@ -92,6 +92,8 @@ class FileRulesTest {
         assertEquals("file", FileRules.displayName("  "))
         assertEquals("file", FileRules.displayName("folder/"))
         assertEquals("keeps letters of any script", "ਰਸੀਦ.pdf", FileRules.displayName("ਰਸੀਦ.pdf"))
+        assertEquals("no character that turns the text around", "Bill Mogafdp.exe", FileRules.displayName("Bill Moga\u202Efdp.exe"))
+        assertEquals("nor one that hides in it", "Rasid.pdf", FileRules.displayName("Ra\u200Bsid\u2066.pdf"))
     }
 
     @Test

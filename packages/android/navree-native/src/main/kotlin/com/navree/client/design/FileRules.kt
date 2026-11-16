@@ -209,12 +209,14 @@ object FileRules {
     }
 
     /**
-     * The name a file is sent under: the last part of what the provider gave
-     * (never a path), without control characters, `file` when nothing is left.
+     * The name a file is sent under and shown by: the last part of what the
+     * provider gave (never a path), without control characters or the format
+     * characters that turn the order of text around or hide in it (such as
+     * U+202E), `file` when nothing is left.
      */
     fun displayName(raw: String?): String {
         val last = raw.orEmpty().substringAfterLast('/').substringAfterLast('\\')
-        val clean = last.filter { !it.isISOControl() }.trim()
+        val clean = last.filter { !it.isISOControl() && Character.getType(it) != Character.FORMAT.toInt() }.trim()
         return clean.ifEmpty { "file" }
     }
 
