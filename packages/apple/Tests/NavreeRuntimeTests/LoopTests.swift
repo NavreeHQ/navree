@@ -214,6 +214,9 @@ struct LoopTests {
         h.client.send(.act(.init(screen: 2, action: .navigate(.init(href: "/orders/1")))))
         try h.answer(5, with: "store/order.json")
         let snapshot = try #require(h.client.snapshot())
+        // It is the person's, known by their id: the core says so of one it kept nothing in.
+        #expect(object(snapshot)["person_unknown"] == nil)
+        #expect(object(snapshot)["person"] is String)
 
         let again = try Harness()
         again.client.begin(restoring: snapshot)
