@@ -126,20 +126,28 @@ every `@navree/*` package carries the same version.
   `UiExtension` names a component's script and stylesheet under a namespace. With the facade's
   `ui-extension-files`, `extension_script!` and `extension_sheet!` read and hash the files when the
   crate compiles, and scope the stylesheet, so a plugin's stylesheet applies only inside its
-  components. The macros live in the new crate `navree-ui-ext-macros`, which only an app with that
-  feature compiles. `Element::extension`, `extension_with` and `extension_call` name the files on an
-  element: the page links the stylesheets it names (those in table rows and replies too), and a new
+  components: a sheet names an element of the page in `url()` only by an id under its namespace
+  (`url(#geo--glow)`), takes no `inherit` on the properties that name things across the page, and
+  sets `all` only to `initial`, `unset` or `revert`. The macros live in the new crate
+  `navree-ui-ext-macros`, which only an app with that feature compiles. `Element::extension`,
+  `extension_with` and `extension_call` name the files on an element: the page links the stylesheets it names (those in table rows and replies too), and a new
   runtime module mounts the script, seals what it draws and lets it call only the routes the server
   named (browser contract 1). `GET /_navree/ui/ext/{file}` serves the files of an app that
   contributes one. `navree::plugin` names `UiExtension`, `ExtensionFile`, `FieldControl`, `Control`,
   `ControlCx`, `ControlField`, `EditedValue`, `PageSources`, `Directive` and `PagePolicy` for a
   plugin's modules.
-- A form field of your own: a `FieldControl`, drawn with `#[form(control = ..)]` in a derived form,
-  `Widget::Control` in a described one and `EditCell::control` in a table. Its server check runs on
-  every path a value arrives by (`Submit`, wizard steps, drafts read with `Draft::read_for`,
-  `EditedValue::read` and `check_controls`) and can read the app's configuration through
-  `ControlCx`. A control's ids take the form's prefix (`FormView::id_prefix`) as the other fields'
-  do.
+- A form field of your own: a `FieldControl`, drawn with `#[form(control = ..)]` on a field of one
+  value in a derived form, `Widget::Control` in a described one and `EditCell::control` in a table.
+  Its server check runs where the toolkit reads a form with the app (`Submit`, wizard steps given
+  the app's language, drafts read with `Draft::read_for`, `EditedValue::read` and `check_controls`)
+  and can read the app's configuration through `ControlCx`; `decode`, `Draft::read` and
+  `TestView::submit_as` run it with no app, and `navree::http::Form`, `Json` and `Query` don't run
+  it. A control whose value is a secret says so with `FieldControl::secret`, and a field drawn by a
+  control under a password's name is one too: a refused form never shows it again,
+  `Rejected::values` never gives it back, a wizard never keeps it, and the control is drawn with no
+  value. `EditedValue` refuses what `Submit` refuses before it reads a value: a post from another
+  site, a body that is not a form, and a `GET`. A control's ids take the form's prefix
+  (`FormView::id_prefix`) as the other fields' do.
 - The page policy, `ui.policy`: an app allows image, media, connection and font sources for a
   plugin by its namespace (`ui.policy.allow.geo.img_src`), and WebAssembly with one switch; a plugin
   says what it needs with `PageSources`, and the boot says what was asked and what was allowed.
