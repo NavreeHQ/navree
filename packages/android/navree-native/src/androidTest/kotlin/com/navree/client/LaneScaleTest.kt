@@ -75,6 +75,15 @@ class LaneScaleTest {
         val laneX = compose.onAllNodes(hasText(LaneBoard.TITLE_END, substring = true)).onFirst().fetchSemanticsNode().boundsInRoot.center.x
         val before = cardNumbers()
         val stats = FrameStats(compose.activity.window)
+        // What composing each part of a card took while the lane was swiped: the count and the time of each part's compositions.
+        val costs = java.util.TreeMap<String, LongArray>()
+        CardCost.tap = { part, nanos ->
+            synchronized(costs) {
+                val sum = costs.getOrPut(part) { LongArray(2) }
+                sum[0] += nanos
+                sum[1]++
+            }
+        }
         compose.runOnUiThread { stats.start() }
         val scrolled = System.nanoTime()
         repeat(10) {
@@ -83,6 +92,12 @@ class LaneScaleTest {
         }
         val scrollMs = (System.nanoTime() - scrolled) / 1_000_000
         val frames = compose.runOnUiThread { stats.stop() }
+        CardCost.tap = null
+        val parts = synchronized(costs) {
+            costs.entries.joinToString("\n") { (part, sum) ->
+                "  $part: ${sum[1]} compositions, ${"%.2f".format(sum[0] / 1e6 / sum[1].coerceAtLeast(1))} ms each, ${"%.0f".format(sum[0] / 1e6)} ms in all"
+            }
+        }
         val after = cardNumbers()
         val drawn = cardsDrawn()
         val heap = Runtime.getRuntime().let { (it.totalMemory() - it.freeMemory()) / (1024 * 1024) }
@@ -92,7 +107,8 @@ class LaneScaleTest {
             "cards in the first lane: $cards\nfirst screen drawn: $firstMs ms\nten swipes up the page: $scrollMs ms\n" +
                 "cards of the lane drawn at the first screen: $drawnFirst, after the swipes: $drawn\nheap in use afterwards: $heap MB\n" +
                 "the ten swipes moved the cards drawn from ${before.minOrNull()}..${before.maxOrNull()} to ${after.minOrNull()}..${after.maxOrNull()}\n" +
-                "frames of the ten swipes: $frames\n",
+                "frames of the ten swipes: $frames\n" +
+                "what composing the parts of a card took during the ten swipes (a part's time holds the parts inside it):\n$parts\n",
         )
         assertTrue("the board with $cards cards in a lane came up with cards in it", drawnFirst > 0)
         assertTrue("$drawnFirst cards of the lane are drawn at the first screen of $cards: only the ones near the window are", drawnFirst < MOST_DRAWN)

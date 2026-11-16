@@ -172,6 +172,7 @@ internal fun RowView(
     /** The moves of a row that can be moved, offered to TalkBack. */
     moves: List<CustomAccessibilityAction> = emptyList(),
 ) {
+    val began = System.nanoTime()
     val ui = LocalUi.current
     val window = ui.window
     // A button that only says the row's title is the row's own tap, not a second line under it.
@@ -191,23 +192,25 @@ internal fun RowView(
 
     val item: @Composable () -> Unit = {
         ListItem(
-            headlineContent = { Text(row.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            headlineContent = { CardPart("card.title") { Text(row.title, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
             supportingContent = if (under) {
                 {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.subtitle?.let { Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis) }
-                        for (run in ListRules.detailRuns(shown.detail)) {
-                            if (run.size > 1) {
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CardPart("card.supporting") {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            row.subtitle?.let { Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+                            for (run in ListRules.detailRuns(shown.detail)) {
+                                if (run.size > 1) {
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        for (part in run) NodeView(part, place)
+                                    }
+                                } else {
                                     for (part in run) NodeView(part, place)
                                 }
-                            } else {
-                                for (part in run) NodeView(part, place)
                             }
-                        }
-                        if (below) {
-                            row.trailing?.let { NodeView(it, place) }
-                            badge?.let { StatusView(it) }
+                            if (below) {
+                                row.trailing?.let { NodeView(it, place) }
+                                badge?.let { StatusView(it) }
+                            }
                         }
                     }
                 }
@@ -216,7 +219,7 @@ internal fun RowView(
             },
             leadingContent = when {
                 row.leading != null -> {
-                    { Leading(row.leading!!, place) }
+                    { CardPart("card.leading") { Leading(row.leading!!, place) } }
                 }
                 state != null -> {
                     { StateMark(state) }
@@ -235,8 +238,8 @@ internal fun RowView(
                                 badge?.let { StatusView(it) }
                             }
                         }
-                        if (menu.isNotEmpty()) RowMenu(menu, place, menuOpen) { menuOpen = it }
-                        handle?.invoke()
+                        if (menu.isNotEmpty()) CardPart("card.menu") { RowMenu(menu, place, menuOpen) { menuOpen = it } }
+                        if (handle != null) CardPart("card.handle") { handle() }
                     }
                 }
             } else {
@@ -263,8 +266,9 @@ internal fun RowView(
         )
     }
 
+    cardPartSince("row.setup", began)
     Grouped(group) {
-        if (swipe != null) Swipeable(swipe, place, item) else item()
+        CardPart("row.listitem") { if (swipe != null) Swipeable(swipe, place, item) else item() }
     }
 }
 

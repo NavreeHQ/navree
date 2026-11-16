@@ -409,6 +409,20 @@ internal fun MovingRow(
     modifier: Modifier = Modifier,
     animation: Modifier = Modifier,
 ) {
+    CardPart("card") { MovingRowContent(row, list, lane, listState, place, modifier, animation) }
+}
+
+@Composable
+private fun MovingRowContent(
+    row: Navree.Row,
+    list: Navree.List,
+    lane: LaneState,
+    listState: LazyListState?,
+    place: Place,
+    modifier: Modifier,
+    animation: Modifier,
+) {
+    val began = System.nanoTime()
     val ui = LocalUi.current
     val id = row.id ?: return
     val listId = list.id
@@ -425,6 +439,8 @@ internal fun MovingRow(
     val toWords = targets.map { (_, name) -> stringResource(R.string.navree_move_to, name) }
     val handleName = stringResource(R.string.navree_move_card, row.title)
     val density = LocalDensity.current
+    cardPartSince("card.words", began)
+    val wordsDone = System.nanoTime()
 
     fun move(to: Navree.List, before: String?) {
         val from = listId ?: return
@@ -487,6 +503,8 @@ internal fun MovingRow(
         }
     }
 
+    cardPartSince("card.effects", wordsDone)
+
     val dragging: Modifier = if (listState == null) {
         Modifier
     } else {
@@ -503,53 +521,55 @@ internal fun MovingRow(
         }
     }
 
-    Box(
-        modifier
-            .then(if (held) Modifier else animation)
-            .zIndex(if (held) 1f else 0f)
-            .graphicsLayer { translationY = if (held && listState != null) lane.translation(listState, key) else 0f }
-            .semantics { collectionItemInfo = CollectionItemInfo(index, 1, 0, 1) }
-            .padding(bottom = 8.dp),
-    ) {
-        // The card is the row container: a tonal step above the surface, lifted while it is dragged.
-        Card(
-            Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = if (held) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = if (held) 6.dp else 0.dp),
+    CardPart("card.box") {
+        Box(
+            modifier
+                .then(if (held) Modifier else animation)
+                .zIndex(if (held) 1f else 0f)
+                .graphicsLayer { translationY = if (held && listState != null) lane.translation(listState, key) else 0f }
+                .semantics { collectionItemInfo = CollectionItemInfo(index, 1, 0, 1) }
+                .padding(bottom = 8.dp),
         ) {
-            RowView(
-                // The form that moves a card by its fields is for a page with no handle: here the handle is the one way.
-                ReorderRules.withoutMoveForm(list, row),
-                place,
-                Group.None,
-                handle = {
-                    var open by remember { mutableStateOf(false) }
-                    Box {
-                        Icon(
-                            Glyphs.DragHandle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .then(dragging)
-                                // One stop for a screen reader: the handle, named for its card, with the moves as its actions.
-                                .semantics {
-                                    contentDescription = handleName
-                                    customActions = moves
+            // The card is the row container: a tonal step above the surface, lifted while it is dragged.
+            Card(
+                Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = if (held) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = if (held) 6.dp else 0.dp),
+            ) {
+                RowView(
+                    // The form that moves a card by its fields is for a page with no handle: here the handle is the one way.
+                    ReorderRules.withoutMoveForm(list, row),
+                    place,
+                    Group.None,
+                    handle = {
+                        var open by remember { mutableStateOf(false) }
+                        Box {
+                            Icon(
+                                Glyphs.DragHandle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .then(dragging)
+                                    // One stop for a screen reader: the handle, named for its card, with the moves as its actions.
+                                    .semantics {
+                                        contentDescription = handleName
+                                        customActions = moves
+                                    }
+                                    .clickable(role = Role.Button) { open = true }
+                                    .padding(12.dp),
+                            )
+                            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                                if (up) DropdownMenuItem(text = { Text(upWords) }, onClick = { open = false; step(-1) })
+                                if (down) DropdownMenuItem(text = { Text(downWords) }, onClick = { open = false; step(1) })
+                                targets.forEachIndexed { at, (to, _) ->
+                                    DropdownMenuItem(text = { Text(toWords[at]) }, onClick = { open = false; move(to, null) })
                                 }
-                                .clickable(role = Role.Button) { open = true }
-                                .padding(12.dp),
-                        )
-                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                            if (up) DropdownMenuItem(text = { Text(upWords) }, onClick = { open = false; step(-1) })
-                            if (down) DropdownMenuItem(text = { Text(downWords) }, onClick = { open = false; step(1) })
-                            targets.forEachIndexed { at, (to, _) ->
-                                DropdownMenuItem(text = { Text(toWords[at]) }, onClick = { open = false; move(to, null) })
                             }
                         }
-                    }
-                },
-            )
+                    },
+                )
+            }
         }
     }
 }
