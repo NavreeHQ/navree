@@ -218,6 +218,8 @@ fn register(m: &mut ModuleBuilder, config: Option<WorkspaceConfig>) {
         )
         .factory(
             Factory::<Core>::new(|r: Resolver| async move {
+                // What a plugin scopes to workspaces, before a record is checked with it.
+                crate::current::check_scoped_subjects(&r.app())?;
                 Ok(Arc::new(
                     Core::new(
                         r.app(),
@@ -461,6 +463,12 @@ pub trait ModuleBuilderWorkspaceExt {
     /// on `M`'s subject first confirms that the record belongs to the
     /// current workspace (a 404 otherwise). It also classifies `M` as a
     /// workspace entity, like [`workspace_entity`](Self::workspace_entity).
+    ///
+    /// A module of a plugin that is not one of the framework's own packages
+    /// scopes only the plugin's own models, and no other module scopes
+    /// another model under the subject name of one of them: the boot fails
+    /// otherwise. The app scopes any model from a module of its own; between
+    /// two of the app's modules that scope one subject, the first decides.
     fn workspace_scoped<M: WorkspaceScoped + Subject>(&mut self) -> &mut Self;
 
     /// Classifies model `M` as a workspace entity: its rows belong to one

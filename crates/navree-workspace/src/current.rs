@@ -12,7 +12,7 @@ use navree_contracts::{AuthState, AuthVia, Principal, RequestId};
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
 use navree_http::{AppError, Guard, PathParams, RequestWorkspace, RouteMeta};
-use navree_kernel::{AppContext, BoxError, BoxFuture};
+use navree_kernel::{AppContext, BoxError, BoxFuture, ModuleId, PluginReport};
 use navree_orm::Builder;
 use navree_orm::binding::{RouteBinding, RouteKey};
 use navree_telemetry::TelemetryContext;
@@ -648,6 +648,8 @@ impl Guard for InWorkspace {
 /// registers.
 pub(crate) struct ScopedSubject {
     pub(crate) subject: &'static str,
+    /// The model's type path, which says whose model it is.
+    pub(crate) type_name: &'static str,
     pub(crate) belongs: fn(Uow, Uuid, String) -> BoxFuture<'static, Result<bool, BoxError>>,
 }
 
@@ -658,9 +660,73 @@ impl ScopedSubject {
     {
         ScopedSubject {
             subject: M::SUBJECT,
+            type_name: std::any::type_name::<M>(),
             belongs: |uow, workspace, id| Box::pin(belongs::<M>(uow, workspace, id)),
         }
     }
+}
+
+/// Checks at boot what the app's modules scope to workspaces, and returns the first refusal. A
+/// module that acts for a plugin the kernel does not find first-party (the `plugins` listing
+/// lists it under the plugin) scopes only models of the plugin's crate, and no other module
+/// scopes another model under the name of a subject such a module scopes: where two modules
+/// scope one subject, the first decides whether a record belongs to the workspace. Between
+/// modules that act for no such plugin the first still decides, as before; one model scoped by
+/// two modules decides the same way whichever is first.
+pub(crate) fn check_scoped_subjects(ctx: &AppContext) -> Result<(), String> {
+    let scoped = ctx.contributions::<ScopedSubject>();
+    if scoped.is_empty() {
+        return Ok(());
+    }
+    let plugins = ctx.plugins().plugins;
+    for contributed in &scoped {
+        let Some(plugin) = community_plugin(&plugins, contributed.module.id) else {
+            continue;
+        };
+        let own = contributed
+            .value
+            .type_name
+            .strip_prefix(plugin.info.crate_name)
+            .is_some_and(|rest| rest.starts_with("::"));
+        if !own {
+            let (name, subject) = (plugin.info.name, contributed.value.subject);
+            let module = contributed.module.name;
+            return Err(format!(
+                "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`, a model of another crate; only a module of the app scopes it: remove the plugin or update it to a version that leaves it to the app, and to scope `{subject}` to workspaces, call m.workspace_scoped from a module of the app"
+            ));
+        }
+    }
+    for (index, first) in scoped.iter().enumerate() {
+        for second in &scoped[index + 1..] {
+            if second.value.subject != first.value.subject
+                || second.value.type_name == first.value.type_name
+            {
+                continue;
+            }
+            let (plugin, module, other) = match (
+                community_plugin(&plugins, second.module.id),
+                community_plugin(&plugins, first.module.id),
+            ) {
+                (Some(plugin), _) => (plugin, second.module.name, first.module.name),
+                (None, Some(plugin)) => (plugin, first.module.name, second.module.name),
+                (None, None) => continue,
+            };
+            let (name, namespace) = (plugin.info.name, plugin.info.namespace);
+            let subject = first.value.subject;
+            return Err(format!(
+                "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`, and `{other}` scopes another model under that name; a plugin scopes only a subject no other module scopes: remove the plugin or update it to a version that names its subject under its namespace, such as `{namespace}.{subject}`"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The plugin the kernel does not find first-party that `module` acts for, if any: the plugin
+/// the `plugins` listing lists it under.
+fn community_plugin(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
+    plugins.iter().find(|plugin| {
+        !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
+    })
 }
 
 /// Whether the record of `M` whose route key is `id` belongs to
