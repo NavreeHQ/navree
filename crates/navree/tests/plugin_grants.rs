@@ -400,3 +400,20 @@ async fn a_plugin_may_not_hook_or_scope_the_workspace_member_row() {
     assert!(Member::has_global_scope("noop"));
     app.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn the_frameworks_audit_module_keeps_the_apps_audit_sink_beside_a_plugin() {
+    use navree::contracts::AuditSink;
+    use navree_plugin_roster::RosterModule;
+
+    // navree-audit's module acts for no plugin: beside a community plugin it registers the
+    // app's audit sink as before.
+    let app = workspace_app()
+        .module(navree::audit::AuditModule::from_config())
+        .module(RosterModule(|_| {}))
+        .build()
+        .await;
+    assert_eq!(app.ctx().plugins().plugins.len(), 1);
+    assert!(app.ctx().try_get::<dyn AuditSink>().await.is_some());
+    app.shutdown().await.unwrap();
+}

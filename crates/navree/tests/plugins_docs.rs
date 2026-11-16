@@ -730,7 +730,7 @@ mod navree_plugin_guard {
     use http::request::Parts;
     use navree::BoxFuture;
     use navree::auth::{AuthError, SignInAttempt, SignInPolicy, Strategy};
-    use navree::contracts::{Clock, FixedClock, PermissionCheck, Principal};
+    use navree::contracts::{AuditEntry, AuditSink, Clock, FixedClock, PermissionCheck, Principal};
     use navree::db::{ChangeEvent, ChangeObserver, DbError, Uow};
     use navree::kernel::KernelError;
     use navree::plugin::PluginInfo;
@@ -855,6 +855,21 @@ mod navree_plugin_guard {
         Factory::new(|_| async { Ok(Arc::new(Watches) as Arc<dyn ChangeObserver>) })
     }
 
+    /// A sink that would send each audit record to the guard room of the Amritsar office; here
+    /// it keeps none.
+    pub struct ToGuardRoom;
+
+    impl AuditSink for ToGuardRoom {
+        fn record(&self, _entry: AuditEntry) -> BoxFuture<'_, Result<(), BoxError>> {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    /// The plugin's audit sink, for a module of the app to register.
+    pub fn audit_sink() -> Factory<dyn AuditSink> {
+        Factory::new(|_| async { Ok(Arc::new(ToGuardRoom) as Arc<dyn AuditSink>) })
+    }
+
     /// A module of the plugin's crate that names no plugin, and registers what `.0` adds.
     pub struct Helper(pub fn(&mut ModuleBuilder));
 
@@ -905,7 +920,7 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
 
     use navree::access::{AbilityFactory, WorkspaceGate};
     use navree::auth::{AuthOptions, Strategy};
-    use navree::contracts::Clock;
+    use navree::contracts::{AuditSink, Clock};
     use navree::db::ChangeObserver;
     use navree::helm::HelmOptions;
     use navree::http::{Authenticator, RouteAuthorizer};
@@ -1019,6 +1034,16 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
             }),
             type_name::<dyn ChangeObserver>(),
             "which sees, and can change, every write the app commits",
+        ),
+        // A sink of the app's audit records, exported: beside navree-audit's, neither would be
+        // the one the app's modules find, and every record would be lost.
+        (
+            Provides(|m| {
+                m.factory(navree_plugin_guard::audit_sink())
+                    .exports::<dyn AuditSink>();
+            }),
+            type_name::<dyn AuditSink>(),
+            "which receives the app's audit records",
         ),
     ];
     for (provides, provider, role) in cases {
@@ -1234,6 +1259,32 @@ async fn the_app_may_register_a_plugins_change_observer() {
         .await;
     let observers = app.ctx().get_all::<dyn ChangeObserver>().await.unwrap();
     assert_eq!(observers.len(), 1);
+
+    app.shutdown().await.unwrap();
+}
+
+/// A module of the app: it registers the guard plugin's audit sink as the app's.
+struct GuardAudit;
+
+impl Module for GuardAudit {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.factory(navree_plugin_guard::audit_sink());
+    }
+}
+
+#[tokio::test]
+async fn the_app_may_register_a_plugins_audit_sink() {
+    use navree::contracts::AuditSink;
+
+    let app = TestApp::builder()
+        .module(navree_plugin_guard::Provides(|_| {}))
+        .module(GuardAudit)
+        .build()
+        .await;
+    assert!(
+        app.ctx().try_get::<dyn AuditSink>().await.is_some(),
+        "the app's module registered the plugin's sink"
+    );
 
     app.shutdown().await.unwrap();
 }

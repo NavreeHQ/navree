@@ -1317,6 +1317,7 @@ fn the_app_only_providers_match_their_types() {
         type_name::<dyn navree::ui::NativeShellPart>(),
         type_name::<dyn navree::contracts::Clock>(),
         type_name::<dyn navree::db::ChangeObserver>(),
+        type_name::<dyn navree::contracts::AuditSink>(),
     ]
     .into_iter()
     .collect();

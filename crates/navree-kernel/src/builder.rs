@@ -155,10 +155,10 @@ impl ModuleBuilder {
     /// permission check, the route authorizer, the authenticator, a sign-in
     /// strategy, the workspace gate, where native clients sign in, the options
     /// of access, workspaces, authentication or the admin panel, the app's
-    /// shell, its clock, or an observer of every commit, nor hook a model of
-    /// another crate, nor register a command with the name of one of the
-    /// framework's own (`plugins`, `check`, ..): the boot fails, and the app
-    /// registers the plugin's from a module of its own.
+    /// shell, its clock, an observer of every commit, or the sink of its audit
+    /// records, nor hook a model of another crate, nor register a command with
+    /// the name of one of the framework's own (`plugins`, `check`, ..): the
+    /// boot fails, and the app registers the plugin's from a module of its own.
     ///
     /// ```no_run
     /// use navree_kernel::{Module, ModuleBuilder, Navree};
