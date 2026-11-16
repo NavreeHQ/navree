@@ -1,5 +1,5 @@
 {
-  "about": "On Windows the sign-in in the browser has the browser's cookies, never the app's: with no hand-over routes in the shell the browser is not used for signing in, and an address on the app's scheme that comes back from it is not opened as a page with the app's cookies.",
+  "about": "On Windows the sign-in in the browser has the browser's cookies, never the app's: with no hand-over routes in the shell the browser is not used for signing in, and an address handed back as the end of a browser session is not opened as a page.",
   "config": {"app_id":"CharkhaSupply_8wekyb3d8bbwe","client":{"form":"desktop","platform":"windows","text_percent":100,"vocab":0},"sign_in":{"callback":"charkha","paths":["/auth/*"]}},
   "steps": [
     {
