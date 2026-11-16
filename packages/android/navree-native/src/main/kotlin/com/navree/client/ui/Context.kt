@@ -196,7 +196,8 @@ internal val LocalInCard = compositionLocalOf { false }
  * The order a keyboard's Tab goes through the parts of a window (see
  * [FocusRules]): each part is a focus group that registers itself here, and
  * where focus leaves one forwards or backwards it goes to the next part of the
- * ring, entering it at its first control (forwards) or its last (backwards).
+ * ring, entering it at its first control (a group is entered, not searched
+ * backwards: the last control of a part is not where Shift+Tab lands).
  */
 internal class FocusOrder(val sequence: List<Int>) {
     val requesters = List(3) { FocusRequester() }
@@ -242,7 +243,8 @@ internal fun Modifier.orderedGroup(part: Int): Modifier {
                 }
                 if (step != 0) {
                     FocusRules.neighbour(order.sequence, order.present, part, step)?.let { target ->
-                        if (order.requesters[target].requestFocus(requestedFocusDirection)) cancelFocusChange()
+                        // A group is entered, which lands on its first control: asking it for a Tab direction is for a 2-D search only and throws.
+                        if (order.requesters[target].requestFocus()) cancelFocusChange()
                     }
                 }
             }
@@ -259,7 +261,7 @@ internal fun Modifier.orderedRoot(order: FocusOrder?): Modifier = if (order == n
                 FocusDirection.Previous -> FocusRules.last(order.sequence, order.present)
                 else -> null
             }
-            target?.let { order.requesters[it].requestFocus(requestedFocusDirection) }
+            target?.let { order.requesters[it].requestFocus() }
         }
     }
     .focusGroup()
