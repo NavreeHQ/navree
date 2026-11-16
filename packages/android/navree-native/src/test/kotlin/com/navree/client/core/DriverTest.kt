@@ -138,6 +138,22 @@ class DriverTest {
     }
 
     @Test
+    fun an_event_answered_with_an_error_is_refused_whatever_the_error_is_written_as_and_whatever_else_the_answer_holds() {
+        for (error in listOf(""""the event does not read"""", """{"what":"the event does not read"}""", "null", "7")) {
+            val engine = Scripted(ArrayDeque(listOf("""{"error":$error,"changed":[{"part":"nav"}],"effects":[{"t":"exit"}]}""")), emptyMap())
+            val driver = Driver(engine)
+            val problems = ArrayList<String>()
+            val carried = ArrayList<Effect>()
+            driver.problems = { problems += it }
+            driver.effects = EffectRunner { carried += it }
+            driver.send(Events.start)
+            assertEquals("no effect of a refused answer is carried out: $error", emptyList<Effect>(), carried)
+            assertEquals("and no part of the view is asked for: $error", emptyList<String>(), engine.asked)
+            assertEquals(error, 1, problems.size)
+        }
+    }
+
+    @Test
     fun a_view_answered_with_an_error_is_refused_whatever_else_the_answer_holds() {
         // The answer reads as a place to be in, and says it is an error: it is the error.
         val refused = """{"error":"the query does not read: missing field","stage":"ready","destinations":[{"label":"Orders","href":"/orders","items":[],"stack":[1]}],"front":1}"""

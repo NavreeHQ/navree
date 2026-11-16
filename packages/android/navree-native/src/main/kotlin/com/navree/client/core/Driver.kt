@@ -114,8 +114,10 @@ class Driver(private val engine: Engine) {
             halt()
             return
         }
-        (update["error"] as? JsonPrimitive)?.contentOrNull?.let {
-            problems("the core refused ${event["t"]}: $it")
+        // An answer that carries an `error` is the core's refusal whatever else it holds and whatever the error is
+        // written as, as for a view: nothing of the answer is carried out.
+        update["error"]?.let { error ->
+            problems("the core refused ${event["t"]}: ${(error as? JsonPrimitive)?.contentOrNull ?: error}")
             return
         }
         for (change in (update["changed"] as? JsonArray).orEmpty()) {

@@ -57,7 +57,9 @@ class NavreeSession(
     restoring: Boolean = false,
 ) : AndroidViewModel(application) {
     private val engine = CoreEngine()
-    val driver = Driver(engine)
+
+    // What the driver could not do is said in the log of a build made to be debugged, and nowhere in any other.
+    val driver = Driver(engine).apply { if (BuildConfig.DEBUG) problems = { android.util.Log.w("Navree", it) } }
 
     /** The settings the core was last told of: dark, text size, locale. A change is told once. */
     var environment: Triple<Boolean, Int, String>? = null
