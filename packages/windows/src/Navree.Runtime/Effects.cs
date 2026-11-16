@@ -150,6 +150,14 @@ public sealed record RandomEffect(long Request, int Bytes) : Effect;
 /// <summary>The person signed out: every cookie and all web storage of the app go, and the stored snapshot.</summary>
 public sealed record ForgetSessionEffect : Effect;
 
+/// <summary>
+/// The session is ending and the core has not let go of the person yet. Just before this, in the same update, the core asked the server for
+/// one last thing (to forget what it holds for this device), and it sends <see cref="ForgetSessionEffect"/> when that is answered. The client
+/// begins the sign-out at this effect, without waiting for the answer: an app that is ended while the core waits has then begun, and finishes
+/// at its next start.
+/// </summary>
+public sealed record SessionEndingEffect : Effect;
+
 /// <summary>An effect this build does not know.</summary>
 /// <param name="Tag">Its name.</param>
 public sealed record UnknownEffect(string Tag) : Effect;
@@ -204,6 +212,7 @@ public static class EffectReading
             "report" => new ReportEffect(Text(json, "what", string.Empty), Text(json, "detail", string.Empty)),
             "random" => new RandomEffect(Long(json, "request", 0), (int)Long(json, "bytes", 48)),
             "forget_session" => new ForgetSessionEffect(),
+            "session_ending" => new SessionEndingEffect(),
             _ => new UnknownEffect(tag),
         };
     }

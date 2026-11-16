@@ -197,6 +197,61 @@ public sealed class SessionGateTests
     }
 
     [TestMethod]
+    public void The_request_asked_for_just_before_the_core_says_the_session_is_ending_is_its_last_and_no_other_is()
+    {
+        SessionGate gate = new();
+
+        // A page is loading, from an earlier update.
+        FetchEffect page = Get(1, "https://shop.example/orders");
+        long loading = gate.Asked([page])[0];
+
+        // One update: the core asks the server to forget this device, says the session is ending, and goes on asking as the person it still holds.
+        FetchEffect removal = new(2, "delete", "https://shop.example/_navree/native/devices/this", [], null, 5000, false);
+        FetchEffect later = Get(3, "https://shop.example/orders?page=2");
+        Effect[] update = [new CancelTimerEffect(4), removal, new SessionEndingEffect(), later];
+        long[] marks = gate.Asked(update);
+        Expect.That(gate.IsLast(removal.Request), "the request asked for just before the word is not the last");
+        Expect.That(!gate.IsLast(page.Request), "a request of an earlier update is let through the sign-out");
+        Expect.That(!gate.IsLast(later.Request), "a request asked for after the word is let through the sign-out");
+
+        // The core has not let go: everything in the update is marked as the leaving person's, the word included.
+        foreach (long mark in marks)
+        {
+            Assert.AreEqual(loading, mark, "the core's side moved at the word that the session is ending: it moves when the core lets go");
+        }
+
+        // The window carries the update out in order: the request before the word is started, the session's number moves at the word, and
+        // what follows the word is refused.
+        Expect.That(gate.MayRun(update[1], marks[1]), "the last request is refused");
+        Expect.That(gate.MayRun(update[2], marks[2]), "the word that the session is ending is not carried out");
+        gate.SessionIsEnding();
+        Expect.That(!gate.MayRun(update[3], marks[3]), "a request of the leaving person asked for after the word is started");
+        Expect.That(!gate.Live(loading), "the answer to the page that was loading is still told to the core");
+
+        // The last request is still known as such, until it ends; then it is nobody's.
+        Expect.That(!gate.Live(marks[1]) && gate.IsLast(removal.Request), "the answer to the last request has no way to the core");
+        Expect.That(gate.LastEnded(removal.Request), "the last request ended and was not known as the last");
+        Expect.That(!gate.LastEnded(removal.Request), "a request is the last one twice");
+        Expect.That(!gate.LastEnded(page.Request), "a request that was never the last is told to the core as if it were");
+
+        // The core lets go: what follows is for whoever comes next.
+        Effect[] letting = [new ForgetSessionEffect(), Get(5, "https://shop.example/_navree/native/shell")];
+        long[] after = gate.Asked(letting);
+        Expect.That(gate.MayRun(letting[1], after[1]), "the start after the sign-out is refused");
+
+        // A last request that never ended is forgotten when the core lets go: its number means nothing to whoever comes next.
+        FetchEffect second = new(6, "delete", "https://shop.example/_navree/native/devices/this", [], null, 5000, false);
+        _ = gate.Asked([second, new SessionEndingEffect()]);
+        Expect.That(gate.IsLast(second.Request), "the last request of the next sign-out is not known");
+        _ = gate.Asked([new ForgetSessionEffect()]);
+        Expect.That(!gate.IsLast(second.Request), "a last request outlives the core letting go");
+
+        // A word with no request before it lets nothing through.
+        _ = gate.Asked([new SessionEndingEffect(), Get(7, "https://shop.example/orders")]);
+        Expect.That(!gate.IsLast(7), "a request after the word is let through");
+    }
+
+    [TestMethod]
     public void When_the_core_ends_the_session_itself_what_it_asks_after_saying_so_is_for_whoever_comes_next()
     {
         SessionGate gate = new();

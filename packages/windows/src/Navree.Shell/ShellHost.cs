@@ -29,6 +29,10 @@ public sealed partial class ShellHost : IDisposable
     private readonly List<string> startNotes = [];
     private bool started;
     private Task? signingOut;
+
+    // From the core's word that the session is ending until its word that the session is to be forgotten: completed at the second, which
+    // tells the sign-out that began at the first that the core has let go.
+    private TaskCompletionSource? coreLetsGo;
     private readonly CancellationTokenSource stopped = new();
     private readonly EnvironmentWatcher environment;
     private readonly ForegroundTracker foreground = new();
@@ -434,9 +438,31 @@ public sealed partial class ShellHost : IDisposable
             case RandomEffect random:
                 client.Send(Events.Random(random.Request, Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(Math.Clamp(random.Bytes, 1, 1024)))));
                 break;
+            case SessionEndingEffect:
+                // The core has asked the server for one last thing and lets go when that is answered. The sign-out begins here, without
+                // waiting for the answer: its first part (the session's number, the web view's folder, the mark, the cookies out of memory,
+                // the work under way stopped but for that one request) is done before the next effect of this update runs.
+                if (coreLetsGo is null)
+                {
+                    coreLetsGo = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _ = EndSessionAsync(coreEnded: true, coreLetsGo.Task);
+                }
+
+                break;
             case ForgetSessionEffect:
-                // Its first part (the cookies out of memory, the work under way stopped) is done before the next effect of this update runs.
-                _ = EndSessionAsync(coreEnded: true);
+                if (coreLetsGo is { } begun)
+                {
+                    // The sign-out began when the core said the session was ending: it is done or under way, and none begins here. It is
+                    // told that the core has let go.
+                    coreLetsGo = null;
+                    _ = begun.TrySetResult();
+                }
+                else
+                {
+                    // Its first part (the cookies out of memory, the work under way stopped) is done before the next effect of this update runs.
+                    _ = EndSessionAsync(coreEnded: true);
+                }
+
                 break;
             default:
                 Problem?.Invoke("an effect this build does not know: " + (effect is UnknownEffect unknown ? unknown.Tag : effect.GetType().Name));
@@ -451,7 +477,13 @@ public sealed partial class ShellHost : IDisposable
         FetchResult? result = null;
         try
         {
-            result = await Task.Run(() => Delivery.FetchAsync(fetcher, fetch, work.Token)).ConfigureAwait(false);
+            // The last request of a person who is signing out is made here, on the window's thread, so that it holds the cookies of this
+            // moment: the next effect of the same update begins the sign-out, whose first act takes the cookies out of memory. Every other
+            // request is made off the window's thread.
+            Task<FetchResult> sending = asked.IsLast(fetch.Request)
+                ? Delivery.FetchAsync(fetcher, fetch, work.Token)
+                : Task.Run(() => Delivery.FetchAsync(fetcher, fetch, work.Token));
+            result = await sending.ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -466,8 +498,11 @@ public sealed partial class ShellHost : IDisposable
         running.Remove(fetch.Request);
         work.Dispose();
 
-        // An answer to a request of a person who signed out meanwhile is told to nobody, and nothing of it is kept.
-        if (result is null || stopped.IsCancellationRequested || !asked.Live(mark))
+        // An answer to a request of a person who signed out meanwhile is told to nobody, and nothing of it is kept. The one answer the core
+        // is told all the same is that of the leaving person's last request: the core waits for it before it lets go. Nothing of that
+        // answer is kept either (its cookies are refused by the store, and the keeper writes nothing while the sign-out is under way).
+        bool last = asked.LastEnded(fetch.Request);
+        if (result is null || stopped.IsCancellationRequested || !(asked.Live(mark) || last))
         {
             return;
         }
@@ -567,8 +602,8 @@ public sealed partial class ShellHost : IDisposable
 
     // The end of a session, on the UI thread: everything that writes for the person is stopped or refused at once, then what could rebuild the
     // session goes first, then the rest, each step with a limit (SessionKeeper). The core is told when the client ended it; when the core ended it,
-    // it has let go already.
-    private async Task EndSessionAsync(bool coreEnded)
+    // it has let go already, or (when it only said the session is ending) lets go later, and the sign-out is told when it does.
+    private async Task EndSessionAsync(bool coreEnded, Task? coreLetsGoLater = null)
     {
         // Already there when the core's effect or the window asks (then nothing waits); otherwise it goes there first.
         if (!await OnDispatcherAsync())
@@ -595,18 +630,24 @@ public sealed partial class ShellHost : IDisposable
             // The web view's folder moves on first, before any step and before any wait: a web page asked for from this line on is given the
             // folder of whoever comes next, or none, and never the folder of the person who is leaving, however long emptying that one takes.
             string webEnded = webProfiles.MoveOn();
-            report = await session.EndAsync(
-                StopWork,
-                coreEnded ? null : TellCore,
-                [new WipeStep("what the web view keeps", () => EndWebAsync(webEnded), OnUi)],
-                [.. new[]
+            WipeStep[] web = [new WipeStep("what the web view keeps", () => EndWebAsync(webEnded), OnUi)];
+            WipeStep[] ofTheWindows =
+            [
+                .. new[]
                 {
                     // A photograph still being read when the person signed out is waited for: it is refused, and its copy is gone, when this is done.
                     new WipeStep("the files chosen for forms", Files.ClearAsync),
 
                     // What the system shows or holds for the person (notifications waiting and shown, the count, the jump list), before the windows' own.
                     new WipeStep("the notifications, the count and the jump list", () => Place?.EndSessionAsync() ?? Task.CompletedTask, OnUi),
-                }.Concat(moreWipeSteps)]).ConfigureAwait(false);
+                }.Concat(moreWipeSteps),
+            ];
+
+            // When the core said the session is ending and lets go later, everything runs at once. The person's screens are still shown until
+            // the core lets go, and can gain a file or a picture meanwhile, so what is the windows' own is taken away once more then.
+            report = coreLetsGoLater is null
+                ? await session.EndAsync(StopWork, coreEnded ? null : TellCore, web, ofTheWindows).ConfigureAwait(false)
+                : await session.EndBeforeCoreAsync(StopWork, coreLetsGoLater, web, ofTheWindows, ofTheWindows).ConfigureAwait(false);
         }
         catch (Exception problem)
         {
@@ -673,8 +714,14 @@ public sealed partial class ShellHost : IDisposable
     {
         foreach (Dictionary<long, CancellationTokenSource> work in new[] { running, streams, timers })
         {
-            foreach (CancellationTokenSource source in work.Values)
+            foreach ((long id, CancellationTokenSource source) in work.ToArray())
             {
+                // The last request of the person who is leaving is let through: the core waits for its answer before it lets go.
+                if (ReferenceEquals(work, running) && asked.IsLast(id))
+                {
+                    continue;
+                }
+
                 try
                 {
                     source.Cancel();
@@ -683,9 +730,9 @@ public sealed partial class ShellHost : IDisposable
                 {
                     // It had ended, or something that waited on it threw as it was told. It is cancelled either way, and the rest still are.
                 }
-            }
 
-            work.Clear();
+                _ = work.Remove(id);
+            }
         }
 
         Place?.HoldSnapshots(true);

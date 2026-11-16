@@ -364,6 +364,122 @@ public sealed class SessionKeeper : IDisposable
         return report;
     }
 
+    /// <summary>
+    /// Ends the session when the core has said it is ending and has not let go of the person yet: the core waits for one last answer of the
+    /// server first, and an app that is ended while it waits must already have begun. What runs before the first await is what
+    /// <see cref="EndAsync"/> runs there: the mark is left on disk, the cookies go from memory, and <paramref name="stopWork"/> stops what is
+    /// running. Then every step runs at once, in the order of <see cref="EndAsync"/> and without waiting for the core: the cookie file,
+    /// <paramref name="beforeKept"/>, everything else kept, <paramref name="afterKept"/>. Nothing is written for anybody until the core has
+    /// let go (<paramref name="coreLetsGo"/>): until then what it or a timer asks to keep is still the leaving person's. When it has let go,
+    /// <paramref name="onceLetGo"/> run, for what the person's screens, which were still shown meanwhile, gained since. The mark goes when
+    /// every step finished and the core let go in time.
+    /// </summary>
+    /// <param name="stopWork">As for <see cref="EndAsync"/>. It leaves the leaving person's last request running (<see cref="SessionGate.IsLast"/>).</param>
+    /// <param name="coreLetsGo">Completes when the core has let go of the person.</param>
+    /// <param name="beforeKept">Steps that run after the cookie file goes and before the rest of what is kept.</param>
+    /// <param name="afterKept">Steps that run after.</param>
+    /// <param name="onceLetGo">Steps that run when the core has let go.</param>
+    /// <param name="limit">How long one step may take, and how long the core may take to let go once the steps have run; <see cref="Wipe.StepLimit"/> when left out.</param>
+    /// <returns>What came of each step.</returns>
+    public async Task<WipeReport> EndBeforeCoreAsync(
+        Action stopWork,
+        Task coreLetsGo,
+        IEnumerable<WipeStep> beforeKept,
+        IEnumerable<WipeStep> afterKept,
+        IEnumerable<WipeStep> onceLetGo,
+        TimeSpan? limit = null)
+    {
+        ArgumentNullException.ThrowIfNull(stopWork);
+        ArgumentNullException.ThrowIfNull(coreLetsGo);
+        ArgumentNullException.ThrowIfNull(beforeKept);
+        ArgumentNullException.ThrowIfNull(afterKept);
+        ArgumentNullException.ThrowIfNull(onceLetGo);
+        TimeSpan each = limit ?? Wipe.StepLimit;
+        List<KeyValuePair<string, string>> failed = [];
+        lock (gate)
+        {
+            ending = true;
+            wiping++;
+            lastCookies = string.Empty;
+        }
+
+        // The start, as in EndAsync: a part that throws is written down and the sign-out goes on.
+        Begin("the mark that a sign-out is under way", kept.MarkWipe, failed);
+        Begin("the cookies in memory", cookies.Clear, failed);
+        Begin("the work under way", stopWork, failed);
+
+        WipeReport first;
+        try
+        {
+            first = await Wipe.RunAsync(
+                [
+                    new WipeStep("the cookies", () => disk.RunAsync(() => kept.Write(CookiesKey, null))),
+                    .. beforeKept,
+                ],
+                each).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (gate)
+            {
+                wiping--;
+            }
+        }
+
+        // Everything else goes now too, and not when the core lets go: nothing is written while it has not, so nothing of the person comes back.
+        WipeReport rest = await Wipe.RunAsync(
+            [
+                new WipeStep("what is kept on the device", () => disk.RunAsync(kept.Clear)),
+                .. afterKept,
+            ],
+            each).ConfigureAwait(false);
+
+        bool letGo = false;
+        try
+        {
+            if (await Task.WhenAny(coreLetsGo, Task.Delay(each)).ConfigureAwait(false) == coreLetsGo)
+            {
+                await coreLetsGo.ConfigureAwait(false);
+                letGo = true;
+            }
+            else
+            {
+                failed.Add(new KeyValuePair<string, string>("the core letting go", "it took longer than " + each.TotalSeconds + " seconds"));
+            }
+        }
+        catch (Exception problem)
+        {
+            failed.Add(new KeyValuePair<string, string>("the core letting go", problem.GetType().Name));
+        }
+
+        // A core that did not let go keeps it so: what it asks to keep is still the leaving person's, and nothing is written.
+        WipeReport since = new([], []);
+        if (letGo)
+        {
+            lock (gate)
+            {
+                ending = false;
+            }
+
+            since = await Wipe.RunAsync(onceLetGo, each).ConfigureAwait(false);
+        }
+
+        WipeReport report = new([.. first.Done, .. rest.Done, .. since.Done], [.. failed, .. first.Failed, .. rest.Failed, .. since.Failed]);
+        if (report.Complete)
+        {
+            try
+            {
+                await disk.RunAsync(kept.UnmarkWipe).ConfigureAwait(false);
+            }
+            catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+            {
+                // The mark stays: the next start takes away again what is already gone.
+            }
+        }
+
+        return report;
+    }
+
     /// <summary>Waits until everything given to the queue so far has run.</summary>
     /// <returns>When it has.</returns>
     public Task DrainAsync() => disk.RunAsync(static () => { });

@@ -85,6 +85,11 @@ public sealed class HttpFetcher : IFetcher, IDisposable
     };
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The request is made, with the cookies of that moment, before this returns its task: nothing is awaited before it. A caller that needs
+    /// a request to hold the cookies as they are now (the last request of a person who is signing out) calls this where it stands, and
+    /// awaits the answer later.
+    /// </remarks>
     public async Task<FetchResult> FetchAsync(FetchEffect effect, CancellationToken cancel)
     {
         ArgumentNullException.ThrowIfNull(effect);

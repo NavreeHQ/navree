@@ -13,10 +13,18 @@ namespace Navree.Platform;
 /// (<see cref="CoreIsToldTheSessionEnded"/>, called on the core's thread just before it is told), or when it ends the session itself and says so
 /// with <see cref="ForgetSessionEffect"/> (seen by <see cref="Asked"/>: what follows that effect in the same update is for whoever comes next).
 /// The window's side moves once for each end of a session, as it begins (<see cref="SessionIsEnding"/>).
+/// <para>
+/// The core may say that the session is ending some time before it lets go (<see cref="SessionEndingEffect"/>): it waits for the answer to one
+/// last request first. The window's side moves at that word, and the core's side when the core lets go, so everything the core asks in
+/// between is still the leaving person's and is refused, with one exception: the request the core asked for just before it said so, in the
+/// same update (<see cref="IsLast"/>). That request is not cancelled when the sign-out begins and its answer is told to the core, which
+/// would otherwise wait for it for ever; nothing of its answer is kept.
+/// </para>
 /// </remarks>
 public sealed class SessionGate
 {
     private readonly object gate = new();
+    private readonly HashSet<long> last = [];
     private long asking;
     private long live;
 
@@ -34,8 +42,20 @@ public sealed class SessionGate
                 marks[at] = asking;
                 if (effects[at] is ForgetSessionEffect)
                 {
-                    // The core has ended the session itself: what it asks after this is for whoever comes next.
+                    // The core has ended the session itself: what it asks after this is for whoever comes next. Whatever it waited for is over.
                     asking++;
+                    last.Clear();
+                }
+                else if (effects[at] is SessionEndingEffect)
+                {
+                    // What the core asked the server for just before it said so, in this update, is the leaving person's last request.
+                    for (int before = 0; before < at; before++)
+                    {
+                        if (effects[before] is FetchEffect request)
+                        {
+                            _ = last.Add(request.Request);
+                        }
+                    }
                 }
             }
         }
@@ -49,6 +69,32 @@ public sealed class SessionGate
         lock (gate)
         {
             asking++;
+        }
+    }
+
+    /// <summary>
+    /// Whether a request is the last one of a person who is signing out: the core asked for it in the same update as it said the session is
+    /// ending, before it said so, and waits for its answer before it lets go. It is the one thing let through a sign-out: it is not
+    /// cancelled when the sign-out begins, and its answer is told to the core though the session it was asked in is over.
+    /// </summary>
+    /// <param name="request">The request's number.</param>
+    /// <returns>Whether it is one.</returns>
+    public bool IsLast(long request)
+    {
+        lock (gate)
+        {
+            return last.Contains(request);
+        }
+    }
+
+    /// <summary>A request has ended (answered, failed or cancelled): it is no longer anybody's last request.</summary>
+    /// <param name="request">The request's number.</param>
+    /// <returns>Whether it was the last request of a person who is signing out, so that its answer is told to the core.</returns>
+    public bool LastEnded(long request)
+    {
+        lock (gate)
+        {
+            return last.Remove(request);
         }
     }
 

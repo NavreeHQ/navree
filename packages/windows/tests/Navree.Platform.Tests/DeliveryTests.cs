@@ -52,6 +52,34 @@ public sealed class DeliveryTests
     }
 
     [TestMethod]
+    public void An_effect_this_build_does_not_know_is_passed_over_and_the_rest_of_the_update_is_carried_out()
+    {
+        // A later core says something this build has no word for, between two things it knows, while a person is signing out.
+        List<string> problems = [];
+        List<Effect> run = [];
+        Effect[] effects = [new ReportEffect("a", "b"), new UnknownEffect("session_paused"), new CancelEffect(7), new RandomEffect(1, 4)];
+        SessionGate gate = new();
+        long[] marks = gate.Asked(effects);
+        gate.SessionIsEnding();
+        int at = 0;
+        Delivery.Deliver(
+            Said(effects),
+            _ => { },
+            effect =>
+            {
+                // As the host carries an effect out: the gate is asked, and what this build does not know is said and left.
+                if (gate.MayRun(effect, marks[at++]))
+                {
+                    run.Add(effect);
+                }
+            },
+            problems.Add);
+        CollectionAssert.AreEqual(effects, run, "an effect this build does not know, or one beside it, was not handed on");
+        Assert.AreEqual(0, problems.Count, string.Join(" | ", problems));
+        Expect.That(!SessionGate.StartsOrKeeps(effects[1]), "an effect this build does not know is taken for one that starts or keeps something");
+    }
+
+    [TestMethod]
     public async Task A_fetcher_that_throws_answers_the_core_with_a_failure()
     {
         FetchResult answer = await Delivery.FetchAsync(new Throwing(new InvalidOperationException()), Request(), CancellationToken.None);
