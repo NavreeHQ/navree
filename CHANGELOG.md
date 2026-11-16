@@ -438,7 +438,12 @@ look at when you update:
   Every `meta`, `link` and `base` written into a body is taken out. `ui.call` and `ui.get` reach
   only route prefixes the server can write, so `/` alone or a prefix under `/_navree/` opens
   nothing. The answer of a call whose component has left the page is not applied and shows no
-  toast, and a read is ended. `ui.call` takes `null` for its options. The browser contract now says
+  toast, and a read is ended. A `ui.call` begun after its component's element has left the page
+  sends nothing and takes no turn of the page's, so it does not overtake a navigation on its way;
+  it resolves `{ ok: false, status: 0, data: null }` and shows no toast. A plugin's island keeps
+  its seal when a morph puts another body in place of its body: the extensions module seals the
+  body such an island has each time it scans the page, and an app's own island is still never
+  sealed. `ui.call` takes `null` for its options. The browser contract now says
   what the seal does not stop, the refresh a written `meta` schedules or a request to a host the
   policy allows among it, and asks authors to escape data before a library writes it as HTML.
 - Navree Native: what an app keeps for a person is no longer emptied by an answer that never
