@@ -94,7 +94,16 @@ internal sealed class ScreenPresenter : Grid
 
         if (screen.Content is WebContent web)
         {
-            if (!webs.TryGetValue(screen.Id, out WebPage? page))
+            if (webs.TryGetValue(screen.Id, out WebPage? page) && page.OfAnEndedSession && !page.Shows(web))
+            {
+                // A web view started for a session that has ended is never shown a page again (the page it was emptied of stays empty): when
+                // the screen has another page to show it gets a new web view, which keeps its data in the folder of the session now.
+                webs.Remove(screen.Id);
+                page.Release();
+                page = null;
+            }
+
+            if (page is null)
             {
                 page = new WebPage(host, screen.Id, host.RecordedPages);
                 webs[screen.Id] = page;

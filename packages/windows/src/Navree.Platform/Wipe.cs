@@ -18,6 +18,21 @@ public sealed record WipeReport(IReadOnlyList<string> Done, IReadOnlyList<KeyVal
     public bool Complete => Failed.Count == 0;
 }
 
+/// <summary>What the person is told when a sign-out could not take everything away.</summary>
+public static class SignOutWords
+{
+    /// <summary>The heading.</summary>
+    public const string UnfinishedTitle = "Signing out did not finish";
+
+    /// <summary>What to do about it: the app, started again, finishes the sign-out before it reads anything it kept.</summary>
+    public const string UnfinishedHelp = "Some of what the app kept on this device could not be removed. Restart the app to finish signing out.";
+
+    /// <summary>Whether the person is to be told: a step of the wipe failed or ran out of time.</summary>
+    /// <param name="report">What came of the wipe.</param>
+    /// <returns>Whether the sign-out did not finish.</returns>
+    public static bool Unfinished(WipeReport? report) => report is { Complete: false };
+}
+
 /// <summary>
 /// The end of a session, when the person signs out: everything of theirs goes, in an order that never leaves the
 /// next person a door open (what could rebuild a session goes first), and each step has a limit, so one that hangs

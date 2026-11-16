@@ -1,6 +1,7 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Navree.Platform;
 using Navree.Presence;
 using Windows.System;
 
@@ -15,6 +16,7 @@ public sealed partial class ShellWindow
     private bool settingsOpen;
     private bool rightToLeft;
     private InfoBar? stoppedBar;
+    private InfoBar? unfinishedBar;
     private OverlappedPresenter? windowed;
 
     /// <summary>Whether the window is laid out from the right.</summary>
@@ -53,6 +55,33 @@ public sealed partial class ShellWindow
         {
             OfferRestart();
         }
+
+        host.SessionEnded += TellUnfinishedSignOut;
+        Closed += (_, _) => host.SessionEnded -= TellUnfinishedSignOut;
+    }
+
+    // A sign-out that could not take everything away is said to the person, with the way to finish it: the app, started again, finishes it
+    // before it reads anything it kept.
+    private void TellUnfinishedSignOut(WipeReport report)
+    {
+        if (!SignOutWords.Unfinished(report) || unfinishedBar is not null)
+        {
+            return;
+        }
+
+        Button again = new() { Content = "Restart" };
+        again.Click += (_, _) => host.Restart();
+        unfinishedBar = new InfoBar
+        {
+            IsOpen = true,
+            IsClosable = false,
+            Severity = InfoBarSeverity.Warning,
+            Title = SignOutWords.UnfinishedTitle,
+            Message = SignOutWords.UnfinishedHelp,
+            ActionButton = again,
+        };
+        messages.Children.Add(unfinishedBar);
+        Announce(SignOutWords.UnfinishedTitle + ". " + SignOutWords.UnfinishedHelp);
     }
 
     // The least size, in device pixels at the scale the window has now.

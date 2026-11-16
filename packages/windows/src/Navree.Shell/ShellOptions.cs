@@ -33,7 +33,10 @@ public sealed record ShellOptions
     /// <summary>Where what the app keeps between launches goes; the app's folder under the local application data when left out.</summary>
     public string? KeptFolder { get; init; }
 
-    /// <summary>Where the web views keep what a web page leaves (cookies, storage, cache); the app's folder under the local application data when left out. Signing out empties it.</summary>
+    /// <summary>
+    /// Where the web views keep what a web page leaves (cookies, storage, cache); the app's folder under the local application data when left
+    /// out. Each session keeps it in a folder of its own inside this one, which is never used for another session; signing out takes it away.
+    /// </summary>
     public string? WebFolder { get; init; }
 
     /// <summary>What the app says about its place in Windows: its own scheme, its instance key, what its jump list holds.</summary>

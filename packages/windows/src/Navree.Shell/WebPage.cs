@@ -46,6 +46,7 @@ internal sealed class WebPage : Grid
     private long loadedSerial = -1;
     private WebContent? wanted;
     private Task? starting;
+    private string? startedIn;
     private bool released;
     private bool closed;
 
@@ -63,9 +64,13 @@ internal sealed class WebPage : Grid
     /// when the person signs out from a screen that is not a web page, or in a launch that never showed one, the folder the last
     /// launch left is deleted.
     /// </summary>
-    /// <param name="folder">The folder the web views keep their data in.</param>
+    /// <param name="folder">The folder the web views of the session keep their data in.</param>
     /// <param name="trace">Told, in words, each step of the wipe and how long it took; when the wipe is slow this says which call it was.</param>
-    internal static async Task ClearAllAsync(string folder, Action<string>? trace = null)
+    /// <returns>
+    /// Whether what was kept is gone: the profile was cleared through a web view, or the folder was deleted. False when neither could be done:
+    /// every web view is closed by then, and the caller sees to it that the folder is never used again.
+    /// </returns>
+    internal static async Task<bool> ClearAllAsync(string folder, Action<string>? trace = null)
     {
         System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
         void Note(string what) => trace?.Invoke(clock.ElapsedMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + " ms: " + what);
@@ -75,7 +80,7 @@ internal sealed class WebPage : Grid
         wiping++;
         try
         {
-            await WipeAsync(folder, Note);
+            return await WipeAsync(folder, Note);
         }
         finally
         {
@@ -92,7 +97,7 @@ internal sealed class WebPage : Grid
         }
     }
 
-    private static async Task WipeAsync(string folder, Action<string> note)
+    private static async Task<bool> WipeAsync(string folder, Action<string> note)
     {
         WebPage[] kept = [.. Live, .. Deferred];
         note(kept.Length + " web page(s) are kept for the wipe: " + string.Join(", ", kept.Select(page => "screen " + page.screen + (page.released ? " released" : string.Empty) + (page.view.CoreWebView2 is null ? " not started" : string.Empty))));
@@ -138,7 +143,7 @@ internal sealed class WebPage : Grid
 
                 await clearing;
                 note("screen " + page.screen + ": the profile was cleared");
-                return;
+                return true;
             }
             catch (Exception problem)
             {
@@ -175,11 +180,19 @@ internal sealed class WebPage : Grid
         Environments.Remove(folder);
         bool gone = await WebData.DeleteAsync(folder, TimeSpan.FromSeconds(2));
         note("the folder " + (gone ? "was deleted" : "could not be deleted"));
-        if (!gone)
-        {
-            throw new IOException("the web view's folder could not be deleted");
-        }
+        return gone;
     }
+
+    /// <summary>
+    /// Whether the page's web view was started for a session that has ended: it keeps its data in a folder that is not the one of the session
+    /// now, and is never shown a page again.
+    /// </summary>
+    internal bool OfAnEndedSession => startedIn is not null && !string.Equals(startedIn, host.WebFolder, StringComparison.Ordinal);
+
+    /// <summary>Whether the page was last asked to show this very content.</summary>
+    /// <param name="web">The content.</param>
+    /// <returns>Whether it is what the page holds.</returns>
+    internal bool Shows(WebContent web) => loaded == web.Url && loadedSerial == web.Serial;
 
     /// <summary>Closes the page's web view when its screen has left for good, so the page is no longer kept for the wipe and the process behind it goes.</summary>
     internal void Release()
@@ -235,7 +248,8 @@ internal sealed class WebPage : Grid
                 await Task.Delay(50);
             }
 
-            if (wanted != web || !host.Origins.Ours(web.Url))
+            // A web view whose session ended while it waited keeps the profile of the person who left: it is never sent anywhere again.
+            if (wanted != web || !host.Origins.Ours(web.Url) || OfAnEndedSession)
             {
                 return;
             }
@@ -249,6 +263,15 @@ internal sealed class WebPage : Grid
             Children.Clear();
             Children.Add(Look.Label("This page cannot be shown: the web view on this device is too old to be kept to the app's own addresses. Updating the Microsoft Edge WebView2 Runtime lets it be shown.", muted: true));
             host.ReportProblem("a web page was not shown: the web view runtime has no request filter for workers");
+        }
+        catch (WebViewNotEmptiedException)
+        {
+            // What the web view kept for a person who signed out is still on the device: no web view is started in this run, so no page can
+            // be shown with it, and the person is told the way on.
+            CloseNow();
+            Children.Clear();
+            Children.Add(Look.Label("This page cannot be shown until the app is started again: what its web pages kept for the person who signed out could not be removed from this device. Close the app and start it again.", muted: true));
+            host.ReportProblem("a web page was not shown: what the web view kept at the last sign-out could not be taken away");
         }
         catch (Exception problem)
         {
@@ -281,9 +304,15 @@ internal sealed class WebPage : Grid
     // The runtime has no way to ask the app about the requests of a page's workers, so the page is not shown.
     private sealed class WebViewTooOldException(Exception inner) : Exception("the web view runtime has no request filter for workers", inner);
 
+    // What the web view kept for a person who signed out could be neither cleared nor deleted, so no web view is started in this run.
+    private sealed class WebViewNotEmptiedException() : Exception("what the web view kept at the last sign-out could not be taken away");
+
     private async Task StartAsync()
     {
-        string folder = host.Options.WebFolder ?? WebData.DefaultFolder(host.Options.AppName);
+        // The folder of the session now, which no earlier session's profile was ever in; none when a sign-out of this run could not take
+        // away what the web view kept.
+        string folder = host.WebFolder ?? throw new WebViewNotEmptiedException();
+        startedIn = folder;
         if (!Environments.TryGetValue(folder, out Task<CoreWebView2Environment>? made))
         {
             made = CoreWebView2Environment.CreateWithOptionsAsync(null, folder, new CoreWebView2EnvironmentOptions()).AsTask();

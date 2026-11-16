@@ -24,6 +24,7 @@ public sealed partial class ShellHost : IDisposable
     private readonly Dictionary<long, CancellationTokenSource> timers = [];
     private readonly Dictionary<long, CancellationTokenSource> streams = [];
     private readonly SessionKeeper session;
+    private readonly WebProfiles webProfiles;
     private readonly CancellationTokenSource stopped = new();
     private readonly EnvironmentWatcher environment;
     private readonly ForegroundTracker foreground = new();
@@ -53,14 +54,19 @@ public sealed partial class ShellHost : IDisposable
         fetcher = options.AnswerFirst is null ? answering : new FirstAnswer(options.AnswerFirst, answering);
 
         // A sign-out the last run did not finish is finished before anything kept is read: no cookie, no page and no web data of the
-        // person who left is taken in. No web view runs yet, so the web view's folder can be deleted.
+        // person who left is taken in. No web view runs yet, so the web view's folders can be deleted; one that cannot be is never used
+        // again, because the session of this run keeps its web data in a folder of its own (WebProfiles).
         session = new SessionKeeper(kept, cookies);
-        string webFolder = options.WebFolder ?? WebData.DefaultFolder(options.AppName);
+        webProfiles = new WebProfiles(options.WebFolder ?? WebData.DefaultFolder(options.AppName), say: what => Problem?.Invoke(what));
         FinishedSignOutAtStart = session.Open(() =>
         {
             Files.Clear();
-            return WebData.DeleteAsync(webFolder, TimeSpan.FromSeconds(3)).GetAwaiter().GetResult();
+            return webProfiles.Open(lastSessionEnded: true);
         });
+        if (!FinishedSignOutAtStart)
+        {
+            _ = webProfiles.Open(lastSessionEnded: false);
+        }
 
         client = new CoreClient(ClientEnvironment.Config(options), OnUpdate, OnProblem, () => dispatcher.TryEnqueue(NoteStop));
 
@@ -124,6 +130,12 @@ public sealed partial class ShellHost : IDisposable
 
     /// <summary>Whether a sign-out's steps are running: the web view asks nothing of the network meanwhile.</summary>
     internal bool Wiping => session.Wiping;
+
+    /// <summary>
+    /// The folder the web views of the session now keep their data in; null when no web page may be shown in this run, because what the web
+    /// view kept for a person who signed out could not be taken away.
+    /// </summary>
+    internal string? WebFolder => webProfiles.Folder;
 
     /// <summary>
     /// A window says whether it is shown (not minimised, not hidden). The core is told the app went to the background when the last
@@ -477,7 +489,7 @@ public sealed partial class ShellHost : IDisposable
             report = await session.EndAsync(
                 StopWork,
                 coreEnded ? null : () => client.SendAsync(Events.SignedOut),
-                [new WipeStep("what the web view keeps", () => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName), what => ReportProblem("web wipe " + what)), OnUi)],
+                [new WipeStep("what the web view keeps", EndWebAsync, OnUi)],
                 [.. new[]
                 {
                     // A photograph still being read when the person signed out is waited for: it is refused, and its copy is gone, when this is done.
@@ -504,6 +516,18 @@ public sealed partial class ShellHost : IDisposable
         }
 
         SessionEnded?.Invoke(report);
+    }
+
+    // What the web view keeps for the person who is leaving is taken away (its profile cleared through a web view, or its folder deleted), and
+    // whatever came of that, the folder is never used again: whoever comes next has a new one. When it could be neither cleared nor deleted the
+    // step fails (so the mark of an unfinished sign-out stays) and no web page is shown for the rest of this run.
+    private async Task EndWebAsync()
+    {
+        bool taken = webProfiles.Folder is string folder && await WebPage.ClearAllAsync(folder, what => ReportProblem("web wipe " + what));
+        if (!webProfiles.End(taken))
+        {
+            throw new IOException("what the web view keeps could not be taken away");
+        }
     }
 
     // On the UI thread, before the first step of a sign-out: every request, stream and timer under way for the person is cancelled and forgotten
