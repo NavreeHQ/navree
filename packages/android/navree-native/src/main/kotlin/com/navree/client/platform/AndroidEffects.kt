@@ -97,9 +97,8 @@ class AndroidEffects(
     val cookies = WebViewCookies()
 
     init {
-        // What an earlier run of the app still owes of the end of a session is done now; no web page is shown before it is.
+        // Read here what an earlier run of the app still owes of the end of a session; it is done below, once everything it needs is made.
         SiteWipe.arm(app, origins)
-        if (SiteWipe.owes) main.post { SiteWipe.finish() }
     }
 
     /** Everything that touches what is kept on the device runs here, in order, one piece at a time. */
@@ -123,6 +122,25 @@ class AndroidEffects(
     /** What the core keeps for a launch the system ended: sealed, out of backups, gone at sign-out. */
     val snapshots = SealedCache(app, "navree-snapshot")
     private val random = SecureRandom()
+
+    init {
+        if (SiteWipe.owesAll) {
+            // A run of the app was told that the session ended and did not get as far as the cookies. What the app reads at
+            // its start goes here and now; then all of the end of a session is done again, in the store's turn, before
+            // anything of this run is kept.
+            try {
+                cache.clear()
+                snapshots.clear()
+                picked.clear()
+            } catch (_: Throwable) {
+                // The same three go again in the store's turn.
+            }
+            forget()
+        } else if (SiteWipe.owes) {
+            // Only what pages stored at the origins is left of it: no web page is shown before that is gone.
+            main.post { SiteWipe.finish() }
+        }
+    }
 
     /** The activity in front, while there is one. */
     var activity: ComponentActivity? = null
@@ -217,7 +235,10 @@ class AndroidEffects(
      * gone ([SiteWipe]): if the five seconds pass first, or the app ends, no
      * web page is shown until it has, and the next start finishes it; an
      * origin that does not say so is left and its pages stay held back, while
-     * the pages of the others are shown again. The
+     * the pages of the others are shown again. Until the cookies are gone and
+     * on the disk the mark owes the whole of this, and a start of the app that
+     * finds it so does all of it again, the push token's deletion with it,
+     * before anything of that run is kept (the `init` above). The
      * push service's token for this install is deleted and a new one asked for.
      */
     private fun forget() {
@@ -262,27 +283,40 @@ class AndroidEffects(
                     try {
                         cookies.clear {
                             val last = { left: Set<String>? ->
-                                // Written to disk before the wipe is done, off the main thread: nothing after it,
-                                // the end of the session's thread included, comes first.
-                                thread(name = "navree-cookie-flush", isDaemon = true) {
+                                thread(name = "navree-web-wipe", isDaemon = true) {
                                     try {
                                         SiteWipe.over(left)
-                                        cookies.flush()
                                     } finally {
                                         done()
                                     }
                                 }
                                 Unit
                             }
-                            // After the cookies and the storage: where the web view could not delete every kind itself, a document
-                            // of the client's own on each origin unregisters its service workers and deletes its caches.
-                            if (everyKind) {
-                                last(emptySet())
-                            } else {
-                                try {
-                                    SiteWipe.documents(app, origins) { left -> last(left) }
+                            // The cookies are written to disk before the wipe is done, off the main thread: nothing after it,
+                            // the end of the session's thread included, comes first. Once they are, the mark owes only what
+                            // pages stored at the origins: a run of the app that ends before that does all of this again.
+                            thread(name = "navree-cookie-flush", isDaemon = true) {
+                                val flushed = try {
+                                    cookies.flush()
+                                    SiteWipe.narrow()
+                                    true
                                 } catch (_: Throwable) {
-                                    last(null)
+                                    false
+                                }
+                                main.post {
+                                    // After the cookies and the storage: where the web view could not delete every kind itself, a document
+                                    // of the client's own on each origin unregisters its service workers and deletes its caches.
+                                    if (!flushed) {
+                                        last(null)
+                                    } else if (everyKind) {
+                                        last(emptySet())
+                                    } else {
+                                        try {
+                                            SiteWipe.documents(app, origins) { left -> last(left) }
+                                        } catch (_: Throwable) {
+                                            last(null)
+                                        }
+                                    }
                                 }
                             }
                         }

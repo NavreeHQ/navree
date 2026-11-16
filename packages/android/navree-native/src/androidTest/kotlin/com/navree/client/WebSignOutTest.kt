@@ -24,6 +24,7 @@ import com.navree.client.platform.AndroidEffects
 import com.navree.client.platform.OriginWebClient
 import com.navree.client.platform.Origins
 import com.navree.client.platform.SiteWipe
+import com.navree.client.platform.WipeRules
 import com.navree.client.platform.guardDocuments
 import com.navree.client.platform.guardWorkers
 import kotlinx.serialization.json.Json
@@ -42,6 +43,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -262,7 +264,13 @@ class WebSignOutTest {
      * web view has said that what its pages stored is gone: until then a
      * deletion is owed, and the app shows no web page.
      */
-    private fun signOut() {
+    private fun signOut() = client { it.run(Effect.ForgetSession) }
+
+    /**
+     * A client of the app made now, as at a start of the app, and [then] with
+     * it; waits until whatever it owes of the end of a session is done.
+     */
+    private fun client(then: (AndroidEffects) -> Unit) {
         val driver = Driver(object : Engine {
             override fun send(event: ByteArray): ByteArray = "{}".encodeToByteArray()
 
@@ -271,7 +279,7 @@ class WebSignOutTest {
         lateinit var effects: AndroidEffects
         compose.runOnUiThread {
             effects = AndroidEffects(compose.activity, driver, "$base/".toHttpUrl(), null, null, Origins(base, loopbackHttp = true), loopbackHttp = true)
-            effects.run(Effect.ForgetSession)
+            then(effects)
         }
         // Whatever the store does after the end of the session runs only once the wipe is done, or its time limit has passed.
         val wiped = AtomicBoolean(false)
@@ -351,5 +359,20 @@ class WebSignOutTest {
         assertNothingLeft(looked("web-fetching-worker-after-sign-out.txt", "the session ended; the worker fetched every page of its origin from the network"))
         val known = setOf("/", "/look", "/sw.js", "/says", "/sign-in", "/favicon.ico")
         assertEquals("the server was asked for nothing but its own pages: $asked", emptyList<String>(), asked.filter { it !in known })
+    }
+
+    /**
+     * A run of the app that was told the session ended, wrote that down, and
+     * ended before it got as far as the cookies: the next start of the app
+     * does the whole of the end of a session, so a page shown after it finds
+     * no cookie either, nor anything else the first page stored.
+     */
+    @Test
+    fun theEndOfASessionThatARunOfTheAppDidNotFinishIsDoneWhollyByTheNextStart() {
+        start()
+        // What such a run leaves on the device: the mark, and everything the session's pages stored.
+        File(compose.activity.noBackupFilesDir, "navree-web-wipe").writeText(WipeRules.EVERYTHING + "\n")
+        client {}
+        assertNothingLeft(looked("web-storage-after-an-unfinished-sign-out.txt", "a run of the app ended before the end of the session was done; the app started again"))
     }
 }

@@ -50,6 +50,17 @@ object WipeRules {
     /** How often one origin is shown the client's document in one go before the go leaves it and moves on. */
     const val TRIES = 2
 
+    /**
+     * The first line of the mark while the whole of what the end of a session
+     * deletes is owed: the sealed pages, the snapshot, the chosen files, the
+     * notifications, the web view's cache and every cookie, and what pages
+     * stored. A mark without it owes only what pages stored at the origins.
+     */
+    const val EVERYTHING = "everything"
+
+    /** Whether a mark's text says the whole of the end of a session is owed. */
+    fun everything(mark: String): Boolean = mark.lineSequence().firstOrNull()?.trim() == EVERYTHING
+
     /** The one document the web view is answered with: nothing in it. */
     const val DOCUMENT = "<!doctype html><html><head><meta charset=\"utf-8\"><title></title></head><body></body></html>"
 
@@ -299,12 +310,15 @@ internal class WipeGo(
 }
 
 /**
- * What the pages of a session that ended left in the web view, as something
- * owed: from the moment the session ends until the web view has said it is
- * gone, a deletion is owed ([owe], [over]), a web page is shown only where
- * nothing of it can be left ([shows]), and what a run of the app did not
- * finish the next one does ([finish]). The mark is a file no backup takes, so
- * it outlives the process.
+ * What the end of a session deletes on this device, as something owed: from
+ * the moment the session ends until the web view has said that what its pages
+ * stored is gone, a deletion is owed ([owe], [over]), a web page is shown only
+ * where nothing of it can be left ([shows]), and what a run of the app did not
+ * finish the next one does. The mark is a file no backup takes, so it
+ * outlives the process, and it says how much is owed: the whole of the end of
+ * a session ([owesAll]), until the cookies and everything else that is not a
+ * page's own storage are gone and on the disk ([narrow]); after that only
+ * what pages stored at the origins ([finish]).
  *
  * Where the system's web view deletes every kind of site data itself
  * (`WebViewFeature.DELETE_BROWSING_DATA`) that call is what is waited for.
@@ -330,6 +344,9 @@ object SiteWipe {
     private var owed = false
     private var running = false
 
+    /** While a deletion is owed: whether it is the whole of the end of a session, the cookies and the rest with what pages stored. */
+    private var all = false
+
     /** While a deletion is owed: the origins a go left, or null while no go has ended and every origin is still to clear. */
     private var left: Set<String>? = null
 
@@ -351,13 +368,24 @@ object SiteWipe {
             val mark = File(application.noBackupFilesDir, OWED)
             if (!mark.exists()) return
             owed = true
+            // A mark that cannot be read owes everything.
+            val text = runCatching { mark.readText() }.getOrDefault(WipeRules.EVERYTHING)
+            all = WipeRules.everything(text)
             // The origins an earlier go left, where the mark names them; a mark that names none owes every origin.
-            left = runCatching { WipeRules.listed(mark.readText()) }.getOrDefault(emptyList()).toSet().ifEmpty { null }
+            left = WipeRules.listed(text).toSet().ifEmpty { null }
         }
     }
 
     /** Whether a deletion is owed. */
     val owes: Boolean get() = synchronized(lock) { owed }
+
+    /**
+     * Whether the whole of the end of a session is owed: a run of the app was
+     * told that the session ended and did not get as far as the cookies. The
+     * client then does all of it again, as at the end of a session, before
+     * anything of this run is read, kept or shown ([AndroidEffects]).
+     */
+    val owesAll: Boolean get() = synchronized(lock) { owed && all }
 
     /**
      * A document of the app is, or is about to be, at this address or on this
@@ -380,13 +408,31 @@ object SiteWipe {
     private fun load(folder: File): MutableSet<String> =
         runCatching { WipeRules.listed(File(folder, SEEN).readText()).toCollection(LinkedHashSet()) }.getOrElse { LinkedHashSet() }
 
-    /** A session ended: what its pages stored is owed a deletion from now, at every origin, and one is on its way. It blocks on a small file: not on the main thread. */
+    /**
+     * A session ended: the whole of what that deletes is owed from now, what
+     * its pages stored at every origin with it, and the deletion is on its
+     * way. It blocks on a small file: not on the main thread.
+     */
     fun owe() {
         synchronized(lock) {
             owed = true
+            all = true
             running = true
             left = null
             round++
+            app?.let { context -> runCatching { WipeRules.put(File(context.noBackupFilesDir, OWED), WipeRules.EVERYTHING + "\n") } }
+        }
+    }
+
+    /**
+     * The cookies, and everything else of the end of a session that is not
+     * what pages stored, are gone and on the disk: from now the mark owes only
+     * what pages stored at the origins. Not on the main thread.
+     */
+    fun narrow() {
+        synchronized(lock) {
+            if (!owed || !all) return
+            all = false
             app?.let { context -> runCatching { WipeRules.put(File(context.noBackupFilesDir, OWED), "") } }
         }
     }
@@ -405,7 +451,8 @@ object SiteWipe {
             // A go begun before a later end of a session says nothing about what that one owes.
             if (of != null && of != round) return
             running = false
-            if (!owed || left == null) return
+            // While the whole is owed nothing a go says ends it: the cookies come first ([narrow]).
+            if (!owed || all || left == null) return
             val folder = app?.noBackupFilesDir
             // A go at every origin, and no page shown since the deletion became owed: the list of origins seen starts again, from those that were left.
             if (this.left == null) {
@@ -430,6 +477,7 @@ object SiteWipe {
     internal fun forget() {
         synchronized(lock) {
             owed = false
+            all = false
             running = false
             left = null
             round++
@@ -462,14 +510,16 @@ object SiteWipe {
     fun held(address: String): Boolean = synchronized(lock) { owed && WipeRules.held(left, origins?.originOf(address)) }
 
     /**
-     * Does what is still owed: what the older call covers, while no page has
-     * been shown since the deletion became owed, then the documents, at every
-     * origin or at those an earlier go left. Never the cookies, which may be a
-     * new session's by now. Call on the main thread.
+     * Does what is still owed of what pages stored: what the older call
+     * covers, while no page has been shown since the deletion became owed,
+     * then the documents, at every origin or at those an earlier go left.
+     * Never the cookies, which may be a new session's by now: while the whole
+     * of the end of a session is owed ([owesAll]) this does nothing, and the
+     * next start of the app does all of it. Call on the main thread.
      */
     fun finish() {
         val (context, them, began) = synchronized(lock) {
-            if (!owed || running) return
+            if (!owed || running || all) return
             val context = app ?: return
             val them = origins ?: return
             running = true

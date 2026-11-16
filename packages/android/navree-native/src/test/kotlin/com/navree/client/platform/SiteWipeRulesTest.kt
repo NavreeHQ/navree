@@ -59,6 +59,16 @@ class SiteWipeRulesTest {
     }
 
     @Test
+    fun the_mark_says_whether_the_whole_of_the_end_of_a_session_is_owed_or_only_what_pages_stored() {
+        assertTrue(WipeRules.everything(WipeRules.EVERYTHING + "\n"))
+        assertTrue(WipeRules.everything(WipeRules.EVERYTHING))
+        assertEquals("the whole names no origin: every one is owed", emptyList<String>(), WipeRules.listed(WipeRules.EVERYTHING + "\n"))
+        assertFalse("a mark with nothing in it owes what pages stored, at every origin", WipeRules.everything(""))
+        assertFalse("and one that names the origins a go left owes those", WipeRules.everything(WipeRules.lines(setOf("https://pay.example"))))
+        assertFalse(WipeRules.everything("https://everything.example\n"))
+    }
+
+    @Test
     fun a_go_that_cannot_go_on_leaves_every_origin_not_yet_cleared() {
         val turns = WipeRules.Turns(listOf("https://shop.example", "https://pay.example", "https://patiala.shop.example"))
         turns.cleared()
