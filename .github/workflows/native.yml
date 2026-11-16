@@ -7,6 +7,7 @@ on:
       - "crates/navree-native/**"
       - "crates/navree-native-core/**"
       - "packages/android/**"
+      - "packages/windows/**"
       - "apps/store-demo/**"
       - "apps/inbox-demo/**"
       - "apps/board-demo/**"
@@ -17,6 +18,7 @@ on:
       - "crates/navree-native/**"
       - "crates/navree-native-core/**"
       - "packages/android/**"
+      - "packages/windows/**"
       - "apps/store-demo/**"
       - "apps/inbox-demo/**"
       - "apps/board-demo/**"
@@ -27,12 +29,57 @@ permissions:
   contents: read
 
 jobs:
+  # What the push changed, so that a job runs only when what it is for changed. For a push to a branch other than main, the files
+  # between the commit the branch stood at before the push and the commit it stands at now are looked at, with plain git; for a pull
+  # request, for main, for a branch that is new, and whenever that commit cannot be fetched, everything counts as changed.
+  changes:
+    name: What the push changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      core: ${{ steps.diff.outputs.core }}
+      android: ${{ steps.diff.outputs.android }}
+      apple: ${{ steps.diff.outputs.apple }}
+      windows: ${{ steps.diff.outputs.windows }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Which jobs are concerned
+        id: diff
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          everything=true
+          files=""
+          if [ "$EVENT" = push ] && [ "$REF" != refs/heads/main ] && [ -n "$BEFORE" ] && ! printf '%s' "$BEFORE" | grep -qE '^0+$'; then
+            if git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null && files="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"; then
+              everything=false
+              echo "changed since $BEFORE:"
+              printf '%s\n' "$files"
+            fi
+          fi
+          if [ "$everything" = true ]; then echo "everything counts as changed"; fi
+          flag() { if [ "$everything" = true ] || printf '%s\n' "$files" | grep -qE "$1"; then echo true; else echo false; fi; }
+          crates='^crates/navree-native(-core)?/'
+          demos='^apps/(store|inbox|board)-demo/'
+          flow='^\.github/workflows/native\.yml$'
+          echo "core=$(flag "$crates|$flow")" >> "$GITHUB_OUTPUT"
+          echo "android=$(flag "$crates|^packages/android/|$demos|$flow")" >> "$GITHUB_OUTPUT"
+          echo "apple=$(flag "$crates|^packages/apple/|$flow")" >> "$GITHUB_OUTPUT"
+          echo "windows=$(flag "$crates|^packages/windows/|^xtask/|$demos|$flow")" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
   # The runtime core: the protocol's tests and its own, a C program built
   # against its header, and the libraries the phones' clients link. Nothing
   # here needs a Mac: a static library is an archive, which is written without
   # Apple's linker.
   core:
     name: Runtime core
+    needs: changes
+    # The Android and Apple clients take the core's libraries from this job, so it runs when any of the three is concerned.
+    if: needs.changes.outputs.core == 'true' || needs.changes.outputs.android == 'true' || needs.changes.outputs.apple == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     concurrency:
@@ -141,7 +188,8 @@ jobs:
   # from the job above, its JVM tests run, and its APKs kept for the screens.
   android:
     name: Android client
-    needs: core
+    needs: [changes, core]
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     concurrency:
@@ -242,6 +290,8 @@ jobs:
   # tests to run against: the screens they photograph are the servers' answers of now.
   android-demo:
     name: Demos for the Android screens
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     concurrency:
@@ -281,7 +331,8 @@ jobs:
   # four looks (light, dark, the largest text, right to left), photographed.
   android-screens:
     name: Android screens (${{ matrix.device }})
-    needs: [android, android-demo]
+    needs: [changes, android, android-demo]
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 80
     strategy:
@@ -423,7 +474,8 @@ jobs:
   # supports (the one before in fewer passes, as its runner is slower).
   apple:
     name: Apple client (Xcode ${{ matrix.xcode }})
-    needs: core
+    needs: [changes, core]
+    if: needs.changes.outputs.apple == 'true'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     concurrency:
@@ -533,3 +585,662 @@ jobs:
             packages/apple/build/results
           if-no-files-found: warn
           retention-days: 14
+
+  # The Windows client: the core built as a DLL, the solution built and tested with
+  # the dotnet command alone, and the demo started from its build folder and pictured.
+  # It runs twice. "image" is the runner as it comes. "plain" hides Visual Studio and
+  # the Windows SDK before the solution is built, to show the build needs neither.
+  windows:
+    name: Windows client (${{ matrix.variant }})
+    needs: changes
+    if: needs.changes.outputs.windows == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [image, plain]
+    concurrency:
+      group: native-windows-${{ matrix.variant }}-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+      WINAPP_VERSION: "0.8.0"
+      # What the audit of the walks counts, added over every look of the three demos (nine files): the most it may count today. The
+      # job fails when a count goes above its number; a number is brought down when the count is. The counts move a little from one run
+      # to the next (a popup open, a table that has realised a row or not), so each number is the most two runs counted, with five in
+      # a hundred added. "no name" is the in-process audit's own count, which asks a control's own peer and so calls a list row nameless
+      # (the system's tool names it).
+      AUDIT_NO_NAME: "2400"
+      AUDIT_SMALL_TARGETS: "2760"
+      AUDIT_TEXTS_CUT: "340"
+      AUDIT_PAST_EDGE: "1040"
+      # What the press run proves: how many of its checks must pass.
+      PRESS_PASSES: "7"
+      # Checks that say FAIL today because the page does not do the thing yet: one pattern for each. A check that says FAIL and is not named
+      # here fails the job; one named here that says PASS is told so, and its line is taken off in the change that fixed it. None is named now:
+      # every line that was has been seen to pass in the cloud.
+      KNOWN_FAILS: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: windows-core
+
+      # The core as a DLL for 64-bit Windows, which the bridge imports and the apps carry.
+      - name: The core as a DLL
+        shell: bash
+        run: |
+          cargo rustc -p navree-native-core --locked --release --target x86_64-pc-windows-msvc --crate-type cdylib
+          mkdir -p packages/windows/native/win-x64
+          cp target/x86_64-pc-windows-msvc/release/navree_native_core.dll packages/windows/native/win-x64/
+          ls -l packages/windows/native/win-x64
+
+      # The five functions of the C interface are exported by the DLL.
+      - name: The DLL's exports
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" | Select-Object -First 1
+          $exports = & $dumpbin.FullName /exports packages/windows/native/win-x64/navree_native_core.dll | Select-String '\snavree_(core|bytes)_'
+          $exports
+          if (@($exports).Count -ne 5) { throw "expected five exported functions, found $(@($exports).Count)" }
+
+      # The C# models are written by the program that writes the Kotlin and Swift ones, from the
+      # same schema; its own tests run, and what it writes is what the build then reads.
+      - name: The generator's tests, and the C# models written
+        shell: bash
+        run: |
+          cargo test --locked -p xtask --lib native_models
+          cargo run --locked -q -p xtask -- native-models
+          ls -l packages/windows/src/Navree.Protocol/Models.cs
+
+      - name: Keep the written models
+        if: matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-models
+          if-no-files-found: error
+          path: packages/windows/src/Navree.Protocol/Models.cs
+          retention-days: 14
+
+      - name: What the runner has
+        shell: pwsh
+        working-directory: packages/windows
+        run: |
+          dotnet --list-sdks
+          dotnet --version
+          dotnet --list-runtimes
+          if (Test-Path "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe") {
+            & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -all -property displayName
+          } else { "no vswhere" }
+          Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\Include" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
+          "nuget sources of the solution:"
+          dotnet nuget list source
+          "nuget sources of the machine:"
+          Push-Location $env:RUNNER_TEMP
+          dotnet nuget list source
+          Pop-Location
+          Get-ChildItem "${env:ProgramFiles(x86)}\NuGet\Config" -ErrorAction SilentlyContinue | ForEach-Object { "machine config: $($_.FullName)"; Get-Content $_.FullName }
+
+      # What a machine with only the .NET SDK has: no Visual Studio and no Windows SDK.
+      - name: Hide Visual Studio and the Windows SDK
+        if: matrix.variant == 'plain'
+        shell: pwsh
+        run: |
+          $folders = @(
+            "$env:ProgramFiles\Microsoft Visual Studio",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio",
+            "${env:ProgramFiles(x86)}\Windows Kits",
+            "${env:ProgramFiles(x86)}\Microsoft SDKs"
+          )
+          foreach ($folder in $folders) {
+            if (Test-Path -LiteralPath $folder) {
+              try {
+                Rename-Item -LiteralPath $folder -NewName ((Split-Path $folder -Leaf) + ' (hidden)') -ErrorAction Stop
+                "hidden: $folder"
+              } catch { "not hidden: $folder ($($_.Exception.Message))" }
+            } else { "not there: $folder" }
+          }
+          # Visual Studio's installer leaves machine-wide NuGet settings (a source and a fallback folder) that point into its own folders.
+          $offline = Get-ChildItem "${env:ProgramFiles(x86)}\NuGet\Config" -Filter 'Microsoft.VisualStudio.*.config' -ErrorAction SilentlyContinue
+          foreach ($config in $offline) {
+            Rename-Item -LiteralPath $config.FullName -NewName ($config.Name + '.hidden')
+            "hidden: $($config.FullName)"
+          }
+
+      # The dotnet command alone: restore, then build the whole solution. Restoring is from the lock files kept beside each project
+      # (CI is true on this runner, which makes a restore that would change a package fail), and the versions it used are printed.
+      - name: Restore
+        shell: pwsh
+        working-directory: packages/windows
+        run: |
+          dotnet restore Navree.Native.sln
+          if ('${{ matrix.variant }}' -eq 'image') { dotnet restore demo/Navree.Demo.Packaged/Navree.Demo.Packaged.csproj }
+          "packages restored, from the lock files:"
+          Get-ChildItem -Recurse -Filter packages.lock.json | ForEach-Object {
+            $locked = Get-Content $_.FullName -Raw | ConvertFrom-Json
+            foreach ($framework in $locked.dependencies.PSObject.Properties) {
+              foreach ($package in $framework.Value.PSObject.Properties) { if ($package.Value.type -ne 'Project') { "$($package.Name) $($package.Value.resolved)" } }
+            }
+          } | Sort-Object -Unique
+
+      - name: Build
+        shell: pwsh
+        working-directory: packages/windows
+        run: dotnet build Navree.Native.sln -c Release --no-restore
+
+      # The demo and the gallery start from their built folders with nothing registered, so the folders are kept:
+      # either can be started on another Windows machine.
+      - name: Keep the built demo and gallery
+        if: matrix.variant == 'plain'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-demo
+          if-no-files-found: error
+          path: |
+            packages/windows/demo/Navree.Demo/bin/Release
+            packages/windows/demo/Navree.Gallery/bin/Release
+          retention-days: 14
+
+      - name: Unit tests
+        shell: pwsh
+        working-directory: packages/windows
+        run: dotnet test Navree.Native.sln -c Release --no-build --logger trx --results-directory "$env:RUNNER_TEMP/trx"
+
+      - name: Keep the test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-test-reports-${{ matrix.variant }}
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/trx
+          retention-days: 14
+
+      # A tool that drives and pictures a running app, at the version written in WINAPP_VERSION: the one release the job's
+      # pictures, accessibility trees and package are made with, and the job says which it found.
+      - name: The winapp command
+        if: matrix.variant == 'image'
+        uses: microsoft/setup-WinAppCli@9288bd0729bd3f71e2ed1b9eb247dc91470b824e # v0.3
+        with:
+          version: v${{ env.WINAPP_VERSION }}
+
+      - name: The winapp version in use
+        if: matrix.variant == 'image'
+        shell: pwsh
+        run: |
+          $said = (& winapp --version 2>&1 | Out-String).Trim()
+          "winapp says: $said"
+          if ($said -notmatch [regex]::Escape($env:WINAPP_VERSION)) { throw "winapp $env:WINAPP_VERSION was asked for and the machine has: $said" }
+
+      # The demo is started from its build folder, with no registration, and its window is
+      # pictured every way there is; the report says which ways worked on this runner. The step
+      # fails when the demo did not start, showed no window, or its three walks made no picture.
+      - name: Start the demo and take pictures
+        if: matrix.variant == 'image'
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter Navree.Demo.exe | Select-Object -First 1
+          if (-not $exe) { throw "the demo was not built" }
+          Get-ChildItem $exe.Directory.FullName | Select-Object -First 400 | ForEach-Object { $_.Name } | Out-File "$env:RUNNER_TEMP\demo-files.txt"
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/take-pictures.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\pictures"
+          Copy-Item "$env:RUNNER_TEMP\demo-files.txt" "$env:RUNNER_TEMP\pictures\"
+
+      # The drawn kinds (charts, rings, gauges, flags and the composition kinds) on their own, at three widths, in light, dark and
+      # right to left; the screens are written for the purpose, and the protocol's own examples.
+      - name: Evidence, pictures of the drawn kinds
+        if: matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter Navree.Demo.exe | Select-Object -First 1
+          $folder = Split-Path -Parent $exe.FullName
+          $out = "$env:RUNNER_TEMP\pictures\kinds"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          foreach ($look in @(@('--light'), @('--dark'), @('--light', '--rtl'))) {
+            $arguments = @('--kinds', $out) + $look
+            $run = Start-Process -FilePath $exe.FullName -ArgumentList $arguments -WorkingDirectory $folder -PassThru
+            if (-not $run.WaitForExit(480000)) { "the kinds walk $($look -join ' ') did not end in 480 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+          }
+          Get-ChildItem $out | ForEach-Object { "$($_.Name) $($_.Length)" }
+          Get-ChildItem $out -Filter '*kinds.txt' | ForEach-Object { "--- $($_.Name)"; Get-Content $_.FullName }
+          $log = Join-Path $folder 'navree-demo.log'
+          if (Test-Path $log) { Copy-Item $log (Join-Path $out 'navree-demo.log') }
+
+      # The store, inbox and board demos, answering the client for real (SQLite, on this machine). Each is walked in light, dark
+      # and right to left (the widest window in light only): every destination at 480, 840, 1280 and 1800 wide; the first two links
+      # of a destination that lead to another screen are pushed and pictured (a screen that only a third link reaches is not
+      # walked); the first three sheets, dialogs or popovers a screen holds are opened at 840 wide only. Each picture is the window
+      # as the screen shows it, with what is over it. The step fails when a demo's server does not answer or a walk does not end.
+      - name: Build the store, inbox and board demos
+        if: matrix.variant == 'image'
+        run: cargo build --locked -p store-demo -p inbox-demo -p board-demo --features store-demo/native-preview,inbox-demo/native-preview,board-demo/native-preview
+
+      # The servers are started in the step that walks them: a process left running by a step does not outlive it on this runner.
+      - name: Walk every screen of the three demos
+        if: matrix.variant == 'image'
+        shell: pwsh
+        run: |
+          $problems = @()
+          $folder = "$env:RUNNER_TEMP\demos"
+          New-Item -ItemType Directory -Force -Path $folder | Out-Null
+          $ids = @()
+          $servers = @(
+            @{ name = 'store'; port = 8095; simulator = 'STORE_SIMULATOR'; database = 'STORE_DATABASE_URL'; extra = @{} },
+            @{ name = 'inbox'; port = 8096; simulator = 'INBOX_SIMULATOR'; database = 'INBOX_DATABASE_URL'; extra = @{ INBOX_SCALE = '2000' } },
+            @{ name = 'board'; port = 8097; simulator = 'BOARD_SIMULATOR'; database = 'BOARD_DATABASE_URL'; extra = @{} }
+          )
+          try {
+            foreach ($server in $servers) {
+              $env:PORT = [string]$server.port
+              Set-Item -Path "env:$($server.simulator)" -Value 'off'
+              Set-Item -Path "env:$($server.database)" -Value "sqlite://$($server.name).db?mode=rwc"
+              foreach ($key in $server.extra.Keys) { Set-Item -Path "env:$key" -Value $server.extra[$key] }
+              $run = Start-Process -FilePath "$PWD\target\debug\$($server.name)-demo.exe" -WorkingDirectory $folder -PassThru -RedirectStandardOutput "$folder\$($server.name).log" -RedirectStandardError "$folder\$($server.name).err.log"
+              $ids += $run.Id
+            }
+            $diagnosis = "$folder\diagnosis.txt"
+            foreach ($server in $servers) {
+              $up = $false
+              for ($i = 0; $i -lt 240 -and -not $up; $i++) {
+                try { Invoke-WebRequest -Uri "http://127.0.0.1:$($server.port)/" -UseBasicParsing -TimeoutSec 3 | Out-Null; $up = $true } catch { if ($_.Exception.Response) { $up = $true } else { Start-Sleep -Seconds 1 } }
+              }
+              "$($server.name) on $($server.port): " + $(if ($up) { 'answers' } else { 'did not answer' })
+              if (-not $up) { $problems += "the $($server.name) demo's server did not answer" }
+            }
+            $ids | ForEach-Object { $p = Get-Process -Id $_ -ErrorAction SilentlyContinue; "process ${_}: " + $(if ($p) { $p.ProcessName + ' alive' } else { 'gone' }) } | Out-File $diagnosis
+            Get-Content $diagnosis
+
+            $exe = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter Navree.Demo.exe | Select-Object -First 1
+            $out = "$env:RUNNER_TEMP\full"
+            New-Item -ItemType Directory -Force -Path $out | Out-Null
+            $apps = @(@('store', 8095), @('inbox', 8096), @('board', 8097))
+            $looks = @(@('--light'), @('--dark'), @('--light', '--rtl'))
+            foreach ($app in $apps) {
+              foreach ($look in $looks) {
+                $arguments = @('--full', $out, '--name', $app[0], '--server', "http://127.0.0.1:$($app[1])") + $look
+                $run = Start-Process -FilePath $exe.FullName -ArgumentList $arguments -WorkingDirectory $exe.Directory.FullName -PassThru
+                if (-not $run.WaitForExit(900000)) { $problems += "the walk of $($app[0]) $($look -join ' ') did not end in 900 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+                else { "the walk of $($app[0]) $($look -join ' ') ended" }
+              }
+              # What a person does in the app, with each thing's outcome said: forward and back, more rows, a search, a form's errors, a message sent, a second window, signing out.
+              $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--checks', $out, '--name', $app[0], '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+              if (-not $run.WaitForExit(600000)) { $problems += "the checks of $($app[0]) did not end in 600 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+              else { "the checks of $($app[0]) ended" }
+              # The store's orders table under a hand: the wheel and the keys to the end of the rows held, a right click on a row and its menu.
+              if ($app[0] -eq 'store') {
+                $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--hands', $out, '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+                if (-not $run.WaitForExit(300000)) { $problems += "the hands on the table did not end in 300 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+                else { "the hands on the table ended" }
+                if (Test-Path "$out\hands.txt") { Get-Content "$out\hands.txt" }
+              }
+              # A popover of the inbox opened with the real pointer and taken away with Escape.
+              if ($app[0] -eq 'inbox') {
+                $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--popover', $out, '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+                if (-not $run.WaitForExit(240000)) { $problems += "the popover check did not end in 240 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+                else { "the popover check ended" }
+                if (Test-Path "$out\popover.txt") { Get-Content "$out\popover.txt" }
+              }
+              # What a person meets when an answer arrives while they are in the middle of something: the page is brought up to date where it stands, and
+              # each scenario reads that what the person was using is the same object afterwards, with what they did still in it and the focus where it was.
+              $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--page', "$out\page-$($app[0])", '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+              if (-not $run.WaitForExit(600000)) { $problems += "the page walk of $($app[0]) did not end in 600 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+              else { "the page walk of $($app[0]) ended" }
+              if (Test-Path "$out\page-$($app[0])\page.txt") { Get-Content "$out\page-$($app[0])\page.txt" }
+              # A card of the board moved with the real keys, a real click on its menu and the real pointer, and what the server kept.
+              if ($app[0] -eq 'board') {
+                $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--moves', $out, '--server', "http://127.0.0.1:$($app[1])", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+                if (-not $run.WaitForExit(480000)) { $problems += "the moves of a card did not end in 480 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+                else { "the moves of a card ended" }
+                if (Test-Path "$out\moves.txt") { Get-Content "$out\moves.txt" }
+              }
+            }
+            # The same walk with no server, on the protocol's own pages: a disclosure, a pane that waits for its page, and the form with a colour field and a file field
+            # (a colour chosen with the keyboard, files chosen through a picker the walk supplies, what the walk's own server received read by hash).
+            $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--page', "$out\page-fixtures", '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+            if (-not $run.WaitForExit(600000)) { $problems += "the page walk of the fixtures did not end in 600 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+            else { "the page walk of the fixtures ended" }
+            if (Test-Path "$out\page-fixtures\page.txt") { Get-Content "$out\page-fixtures\page.txt" }
+            # Signing out empties what the web view keeps, read from the web view: a web page that stores a cookie and a value is shown,
+            # left, and the person signs out with the answer a server gives; the web page shown after says what it finds. No server is needed.
+            $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--wipe', $out, '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+            if (-not $run.WaitForExit(300000)) { $problems += "the wipe check did not end in 300 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+            else { "the wipe check ended" }
+            if (Test-Path "$out\wipe.txt") { Get-Content "$out\wipe.txt" }
+            # A screen the shell presents as a sheet is pushed at 480, 840 and 1280 wide, from the protocol's own examples (no demo server
+            # presents a route as a sheet): the sheet must show what the screen holds.
+            $run = Start-Process -FilePath $exe.FullName -ArgumentList @('--sheet', $out, '--light') -WorkingDirectory $exe.Directory.FullName -PassThru
+            if (-not $run.WaitForExit(300000)) { $problems += "the sheet walk did not end in 300 seconds"; Stop-Process -Id $run.Id -Force -ErrorAction SilentlyContinue }
+            else { "the sheet walk ended" }
+            if (Test-Path "$out\sheet.txt") { Get-Content "$out\sheet.txt" }
+            Get-ChildItem $out -Filter '*-checks.txt' | ForEach-Object { "--- $($_.Name)"; Get-Content $_.FullName }
+            Get-ChildItem $out -Filter '*-faults.txt' | ForEach-Object { "--- $($_.Name)"; Get-Content $_.FullName }
+            $log = Join-Path $exe.Directory.FullName 'navree-demo.log'
+            if (Test-Path $log) { Copy-Item $log (Join-Path $out 'navree-demo.log') }
+          } finally {
+            foreach ($id in $ids) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
+          }
+          if ($problems) { $problems | ForEach-Object { "PROBLEM: $_" }; throw "the walks did not all run: $($problems -join '; ')" }
+
+      # What the walks found decides the job: every check line the demos wrote (the page walks' too) is read, and any that says FAIL fails it; a run that
+      # wrote no checks, or stopped before its last line, fails it; and the audit's counts are added over every look and may not
+      # pass the numbers written at the top of this job.
+      - name: What the walks found
+        if: always() && matrix.variant == 'image'
+        shell: pwsh
+        run: |
+          $out = "$env:RUNNER_TEMP\full"
+          $failed = @()
+          $known = @($env:KNOWN_FAILS -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+          $stillFailing = @()
+          foreach ($file in 'store-checks.txt', 'inbox-checks.txt', 'board-checks.txt', 'wipe.txt', 'sheet.txt', 'hands.txt', 'popover.txt', 'moves.txt', 'page-store\page.txt', 'page-inbox\page.txt', 'page-board\page.txt', 'page-fixtures\page.txt') {
+            $path = Join-Path $out $file
+            if (-not (Test-Path $path)) { $failed += "$file was not written"; continue }
+            $lines = Get-Content $path
+            $passes = @($lines | Where-Object { $_ -match '\[(check|hands|popover|moves|page)\] PASS' }).Count
+            $fails = @($lines | Where-Object { $_ -match '\[(check|hands|popover|moves|page)\] FAIL' })
+            $unknown = @($fails | Where-Object { $line = $_; -not ($known | Where-Object { $line -match $_ }) })
+            $stillFailing += $fails | Where-Object { $line = $_; $known | Where-Object { $line -match $_ } }
+            "$file : $passes passed, $($fails.Count) failed ($($fails.Count - $unknown.Count) of them named in KNOWN_FAILS)"
+            $fails | ForEach-Object { "    $_" }
+            $failed += $unknown | ForEach-Object { "$file : $_" }
+            if ($lines[-1] -notmatch ' done$') { $failed += "$file stopped before its last line" }
+            if ($passes -eq 0) { $failed += "$file holds no passing check" }
+          }
+          $faultFiles = @(Get-ChildItem $out -Filter '*-faults.txt')
+          "audit files: $($faultFiles.Count)"
+          if ($faultFiles.Count -ne 9) { $failed += "expected nine audit files (three demos, three looks), found $($faultFiles.Count)" }
+          $sum = @(0, 0, 0, 0)
+          foreach ($file in $faultFiles) {
+            foreach ($line in Get-Content $file.FullName) {
+              if ($line -match ': (\d+) controls with no name, (\d+) targets under 24 px, (\d+) texts cut, (\d+) parts past') {
+                for ($i = 0; $i -lt 4; $i++) { $sum[$i] += [int]$Matches[$i + 1] }
+              }
+            }
+          }
+          $limits = @([int]$env:AUDIT_NO_NAME, [int]$env:AUDIT_SMALL_TARGETS, [int]$env:AUDIT_TEXTS_CUT, [int]$env:AUDIT_PAST_EDGE)
+          $names = @('controls with no name', 'targets under 24 px', 'texts cut', 'parts past the window edge')
+          for ($i = 0; $i -lt 4; $i++) {
+            "audit: $($names[$i]) $($sum[$i]) (at most $($limits[$i]))"
+            if ($sum[$i] -gt $limits[$i]) { $failed += "the audit counts $($sum[$i]) $($names[$i]), more than the $($limits[$i]) written in this job" }
+          }
+          foreach ($pattern in ($known | Where-Object { $_ -notmatch '^\[press' })) {
+            if (-not ($stillFailing | Where-Object { $_ -match $pattern })) { "NOTE: '$pattern' no longer fails: take it off KNOWN_FAILS" }
+          }
+          if ($failed) { $failed | ForEach-Object { "FAILED: $_" }; throw "the walks found $($failed.Count) thing(s) wrong" }
+
+      - name: Keep the pictures of every screen
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-every-screen
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/full
+            ${{ runner.temp }}/demos/*.log
+            ${{ runner.temp }}/demos/*.txt
+          retention-days: 30
+
+      # The picture of the whole screen is written whether the demo started or not, so it proves nothing: the window of the demo
+      # was pictured by one of the ways that picture the window, and the walks made pictures of the app's own content.
+      - name: A picture of the demo was taken
+        if: always() && matrix.variant == 'image'
+        shell: pwsh
+        run: |
+          $folder = "$env:RUNNER_TEMP/pictures"
+          $window = @(Get-ChildItem $folder -Filter 'window-*.png' -ErrorAction SilentlyContinue)
+          $content = @(Get-ChildItem "$folder/walk" -Filter *.png -ErrorAction SilentlyContinue)
+          $window | ForEach-Object { "$($_.Name) $($_.Length) bytes" }
+          "the walks made $($content.Count) pictures of the app's content"
+          if (-not $window) { throw "no picture of the demo's window was taken" }
+          if (-not $content) { throw "the walks made no picture of the app's content" }
+
+      - name: Keep the pictures
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-pictures
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/pictures
+          retention-days: 30
+
+      - name: Keep the core's DLL
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: navree-native-core-windows
+          if-no-files-found: error
+          path: packages/windows/native/win-x64/navree_native_core.dll
+          retention-days: 30
+
+      # The demo's place in Windows, with no package: the count on the taskbar, the icon in the notification area, the
+      # small window, settings, a notification, more windows, the full screen, what comes from outside. The report says
+      # what the system accepted and what it only was asked.
+      - name: Evidence, the place in Windows, no package
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter Navree.Demo.exe | Select-Object -First 1
+          if (-not $exe) { throw "the demo was not built" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/take-system-pictures.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\system-unpackaged"
+
+      - name: Keep the pictures of the place in Windows, no package
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-system-unpackaged
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/system-unpackaged
+          retention-days: 30
+
+      # Evidence, not a proof: the demo as a package: its pictures are drawn, a development certificate is made, and the package is built and signed.
+      # Then the same walk is run with package identity, through the loose layout the winapp command registers from the same
+      # manifest, which is what lets the features that need identity be tried.
+      - name: Evidence, the demo as a package
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v AllowDevelopmentWithoutDevLicense /d 1
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v AllowAllTrustedApps /d 1
+          $project = "packages/windows/demo/Navree.Demo.Packaged/Navree.Demo.Packaged.csproj"
+          $out = "$env:RUNNER_TEMP\package"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/make-assets.ps1 -Out packages/windows/demo/Navree.Demo.Packaged/Assets
+          winapp cert generate --manifest packages/windows/demo/Navree.Demo.Packaged/Package.appxmanifest --output "$out\devcert.pfx" --export-cer --install 2>&1 | Tee-Object -FilePath "$out\cert.txt"
+          winapp pack $project -c Release --arch x64 --cert "$out\devcert.pfx" --output "$out\Navree.Demo.msix" 2>&1 | Tee-Object -FilePath "$out\pack.txt"
+          Get-ChildItem $out | ForEach-Object { "$($_.Name) $($_.Length)" }
+          if (-not (Test-Path "$out\Navree.Demo.msix")) { throw "the package was not built" }
+
+      # Only the package leaves the runner. The key it was signed with, the certificate and the tool's log stay on it: the
+      # repository is public, and a key that is kept is a key that anyone may sign with.
+      - name: Keep the package
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-demo-package
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/package/*.msix
+          retention-days: 30
+
+      - name: Evidence, the place in Windows, with package identity
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/take-system-pictures.ps1 -Project packages/windows/demo/Navree.Demo.Packaged/Navree.Demo.Packaged.csproj -Packaged -OutDir "$env:RUNNER_TEMP\system-packaged"
+
+      - name: Keep the pictures of the place in Windows, with package identity
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-system-packaged
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/system-packaged
+          retention-days: 30
+
+      # The data table on its own in the gallery: each time the gallery says a table is ready a picture of its window is taken,
+      # and what the scenarios measured (rows made, scroll positions, keys and the pointer) is written beside the pictures.
+      - name: Evidence, the data table in the gallery
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          if (-not $exe) { throw "the gallery was not built" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\gallery" -Run "table,pointer,rows100k,stick,anchor"
+
+      - name: What the gallery measured
+        if: always() && matrix.variant == 'image'
+        shell: pwsh
+        run: |
+          foreach ($name in 'script.txt', 'results.txt', 'analysis.txt') {
+            "---- $name"
+            if (Test-Path "$env:RUNNER_TEMP/gallery/$name") { Get-Content "$env:RUNNER_TEMP/gallery/$name" } else { "(not written)" }
+          }
+
+      - name: Keep the pictures and measurements of the data table
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-gallery
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/gallery
+          retention-days: 30
+
+      # The store demo on the recorded answers, with the real pointer and keys: the order number is pressed, a quantity is typed
+      # and Restock is pressed, the Filter button is opened and a box ticked. The demo writes what the core was asked to send.
+      - name: Press the buttons of the store demo
+        if: always() && matrix.variant == 'image'
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter Navree.Demo.exe | Select-Object -First 1
+          if (-not $exe) { throw "the demo was not built" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\press" -Run "press" -Seconds 300
+
+      - name: What was pressed, and what the core was asked to send
+        if: always() && matrix.variant == 'image'
+        shell: pwsh
+        run: |
+          foreach ($name in 'press.txt', 'script.txt') {
+            "---- $name"
+            if (Test-Path "$env:RUNNER_TEMP/press/$name") { Get-Content "$env:RUNNER_TEMP/press/$name" } else { "(not written)" }
+          }
+          $log = Get-ChildItem packages/windows/demo/Navree.Demo/bin/Release -Recurse -Filter navree-demo.log | Select-Object -First 1
+          if ($log) { "---- navree-demo.log"; Get-Content $log.FullName }
+          # The press run is a proof: every line that says FAIL fails the job, and so does a run that passed fewer checks than PRESS_PASSES.
+          $press = "$env:RUNNER_TEMP/press/press.txt"
+          if (-not (Test-Path $press)) { throw "the press run wrote no press.txt" }
+          $lines = Get-Content $press
+          $passes = @($lines | Where-Object { $_ -match '\[press\] PASS' }).Count
+          $fails = @($lines | Where-Object { $_ -match '\[press\] FAIL' })
+          $known = @($env:KNOWN_FAILS -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+          $unknown = @($fails | Where-Object { $line = $_; -not ($known | Where-Object { $line -match $_ }) })
+          "press: $passes passed, $($fails.Count) failed ($($fails.Count - $unknown.Count) of them named in KNOWN_FAILS; at least $env:PRESS_PASSES must pass)"
+          $fails | ForEach-Object { "    $_" }
+          $unknown | ForEach-Object { "FAILED: $_" }
+          foreach ($pattern in ($known | Where-Object { $_ -match '^\[press' })) {
+            if (-not ($fails | Where-Object { $_ -match $pattern })) { "NOTE: '$pattern' no longer fails: take it off KNOWN_FAILS" }
+          }
+          if ($unknown.Count -gt 0 -or $passes -lt [int]$env:PRESS_PASSES -or $lines[-1] -notmatch ' done$') { throw "the press run did not pass" }
+
+      - name: Keep what was pressed
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-pressing
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/press
+          retention-days: 30
+
+      # The same tables at larger text and in the system's high contrast colours. The system may not take either on a hosted
+      # machine, so what it was told and what the gallery read are both kept. These come last: they change the machine.
+      - name: Evidence, the data table at larger text
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          $key = 'HKCU:\Software\Microsoft\Accessibility'
+          if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
+          try {
+            foreach ($scale in 150, 225) {
+              Set-ItemProperty -Path $key -Name TextScaleFactor -Value $scale -Type DWord -Force
+              Start-Sleep -Seconds 2
+              powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\gallery-text$scale" -Run "tabletext" -Seconds 200
+            }
+          } finally {
+            Remove-ItemProperty -Path $key -Name TextScaleFactor -ErrorAction SilentlyContinue
+          }
+
+      - name: Evidence, the data table in high contrast
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          try {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -On
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\gallery-contrast" -Run "tabletext" -Seconds 200
+          } finally {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -Off
+          }
+
+      # The box that chooses a row, drawn on a page of its own in two ways, each in a process of its own so that a way
+      # that stops the app costs one page: in light and dark, then in the system's high contrast colours.
+      - name: Evidence, the chosen box in light and dark
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          foreach ($way in 'states') {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\box-$way" -Run "contrast-$way" -Seconds 90
+          }
+
+      - name: Evidence, the chosen box in high contrast
+        if: always() && matrix.variant == 'image'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem packages/windows/demo/Navree.Gallery/bin/Release -Recurse -Filter Navree.Gallery.exe | Select-Object -First 1
+          try {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -On
+            foreach ($way in 'states') {
+              powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/run-gallery.ps1 -Exe $exe.FullName -OutDir "$env:RUNNER_TEMP\box-contrast-$way" -Run "contrast-$way" -Seconds 90
+            }
+          } finally {
+            powershell -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/set-contrast.ps1 -Off
+          }
+
+      - name: Keep the larger text and high contrast pictures
+        if: always() && matrix.variant == 'image'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-gallery-settings
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/gallery-text150
+            ${{ runner.temp }}/gallery-text225
+            ${{ runner.temp }}/gallery-contrast
+            ${{ runner.temp }}/box-states
+            ${{ runner.temp }}/box-contrast-states
+          retention-days: 30
+
+      # What the generator wrote is what is committed: a stale model fails the run, after the rest has run.
+      - name: The written models are the committed ones
+        if: always()
+        shell: bash
+        run: |
+          status="$(git status --porcelain -- packages xtask)"
+          echo "$status"
+          test -z "$status"
