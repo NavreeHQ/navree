@@ -43,12 +43,13 @@ import kotlin.concurrent.thread
  * sites, and what sites stored. Where the system's web view has it
  * (`WebViewFeature.DELETE_BROWSING_DATA`), what sites stored goes by
  * `WebStorageCompat.deleteBrowsingData`, which deletes "all data stored by
- * websites", "network cache, cookies, and any JavaScript-readable storage"
- * (service workers, Cache Storage and IndexedDB among it), and says when it is
- * done: [done] runs then. Where it has not, the only call left is
- * [WebStorage.deleteAllData], which its reference says covers the Web SQL
- * database and Web Storage and which says nothing when it is done: [done]
- * runs at once. Cookies are also the cookie store's ([WebViewCookies.clear]).
+ * websites", "network cache, cookies, and any JavaScript-readable storage",
+ * and says when it is done: [done] runs then. Where it has not, the only call
+ * left is [WebStorage.deleteAllData], which its reference says covers the Web
+ * SQL database and Web Storage and which says nothing when it is done: [done]
+ * runs at once. On the system web view of the tested emulator (API 35), which
+ * has not, it took IndexedDB too and left Cache Storage and a page's service
+ * worker. Cookies are also the cookie store's ([WebViewCookies.clear]).
  * Call on the main thread; [done] runs on it, once. Answers whether every
  * kind of site data was asked to go.
  */

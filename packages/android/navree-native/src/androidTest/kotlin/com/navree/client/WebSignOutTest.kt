@@ -205,11 +205,28 @@ class WebSignOutTest {
         effects.state.always { wiped.set(true) }
         assertTrue("the end of the session finished", waitFor(30) { wiped.get() })
         val found = looked("web-storage-after-sign-out.txt", "the session ended between the two pages")
+        // Every web view: the cookies (the cookie store's own call) and Web Storage (what `deleteAllData` names) go.
         assertEquals("no cookie: $found", "", found.getValue("cookie").jsonPrimitive.content)
         assertEquals("nothing in local storage: $found", 0, found.getValue("local").jsonPrimitive.int)
-        assertEquals("no IndexedDB database: $found", 0, found.getValue("indexeddb").jsonArray.size)
-        assertEquals("nothing in Cache Storage: $found", 0, found.getValue("caches").jsonArray.size)
-        assertEquals("no service worker: $found", 0, found.getValue("workers").jsonPrimitive.int)
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)) {
+            // A web view that deletes every kind of site data: nothing is left.
+            assertEquals("no IndexedDB database: $found", 0, found.getValue("indexeddb").jsonArray.size)
+            assertEquals("nothing in Cache Storage: $found", 0, found.getValue("caches").jsonArray.size)
+            assertEquals("no service worker: $found", 0, found.getValue("workers").jsonPrimitive.int)
+        } else {
+            // One that does not: the README says what this web view keeps (Cache Storage and the service worker, on the
+            // tested emulator), and the file beside the pictures says what was found. The day it keeps something else
+            // or nothing, this says so and the README changes with it.
+            assertEquals(
+                "what a web view without the feature keeps across the end of a session: $found",
+                listOf("indexeddb=0", "caches=1", "workers=1"),
+                listOf(
+                    "indexeddb=" + found.getValue("indexeddb").jsonArray.size,
+                    "caches=" + found.getValue("caches").jsonArray.size,
+                    "workers=" + found.getValue("workers").jsonPrimitive.int,
+                ),
+            )
+        }
         compose.runOnUiThread { effects.close() }
     }
 }
