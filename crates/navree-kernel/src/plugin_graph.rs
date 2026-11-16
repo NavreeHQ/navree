@@ -422,14 +422,16 @@ impl Graph {
     ///
     /// A module acts for the plugin it names. Else, for the plugin of the
     /// crate its type path is in, up to its first `<`: the type of the module
-    /// value the app or its importer passed, and the type its id names, either
-    /// one (the longest crate name, then the plugin first in import order; a
-    /// plugin that is not first-party before one that is). Else, for a module
-    /// with generic arguments whose direct importers all act for plugins: the
-    /// one of theirs whose crate its arguments name, else the first of them in
-    /// import order that is not first-party, else the first. When its type
-    /// path gives a first-party plugin and its importers one that is not, it
-    /// acts for the one that is not. The root acts for nothing.
+    /// value the app or its importer passed, else the type its id names. For
+    /// each type, among plugins whose crates hold it, the longest crate name
+    /// wins, then the plugin first in import order. When its own type gives a
+    /// first-party plugin and its id one that is not, it is the one its id
+    /// gives. Else, for a module with generic arguments whose direct importers
+    /// all act for plugins: the one of theirs whose crate its arguments name,
+    /// else the first of them in import order that is not first-party, else the
+    /// first. When its type path gives a first-party plugin and its importers
+    /// one that is not, it acts for the one that is not. The root acts for
+    /// nothing.
     fn attribution(&self, groups: &[PluginGroup]) -> Vec<Option<usize>> {
         let mut acts_for: Vec<Option<usize>> = vec![None; self.modules.len()];
         if groups.is_empty() {
