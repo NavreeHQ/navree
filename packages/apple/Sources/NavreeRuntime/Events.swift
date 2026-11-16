@@ -154,7 +154,7 @@ public struct Response: Sendable, Equatable {
     public var contentType: String?
     /// A redirect's address, as it came.
     public var location: String?
-    /// The answer's headers whose names start with `x-navree-`.
+    /// The answer's headers whose names start with `x-navree-`, and its `cache-control`.
     public var headers: [[String]]
     public var body: String
     /// No answer: `offline`, `timeout` or `other`.
