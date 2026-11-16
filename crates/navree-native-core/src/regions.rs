@@ -225,6 +225,9 @@ impl Core {
         for (at, item) in found.items.iter_mut().enumerate() {
             item.selected = at == index;
         }
+        if let Some(inner) = self.inner.screens.get_mut(&id) {
+            inner.begun = true;
+        }
         // The regions of the tab that shows now are asked for.
         self.reconcile(id, Some(&std::collections::BTreeSet::new()));
         self.touch_screen(id);

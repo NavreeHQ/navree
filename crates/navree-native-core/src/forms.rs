@@ -846,6 +846,9 @@ impl Core {
             format!("{path}?{query}")
         };
         if url != view.url {
+            if let Some(inner) = self.inner.screens.get_mut(&id) {
+                inner.begun = true;
+            }
             self.replace(id, &url);
         }
     }
