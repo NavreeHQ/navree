@@ -326,6 +326,19 @@ With nothing opened, the list has the window.
   from. The right to left look of the device tests is the composition's
   direction: the system's own bars, its keyboard and its back gesture are not
   turned by it, and the language the system holds is not changed.
+- A keyboard's Tab goes through a window in the order a person reads it, on
+  every window size: on a phone the top bar (back, title, search, actions),
+  then the content, then the bottom navigation; on a tablet and wider the
+  navigation at the start edge, then the top bar, then the content. Right to
+  left mirrors nothing in this order. Each of the three is a focus group and
+  where focus leaves one it goes to the next (`FocusRules`, `orderedGroup`,
+  `focusProperties` `onExit`/`onEnter` of compose-ui 1.8 and later); inside a
+  group the system's own order stands. Shift+Tab goes the other way round, and
+  from the first stop it goes to the last part. The two panes of a list and its
+  detail keep the system's order for now. A table that loads rows as Tab goes
+  has no end: whatever stands after it is reached only backwards. The order
+  above puts every bar before a long content on a tablet; on a phone the bottom
+  navigation is reached by Shift+Tab from the top.
 - A service worker a page registers is held to the origins the web view is:
   its requests to any other origin are answered 403. A page's own scripts open
   a socket or start a worker only for an address on the app's origins. What a

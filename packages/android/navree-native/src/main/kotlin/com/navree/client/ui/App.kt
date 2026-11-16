@@ -95,6 +95,7 @@ import com.navree.client.core.NavPart
 import com.navree.client.core.ScreenView
 import com.navree.client.core.Stage
 import com.navree.client.design.FabPlace
+import com.navree.client.design.FocusRules
 import com.navree.client.design.NavigationKind
 import com.navree.client.design.NavigationPlan
 import com.navree.client.design.NavigationRules
@@ -251,10 +252,12 @@ private fun Frame(nav: NavPart, name: String, user: Navree.User?) {
     }
     val railFab = rootPlan != null && rootPlan.fab != null && rootPlan.fabPlace == FabPlace.RailHeader && (destination?.stack?.size == 1 || twoPanes)
 
-    CompositionLocalProvider(LocalOpenMenu provides { scope.launch { menu.expand() } }) {
+    // The order a keyboard goes through the window in is set between its parts when the screen is one pane; the two panes of a list and its detail keep the system's.
+    val order = remember(kind, twoPanes) { if (twoPanes) null else FocusOrder(FocusRules.sequence(kind)) }
+    CompositionLocalProvider(LocalOpenMenu provides { scope.launch { menu.expand() } }, LocalFocusOrder provides order) {
         Box(Modifier.fillMaxSize()) {
             // Under a full-screen cover the app is still drawn, but it is not there for TalkBack.
-            Box(Modifier.fillMaxSize().then(if (covered) Modifier.clearAndSetSemantics {} else Modifier)) {
+            Box(Modifier.fillMaxSize().then(if (covered) Modifier.clearAndSetSemantics {} else Modifier).orderedRoot(order)) {
                 val stack: @Composable () -> Unit = {
                     if (destination != null) {
                         StackHost(nav, user, name, plan, destination.stack, group = nav.selected, Presentation.Stack, holder, active = nav.modals.isEmpty())
@@ -263,24 +266,27 @@ private fun Frame(nav: NavPart, name: String, user: Navree.User?) {
                 when (kind) {
                     NavigationKind.None -> stack()
                     NavigationKind.Bar -> Scaffold(
-                        bottomBar = { BottomBar(nav.destinations, plan, nav.selected) { ui.send(Events.select(it)) } },
+                        bottomBar = { Box(Modifier.orderedGroup(FocusRules.NAV)) { BottomBar(nav.destinations, plan, nav.selected) { ui.send(Events.select(it)) } } },
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     ) { padding ->
                         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) { stack() }
                     }
                     NavigationKind.Rail, NavigationKind.ExpandedRail -> Row(Modifier.fillMaxSize()) {
-                        SideRail(
-                            destinations = nav.destinations,
-                            plan = plan,
-                            selected = nav.selected,
-                            expanded = kind == NavigationKind.ExpandedRail,
-                            fab = if (railFab && root != null && rootPlan != null) ({ RailFab(root, rootPlan) }) else null,
-                        ) { ui.send(Events.select(it)) }
+                        Box(Modifier.fillMaxHeight().orderedGroup(FocusRules.NAV)) {
+                            SideRail(
+                                destinations = nav.destinations,
+                                plan = plan,
+                                selected = nav.selected,
+                                expanded = kind == NavigationKind.ExpandedRail,
+                                fab = if (railFab && root != null && rootPlan != null) ({ RailFab(root, rootPlan) }) else null,
+                            ) { ui.send(Events.select(it)) }
+                        }
                         Box(Modifier.weight(1f).fillMaxHeight().consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))) { stack() }
                     }
                 }
             }
-            Covers(nav, user, name, plan, covers, holder)
+            // A cover is a window of its own over this one: it has the system's order, not this window's.
+            CompositionLocalProvider(LocalFocusOrder provides null) { Covers(nav, user, name, plan, covers, holder) }
             if (plan.menuButton) {
                 AllDestinations(nav.destinations, nav.selected, menu) { index ->
                     scope.launch { menu.collapse() }
