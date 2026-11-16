@@ -310,6 +310,67 @@ class WebWorkersTest {
         assertEquals("the other origin was asked: $otherAsked", emptyList<String>(), otherAsked.toList())
     }
 
+    // ------------------------------------------------------------------ other kinds of request a page makes
+
+    /**
+     * A kind of request a page can make, once to the app's own server and once to the other origin, with the
+     * client's checks on: the other origin is never asked. The request to the app's own server is the sign that the
+     * page made the request at all; where [mustArrive], the test waits for it, and then waits as long again for
+     * anything to reach the other origin. What the client was asked about is written beside the pictures.
+     */
+    private fun kind(name: String, own: String, mustArrive: Boolean, page: () -> String, files: () -> Map<String, String> = { emptyMap() }) {
+        serve(page, files)
+        openedBy(Origins(base, loopbackHttp = true))
+        val came = waitFor(15) { appAsked.any { it.endsWith(" $own") } }
+        waitFor(10) { otherAsked.isNotEmpty() }
+        settle("request-$name.txt", "$name, to the app's own server and to another origin, with the client's checks on; the app's own came: $came")
+        if (mustArrive) assertTrue("the page made the request to the app's own server: $appAsked", came)
+        assertEquals("the other origin was asked: $otherAsked", emptyList<String>(), otherAsked.toList())
+    }
+
+    @Test
+    fun aBeaconGoesOnlyToTheAppsOrigins() = kind("beacon", "/beacon-own", mustArrive = true, page = {
+        "<p>ours</p><script>navigator.sendBeacon('/beacon-own', 'Moga'); navigator.sendBeacon('$elsewhere/beacon', 'Moga')</script>"
+    })
+
+    @Test
+    fun aFetchThatOutlivesThePageGoesOnlyToTheAppsOrigins() = kind("keepalive", "/keepalive-own", mustArrive = true, page = {
+        "<p>ours</p><script>fetch('/keepalive-own', {method: 'POST', body: 'Moga', keepalive: true}).catch(function(){});" +
+            "fetch('$elsewhere/keepalive', {method: 'POST', body: 'Moga', keepalive: true, mode: 'no-cors'}).catch(function(){})</script>"
+    })
+
+    @Test
+    fun aLinksPingGoesOnlyToTheAppsOrigins() = kind("ping", "/ping-own", mustArrive = false, page = {
+        "<p>ours</p><a id=\"a\" href=\"/pinged\" ping=\"/ping-own $elsewhere/ping\">Bathinda</a><script>document.getElementById('a').click()</script>"
+    })
+
+    @Test
+    fun anEventStreamGoesOnlyToTheAppsOrigins() = kind("eventsource", "/events-own", mustArrive = true, page = {
+        "<p>ours</p><script>new EventSource('/events-own'); new EventSource('$elsewhere/events')</script>"
+    })
+
+    @Test
+    fun aPrefetchHintGoesOnlyToTheAppsOrigins() = kind("prefetch", "/prefetch-own", mustArrive = false, page = {
+        "<link rel=\"prefetch\" href=\"/prefetch-own\"><link rel=\"prefetch\" href=\"$elsewhere/prefetch\"><p>ours</p>"
+    })
+
+    @Test
+    fun aModuleWorkersImportsComeOnlyFromTheAppsOrigins() = kind(
+        "module-worker",
+        "/own-import.js",
+        mustArrive = false,
+        page = {
+            "<p>ours</p><script>new Worker('/module.js', {type: 'module'}); new Worker('/module-dynamic.js', {type: 'module'})</script>"
+        },
+        files = {
+            mapOf(
+                "/module.js" to "import '/own-import.js'; import '$elsewhere/import.js';",
+                "/module-dynamic.js" to "import('$elsewhere/dynamic.js').catch(function(){});",
+                "/own-import.js" to "export default 1;",
+            )
+        },
+    )
+
     // ------------------------------------------------------------------ a worker the page starts from one of the app's addresses
 
     private fun reportsWhatItReaches() =
