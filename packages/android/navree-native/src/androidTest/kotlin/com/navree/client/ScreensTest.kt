@@ -217,29 +217,39 @@ class ScreensTest {
         front(app, "Today")
         send(app, Events.openLink("${server.url("/customers/new")}"))
         front(app, "New customer")
-        val stops = ArrayList<String>()
+        // Tab goes round: the walk goes on until the first stop comes again, and the loop it made is what is judged.
+        val ids = ArrayList<Int>()
+        val names = ArrayList<String>()
         val trace = ArrayList<String>()
-        repeat(45) { press ->
+        var closed = false
+        repeat(80) { press ->
+            if (closed) return@repeat
             Shots.pressTab()
             compose.waitForIdle()
             val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
-            assertTrue("press ${press + 1} of Tab landed on nothing that can be seen or said; the stops so far: $stops", focused.size == 1)
-            val config = focused.single().config
-            val where = "#${focused.single().id}@${(focused.single().boundsInRoot.top / focused.single().layoutInfo.density.density).toInt()}"
+            assertTrue("press ${press + 1} of Tab landed on nothing that can be seen or said; the stops so far: $trace", focused.size == 1)
+            val node = focused.single()
+            val config = node.config
             val named = listOfNotNull(
                 config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", "),
                 config.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text },
                 config.getOrNull(SemanticsProperties.EditableText)?.text,
             ).filter { it.isNotEmpty() }.joinToString(" | ")
-            assertTrue("press ${press + 1}: the stop has no name; the stops so far: $stops", named.isNotEmpty())
-            stops += named
-            trace += named.take(30) + where
+            assertTrue("press ${press + 1}: the stop has no name; the stops so far: $trace", named.isNotEmpty())
+            if (ids.isNotEmpty() && node.id == ids.first()) {
+                closed = true
+            } else {
+                assertTrue("the stop \"$named\" is a stop twice in one loop; the stops were $trace", node.id !in ids)
+                ids += node.id
+                names += named
+                trace += named.take(30) + "#" + node.id
+            }
         }
-        stops.zipWithNext().forEach { (before, after) -> assertTrue("the stop \"$after\" came twice running; the stops were $trace", before != after) }
-        // Each picked field is one stop of a loop, not two: its label starts the name of one stop, in the first loop.
-        for (label in listOf("City", "Tier", "Customer since")) {
-            val found = stops.count { it.startsWith(label) }
-            assertTrue("$label is a stop at most once in each loop of the form: $found in ${stops.size} presses; the stops were $trace", found in 1..2)
+        assertTrue("Tab went round and came back to the first stop within 80 presses; the stops were $trace", closed)
+        // A picked field is one stop, the layer over it, named by its label and what it holds; a field of options (radio buttons, chips) is a stop for each option.
+        for (label in listOf("City", "Customer since", "Call at", "Next visit")) {
+            val found = names.count { it.startsWith(label) }
+            assertTrue("$label is one stop of the loop: $found; the stops were $trace", found == 1)
         }
     }
 }

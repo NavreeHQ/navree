@@ -196,7 +196,7 @@ class LiveDemosTest {
         compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.Focused)).fetchSemanticsNodes()
             .filter { it.size.width > 0 && it.size.height > 0 }
             .sortedWith(compareBy({ it.boundsInRoot.top }, { it.boundsInRoot.left }))
-            .map { node -> "${nameOf(node).take(24)}@${(node.boundsInRoot.top / node.layoutInfo.density.density).toInt()}" }
+            .map { node -> "${nameOf(node).take(24)}@${(node.boundsInRoot.left / node.layoutInfo.density.density).toInt()},${(node.boundsInRoot.top / node.layoutInfo.density.density).toInt()}" }
 
     private fun focusedStop(): Stop? {
         val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
@@ -204,7 +204,8 @@ class LiveDemosTest {
         val node = focused.single()
         val density = node.layoutInfo.density.density
         val named = nameOf(node)
-        val window = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        // A tooltip, a menu or a picker is a window of its own: the window is the largest one.
+        val window = compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes().maxByOrNull { it.size.width.toLong() * it.size.height }!!.boundsInRoot
         val box = node.boundsInRoot
         val inside = box.left >= window.left - 1f && box.top >= window.top - 1f && box.right <= window.right + 1f && box.bottom <= window.bottom + 1f
         return Stop(node.id, named, inside, node.size.width / density, node.size.height / density)
@@ -268,7 +269,7 @@ class LiveDemosTest {
             Shots.pressTab()
             compose.waitForIdle()
             val node = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
-            val named = node.joinToString(" + ") { nameOf(it).take(28) + "#" + it.id }
+            val named = node.joinToString(" + ") { nameOf(it).take(28) + "#" + it.id + "@" + (it.boundsInRoot.left / it.layoutInfo.density.density).toInt() + "," + (it.boundsInRoot.top / it.layoutInfo.density.density).toInt() }
             stops += named
             if (node.any { nameOf(it).contains("Search", ignoreCase = true) }) reached = true
         }
