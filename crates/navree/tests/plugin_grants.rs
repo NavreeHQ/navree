@@ -15,7 +15,7 @@ use navree::orm::ExecContext;
 use navree::orm::hooks::ModelEvent;
 use navree::prelude::*;
 use navree::realtime::{ChannelDecision, RealtimeOptions};
-use navree::testing::{TestApp, principal};
+use navree::testing::{TestApp, TestAppBuilder, principal};
 use navree::ui::Shell;
 use navree::workspace::Member;
 use serde_json::{Value, json};
@@ -259,5 +259,144 @@ async fn an_app_with_no_plugin_registers_through_every_route_as_before() {
     let reads_reports = json!({ "action": "read", "subject": "reports" });
     assert!(rules.contains(&reads_reports), "{body}");
 
+    app.shutdown().await.unwrap();
+}
+
+// A plugin may not hook or scope the framework's rows.
+
+/// The roster plugin: its crate is this module, so the app's modules at the top of the file are
+/// in no crate it names.
+mod navree_plugin_roster {
+    use navree::BoxFuture;
+    use navree::orm::ExecContext;
+    use navree::plugin::PluginInfo;
+    use navree::prelude::*;
+    use navree::workspace::Member;
+
+    /// The plugin's info.
+    const ROSTER: PluginInfo =
+        PluginInfo::new("navree-plugin-roster", module_path!(), "roster", "1.0.0");
+
+    /// The plugin's module: it names the plugin, then registers what its function adds.
+    pub struct RosterModule(pub fn(&mut ModuleBuilder));
+
+    impl Module for RosterModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(ROSTER);
+            (self.0)(m);
+        }
+    }
+
+    /// The plugin's listener on the workspace member row: it rewrites the role of every member
+    /// it saves (here it only tidies the role's spelling).
+    pub fn tidy_role<'a>(
+        member: &'a mut Record<Member>,
+        _ctx: &'a ExecContext,
+    ) -> BoxFuture<'a, navree::orm::Result<()>> {
+        member.role = member.role.trim().to_lowercase();
+        Box::pin(async { Ok(()) })
+    }
+
+    /// The plugin's scope on the workspace member row: it shows every row, the ones the row's
+    /// other scopes leave out included.
+    pub fn every_member(query: Builder<Member>) -> Builder<Member> {
+        query.without_global_scopes()
+    }
+}
+
+/// The roster plugin's module hooking the workspace member row.
+fn hooks_members(m: &mut ModuleBuilder) {
+    m.on_model::<Member, _>(ModelEvent::Saving, navree_plugin_roster::tidy_role);
+}
+
+/// The roster plugin's module registering a global scope on the workspace member row.
+fn scopes_members(m: &mut ModuleBuilder) {
+    m.global_scope::<Member>("all-members", navree_plugin_roster::every_member);
+}
+
+/// The refusal of the roster plugin's listener on the workspace member row.
+fn roster_hooks() -> String {
+    let member = std::any::type_name::<Member>();
+    format!(
+        "plugin `navree-plugin-roster` hooks the model `{member}` in `RosterModule`, a model of another crate; only a module of the app hooks it: remove the plugin or update it to a version that leaves the hook to the app, and to use the plugin's hook, register it from a module of the app"
+    )
+}
+
+/// The refusal of the roster plugin's scope on the workspace member row.
+fn roster_scopes() -> String {
+    let member = std::any::type_name::<Member>();
+    format!(
+        "plugin `navree-plugin-roster` registers the global scope `all-members` on `{member}` in `RosterModule`, a model of another crate; only a module of the app registers a global scope on it: remove the plugin or update it to a version that leaves the scope to the app, and to use the plugin's scope, register it from a module of the app"
+    )
+}
+
+/// An app with workspaces on a temporary database, and no module of its own.
+fn workspace_app() -> TestAppBuilder {
+    TestApp::builder()
+        .temp_database()
+        .config("workspace.routes", false)
+        .config("workspace.users_table", "")
+        .module(DatabaseModule::from_config())
+        .module(WorkspaceModule::from_config())
+}
+
+/// The boot error of an app that must not boot.
+async fn boot_error(builder: TestAppBuilder) -> String {
+    match builder.try_build().await {
+        Ok(_) => panic!("the app booted"),
+        Err(error) => error.to_string(),
+    }
+}
+
+/// A module of the app: the roster plugin's listener on the member row, and a scope of its own
+/// that changes nothing.
+struct MemberRows;
+
+impl Module for MemberRows {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.global_scope::<Member>("noop", |q| q)
+            .on_model::<Member, _>(ModelEvent::Saving, navree_plugin_roster::tidy_role);
+    }
+}
+
+#[tokio::test]
+async fn a_plugin_may_not_hook_or_scope_the_workspace_member_row() {
+    use navree_plugin_roster::RosterModule;
+
+    // The listener: refused with the ORM's module in the app and without it (the member row's
+    // hooks are found by their key alone), at the boot and by validate.
+    let hooks = roster_hooks();
+    let with_orm = workspace_app()
+        .module(OrmModule::from_config())
+        .module(RosterModule(hooks_members));
+    let error = boot_error(with_orm).await;
+    assert!(error.contains(&hooks), "expected `{hooks}` in:\n{error}");
+    let without_orm = workspace_app().module(RosterModule(hooks_members));
+    let error = boot_error(without_orm).await;
+    assert!(error.contains(&hooks), "expected `{hooks}` in:\n{error}");
+    let validated = Navree::app()
+        .module(WorkspaceModule::from_config())
+        .module(RosterModule(hooks_members))
+        .validate()
+        .expect_err("the plugin hooks the member row")
+        .to_string();
+    assert!(validated.lines().any(|line| line == hooks), "{validated}");
+
+    // The scope: refused before any scope is installed, and the scopes are the process's.
+    let scoped = workspace_app().module(RosterModule(scopes_members));
+    let error = boot_error(scoped).await;
+    let scopes = roster_scopes();
+    assert!(error.contains(&scopes), "expected `{scopes}` in:\n{error}");
+    assert!(!Member::has_global_scope("all-members"));
+
+    // A module of the app registers the plugin's listener and a scope of its own, beside the
+    // plugin: it boots.
+    let app = workspace_app()
+        .module(RosterModule(|_| {}))
+        .module(MemberRows)
+        .build()
+        .await;
+    assert_eq!(app.ctx().plugins().plugins.len(), 1);
+    assert!(Member::has_global_scope("noop"));
     app.shutdown().await.unwrap();
 }

@@ -10,8 +10,8 @@ use std::sync::Arc;
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, Module, ModuleBuilder,
-    ModuleId, Resolver,
+    AppContext, BoxError, BoxFuture, CommandSpec, Contributed, Factory, Injectable, Module,
+    ModuleBuilder, ModuleId, PluginReport, Resolver,
 };
 
 use crate::error::Result;
@@ -32,7 +32,9 @@ use crate::strict::{self, Strictness, Violation};
 /// - reads the `[orm]` section ([`OrmOptions`]): the strict modes, by
 ///   default on except in production;
 /// - installs, at boot, the global scopes modules register
-///   ([`ModuleBuilderOrmExt::global_scope`]);
+///   ([`ModuleBuilderOrmExt::global_scope`]); when a module of a plugin
+///   that is not one of the framework's own packages registers one on a
+///   model of another crate, the boot fails and none is installed;
 /// - keeps the registry of the app's models
 ///   ([`ModuleBuilderOrmExt::model`]) for tooling;
 /// - registers the commands `model:prune` (see [`prune`](crate::prune))
@@ -191,7 +193,12 @@ fn register(m: &mut ModuleBuilder, options: Option<OrmOptions>, handlers: Handle
                 let strictness =
                     handlers.apply(Strictness::from_options(&options, environment.as_deref()));
                 strict::install(strictness.clone());
-                for registration in app.contributions::<ScopeRegistration>() {
+                // The scopes apply process-wide once installed, so a refusal installs none.
+                let scopes = app.contributions::<ScopeRegistration>();
+                if let Some(refusal) = plugin_scope_refusal(&app, &scopes) {
+                    return Err(BoxError::from(refusal));
+                }
+                for registration in scopes {
                     (registration.value.install)();
                 }
                 Ok(Arc::new(OrmRuntime {
@@ -254,6 +261,47 @@ impl fmt::Debug for OrmRuntime {
 /// A global scope a module registered, installed when the app boots.
 struct ScopeRegistration {
     install: Box<dyn Fn() + Send + Sync>,
+    /// The model's type path, which says whose model it is.
+    model: &'static str,
+    /// The scope's name.
+    name: Cow<'static, str>,
+}
+
+/// The refusal of the first of `scopes` that a module acting for a plugin the kernel does not
+/// find first-party (the `plugins` listing lists it under the plugin) registers on a model that
+/// is not of the plugin's crate, if any.
+fn plugin_scope_refusal(
+    app: &AppContext,
+    scopes: &[Contributed<ScopeRegistration>],
+) -> Option<String> {
+    if scopes.is_empty() {
+        return None;
+    }
+    let plugins = app.plugins().plugins;
+    scopes.iter().find_map(|contributed| {
+        let plugin = community_plugin(&plugins, contributed.module.id)?;
+        let registration = &contributed.value;
+        let own = registration
+            .model
+            .strip_prefix(plugin.info.crate_name)
+            .is_some_and(|rest| rest.starts_with("::"));
+        if own {
+            return None;
+        }
+        let (name, scope, model) = (plugin.info.name, &registration.name, registration.model);
+        let module = contributed.module.name;
+        Some(format!(
+            "plugin `{name}` registers the global scope `{scope}` on `{model}` in `{module}`, a model of another crate; only a module of the app registers a global scope on it: remove the plugin or update it to a version that leaves the scope to the app, and to use the plugin's scope, register it from a module of the app"
+        ))
+    })
+}
+
+/// The plugin the kernel does not find first-party that `module` acts for, if any: the plugin
+/// the `plugins` listing lists it under.
+fn community_plugin(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
+    plugins.iter().find(|plugin| {
+        !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
+    })
 }
 
 /// Describes model `M` with the hooks the app registers for it.
@@ -366,10 +414,18 @@ pub trait ModuleBuilderOrmExt {
 
     /// Registers `observer` for model `M`'s events (a `dyn ModelHook<M>`
     /// multi-binding).
+    ///
+    /// A module of a plugin that is not one of the framework's own packages
+    /// hooks only the plugin's own models (the boot fails otherwise); the app
+    /// registers a plugin's hook on any model from a module of its own.
     fn observe<M: Model>(&mut self, observer: impl Observer<M>) -> &mut Self;
 
     /// Registers an observer of model `M` that the container builds (with
     /// the visibility of this module), for observers with dependencies.
+    ///
+    /// A module of a plugin that is not one of the framework's own packages
+    /// hooks only the plugin's own models (the boot fails otherwise); the app
+    /// registers a plugin's hook on any model from a module of its own.
     fn observer<M: Model, O: Observer<M> + Injectable>(&mut self) -> &mut Self;
 
     /// Registers `listener` for `event` of model `M`. It may change the
@@ -379,6 +435,10 @@ pub trait ModuleBuilderOrmExt {
     ///
     /// The second type parameter is the listener's output (`()` or
     /// [`Flow`]): write `m.on_model::<Deal, _>(..)`.
+    ///
+    /// A module of a plugin that is not one of the framework's own packages
+    /// hooks only the plugin's own models (the boot fails otherwise); the app
+    /// registers a plugin's hook on any model from a module of its own.
     fn on_model<M, O>(
         &mut self,
         event: ModelEvent,
@@ -394,6 +454,11 @@ pub trait ModuleBuilderOrmExt {
     /// Registers a global scope named `name` for every query of `M`,
     /// installed when the app boots (it imports [`OrmModule`]). Queries
     /// leave it out with `without_global_scope_named(name)`.
+    ///
+    /// A module of a plugin that is not one of the framework's own packages
+    /// registers global scopes only on the plugin's own models (the boot
+    /// fails otherwise, and installs no scope); the app registers a plugin's
+    /// scope on any model from a module of its own.
     fn global_scope<M: Model>(
         &mut self,
         name: impl Into<Cow<'static, str>>,
@@ -402,6 +467,11 @@ pub trait ModuleBuilderOrmExt {
 
     /// Registers `scope` (a [`GlobalScope`] value) for every query of `M`,
     /// installed when the app boots (it imports [`OrmModule`]).
+    ///
+    /// A module of a plugin that is not one of the framework's own packages
+    /// registers global scopes only on the plugin's own models (the boot
+    /// fails otherwise, and installs no scope); the app registers a plugin's
+    /// scope on any model from a module of its own.
     fn global_scope_of<M: Model>(&mut self, scope: impl GlobalScope<M>) -> &mut Self;
 }
 
@@ -457,9 +527,12 @@ impl ModuleBuilderOrmExt for ModuleBuilder {
     }
 
     fn global_scope_of<M: Model>(&mut self, scope: impl GlobalScope<M>) -> &mut Self {
+        let name = scope.name();
         let scope: Arc<dyn GlobalScope<M>> = Arc::new(scope);
         self.import(OrmModule).contribute(ScopeRegistration {
             install: Box::new(move || crate::global_scopes::register::<M>(scope.clone())),
+            model: std::any::type_name::<M>(),
+            name,
         })
     }
 }
