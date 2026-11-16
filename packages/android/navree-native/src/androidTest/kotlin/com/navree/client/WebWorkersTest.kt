@@ -563,8 +563,8 @@ class WebWorkersTest {
     @Test
     fun aSocketOrAWorkerMadeFromAnEmptyFrameThePageMakesIsNotChecked() {
         documentChecks()
-        val workerSocket = "new WebSocket('ws://localhost:${other.port}/from-a-worker')"
         serve({
+            val workerSocket = "new WebSocket('ws://localhost:${other.port}/from-a-worker')"
             "<p>ours</p><script>" +
                 "var f = document.createElement('iframe'); document.body.appendChild(f);" +
                 madeOrRefused("empty-frame", "new f.contentWindow.WebSocket('ws://localhost:${other.port}/socket')") +
