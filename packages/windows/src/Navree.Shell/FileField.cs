@@ -180,6 +180,9 @@ internal sealed class FileFieldView
         // The button stays enabled while the picker is open: a button that is disabled under the focus gives the focus away to some other part of the window.
         picking = true;
         Dropped chosen;
+
+        // The session the picker is opened in: a session that ends while it is open does not have its files held for whoever comes next.
+        long session = host.Files.Session;
         try
         {
             // The click's handler is the system's: nothing may escape it, or the app ends. A picker that fails is said in words (FileOffers),
@@ -200,7 +203,7 @@ internal sealed class FileFieldView
 
         try
         {
-            await OfferAsync(chosen.Paths, chosen.Words);
+            await OfferAsync(chosen.Paths, chosen.Words, session);
         }
         catch (Exception)
         {
@@ -211,8 +214,9 @@ internal sealed class FileFieldView
     /// <summary>Offers files to the field, as the picker does and a drop does: each is checked, the ones that fit are added, and the others are told in words. It never throws.</summary>
     /// <param name="paths">Where the files are.</param>
     /// <param name="said">Words already to say, for things a drop could not offer.</param>
+    /// <param name="session">The session the picker was opened in; the one now when left out.</param>
     /// <returns>When every file has been looked at and the core told.</returns>
-    internal async Task OfferAsync(IEnumerable<string> paths, IReadOnlyList<string>? said = null)
+    internal async Task OfferAsync(IEnumerable<string> paths, IReadOnlyList<string>? said = null, long? session = null)
     {
         if (context.Host is not { } host)
         {
@@ -220,7 +224,7 @@ internal sealed class FileFieldView
         }
 
         // Each file is checked and added, or said in words, where no window is needed (FileOffers), so that it is tested without one.
-        Offered offered = await FileOffers.AddAsync(host.Files, paths, Rule, Held, input.Multiple, said);
+        Offered offered = await FileOffers.AddAsync(host.Files, paths, Rule, Held, input.Multiple, said, session);
         Say(offered.Words);
         if (offered.Added.Count > 0)
         {

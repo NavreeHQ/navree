@@ -62,8 +62,19 @@ public static class FileOffers
     /// <param name="before">The files the field holds.</param>
     /// <param name="multiple">Whether the field takes more than one.</param>
     /// <param name="said">Words already to say, for things that could not be offered.</param>
+    /// <param name="session">
+    /// The session the person began to choose in: <see cref="PickedFiles.Session"/> as it was when the picker was opened, which may be long
+    /// before it gave its files. The one now when left out (a drop, which is offered the moment it is made).
+    /// </param>
     /// <returns>What the field holds now, what was added, and what is said.</returns>
-    public static async Task<Offered> AddAsync(PickedFiles files, IEnumerable<string> paths, FieldRule rule, IReadOnlyList<FileRef> before, bool multiple, IReadOnlyList<string>? said = null)
+    public static async Task<Offered> AddAsync(
+        PickedFiles files,
+        IEnumerable<string> paths,
+        FieldRule rule,
+        IReadOnlyList<FileRef> before,
+        bool multiple,
+        IReadOnlyList<string>? said = null,
+        long? session = null)
     {
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(paths);
@@ -74,8 +85,9 @@ public static class FileOffers
         List<string> words = [.. said ?? []];
         List<FileRef> added = [];
 
-        // The session the person chose them in: a file still being looked at when that session ends is not held for whoever comes next.
-        long chosenIn = files.Session;
+        // The session the person chose them in: a file still being looked at when that session ends is not held for whoever comes next, nor
+        // is one chosen in a picker that was opened before it ended.
+        long chosenIn = session ?? files.Session;
         try
         {
             foreach (string path in paths)

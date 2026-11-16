@@ -98,6 +98,27 @@ public sealed class FileOffersTests
     }
 
     [TestMethod]
+    public async Task A_file_chosen_in_a_picker_that_was_opened_before_the_session_ended_is_not_held_for_whoever_comes_next()
+    {
+        PickedFiles files = new(copies);
+
+        // The person opens the picker. While it is open the session ends (the server signs them out); then they choose a file.
+        long opened = files.Session;
+        files.Clear();
+        Offered late = await FileOffers.AddAsync(files, [Write("Lease.pdf", 200)], Rule(), [], multiple: true, session: opened);
+        Assert.AreEqual(0, late.Added.Count, "a file chosen in a picker opened before the session ended is held for whoever comes next");
+        Assert.AreEqual(0, late.Held.Count);
+        Assert.AreEqual(1, late.Words.Count, string.Join(" | ", late.Words));
+        StringAssert.Contains(late.Words[0], "has ended");
+
+        // A picker opened since is of the session now, and so is a drop.
+        Offered now = await FileOffers.AddAsync(files, [Write("Bill.pdf", 200)], Rule(), [], multiple: true, session: files.Session);
+        Assert.AreEqual(1, now.Added.Count, string.Join(" | ", now.Words));
+        Offered dropped = await FileOffers.AddAsync(files, [Write("Receipt.pdf", 200)], Rule(), now.Held, multiple: true);
+        Assert.AreEqual(2, dropped.Held.Count, string.Join(" | ", dropped.Words));
+    }
+
+    [TestMethod]
     public async Task Files_that_cannot_be_read_are_said_in_words_and_the_field_holds_what_it_held()
     {
         PickedFiles files = new(copies);
