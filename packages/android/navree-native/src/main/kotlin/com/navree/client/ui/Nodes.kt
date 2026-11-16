@@ -45,6 +45,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -61,6 +62,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -90,6 +94,7 @@ import com.navree.client.core.Events
 import com.navree.client.design.ContentRules
 import com.navree.client.design.ListRules
 import com.navree.client.design.ProgressRules
+import com.navree.client.design.ScreenRules
 import com.navree.client.design.ToneRole
 import com.navree.client.design.TypeRole
 import com.navree.client.design.expressive.ConnectedChoice
@@ -152,15 +157,17 @@ private fun TextView(node: Navree.Text, modifier: Modifier) {
         Navree.Align.START -> TextAlign.Start
         else -> null
     }
+    // In a block at the end of a table's column, the lines of a text that wraps end together too.
+    val wrapped = align ?: if (LocalEndAligned.current) TextAlign.End else null
     val heading = node.heading != null || node.style == Navree.TextStyle.LARGE_TITLE || node.style == Navree.TextStyle.TITLE || node.style == Navree.TextStyle.DISPLAY
     val shaped = (if (align != null) modifier.fillMaxWidth() else modifier).then(if (heading) Modifier.semantics { heading() } else Modifier)
     val draw: @Composable (String) -> Unit = { words ->
         Text(
-            text = words,
+            text = com.navree.client.design.BidiRules.codes(words, LocalLayoutDirection.current == LayoutDirection.Rtl),
             modifier = shaped,
             style = style,
             color = colour,
-            textAlign = align,
+            textAlign = wrapped,
             maxLines = node.lines ?: Int.MAX_VALUE,
             overflow = TextOverflow.Ellipsis,
         )
@@ -187,7 +194,7 @@ private fun fontWeight(weight: Navree.Weight): FontWeight = when (weight) {
 /** Draws any node. What has its own place on the screen's frame (sheets, dialogs, toolbars) draws nothing here. */
 @Composable
 internal fun NodeView(node: Navree.Node, place: Place, modifier: Modifier = Modifier) {
-    if (node === place.omit || !inFlow(node, place.screen)) return
+    if (node === place.omit || !inFlow(node, place.screen, place.titleInBar)) return
     when (node) {
         is Navree.Text -> TextView(node, modifier)
         is Navree.Rich -> RichView(node, place, modifier)
@@ -272,7 +279,7 @@ internal fun NodeView(node: Navree.Node, place: Place, modifier: Modifier = Modi
 private fun RegionView(node: Navree.Region, place: Place, modifier: Modifier) {
     val ui = LocalUi.current
     val state = place.screen.regions[node.id]
-    val shown = node.children.filter { inFlow(it, place.screen) }
+    val shown = node.children.filter { inFlow(it, place.screen, place.titleInBar) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         when {
             shown.isEmpty() && (node.lazy || state?.loading == true) && state?.failure == null ->
@@ -457,7 +464,7 @@ private fun FactsView(node: Navree.Facts, place: Place, modifier: Modifier) {
         FactFigures(node, modifier)
         return
     }
-    val columns = if (window.width >= com.navree.client.design.WidthClass.Expanded && !window.largeText) 2 else 1
+    val columns = ContentRules.factColumns(window, LocalRoom.current)
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         for (line in node.items.chunked(columns)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -478,7 +485,7 @@ private fun FactsView(node: Navree.Facts, place: Place, modifier: Modifier) {
                             Text(fact.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             for (value in fact.value) NodeView(value, place)
                             for (detail in fact.details) {
-                                Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(com.navree.client.design.BidiRules.codes(detail, LocalLayoutDirection.current == LayoutDirection.Rtl), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -547,17 +554,42 @@ private fun GridView(node: Navree.Grid, place: Place, modifier: Modifier) {
 @Composable
 private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthDp: Float) {
     val gap = ContentRules.gap(node.gap)
-    val shown = node.children.filter { inFlow(it, place.screen) }
-    val columns = ListRules.gridColumns(widthDp.toInt(), node.min, gap, node.cols, LocalUi.current.window.fontScale, shown.size)
+    val shown = node.children.filter { inFlow(it, place.screen, place.titleInBar) }
+    val columns = ListRules.gridColumns(
+        widthDp.toInt(),
+        ListRules.gridLeast(node.min, shown),
+        gap,
+        node.cols,
+        LocalUi.current.window.fontScale,
+        shown.size,
+        controls = shown.any { it is Navree.Field },
+    )
+    if (ListRules.stacksAreOneColumn(shown, node.min, widthDp.toInt())) {
+        // The columns of a page's own layout stand one under another in a narrow window.
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(gap.dp)) {
+            for (child in shown) CompositionLocalProvider(LocalInLine provides false) { Roomed(widthDp) { NodeView(child, place) } }
+        }
+        return
+    }
+    if (ListRules.oneLaneAtATime(shown, columns)) {
+        OneLane(node.id, shown.filterIsInstance<Navree.Section>(), place, modifier)
+        return
+    }
+    if (ListRules.areLanes(shown)) {
+        Lanes(shown, place, modifier, widthDp)
+        return
+    }
     val cell = ContentRules.cardWidthDp(widthDp, columns, gap)
     val stretch = ListRules.stretchesLastLine(shown)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(gap.dp)) {
         for (line in shown.chunked(columns)) {
             // The parts of a line are as tall as the tallest of them, where they can say how tall that is.
             val even = line.all(::measuresAhead)
+            // Parts that cannot say how tall they are are made as tall as the tallest once they are laid out.
+            val tallest = rememberTallest(line, widthDp)
             Row(if (even) Modifier.height(IntrinsicSize.Min) else Modifier, horizontalArrangement = Arrangement.spacedBy(gap.dp)) {
                 for (child in line) {
-                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                    Box(if (even) Modifier.weight(1f).fillMaxHeight() else Modifier.weight(1f).sameHeightAs(tallest), propagateMinConstraints = !even) {
                         CompositionLocalProvider(LocalInLine provides false) { Roomed(cell) { NodeView(child, place, Modifier.fillMaxHeight()) } }
                     }
                 }
@@ -565,6 +597,73 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
                 if (!stretch) repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }
             }
         }
+    }
+}
+
+/**
+ * Lanes side by side: one row of them, each as wide as a card reads in. When
+ * they do not all fit, the row scrolls along (and runs to the window's edge,
+ * not to the margin) so the lanes that do not fit are beside the others and
+ * not a screenful further down.
+ */
+@Composable
+private fun Lanes(lanes: List<Navree.Node>, place: Place, modifier: Modifier, widthDp: Float) {
+    val margin = ContentRules.marginDp(LocalUi.current.window)
+    val laneDp = ListRules.laneWidthDp(widthDp, lanes.size, fontScale = LocalUi.current.window.fontScale)
+    val scroll = rememberScrollState()
+    Row(
+        modifier
+            .layout { measurable, constraints ->
+                // The row runs out to the edges of the column's box, past its margins.
+                val bleed = (margin * 2).dp.roundToPx()
+                if (!constraints.hasBoundedWidth) {
+                    // Inside a part that scrolls along there is no room to run out of: the lanes are as wide as they are.
+                    val placeable = measurable.measure(constraints.copy(minWidth = 0))
+                    layout(placeable.width, placeable.height) { placeable.placeRelative(0, 0) }
+                } else {
+                    val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = ListRules.bledWidthPx(constraints.maxWidth, bleed)))
+                    layout(constraints.maxWidth, placeable.height) { placeable.placeRelative(-(bleed / 2), 0) }
+                }
+            }
+            .horizontalScroll(scroll)
+            .padding(horizontal = margin.dp),
+        horizontalArrangement = Arrangement.spacedBy(ListRules.LANE_GAP_DP.dp),
+    ) {
+        for (lane in lanes) {
+            Box(Modifier.width(laneDp.dp)) {
+                CompositionLocalProvider(LocalInLine provides false) { Roomed(laneDp) { NodeView(lane, place) } }
+            }
+        }
+    }
+}
+
+/**
+ * Lanes where the window holds one column: a row of tabs, one a lane with its
+ * count under its name, and the lane chosen below, as Material's secondary
+ * tabs switch between the parts of one screen. What is chosen is kept
+ * through a turn of the device.
+ */
+@Composable
+private fun OneLane(id: String?, lanes: List<Navree.Section>, place: Place, modifier: Modifier) {
+    var at by rememberSaveable(id) { mutableIntStateOf(0) }
+    val chosen = at.coerceIn(0, lanes.lastIndex)
+    Column(modifier.fillMaxWidth()) {
+        SecondaryScrollableTabRow(selectedTabIndex = chosen, edgePadding = 0.dp) {
+            lanes.forEachIndexed { index, lane ->
+                Tab(
+                    selected = index == chosen,
+                    onClick = { at = index },
+                    text = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(lane.title ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            lane.subtitle?.let { Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1) }
+                        }
+                    },
+                )
+            }
+        }
+        // The tab says the lane's name and count: the lane's own heading is not said again over its cards.
+        Box(Modifier.padding(top = 12.dp)) { NodeView(lanes[chosen].copy(title = null, subtitle = null), place) }
     }
 }
 
@@ -578,7 +677,7 @@ private fun GridLaid(node: Navree.Grid, place: Place, modifier: Modifier, widthD
  */
 @Composable
 private fun StackView(node: Navree.Stack, place: Place, modifier: Modifier) {
-    val shown = node.children.filter { it !== place.omit && inFlow(it, place.screen) }
+    val shown = node.children.filter { it !== place.omit && inFlow(it, place.screen, place.titleInBar) }
     if (shown.isEmpty()) return
     val padded = if (node.pad > 0) modifier.padding((node.pad * CompositionRules.STEP_DP).dp) else modifier
     val fontScale = LocalUi.current.window.fontScale
@@ -627,7 +726,13 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
                 CompositionLocalProvider(LocalInLine provides true) { Roomed(room) { for (child in shown) NodeView(child, place) } }
             }
         } else {
-            Row(modifier = if (wide) modifier.fillMaxWidth() else modifier, horizontalArrangement = across, verticalAlignment = upright) {
+            // A line with a dial in it that fills little of its card stands in the card's middle (the card's own parts keep their size).
+            val lined = when {
+                wide -> modifier.fillMaxWidth()
+                LocalInCard.current && node.justify == null && CompositionRules.holdsDial(shown) -> modifier.fillMaxWidth().centredWhenShort()
+                else -> modifier
+            }
+            Row(modifier = lined, horizontalArrangement = across, verticalAlignment = upright) {
                 for (child in shown) {
                     val grows = CompositionRules.grows(child)
                     // A part that grows has what is left of the line; one that keeps its size has that size.
@@ -648,13 +753,17 @@ private fun StackLaid(node: Navree.Stack, axis: Navree.Axis, shown: List<Navree.
         Column(
             modifier = if (fills) modifier.fillMaxWidth() else modifier,
             verticalArrangement = Arrangement.spacedBy(gap),
-            horizontalAlignment = when (node.align) {
+            horizontalAlignment = when (CompositionRules.columnAlignIn(node, LocalEndAligned.current)) {
                 Navree.Align.CENTER -> Alignment.CenterHorizontally
                 Navree.Align.END -> Alignment.End
                 else -> Alignment.Start
             },
         ) {
-            CompositionLocalProvider(LocalInLine provides false) { Roomed(room) { for (child in shown) NodeView(child, place) } }
+            CompositionLocalProvider(LocalInLine provides false) {
+                Roomed(room) {
+                    for (child in shown) NodeView(child, place)
+                }
+            }
         }
     }
 }
@@ -680,10 +789,8 @@ private fun SplitView(node: Navree.Split, place: Place, modifier: Modifier) {
                 }
             }
         } else {
-            val detailFirst = (node.detail as? Navree.Pane)?.current == true
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                NodeView(if (detailFirst) node.detail else node.primary, place)
-                NodeView(if (detailFirst) node.primary else node.detail, place)
+                for (pane in ScreenRules.splitPanes(node)) NodeView(pane, place)
             }
         }
     }
@@ -856,7 +963,7 @@ internal fun FeedRowView(node: Navree.FeedRow, place: Place, modifier: Modifier 
     val action = node.action
     ListItem(
         headlineContent = {
-            NodeView(Navree.Rich(runs = node.runs), place)
+            NodeView(Navree.Rich(runs = ListRules.withoutOwnLink(node.runs, action)), place)
         },
         supportingContent = if (node.time != null || node.detail.isNotEmpty()) {
             {
