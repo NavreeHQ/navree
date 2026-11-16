@@ -111,6 +111,14 @@ impl DealsModule {
 
 An observer whose "-ed" methods must write in the same transaction as the change, such as a history table that commits or rolls back with it, sets `const IN_TRANSACTION: bool = true`: its methods then run at once, inside the unit of work.
 
+An observer can change or refuse every write of its model, so a module of a plugin that is not one of the framework's own packages registers observers, and the closure listeners below, only on its own models, the ones whose type is in the plugin's crate. Hooking a model of another crate stops the boot, whether the plugin uses `observe`, `observer`, `on_model` or registers a `dyn ModelHook<M>` itself, and no hook is built:
+
+```text wrap
+plugin `navree-plugin-ledger` hooks the model `crm::deals::Deal` in `LedgerModule`, a model of another crate; only a module of the app hooks it: remove the plugin or update it to a version that leaves the hook to the app, and to use the plugin's hook, register it from a module of the app
+```
+
+A hook the plugin ships as a function goes on your model from a module of your app, as `m.on_model::<Deal, _>(ModelEvent::Saving, ledger::stamp::<Deal>)` does. A model in another crate, even one the plugin depends on, is another crate's.
+
 ## Closure listeners
 
 For one event, a closure is enough:
@@ -131,7 +139,7 @@ m.on_model::<Deal, _>(ModelEvent::Creating, |deal, _ctx| {
 });
 ```
 
-The second type parameter is what the closure returns: `()`, or `Flow` to cancel. Closure listeners follow the same timing as observers.
+The second type parameter is what the closure returns: `()`, or `Flow` to cancel. Closure listeners follow the same timing as observers, and the same rule about plugins: a plugin's `on_model` is for its own models, and your app registers the plugin's listener on your model (see [observers](#observers)).
 
 ## Application events
 

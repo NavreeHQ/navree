@@ -78,6 +78,20 @@ impl DealsModule {
 }
 ```
 
+The record check is whatever the registration says, so who registers a model matters. A module of a plugin that is not one of the framework's own packages registers only its own models this way, the ones whose type is in the plugin's crate. A model of another crate stops the boot, because the plugin's check would decide whether a record of another workspace belongs to the current one:
+
+```text wrap
+plugin `navree-plugin-notices` scopes the subject `Deal` to workspaces in `NoticesModule`, a model of another crate; only a module of the app scopes it: remove the plugin or update it to a version that leaves it to the app, and to scope `Deal` to workspaces, call m.workspace_scoped from a module of the app
+```
+
+A plugin's model may not take the name of a subject that another module scopes either, since where two modules scope one subject the first decides. The plugin names its subject under its namespace instead, such as `notices.Deal`:
+
+```text wrap
+plugin `navree-plugin-notices` scopes the subject `Deal` to workspaces in `NoticesModule`, and `DealsModule` scopes another model under that name; a plugin scopes only a subject no other module scopes: remove the plugin or update it to a version that names its subject under its namespace, such as `notices.Deal`
+```
+
+Your app scopes any model from a module of its own: `m.workspace_scoped::<notices::Notice>()` scopes a plugin's model. Between two modules of your app that scope one subject the first still decides, as before, and a model that both you and the plugin scope decides the same way in either order.
+
 ### Row-level security on PostgreSQL
 
 On PostgreSQL, the database enforces the scope too. Every workspace request sets the setting `navree.workspace` to the workspace's id for its transaction (with `Uow::set_local`, so it ends with the transaction), next to the `navree.actor` and `navree.request_id` settings navree-db sets. A row-level security policy compares each row's column with it. Every statement of that unit of work is covered, navree-orm queries and raw navree-db statements alike. `RlsPolicy` writes the SQL; run it in the table's migration, on PostgreSQL only:

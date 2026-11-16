@@ -73,6 +73,14 @@ m.model::<Project>()
     .global_scope::<Project>("named", |q| q.where_(Project::NAME.ne("")));
 ```
 
+A scope applies to every query of its model in the whole process, so a module of a plugin that is not one of the framework's own packages registers scopes only on its own models, the ones whose type is in the plugin's crate. A scope on a model of another crate stops the boot, and the boot installs none:
+
+```text wrap
+plugin `navree-plugin-ledger` registers the global scope `open` on `crm::deals::Deal` in `LedgerModule`, a model of another crate; only a module of the app registers a global scope on it: remove the plugin or update it to a version that leaves the scope to the app, and to use the plugin's scope, register it from a module of the app
+```
+
+A scope the plugin ships as a function goes on your model from a module of your app: `m.global_scope::<Deal>("open", ledger::open::<Deal>)`. A model in another crate, even one the plugin depends on, is another crate's.
+
 Global scopes apply when a query runs, once, in this order: the model's own, the ones modules registered, soft deletes, then [workspace scoping](/docs/orm/workspaces-and-access/#workspace-scoping). They apply to counts, aggregates, relation queries, eager loads, existence subqueries, mass updates and route bindings alike. A scope never changes the meaning of the conditions around it: when an `OR` is involved, the scope's conditions are grouped, so `where a OR b` plus a scope's `c` is `(a OR b) AND c`.
 
 A query removes them when it must see everything:

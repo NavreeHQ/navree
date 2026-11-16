@@ -279,6 +279,12 @@ m.http_layer(GlobalLayer::new(LayerSlot::Context, "timeout", |_ctx, router| {
 });
 ```
 
+Only the app adds a layer that runs on every request. A module of a plugin
+that is not one of the framework's own packages stops the boot when it calls
+`m.http_layer`: the plugin ships the layer as a function (`khata_timeout()`)
+and the app adds it with `m.http_layer(khata_timeout())`. A plugin's own
+routes and mounts may carry layers of their own.
+
 Details: https://navree.com/docs/plugins/existing-crates/
 
 ## Test

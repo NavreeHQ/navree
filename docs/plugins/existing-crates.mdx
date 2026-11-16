@@ -104,7 +104,7 @@ impl Module for AppModule {
 }
 ```
 
-A plugin ships its middleware, and the app adds it with one line: only the app adds a layer that runs on every request. A plugin's module that adds one itself stops the boot, with a message that names the plugin, the layer and the module, and says to add the layer from a module of the app. A plugin's own routes and mounts may carry layers of their own. With the line above, a request that takes longer than ten seconds gets a 503 with the message `The khata took too long.`. See [a layer whose service can fail](/docs/basics/middleware/#a-layer-whose-service-can-fail).
+A plugin ships its middleware, and the app adds it with one line: only the app adds a layer that runs on every request. A plugin's module that adds one itself stops the boot, with a message that names the plugin, the layer and the module, and says to add the layer from a module of the app (the message is under [rules for global layers](/docs/basics/middleware/#rules-for-global-layers)). A plugin's own routes and mounts may carry layers of their own. With the line above, a request that takes longer than ten seconds gets a 503 with the message `The khata took too long.`. See [a layer whose service can fail](/docs/basics/middleware/#a-layer-whose-service-can-fail).
 
 ## A service under a path
 

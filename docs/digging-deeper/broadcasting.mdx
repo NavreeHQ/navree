@@ -137,6 +137,14 @@ fn user_channel(
 - **Mistakes fail the boot**: a malformed pattern, a pattern written with its prefix, or the same pattern registered twice.
 - The authoriser gets the `Principal` asking and the `AppContext`, so it can resolve any service, such as the ability factory above (see [Authorization](/docs/security/authorization/)).
 
+A plugin that is not one of the framework's own packages authorizes only the channels under its own namespace. Its patterns start with the namespace and a dot, as `notice_board.{id}` does for the namespace `notice_board`, so its authoriser never decides one of your own private or presence channels. Any other pattern stops the boot, and the message names the pattern, the module and the plugin:
+
+```text wrap
+channel pattern `users.{id}` of module `BoardModule`: plugin `navree-plugin-notice-board` authorizes channels under `notice_board.` only, and only a module of the app authorizes the app's other channels: remove the plugin or update it to a version that names its channels under `notice_board.`, and to use the plugin's authorizer for `users.{id}`, register it from a module of the app (m.channel)
+```
+
+A pattern made only of parameters (`{scope}.{id}`), one that starts with the namespace and more letters (`notice_board_extra.{id}`) and one with the namespace after a parameter (`{board}.notice_board`) are all outside the namespace. To use a plugin's authoriser for one of your own channels, register it from a module of your app: `m.channel("orders.{id}", notices::authorize)`. The check reads where a plugin's pattern starts and does not look at your own patterns, so the first matching pattern still decides when two overlap. [What a plugin may not grant](/docs/security/authorization/#what-a-plugin-may-not-grant) says which modules count as a plugin's.
+
 It returns a `ChannelDecision`:
 
 | Decision | Meaning |
