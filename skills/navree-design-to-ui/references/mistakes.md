@@ -203,16 +203,18 @@ token pairs that pass 4.5:1. axe runs in every state.
 
 ## 15. Shapes the app rules refuse
 
-**Looks like:** avatars with initials, glowing focus or cards, heavy or
-coloured shadows. Pill buttons and chips, round avatars, corners of 8, 12
-or 16 pixels and soft shadows under a chosen segment or a popover are not
-refused: they are the theme's, below.
+**Looks like:** glowing focus or cards, heavy or coloured shadows. Pill
+buttons and chips, round avatars, corners of 8, 12 or 16 pixels and soft
+shadows under a chosen segment or a popover are not refused: they are the
+theme's, below. Avatars and organisation tiles with initials are not
+refused either: they are `Avatar::initials`.
 
 **Detect:** `rg -n "9999px|rounded-full|box-shadow|initials" design/source`;
 look at every chip, avatar and card.
 
-**Navree form:** `Badge` for chips, `Avatar::image` or the neutral
-`Avatar::placeholder`, no shadow or glow: each a deviation the owner
+**Navree form:** `Badge` for chips; `Avatar::image`, `Avatar::initials`
+(a tone's tint, or `.solid()` for the accent's fill) or the neutral
+`Avatar::placeholder`; no shadow or glow: each a deviation the owner
 approves. A design's corners, pills and round avatars included, and its soft
 shadows are a theme of the app's own: `Theme::with_shape` with `Corners`
 (`Corner::Pill`, `Corner::Px(16)`) and `Elevation::Soft`, never a

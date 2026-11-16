@@ -241,17 +241,60 @@ impl Attachment {
     }
 }
 
-/// A picture of a person: an image, or a neutral icon when there is none.
-/// There is no way to put initials in it.
+/// The shape of an [`Avatar`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AvatarShape {
+    /// The theme's corner for avatars ([`Corners::avatar`](crate::theme::Corners::avatar)),
+    /// 4 px unless the theme says otherwise: the default.
+    #[default]
+    Rounded,
+    /// A circle, whatever the theme's corner.
+    Circle,
+}
+
+/// A picture of a person or an organisation: an image, their initials, or a neutral icon
+/// when there is neither.
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Avatar {
     el: Element,
     inner: Node,
     size: Size,
+    tone: Option<&'static str>,
+    solid: bool,
+    shape: AvatarShape,
+}
+
+/// Up to two letters for `name`: the first letter or digit of its first word and of its
+/// last, in capitals. `None` when no word has a letter or a digit.
+fn initials_of(name: &str) -> Option<String> {
+    let mut firsts = name
+        .split_whitespace()
+        .filter_map(|word| word.chars().find(|c| c.is_alphanumeric()));
+    let capital = |c: char| c.to_uppercase().next().unwrap_or(c);
+    let first = firsts.next()?;
+    let mut letters = String::with_capacity(8);
+    letters.push(capital(first));
+    if let Some(last) = firsts.next_back() {
+        letters.push(capital(last));
+    }
+    Some(letters)
 }
 
 impl Avatar {
+    /// The avatar around `inner`, in its root element `el`.
+    fn of(el: Element, inner: Node) -> Self {
+        Self {
+            el,
+            inner,
+            size: Size::Md,
+            tone: None,
+            solid: false,
+            shape: AvatarShape::Rounded,
+        }
+    }
+
     /// An image, described by `alt`.
     pub fn image(src: impl Into<Href>, alt: impl Into<String>) -> Self {
         let image = el("img")
@@ -260,28 +303,75 @@ impl Avatar {
             .attr("loading", "lazy")
             .attr("width", 32_i64)
             .attr("height", 32_i64);
-        Self {
-            el: el("span").slot("avatar"),
-            inner: image.into(),
-            size: Size::Md,
-        }
+        Self::of(el("span").slot("avatar"), image.into())
     }
 
     /// No image: the person icon, labelled `label`.
     pub fn placeholder(label: impl Into<String>) -> Self {
-        Self {
-            el: el("span")
+        Self::of(
+            el("span")
                 .slot("avatar")
                 .attr("role", "img")
                 .attr("aria-label", label.into()),
-            inner: icon(icons::USER_ROUND),
-            size: Size::Md,
+            icon(icons::USER_ROUND),
+        )
+    }
+
+    /// The initials of `name`, a person's or an organisation's: the first letter of its
+    /// first word and of its last, in capitals (`DO` for "Dalbir Oberoi", `N` for
+    /// "Narmada", `ਗਸ` for "ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ"). A screen reader says the whole name. A name
+    /// with no letter or digit in it draws the person icon, as
+    /// [`placeholder`](Self::placeholder) does. Its styles come with the parts stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{Avatar, AvatarShape, Tone, render};
+    ///
+    /// let html = render(&Avatar::initials("Dalbir Oberoi").shape(AvatarShape::Circle).into());
+    /// assert!(html.contains(r#"aria-label="Dalbir Oberoi" data-initials"#));
+    /// assert!(html.contains(">DO</span>"));
+    /// let tile = render(&Avatar::initials("Narmada Roadways").tone(Tone::Info).into());
+    /// assert!(tile.contains(r#"data-tone="info""#));
+    /// ```
+    pub fn initials(name: impl Into<String>) -> Self {
+        let name = name.into();
+        match initials_of(&name) {
+            Some(letters) => Self::of(
+                el("span")
+                    .slot("avatar")
+                    .attr("role", "img")
+                    .attr("aria-label", name)
+                    .flag("data-initials", true)
+                    .uses(Uses::PARTS_STYLES),
+                Node::from(letters),
+            ),
+            None => Self::placeholder(name),
         }
     }
 
     /// Sets the size.
     pub fn size(mut self, size: Size) -> Self {
         self.size = size;
+        self
+    }
+
+    /// Colours it in `tone`: a thin tint of the tone behind the initials or the icon, drawn
+    /// in the tone, as a [`Badge`] in a tone is. [`Tone::Neutral`] leaves it as it is.
+    pub fn tone(mut self, tone: Tone) -> Self {
+        self.tone = tone.value();
+        self
+    }
+
+    /// Fills it with the accent and draws its initials or icon in the accent's ink, as a
+    /// primary button is drawn: an organisation's tile beside its name. A filled avatar
+    /// takes no tone.
+    pub fn solid(mut self) -> Self {
+        self.solid = true;
+        self
+    }
+
+    /// Sets its shape: the theme's corner (the default) or a circle.
+    pub fn shape(mut self, shape: AvatarShape) -> Self {
+        self.shape = shape;
         self
     }
 
@@ -297,10 +387,18 @@ impl Avatar {
     }
 
     fn into_node(self) -> Node {
-        self.el
+        let circle = self.shape == AvatarShape::Circle;
+        let mut el = self
+            .el
             .attr_opt("data-size", self.size.as_str())
-            .child(self.inner)
-            .into()
+            .attr_opt("data-tone", self.tone.filter(|_| !self.solid))
+            .flag("data-solid", self.solid)
+            .attr_opt("data-shape", circle.then_some("circle"));
+        // Only an option that draws something brings its styles.
+        if self.solid || circle || self.tone.is_some() {
+            el = el.uses(Uses::PARTS_STYLES);
+        }
+        el.child(self.inner).into()
     }
 }
 

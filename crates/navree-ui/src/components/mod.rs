@@ -46,11 +46,11 @@ pub use carousel::{Carousel, CarouselHeight, CarouselLabels, CarouselSlide};
 pub use color_picker::ColorPicker;
 pub use context_menu::ContextMenu;
 pub use display::{
-    Alert, AlertTone, AspectRatio, Attachment, Avatar, AvatarGroup, Badge, BadgeVariant, Bars,
-    Breadcrumb, Bubble, BubbleSide, Card, CardVariant, Direction, Empty, Heading, Item,
-    ItemVariant, Kbd, Marker, MarkerVariant, Message, Pagination, Progress, Ratio, Separator,
-    Skeleton, SkeletonShape, Spinner, Stat, Table, TableCell, TableHead, TableRowEl, Text,
-    TextVariant,
+    Alert, AlertTone, AspectRatio, Attachment, Avatar, AvatarGroup, AvatarShape, Badge,
+    BadgeVariant, Bars, Breadcrumb, Bubble, BubbleSide, Card, CardVariant, Direction, Empty,
+    Heading, Item, ItemVariant, Kbd, Marker, MarkerVariant, Message, Pagination, Progress, Ratio,
+    Separator, Skeleton, SkeletonShape, Spinner, Stat, Table, TableCell, TableHead, TableRowEl,
+    Text, TextVariant,
 };
 pub(crate) use dropdown::menu_element;
 pub use dropdown::{DropdownMenu, MenuCheckbox, MenuGroup, MenuItem, MenuRadios, MenuSub};

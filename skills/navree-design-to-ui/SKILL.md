@@ -45,7 +45,8 @@ components, so load it for the code of any component you map.
 6. **Navree's rules win, the owner decides.** Corners are the theme's: 4 px
    on controls and 6 px on surfaces by default, and a corner of its own for
    each kind of part, pills included, through a theme of the app's own
-   (`Theme::with_shape`, `references/tokens.md`). No letter tiles, no glow.
+   (`Theme::with_shape`, `references/tokens.md`). A letter tile is
+   `Avatar::initials`. No glow.
    No inline script and no `style=""`: the content security policy refuses
    them. Where the
    design breaks a rule, the row records a deviation and the owner

@@ -492,7 +492,7 @@ pub const COMPONENTS: &[Component] = &[
         "default",
     )
     .parts("default"),
-    component("avatar", "Avatar", &["Avatar"], "default").parts("default"),
+    component("avatar", "Avatar", &["Avatar", "AvatarShape"], "default").parts("default"),
     component("item", "Item", &["Item", "ItemVariant"], "thumb").parts("default"),
     component(
         "typography",

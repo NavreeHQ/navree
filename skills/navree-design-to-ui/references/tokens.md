@@ -144,7 +144,7 @@ For each `DT-` row, write one of:
 - **Refused:** a value that breaks the app rules: glow, a shadow other than
   the theme's two soft levels (`Elevation::Soft`: a small one under the
   chosen segment and the current link, a wider one under popovers, menus
-  and dialogs), letter tiles. It becomes a deviation with the Navree form,
+  and dialogs). It becomes a deviation with the Navree form,
   for the owner to approve.
 
 ## Themes

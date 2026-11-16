@@ -82,8 +82,8 @@ is dropped.
 | A link or key with a Copy button | `CopyField::new(id, label, value)` |
 | A paced breathing circle | `BreathingGuide::new(id, title)` |
 | A responsive image, light and dark screenshots | `Picture::new(src, alt, width, height).srcset(..).webp(..).dark(..)` |
-| Person picture | `Avatar::image(src, alt)`, `Avatar::placeholder(label)`: no initials, no letter tile; round when the theme's shape says `Corners::avatar(Corner::Pill)` |
-| People side by side, the rest as `+N` | `AvatarGroup::new(label).max(3).total(count).children((Avatar::placeholder(..), ..))` |
+| Person or organisation picture, letter tile | `Avatar::image(src, alt)`, `Avatar::initials(name)`, `Avatar::placeholder(label)`; `.tone(Tone::Info)` for a tinted tile, `.solid()` for a tile filled with the accent, `.shape(AvatarShape::Circle)` for a round one | the initials are the first letters of the first and last words; the theme's `Corners::avatar` rounds every avatar, `AvatarShape::Circle` only this one (an 8 px organisation tile beside round people) |
+| People side by side, the rest as `+N` | `AvatarGroup::new(label).max(3).total(count).children((Avatar::initials(..), ..))` |
 | List row with media and actions | `Item::new(title).media(..).description(..).actions(..).href(..)`, `ItemVariant` |
 | File tile | `Attachment::new(name).meta(..).icon(..).href(..).action(..)` |
 | Chat | `Message::new(BubbleSide::Start \| End).avatar(..).header(..).content(..)`, `Bubble`, `Marker` |

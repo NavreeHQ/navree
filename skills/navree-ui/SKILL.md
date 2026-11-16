@@ -42,8 +42,9 @@ around them.
    default; a theme of the app's own gives each kind of part its own corner,
    pills included, with its shape (`Theme::with_shape`,
    `references/themes.md`). Surfaces are flat unless the theme's shape says
-   `Elevation::Soft`. No letter tiles, no glow, and no stylesheet that
-   restyles a component: a value the design needs goes in the theme.
+   `Elevation::Soft`. Initials are `Avatar::initials`. No glow, and no
+   stylesheet that restyles a component: a value the design needs goes in
+   the theme.
 6. **Every page has its other states**: empty, loading, failed, read-only and
    forbidden. Build them with the components below.
 7. **Test each page** with `TestView` (no browser), and look at it at 1440
@@ -1033,7 +1034,10 @@ and `Bars` a small bar chart drawn on the server; `Text::tone(Tone::Danger)`
 cell too, where a `Badge` pill would say too much. A real chart is a
 `Chart` (line, area or bar, with series, stacks and a table of the same
 numbers), a `Donut`, a `Funnel` or a `Sparkline` under a `Stat`; a `Report`
-reads its window from the address and counts per period. `AvatarGroup`
+reads its window from the address and counts per period.
+`Avatar::initials(name)` draws a person's or an organisation's initials,
+with `.tone(..)` for a tint, `.solid()` for the accent's fill and
+`.shape(AvatarShape::Circle)` for a round one; `AvatarGroup`
 overlaps avatars and counts the rest in a `+N` tile; `Trace` lists the steps
 of a run (an agent, an import) with a spoken state each; `ColorPicker` is the
 browser's colour field, posting `#rrggbb`; `DateTimePicker` puts a date and a

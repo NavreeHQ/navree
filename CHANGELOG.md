@@ -76,6 +76,17 @@ every `@navree/*` package carries the same version.
   alpha in light mode and black in dark mode, written with `light-dark()`; there is no glow and
   no free value. `Elevation::Flat` is the default, and a part is drawn without a shadow, as
   before.
+- `Avatar::initials(name)` draws a person's or an organisation's initials, the first letter of
+  the name's first word and of its last in capitals, in any script; a screen reader says the
+  whole name, and a name with no letter or digit draws the person icon. `Avatar::tone(tone)`
+  lays a tone's tint behind the initials or the icon, as a badge in a tone is drawn;
+  `Avatar::solid()` fills the avatar with the accent and draws it in the accent's ink, as a
+  primary button is drawn; `Avatar::shape(AvatarShape::Circle)` makes it round whatever the
+  theme's avatar corner, which `AvatarShape::Rounded`, the default, keeps. Each draws with
+  pairs every theme is already checked for, and comes with the parts stylesheet; an avatar with
+  none of them is drawn as before. `Avatar::initials`, `tone`, `solid` and `shape` are new
+  inherent methods: an app whose own extension trait gives `Avatar` a method of one of these
+  names calls it through the trait.
 
 ## [1.7.0] - 2026-11-27
 

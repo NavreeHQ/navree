@@ -80,8 +80,8 @@ owner's answer. A deviation the owner hasn't approved blocks stop 2.
 | DV-05 | DS-04 | the table sorts in the browser | sort on the server, in the URL | mistakes.md 2 | none | approved | 2026-11-04 |
 ```
 
-Reasons fall into four kinds: an app rule (corners, pills, letter tiles,
-glow, inline style), a missing token or component (a gap with an interim
+Reasons fall into four kinds: an app rule (corners, pills, glow, inline
+style), a missing token or component (a gap with an interim
 form), a design mistake (`mistakes.md`), or accessibility (a pair below
 4.5:1, a target too small, a missing label). The picture is the design's
 part beside the page's part, cut from the screenshots; write "none" only

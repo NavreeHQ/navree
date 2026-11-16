@@ -21,6 +21,12 @@ pub fn all() -> Vec<Example> {
         single!("badge", "icon", "With an icon", badge_icon),
         single!("avatar", "default", "Avatars", avatar_default),
         gallery!("avatar", "sizes", "Sizes", avatar_sizes).narrow(),
+        single!(
+            "avatar",
+            "initials",
+            "Initials, in a tone and filled",
+            avatar_initials
+        ),
         single!("item", "thumb", "An item", item_thumb).start(),
         single!("item", "default", "Items", item_default).start(),
         gallery!("item", "variants", "Variants", item_variants).wide(),
@@ -108,6 +114,19 @@ fn avatar_default() -> Row {
         Avatar::placeholder("Gurpreet Singh"),
         Avatar::placeholder("Harleen Kaur"),
         Avatar::placeholder("Manpreet Gill"),
+    ))
+}
+
+fn avatar_initials() -> Row {
+    Row::gap(2).children((
+        Avatar::initials("Narmada Roadways").solid(),
+        Avatar::initials("Dalbir Oberoi").shape(AvatarShape::Circle),
+        Avatar::initials("Harleen Kaur")
+            .tone(Tone::Info)
+            .shape(AvatarShape::Circle),
+        Avatar::initials("ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ")
+            .tone(Tone::Success)
+            .shape(AvatarShape::Circle),
     ))
 }
 

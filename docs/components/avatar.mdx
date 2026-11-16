@@ -1,11 +1,11 @@
 ---
 title: "Avatar"
-description: "A picture of a person beside their name: an image, or a neutral icon when there is none."
+description: "A picture of a person or an organisation beside their name: an image, their initials, or a neutral icon when there is neither."
 ---
 
 <UiPreview example="avatar/default" />
 
-`Avatar` shows a person's picture with `Avatar::image(src, alt)`, or a neutral person icon with `Avatar::placeholder(label)`. There is no way to put initials in it.
+`Avatar` shows a person's picture with `Avatar::image(src, alt)`, their initials with `Avatar::initials(name)`, or a neutral person icon with `Avatar::placeholder(label)`.
 
 ```rust
 use navree::ui::*;
@@ -15,7 +15,7 @@ Avatar::image("/avatars/gurpreet.webp", "Gurpreet Singh")
 
 ## When to use it
 
-Use an avatar next to a person's name: in a list of members, a message, the user menu.
+Use an avatar next to a person's name: in a list of members, a message, the user menu. Use the initials of an organisation, filled or in a tone, as its tile beside its name: in a workspace switcher.
 
 <UiChoose name="label" current="Avatar" />
 
@@ -23,9 +23,30 @@ Use an avatar next to a person's name: in a list of members, a message, the user
 
 <UiAnatomy component="avatar" />
 
+## Initials
+
+`Avatar::initials(name)` draws the first letter of the name's first word and of its last, in capitals: `DO` for "Dalbir Oberoi", `N` for "Narmada", `ਗਸ` for "ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ". A screen reader says the whole name. A name with no letter or digit in it draws the person icon, as `placeholder` does.
+
+`.tone(tone)` lays a thin tint of a [tone](/docs/components/badge/) behind the letters and draws them in the tone, as a badge in a tone is drawn. `.solid()` fills the avatar with the accent and draws the letters in the accent's ink, as a primary button is drawn: an organisation's tile. Both pairs are among the ones every theme is checked for, in light and in dark. A filled avatar takes no tone.
+
+```rust
+use navree::ui::*;
+
+Avatar::initials("Narmada Roadways").solid();
+Avatar::initials("Dalbir Oberoi").tone(Tone::Info).shape(AvatarShape::Circle);
+```
+
+<UiPreview example="avatar/initials" />
+
+The initials, a tone, a fill and a circle are drawn by the parts stylesheet, which a page links only when it draws one of them.
+
+## Shape
+
+An avatar takes the theme's corner for avatars: 4 px, or what the theme's shape says with `Corners::avatar` (see [themes](/docs/ui/themes/)). `.shape(AvatarShape::Circle)` makes it round whatever the theme says, so a theme can give organisation tiles an 8 px corner and people round avatars.
+
 ## Sizes
 
-Avatars take the controls' sizes, with 4 px corners.
+Avatars take the controls' sizes. The initials are 12 px at the default size, 9 and 10 px at the two smaller and 15 px at the larger.
 
 <UiPreview example="avatar/sizes" />
 
@@ -42,7 +63,7 @@ Avatar::image("/avatars/gurpreet.webp", "Gurpreet Singh").fallback()
 <UiA11y>
 
 - An image avatar's `alt` is required. Next to the person's name, pass the name anyway: it's what a screen reader says if the picture is the only thing in a link.
-- A placeholder has `role="img"` and the label you give it.
+- A placeholder and an avatar of initials have `role="img"`, and a screen reader says the label or the whole name, never the letters.
 - Images load lazily and carry their width and height, so the page doesn't shift.
 
 </UiA11y>
@@ -52,3 +73,7 @@ Avatar::image("/avatars/gurpreet.webp", "Gurpreet Singh").fallback()
 ### Avatar
 
 <UiProps type="Avatar" />
+
+### AvatarShape
+
+<UiProps type="AvatarShape" />
