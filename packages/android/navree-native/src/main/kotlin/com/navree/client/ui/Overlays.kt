@@ -1,7 +1,10 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.navree.client.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +16,11 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.isSystemInDarkTheme
 import com.navree.client.R
 import com.navree.client.design.Presentation
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -126,6 +134,20 @@ private fun Sheet(
     }
 }
 
+/** The system bars' icons over a dialog window that is drawn behind them: dark over the light theme's surface, light over the dark theme's. */
+@Composable
+private fun DialogSystemBars() {
+    val view = LocalView.current
+    val dark = isSystemInDarkTheme()
+    SideEffect {
+        val window = (view.parent as? DialogWindowProvider)?.window ?: return@SideEffect
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
+    }
+}
+
 /**
  * A sheet of the page that is a task: something to finish or cancel. On a
  * short window it is a full-screen dialog (an X, the title, the affirming
@@ -133,12 +155,15 @@ private fun Sheet(
  */
 @Composable
 private fun TaskSheet(sheet: Navree.Sheet, place: Place, full: Boolean, close: () -> Unit) {
-    val buttons = sheet.actions.filterIsInstance<Navree.Button>()
-    val forward = buttons.filter(::affirms)
     val form = sheet.children.asSequence().flatMap { it.walk() }.filterIsInstance<Navree.Form>().firstOrNull()
     val submit = form?.submitButton()
+    // One action finishes the task from the bar; the others stand at the end of the content.
+    val placed = OverlayRules.taskActions(sheet.actions.filterIsInstance<Navree.Button>(), hasSubmit = form != null && submit != null)
     val inner = place.copy(omit = submit)
-    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = !full)) {
+    // A full-screen task is drawn edge to edge, as the screen under it is: the surface runs behind the system bars (which
+    // the content keeps clear of), and the bars' icons are the colour the surface calls for.
+    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = !full, decorFitsSystemWindows = !full)) {
+        if (full) DialogSystemBars()
         Surface(
             shape = if (full) RectangleShape else MaterialTheme.shapes.extraLarge,
             color = if (full) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -148,7 +173,7 @@ private fun TaskSheet(sheet: Navree.Sheet, place: Place, full: Boolean, close: (
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TipIconButton(stringResource(R.string.navree_close), Glyphs.Close, close)
                     Text(sheet.title ?: "", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp).semantics { heading() })
-                    for (button in forward) QuietButton(button, place)
+                    placed.bar?.let { QuietButton(it, place) }
                     if (form != null && submit != null) QuietButton(submit, place.copy(form = form.id))
                 }
                 Column(
@@ -156,7 +181,14 @@ private fun TaskSheet(sheet: Navree.Sheet, place: Place, full: Boolean, close: (
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     sheet.subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    for (child in sheet.children) NodeView(child, inner)
+                    // What the content has to be drawn in: the dialog's most, or the window, less the content's sides.
+                    val room = (if (full) LocalUi.current.window.widthDp.toFloat() else 560f) - 48f
+                    Roomed(room) { for (child in sheet.children) NodeView(child, inner) }
+                    if (placed.foot.isNotEmpty()) {
+                        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (button in placed.foot) QuietButton(button, inner)
+                        }
+                    }
                 }
             }
         }

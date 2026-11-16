@@ -1,16 +1,23 @@
 package com.navree.client.ui
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
@@ -23,6 +30,7 @@ import com.navree.client.core.FieldValue
 import com.navree.client.core.Notice
 import com.navree.client.core.ScreenView
 import com.navree.client.design.ConfirmRules
+import com.navree.client.design.CompositionRules
 import com.navree.client.design.ContentRules
 import com.navree.client.design.WindowInfo
 import com.navree.protocol.Navree
@@ -59,12 +67,14 @@ internal data class Place(
     val overlay: String? = null,
     /** A dialog's own buttons are the confirmation; they are not asked about again. */
     val inDialog: Boolean = false,
-    /** The address of the screen shown beside this one, when a list and its detail share the window. */
-    val selectedUrl: String? = null,
+    /** The row that is the open one: the first that leads to the page shown beside the list, or to the screen's own. */
+    val openRow: com.navree.client.design.ListRules.RowAddress? = null,
     /** A node that is drawn elsewhere: a form's button that the app bar or a dialog's foot holds. */
     val omit: Navree.Node? = null,
     /** Drawn in a cell of a wide table, whose column heading already names what is in it. */
     val inCell: Boolean = false,
+    /** The screen's bar says its title: a heading that says it again is not drawn. */
+    val titleInBar: Boolean = false,
 ) {
     val id: Long get() = screen.id
 
@@ -127,8 +137,78 @@ internal val LocalRoom = compositionLocalOf { 0f }
 /** Whether the part being drawn is one of the parts of a line across, where it must not take the whole width. */
 internal val LocalInLine = compositionLocalOf { false }
 
+/** Whether the part being drawn stands in a cell at the end of a table's column: a block of lines there ends where its widest line ends. */
+internal val LocalEndAligned = compositionLocalOf { false }
+
+/** The tallest height the cards of one line have been seen to have. */
+internal class Tallest {
+    var px by mutableIntStateOf(0)
+}
+
+/**
+ * A line's record of its tallest card, kept while the line's parts, the width
+ * they are laid in and the text size are the same: a turned device or a smaller
+ * text makes the cards shorter, and the line must not stay as tall as it was.
+ */
+@Composable
+internal fun rememberTallest(key: Any?, widthDp: Float): Tallest {
+    val fontScale = LocalDensity.current.fontScale
+    return remember(key, widthDp, fontScale) { Tallest() }
+}
+
+/**
+ * Makes a card as tall as the tallest of the cards in its line, for parts
+ * that cannot say how tall they are before they are laid out (so the line
+ * cannot be measured ahead): each reports its height, and each is at least as
+ * tall as the tallest reported. The line settles in a frame.
+ */
+@Composable
+internal fun Modifier.sameHeightAs(line: Tallest): Modifier {
+    val least = with(LocalDensity.current) { line.px.toDp() }
+    return heightIn(min = least).onSizeChanged { line.px = CompositionRules.tallest(line.px, it.height) }
+}
+
+/**
+ * A line of parts that fills little of the room it is given stands in the
+ * middle of it; one that fills most of it starts at the start. The room is
+ * the width the line is given, taken whole.
+ */
+internal fun Modifier.centredWhenShort(): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(minWidth = 0))
+    val room = constraints.maxWidth
+    val width = if (constraints.hasBoundedWidth) room else placeable.width
+    val x = if (CompositionRules.centresShortLine(placeable.width, width)) (width - placeable.width) / 2 else 0
+    layout(width, placeable.height) { placeable.placeRelative(x, 0) }
+}
+
 /** Whether the part being drawn stands in a card: tabs there are one choice of a few over the card's content, not a second bar. */
 internal val LocalInCard = compositionLocalOf { false }
+
+/**
+ * A place for the focus to go when a field is done with it, so that the
+ * system does not hand it to the first thing that can take it (a search box at
+ * the top of the screen, whose keyboard would then open). Null where none is drawn.
+ */
+internal val LocalFocusSink = staticCompositionLocalOf<FocusSink?> { null }
+
+/**
+ * The focus sink's state. It can take the focus only while it is asked for
+ * ([take]) and until the focus leaves it again, so a hardware keyboard's Tab
+ * never stops on it: it is out of sight, and a stop that cannot be seen is not one.
+ */
+internal class FocusSink {
+    val requester = androidx.compose.ui.focus.FocusRequester()
+    var armed by androidx.compose.runtime.mutableStateOf(false)
+        private set
+
+    fun take() {
+        armed = true
+    }
+
+    fun release() {
+        armed = false
+    }
+}
 
 /** The width of the pane a screen is drawn in, in dp; 0 outside a screen. */
 internal val LocalPane = compositionLocalOf { 0f }
@@ -146,8 +226,10 @@ internal fun Roomed(roomDp: Float, content: @Composable () -> Unit) {
  * Content in a wide window is one column of readable width, in the middle.
  * What is in the column starts at the column's start, as text does.
  */
-internal fun Modifier.readable(mostDp: Int = ContentRules.CONTENT_MOST_DP): Modifier =
-    fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = mostDp.dp).fillMaxWidth()
+internal fun Modifier.readable(mostDp: Int = ContentRules.CONTENT_MOST_DP, columnDp: Int = mostDp): Modifier =
+    // The column stands in the middle; what is narrower than the column (a field, a form) starts at the column's start edge.
+    fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = maxOf(mostDp, columnDp).dp).fillMaxWidth()
+        .wrapContentWidth(Alignment.Start).widthIn(max = mostDp.dp).fillMaxWidth()
 
 @Composable
 internal fun failureTitle(failure: Failure): String = stringResource(
@@ -169,9 +251,13 @@ internal fun failureText(failure: Failure): String = stringResource(
     },
 )
 
-/** The client's own words for a notice of the core. */
+/**
+ * The client's own words for a notice of the core. One this build does not
+ * know ([Notice.Unknown]) is said by its [tone]: something that failed, or
+ * something this version cannot describe.
+ */
 @Composable
-internal fun noticeText(notice: Notice): String = stringResource(
+internal fun noticeText(notice: Notice, tone: Navree.Tone = Navree.Tone.NEUTRAL): String = stringResource(
     when (notice) {
         Notice.Offline -> R.string.navree_notice_offline
         Notice.Timeout -> R.string.navree_notice_timeout
@@ -182,5 +268,7 @@ internal fun noticeText(notice: Notice): String = stringResource(
         Notice.FieldsNeedAttention -> R.string.navree_notice_fields
         Notice.Loaded -> R.string.navree_notice_loaded
         Notice.SecondStep -> R.string.navree_notice_second_step
+        Notice.SavedNotRefreshed -> R.string.navree_notice_saved_not_refreshed
+        Notice.Unknown -> if (tone == Navree.Tone.DANGER) R.string.navree_notice_unknown_failed else R.string.navree_notice_unknown
     },
 )
