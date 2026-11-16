@@ -67,6 +67,60 @@ object FileRules {
 
         /** The place a picture was taken is in it, and the field does not keep it, and it cannot be taken out of this kind of file. */
         data class WithLocation(override val name: String) : Refusal
+
+        /** A picture of a kind this device cannot read for the place it was taken, for a field that does not keep it. */
+        data class PlaceUnchecked(override val name: String) : Refusal
+    }
+
+    /** A kind of picture, read from the file's own first bytes, never from its type or name. */
+    enum class Picture {
+        Jpeg,
+        Png,
+        Webp,
+        Gif,
+
+        /** HEIC and HEIF: an ISO media file whose brands name HEVC pictures (`heic`, `heix`, `mif1` and the like). */
+        Heic,
+
+        /** AVIF: an ISO media file whose brands name AV1 pictures (`avif`, `avis`). */
+        Avif,
+
+        /** TIFF and the raw formats of cameras (DNG, CR2, NEF, ORF, RW2, CR3, RAF and others). */
+        Raw,
+    }
+
+    /** What the client does about the place a picture was taken, for a field that does not keep it. */
+    enum class Place {
+        /** Not a picture: nothing to do. */
+        None,
+
+        /** Taken out of the copy (JPEG, PNG, WebP: the kinds `ExifInterface` writes), then read again to see it is gone. */
+        TakeOut,
+
+        /** Read, and the picture refused when it holds one: a kind this device reads but `ExifInterface` does not write. */
+        Check,
+
+        /** Refused: a kind this device cannot read for it. */
+        Refuse,
+    }
+
+    /**
+     * What is done about the place in a picture of [kind] on a system of API
+     * level [sdk]. `ExifInterface` (androidx, the reference on
+     * developer.android.com) reads "JPEG, PNG, WebP, HEIC (on API 28+), DNG,
+     * CR2, NEF, NRW, ARW, RW2, ORF, PEF, SRW, RAF, AVIF (on API 31+)" and writes
+     * "JPEG, PNG, WebP". The raw formats and TIFF are refused, though some are
+     * read, since they cannot be rewritten and TIFF is not on the list. A GIF
+     * has no Exif data: only an XMP packet in it can name a place, and that is
+     * read.
+     */
+    fun place(kind: Picture?, sdk: Int): Place = when (kind) {
+        null -> Place.None
+        Picture.Jpeg, Picture.Png, Picture.Webp -> Place.TakeOut
+        Picture.Gif -> Place.Check
+        Picture.Heic -> if (sdk >= 28) Place.Check else Place.Refuse
+        Picture.Avif -> if (sdk >= 31) Place.Check else Place.Refuse
+        Picture.Raw -> Place.Refuse
     }
 
     /** The kinds a field's `accept` names: trimmed, in lower case, none empty. */
@@ -162,18 +216,6 @@ object FileRules {
         val last = raw.orEmpty().substringAfterLast('/').substringAfterLast('\\')
         val clean = last.filter { !it.isISOControl() }.trim()
         return clean.ifEmpty { "file" }
-    }
-
-    /** The kinds of file whose own data can hold the place a picture was taken, which the client takes out unless the field keeps it. */
-    fun mayHoldLocation(mime: String?): Boolean = when (mime?.lowercase()) {
-        "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/avif" -> true
-        else -> false
-    }
-
-    /** The kinds the picture's own data can be rewritten for, to take the place out: the others are refused when they hold one. */
-    fun canRewriteLocation(mime: String?): Boolean = when (mime?.lowercase()) {
-        "image/jpeg", "image/png", "image/webp" -> true
-        else -> false
     }
 
     /** A token the client made for a kept file: 32 lower-case hex digits, so it can never name a path. */

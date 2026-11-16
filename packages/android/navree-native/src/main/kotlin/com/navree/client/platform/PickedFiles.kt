@@ -3,6 +3,7 @@ package com.navree.client.platform
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import androidx.exifinterface.media.ExifInterface
@@ -37,6 +38,11 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * The folder is emptied at the end of a session, and a copy a past process
  * left (the core's own state did not outlive it) is removed when a session starts.
+ *
+ * Unless the field keeps it, the place a picture was taken is taken out of the
+ * copy, or the picture is refused, by what the copy's own bytes say it is
+ * ([FileRules.place], [PictureData]): never by the type the provider gave or
+ * the file's name.
  */
 class PickedFiles internal constructor(private val folder: File) {
     /** The most bytes one file may have, and all the files of one field together: `NavreeConfig.mostFileBytes`. */
@@ -78,9 +84,19 @@ class PickedFiles internal constructor(private val folder: File) {
                 copy.delete()
                 return@withContext Result.Refused(if (held > 0) FileRules.Refusal.TooLargeTogether(name, mostBytes) else FileRules.Refusal.TooLarge(name, mostBytes))
             }
-            if (!keepLocation && FileRules.mayHoldLocation(mime) && !withoutLocation(copy, mime)) {
-                copy.delete()
-                return@withContext Result.Refused(FileRules.Refusal.WithLocation(name))
+            if (!keepLocation) {
+                // What the file is, by its own first bytes: never by the type the provider gave or the name.
+                val kind = PictureData.kindOf(copy)
+                val refused = when (FileRules.place(kind, Build.VERSION.SDK_INT)) {
+                    FileRules.Place.None -> null
+                    FileRules.Place.TakeOut -> if (takeOutPlace(copy, kind!!)) null else FileRules.Refusal.WithLocation(name)
+                    FileRules.Place.Check -> if (holdsPlace(copy, kind!!)) FileRules.Refusal.WithLocation(name) else null
+                    FileRules.Place.Refuse -> FileRules.Refusal.PlaceUnchecked(name)
+                }
+                if (refused != null) {
+                    copy.delete()
+                    return@withContext Result.Refused(refused)
+                }
             }
         } catch (e: CancellationException) {
             copy.delete()
@@ -176,24 +192,60 @@ class PickedFiles internal constructor(private val folder: File) {
     }
 
     /**
-     * Takes the place a picture was taken out of the copy. True when it holds
-     * none or it is taken out; false when it holds one that cannot be taken out
-     * of this kind of file, or the copy cannot be rewritten.
+     * Takes the place a picture was taken out of the copy of a JPEG, PNG or
+     * WebP, and reads what is left to see that it is gone. First the parts
+     * outside the Exif data that can name a place ([PictureData.clean]: an XMP
+     * packet that names one, Exif blocks after the first, other programs'
+     * metadata, whatever follows the end of the picture); then every GPS tag
+     * of the Exif data, and an XMP packet kept in the Exif data that names a
+     * place, with `ExifInterface`. True when the copy, read again, holds none.
      */
-    private fun withoutLocation(copy: File, mime: String): Boolean = try {
-        val exif = ExifInterface(copy)
-        val present = LOCATION_TAGS.filter { exif.getAttribute(it) != null }
-        when {
-            present.isEmpty() -> true
-            !FileRules.canRewriteLocation(mime) -> false
-            else -> {
-                present.forEach { exif.setAttribute(it, null) }
-                exif.saveAttributes()
-                true
+    private fun takeOutPlace(copy: File, kind: FileRules.Picture): Boolean {
+        val cleaned = File(copy.path + ".clean")
+        return try {
+            if (PictureData.clean(copy, cleaned, kind).broken || !cleaned.renameTo(copy)) return false
+            val exif = ExifInterface(copy)
+            var changed = false
+            for (tag in GPS_TAGS) {
+                if (exif.getAttribute(tag) != null) {
+                    exif.setAttribute(tag, null)
+                    changed = true
+                }
             }
+            if (exif.getAttributeBytes(ExifInterface.TAG_XMP)?.let(PictureData::namesPlace) == true) {
+                exif.setAttribute(ExifInterface.TAG_XMP, null)
+                changed = true
+            }
+            if (changed) exif.saveAttributes()
+            // What will be sent, read again from the start.
+            val again = ExifInterface(copy)
+            GPS_TAGS.none { again.getAttribute(it) != null } &&
+                again.latLong == null &&
+                again.getAttributeBytes(ExifInterface.TAG_XMP)?.let(PictureData::namesPlace) != true &&
+                PictureData.inspect(copy, kind).clean
+        } catch (_: Exception) {
+            false
+        } finally {
+            cleaned.delete()
         }
+    }
+
+    /**
+     * Whether a picture of a kind the client does not rewrite (HEIC, AVIF,
+     * GIF) holds a place: a GPS tag or an XMP packet `ExifInterface` reads in
+     * it (not for a GIF, which has no Exif data), or an XMP packet in its
+     * bytes that names one. A picture that cannot be read is taken to hold one.
+     */
+    private fun holdsPlace(copy: File, kind: FileRules.Picture): Boolean = try {
+        val exif = if (kind == FileRules.Picture.Gif) null else ExifInterface(copy)
+        val inExif = exif != null && (
+            GPS_TAGS.any { exif.getAttribute(it) != null } ||
+                exif.latLong != null ||
+                exif.getAttributeBytes(ExifInterface.TAG_XMP)?.let(PictureData::namesPlace) == true
+            )
+        inExif || copy.inputStream().buffered().use { PictureData.packetNamesPlace(it) }
     } catch (_: Exception) {
-        false
+        true
     }
 
     companion object {
@@ -208,16 +260,30 @@ class PickedFiles internal constructor(private val folder: File) {
             store ?: PickedFiles(File(context.applicationContext.cacheDir, "navree-picked")).also { store = it }
         }
 
-        /** The tags of a picture's data that tell where it was taken, and the direction and speed there. */
-        internal val LOCATION_TAGS: List<String> = listOf(
+        /**
+         * Every GPS tag of a picture's Exif data, as the `ExifInterface`
+         * reference lists them: where it was taken, the place it points to
+         * (the `GPSDest` tags), and the time, direction, speed and means of the
+         * fix.
+         */
+        internal val GPS_TAGS: List<String> = listOf(
+            ExifInterface.TAG_GPS_VERSION_ID,
             ExifInterface.TAG_GPS_LATITUDE, ExifInterface.TAG_GPS_LATITUDE_REF,
             ExifInterface.TAG_GPS_LONGITUDE, ExifInterface.TAG_GPS_LONGITUDE_REF,
             ExifInterface.TAG_GPS_ALTITUDE, ExifInterface.TAG_GPS_ALTITUDE_REF,
             ExifInterface.TAG_GPS_TIMESTAMP, ExifInterface.TAG_GPS_DATESTAMP,
-            ExifInterface.TAG_GPS_PROCESSING_METHOD, ExifInterface.TAG_GPS_AREA_INFORMATION,
+            ExifInterface.TAG_GPS_SATELLITES, ExifInterface.TAG_GPS_STATUS,
+            ExifInterface.TAG_GPS_MEASURE_MODE, ExifInterface.TAG_GPS_DOP,
             ExifInterface.TAG_GPS_SPEED, ExifInterface.TAG_GPS_SPEED_REF,
             ExifInterface.TAG_GPS_TRACK, ExifInterface.TAG_GPS_TRACK_REF,
             ExifInterface.TAG_GPS_IMG_DIRECTION, ExifInterface.TAG_GPS_IMG_DIRECTION_REF,
+            ExifInterface.TAG_GPS_MAP_DATUM,
+            ExifInterface.TAG_GPS_DEST_LATITUDE, ExifInterface.TAG_GPS_DEST_LATITUDE_REF,
+            ExifInterface.TAG_GPS_DEST_LONGITUDE, ExifInterface.TAG_GPS_DEST_LONGITUDE_REF,
+            ExifInterface.TAG_GPS_DEST_BEARING, ExifInterface.TAG_GPS_DEST_BEARING_REF,
+            ExifInterface.TAG_GPS_DEST_DISTANCE, ExifInterface.TAG_GPS_DEST_DISTANCE_REF,
+            ExifInterface.TAG_GPS_PROCESSING_METHOD, ExifInterface.TAG_GPS_AREA_INFORMATION,
+            ExifInterface.TAG_GPS_DIFFERENTIAL, ExifInterface.TAG_GPS_H_POSITIONING_ERROR,
         )
     }
 }

@@ -291,8 +291,14 @@ With nothing opened, the list has the window.
   part is sent for it, never an empty one. The copies are removed when a file is
   removed, at the end of a session, and a day after they were made.
 - Unless the field says `keep_location`, the place a picture was taken is taken
-  out of the copy (JPEG, PNG, WebP); a picture of another kind that holds one is
-  refused. The place in a video is not taken out.
+  out of the copy, by what its own first bytes say it is, never by its type or
+  name: from a JPEG, PNG or WebP every GPS tag, an XMP packet that names a
+  place, the Exif blocks after the first, other programs' metadata blocks and
+  what follows the end of the picture; the copy is read again and refused when
+  a place is still in it. A HEIC, AVIF or GIF that holds one is refused; a HEIC
+  below API 28, an AVIF below API 31, a TIFF and a raw picture are refused
+  outright, as the system cannot read them for it. The place in a video is not
+  taken out.
 - While the form is on its way the field cannot be changed. A field that takes
   one file replaces it (a second choice replaces the first); one that takes
   several adds, with no limit on the count.

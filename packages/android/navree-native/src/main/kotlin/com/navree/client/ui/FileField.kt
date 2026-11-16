@@ -108,6 +108,7 @@ private fun words(context: Context, why: FileRules.Refusal): String = when (why)
     is FileRules.Refusal.WrongType -> context.getString(R.string.navree_file_wrong_type, why.name, why.accepted)
     is FileRules.Refusal.Unreadable -> context.getString(R.string.navree_file_unreadable, why.name)
     is FileRules.Refusal.WithLocation -> context.getString(R.string.navree_file_with_location, why.name)
+    is FileRules.Refusal.PlaceUnchecked -> context.getString(R.string.navree_file_place_unchecked, why.name)
 }
 
 /**

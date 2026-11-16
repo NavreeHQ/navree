@@ -641,6 +641,102 @@ class InputFieldsTest {
         file.delete()
     }
 
+    /** A picture of [format], made on the device, with what [write] puts in its Exif data. */
+    private fun picture(name: String, format: Bitmap.CompressFormat, write: ExifInterface.() -> Unit): ByteArray {
+        val file = File(context.cacheDir, name)
+        val drawn = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888).also { it.eraseColor(0xFF16A34A.toInt()) }
+        file.outputStream().use { out -> drawn.compress(format, 90, out) }
+        ExifInterface(file).apply {
+            write()
+            saveAttributes()
+        }
+        return file.readBytes().also { file.delete() }
+    }
+
+    private val ludhiana: ExifInterface.() -> Unit = { setLatLong(30.9010, 75.8573) }
+
+    private val xmpWithPlace = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+        "<rdf:Description xmlns:exif=\"http://ns.adobe.com/exif/1.0/\" exif:GPSLatitude=\"30,54.06N\" exif:GPSLongitude=\"75,51.44E\"/></rdf:RDF></x:xmpmeta>"
+
+    /** Whether these bytes, read as a picture, say anywhere where it was taken. */
+    private fun namesPlace(bytes: ByteArray): String? {
+        val exif = ExifInterface(ByteArrayInputStream(bytes))
+        val tags = com.navree.client.platform.PickedFiles.GPS_TAGS.filter { exif.getAttribute(it) != null }
+        return when {
+            exif.latLong != null -> "a latitude and longitude"
+            tags.isNotEmpty() -> "the tags $tags"
+            String(bytes, Charsets.ISO_8859_1).contains("exif:GPS") -> "an XMP packet"
+            else -> null
+        }
+    }
+
+    /**
+     * The kind of a picture is read from its own bytes: a JPEG the provider calls
+     * `image/jpg`, one named and typed as a PDF, a PNG and a WebP, each with a
+     * place in its Exif data; a JPEG whose only place is where it points to
+     * (`GPSDest`); one whose only place is an XMP packet; and one with more after
+     * its end. Each is sent without a place, and the JPEGs end where the picture does.
+     */
+    @Test
+    fun thePlaceIsTakenOutOfEveryPictureByWhatItIsNotByWhatItIsCalled() {
+        startOnTheClaimsForm()
+        val webp = if (android.os.Build.VERSION.SDK_INT >= 30) Bitmap.CompressFormat.WEBP_LOSSLESS else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
+        val jpeg = picture("ludhiana.jpg", Bitmap.CompressFormat.JPEG, ludhiana)
+        val pictures = linkedMapOf(
+            "Ludhiana photo" to document("Ludhiana photo", "image/jpg", jpeg),
+            "Bill Amritsar.pdf" to document("Bill Amritsar.pdf", pdf, jpeg),
+            "Patiala.png" to document("Patiala.png", "image/png", picture("patiala.png", Bitmap.CompressFormat.PNG, ludhiana)),
+            "Moga.webp" to document("Moga.webp", "image/webp", picture("moga.webp", webp, ludhiana)),
+            "Bathinda.jpg" to document(
+                "Bathinda.jpg",
+                "image/jpeg",
+                picture("bathinda.jpg", Bitmap.CompressFormat.JPEG) {
+                    setAttribute(ExifInterface.TAG_GPS_DEST_LATITUDE, "30/1,12/1,0/1")
+                    setAttribute(ExifInterface.TAG_GPS_DEST_LATITUDE_REF, "N")
+                    setAttribute(ExifInterface.TAG_GPS_DEST_LONGITUDE, "74/1,57/1,0/1")
+                    setAttribute(ExifInterface.TAG_GPS_DEST_LONGITUDE_REF, "E")
+                },
+            ),
+            "Sangrur.jpg" to document("Sangrur.jpg", "image/jpeg", picture("sangrur.jpg", Bitmap.CompressFormat.JPEG) { setAttribute(ExifInterface.TAG_XMP, xmpWithPlace) }),
+            "Jalandhar.jpg" to document("Jalandhar.jpg", "image/jpeg", jpeg + "\u0000\u0000\u0000\u0018ftypmp42$xmpWithPlace".toByteArray(Charsets.ISO_8859_1)),
+        )
+        for ((name, uri) in pictures) {
+            assertNotNull("the fixture $name holds a place", namesPlace(context.contentResolver.openInputStream(uri)!!.use { it.readBytes() }))
+        }
+        pick("Papers", "Choose files", *pictures.values.toTypedArray())
+        waitFor("every picture to reach the core") { heldFiles("f-papers").size == pictures.size }
+        save()
+        val sent = partsOf(claims.posts.last()).filter { it.name == "papers" }
+        assertEquals(pictures.keys.toList(), sent.map { it.filename })
+        for (part in sent) {
+            assertNull("${part.filename} was sent with a place in it", namesPlace(part.bytes))
+            if (part.bytes[0] == 0xFF.toByte()) {
+                assertTrue("${part.filename} ends where its picture ends", part.bytes[part.bytes.size - 2] == 0xFF.toByte() && part.bytes.last() == 0xD9.toByte())
+            }
+        }
+    }
+
+    /**
+     * A picture of a kind the client does not rewrite: a HEIC whose XMP names
+     * a place is refused with words, and so is a TIFF, which this device cannot
+     * read for a place; neither is held or sent.
+     */
+    @Test
+    fun aPictureThatCannotBeCleanedIsRefusedWithWordsUnlessTheFieldKeepsThePlace() {
+        startOnTheClaimsForm()
+        val heic = byteArrayOf(0, 0, 0, 24) + "ftypheic\u0000\u0000\u0000\u0000mif1heic".toByteArray(Charsets.ISO_8859_1) + ByteArray(2_000) + xmpWithPlace.toByteArray(Charsets.ISO_8859_1)
+        pick("Photo", "Choose a file", document("Kapurthala.heic", "image/heic", heic))
+        reveal(compose.onNode(hasText("Kapurthala.heic has the place it was taken in it", substring = true))).assertExists()
+        assertTrue("a HEIC that names a place is not held", heldFiles("f-photo").isEmpty())
+        pick("Photo", "Choose a file", document("Firozpur.tiff", "image/tiff", "MM\u0000*\u0000\u0000\u0000\u0008".toByteArray(Charsets.ISO_8859_1) + ByteArray(500)))
+        reveal(compose.onNode(hasText("Firozpur.tiff is a kind of picture this device cannot check", substring = true))).assertExists()
+        assertTrue("a TIFF is not held", heldFiles("f-photo").isEmpty())
+        Shots.take("inputs-file-place-refused")
+        // A field that keeps the place takes both as they are.
+        pick("Snap", "Choose a file", document("Firozpur.tiff", "image/tiff", "MM\u0000*\u0000\u0000\u0000\u0008".toByteArray(Charsets.ISO_8859_1) + ByteArray(500)))
+        waitFor("the field that keeps the place to hold the TIFF") { heldFiles("f-snap").size == 1 }
+    }
+
     // ---------------------------------------------------------------- pictures
 
     /** Both fields as a person sees them, with files chosen, in the look the job set; and the colour dialog open. */

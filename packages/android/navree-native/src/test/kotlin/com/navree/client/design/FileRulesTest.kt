@@ -95,13 +95,17 @@ class FileRulesTest {
     }
 
     @Test
-    fun the_place_a_picture_was_taken_is_looked_for_in_the_kinds_that_can_hold_it() {
-        assertTrue(FileRules.mayHoldLocation("image/jpeg"))
-        assertTrue(FileRules.mayHoldLocation("IMAGE/HEIC"))
-        assertFalse(FileRules.mayHoldLocation("application/pdf"))
-        assertFalse(FileRules.mayHoldLocation(null))
-        assertTrue(FileRules.canRewriteLocation("image/png"))
-        assertFalse("a picture the client cannot rewrite is refused when it holds a place", FileRules.canRewriteLocation("image/heic"))
+    fun the_place_in_a_picture_is_taken_out_of_the_kinds_the_platform_writes_and_checked_or_refused_in_the_others_by_api_level() {
+        assertEquals(FileRules.Place.None, FileRules.place(null, 35))
+        for (kind in listOf(FileRules.Picture.Jpeg, FileRules.Picture.Png, FileRules.Picture.Webp)) {
+            assertEquals(kind.name, FileRules.Place.TakeOut, FileRules.place(kind, 26))
+        }
+        assertEquals("a GIF has no Exif data: its XMP is read", FileRules.Place.Check, FileRules.place(FileRules.Picture.Gif, 26))
+        assertEquals("HEIC is read from API 28", FileRules.Place.Refuse, FileRules.place(FileRules.Picture.Heic, 27))
+        assertEquals(FileRules.Place.Check, FileRules.place(FileRules.Picture.Heic, 28))
+        assertEquals("AVIF is read from API 31", FileRules.Place.Refuse, FileRules.place(FileRules.Picture.Avif, 30))
+        assertEquals(FileRules.Place.Check, FileRules.place(FileRules.Picture.Avif, 31))
+        assertEquals("TIFF and raw pictures cannot be rewritten", FileRules.Place.Refuse, FileRules.place(FileRules.Picture.Raw, 36))
     }
 
     @Test
