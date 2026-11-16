@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Navree.Design;
+using Navree.Design.Inputs;
 using Navree.Design.Pages;
 using Navree.Protocol;
 using Navree.Runtime;
@@ -758,34 +759,22 @@ internal sealed partial class NodeRenderer
                 if (choice.Search is { } search)
                 {
                     // A choice that is searched on the server: the person types, the core is asked for the options that match (by the words,
-                    // and by cursor for more), and the options that come are the suggestions; a way to make a new one stands last.
-                    List<(string Label, string? Value, int Kind)> entries = [];
+                    // and by cursor for more), and the options that come are the suggestions; a way to make a new one stands last. The list is
+                    // given the lines themselves, each with its own value, so the one chosen is known by which line it is and never by its
+                    // words: two people of one name are two lines. The box's words are set here, not by the list.
+                    IReadOnlyList<Suggestion> offered = [];
                     AutoSuggestBox finder = new()
                     {
                         Header = header,
                         PlaceholderText = choice.Placeholder ?? string.Empty,
                         IsEnabled = !field.Disabled,
+                        UpdateTextOnSelect = false,
                         Text = options.FirstOrDefault(option => option.Value == chosen)?.Label ?? string.Empty,
                     };
                     void Offer(IReadOnlyList<Models.ChoiceOption> found, bool more, string typed)
                     {
-                        entries.Clear();
-                        foreach (Models.ChoiceOption option in found)
-                        {
-                            entries.Add((option.Label, option.Value, option.Disabled ? 3 : 0));
-                        }
-
-                        if (more)
-                        {
-                            entries.Add(("Show more", null, 1));
-                        }
-
-                        if (choice.Create is { } make && typed.Length > 0)
-                        {
-                            entries.Add((make.Label + ": " + typed, null, 2));
-                        }
-
-                        finder.ItemsSource = entries.Select(entry => entry.Label).ToList();
+                        offered = ChoiceRules.Offer(found, more, choice.Create?.Label, typed);
+                        finder.ItemsSource = offered;
                     }
 
                     Offer(options, held?.More ?? choice.More is not null, finder.Text);
@@ -799,23 +788,17 @@ internal sealed partial class NodeRenderer
                     };
                     finder.QuerySubmitted += (box, e) =>
                     {
-                        int at = e.ChosenSuggestion is string label ? entries.FindIndex(entry => entry.Label == label) : -1;
-                        if (at < 0)
+                        (ChoiceAct act, Suggestion? line) = ChoiceRules.Chosen(offered, e.ChosenSuggestion);
+                        switch (act)
                         {
-                            return;
-                        }
-
-                        (string Label, string? Value, int Kind) entry = entries[at];
-                        switch (entry.Kind)
-                        {
-                            case 0 when entry.Value is not null:
-                                box.Text = entry.Label;
-                                send(new TextValue(entry.Value));
+                            case ChoiceAct.Send when line?.Value is string value:
+                                box.Text = line.Label;
+                                send(new TextValue(value));
                                 break;
-                            case 1:
+                            case ChoiceAct.More:
                                 context.Send(Events.Options(context.Screen.Id, currentFormOf(), id, box.Text, more: true));
                                 break;
-                            case 2 when choice.Create?.Href is string href:
+                            case ChoiceAct.Create when choice.Create?.Href is string href:
                                 Act(new Models.ActionNavigate { Href = href }, null, id, currentFormOf(), searchOverlay);
                                 break;
                             default:
@@ -857,17 +840,29 @@ internal sealed partial class NodeRenderer
                     show = view =>
                     {
                         radios.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
-                        if (view?.Value is TextValue now && IndexOfValue(options, now.Text) is int at && at != radios.SelectedIndex)
+                        radiosApplying = true;
+                        try
                         {
-                            radiosApplying = true;
-                            try
+                            // The buttons are the options the field has now: a list that reads the same and sends other values is another list.
+                            IReadOnlyList<Models.ChoiceOption> latest = view?.Options ?? choice.Options;
+                            if (!ChoiceRules.SameOptions(options, latest))
+                            {
+                                options = latest;
+                                radios.Items.Clear();
+                                foreach (Models.ChoiceOption option in latest)
+                                {
+                                    radios.Items.Add(option.Label);
+                                }
+                            }
+
+                            if (view?.Value is TextValue now && IndexOfValue(options, now.Text) is int at && at != radios.SelectedIndex)
                             {
                                 radios.SelectedIndex = at;
                             }
-                            finally
-                            {
-                                radiosApplying = false;
-                            }
+                        }
+                        finally
+                        {
+                            radiosApplying = false;
                         }
                     };
                 }
@@ -922,10 +917,11 @@ internal sealed partial class NodeRenderer
                         comboApplying = true;
                         try
                         {
-                            IReadOnlyList<Models.ChoiceOption> latest = view?.Options ?? options;
+                            // The entries are the options the field has now, found by their values: a list that reads the same and sends other
+                            // values is another list, and the list the field was drawn with comes back when the core holds none of its own.
+                            IReadOnlyList<Models.ChoiceOption> latest = view?.Options ?? choice.Options;
                             bool more = view is not null ? view.More : goesOn;
-                            int expected = latest.Count + (more ? 1 : 0);
-                            if (expected != combo.Items.Count || latest.Select((option, at) => combo.Items[at] as string != option.Label).Any(different => different))
+                            if (more != goesOn || !ChoiceRules.SameOptions(options, latest))
                             {
                                 options = latest;
                                 goesOn = more;
