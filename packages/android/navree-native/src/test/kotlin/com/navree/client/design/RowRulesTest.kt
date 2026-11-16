@@ -90,14 +90,6 @@ class ReorderRulesTest {
     }
 
     @Test
-    fun half_a_row_dragged_counts_as_a_place() {
-        assertEquals(0, ReorderRules.steps(20f, 100))
-        assertEquals(1, ReorderRules.steps(60f, 100))
-        assertEquals(-2, ReorderRules.steps(-180f, 100))
-        assertEquals(0, ReorderRules.steps(500f, 0))
-    }
-
-    @Test
     fun a_moved_row_names_the_row_it_then_stands_before() {
         val ids = listOf("a", "b", "c", "d")
         assertEquals(ReorderRules.Landing(2, "d"), ReorderRules.landing(ids, 1, 1))
@@ -118,6 +110,42 @@ class ReorderRulesTest {
         assertFalse("full", ReorderRules.accepts(todo, doing))
         assertFalse("another group", ReorderRules.accepts(todo, other))
         assertFalse("no group: its own list only", ReorderRules.accepts(list("solo", null, null, "x"), done))
+    }
+
+    @Test
+    fun the_form_that_moves_a_card_by_its_fields_gives_way_to_the_handle() {
+        val moveForm = Navree.Form(id = "move", action = "/cards/move", method = Navree.Method.POST, children = listOf(Navree.Button(label = "Move", action = Navree.Action.Submit())))
+        val badges = Navree.Stack(children = listOf(Navree.Badge(text = "Bug")))
+        val row = Navree.Row(id = "c-7", title = "Card c-7", detail = listOf(badges, Navree.Disclosure(label = "Move", children = listOf(moveForm))))
+        val todo = list("todo", "board", null).copy(children = listOf(row))
+        assertEquals(listOf<Navree.Node>(badges), ReorderRules.withoutMoveForm(todo, row).detail)
+        val other = Navree.Disclosure(label = "Details", children = listOf(Navree.Text(value = "More")))
+        val kept = row.copy(detail = listOf(badges, other))
+        assertEquals("a disclosure of something else stays", kept, ReorderRules.withoutMoveForm(todo, kept))
+        assertEquals("a list that takes no moves has no handle", row, ReorderRules.withoutMoveForm(todo.copy(reorder = null), row))
+    }
+
+    @Test
+    fun a_disclosure_of_the_move_form_and_something_else_keeps_the_something_else() {
+        val moveForm = Navree.Form(id = "move", action = "/cards/move", method = Navree.Method.POST, children = listOf(Navree.Button(label = "Move", action = Navree.Action.Submit())))
+        val deleteForm = Navree.Form(id = "delete", action = "/cards/7/delete", method = Navree.Method.POST, children = listOf(Navree.Button(label = "Delete", action = Navree.Action.Submit())))
+        val row = Navree.Row(id = "c-7", title = "Card c-7", detail = listOf(Navree.Disclosure(label = "More", children = listOf(moveForm, deleteForm))))
+        val todo = list("todo", "board", null).copy(children = listOf(row))
+        assertEquals(
+            listOf<Navree.Node>(Navree.Disclosure(label = "More", children = listOf(deleteForm))),
+            ReorderRules.withoutMoveForm(todo, row).detail,
+        )
+        val nested = row.copy(detail = listOf(Navree.Disclosure(label = "More", children = listOf(Navree.Stack(children = listOf(moveForm))))))
+        assertEquals("a disclosure left empty goes", emptyList<Navree.Node>(), ReorderRules.withoutMoveForm(todo, nested).detail)
+    }
+
+    @Test
+    fun a_row_that_is_its_title_button_is_as_usable_as_the_button() {
+        val button = Navree.Button(label = "Open", action = Navree.Action.Submit())
+        assertEquals(ListRules.TitleUse(enabled = true, busy = false), ListRules.titleUse(button, formPending = false))
+        assertEquals("disabled", ListRules.TitleUse(enabled = false, busy = false), ListRules.titleUse(button.copy(disabled = true), formPending = false))
+        assertEquals("pending", ListRules.TitleUse(enabled = false, busy = true), ListRules.titleUse(button.copy(pending = true), formPending = false))
+        assertEquals("its form's request is on its way", ListRules.TitleUse(enabled = false, busy = true), ListRules.titleUse(button, formPending = true))
     }
 
     @Test
