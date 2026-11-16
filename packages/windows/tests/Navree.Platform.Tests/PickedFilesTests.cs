@@ -335,6 +335,30 @@ public sealed class PickedFilesTests
     private int CopiesOnDisk() => Directory.Exists(copies) ? Directory.GetFiles(copies).Length : 0;
 
     [TestMethod]
+    public async Task A_photoshop_document_is_not_sent_from_a_field_that_does_not_keep_the_place_and_is_sent_as_it_is_from_one_that_does()
+    {
+        PickedFiles files = new(copies);
+
+        // A Photoshop document: its first bytes say so, and it can hold the place of the photo it was made from.
+        byte[] document = [.. "8BPS"u8.ToArray(), 0, 1, 0, 0, 0, 0, 0, 0, 0, 3, .. PhotoWithPlace()];
+        string path = Write("Wagah border.psd", document);
+
+        Picked refused = await files.AddAsync(path, Rule(accept: null), 0, CancellationToken.None);
+        Assert.IsNull(refused.File, "a Photoshop document went out of a field that does not keep the place");
+        StringAssert.Contains(refused.Refusal, "Photoshop");
+        Assert.AreEqual(0, CopiesOnDisk());
+
+        // Named as a paper, it is the same file.
+        Picked renamed = await files.AddAsync(Write("Wagah border.pdf", document), Rule(accept: null), 0, CancellationToken.None);
+        Assert.IsNull(renamed.File, "a Photoshop document named as a paper went out of a field that does not keep the place");
+
+        // A field that keeps the place sends it as it is.
+        Picked kept = await files.AddAsync(path, Rule(accept: null, keep: true), 0, CancellationToken.None);
+        Assert.IsNotNull(kept.File);
+        CollectionAssert.AreEqual(document, await SentAsync(files, kept));
+    }
+
+    [TestMethod]
     public async Task A_photo_chosen_in_a_session_that_has_ended_is_not_held_and_leaves_no_copy()
     {
         PickedFiles files = new(copies);

@@ -50,6 +50,12 @@ public enum PictureKind
 
     /// <summary>A file of the ISO media family that names neither a picture nor a video this code knows.</summary>
     OtherMedia,
+
+    /// <summary>A Photoshop document (PSD, PSB): it keeps the EXIF and XMP of the photo it was made from.</summary>
+    Photoshop,
+
+    /// <summary>A camera's raw picture whose first bytes say so, whatever the file is named.</summary>
+    Raw,
 }
 
 /// <summary>Reads what kind of file a file is from its first bytes.</summary>
@@ -95,6 +101,18 @@ public static class PlaceKinds
         if (head.StartsWith("RIFF"u8) && head.Length >= 12 && head[8..12].SequenceEqual("WEBP"u8))
         {
             return PictureKind.Webp;
+        }
+
+        // A Photoshop document and the raw pictures that say what they are in their first bytes are known before TIFF is, since some of
+        // them begin as a TIFF does. This client takes no place out of either: they are refused unless the field keeps the place.
+        if (head.StartsWith("8BPS"u8))
+        {
+            return PictureKind.Photoshop;
+        }
+
+        if (IsRaw(head))
+        {
+            return PictureKind.Raw;
         }
 
         if (head.StartsWith("II*\0"u8) || head.StartsWith("MM\0*"u8))
@@ -154,6 +172,7 @@ public static class PlaceKinds
         PictureKind.Heif => "image/heif",
         PictureKind.JpegXl => "image/jxl",
         PictureKind.Jpeg2000 => "image/jp2",
+        PictureKind.Photoshop => "image/vnd.adobe.photoshop",
         _ => null,
     };
 
@@ -166,8 +185,36 @@ public static class PlaceKinds
         PictureKind.Jpeg2000 => "JPEG 2000",
         PictureKind.BigTiff => "BigTIFF",
         PictureKind.OtherMedia => "ISO media",
+        PictureKind.Photoshop => "Photoshop",
+        PictureKind.Raw => "raw",
         _ => kind.ToString().ToUpperInvariant(),
     };
+
+    // A camera's raw picture by its first bytes. From ExifTool's list of file signatures (lib/Image/ExifTool.pm, %magicNumber): Fujifilm RAF
+    // 'FUJIFILM', Sigma X3F 'FOVb', Minolta MRW '\0MR[MI]', Canon CRW '(II|MM).{4}HEAP(CCDR|JPGM)'. Not in that list, and written here from
+    // the formats' own headers: Olympus ORF, which begins as a TIFF does with another number in place of 42 ("IIRO", "IIRS", "MMOR"); Panasonic
+    // RW2, likewise ("II" then 0x55 0x00); and Canon CR2, a TIFF with "CR" at its ninth byte. A raw picture that is a plain TIFF by its bytes
+    // (DNG, NEF, ARW and others) is known by its name only, and read as the TIFF it is when it has another name.
+    private static bool IsRaw(ReadOnlySpan<byte> head)
+    {
+        if (head.StartsWith("FUJIFILM"u8) || head.StartsWith("FOVb"u8) || head.StartsWith("\0MRM"u8) || head.StartsWith("\0MRI"u8))
+        {
+            return true;
+        }
+
+        if (head.StartsWith("IIRO"u8) || head.StartsWith("IIRS"u8) || head.StartsWith("MMOR"u8) || head.StartsWith((ReadOnlySpan<byte>)[0x49, 0x49, 0x55, 0x00]))
+        {
+            return true;
+        }
+
+        bool ordered = head.StartsWith("II"u8) || head.StartsWith("MM"u8);
+        if (ordered && head.Length >= 14 && head[6..10].SequenceEqual("HEAP"u8) && (head[10..14].SequenceEqual("CCDR"u8) || head[10..14].SequenceEqual("JPGM"u8)))
+        {
+            return true;
+        }
+
+        return (head.StartsWith("II*\0"u8) || head.StartsWith("MM\0*"u8)) && head.Length >= 10 && head[8] == (byte)'C' && head[9] == (byte)'R';
+    }
 
     // The brands of an ISO media file: its major brand and the compatible ones, read from its first box (the 'ftyp' box) as far as the head goes.
     private static PictureKind Brands(ReadOnlySpan<byte> head)

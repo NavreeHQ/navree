@@ -35,7 +35,8 @@ public sealed record PlaceResult(PlaceOutcome Outcome, string? Why = null)
 /// <item>XMP anywhere (PlaceXmp.cs): a packet that holds any property about a place goes whole.</item>
 /// <item>GIF, BMP and SVG: searched for a property about a place, and refused when one is found.</item>
 /// </list>
-/// Refused by their bytes: HEIC, HEIF, AVIF, JPEG XL, JPEG 2000, BigTIFF. Not looked into: words a person wrote (a caption, a comment), a video.
+/// Refused by their bytes: HEIC, HEIF, AVIF, JPEG XL, JPEG 2000, BigTIFF, a Photoshop document, and the raw pictures whose first bytes say what
+/// they are. Not looked into: words a person wrote (a caption, a comment), a video.
 /// </summary>
 public static partial class PlaceRules
 {
@@ -119,6 +120,9 @@ public static partial class PlaceRules
                     break;
                 case PictureKind.OtherMedia:
                     return Refused(Doubt.Unknown);
+                case PictureKind.Raw:
+                    // A raw picture by its bytes, whatever it is named.
+                    return Refused(Doubt.Raw);
                 default:
                     return Refuse(kind);
             }

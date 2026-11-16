@@ -371,9 +371,49 @@ public sealed class PlaceRulesTests
     [DataRow(new byte[] { 0xFF, 0x0A, 0xFA, 0x7F }, PictureKind.JpegXl)]
     [DataRow(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D }, PictureKind.NotAPicture)]
     [DataRow(new byte[] { 0xEF, 0xBB, 0xBF, 0x0A, 0x3C, 0x3F, 0x78, 0x6D, 0x6C, 0x3F, 0x3E, 0x3C, 0x53, 0x56, 0x47 }, PictureKind.Svg)]
+    [DataRow(new byte[] { 0x38, 0x42, 0x50, 0x53, 0, 1, 0, 0, 0, 0, 0, 0, 0, 3 }, PictureKind.Photoshop)]
+    [DataRow(new byte[] { 0x46, 0x55, 0x4A, 0x49, 0x46, 0x49, 0x4C, 0x4D, 0x43, 0x43, 0x44, 0x2D, 0x52, 0x41, 0x57 }, PictureKind.Raw)]
+    [DataRow(new byte[] { 0x46, 0x4F, 0x56, 0x62, 0, 0, 3, 0 }, PictureKind.Raw)]
+    [DataRow(new byte[] { 0, 0x4D, 0x52, 0x4D, 0, 0, 0, 8 }, PictureKind.Raw)]
+    [DataRow(new byte[] { 0x49, 0x49, 0x1A, 0, 0, 0, 0x48, 0x45, 0x41, 0x50, 0x43, 0x43, 0x44, 0x52 }, PictureKind.Raw)]
+    [DataRow(new byte[] { 0x49, 0x49, 0x52, 0x4F, 8, 0, 0, 0 }, PictureKind.Raw)]
+    [DataRow(new byte[] { 0x49, 0x49, 0x52, 0x53, 8, 0, 0, 0 }, PictureKind.Raw)]
+    [DataRow(new byte[] { 0x4D, 0x4D, 0x4F, 0x52, 0, 0, 0, 8 }, PictureKind.Raw)]
+    [DataRow(new byte[] { 0x49, 0x49, 0x55, 0, 0x18, 0, 0, 0 }, PictureKind.Raw)]
+    [DataRow(new byte[] { 0x49, 0x49, 0x2A, 0, 0x10, 0, 0, 0, 0x43, 0x52, 2, 0 }, PictureKind.Raw)]
+    [DataRow(new byte[] { 0x49, 0x49, 0x2A, 0, 8, 0, 0, 0, 1, 0 }, PictureKind.Tiff)]
     public void The_kind_of_a_file_is_read_from_its_first_bytes(byte[] head, PictureKind kind)
     {
         Assert.AreEqual(kind, PlaceKinds.KindOf(head));
+    }
+
+    [TestMethod]
+    public void A_photoshop_document_and_a_raw_picture_under_another_name_are_known_by_their_bytes_and_refused_with_words()
+    {
+        // A Photoshop document made from a phone photo keeps the photo's EXIF block, GPS and all, as one of its resources (1058).
+        (byte[] block, _, _, _) = Exif(true);
+        byte[] document = [.. "8BPS"u8.ToArray(), 0, 1, 0, 0, 0, 0, 0, 0, 0, 3, .. "8BIM"u8.ToArray(), 0x04, 0x22, 0, 0, 0, 0, (byte)(block.Length >> 8), (byte)block.Length, .. block];
+        foreach (string name in new[] { "Wagah border.psd", "Wagah border", "Wagah border.pdf", "Wagah border.jpg" })
+        {
+            PlaceResult refused = PlaceRules.TakeOut([.. document], name);
+            Assert.AreEqual(PlaceOutcome.Refused, refused.Outcome, name + ": a Photoshop document that holds a place is sent as it is");
+            StringAssert.Contains(refused.Why, "Photoshop");
+            Expect.That(PlaceRules.MustLook(document, name, FileRules.MediaTypeOf(name)), name + " is not looked into before it is sent");
+        }
+
+        // A Fujifilm raw picture saved under a name that says nothing, and one that says it is a paper.
+        byte[] raw = [.. "FUJIFILMCCD-RAW 0201FF129502X-T2"u8.ToArray(), .. new byte[64]];
+        foreach (string name in new[] { "DSCF0412", "DSCF0412.dat", "DSCF0412.pdf" })
+        {
+            PlaceResult refused = PlaceRules.TakeOut([.. raw], name);
+            Assert.AreEqual(PlaceOutcome.Refused, refused.Outcome, name + ": a raw picture under another name is sent as it is");
+            StringAssert.Contains(refused.Why, "raw picture");
+            Expect.That(PlaceRules.MustLook(raw, name, FileRules.MediaTypeOf(name)), name + " is not looked into before it is sent");
+        }
+
+        // An Olympus and a Panasonic raw picture begin almost as a TIFF does: neither is read as a TIFF.
+        Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([0x49, 0x49, 0x52, 0x4F, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0], "P1010001.tif").Outcome);
+        Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([0x49, 0x49, 0x55, 0, 0x18, 0, 0, 0, 0, 0, 0, 0, 0, 0], "P1010002.tif").Outcome);
     }
 
     [TestMethod]
