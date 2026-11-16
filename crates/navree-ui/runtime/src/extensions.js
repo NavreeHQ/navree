@@ -20,7 +20,10 @@ import { E, T, all, attr, body, byId, cookie, emit, every, fetchHere, fresh, has
 
 /** A UI extension's file: at the extension route, by namespace, name and content hash. */
 const FILE = /^\/_navree\/ui\/ext\/[a-z][a-z0-9_]{0,63}\.[a-z0-9-]{1,64}-[0-9a-f]{12}\.(js|css)$/;
-/** The form a sealed field names: an id no element has, so it joins none. */
+/**
+ * The form a sealed field names. The page's first element with this id is one of the runtime's own, which is
+ * no form, so a sealed field joins none, whatever form a library writes with the same id.
+ */
 const SEALED = "ui-sealed";
 /** What a form takes into its post. */
 const FIELDS = "input,select,textarea,button,fieldset,output,object";
@@ -349,6 +352,10 @@ function drop() {
 }
 
 if (!fresh()) {
+  // A field's form is the first element of the page with the id it names: this one, ahead of anything written.
+  const first = make("template");
+  set(first, "id", SEALED);
+  head().prepend(first);
   link();
   scan();
   on(document, "ui:before-swap", (e) => {
