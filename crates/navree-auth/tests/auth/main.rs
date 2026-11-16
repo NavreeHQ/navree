@@ -19,6 +19,7 @@ mod module;
 mod native_calls;
 mod offboarding;
 mod orm;
+mod pages_markup;
 mod passkeys;
 mod password_reset;
 mod passwordless;
