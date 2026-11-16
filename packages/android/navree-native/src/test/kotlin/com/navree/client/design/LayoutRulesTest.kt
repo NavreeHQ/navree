@@ -307,8 +307,8 @@ class BidiRulesTest {
 
     @Test
     fun a_phone_number_and_an_address_are_read_left_to_right_in_a_right_to_left_line_and_other_words_are_left_alone() {
-        assertEquals("⁦+91 98140 12345⁩", BidiRules.codes("+91 98140 12345", rtl = true))
-        assertEquals("⁦harpreet.sandhu@example.com⁩", BidiRules.codes("harpreet.sandhu@example.com", rtl = true))
+        assertEquals("\u2066+91 98140 12345\u2069", BidiRules.codes("+91 98140 12345", rtl = true))
+        assertEquals("\u2066harpreet.sandhu@example.com\u2069", BidiRules.codes("harpreet.sandhu@example.com", rtl = true))
         assertEquals("7 orders since Mar 2024", BidiRules.codes("7 orders since Mar 2024", rtl = true))
         assertEquals("CH-1042", BidiRules.codes("CH-1042", rtl = true))
     }
@@ -320,7 +320,7 @@ class BidiRulesTest {
         assertEquals("2026-11-13", BidiRules.codes("2026-11-13", rtl = true))
         assertEquals("13-11-2026", BidiRules.codes("13-11-2026", rtl = true))
         assertEquals("13/11/26", BidiRules.codes("13/11/26", rtl = true))
-        assertEquals("a phone number written like a date is isolated", "⁦0124-45-67⁩", BidiRules.codes("0124-45-67", rtl = true))
-        assertEquals("⁦98-45-1234⁩", BidiRules.codes("98-45-1234", rtl = true))
+        assertEquals("a phone number written like a date is isolated", "\u20660124-45-67\u2069", BidiRules.codes("0124-45-67", rtl = true))
+        assertEquals("\u206698-45-1234\u2069", BidiRules.codes("98-45-1234", rtl = true))
     }
 }
