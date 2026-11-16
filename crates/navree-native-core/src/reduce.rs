@@ -3291,6 +3291,23 @@ mod tests {
             ("a 429", vec![json(429)], true),
             ("a 408", vec![json(408)], true),
             (
+                "no network on the request that carried it",
+                vec![Response {
+                    error: Some(TransportError::Offline),
+                    ..Response::default()
+                }],
+                false,
+            ),
+            (
+                "no network after a redirect the transport followed itself",
+                vec![Response {
+                    error: Some(TransportError::Offline),
+                    url: "https://shop.example/orders/42".to_owned(),
+                    ..Response::default()
+                }],
+                true,
+            ),
+            (
                 "a 413 that names her",
                 vec![Response {
                     headers: her(),
