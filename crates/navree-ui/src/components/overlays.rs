@@ -446,6 +446,8 @@ pub struct Popover {
     side: Side,
     align: PopupAlign,
     label: Option<String>,
+    trigger_label: Option<String>,
+    glyph: Option<icons::Icon>,
     body: Vec<Node>,
 }
 
@@ -461,8 +463,43 @@ impl Popover {
             side: Side::Bottom,
             align: PopupAlign::Center,
             label: None,
+            trigger_label: None,
+            glyph: None,
             body: Vec::new(),
         }
+    }
+
+    /// A popover with the id `id`, opened by a square button showing `glyph` alone and named
+    /// `label` for assistive technology, such as a bell that opens the notifications. The
+    /// button is a ghost button unless [`variant`](Self::variant) says otherwise.
+    ///
+    /// ```
+    /// use navree_ui::{Popover, icons, render};
+    ///
+    /// let alerts = Popover::icon_only("alerts", icons::BELL, "Notifications").body("Nothing new.");
+    /// let html = render(&alerts.into());
+    /// assert!(html.contains(r#"aria-label="Notifications""#));
+    /// assert!(html.contains("data-icon-only"));
+    /// ```
+    pub fn icon_only(id: impl Into<String>, glyph: icons::Icon, label: impl Into<String>) -> Self {
+        let mut popover = Self::new(id, Node::Empty).variant(ButtonVariant::Ghost);
+        popover.glyph = Some(glyph);
+        popover.trigger_label = Some(label.into());
+        popover
+    }
+
+    /// Names the button that opens it for assistive technology, when what it shows doesn't
+    /// say, such as an icon or a count. [`label`](Self::label) names the popup.
+    ///
+    /// ```
+    /// use navree_ui::{Popover, render};
+    ///
+    /// let html = render(&Popover::new("inbox", "3").trigger_label("3 new messages").into());
+    /// assert!(html.contains(r#"aria-label="3 new messages""#));
+    /// ```
+    pub fn trigger_label(mut self, label: impl Into<String>) -> Self {
+        self.trigger_label = Some(label.into());
+        self
     }
 
     /// Sets the button's look.
@@ -502,11 +539,24 @@ impl Popover {
     }
 
     fn into_node(self) -> Node {
-        let trigger = Button::new(self.trigger)
-            .variant(self.variant)
-            .size(self.size)
-            .attr("popovertarget", self.pop_id.clone())
-            .attr("aria-haspopup", "dialog");
+        let trigger = match (self.glyph, self.trigger_label) {
+            (Some(glyph), label) => Button::icon_only(glyph, label.unwrap_or_default())
+                .variant(self.variant)
+                .size(self.size)
+                .attr("popovertarget", self.pop_id.clone())
+                .attr("aria-haspopup", "dialog"),
+            (None, label) => {
+                let button = Button::new(self.trigger)
+                    .variant(self.variant)
+                    .size(self.size)
+                    .attr("popovertarget", self.pop_id.clone())
+                    .attr("aria-haspopup", "dialog");
+                match label {
+                    Some(label) => button.attr("aria-label", label),
+                    None => button,
+                }
+            }
+        };
         let popup = self
             .el
             .attr("id", self.pop_id)

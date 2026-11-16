@@ -40,6 +40,20 @@ The label is small and uppercase. The value is large and may be any node: text, 
 
 `FactGrid` fits as many cards in a row as the width allows, at least 14 rem each, and shows one on a phone. A lone card keeps the width of one column. `.cols(4)` fixes the number from 768 px wide. Narrower than that it is one column either way.
 
+## Narrower or wider tiles
+
+A grid fits as many tiles of at least 14 rem as the row holds. `.min_tile(px)` sets that width in pixels, so eight small tiles can share a row: it is taken to the nearest of 96, 112, 128, 144, 160, 176, 192, 208, 224, 256 and 320, and 224, the default, writes nothing. Fixed `.cols(n)` win from 768 px wide. Another width links the looks stylesheet.
+
+```rust
+use navree::ui::*;
+
+FactGrid::new()
+    .min_tile(128)
+    .cards((1..=8).map(|n| FactCard::new(format!("Rep {n}"), "Away").detail("8 won")))
+```
+
+<UiPreview example="fact-card/narrow" />
+
 ## Keyboard and accessibility
 
 <UiA11y>

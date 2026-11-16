@@ -817,6 +817,43 @@ impl Bubble {
     }
 }
 
+/// A status as a dot and a word, with no chip around them: "Awaiting signature" beside a
+/// green dot. The word carries the meaning, so the dot is never the only sign; the dot takes
+/// the [`Tone`]'s colour, grey with none.
+///
+/// ```
+/// use navree_ui::{StatusDot, Tone, render};
+///
+/// let html = render(&StatusDot::new("Awaiting signature").tone(Tone::Success).into());
+/// assert_eq!(html, r#"<span data-slot="status-dot" data-tone="success">Awaiting signature</span>"#);
+/// ```
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct StatusDot {
+    el: Element,
+    word: Node,
+}
+
+impl StatusDot {
+    /// A dot beside `word`.
+    pub fn new(word: impl Into<Node>) -> Self {
+        Self {
+            el: el("span").slot("status-dot").uses(Uses::LOOKS),
+            word: word.into(),
+        }
+    }
+
+    /// Colours the dot. A [`Tone::Named`] colour comes from the stylesheet.
+    pub fn tone(mut self, tone: Tone) -> Self {
+        self.el = self.el.attr_opt("data-tone", tone.value());
+        self
+    }
+
+    fn into_node(self) -> Node {
+        self.el.child(self.word).into()
+    }
+}
+
 /// How a [`Card`] is drawn.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
@@ -919,6 +956,21 @@ impl Card {
     /// Sets the description.
     pub fn description(mut self, description: impl Into<Node>) -> Self {
         self.description = Some(description.into());
+        self
+    }
+
+    /// Raises the card on the theme's soft shadow
+    /// ([`Elevation::Soft`](crate::theme::Elevation::Soft)); a flat theme draws none. It links
+    /// the looks stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{Card, render};
+    ///
+    /// let html = render(&Card::titled("Plan").raised().into());
+    /// assert!(html.starts_with(r#"<div data-slot="card" data-raised>"#));
+    /// ```
+    pub fn raised(mut self) -> Self {
+        self.el = self.el.flag("data-raised", true).uses(Uses::LOOKS);
         self
     }
 
@@ -2572,8 +2624,8 @@ impl Bars {
     }
 }
 
-root_methods!(Stat, Bars);
-into_node!(Stat, Bars);
+root_methods!(Stat, Bars, StatusDot);
+into_node!(Stat, Bars, StatusDot);
 
 root_methods!(
     Alert,

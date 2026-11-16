@@ -28,6 +28,10 @@ pub fn all() -> Vec<Example> {
         single!("timeline", "hidden", "Events set aside", timeline_hidden).start(),
         gallery!("timeline", "empty", "Empty and loading", timeline_empty).wide(),
         single!("timeline", "text", "Times written by hand", timeline_text).start(),
+        single!("timeline", "plain", "Plain", timeline_plain)
+            .start()
+            .width(520)
+            .height(150),
         single!("activity-feed", "thumb", "A feed", feed_thumb).start(),
         single!("activity-feed", "default", "Recent activity", feed_default)
             .start()
@@ -46,7 +50,12 @@ pub fn all() -> Vec<Example> {
         single!("fact-card", "thumb", "A fact card", fact_thumb).start(),
         single!("fact-card", "default", "A grid of facts", fact_default).start(),
         single!("fact-card", "single", "One card", fact_single).start(),
+        single!("fact-card", "narrow", "Eight tiles in a row", fact_narrow)
+            .start()
+            .width(1180)
+            .height(110),
         single!("badge", "dot", "A dot and a tone", badge_dot),
+        single!("badge", "status-dot", "A status dot", badge_status_dot),
         gallery!("badge", "tones", "Tones", badge_tones).narrow(),
         single!("badge", "outcome", "Outcome chips", badge_outcome),
         single!(
@@ -210,6 +219,22 @@ fn timeline_empty() -> impl IntoIterator<Item = (&'static str, Timeline)> {
         ("Empty", Timeline::new("none", "Steps")),
         ("Loading", Timeline::new("wait", "Steps").loading()),
     ]
+}
+
+fn timeline_plain() -> Timeline {
+    Timeline::new("deal-events", "Deal events")
+        .variant(TimelineVariant::Plain)
+        .day(
+            "Today",
+            [
+                TimelineEvent::new("Deal 4 signed")
+                    .time_text("09:41")
+                    .detail("Eight seats added"),
+                TimelineEvent::new("Rep assigned")
+                    .time_text("09:12")
+                    .detail("By Harleen Kaur"),
+            ],
+        )
 }
 
 fn timeline_text() -> Timeline {
@@ -381,6 +406,19 @@ fn fact_single() -> FactCard {
         .tone(Tone::Success)
         .detail("Left the depot 07:15")
         .detail("Due today by 18:00")
+}
+
+fn fact_narrow() -> FactGrid {
+    FactGrid::new()
+        .min_tile(128)
+        .cards((1..=8).map(|n| FactCard::new(format!("Rep {n}"), "Away").detail("8 won")))
+}
+
+fn badge_status_dot() -> Row {
+    Row::gap(4).children((
+        StatusDot::new("Awaiting signature").tone(Tone::Success),
+        StatusDot::new("No deals yet"),
+    ))
 }
 
 fn badge_dot() -> Row {

@@ -1044,7 +1044,7 @@ come from the component catalog of the docs
 | Actions | `Button`, `ButtonGroup`, `Toggle`, `ToggleGroup`, `DropdownMenu`, `ContextMenu`, `Menubar` |
 | Inputs | `Field`, `Input`, `InputGroup`, `Textarea`, `NativeSelect`, `Select`, `Combobox`, `MultiSelect`, `Checkbox`, `Switch`, `RadioGroup`, `PhoneInput`, `InputOtp`, `ColorPicker`, `Upload`, `Questionnaire`, and Forms (`FormView`, `Submit`) |
 | Date and time | `Calendar`, `DatePicker`, `DateRangePicker`, `TimePicker`, `DateTimePicker` |
-| Display | `Card`, `Badge`, `Avatar`, `AvatarGroup`, `Item`, Heading and Text, `Kbd`, `Attachment`, Message and Bubble, `Timeline`, `ActivityFeed`, `Trace`, FactCard and FactGrid, `Markdown`, `CodeBlock` |
+| Display | `Card`, `Badge`, `StatusDot`, `Avatar`, `AvatarGroup`, `Item`, Heading and Text, `Kbd`, `Attachment`, Message and Bubble, `Timeline`, `ActivityFeed`, `Trace`, FactCard and FactGrid, `Markdown`, `CodeBlock` |
 | Feedback | `Alert`, `Toast`, `Empty`, `EmptyState`, `ErrorPage`, `Forbidden`, `NotFound`, `SignInRequired`, `Progress`, `Skeleton`, `Spinner` |
 | Overlays | `Dialog`, `AlertDialog`, `Sheet`, `Drawer`, `Popover`, `Tooltip`, `HoverCard` |
 | Layout | Stack, Row, Grid and Container, `SplitPane`, `Accordion`, `Collapsible`, `ScrollArea`, `Separator`, `AspectRatio`, `Direction`, `Carousel` |
@@ -1066,7 +1066,13 @@ between places (two halves of an app), each a real link and the one you are on
 shadow as segmented tabs; `CardVariant::Inverse`, `StatVariant::Inverse` and
 `CodeBlock::inverse()` draw a card, a figure tile or a code panel on the inverse
 surface (a dark card on a light page), everything in them reading the flipped
-colours;
+colours; `StatusDot::new(word).tone(..)` is a dot and a word with no chip;
+`Timeline::variant(TimelineVariant::Plain)` a log with no rail or dots;
+`FactGrid::min_tile(px)` tiles narrower than 14 rem; `Card::raised()` the
+theme's soft shadow under a card; `Popover::icon_only(id, icon, label)` and
+`Popover::trigger_label(..)` name the button that opens a popover;
+`ThreadList::group(label, threads)` lists conversations under "Today" and
+"Earlier";
 `Toast` has four tones, a title and one action; `Message` and `Bubble` draw
 a chat; `Empty` is the plain version of `EmptyState`; `Table` is the small
 static table and `DataTable` the paged, sorted, filtered one; `Pagination`

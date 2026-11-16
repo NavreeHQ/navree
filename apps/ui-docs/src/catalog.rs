@@ -488,7 +488,7 @@ pub const COMPONENTS: &[Component] = &[
     component(
         "badge",
         "Badge",
-        &["Badge", "BadgeVariant", "Tone"],
+        &["Badge", "BadgeVariant", "StatusDot", "Tone"],
         "default",
     )
     .parts("default"),
@@ -519,7 +519,7 @@ pub const COMPONENTS: &[Component] = &[
     component(
         "timeline",
         "Timeline",
-        &["Timeline", "TimelineEvent", "TimelineState", "Meta"],
+        &["Timeline", "TimelineEvent", "TimelineState", "TimelineVariant", "Meta"],
         "thumb",
     )
     .parts("default"),
@@ -785,7 +785,7 @@ pub const COMPONENTS: &[Component] = &[
         "thumb",
     )
     .parts("default"),
-    component("stat", "Stat and Bars", &["Stat", "Bars"], "thumb").parts("default"),
+    component("stat", "Stat and Bars", &["Stat", "StatVariant", "Bars"], "thumb").parts("default"),
     component(
         "sortable",
         "Sortable",

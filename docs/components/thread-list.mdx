@@ -20,11 +20,26 @@ The argument is the name of the list for assistive technology. Each `.thread(tit
 
 A conversation that has no title yet can use the words `ChatLabels::untitled` ("New conversation").
 
+## Groups
+
+`.group(label, threads)` lists conversations under a heading of their own, such as "Today" and "Earlier", each thread a `(title, href, current)` as `.thread` takes it. Each group is a list named by its heading, after any threads given without one.
+
+```rust
+ThreadList::new("Your conversations")
+    .group("Today", [("Payments by method this week", "/assistant/7", true)])
+    .group("Earlier", [
+        ("Pending refunds in Ludhiana", "/assistant/6", false),
+        ("GST summary for October", "/assistant/5", false),
+    ])
+```
+
+<UiPreview example="thread-list/groups" />
+
 ## Keyboard and accessibility
 
 <UiA11y>
 
-- The list is a navigation landmark with a name, holding a list of links.
+- The list is a navigation landmark with a name, holding a list of links. A group is a list of its own, named by its heading.
 - The open conversation is marked with `aria-current="page"`, so it is spoken as the current page and not only shown in a different colour.
 - The links are plain links: a reader can open one in a new tab.
 

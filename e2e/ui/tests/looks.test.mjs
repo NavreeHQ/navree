@@ -507,5 +507,83 @@ for (const name of NAMES) {
         await page.done();
       });
     });
+
+    // ---- Small options: a status dot, a plain timeline, narrow tiles, a raised card, popovers, threads
+
+    describe("small options", () => {
+      test("a status dot, a plain timeline, narrow fact tiles and a raised card, light and dark, 1440 and 390 px, outside and inside the inverse surface", async () => {
+        for (const path of PAGES) {
+          for (const mode of MODES) {
+            for (const width of WIDTHS) {
+              const page = await open(`${path}?mode=${mode}`, { width });
+              const where = `${path} ${mode} ${width}`;
+              const pageBg = (await styles(page, "body", ["background-color"]))["background-color"];
+              const card = (await styles(page, "[data-proof=inverse-card] [data-slot=card]", ["background-color"]))["background-color"];
+              // A status dot: a 6 px round dot in its tone beside its word, 13 px, no chip.
+              for (const [id, bg] of [
+                ["status-dot", pageBg],
+                ["inverse-status-dot", card],
+              ]) {
+                const word = await styles(page, `[data-proof=${id}] [data-slot=status-dot]`, ["color", "font-size", "background-color"]);
+                const dot = await page.locator(`[data-proof=${id}] [data-slot=status-dot]`).first().evaluate((el) => {
+                  const s = getComputedStyle(el, "::before");
+                  return [s.width, s.height, s.borderTopLeftRadius, s.backgroundColor];
+                });
+                assert.deepEqual(dot.slice(0, 3), ["6px", "6px", "50%"], `${where} ${id}: the dot`);
+                assert.equal(word["font-size"], "13px", `${where} ${id}: 13 px words`);
+                assert.equal(word["background-color"], null, `${where} ${id}: no chip`);
+                assert.ok(contrastOf(word.color, bg) >= 4.5, `${where} ${id}: the word reads`);
+              }
+              const tones = await page.locator("[data-proof=status-dot] [data-slot=status-dot]").evaluateAll((all) => all.map((el) => getComputedStyle(el, "::before").backgroundColor));
+              assert.notEqual(tones[0], tones[1], `${where}: a tone colours the dot`);
+              // A plain timeline: no rail and no dot, a time column, a bold title.
+              const plain = await page.locator("[data-proof=plain-timeline] [data-slot=timeline-event]").first().evaluate((el) => ({
+                rail: getComputedStyle(el, "::before").display,
+                dot: getComputedStyle(el.querySelector("[data-slot=timeline-dot]")).display,
+                title: getComputedStyle(el.querySelector("[data-slot=timeline-title]")).fontWeight,
+                time: el.querySelector("[data-slot=timeline-time]").getBoundingClientRect().width,
+              }));
+              assert.deepEqual([plain.rail, plain.dot, plain.title], ["none", "none", "600"], `${where}: a plain timeline`);
+              assert.ok(plain.time > 40, `${where}: the time column`);
+              const rail = await page.locator("[data-proof=rail-timeline] [data-slot=timeline-event]").first().evaluate((el) => getComputedStyle(el.querySelector("[data-slot=timeline-dot]")).display);
+              assert.notEqual(rail, "none", `${where}: a timeline drawn as before keeps its dots`);
+              // Eight fact tiles of at least 128 px share a row on a wide screen.
+              const tops = await page.locator("[data-proof=reps] [data-slot=fact-card]").evaluateAll((all) => all.map((c) => [Math.round(c.getBoundingClientRect().top), c.getBoundingClientRect().width]));
+              if (width === 1440) assert.equal(new Set(tops.map(([top]) => top)).size, 1, `${where}: eight tiles in one row: ${JSON.stringify(tops)}`);
+              assert.ok(tops.every(([, w]) => w >= 127), `${where}: none narrower than 128 px`);
+              // A raised card has the theme's soft shadow, none in a flat theme; a card drawn as before has none.
+              const raised = (await styles(page, "[data-proof=raised-card] [data-slot=card]", ["box-shadow"]))["box-shadow"];
+              const flat = (await styles(page, "[data-proof=plain-card] [data-slot=card]", ["box-shadow"]))["box-shadow"];
+              assert.equal(flat, "none", `${where}: a card drawn as before`);
+              if (path === "/looks") assert.notEqual(raised, "none", `${where}: a raised card`);
+              else assert.equal(raised, "none", `${where}: a flat theme draws no shadow`);
+              assert.ok(await noSidewaysScroll(page), `${where}: no sideways scroll`);
+              assert.deepEqual(await axe(page), [], `${where}: axe`);
+              await shot(page, `small-${path.replaceAll("/", "_")}-${mode}-${width}`);
+              await page.done();
+            }
+          }
+        }
+      });
+
+      test("an icon popover's button is named, opens by keyboard and gives focus back; a thread list's groups are named lists", async () => {
+        const page = await open("/looks?mode=light");
+        const bell = page.getByRole("button", { name: "Notifications" });
+        assert.equal(await bell.count(), 1);
+        assert.equal(await bell.getAttribute("aria-haspopup"), "dialog");
+        await bell.focus();
+        await page.keyboard.press("Enter");
+        await page.locator("#looks-alerts").waitFor({ state: "visible" });
+        await page.keyboard.press("Escape");
+        await page.locator("#looks-alerts").waitFor({ state: "hidden" });
+        assert.equal(await page.evaluate(() => document.activeElement.getAttribute("aria-label")), "Notifications");
+        assert.equal(await page.getByRole("button", { name: "3 new messages" }).count(), 1);
+        const nav = page.getByRole("navigation", { name: "Your conversations" });
+        assert.deepEqual(await nav.getByRole("list").evaluateAll((all) => all.map((l) => l.getAttribute("aria-labelledby") && document.getElementById(l.getAttribute("aria-labelledby")).textContent)), ["Today", "Earlier"]);
+        assert.equal(await nav.getByRole("list", { name: "Today" }).getByRole("link").count(), 2);
+        assert.equal(await nav.getByRole("link", { name: "Refunds this week" }).getAttribute("aria-current"), "page");
+        await page.done();
+      });
+    });
   });
 }

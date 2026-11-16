@@ -246,6 +246,17 @@ every `@navree/*` package carries the same version.
   for assistive technology, `aria-current="step"` and the links are the same in each; the
   looks sheet draws the two new ones. `Stepper::variant` is a new inherent method: an app whose
   own extension trait gives `Stepper` a method of that name calls it through the trait.
+- Small options for what a design draws that a component couldn't: `StatusDot`, a dot in a
+  tone beside its word with no chip; `Timeline::variant(TimelineVariant::Plain)`, a time
+  column, a bold title and a quieter detail with no rail and no dot; `FactGrid::min_tile(px)`,
+  tiles narrower or wider than 14 rem, taken to the nearest of eleven widths; `Card::raised`,
+  the theme's soft shadow under a card, none in a flat theme; `Popover::trigger_label`, a name
+  for the button that opens a popover, and `Popover::icon_only`, a square icon button that
+  opens one; and `ThreadList::group`, conversations under headings such as "Today" and
+  "Earlier", each group a named list. The looks sheet draws the dot, the plain timeline, the
+  tiles' widths and the raised card, and is linked only where one is drawn; every component
+  that uses none of them is drawn as before. Each method is a new inherent method: an app whose
+  own extension trait gives the type a method of that name calls it through the trait.
 
 ### Fixed
 

@@ -56,7 +56,8 @@ is dropped.
 |---|---|
 | Headings | `Heading::h1..h4(text)`: the level is the document's |
 | Paragraph, secondary text, lead, code | `Text::new`, `Text::muted`, `.variant(TextVariant::Lead)`, `Text::code`; `.inline()` |
-| Panel, card, tile | `Card::new()` / `Card::titled(..)`, `.description(..)`, `.action(..)`, `.body(..)`, `.footer(..)` |
+| Panel, card, tile | `Card::new()` / `Card::titled(..)`, `.description(..)`, `.action(..)`, `.body(..)`, `.footer(..)`; `.raised()` for the theme's soft shadow under it |
+| A status as a dot and a word with no chip ("Awaiting signature") | `StatusDot::new(word).tone(Tone::Success)` |
 | Dark card or band on a light page (a light one on a dark page), with a white button on it | `Card::titled(..).variant(CardVariant::Inverse)`: the inverse surface, everything in it reading the flipped colours; a `Button::primary` on it is the surface's text colour with the surface's colour as its text. Its colours are the theme's `Roles::inverse` |
 | Code panel, dark on a light page, with a copy button | `CodeBlock::new(lang, code).copy_button().inverse()` |
 | Status label, tag, chip | `Badge::new(text).variant(BadgeVariant::Neutral \| Outline \| Success \| Warning \| Danger).icon(..)`: the theme's corners, a pill when its shape says `Corners::badge(Corner::Pill)` |
@@ -100,8 +101,8 @@ is dropped.
 | A part the user may not see, a record that is gone, a part that needs sign-in | `Forbidden::new().what(..)` (never says whether the thing exists), `NotFound::new().what(..)`, `SignInRequired::new(sign_in_url).what(..)`; each also `.compact()` for one line |
 | A whole error page (401, 403, 404, 500, ...) | `UiModule` draws it for every page route; your own is `ErrorPage::not_found()` or `ErrorPage::of(StateKind::..)` |
 | Session ended notice | `SessionEnded::new()` |
-| Figure with a label and a detail | `FactCard::new(label, value).detail(..)` in a `FactGrid` |
-| History of events, in a time zone | `Timeline::new(id, label).time_zone("Asia/Kolkata", 19_800).event(TimelineEvent::new(..).at(secs).tone(Tone::Success).detail(..).meta(Meta::icon(..)))` |
+| Figure with a label and a detail | `FactCard::new(label, value).detail(..)` in a `FactGrid`; `.min_tile(px)` for tiles narrower than 14 rem (eight in a row: 128) |
+| History of events, in a time zone | `Timeline::new(id, label).time_zone("Asia/Kolkata", 19_800).event(TimelineEvent::new(..).at(secs).tone(Tone::Success).detail(..).meta(Meta::icon(..)))`; a plain log with no rail or dots (a time column, a bold title, a muted detail): `.variant(TimelineVariant::Plain)` |
 | Steps of a run: an agent, an import, a deploy | `Trace::new(title).step(TraceStep::new(title).description(..).state(TraceState::Done \| Running \| Pending \| Failed).detail(..))` |
 | Recent activity feed | `ActivityFeed::new(id, label).summary(..).item(ActivityItem::new(who, what).object(..).tone(..).icon(..).time_text(..))` |
 | Divider | `Separator::horizontal()`, `Separator::vertical()` |
@@ -140,7 +141,7 @@ the app's own: `icon_file!` and `icon_set!` compile it from an SVG file
 | Confirmation | `AlertDialog::new(id, title, description).cancel(..).action(..)` |
 | Side panel | `Sheet::new(id, title).side(SheetSide::Right \| Left \| Top \| Bottom)` |
 | Bottom drawer on phones | `Drawer::new(id, title)` |
-| Popover | `Popover::new(id, trigger).side(..).align(..).body(..)` |
+| Popover | `Popover::new(id, trigger).side(..).align(..).body(..)`; `.trigger_label(..)` names the button when it shows a count; `Popover::icon_only(id, icons::BELL, "Notifications")` for an icon button that opens it |
 | Tooltip | `Tooltip::new(id, trigger, text).side(..)` |
 | Hover card | `HoverCard::new(id, trigger).body(..)` |
 | Tabs | `Tabs::new(id, label).tab(Tab::new(key, label).panel(..))`, `.active_from(query.tab)`, `.variant(TabsVariant::Segmented)`, `.vertical()`; `Tab::lazy(src)` loads a panel when first shown |

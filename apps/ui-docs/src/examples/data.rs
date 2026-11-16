@@ -384,7 +384,7 @@ fn stat_default() -> Grid {
 fn stat_inverse() -> Grid {
     Grid::cols(2).gap(4).children((
         Stat::new("Invoices due, Mon 16 Nov", "₹9,12,400")
-            .caption("to HDFC ••4521")
+            .caption("from 14 customers")
             .variant(StatVariant::Inverse),
         Stat::new("Won this month", "₹14,80,000").trend("+8.2%", true),
     ))

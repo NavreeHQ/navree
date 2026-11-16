@@ -118,12 +118,17 @@ fn the_segmented_group_reads_the_segment_roles_toggle_corners_and_control_height
 
 /// The hooks the looks sheet's rules are keyed on: each a value a page writes only when it asks
 /// for that look, so none of them reaches a part drawn as it always was.
-const HOOKS: [&str; 5] = [
+const HOOKS: [&str; 10] = [
     "[data-slot=button-group][data-variant=segmented]",
     "[data-slot=button-group][data-block]",
     "[data-slot=button][data-variant=destructive-outline]",
     "[data-slot=stepper][data-variant=tiles]",
     "[data-slot=stepper][data-variant=track]",
+    ":where([data-slot=status-dot])",
+    "[data-slot=status-dot]",
+    "[data-slot=timeline][data-variant=plain]",
+    "[data-slot=fact-grid][data-tile",
+    "[data-slot=card][data-raised]",
 ];
 
 #[test]
@@ -513,4 +518,172 @@ fn the_tiles_and_the_track_read_the_theme_and_draw_their_text_on_pairs_every_the
             && pair.text == Paint::Mix(Token::Success, 80, Token::Fg)
             && pair.on == Paint::Tint(Token::Success, 12, surface)));
     }
+}
+
+// ---- Small options ---------------------------------------------------------------------------
+
+#[test]
+fn a_status_dot_is_a_word_in_a_tone_with_its_dot_drawn_by_the_sheet() {
+    assert_eq!(
+        html(StatusDot::new("Awaiting signature").tone(Tone::Success)),
+        r#"<span data-slot="status-dot" data-tone="success">Awaiting signature</span>"#
+    );
+    assert_eq!(
+        html(StatusDot::new("<b>No deals</b>")),
+        r#"<span data-slot="status-dot">&lt;b&gt;No deals&lt;/b&gt;</span>"#
+    );
+    keeps_the_contract("status dot", StatusDot::new("Live").into());
+    let css = looks_source();
+    assert!(css.contains(":where([data-slot=status-dot]){--tone:var(--fg-3)}"));
+    assert!(css.contains("&::before{content:\"\";flex:none;width:6px;height:6px;border-radius:50%;background:var(--tone)}"));
+}
+
+#[test]
+fn a_plain_timeline_names_its_look_and_keeps_its_events() {
+    let events = || {
+        [
+            TimelineEvent::new("Deal 4 signed")
+                .time_text("09:41")
+                .detail("Eight seats added"),
+            TimelineEvent::new("Rep assigned").time_text("09:12"),
+        ]
+    };
+    let plain = html(
+        Timeline::new("deal", "Deal events")
+            .variant(TimelineVariant::Plain)
+            .day("Today", events()),
+    );
+    assert!(
+        plain.starts_with(r#"<div data-slot="timeline" id="deal" data-variant="plain" role="group" aria-label="Deal events">"#),
+        "{plain}"
+    );
+    let rail = html(Timeline::new("deal", "Deal events").day("Today", events()));
+    assert_eq!(plain.replace(r#" data-variant="plain""#, ""), rail);
+    assert_eq!(
+        html(
+            Timeline::new("deal", "Deal events")
+                .variant(TimelineVariant::Rail)
+                .day("Today", events())
+        ),
+        rail
+    );
+    keeps_the_contract(
+        "plain timeline",
+        Timeline::new("t", "T")
+            .variant(TimelineVariant::Plain)
+            .event(TimelineEvent::new("A"))
+            .into(),
+    );
+}
+
+#[test]
+fn fact_tiles_take_the_nearest_width_and_the_default_writes_nothing() {
+    let grid = |px: u16| {
+        html(
+            FactGrid::new()
+                .min_tile(px)
+                .card(FactCard::new("Rep 1", "Away")),
+        )
+    };
+    assert!(grid(128).starts_with(r#"<div data-slot="fact-grid" data-tile="128">"#));
+    assert!(grid(130).starts_with(r#"<div data-slot="fact-grid" data-tile="128">"#));
+    assert!(grid(0).starts_with(r#"<div data-slot="fact-grid" data-tile="96">"#));
+    assert!(grid(u16::MAX).starts_with(r#"<div data-slot="fact-grid" data-tile="320">"#));
+    assert_eq!(
+        grid(224),
+        html(FactGrid::new().card(FactCard::new("Rep 1", "Away")))
+    );
+    assert!(
+        View::new("x")
+            .body(FactGrid::new().min_tile(224))
+            .uses()
+            .is_none()
+    );
+    keeps_the_contract("narrow tiles", FactGrid::new().min_tile(128).into());
+    // Every width the method writes has its rule, and fixed columns win.
+    let css = looks_source();
+    for px in [96, 112, 128, 144, 160, 176, 192, 208, 256, 320] {
+        assert!(
+            css.contains(&format!(
+                "[data-slot=fact-grid][data-tile=\"{px}\"]{{--tile:{px}px}}"
+            )),
+            "{px}"
+        );
+    }
+    assert!(css.contains("[data-slot=fact-grid][data-tile]:not([data-cols])"));
+}
+
+#[test]
+fn a_raised_card_takes_the_themes_raised_shadow() {
+    assert!(
+        html(Card::titled("Plan").raised())
+            .starts_with(r#"<div data-slot="card" data-raised><div data-slot="card-header">"#)
+    );
+    keeps_the_contract("raised card", Card::new().raised().into());
+    assert!(
+        looks_source().contains("[data-slot=card][data-raised]{box-shadow:var(--shadow-raised)}")
+    );
+}
+
+#[test]
+fn a_popover_button_can_have_a_name_of_its_own_or_be_an_icon() {
+    let counted = html(
+        Popover::new("inbox", "3")
+            .trigger_label("3 new messages")
+            .label("Messages"),
+    );
+    assert!(
+        counted.starts_with(r#"<button data-slot="button" popovertarget="inbox" aria-haspopup="dialog" aria-label="3 new messages" data-variant="outline" type="button">3</button>"#),
+        "{counted}"
+    );
+    assert!(counted.contains(r#"aria-label="Messages""#), "{counted}");
+    let bell =
+        html(Popover::icon_only("alerts", icons::BELL, "Notifications").body("Nothing new."));
+    assert!(
+        bell.starts_with(r#"<button data-slot="button" data-icon-only popovertarget="alerts" aria-haspopup="dialog" data-variant="ghost" aria-label="Notifications" type="button"><svg"#),
+        "{bell}"
+    );
+    // Without a name of its own, the button is what it was.
+    assert!(
+        html(Popover::new("filters", "Filters")).starts_with(
+            r#"<button data-slot="button" popovertarget="filters" aria-haspopup="dialog" data-variant="outline" type="button">Filters</button>"#
+        )
+    );
+}
+
+#[test]
+fn a_thread_list_in_groups_is_a_named_list_for_each() {
+    use navree_ui::genui::ThreadList;
+
+    let out = html(
+        ThreadList::new("Your conversations")
+            .thread("Pinned", "/assistant/9", false)
+            .group(
+                "Today",
+                [
+                    ("Refunds this week", "/assistant/7", true),
+                    ("Orders from Pune", "/assistant/6", false),
+                ],
+            )
+            .group("Earlier", [("GST summary", "/assistant/5", false)]),
+    );
+    assert!(
+        out.starts_with(r#"<nav data-genui="threads" aria-label="Your conversations"><ul role="list"><li><a href="/assistant/9">Pinned</a></li></ul>"#),
+        "{out}"
+    );
+    assert!(
+        out.contains(r#"<div data-genui="thread-group"><p id="threads-Yourconversations-0">Today</p><ul role="list" aria-labelledby="threads-Yourconversations-0"><li><a href="/assistant/7" aria-current="page">Refunds this week</a></li>"#),
+        "{out}"
+    );
+    assert!(
+        out.contains(r#"<p id="threads-Yourconversations-1">Earlier</p>"#),
+        "{out}"
+    );
+    assert_eq!(out.matches(r#"aria-current="page""#).count(), 1, "{out}");
+    // Groups alone: no empty list before them.
+    let only = html(ThreadList::new("Chats").group("Today", [("A", "/a", false)]));
+    assert_eq!(only.matches("<ul").count(), 1, "{only}");
+    // A hostile label is text, and an id is made of its letters.
+    let hostile = html(ThreadList::new("x").group("<b>Today</b>", [("A", "/a", false)]));
+    assert!(hostile.contains("&lt;b&gt;Today&lt;/b&gt;"), "{hostile}");
 }

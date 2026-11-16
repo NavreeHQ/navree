@@ -15,6 +15,7 @@ use http::{HeaderMap, Method};
 use navree::http::extract::RawQuery;
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree::ui::genui::ThreadList;
 use navree::ui::theme::{
     Appearance, ControlSizes, Corner, Corners, Elevation, Inverse, Mode, Rgb, Roles, Shape, Sizes,
     Theme, ThemeId, Token,
@@ -147,6 +148,9 @@ fn inverse(path: &str, asked: &Asked) -> Grid {
                         Text::muted("A quieter line."),
                         Badge::new("Isolated").variant(BadgeVariant::Success),
                         el("div")
+                            .attr("data-proof", "inverse-status-dot")
+                            .child(StatusDot::new("Every invoice paid").tone(Tone::Success)),
+                        el("div")
                             .attr("data-proof", "inverse-track")
                             .child(deal_track()),
                         el("div").attr("data-proof", "inverse-destructive").child(
@@ -180,6 +184,70 @@ fn inverse(path: &str, asked: &Asked) -> Grid {
             .copy_button()
             .inverse(),
         ),
+    ))
+}
+
+/// A status dot, a plain timeline, narrow fact tiles, a raised card, popovers opened by an
+/// icon and by a count, and a thread list in groups, each beside its look as before.
+fn small() -> Stack {
+    let events = || {
+        [
+            TimelineEvent::new("Deal 4 signed")
+                .time_text("09:41")
+                .detail("Eight seats added"),
+            TimelineEvent::new("Rep assigned")
+                .time_text("09:12")
+                .detail("By Harleen Kaur"),
+        ]
+    };
+    Stack::gap(6).children((
+        el("div")
+            .attr("data-proof", "status-dot")
+            .child(Row::gap(4).wrap().children((
+                StatusDot::new("Awaiting signature").tone(Tone::Success),
+                StatusDot::new("No deals yet"),
+            ))),
+        Grid::cols(2).gap(4).children((
+            el("div").attr("data-proof", "plain-timeline").child(
+                Timeline::new("deal-events", "Deal events")
+                    .variant(TimelineVariant::Plain)
+                    .day("Today", events()),
+            ),
+            el("div").attr("data-proof", "rail-timeline").child(
+                Timeline::new("rail-events", "Deal events on a rail").day("Today", events()),
+            ),
+        )),
+        el("div").attr("data-proof", "reps").child(
+            FactGrid::new()
+                .min_tile(128)
+                .cards((1..=8).map(|n| FactCard::new(format!("Rep {n}"), "Away").detail("8 won"))),
+        ),
+        el("div").attr("data-proof", "raised-card").child(
+            Card::titled("Plan")
+                .raised()
+                .body(Text::new("A card on the theme's soft shadow.")),
+        ),
+        Row::gap(2).children((
+            Popover::icon_only("looks-alerts", icons::BELL, "Notifications")
+                .label("Notifications")
+                .body("Nothing new."),
+            Popover::new("looks-inbox", "3")
+                .trigger_label("3 new messages")
+                .label("Messages")
+                .body("Three messages."),
+        )),
+        ThreadList::new("Your conversations")
+            .group(
+                "Today",
+                [
+                    ("Refunds this week", "/looks#threads", true),
+                    ("Orders from Pune", "/looks#threads", false),
+                ],
+            )
+            .group(
+                "Earlier",
+                [("GST summary for October", "/looks#threads", false)],
+            ),
     ))
 }
 
@@ -238,6 +306,7 @@ fn page(shell: AppShell, path: &str, asked: &Asked) -> AppPage {
         section("segmented", "Segmented links", segmented(path, asked)),
         section("buttons", "Buttons", buttons()),
         section("steps", "Steps", steps()),
+        section("small", "Small options", small()),
         section("inverse", "The inverse surface", inverse(path, asked)),
     )))
 }

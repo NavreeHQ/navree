@@ -47,6 +47,14 @@ Card::new()
     .footer(Button::outline("Add a view"))
 ```
 
+## Raised
+
+`.raised()` puts the theme's soft shadow under the card, the one a theme with `Elevation::Soft` gives a raised part; a flat theme draws none, so the card is drawn as before. It links the looks stylesheet.
+
+```rust
+Card::titled("Plan").raised().body(Text::new("₹2,990 a year"))
+```
+
 ## On the inverse surface
 
 `CardVariant::Inverse` draws the card on the theme's other palette: a dark card on a light page, a light one on a dark page. Everything in it reads the flipped colours with no work of its own: its title and text, a badge, a primary button (which takes the surface's text colour, so a white button with dark text on a near-black card) and an outline button.

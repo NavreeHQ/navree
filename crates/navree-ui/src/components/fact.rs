@@ -3,7 +3,7 @@
 use super::tone::Tone;
 use super::{icon, root_methods};
 use crate::icons::Icon;
-use crate::node::{Element, Node, el, into_node};
+use crate::node::{Element, Node, Uses, el, into_node};
 
 /// One fact about something: a small label, a value and the details under it.
 ///
@@ -134,6 +134,34 @@ impl FactGrid {
         self.el = self
             .el
             .attr("data-cols", super::layout::span_name(columns.clamp(2, 6)));
+        self
+    }
+
+    /// Sets the narrowest a tile may be, in pixels, so the grid fits as many tiles of at
+    /// least that width as the row holds: 128 for eight small tiles in a row. The width is
+    /// taken to the nearest of 96, 112, 128, 144, 160, 176, 192, 208, 224, 256 and 320; 224,
+    /// the 14 rem a tile is by default, writes nothing. Fixed [`cols`](Self::cols) win from
+    /// 768 px wide. Another width links the looks stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{FactCard, FactGrid, render};
+    ///
+    /// let reps = FactGrid::new()
+    ///     .min_tile(130)
+    ///     .cards((0..8).map(|n| FactCard::new(format!("Rep {n}"), "Away")));
+    /// assert!(render(&reps.into()).starts_with(r#"<div data-slot="fact-grid" data-tile="128">"#));
+    /// ```
+    pub fn min_tile(mut self, px: u16) -> Self {
+        let nearest = [96_u16, 112, 128, 144, 160, 176, 192, 208, 224, 256, 320]
+            .into_iter()
+            .min_by_key(|step| step.abs_diff(px))
+            .unwrap_or(224);
+        if nearest != 224 {
+            self.el = self
+                .el
+                .attr("data-tile", nearest.to_string())
+                .uses(Uses::LOOKS);
+        }
         self
     }
 

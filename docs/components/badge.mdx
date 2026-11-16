@@ -47,6 +47,21 @@ A tone colours a badge by what it means. `Tone` has five built-in values (`Neutr
 
 <UiPreview example="badge/dot" />
 
+## A status dot
+
+`StatusDot` is a dot and a word with no chip around them, for a status that sits in a line of text or under a heading: "Awaiting signature" beside a green dot. The word carries the meaning, so the dot is never the only sign. `.tone(Tone)` colours the dot; with none it is grey. It links the looks stylesheet.
+
+```rust
+use navree::ui::*;
+
+Row::gap(4).children((
+    StatusDot::new("Awaiting signature").tone(Tone::Success),
+    StatusDot::new("No deals yet"),
+))
+```
+
+<UiPreview example="badge/status-dot" />
+
 ## Outcome chips
 
 `Badge::outcome(label, reached)` is a chip for something that did or did not happen: paid, packed, shipped. When it did, it carries a check and its tone. When it did not, it carries a dash and a quiet, dashed outline. A screen reader hears "yes" or "no" after the label; change the words with `.outcome_words("oui", "non")`.
@@ -90,6 +105,10 @@ The text says the status, so the color is never alone. To show which way a figur
 ### BadgeVariant
 
 <UiProps type="BadgeVariant" />
+
+### StatusDot
+
+<UiProps type="StatusDot" />
 
 ### Tone
 

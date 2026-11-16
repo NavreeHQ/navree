@@ -54,3 +54,17 @@
   & [data-state=upcoming] [data-slot=step-title]{color:var(--fg-3)}
   & :is([data-slot=step-description],[data-slot=step-note]){display:none}
 }
+
+/* A status dot: a dot in a tone and its word, with no chip around them. */
+:where([data-slot=status-dot]){--tone:var(--fg-3)}
+[data-slot=status-dot]{display:inline-flex;align-items:center;gap:.375rem;color:var(--fg-1);font-size:13px;&::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--tone)}}
+
+/* A plain timeline: a time column, a bold title and a quieter detail, with no rail and no dot. */
+[data-slot=timeline][data-variant=plain] [data-slot=timeline-event]{grid-template-columns:4.5rem minmax(0,1fr);&::before{display:none}&[data-untimed]{grid-template-columns:minmax(0,1fr)}& [data-slot=timeline-dot]{display:none}& [data-slot=timeline-title]{font-weight:600}}
+
+/* Fact tiles as narrow or as wide as a page asks, as many as fit; fixed columns win. */
+[data-slot=fact-grid][data-tile]:not([data-cols]){grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--tile)),1fr))}
+[data-slot=fact-grid][data-tile="96"]{--tile:96px}[data-slot=fact-grid][data-tile="112"]{--tile:112px}[data-slot=fact-grid][data-tile="128"]{--tile:128px}[data-slot=fact-grid][data-tile="144"]{--tile:144px}[data-slot=fact-grid][data-tile="160"]{--tile:160px}[data-slot=fact-grid][data-tile="176"]{--tile:176px}[data-slot=fact-grid][data-tile="192"]{--tile:192px}[data-slot=fact-grid][data-tile="208"]{--tile:208px}[data-slot=fact-grid][data-tile="256"]{--tile:256px}[data-slot=fact-grid][data-tile="320"]{--tile:320px}
+
+/* A raised card: the theme's soft shadow under it, none in a flat theme. */
+[data-slot=card][data-raised]{box-shadow:var(--shadow-raised)}

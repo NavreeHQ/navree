@@ -104,6 +104,23 @@ An event with no unix time can carry text instead: `.time_text("Mon")`. Group su
 
 <UiPreview example="timeline/text" />
 
+## Plain
+
+`.variant(TimelineVariant::Plain)` draws the events with no rail and no dot: a column of times, each title in bold and its detail quieter under it, as a log of what happened at a place. Days, times, gaps and facts are the same; a tone and an icon, which the dot draws, are not shown. It links the looks stylesheet.
+
+```rust
+use navree::ui::*;
+
+Timeline::new("deal-events", "Deal events")
+    .variant(TimelineVariant::Plain)
+    .day("Today", [
+        TimelineEvent::new("Deal 4 signed").time_text("09:41").detail("Eight seats added"),
+        TimelineEvent::new("Rep assigned").time_text("09:12").detail("By Harleen Kaur"),
+    ])
+```
+
+<UiPreview example="timeline/plain" />
+
 ## Words
 
 The words the timeline prints (the zone note, the empty message, the gap units, "Upcoming", the notice) are in `DisplayLabels`. English is the default; pass your own with `.labels(...)`. `{zone}` and `{n}` are filled in.
@@ -133,6 +150,10 @@ The words the timeline prints (the zone note, the empty message, the gap units, 
 ### TimelineState
 
 <UiProps type="TimelineState" />
+
+### TimelineVariant
+
+<UiProps type="TimelineVariant" />
 
 ### Meta
 
