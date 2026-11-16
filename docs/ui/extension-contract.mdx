@@ -47,26 +47,45 @@ An element is never mounted inside stored content, inside a sealed body, on an i
 
 ## Owned bodies and the seal
 
-A script that draws, or a library the script bundles, writes markup the server never saw. The server marks the part where it may draw: an element inside the component's root marked `data-ui-keep`, with no other extension's element, island or kept element between. That element is the script's **owned body**. A morph from the server leaves an owned body, its attributes and what is in it, as they are.
+A script that draws, or a library the script bundles, writes markup the server never saw. The server marks the part where it may draw: an element inside the component's root marked `data-ui-keep`, with no other extension's element, island or kept element between. That element is the script's **owned body**. A morph from the server leaves an owned body, its attributes and what is in it, as they are. It never takes an element written inside one for one of the page's own elements, whatever its id or `data-key`: what is in an owned body stays in it.
 
 Each owned body is sealed when the module begins to mount its element, before it imports the script. The seal has four steps:
 
-1. **Scrub.** Every `data-ui-*` attribute already inside the body is removed, and so is a `meta` with `http-equiv` and a `base`, as the runtime removes them from a page it fetches.
+1. **Scrub.** Every `data-ui-*` attribute already inside the body is removed, and so is every `meta`, `link` and `base` element.
 2. **Mark.** The body gets `data-ui-stored`, so the runtime treats it as stored content.
-3. **Detach from forms.** Every `input`, `select`, `textarea`, `button`, `fieldset`, `output` and `object` inside gets `form="ui-sealed"`, an id no element has, so none joins a form.
-4. **Watch.** A `MutationObserver` on the body keeps the first three true for whatever is written later, however. It removes `data-ui-*` from every element added or changed inside, and sets `form="ui-sealed"` on every form field added, and on one whose `form` attribute is changed. It puts `data-ui-stored` back whenever it is removed, and removes any other `data-ui-*` from the body itself but `data-ui-keep`.
+3. **Detach from forms.** Every `input`, `select`, `textarea`, `button`, `fieldset`, `output` and `object` inside gets `form="ui-sealed"`. A field's form is the page's first element with the id the field names, and the first element with this id is one the runtime puts at the start of the head, which is no form. So none of these fields joins a form, whatever a library writes with that id.
+4. **Watch.** A `MutationObserver` on the body keeps the first three true for whatever is written later, however. It removes `data-ui-*` from every element added or changed inside, takes out every `meta`, `link` and `base` added, and sets `form="ui-sealed"` on every form field added, and on one whose `form` attribute is changed. It puts `data-ui-stored` back whenever it is removed, and removes any other `data-ui-*` from the body itself but `data-ui-keep`.
 
-From then on, nothing written inside an owned body drives the runtime, stands in for one of the page's ids, mounts an extension, or joins a form around the component. A command, a hotkey, a region, a form marker or an island written there does nothing.
+The observer runs once the task that wrote to the body is over. From then on, what was written inside an owned body drives no hook of the runtime, stands in for none of the page's ids in the runtime's lookups or in a morph, mounts no extension, and joins no form around the component. A command, a hotkey, a region, a form marker or an island written there does nothing. Within the task that wrote it, a script, or a library it bundles, can still use a hook it has just written, by clicking it, submitting it or focusing it at once. That is the script's own doing, with the authority every script has (see [what a script may and may not do](#what-a-script-may-and-may-not-do)).
 
-The seal stays for the life of the body. A body stays sealed when its script fails, so put server hooks outside it. A control's posted form field is drawn outside its owned bodies for the same reason (see [a form field of your own](/docs/ui/your-own-components/#a-form-field-of-your-own-and-its-check)). A body the server adds to a mounted element with a later morph is sealed when the element is mounted again.
+The seal stays for the life of the body. A body stays sealed when its script fails, so put server hooks outside it. A control's posted form field is drawn outside its owned bodies for the same reason (see [a form field of your own](/docs/ui/your-own-components/#a-form-field-of-your-own-and-its-check)). The module seals the bodies of every element it has mounted, or is mounting, each time it scans the page. So a body that a later morph adds to a mounted element, or puts in place of its body, is sealed before the script's `update` is called, and also while the script is still loading. `ui.find` searches it from then on.
 
 The observer judges a change to an attribute by its name first, so the styles and classes a library moves on every frame cost a comparison each. It looks inside a node only when one was added.
 
 Measured on the toolkit's proof page, in Chromium and in Firefox on a shared test machine: two seconds of dragging a map called the observer about 185 times and cost it 3 ms in all, 1 ms at most for one call. 2,000 cells written in one go, each carrying a hook, were all scrubbed within 4 ms, before the task that wrote them gave way, so none was left when the next frame began.
 
-`ui.find`, `ui.findAll` and `ui.closest` search the owned bodies. Anywhere else they skip stored content.
+`ui.find`, `ui.findAll` and `ui.closest` search the owned bodies the element has now. Anywhere else they skip stored content.
 
-A script writes its own markup only into an owned body. Markup it writes into the server's other children lasts until the next morph removes it, and is not sealed.
+### What the seal does not stop
+
+The seal keeps the runtime from acting on what is written in a body. It does not make that markup harmless, and it is no sanitizer. The browser acts on some markup at the moment it is inserted, before the observer runs, and the seal can't undo that:
+
+- A `meta` element can schedule a refresh to another address, or change the page's referrer policy. The seal takes the element out, but a refresh already scheduled still happens.
+- An image, a video or another element with an address starts to load it as soon as it is written, from any host the page's policy allows for that kind. A `link` can make the browser look up a host name. Either tells that host the page was opened.
+- An id written there takes part in the browser's own lookups: a `label` with `for`, a button with `popovertarget` or `commandfor`, an `input` with `list`, a link to a place on the page (`href="#..."`). Only the runtime's lookups and the morph pass over a sealed body.
+- An event from inside a body bubbles out of it, as from any element. A command on the root or on an element around it (`data-ui-click`, `data-ui-change`, `data-ui-input`) runs for a click, a change or an input inside the body.
+
+So escape data before a library writes it as HTML. Where a library takes HTML, it usually also takes text, or a function that returns an element: use that, or escape `&`, `<`, `>`, `"` and `'` yourself, as the geo plugin's map does with its tiles' attribution. And put no command on an element around a body.
+
+### Markup outside an owned body
+
+Only an owned body is sealed. Markup outside one gets none of the seal: the root's other children, an island's body (a plugin's island too), a popup or a tooltip a library puts on `<body>`, and anything else a script writes in the page. A hook written there drives the runtime as one the server wrote would, a field written there joins the form around it, and an element written there with `data-ui-ext` is mounted, with the routes it names as far as they follow the server's rules. Markup a script writes into the server's other children lasts until the next morph removes it.
+
+So a script writes its own markup only into an owned body. Where a library opens popups, have it put them inside the body; most take an option for the element they go in.
+
+### The toolkit's own kept parts
+
+A part of the toolkit's own that keeps itself through a morph does not work inside a component's root. The list of countries of a `PhoneInput`, the months of a `Calendar` and the items of a `LazyList` are elements marked `data-ui-keep`, and the runtime can't tell them from an owned body, so it seals them: their hooks are removed, they are marked stored content, and their fields join no form. The part stops working, and nothing says why. Draw such a component beside your component's root, not inside it. An island in the root, outside its owned bodies, is not affected: its body is the island's.
 
 ## The ui helpers
 
@@ -117,6 +136,8 @@ A script calls only addresses the server wrote on its element. `.routes(..)` on 
 
 `ui.call` and `ui.get` read the element's routes as each call is made. They parse `url` against the page and require this origin and no user name or password. They then require the parsed path to start with one of the prefixes, or to equal one of the exact addresses, and send the parsed address. So `/geo/../account/email` and `/geo/%2e%2e/account/email` are read as `/account/email` and refused, `/geo` with no trailing slash is not under `/geo/`, and `//other.example/geo/x` and `https://user:password@app.test/geo/x` are another origin and credentials. An address outside the routes is refused before anything is sent. A string in the props opens nothing.
 
+Only a prefix the server can write counts: one that starts and ends with `/`, has one segment or more, none of them empty, `.` or `..`, holds lower-case letters, digits and `/ _ . -` only, and is not under `/_navree/` (see the rules for `.routes(..)` in [Build your own component](/docs/ui/your-own-components/#behaviour-in-the-browser)). Any other, `/` alone included, is none, and an element that names more than 8 prefixes reaches none of them.
+
 ```rust
 use navree::ui::{Element, UiExtension, el, extension_script, extension_sheet};
 
@@ -135,7 +156,7 @@ fn delivery_rating(id: u64) -> Element {
 }
 ```
 
-`ui.call` sends a `POST` unless `options.method` says another. The request goes through the runtime's write path, with the session's token, so what was fetched before a write is not shown after it. The headers are `x-navree-ui: 1`, `x-navree-from` with the page's address, an `accept` for ops, JSON and HTML, and `x-xsrf-token` when the session has one. `data` is a `FormData` or a `URLSearchParams` as given, or an object of strings.
+`ui.call` sends a `POST` unless `options.method` says another. The request goes through the runtime's write path, with the session's token, so what was fetched before a write is not shown after it. A call takes the page's turn, as a form's post does: a navigation the person started that is still on its way when the call begins is overtaken. Its answer is not shown, and the page stays where it is. So use `ui.call` for a write, and `ui.get` for a read, which takes no turn. The headers are `x-navree-ui: 1`, `x-navree-from` with the page's address, an `accept` for ops, JSON and HTML, and `x-xsrf-token` when the session has one. `data` is a `FormData` or a `URLSearchParams` as given, or an object of strings.
 
 It resolves `{ ok, status, data }`, never rejects, and answers by what the server sent:
 
@@ -143,9 +164,12 @@ It resolves `{ ok, status, data }`, never rejects, and answers by what the serve
 - **JSON:** parsed into `data`, with `ok` for the status.
 - **HTML:** a failure, unless `options.page` is true. Then the page at the answer's address is loaded in full.
 - **A redirect off the site, or an answer of a page that starts clean:** a failure, and nothing is applied.
+- **An answer that arrives once the element has left the page:** nothing of it is applied, no page is loaded and no toast is shown. The call resolves `ok: false`, with the answer's status.
 - **Any other failure** shows the toast "That didn't work. Try again." unless `options.quiet` is true.
 
-`ui.get` sends a `GET` with `x-navree-ui: 1` and the headers you give, less any named `x-navree-*`. It resolves the `Response`. It rejects when the address is outside the routes, and refuses the answer of a page that starts clean.
+`options` may be left out, or be `null`.
+
+`ui.get` sends a `GET` with `x-navree-ui: 1` and the headers you give, less any named `x-navree-*`. It takes no turn of the page's: a navigation or a region's fetch on its way is shown. It resolves the `Response`. It rejects when the address is outside the routes, refuses the answer of a page that starts clean, and is ended, and rejects, when the element leaves the page.
 
 ## Errors on a hidden field
 
@@ -155,7 +179,7 @@ The `errors` op marks the field box (the element with `data-slot="field"`) that 
 
 A script hears the runtime's events with `ui.on(document, ..)`:
 
-- `ui:swap` is sent after the page or a part of it was swapped, morphed or replaced.
+- `ui:swap` is sent after the page or a part of it was swapped, morphed or replaced, after a feed added or dropped rows, and after a tree drew the items of a branch.
 - `ui:before-swap` is sent before a morph. Its `detail` is the element being morphed.
 - `ui:sent` is sent when a form's post is over. It is cancelable, and its `detail` is `{ form, ok, status }`: the form element, whether the post succeeded, and the status.
 - `ui:stale` is sent when what was fetched before may be from before a change, so a script that fetches on its own can fetch again.
@@ -164,21 +188,22 @@ The events a script sends are its own: `ui.emit("moved", detail)` dispatches `ge
 
 ## What a script may and may not do
 
-A plugin is code the app's owner chose to compile into the app. Its script runs with the authority of the signed-in person: it can read the session's token and post as that person. The helpers limit what the toolkit gives a script, and the seal limits what a library draws. They are not a sandbox.
+A plugin is code the app's owner chose to compile into the app. Its script runs with the authority of the signed-in person: it can read the session's token and post as that person. The helpers limit what the toolkit gives a script, and the seal limits what the runtime does with what a library draws. They are not a sandbox, and the scripts on a page are not kept apart: one plugin's script can do whatever another's can, and can reach the other's markup and calls.
 
 | A script | Held by |
 |---|---|
-| imports another file or another origin, uses `eval`, or writes a `style` element or a `style` attribute | the page's policy, and what the extension route serves |
-| writes markup inside an owned body that drives the runtime or joins a surrounding form | the seal |
-| calls a path outside its prefixes and exact addresses | `ui.call` and `ui.get` |
-| writes `data-ui-*` outside its owned bodies | nothing: the next morph removes it |
-| posts with `fetch` and the token it read itself | nothing |
+| imports a script from another origin, uses `eval`, or writes a `style` element or a `style` attribute | the page's policy |
+| imports another script this site serves: another plugin's, an island's, the toolkit's own | nothing: the page's policy allows every script of its own origin |
+| writes markup inside an owned body that drives the runtime, stands in for one of the page's elements, or joins a surrounding form | the seal, once the task that wrote it is over |
+| calls a path outside its prefixes and exact addresses with `ui.call` or `ui.get` | `ui.call` and `ui.get` |
+| writes `data-ui-*` outside its owned bodies, in a popup on `<body>` too | nothing: the hook drives the runtime as one the server wrote would, until a morph removes it |
+| posts with `fetch` and the token it read itself, to any path of the site | nothing |
 | queries `document` for its own markup | nothing: the stored twin in a test (see [testing a component](/docs/ui/your-own-components/#testing-it-and-the-stored-twin)) catches the usual mistake |
 | handles `message` events without checking `event.origin` | nothing |
-| puts popups on `<body>` | nothing: the popup sits outside the component, so its scoped styles don't reach it |
-| lets a key or a `change` it handles itself reach an inline editor | nothing: stop Enter, Escape and inner `change` events with `stopPropagation()` |
+| puts popups on `<body>` | nothing: the popup sits outside the component, so its scoped styles don't reach it, and it is not sealed |
+| lets Escape it handles itself, in a part of its own, reach a table drawn as a grid | nothing: the grid takes the focus back to the cell, so stop the event with `stopPropagation()`. A key or a `change` in a part of its own never posts the cell: only the field named `value` does |
 | cancels `ui:sent` for a form outside its own element | nothing |
-| uses a library option that writes HTML from data without escaping it | nothing: what is written inside a sealed body is inert |
+| uses a library option that writes HTML from data without escaping it | the seal, for the runtime's hooks, the page's ids and forms only. What the browser does as the markup is inserted is not held: escape the data (see [what the seal does not stop](#what-the-seal-does-not-stop)) |
 
 ## Versions
 
