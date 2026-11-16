@@ -1,0 +1,215 @@
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Navree.Design.Tables;
+
+namespace Navree.Controls;
+
+public sealed partial class DataTable
+{
+    private DataTableBulkBar? bulkBar;
+    private FrameworkElement? toolbarPresenter;
+    private int bulkSynced = -1;
+    private string lastAnnouncement = string.Empty;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? choiceTimer;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? addedTimer;
+    private int addedLater;
+    private int addedEarlier;
+    private DataTableLoadState lastLoadState = DataTableLoadState.Ready;
+
+    private void WireBulkBar()
+    {
+        bulkBar = GetTemplateChild("PART_BulkBar") as DataTableBulkBar;
+        toolbarPresenter = GetTemplateChild("PART_Toolbar") as FrameworkElement;
+        if (bulkBar is not null)
+        {
+            bulkBar.ClearPressed -= ClearChoice;
+            bulkBar.ClearPressed += ClearChoice;
+            bulkBar.ChooseAllPressed -= ChooseAcross;
+            bulkBar.ChooseAllPressed += ChooseAcross;
+        }
+    }
+
+    // The bar shows while anything is chosen, over the toolbar, and says how many.
+    private void UpdateBulkBar()
+    {
+        if (bulkBar is null)
+        {
+            return;
+        }
+
+        IDataTableModel? model = Model;
+        bool any = model is not null && (choice.Across || choice.Keys.Count > 0);
+        bulkBar.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+        if (toolbarPresenter is not null)
+        {
+            toolbarPresenter.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        if (!any || model is null)
+        {
+            return;
+        }
+
+        SyncBulkActions();
+        (int held, int chosen) = CountChoice();
+        long? total = model.Choice.AcrossTotal;
+
+        // The bar counts the keys chosen, which are what the host is told of, so it never says none while it shows.
+        string countWords = choice.Across
+            ? total is { } all
+                ? DataTableStrings.Get("DataTable_Chosen_All", Choosing.FormatCount(all, Culture))
+                : DataTableStrings.Get("DataTable_Chosen_AllUnknown")
+            : DataTableStrings.Get("DataTable_Chosen_Count", Choosing.FormatCount(choice.Keys.Count, Culture));
+        string? offer = null;
+        if (Choosing.OfferAcross(model.Choice.AcrossAvailable, choice.Across, held, chosen))
+        {
+            offer = total is { } n
+                ? DataTableStrings.Get("DataTable_ChooseAll", Choosing.FormatCount(n, Culture))
+                : DataTableStrings.Get("DataTable_ChooseAllMatching");
+        }
+
+        bulkBar.Set(countWords, offer);
+    }
+
+    private void SyncBulkActions()
+    {
+        CommandBar? bar = bulkBar?.Commands;
+        if (bar is null || bulkSynced == BulkActions.Count)
+        {
+            return;
+        }
+
+        bar.PrimaryCommands.Clear();
+        foreach (ICommandBarElement element in BulkActions)
+        {
+            bar.PrimaryCommands.Add(element);
+        }
+
+        bulkSynced = BulkActions.Count;
+    }
+
+    // The count of rows chosen is said once the person has stopped for 400 ms, so a held key does not talk.
+    private void AnnounceChoice()
+    {
+        choiceTimer ??= DispatcherQueue.CreateTimer();
+        choiceTimer.Stop();
+        choiceTimer.Interval = TimeSpan.FromMilliseconds(400);
+        choiceTimer.IsRepeating = false;
+        choiceTimer.Tick -= OnChoiceTimer;
+        choiceTimer.Tick += OnChoiceTimer;
+        choiceTimer.Start();
+    }
+
+    private void OnChoiceTimer(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        long? total = Model?.Choice.AcrossTotal;
+        Say(Announcements.Chosen(choice.Keys.Count, total, choice.Across));
+    }
+
+    // Rows that join while focus is in the table are said once, a second after the last.
+    private void NoteRowsAdded(int count, bool earlier)
+    {
+        if (!FocusIsInside())
+        {
+            return;
+        }
+
+        if (earlier)
+        {
+            addedEarlier += count;
+        }
+        else
+        {
+            addedLater += count;
+        }
+
+        addedTimer ??= DispatcherQueue.CreateTimer();
+        addedTimer.Stop();
+        addedTimer.Interval = TimeSpan.FromSeconds(1);
+        addedTimer.IsRepeating = false;
+        addedTimer.Tick -= OnAddedTimer;
+        addedTimer.Tick += OnAddedTimer;
+        addedTimer.Start();
+    }
+
+    private void OnAddedTimer(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        if (addedLater > 0)
+        {
+            Say(Announcements.RowsAdded(addedLater, earlier: false));
+        }
+
+        if (addedEarlier > 0)
+        {
+            Say(Announcements.RowsAdded(addedEarlier, earlier: true));
+        }
+
+        addedLater = 0;
+        addedEarlier = 0;
+    }
+
+    private bool FocusIsInside() => FocusIsInside(this);
+
+    // Whether the focus is on the table's own rows or header, not on what the host put above them (a search box a person is typing in): the rows
+    // taking the focus back after they change is for a person who was on them.
+    private bool FocusIsInRows() => FocusIsInside() && !(Toolbar is { } bar && FocusIsInside(bar));
+
+    /// <summary>Whether keyboard focus is on an element of the table or inside it.</summary>
+    /// <param name="element">The element.</param>
+    internal bool HoldsFocus(DependencyObject element) => FocusIsInside(element);
+
+    // Whether keyboard focus is on an element or on something inside it.
+    private bool FocusIsInside(DependencyObject inside)
+    {
+        if (XamlRoot is null)
+        {
+            return false;
+        }
+
+        DependencyObject? at = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        while (at is not null)
+        {
+            if (ReferenceEquals(at, inside))
+            {
+                return true;
+            }
+
+            at = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(at);
+        }
+
+        return false;
+    }
+
+    /// <summary>Makes a row that is far from the view, as assistive technology asks.</summary>
+    /// <param name="index">The row's place.</param>
+    internal void RealizeRow(int index)
+    {
+        if (repeater is null || Model is not { } model || index < 0 || index >= model.RowCount)
+        {
+            return;
+        }
+
+        pins.Set(PinOwner.Assistive, index);
+        rowsLayout.Pinned = pins.Indices;
+        rowsLayout.Reflow();
+        _ = repeater.GetOrCreateElement(index);
+        repeater.UpdateLayout();
+        ReleasePinSoon(PinOwner.Assistive);
+    }
+
+    // Says a message the rules gave, in the table's culture, as the kind and the activity the rules give it.
+    private void Say(Announcement announcement)
+    {
+        (AnnouncementKind kind, string activity) = Announcements.Describe(announcement.Id);
+        Announce(DataTableStrings.Get(announcement, Culture), kind, activity);
+    }
+
+    private void Announce(string words, AnnouncementKind kind = AnnouncementKind.Other, string activity = "DataTable")
+    {
+        lastAnnouncement = words;
+        RaiseNotification(words, kind, activity);
+    }
+
+    /// <summary>The last words the table said to assistive technology; a test reads them.</summary>
+    internal string LastAnnouncement => lastAnnouncement;
+}

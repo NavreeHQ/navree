@@ -1,0 +1,585 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Navree.Controls">
+
+    <!-- The box that chooses a row. -->
+    <Style TargetType="local:DataTableCheck">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:DataTableCheck">
+                    <Grid x:Name="PART_Root" Width="20" Height="20">
+                        <Border x:Name="PART_Box"
+                                CornerRadius="3"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource ControlStrongStrokeColorDefaultBrush}"
+                                Background="{ThemeResource ControlAltFillColorSecondaryBrush}" />
+                        <FontIcon x:Name="PART_Glyph"
+                                  FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  FontSize="12"
+                                  Glyph="&#xE73E;"
+                                  IsTextScaleFactorEnabled="False"
+                                  Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                  Visibility="Collapsed" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CheckStates">
+                                <VisualState x:Name="Unchecked" />
+                                <VisualState x:Name="Checked">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Target="PART_Glyph.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Indeterminate">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Target="PART_Glyph.Glyph" Value="&#xE738;" />
+                                        <Setter Target="PART_Glyph.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="EnabledStates">
+                                <VisualState x:Name="Enabled" />
+                                <VisualState x:Name="Unavailable">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Root.Opacity" Value="0.3" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <!-- In high contrast a chosen box takes the system's colours: the highlight, the text on it, and the window's text for its edge. -->
+                            <VisualStateGroup x:Name="ContrastStates">
+                                <VisualState x:Name="ContrastOff" />
+                                <VisualState x:Name="ContrastOn">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource SystemColorWindowTextColorBrush}" />
+                                        <Setter Target="PART_Glyph.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="ContrastOnIndeterminate">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource SystemColorWindowTextColorBrush}" />
+                                        <Setter Target="PART_Glyph.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <!-- On a row that is the highlight the box is drawn in the highlight's text colour: an empty outline when it is not chosen, filled with a tick or a dash cut out of it when it is. -->
+                                <VisualState x:Name="OnHighlightOff">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="OnHighlightChecked">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_Glyph.Foreground" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="OnHighlightIndeterminate">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Box.Background" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_Box.BorderBrush" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_Glyph.Foreground" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- A small glyph: the chevron that opens a detail, the dots of a menu. -->
+    <Style TargetType="local:DataTableGlyph">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:DataTableGlyph">
+                    <Grid x:Name="PART_Root" Background="Transparent" CornerRadius="4">
+                        <FontIcon x:Name="PART_Icon"
+                                  FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  FontSize="12"
+                                  Glyph="{TemplateBinding Glyph}"
+                                  IsTextScaleFactorEnabled="False"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Highlighted">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Icon.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- A cell of a body row: it holds what the host draws, and is the table's tab stop when it is the active one. -->
+    <Style TargetType="local:DataTableCell">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Padding" Value="12,0,12,0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:DataTableCell">
+                    <Grid x:Name="PART_Root" Background="Transparent">
+                        <ContentPresenter x:Name="ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Padding="{TemplateBinding Padding}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- What a row of a narrow table holds. -->
+    <Style TargetType="local:DataTableListContent">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:DataTableListContent">
+                    <Grid x:Name="PART_Root" Padding="12,0,4,0" ColumnSpacing="8" Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock x:Name="PART_Headline" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                            <TextBlock x:Name="PART_Line1"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextTrimming="CharacterEllipsis"
+                                       TextWrapping="NoWrap" />
+                            <TextBlock x:Name="PART_Line2"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextTrimming="CharacterEllipsis"
+                                       TextWrapping="NoWrap" />
+                            <TextBlock x:Name="PART_States"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextTrimming="CharacterEllipsis"
+                                       TextWrapping="NoWrap" />
+                        </StackPanel>
+                        <TextBlock x:Name="PART_Trailing" Grid.Column="1" VerticalAlignment="Center" />
+                        <local:DataTableGlyph x:Name="PART_More" Grid.Column="2" Width="32" Height="32" VerticalAlignment="Center" Visibility="Collapsed" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The strip a heading is widened by. -->
+    <Style TargetType="local:ResizeGrip">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:ResizeGrip">
+                    <Grid x:Name="PART_Root" Background="Transparent">
+                        <Border x:Name="PART_Line"
+                                Width="1"
+                                HorizontalAlignment="Right"
+                                Opacity="0"
+                                Background="{ThemeResource ControlStrongStrokeColorDefaultBrush}" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Line.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Line.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- A heading cell. -->
+    <Style TargetType="local:DataTableHeaderCell">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:DataTableHeaderCell">
+                    <Grid x:Name="PART_Root" Background="Transparent">
+                        <Grid Padding="12,0,12,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="PART_Text"
+                                       FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"
+                                       TextWrapping="NoWrap"
+                                       VerticalAlignment="Center"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                            <FontIcon x:Name="PART_SortGlyph"
+                                      Grid.Column="1"
+                                      Margin="4,0,0,0"
+                                      FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                      FontSize="12"
+                                      IsTextScaleFactorEnabled="False"
+                                      VerticalAlignment="Center"
+                                      Visibility="Collapsed"
+                                      Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+
+                        </Grid>
+                        <FontIcon x:Name="PART_Options"
+                                  HorizontalAlignment="Right"
+                                  Margin="0,0,14,0"
+                                  FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                  FontSize="12"
+                                  Glyph="&#xE712;"
+                                  IsTextScaleFactorEnabled="False"
+                                  VerticalAlignment="Center"
+                                  Opacity="0"
+                                  Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <local:ResizeGrip x:Name="PART_Grip" Width="8" HorizontalAlignment="Right" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                        <Setter Target="PART_Options.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                        <Setter Target="PART_Options.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Highlighted">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Root.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Options.Opacity" Value="1" />
+                                        <Setter Target="PART_Options.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_Text.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_SortGlyph.Foreground" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- A row of the table, and the header, which is one too: five layers from back to front, and the detail under them. -->
+    <Style TargetType="local:DataTableRow">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:DataTableRow">
+                    <Grid x:Name="PART_Root" Background="Transparent">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="40" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid x:Name="PART_Chrome" HorizontalAlignment="Left" IsHitTestVisible="False">
+                            <Border x:Name="PART_Fill"
+                                    Background="{ThemeResource SubtleFillColorTransparentBrush}"
+                                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                    BorderThickness="0,0,0,1" />
+                            <Border x:Name="PART_Pill"
+                                    Width="3"
+                                    Height="16"
+                                    CornerRadius="1.5"
+                                    Margin="4,0,0,0"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                    Visibility="Collapsed" />
+                        </Grid>
+                        <Canvas x:Name="PART_ScrollCells" />
+                        <Canvas x:Name="PART_FrozenStart" />
+                        <Canvas x:Name="PART_FrozenEnd" />
+                        <!-- What a row's words take when the row is the highlight in a contrast theme: its brush is read by the row. -->
+                        <Border x:Name="PART_TextOnHighlight" Width="0" Height="0" Visibility="Collapsed" Background="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                        <Border x:Name="PART_DetailCard"
+                                Grid.Row="1"
+                                HorizontalAlignment="Left"
+                                CornerRadius="4"
+                                Padding="12"
+                                Margin="16,4,16,8"
+                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                Visibility="Collapsed" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Chosen">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                        <Setter Target="PART_Pill.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="ChosenPointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                        <Setter Target="PART_Pill.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="ChosenPressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                        <Setter Target="PART_Pill.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <!-- In a contrast theme a row that is chosen, pressed or pointed at is the highlight with the highlight's text. -->
+                                <VisualState x:Name="Highlighted">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="HighlightedChosen">
+                                    <VisualState.Setters>
+                                        <Setter Target="PART_Fill.Background" Value="{ThemeResource SystemColorHighlightColorBrush}" />
+                                        <Setter Target="PART_Pill.Background" Value="{ThemeResource SystemColorHighlightTextColorBrush}" />
+                                        <Setter Target="PART_Pill.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The table. -->
+    <Style TargetType="local:DataTable">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="HighContrastAdjustment" Value="None" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:DataTable">
+                    <Border x:Name="PART_Border"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <Grid x:Name="PART_Root">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <Grid x:Name="PART_TopBand">
+                                <ContentPresenter x:Name="PART_Toolbar" Content="{TemplateBinding Toolbar}" />
+                                <local:DataTableBulkBar x:Name="PART_BulkBar" Visibility="Collapsed" />
+                            </Grid>
+
+                            <Border x:Name="PART_HeaderHost"
+                                    Grid.Row="1"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    Height="40" />
+
+                            <Grid x:Name="PART_ListBand"
+                                  Grid.Row="1"
+                                  Height="40"
+                                  Padding="8,0,8,0"
+                                  Visibility="Collapsed"
+                                  Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <Button x:Name="PART_SortButton" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="8,4,8,4">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                  FontSize="14"
+                                                  Glyph="&#xE8CB;"
+                                                  IsTextScaleFactorEnabled="False" />
+                                        <TextBlock x:Name="PART_SortText" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+
+                            <Grid x:Name="PART_BodyHost" Grid.Row="2">
+                                <ScrollView x:Name="PART_Scroll"
+                                            ContentOrientation="Both"
+                                            HorizontalScrollBarVisibility="Auto"
+                                            VerticalScrollBarVisibility="Auto"
+                                            ZoomMode="Disabled"
+                                            IsTabStop="False">
+                                    <ItemsRepeater x:Name="PART_Rows"
+                                                   TabFocusNavigation="Local"
+                                                   XYFocusKeyboardNavigation="Disabled" />
+                                </ScrollView>
+                                <ProgressBar x:Name="PART_EarlierProgress"
+                                             IsIndeterminate="True"
+                                             VerticalAlignment="Top"
+                                             Visibility="Collapsed" />
+                                <InfoBar x:Name="PART_EarlierFailed"
+                                         Severity="Warning"
+                                         IsClosable="False"
+                                         IsOpen="False"
+                                         VerticalAlignment="Top"
+                                         Visibility="Collapsed" />
+                                <Border x:Name="PART_EdgeStart"
+                                        Width="1"
+                                        HorizontalAlignment="Left"
+                                        IsHitTestVisible="False"
+                                        Opacity="0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                <Border x:Name="PART_EdgeEnd"
+                                        Width="1"
+                                        HorizontalAlignment="Right"
+                                        IsHitTestVisible="False"
+                                        Opacity="0"
+                                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                <Grid x:Name="PART_State" Visibility="Collapsed">
+                                    <StackPanel x:Name="PART_Empty"
+                                                Spacing="8"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Visibility="Collapsed">
+                                        <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                  FontSize="48"
+                                                  Glyph="&#xE721;"
+                                                  IsTextScaleFactorEnabled="False"
+                                                  HorizontalAlignment="Center"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock x:Name="PART_EmptyText"
+                                                   FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="PART_Loading"
+                                                Spacing="12"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Visibility="Collapsed">
+                                        <ProgressRing Width="32" Height="32" IsActive="True" HorizontalAlignment="Center" />
+                                        <TextBlock x:Name="PART_LoadingText" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                    <InfoBar x:Name="PART_Failed"
+                                             Severity="Error"
+                                             IsClosable="False"
+                                             IsOpen="False"
+                                             MaxWidth="480"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"
+                                             Visibility="Collapsed" />
+                                </Grid>
+                            </Grid>
+
+                            <Grid x:Name="PART_Footer" Grid.Row="3" MinHeight="32" Padding="12,0,12,0" Visibility="Collapsed">
+                                <TextBlock x:Name="PART_Summary"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Left" />
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="8"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center">
+                                    <ProgressRing x:Name="PART_FooterRing" Width="16" Height="16" IsActive="True" Visibility="Collapsed" />
+                                    <TextBlock x:Name="PART_FooterStatus"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center" />
+                                    <HyperlinkButton x:Name="PART_FooterRetry" Padding="4,0,4,0" Visibility="Collapsed" />
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The bar that stands over the toolbar while rows are chosen. -->
+    <Style TargetType="local:DataTableBulkBar">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:DataTableBulkBar">
+                    <Border x:Name="PART_Root"
+                            MinHeight="48"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="0,0,0,1">
+                        <Grid Padding="8,0,8,0" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="PART_Clear" VerticalAlignment="Center" Padding="8,4,8,4">
+                                <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                          FontSize="14"
+                                          Glyph="&#xE711;"
+                                          IsTextScaleFactorEnabled="False" />
+                            </Button>
+                            <TextBlock x:Name="PART_Count"
+                                       Grid.Column="1"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <HyperlinkButton x:Name="PART_ChooseAll"
+                                             Grid.Column="2"
+                                             VerticalAlignment="Center"
+                                             Visibility="Collapsed" />
+                            <CommandBar x:Name="PART_Commands"
+                                        Grid.Column="3"
+                                        Background="Transparent"
+                                        DefaultLabelPosition="Right"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

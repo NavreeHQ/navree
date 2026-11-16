@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>Navree.Controls</RootNamespace>
+    <AssemblyName>Navree.Controls</AssemblyName>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+  </ItemGroup>
+
+  <!-- The drawn kinds and the data table read the protocol's parts and the plain rules. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Navree.Protocol\Navree.Protocol.csproj" />
+    <ProjectReference Include="..\Navree.Design\Navree.Design.csproj" />
+  </ItemGroup>
+
+  <!-- Only the control's own tests read its inner parts. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Navree.Controls.Tests" />
+  </ItemGroup>
+
+  <!-- The gallery measures the control with a build of its own, which has the symbol NAVREE_MEASURING: it shows the inner
+       parts to the gallery and adds the notes a measuring run reads. A build without the symbol holds none of it. -->
+  <PropertyGroup Condition="'$(NavreeMeasuring)' == 'true'">
+    <DefineConstants>$(DefineConstants);NAVREE_MEASURING</DefineConstants>
+    <BaseOutputPath>bin\measuring\</BaseOutputPath>
+    <IntermediateOutputPath>obj\measuring\$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(NavreeMeasuring)' == 'true'">
+    <InternalsVisibleTo Include="Navree.Gallery" />
+  </ItemGroup>
+
+</Project>
