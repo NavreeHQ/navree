@@ -158,6 +158,18 @@ class LazyLaneRulesTest {
     }
 
     @Test
+    fun a_window_stays_where_it_is_when_the_card_at_its_first_place_moves_and_not_for_anything_else() {
+        val first = LaneRules.key("todo", "a")
+        val next = LaneRules.key("todo", "b")
+        assertTrue("the first card moved down: another stands at its place", LaneRules.windowStays(first, next) { true })
+        assertTrue("the same card at the place: nothing moved", !LaneRules.windowStays(first, first) { true })
+        assertTrue("the card was taken away, not moved", !LaneRules.windowStays(first, next) { false })
+        assertTrue("content that is not a card is not held", !LaneRules.windowStays("plain:0:", next) { true })
+        assertTrue("no item stood there", !LaneRules.windowStays(null, next) { true })
+        assertTrue("a list that ends before the place", LaneRules.windowStays(first, null) { true })
+    }
+
+    @Test
     fun the_boards_lanes_are_shown_one_at_a_time_where_the_window_holds_one_column_of_them() {
         val board = Fixtures.screen("screen-board.json").body.walk().filterIsInstance<Navree.Grid>().first { ListRules.areLanes(it.children) }
         val parts = board.children

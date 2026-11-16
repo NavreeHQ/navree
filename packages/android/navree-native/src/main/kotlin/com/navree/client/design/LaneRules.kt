@@ -91,7 +91,20 @@ object LaneRules {
     }
 
     /** The key of a row of a lane in the lazy list: the same row has the same key wherever it stands, and no row of another list has it. */
-    fun key(listId: String?, rowId: String): String = "move:${listId.orEmpty()}:$rowId"
+    fun key(listId: String?, rowId: String): String = "$KEY_START${listId.orEmpty()}:$rowId"
+
+    private const val KEY_START = "move:"
+
+    /**
+     * Whether a lazy list is to keep its window where it is although the item that stood first in it has moved. A lazy list follows the
+     * first item it shows by its key, so a card moved down from the top of the window would stay at the top and the card that took its
+     * place would stand above it, out of the window: the move would look like a card that vanished. `first` is the key of the item at the
+     * window's first place before the change, `at` the key of the item at that place now, and `stillThere` says whether `first` is still
+     * among the items (it moved; it was not taken away). Only a card is held in its place so: content that comes in above the window
+     * is not.
+     */
+    fun windowStays(first: String?, at: String?, stillThere: () -> Boolean): Boolean =
+        first != null && first.startsWith(KEY_START) && at != first && stillThere()
 
     /** The id a key made by [key] names for this list, or null when it is another item's. */
     fun idOf(listId: String?, key: Any?): String? {

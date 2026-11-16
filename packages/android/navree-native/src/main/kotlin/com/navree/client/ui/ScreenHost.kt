@@ -403,6 +403,7 @@ internal fun Body(blocks: List<Block>, place: Place, state: LazyListState, paddi
     val moving = lanes.lists(blocks)
     val shown = lanes.arranged(blocks, moving)
     for ((id, list) in moving) key(id) { lanes.of(id).Settling(list) }
+    KeepTheWindow(state, shown, { it.key }, enabled = { moving.keys.none { lanes.of(it).held != null } })
     CompositionLocalProvider(LocalPageList provides state, LocalLanes provides lanes) {
         LazyColumn(state = state, contentPadding = padding, modifier = Modifier.fillMaxSize()) {
             items(count = shown.size, key = { shown[it].key }, contentType = { shown[it]::class }) { index ->

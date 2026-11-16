@@ -556,6 +556,28 @@ internal fun MovingRow(
 
 private const val FRAME_NANOS = 16_666_667f
 
+/** The items a lazy list was given the last time. */
+private class LastItems<T> {
+    var items: List<T>? = null
+}
+
+/**
+ * Keeps the window of a lazy list where it is when the card at its first place is moved to another place: see [LaneRules.windowStays].
+ * The list is asked to stand at the same place (`LazyListState.requestScrollToItem`, which is for the next layout only and is not
+ * overridden by the list's following of its first item's key). While a card is held the list is not kept: a drag follows its own rules.
+ */
+@Composable
+internal fun <T> KeepTheWindow(state: LazyListState, items: List<T>, key: (T) -> String, enabled: () -> Boolean = { true }) {
+    val last = remember { LastItems<T>() }
+    SideEffect {
+        val index = state.firstVisibleItemIndex
+        val first = last.items?.getOrNull(index)?.let(key)
+        val at = items.getOrNull(index)?.let(key)
+        if (enabled() && LaneRules.windowStays(first, at) { items.any { key(it) == first } }) state.requestScrollToItem(index, state.firstVisibleItemScrollOffset)
+        last.items = items
+    }
+}
+
 /** A child of a lane as the lazy list holds it: a row that is moved (`id` is its own) or anything else. */
 private class LaneEntry(val at: Int, val id: String?, val key: String)
 
@@ -590,6 +612,7 @@ private fun LaneColumn(node: Navree.List, place: Place) {
     val entries = remember(node) { laneEntries(node) }
     val shown = LaneRules.arranged(entries, { it.id }, lane.effective(node))
     lane.Settling(node)
+    KeepTheWindow(listState, shown, { it.key }, enabled = { lane.held == null })
     val more = LaneRules.end(node.more != null, node.id, place.screen.lists[node.id.orEmpty()]?.failed == true) != LaneRules.End.Nothing
     LazyColumn(state = listState, modifier = Modifier.fillMaxWidth()) {
         items(count = shown.size, key = { shown[it].key }, contentType = { if (shown[it].id != null) 0 else 1 }) { at ->
