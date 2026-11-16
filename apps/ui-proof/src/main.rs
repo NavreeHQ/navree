@@ -24,6 +24,7 @@
 //! | `/themes/builder` | the theme builder, saving to memory and importing |
 //! | `/themes/scopes` | the app's, a workspace's (locked or not) and a user's choice |
 //! | `/themes/shaped` | a theme with a shape and colour roles, and the inverse surface |
+//! | `/shell/options` | a shell with a bare and dark mark, a badge, a workspace switcher drawn as a card, a slot above the person, the person's initials, top bar actions, badges and a subtitle by the title; `?mono` for a mono title and crumb |
 //! | `/pages` | error pages, sign-in and the states inside a page, in every case |
 //! | `/flow` | the stepper, slider, tree view and toolbar in every state, and a wizard at `/flow/wizard/start` |
 //! | `/markdown` | Markdown and code blocks: a reply, tables, links, pictures, raw HTML, code in every language, and `/markdown/render?text=` for any text |
@@ -76,6 +77,7 @@ mod pages;
 mod parts;
 mod phone;
 mod select;
+mod shell_options;
 mod site;
 mod themes;
 mod upload;
@@ -160,6 +162,7 @@ impl Module for ProofModule {
             .controller::<phone::PhonePages>()
             .controller::<display::DisplayPages>()
             .controller::<themes::ThemePages>()
+            .controller::<shell_options::ShellPages>()
             .controller::<pages::Pages>()
             .controller::<flow::FlowPages>()
             .controller::<otp_carousel::CodePages>()
@@ -187,6 +190,7 @@ impl Module for ProofModule {
         m.contribute(app_blocks::BRAND);
         m.contribute(app_blocks::FONT);
         m.contribute(app_blocks::MARK);
+        m.contribute(shell_options::MARK_DARK);
         m.contribute(themes::DISPLAY);
     }
 }
