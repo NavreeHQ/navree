@@ -196,9 +196,23 @@ every `@navree/*` package carries the same version.
   it declares; they are not a sandbox, and a crate linked into the app runs with the app's rights.
 - `access:explain` and `GET /api/me/abilities` name the plugin of each rule its policy wrote: the
   rule's `reason` is the policy and the plugin.
-- Navree Native: the Apple client for iPhone, iPad and Mac is in the repository (`packages/apple`,
-  a Swift package), in preview. It runs the example apps on simulators and on a Mac. No package is
-  published, and nothing has run on a real device.
+- Navree Native: an Apple client for iPhone, iPad and Mac is in the repository under
+  `packages/apple`. It draws the framework's screens with SwiftUI and runs the example apps on
+  simulators and on a Mac. It is a preview: no package is published, and nothing has run on a real
+  device.
+- Navree Native: a Windows client, in C# on .NET 10 and WinUI 3, is in the repository under
+  `packages/windows`. It draws the framework's screens with Windows' own controls and its own data
+  table, charts and health kinds, brings a screen up to date in place when an answer changes it,
+  and is built with the `dotnet` command alone. It is a preview. Sign-in through the browser is not
+  available on Windows yet: an app signs people in with its own sign-in page inside the app.
+- Navree Native: the Android, Apple and Windows clients draw a form's file field and colour field
+  themselves, so a form that holds one is a native screen and no longer a web page. The Android and
+  Windows clients take a chosen picture's place out before it is sent unless the field keeps it; a
+  picture that cannot be cleaned is refused with words.
+- Navree Native: the Android client lays a list whose rows can be moved lazily. Only the cards near
+  the window are drawn, whatever a lane holds, and a card can be moved by dragging, from its
+  handle's menu, by a keyboard and by a screen reader's actions.
+- `cargo xtask native-models` writes and checks the protocol's models for Kotlin, Swift and C#.
 
 ### Changed
 
@@ -369,6 +383,11 @@ every `@navree/*` package carries the same version.
   app's without a word.
 - `KernelError` (it is `#[non_exhaustive]`) gains the variants `PluginConfiguresModule`,
   `PluginProvidesAppOnly`, `PluginCommand` and `PluginHooksModel`.
+- Navree Native: in the Android client a keyboard's Tab goes through a window in the order a person
+  reads it (on a phone the top bar, the content, the bottom navigation; on a tablet the
+  navigation, the top bar, the content), and Shift+Tab is the mirror.
+- The Native clients workflow works out what a push changed and runs each client's jobs only when
+  what they are for changed; pull requests and pushes to main run them all.
 
 ### Fixed
 
@@ -406,6 +425,20 @@ every `@navree/*` package carries the same version.
   `"stopped": true`, so a client can offer a restart.
 - Navree Native: a link on an app's scheme is a sign-in's return only for the sign-in that is
   open; any other link opens as a link.
+- Navree Native: signing out of an Android app leaves nothing a page stored in the web view for
+  the next person, on every system web view. Where the web view cannot delete all site data
+  itself, the client removes each origin's service workers and caches, and shows no web page until
+  that is done.
+- Navree Native: a page shown in the Android client's web view can open a socket or start a worker
+  only on the app's origins and the hosts the app names, whatever the page's scripts replace. The
+  README says what the web view's rules cover and what the app's own content security policy must
+  hold.
+- Navree Native: the Android client shows a web page only with its guards in force. On a system
+  web view too old for them a web region is not shown and the rest of the app works.
+- Navree Native: an app tells the person when its runtime core has stopped and offers to start
+  again (Android and Windows).
+- Navree Native: the device tests' job sees a skipped test. A skip that is not on the job's list
+  fails it.
 
 ### Security
 
