@@ -373,18 +373,16 @@ impl Core {
     }
 
     /// Whether the person began something on a screen held: words typed into
-    /// it that differ from what the page gave, or a send from it on its way
-    /// or waiting.
+    /// it that differ from what the page gave, a send from it on its way or
+    /// waiting, a search, a row chosen or another tab chosen.
     fn begun_on_a_screen(&self) -> bool {
         self.view.screens.iter().any(|(id, view)| {
             let mut typed = false;
             each_typed(view, &mut |_, _, _| typed = true);
             typed
-                || self
-                    .inner
-                    .screens
-                    .get(id)
-                    .is_some_and(|inner| !inner.sending.is_empty() || !inner.waiting.is_empty())
+                || self.inner.screens.get(id).is_some_and(|inner| {
+                    inner.begun || !inner.sending.is_empty() || !inner.waiting.is_empty()
+                })
         })
     }
 
@@ -413,7 +411,8 @@ impl Core {
         // or with only the first page of the first destination, which was
         // asked for while the shell could not be fetched, and which gives way
         // unless they began something on it: words typed that differ from
-        // what the page gave, or a send on its way or waiting.
+        // what the page gave, a send on its way or waiting, a search, a row
+        // chosen or another tab chosen.
         if !self.view.screens.is_empty() {
             let untouched = self.view.modals.is_empty()
                 && self.view.selected == 0

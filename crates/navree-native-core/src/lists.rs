@@ -898,6 +898,9 @@ impl Core {
             changed = true;
         }
         if changed {
+            if let Some(inner) = self.inner.screens.get_mut(&id) {
+                inner.begun = true;
+            }
             self.list_changed(id, table);
         }
     }

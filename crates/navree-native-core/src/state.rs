@@ -893,6 +893,10 @@ pub(crate) struct ScreenInner {
     /// This screen finishes a sign-in's second step: when a write from it
     /// leads away, the person may be signed in, and the shell says.
     pub second_step: bool,
+    /// The person did something on this screen beyond looking at it: searched
+    /// it, chose a row of a table on it, or chose another of its tabs. A place
+    /// a snapshot kept is not put back over it.
+    pub begun: bool,
 }
 
 /// What the core remembers about a message.

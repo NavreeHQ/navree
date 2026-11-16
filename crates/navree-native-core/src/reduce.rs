@@ -4157,6 +4157,128 @@ mod tests {
         }
     }
 
+    /// What the person did on the first page beyond looking counts as having
+    /// begun there too: a search typed, a row chosen, another tab chosen. The
+    /// place is not put back over it.
+    #[test]
+    fn a_snapshot_is_not_put_back_over_a_search_a_chosen_row_or_a_tab() {
+        let snapshot = serde_json::json!({
+            "version": 1,
+            "origin": "https://shop.example",
+            "person": "1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e",
+            "selected": "/",
+            "destinations": [{"href": "/", "stack": [{"url": "/"}, {"url": "/orders/1/pay"}]}],
+        });
+        let answered = |body: &str, request: u64| Response {
+            request,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            headers: vec![(
+                "x-navree-person".to_owned(),
+                "0193a4b2-0000-7000-8000-00000000ra01".to_owned(),
+            )],
+            body: body.to_owned(),
+            ..Response::default()
+        };
+        let cases: Vec<(&str, Option<Event>)> = vec![
+            ("looked at", None),
+            (
+                "searched",
+                Some(Event::Search {
+                    screen: 1,
+                    text: "Simran".to_owned(),
+                }),
+            ),
+            (
+                "a row chosen",
+                Some(Event::Choose {
+                    screen: 1,
+                    table: "dispatch".to_owned(),
+                    row: Some("1042".to_owned()),
+                    on: true,
+                    across: false,
+                }),
+            ),
+            (
+                "another tab chosen",
+                Some(Event::Tab {
+                    screen: 1,
+                    id: "parts".to_owned(),
+                    index: 1,
+                }),
+            ),
+        ];
+        for (what, begun) in cases {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Restore {
+                snapshot: snapshot.clone(),
+            });
+            core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(include_str!("../transcripts/fixtures/made/kept-boot.json").to_owned()),
+            });
+            core.send(Event::Response(Response {
+                request: 1,
+                error: Some(TransportError::Offline),
+                ..Response::default()
+            }));
+            core.send(Event::Response(answered(
+                include_str!("../transcripts/fixtures/made/home-begun.json"),
+                2,
+            )));
+            let gives_way = begun.is_none();
+            if let Some(event) = begun {
+                core.send(event);
+            }
+            let shell = (1..=core.inner.next.request)
+                .rev()
+                .find(|request| {
+                    core.inner
+                        .pending
+                        .get(request)
+                        .is_some_and(|asked| asked.purpose == Pending::Shell)
+                })
+                .unwrap_or(core.inner.next.request + 1);
+            if !core.inner.pending.contains_key(&shell) {
+                core.send(Event::Refresh { screen: 1 });
+            }
+            let shell = (1..=core.inner.next.request)
+                .rev()
+                .find(|request| {
+                    core.inner
+                        .pending
+                        .get(request)
+                        .is_some_and(|asked| asked.purpose == Pending::Shell)
+                })
+                .expect("the shell is asked for");
+            let update = core.send(Event::Response(answered(
+                include_str!("../transcripts/fixtures/store/shell.json"),
+                shell,
+            )));
+            let reported = update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "snapshot"));
+            let stack = &core.view.destinations[0].stack;
+            if gives_way {
+                assert!(
+                    stack.len() == 2 && !reported,
+                    "{what}: the place is put back: {stack:?} {update:?}"
+                );
+            } else {
+                assert!(
+                    stack == &[1] && reported,
+                    "{what}: the first page stays and the snapshot is dropped: {stack:?} {update:?}"
+                );
+            }
+        }
+    }
+
     /// A snapshot asked for before this launch's shell has answered names
     /// nobody the server has not named in this launch, and is not a
     /// visitor's: the client must not store it over a person's.
