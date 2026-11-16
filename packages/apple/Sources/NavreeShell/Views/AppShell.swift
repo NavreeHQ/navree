@@ -74,6 +74,11 @@ public struct AppShell: View {
                 )
             }
         }
+        .overlay {
+            if CoverRules.covers(session.configuration, phase: phase) {
+                Rectangle().fill(.background).ignoresSafeArea().accessibilityHidden(true)
+            }
+        }
         .modifier(PresenceHooks(session: session, scene: scene))
         .modifier(WindowSizing(look: session.configuration.windows))
         .task {
@@ -126,6 +131,19 @@ public struct AppShell: View {
         traits.locale = locale.identifier(.bcp47)
         traits.tz = timeZone.identifier
         return traits
+    }
+}
+
+/// When the app's content is covered: while the scene is not active, on
+/// iPhone and iPad, in an app that asks for it. A Mac's windows stay as they
+/// are, since one that is not in front is still being read.
+public enum CoverRules {
+    public static func covers(_ configuration: ShellConfiguration, phase: ScenePhase) -> Bool {
+        #if os(iOS)
+        configuration.coversWhenInactive && phase != .active
+        #else
+        false
+        #endif
     }
 }
 
