@@ -130,6 +130,13 @@ public partial class App : Application
                 window.Activate();
             }
         }
+        catch (Navree.Core.CoreUnavailableException missing)
+        {
+            // The app cannot run without its core: the person is told why, in words, and the app ends when they close the window.
+            File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "navree-demo.log"), "start: " + missing + Environment.NewLine);
+            new StartFailureWindow("Navree Demo", missing.Message).Activate();
+            return;
+        }
         catch (Exception problem)
         {
             File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "navree-demo.log"), "start: " + problem + Environment.NewLine);

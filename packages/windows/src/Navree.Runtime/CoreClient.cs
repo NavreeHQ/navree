@@ -25,6 +25,12 @@ public sealed record Update(ViewState State, IReadOnlyList<Effect> Effects, Read
 /// The client keeps no state of its own about navigation, trees or forms: what it holds
 /// is the core's view state, part by part, as it last said it. Events are handled one at
 /// a time in the order they were sent, also those an effect answers at once.
+/// <para>
+/// A core that cannot be made ends the constructor with what went wrong; a library that cannot be loaded (not there, or for another
+/// processor) is a <see cref="CoreUnavailableException"/> whose words name the file and where it was looked for. Work given after
+/// <see cref="Dispose"/> began is never left waiting: a send is dropped, and work that is awaited completes with
+/// <see cref="ObjectDisposedException"/>.
+/// </para>
 /// </remarks>
 public sealed class CoreClient : IDisposable
 {
@@ -50,13 +56,20 @@ public sealed class CoreClient : IDisposable
     /// (<see cref="CoreAnswers.IsStop(JsonElement)"/>): the app must be started again.
     /// </param>
     public CoreClient(byte[] config, Action<Update> onUpdate, Action<string>? onProblem = null, Action? onStopped = null)
+        : this(config, static bytes => new NavreeCore(bytes), onUpdate, onProblem, onStopped)
+    {
+    }
+
+    // Makes the core with what is given: the library's own, or in a test one that fails as a missing library does.
+    internal CoreClient(byte[] config, Func<byte[], NavreeCore> make, Action<Update> onUpdate, Action<string>? onProblem = null, Action? onStopped = null)
     {
         ArgumentNullException.ThrowIfNull(config);
+        ArgumentNullException.ThrowIfNull(make);
         ArgumentNullException.ThrowIfNull(onUpdate);
         this.onUpdate = onUpdate;
         this.onProblem = onProblem ?? (static _ => { });
         this.onStopped = onStopped ?? (static () => { });
-        thread = new Thread(() => Run(config), StackBytes) { IsBackground = true, Name = "Navree core" };
+        thread = new Thread(() => Run(config, make), StackBytes) { IsBackground = true, Name = "Navree core" };
         thread.Start();
         started.Task.GetAwaiter().GetResult();
     }
@@ -77,7 +90,7 @@ public sealed class CoreClient : IDisposable
     public void Send(string eventJson)
     {
         ArgumentNullException.ThrowIfNull(eventJson);
-        queue.Writer.TryWrite(new SendWork(eventJson, null));
+        Queue(new SendWork(eventJson, null));
     }
 
     /// <summary>Tells the core one thing that happened, and completes when it has been handled.</summary>
@@ -87,7 +100,7 @@ public sealed class CoreClient : IDisposable
     {
         ArgumentNullException.ThrowIfNull(eventJson);
         TaskCompletionSource<Update> done = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        queue.Writer.TryWrite(new SendWork(eventJson, done));
+        Queue(new SendWork(eventJson, done));
         return done.Task;
     }
 
@@ -96,7 +109,7 @@ public sealed class CoreClient : IDisposable
     public Task<ViewState> ReadAllAsync()
     {
         TaskCompletionSource<ViewState> done = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        queue.Writer.TryWrite(new ReadAllWork(done));
+        Queue(new ReadAllWork(done));
         return done.Task;
     }
 
@@ -105,30 +118,51 @@ public sealed class CoreClient : IDisposable
     public Task<string?> SnapshotAsync()
     {
         TaskCompletionSource<string?> done = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        queue.Writer.TryWrite(new SnapshotWork(done));
+        Queue(new SnapshotWork(done));
         return done.Task;
     }
 
-    /// <summary>Ends the core after the events sent so far have been handled.</summary>
+    /// <summary>
+    /// Ends the core after the work given before this call has been handled. What is asked after it, or arrives while the core is ending,
+    /// is never left waiting: <see cref="Send"/> is dropped, and <see cref="SendAsync"/>, <see cref="ReadAllAsync"/> and
+    /// <see cref="SnapshotAsync"/> complete with <see cref="ObjectDisposedException"/>.
+    /// </summary>
     public void Dispose()
     {
         if (queue.Writer.TryWrite(new StopWork()))
         {
             queue.Writer.TryComplete();
             thread.Join();
+
+            // What was given after the stop is answered as ended. No more can be given: the queue is complete.
+            while (queue.Reader.TryRead(out Work? left))
+            {
+                left.Abandon();
+            }
         }
     }
 
-    private void Run(byte[] config)
+    // Gives work to the core's thread; work that cannot be given (the client has ended) is answered as ended at once.
+    private void Queue(Work work)
+    {
+        if (!queue.Writer.TryWrite(work))
+        {
+            work.Abandon();
+        }
+    }
+
+    private void Run(byte[] config, Func<byte[], NavreeCore> make)
     {
         NavreeCore engine;
         try
         {
-            engine = new NavreeCore(config);
+            engine = make(config);
         }
-        catch (ArgumentException problem)
+        catch (Exception problem)
         {
-            started.SetException(problem);
+            // Whatever ends the start ends it here, on this thread, and is handed to the thread that waits: a library that cannot be loaded
+            // is said in words that name the file and where it was looked for.
+            started.SetException(CoreLibrary.Explain(problem, CoreLibrary.Folder) is string words ? new CoreUnavailableException(words, problem) : problem);
             return;
         }
 
@@ -380,6 +414,9 @@ public sealed class CoreClient : IDisposable
     private abstract class Work
     {
         internal abstract void Do(CoreClient client);
+
+        // The client ended before this was handled.
+        internal abstract void Abandon();
     }
 
     private sealed class StopWork : Work
@@ -387,10 +424,16 @@ public sealed class CoreClient : IDisposable
         internal override void Do(CoreClient client)
         {
         }
+
+        internal override void Abandon()
+        {
+        }
     }
 
     private sealed class SendWork(string eventJson, TaskCompletionSource<Update>? done) : Work
     {
+        internal override void Abandon() => done?.TrySetException(new ObjectDisposedException(nameof(CoreClient)));
+
         internal override void Do(CoreClient client)
         {
             try
@@ -409,6 +452,8 @@ public sealed class CoreClient : IDisposable
 
     private sealed class ReadAllWork(TaskCompletionSource<ViewState> done) : Work
     {
+        internal override void Abandon() => done.TrySetException(new ObjectDisposedException(nameof(CoreClient)));
+
         internal override void Do(CoreClient client)
         {
             try
@@ -426,6 +471,8 @@ public sealed class CoreClient : IDisposable
 
     private sealed class SnapshotWork(TaskCompletionSource<string?> done) : Work
     {
+        internal override void Abandon() => done.TrySetException(new ObjectDisposedException(nameof(CoreClient)));
+
         internal override void Do(CoreClient client)
         {
             try
