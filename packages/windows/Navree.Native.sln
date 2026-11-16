@@ -5,7 +5,13 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{96365585-2872-4A8B-B620-DE27B502EFC2}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{313ED949-9D43-45A6-A308-4BDABF6E5554}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Navree.Protocol", "src\Navree.Protocol\Navree.Protocol.csproj", "{768ECA15-E0F2-4118-A348-6ECF423140E9}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Navree.Core", "src\Navree.Core\Navree.Core.csproj", "{23399A17-B3BD-41D0-A9C9-1A0E6297A8AB}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Navree.Core.Tests", "tests\Navree.Core.Tests\Navree.Core.Tests.csproj", "{2A35A5AC-092E-49E3-94C0-A1E78776BCC3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,11 +23,21 @@ Global
 		{768ECA15-E0F2-4118-A348-6ECF423140E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{768ECA15-E0F2-4118-A348-6ECF423140E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{768ECA15-E0F2-4118-A348-6ECF423140E9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{23399A17-B3BD-41D0-A9C9-1A0E6297A8AB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{23399A17-B3BD-41D0-A9C9-1A0E6297A8AB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{23399A17-B3BD-41D0-A9C9-1A0E6297A8AB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{23399A17-B3BD-41D0-A9C9-1A0E6297A8AB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2A35A5AC-092E-49E3-94C0-A1E78776BCC3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2A35A5AC-092E-49E3-94C0-A1E78776BCC3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2A35A5AC-092E-49E3-94C0-A1E78776BCC3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2A35A5AC-092E-49E3-94C0-A1E78776BCC3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{768ECA15-E0F2-4118-A348-6ECF423140E9} = {96365585-2872-4A8B-B620-DE27B502EFC2}
+		{23399A17-B3BD-41D0-A9C9-1A0E6297A8AB} = {96365585-2872-4A8B-B620-DE27B502EFC2}
+		{2A35A5AC-092E-49E3-94C0-A1E78776BCC3} = {313ED949-9D43-45A6-A308-4BDABF6E5554}
 	EndGlobalSection
 EndGlobal

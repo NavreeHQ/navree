@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Navree.Core</RootNamespace>
+    <AssemblyName>Navree.Core</AssemblyName>
+    <!-- The five functions are imported with LibraryImport, which writes the calls at build time. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- The core's library for the app's processor, when the build has made it (see ../../README.md).
+       It goes next to every program that uses this project, and the import finds it there. -->
+  <PropertyGroup>
+    <NavreeCoreLibrary Condition="'$(NavreeCoreLibrary)' == ''">$(MSBuildThisFileDirectory)..\..\native\win-x64\navree_native_core.dll</NavreeCoreLibrary>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(NavreeCoreLibrary)')">
+    <None Include="$(NavreeCoreLibrary)" Link="navree_native_core.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <!-- A build without the core's library would make an app that cannot start: the build stops instead, and says where it looked. -->
+  <Target Name="NavreeCoreLibraryIsThere" BeforeTargets="CoreCompile" Condition="!Exists('$(NavreeCoreLibrary)')">
+    <Error Code="NAVREE0001" Text="The core's library is not at $(NavreeCoreLibrary). Build it and put it there as packages/windows/README.md says, or give its path in the NavreeCoreLibrary property." />
+  </Target>
+
+</Project>
