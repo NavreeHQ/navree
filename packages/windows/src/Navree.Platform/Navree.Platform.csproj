@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- What the client does with the system that needs no window: the connections, the cookies, what is kept on the
+       device and the wipe. Plain .NET, so every rule in it is tested without a window. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Navree.Platform</RootNamespace>
+    <AssemblyName>Navree.Platform</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Navree.Protocol\Navree.Protocol.csproj" />
+    <ProjectReference Include="..\Navree.Runtime\Navree.Runtime.csproj" />
+    <ProjectReference Include="..\Navree.Design\Navree.Design.csproj" />
+  </ItemGroup>
+
+</Project>

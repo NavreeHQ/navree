@@ -1,0 +1,431 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
+using Navree.Design;
+using Navree.Runtime;
+
+namespace Navree.Platform;
+
+/// <summary>What came of a request: an answer of any status, or the reason none came.</summary>
+/// <param name="Status">The answer's status, or 0 when none came.</param>
+/// <param name="ContentType">Its content type.</param>
+/// <param name="Location">Where a redirect leads, as it came.</param>
+/// <param name="Headers">The headers handed to the core.</param>
+/// <param name="Body">The body as text.</param>
+/// <param name="Error">When no answer came: <c>offline</c>, <c>timeout</c> or <c>other</c>.</param>
+public sealed record FetchResult(
+    int Status,
+    string? ContentType,
+    string? Location,
+    IReadOnlyList<KeyValuePair<string, string>> Headers,
+    string Body,
+    string? Error);
+
+/// <summary>Carries out the core's <c>fetch</c> effects.</summary>
+public interface IFetcher
+{
+    /// <summary>Sends the request and answers what came of it.</summary>
+    /// <param name="effect">The effect.</param>
+    /// <param name="cancel">Cancelled when the answer is no longer wanted.</param>
+    /// <returns>What came of it. It never throws for a request that failed.</returns>
+    Task<FetchResult> FetchAsync(FetchEffect effect, CancellationToken cancel);
+}
+
+/// <summary>
+/// Carries out <c>fetch</c> effects over HTTP: exactly the headers the core gives (those HTTP can carry), the
+/// cookie store's cookies, no redirect followed (a 3xx goes back to the core as it came, after its cookies are
+/// kept), and the answer handed back whatever its status, with the <c>x-navree-*</c> headers and <c>cache-control</c>.
+/// An address that is not the app's own is never asked.
+/// </summary>
+public sealed class HttpFetcher : IFetcher, IDisposable
+{
+    /// <summary>The most bytes the body of one answer may have: 8 MiB. A longer body is answered as a failed request.</summary>
+    public const long MostBodyBytes = 8L * 1024 * 1024;
+
+    private readonly Origins origins;
+    private readonly CookieStore cookies;
+    private readonly HttpClient client;
+    private readonly Func<string, Stream?> files;
+    private readonly Func<DateTimeOffset> clock;
+
+    /// <summary>Makes a fetcher for an app.</summary>
+    /// <param name="origins">The app's origins.</param>
+    /// <param name="cookies">The cookies of the app's origins.</param>
+    /// <param name="handler">The handler that makes the connections. The default follows no redirect, keeps no cookies of its own, and speaks TLS 1.2 or 1.3.</param>
+    /// <param name="files">The bytes of a file the person picked, by the token the client keeps it under.</param>
+    /// <param name="clock">The time, as the cookie store asks for it.</param>
+    public HttpFetcher(Origins origins, CookieStore cookies, HttpMessageHandler? handler = null, Func<string, Stream?>? files = null, Func<DateTimeOffset>? clock = null)
+    {
+        ArgumentNullException.ThrowIfNull(origins);
+        ArgumentNullException.ThrowIfNull(cookies);
+        this.origins = origins;
+        this.cookies = cookies;
+        this.files = files ?? (static _ => null);
+        this.clock = clock ?? (static () => DateTimeOffset.UtcNow);
+        client = new HttpClient(handler ?? Connections(), disposeHandler: true) { Timeout = Timeout.InfiniteTimeSpan };
+    }
+
+    /// <summary>The connections the client makes: no redirect followed, no cookie kept by the handler, TLS 1.2 or 1.3 only.</summary>
+    /// <returns>A handler.</returns>
+    public static SocketsHttpHandler Connections() => new()
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false,
+        UseProxy = true,
+        AutomaticDecompression = DecompressionMethods.All,
+        ConnectTimeout = TimeSpan.FromSeconds(15),
+
+        // A name with several addresses is tried address by address after a short wait, not after the whole time out.
+        ConnectCallback = Connecting.OpenAsync,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        SslOptions = new System.Net.Security.SslClientAuthenticationOptions
+        {
+            EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13,
+        },
+    };
+
+    /// <inheritdoc />
+    public async Task<FetchResult> FetchAsync(FetchEffect effect, CancellationToken cancel)
+    {
+        ArgumentNullException.ThrowIfNull(effect);
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        timeout.CancelAfter(TimeSpan.FromMilliseconds(Math.Clamp(effect.TimeoutMs, 1000, 120_000)));
+        try
+        {
+            // The session the request is made under, read before its cookies are: the answer's cookies are kept only while it lasts.
+            long session = cookies.Session;
+            using HttpRequestMessage? request = Build(effect);
+            if (request is null)
+            {
+                return Failed("other");
+            }
+
+            using HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+            if (response.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? setCookie))
+            {
+                cookies.Store(effect.Url, setCookie, clock(), session);
+            }
+
+            byte[]? body = await ReadCappedAsync(response.Content, timeout.Token).ConfigureAwait(false);
+            if (body is null)
+            {
+                return Failed("other");
+            }
+
+            int status = (int)response.StatusCode;
+            bool redirect = status is >= 300 and < 400;
+            IEnumerable<KeyValuePair<string, IEnumerable<string>>> all = response.Headers.Concat(response.Content.Headers);
+            return new FetchResult(
+                status,
+                response.Content.Headers.ContentType?.ToString(),
+                redirect ? response.Headers.Location?.OriginalString : null,
+                HeaderRules.Passed(all),
+                Encoding.UTF8.GetString(body),
+                null);
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        {
+            return Failed("other");
+        }
+        catch (OperationCanceledException)
+        {
+            return Failed("timeout");
+        }
+        catch (HttpRequestException problem)
+        {
+            return Failed(TransportError(problem));
+        }
+        catch (IOException)
+        {
+            // The answer's stream broke after the request went out.
+            return Failed("other");
+        }
+        catch (InvalidOperationException)
+        {
+            return Failed("other");
+        }
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => client.Dispose();
+
+    /// <summary>
+    /// Opens a stream of server-sent events at a whole address of the app's origins, with the app's cookies, and follows no
+    /// redirect. Calls <paramref name="onOpen"/> when the server has answered 200 with an event stream, and
+    /// <paramref name="onEvent"/> with the name of each event, until the stream ends. A stream that fails, or is not an event
+    /// stream, is answered by its status (or 0), and the core asks again when it wants to: the client never reconnects by itself.
+    /// </summary>
+    /// <param name="url">The whole address the core wrote.</param>
+    /// <param name="headers">The headers the core gave.</param>
+    /// <param name="onOpen">Called once the stream is open.</param>
+    /// <param name="onEvent">Called for each event, with its name.</param>
+    /// <param name="cancel">Cancelled when the core closes the stream.</param>
+    /// <returns>The status the stream ended with: 200 when it ended normally, 0 when it could not be had at all.</returns>
+    public async Task<int> StreamAsync(
+        string url,
+        IReadOnlyList<KeyValuePair<string, string>> headers,
+        Func<Task> onOpen,
+        Func<string?, Task> onEvent,
+        CancellationToken cancel)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        ArgumentNullException.ThrowIfNull(headers);
+        if (!origins.Ours(url))
+        {
+            return 0;
+        }
+
+        try
+        {
+            using HttpRequestMessage request = new(HttpMethod.Get, url);
+            foreach (KeyValuePair<string, string> header in headers)
+            {
+                if (!HeaderRules.CanCarry(header.Key, header.Value))
+                {
+                    return 0;
+                }
+
+                if (!header.Key.Equals("cookie", StringComparison.OrdinalIgnoreCase) && !header.Key.Equals("host", StringComparison.OrdinalIgnoreCase))
+                {
+                    request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+            }
+
+            if (cookies.Header(url, clock()) is string cookie)
+            {
+                request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            }
+
+            using HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel).ConfigureAwait(false);
+            int status = (int)response.StatusCode;
+            if (status != 200 || response.Content.Headers.ContentType?.MediaType?.Equals("text/event-stream", StringComparison.OrdinalIgnoreCase) != true)
+            {
+                return status;
+            }
+
+            await onOpen().ConfigureAwait(false);
+            await using Stream stream = await response.Content.ReadAsStreamAsync(cancel).ConfigureAwait(false);
+            await EventStream.ReadAsync(stream, onEvent, cancel).ConfigureAwait(false);
+            return 200;
+        }
+        catch (Exception problem) when (problem is HttpRequestException or IOException or OperationCanceledException or InvalidOperationException)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>The most bytes a picture may have: 10 MiB.</summary>
+    public const long MostPictureBytes = 10L * 1024 * 1024;
+
+    /// <summary>
+    /// Fetches a picture from a whole address of the app's origins, with the app's cookies, following no redirect.
+    /// A picture on another host is the client's to allow by its own list, and is never fetched here.
+    /// </summary>
+    /// <param name="url">The whole address the core wrote.</param>
+    /// <param name="cancel">Cancelled when the picture is no longer wanted.</param>
+    /// <returns>The bytes, or null when it may not be fetched, did not come, or is not a picture.</returns>
+    public async Task<byte[]?> GetPictureAsync(string url, CancellationToken cancel)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        if (!origins.Ours(url))
+        {
+            return null;
+        }
+
+        try
+        {
+            using HttpRequestMessage request = new(HttpMethod.Get, url);
+            if (cookies.Header(url, clock()) is string cookie)
+            {
+                request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            }
+
+            using HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancel).ConfigureAwait(false);
+            string? type = response.Content.Headers.ContentType?.MediaType;
+            if (!response.IsSuccessStatusCode || type is null || !type.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            await using Stream stream = await response.Content.ReadAsStreamAsync(cancel).ConfigureAwait(false);
+            using MemoryStream bytes = new();
+            byte[] buffer = new byte[16 * 1024];
+            while (true)
+            {
+                int read = await stream.ReadAsync(buffer, cancel).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    return bytes.ToArray();
+                }
+
+                if (bytes.Length + read > MostPictureBytes)
+                {
+                    return null;
+                }
+
+                bytes.Write(buffer, 0, read);
+            }
+        }
+        catch (Exception problem) when (problem is HttpRequestException or IOException or OperationCanceledException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The request a <c>fetch</c> effect asks for, with the store's cookies as they are now, or null when it cannot
+    /// be sent: an address that is not one of the app's origins, a header HTTP cannot carry, a body of a kind that
+    /// the method cannot have.
+    /// </summary>
+    /// <param name="effect">The effect.</param>
+    /// <returns>The request, or null.</returns>
+    public HttpRequestMessage? Build(FetchEffect effect)
+    {
+        ArgumentNullException.ThrowIfNull(effect);
+        if (!origins.Ours(effect.Url))
+        {
+            return null;
+        }
+
+        HttpMethod? method = effect.Method.ToUpperInvariant() switch
+        {
+            "GET" => HttpMethod.Get,
+            "POST" => HttpMethod.Post,
+            "DELETE" => HttpMethod.Delete,
+            _ => null,
+        };
+        if (method is null)
+        {
+            return null;
+        }
+
+        HttpRequestMessage request = new(method, effect.Url);
+        string? type = null;
+        foreach (KeyValuePair<string, string> header in effect.Headers)
+        {
+            if (!HeaderRules.CanCarry(header.Key, header.Value))
+            {
+                request.Dispose();
+                return null;
+            }
+
+            if (header.Key.Equals("content-type", StringComparison.OrdinalIgnoreCase))
+            {
+                type = header.Value;
+            }
+            else if (!header.Key.Equals("cookie", StringComparison.OrdinalIgnoreCase)
+                && !header.Key.Equals("host", StringComparison.OrdinalIgnoreCase)
+                && !header.Key.Equals("content-length", StringComparison.OrdinalIgnoreCase))
+            {
+                request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+        }
+
+        DateTimeOffset now = clock();
+        if (cookies.Header(effect.Url, now) is string cookie)
+        {
+            request.Headers.TryAddWithoutValidation("Cookie", cookie);
+        }
+
+        if (effect.Xsrf && cookies.XsrfToken(effect.Url, now) is string token && HeaderRules.CanCarry("x-xsrf-token", token))
+        {
+            request.Headers.TryAddWithoutValidation("x-xsrf-token", token);
+        }
+
+        switch (effect.Body)
+        {
+            case FormBody form:
+                request.Content = Text(form.Text, type);
+                break;
+            case JsonBody json:
+                request.Content = Text(json.Text, type);
+                break;
+            case MultipartBody multipart:
+                MultipartFormDataContent content = new();
+                foreach (BodyPart part in multipart.Parts)
+                {
+                    switch (part)
+                    {
+                        case TextPart text:
+                            content.Add(new StringContent(text.Value, Encoding.UTF8), text.Name);
+                            break;
+                        case FilePart file when files(file.Token) is Stream stream:
+                            StreamContent bytes = new(stream);
+                            bytes.Headers.ContentType = MediaTypeHeaderValue.TryParse(file.MediaType, out MediaTypeHeaderValue? media) ? media : null;
+                            content.Add(bytes, file.Name, file.Filename);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
+                request.Content = content;
+                break;
+            case null when method != HttpMethod.Get:
+                request.Content = Text(string.Empty, type);
+                break;
+            default:
+                break;
+        }
+
+        return request;
+    }
+
+    private static ByteArrayContent Text(string text, string? type)
+    {
+        ByteArrayContent content = new(Encoding.UTF8.GetBytes(text));
+        if (type is not null && MediaTypeHeaderValue.TryParse(type, out MediaTypeHeaderValue? media))
+        {
+            content.Headers.ContentType = media;
+        }
+
+        return content;
+    }
+
+    // Reads only as far as one byte past the limit, so a body that never ends costs no more.
+    private static async Task<byte[]?> ReadCappedAsync(HttpContent content, CancellationToken cancel)
+    {
+        await using Stream stream = await content.ReadAsStreamAsync(cancel).ConfigureAwait(false);
+        using MemoryStream bytes = new();
+        byte[] buffer = new byte[16 * 1024];
+        while (true)
+        {
+            int read = await stream.ReadAsync(buffer, cancel).ConfigureAwait(false);
+            if (read == 0)
+            {
+                return bytes.ToArray();
+            }
+
+            if (bytes.Length + read > MostBodyBytes)
+            {
+                return null;
+            }
+
+            bytes.Write(buffer, 0, read);
+        }
+    }
+
+    /// <summary>
+    /// What a request that failed is reported as. <c>offline</c> only when nothing of it can have been sent: the name was not found, or the
+    /// connection (to the server, through a proxy's tunnel, or its TLS handshake) was never made, which <see cref="HttpRequestException.HttpRequestError"/>
+    /// says. Anything else (the connection reset or ended after the request began to be written, an answer that does not read, or a reason the
+    /// exception does not give) is <c>other</c>: when it cannot be told, the request may have been sent, and a write may have run.
+    /// </summary>
+    /// <param name="problem">What the request threw.</param>
+    /// <returns><c>offline</c> or <c>other</c>.</returns>
+    public static string TransportError(HttpRequestException problem)
+    {
+        ArgumentNullException.ThrowIfNull(problem);
+        return problem.HttpRequestError switch
+        {
+            HttpRequestError.NameResolutionError
+                or HttpRequestError.ConnectionError
+                or HttpRequestError.ProxyTunnelError
+                or HttpRequestError.SecureConnectionError => "offline",
+            _ => "other",
+        };
+    }
+
+    private static FetchResult Failed(string error) =>
+        new(0, null, null, [], string.Empty, error);
+}
