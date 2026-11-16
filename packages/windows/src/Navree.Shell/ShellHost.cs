@@ -26,6 +26,8 @@ public sealed partial class ShellHost : IDisposable
     private readonly SessionKeeper session;
     private readonly SessionGate asked = new();
     private readonly WebProfiles webProfiles;
+    private readonly List<string> startNotes = [];
+    private bool started;
     private readonly CancellationTokenSource stopped = new();
     private readonly EnvironmentWatcher environment;
     private readonly ForegroundTracker foreground = new();
@@ -58,7 +60,7 @@ public sealed partial class ShellHost : IDisposable
         // person who left is taken in. No web view runs yet, so the web view's folders can be deleted; one that cannot be is never used
         // again, because the session of this run keeps its web data in a folder of its own (WebProfiles).
         session = new SessionKeeper(kept, cookies);
-        webProfiles = new WebProfiles(options.WebFolder ?? WebData.DefaultFolder(options.AppName), say: what => Problem?.Invoke(what));
+        webProfiles = new WebProfiles(options.WebFolder ?? WebData.DefaultFolder(options.AppName), say: Note);
         FinishedSignOutAtStart = session.Open(() =>
         {
             Files.Clear();
@@ -67,6 +69,12 @@ public sealed partial class ShellHost : IDisposable
         if (!FinishedSignOutAtStart)
         {
             _ = webProfiles.Open(lastSessionEnded: false);
+        }
+
+        // A file of a session that ended which another program holds does not stop the start: it is set aside and never read.
+        if (session.SetAsideAtStart > 0)
+        {
+            Note(session.SetAsideAtStart + " kept file(s) of a session that ended could not be deleted yet: they are set aside, never read, and deleted at a later start");
         }
 
         client = new CoreClient(ClientEnvironment.Config(options), OnUpdate, OnProblem, () => dispatcher.TryEnqueue(NoteStop));
@@ -173,6 +181,14 @@ public sealed partial class ShellHost : IDisposable
     /// <summary>Starts the app: the core asks for its shell, and is given the snapshot the last run kept, when there is one that reads.</summary>
     public void Start()
     {
+        // What the start had to say before anybody could listen is said now.
+        started = true;
+        foreach (string note in startNotes)
+        {
+            Problem?.Invoke(note);
+        }
+
+        startNotes.Clear();
         string? saved = kept.Read("snapshot");
         client.Send(SnapshotRulesAllow(saved) ? Events.Restore(saved!) : Events.Start);
     }
@@ -230,6 +246,19 @@ public sealed partial class ShellHost : IDisposable
     internal void ReportProblem(string what) => dispatcher.TryEnqueue(() => Problem?.Invoke(what));
 
     private void OnProblem(string what) => dispatcher.TryEnqueue(() => Problem?.Invoke(what));
+
+    // A problem line of the host's own, on the UI thread: kept until the app is started when nobody listens yet.
+    private void Note(string what)
+    {
+        if (started)
+        {
+            Problem?.Invoke(what);
+        }
+        else
+        {
+            startNotes.Add(what);
+        }
+    }
 
     // On the core's thread: the state is handed to the UI thread, and then each effect, in order.
     // A window that cannot show the state, or an effect that fails, does not cost the rest of the update. Each effect is marked here, as it is

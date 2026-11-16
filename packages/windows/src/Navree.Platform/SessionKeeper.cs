@@ -73,26 +73,48 @@ public sealed class SessionKeeper : IDisposable
     /// <summary>
     /// Opens what the last run kept, at the start, before anything else is read. When a sign-out was left unfinished (its mark is there), it is
     /// finished first: the cookie file and everything kept go, nothing is taken from them, and <paramref name="finishRest"/> takes away what is
-    /// kept elsewhere (the web view's folder, the copies of chosen files). The mark goes only when all of it is gone. Otherwise the cookies kept
-    /// are taken into the store.
+    /// kept elsewhere (the web view's folder, the copies of chosen files). A file that cannot be deleted (another program holds it) does not
+    /// stop the start: it is set aside, never read again, and deleted when it can be (<see cref="SetAsideAtStart"/> says how many). The mark
+    /// goes only when everything is gone or set aside; while it is there no start takes anything from what was kept. Otherwise the cookies
+    /// kept are taken into the store.
     /// </summary>
     /// <param name="finishRest">Takes away the rest of the person's data; false when some of it could not be.</param>
-    /// <returns>Whether a sign-out was left unfinished and has been finished now.</returns>
+    /// <returns>Whether a sign-out was left unfinished: this start began signed out, with nothing taken from what was kept.</returns>
     public bool Open(Func<bool>? finishRest = null)
     {
         if (kept.WipeMarked)
         {
-            kept.Write(CookiesKey, null);
-            kept.Clear();
+            // Nothing is imported in a start that finds the mark, whatever can or cannot be deleted.
             cookies.Clear();
-            if (finishRest?.Invoke() ?? true)
+            bool gone = false;
+            try
             {
-                kept.UnmarkWipe();
+                SetAsideAtStart = kept.ClearOrSetAside();
+                gone = true;
+            }
+            catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+            {
+                // What is still there could not even be named: the mark stays, and the next start begins the same way.
+            }
+
+            bool rest = finishRest?.Invoke() ?? true;
+            if (gone && rest)
+            {
+                try
+                {
+                    kept.UnmarkWipe();
+                }
+                catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+                {
+                    // The mark stays: the next start takes away again what is already gone.
+                }
             }
 
             return true;
         }
 
+        // What an earlier start had to set aside is deleted now, if whatever held it has let go.
+        SetAsideAtStart = kept.DeleteSetAside();
         if (kept.Read(CookiesKey) is string saved)
         {
             cookies.Import(saved);
@@ -104,6 +126,12 @@ public sealed class SessionKeeper : IDisposable
 
         return false;
     }
+
+    /// <summary>
+    /// How many files of a session that ended are still on disk after <see cref="Open"/>, because another program holds them: they are set
+    /// aside, never read, and deleted at a later start.
+    /// </summary>
+    public int SetAsideAtStart { get; private set; }
 
     /// <summary>The session a write is asked in now, to be given to <see cref="Write(long?, string, string?)"/>; null while a sign-out is under way.</summary>
     /// <returns>The stamp, or null.</returns>

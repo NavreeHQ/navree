@@ -210,6 +210,101 @@ public sealed class SessionTests
     }
 
     [TestMethod]
+    public async Task A_kept_file_another_program_holds_does_not_stop_the_start_that_finishes_a_sign_out_and_is_never_read_again()
+    {
+        string folder = Folder();
+        try
+        {
+            SignedInBefore(folder);
+            (SessionKeeper keeper, _, _, _) = Start(folder);
+            using (keeper)
+            {
+                // The process ends at the first thing the sign-out does: the mark is on disk, and so is everything of the person.
+                Assert.ThrowsExactly<InvalidOperationException>(() =>
+                    keeper.EndAsync(() => throw new InvalidOperationException("the process ended here"), null, [], []).GetAwaiter().GetResult());
+            }
+
+            // Another program (a scanner, an indexer) holds every kept file open in a way that does not let it be deleted.
+            string[] files = Directory.GetFiles(folder, "*.kept");
+            Assert.AreEqual(2, files.Length, "the cookie file and the page of the person who left are on disk");
+            List<FileStream> held = [.. files.Select(file => new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))];
+            try
+            {
+                (SessionKeeper next, CookieStore cookies, KeptStore kept, bool finished) = Start(folder);
+                using (next)
+                {
+                    Expect.That(finished, "the start does not say it began from an unfinished sign-out");
+                    Assert.AreEqual(2, next.SetAsideAtStart, "the files that could not be deleted are not counted as set aside");
+                    Assert.IsNull(cookies.Header("https://shop.example/", DateTimeOffset.UtcNow), "the start took the cookie of the person who left from a file it could not delete");
+                    Assert.IsNull(kept.Read(SessionKeeper.CookiesKey), "the cookie file of the person who left is still read");
+                    Assert.IsNull(kept.Read("page:https://shop.example/orders"), "a page of the person who left is still read");
+                    Expect.That(!kept.WipeMarked, "the mark stays though everything is gone or set aside: every start would begin signed out");
+                    Assert.AreEqual(2, Directory.GetFiles(folder, "*.kept").Length, "the held files went though they were held");
+                }
+
+                // A start while the files are still held: nothing of them is read, and nothing stops it.
+                (SessionKeeper stillHeld, CookieStore cookiesThen, KeptStore keptThen, bool again) = Start(folder);
+                using (stillHeld)
+                {
+                    Expect.That(!again, "a finished sign-out is finished again");
+                    Assert.IsNull(cookiesThen.Header("https://shop.example/", DateTimeOffset.UtcNow), "a later start took the cookie of the person who left");
+                    Assert.IsNull(keptThen.Read("page:https://shop.example/orders"));
+                    Assert.AreEqual(2, stillHeld.SetAsideAtStart);
+                }
+            }
+            finally
+            {
+                foreach (FileStream file in held)
+                {
+                    file.Dispose();
+                }
+            }
+
+            // The other program has let go: the next start deletes what was set aside, and whoever signs in is kept as usual.
+            (SessionKeeper last, CookieStore lastCookies, KeptStore lastKept, _) = Start(folder);
+            using (last)
+            {
+                Assert.AreEqual(0, last.SetAsideAtStart);
+                Assert.AreEqual(0, Directory.GetFiles(folder, "*.kept").Length, "the files set aside are still on disk after they were let go");
+                lastCookies.Store("https://shop.example/", ["session=manpreet; Path=/; Max-Age=3600"], DateTimeOffset.UtcNow);
+                last.KeepCookies();
+                await last.DrainAsync().WaitAsync(Short);
+                Expect.That(lastKept.Read(SessionKeeper.CookiesKey)?.Contains("manpreet", StringComparison.Ordinal) == true, "the next person's cookie is not kept");
+            }
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
+    public void Clearing_deletes_every_file_it_can_and_says_when_one_is_still_there()
+    {
+        string folder = Folder();
+        try
+        {
+            KeptStore kept = new(folder, App);
+            kept.Write("a", "1");
+            kept.Write("b", "2");
+            kept.Write("c", "3");
+            string[] files = Directory.GetFiles(folder, "*.kept");
+            using (FileStream one = new(files[1], FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                _ = Assert.ThrowsExactly<IOException>(kept.Clear, "a clear that left a file says it finished");
+                Assert.AreEqual(1, Directory.GetFiles(folder, "*.kept").Length, "the clear stopped at the file it could not delete and left the others");
+            }
+
+            kept.Clear();
+            Assert.AreEqual(0, Directory.GetFiles(folder, "*.kept").Length);
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
     public async Task A_wipe_whose_step_fails_has_taken_the_cookie_file_first_and_is_finished_again_at_the_next_start()
     {
         string folder = Folder();
