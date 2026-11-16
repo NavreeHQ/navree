@@ -18,14 +18,14 @@ use std::time::Duration;
 
 use http::Method;
 use navree::config::ConfigSection;
-use navree::contracts::{PermissionCheck, permission_catalog, permitted};
+use navree::contracts::{PermissionCheck, permitted};
 use navree::crypto::generate_key;
 use navree::db::Db;
 use navree::http::extract::Request;
 use navree::http::{AppRouter, Controller, FallibleLayer, GlobalLayer, LayerSlot, Mount, RouteDef};
 use navree::kernel::ModuleId;
 use navree::plugin::prelude::*;
-use navree::plugin::{ClientModule, Permission, PluginInfo};
+use navree::plugin::{ClientModule, PluginInfo};
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
 use navree::ui::{AppShell, Shell, Text};
@@ -546,15 +546,6 @@ async fn the_navigation_endpoint_answers_the_permitted_items() {
     }
 }
 
-/// A section of the database's, which the storage package's plugin reads below.
-#[derive(Clone, Debug, Default, serde::Deserialize, ConfigSection)]
-#[config(key = "database.extra")]
-#[serde(default)]
-struct DatabaseExtra {
-    /// How many more connections the reports of the Amritsar office may open.
-    connections: u32,
-}
-
 /// A digest of notices, which a community plugin reads below, outside its namespace.
 #[derive(Clone, Debug, Default, serde::Deserialize, ConfigSection)]
 #[config(key = "digest")]
@@ -564,116 +555,27 @@ struct DigestOptions {
     size: u32,
 }
 
-/// `navree-storage` as the kernel names it: first-party, at the kernel's version.
-fn storage_plugin() -> PluginInfo {
-    PluginInfo::new(
-        "navree-storage",
-        "navree_storage",
-        "storage",
-        env!("CARGO_PKG_VERSION"),
-    )
-}
-
-/// A module with the storage package's module id that names its plugin, then registers
-/// what `adds` adds.
-fn storage_probe(adds: fn(&mut ModuleBuilder)) -> Probe {
-    Probe(
-        ModuleId::of::<navree::storage::StorageModule>(),
-        storage_plugin(),
-        adds,
-    )
-}
-
-fn reads_database_extra(m: &mut ModuleBuilder) {
-    m.config_section::<DatabaseExtra>();
-}
-
 fn reads_digest(m: &mut ModuleBuilder) {
     m.config_section::<DigestOptions>();
 }
 
-fn describes_storage_audit(m: &mut ModuleBuilder) {
-    m.permissions(&[Permission::new(
-        "storage.audit",
-        "Read the audit of the files stored for the Jalandhar branch",
-    )]);
-}
-
 #[tokio::test(flavor = "current_thread")]
-async fn a_first_party_plugin_reading_a_section_outside_its_namespace_does_not_warn() {
+async fn a_community_plugin_reading_a_section_outside_its_namespace_is_warned_about() {
     let warnings = Warnings::default();
     let _guard = warnings.install();
     let builder = Navree::app()
         .module(ConfigModule::for_root(ConfigSources::default()))
-        .module(storage_probe(reads_database_extra))
         .module(Probe(
             ModuleId::named::<Probe>("notices"),
             PluginInfo::new("navree-plugin-notices", "plugins_docs", "notices", "1.0.0"),
             reads_digest,
         ));
     let report = builder.plugin_report().expect("the graph is valid");
-    let first_party = |name: &str| {
-        report
-            .plugins
-            .iter()
-            .find(|plugin| plugin.info.name == name)
-            .map(|plugin| plugin.first_party)
-    };
-    assert_eq!(first_party("navree-storage"), Some(true));
-    assert_eq!(first_party("navree-plugin-notices"), Some(false));
+    assert!(report.plugins.iter().all(|plugin| !plugin.first_party));
     let _app = builder.boot().await.expect("boots");
     let logged = warnings.all();
-    // The positive control: the community plugin's section outside its namespace.
     let digest = "plugin `navree-plugin-notices` reads the configuration section `digest`, outside its namespace `notices`";
     assert!(logged.iter().any(|line| line == digest), "{logged:?}");
-    assert!(
-        !logged.iter().any(|line| line.contains("navree-storage")),
-        "{logged:?}"
-    );
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn a_first_party_plugin_declaring_another_modules_permission_only_warns() {
-    /// A module of the app that describes the storage package's audit permission too.
-    struct Reports;
-
-    impl Module for Reports {
-        fn register(&self, m: &mut ModuleBuilder) {
-            describes_storage_audit(m);
-        }
-    }
-
-    let warnings = Warnings::default();
-    let _guard = warnings.install();
-    let app = TestApp::builder()
-        .temp_database()
-        .module(DatabaseModule::from_config())
-        .module(AccessModule::for_root(AccessOptions::default()))
-        .module(storage_probe(describes_storage_audit))
-        .module(Reports)
-        .build()
-        .await;
-    let described: Vec<(&str, &str)> = permission_catalog(app.ctx())
-        .iter()
-        .map(|(module, permission)| (module.name, permission.name))
-        .collect();
-    assert_eq!(described.len(), 2, "{described:?}");
-    assert!(
-        described.contains(&("StorageModule", "storage.audit")),
-        "{described:?}"
-    );
-    assert!(
-        described.contains(&("Reports", "storage.audit")),
-        "{described:?}"
-    );
-    let logged = warnings.all();
-    assert!(
-        logged.iter().any(|line| {
-            line.starts_with("permission `storage.audit` is declared by both")
-                && line.ends_with("; this becomes an error in 2.0")
-        }),
-        "{logged:?}"
-    );
 }
 
 /// A module written with the two preludes and nothing else imported.

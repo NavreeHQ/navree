@@ -268,3 +268,132 @@ impl HealthCheck for StorageHealth {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use navree_config::{ConfigModule, ConfigSection, ConfigSources, ModuleBuilderConfigExt};
+    use navree_kernel::{Module, ModuleBuilder, Navree, PluginInfo};
+
+    /// A section of the database's, which this package's plugin reads below.
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default)]
+    #[allow(dead_code)]
+    struct DatabaseExtra {
+        /// How many more connections the reports of the Amritsar office may open.
+        connections: u32,
+    }
+
+    impl ConfigSection for DatabaseExtra {
+        const KEY: &'static str = "database.extra";
+    }
+
+    /// A digest of notices, which a plugin that is not first-party reads below.
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default)]
+    #[allow(dead_code)]
+    struct DigestOptions {
+        /// How many notices a digest holds.
+        size: u32,
+    }
+
+    impl ConfigSection for DigestOptions {
+        const KEY: &'static str = "digest";
+    }
+
+    /// A module of this package that names its plugin, as the package's own modules may, and
+    /// reads a section outside the plugin's namespace.
+    struct StorageProbe;
+
+    impl Module for StorageProbe {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(navree_kernel::plugin_info!())
+                .config_section::<DatabaseExtra>();
+        }
+    }
+
+    /// A plugin that is not first-party, whose crate is this module.
+    const NOTICES: PluginInfo =
+        PluginInfo::new("navree-plugin-notices", module_path!(), "notices", "1.0.0");
+
+    /// The notices plugin's module: it reads a section outside its namespace.
+    struct NoticesProbe;
+
+    impl Module for NoticesProbe {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(NOTICES).config_section::<DigestOptions>();
+        }
+    }
+
+    /// The warnings logged on this thread while the subscriber is the default (the test runs
+    /// on a current-thread runtime, so the boot logs on this thread).
+    #[derive(Clone, Default)]
+    struct Warnings(Arc<Mutex<Vec<String>>>);
+
+    /// The `message` field of an event.
+    struct Message(String);
+
+    impl tracing::field::Visit for Message {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            if field.name() == "message" {
+                self.0 = format!("{value:?}");
+            }
+        }
+    }
+
+    impl tracing::Subscriber for Warnings {
+        fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
+            *metadata.level() <= tracing::Level::WARN
+        }
+
+        fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+
+        fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+
+        fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+
+        fn event(&self, event: &tracing::Event<'_>) {
+            if *event.metadata().level() == tracing::Level::WARN {
+                let mut message = Message(String::new());
+                event.record(&mut message);
+                self.0.lock().unwrap().push(message.0);
+            }
+        }
+
+        fn enter(&self, _: &tracing::span::Id) {}
+
+        fn exit(&self, _: &tracing::span::Id) {}
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_first_party_plugin_reading_a_section_outside_its_namespace_is_not_warned_about() {
+        let warnings = Warnings::default();
+        let _guard = tracing::subscriber::set_default(warnings.clone());
+        let builder = Navree::app()
+            .module(ConfigModule::for_root(ConfigSources::new()))
+            .module(StorageProbe)
+            .module(NoticesProbe);
+        let report = builder.plugin_report().expect("the graph is valid");
+        let first_party = |name: &str| {
+            report
+                .plugins
+                .iter()
+                .find(|plugin| plugin.info.name == name)
+                .map(|plugin| plugin.first_party)
+        };
+        assert_eq!(first_party("navree-storage"), Some(true));
+        assert_eq!(first_party("navree-plugin-notices"), Some(false));
+        let _app = builder.boot().await.expect("boots");
+        let logged = warnings.0.lock().unwrap().clone();
+        // The control: the other plugin's section outside its namespace is warned about.
+        let digest = "plugin `navree-plugin-notices` reads the configuration section `digest`, outside its namespace `notices`";
+        assert!(logged.iter().any(|line| line == digest), "{logged:?}");
+        assert!(
+            !logged.iter().any(|line| line.contains("navree-storage")),
+            "{logged:?}"
+        );
+    }
+}
