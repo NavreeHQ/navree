@@ -197,7 +197,38 @@ public sealed partial class ShellHost : IDisposable
 
         startNotes.Clear();
         string? saved = StartRules.SnapshotToRestore(kept);
-        client.Send(SnapshotRulesAllow(saved) ? Events.Restore(saved!) : Events.Start);
+        if (SnapshotRulesAllow(saved))
+        {
+            _ = RestoreAsync(saved!);
+            return;
+        }
+
+        // No snapshot is given to the core, so none is being put back.
+        StartRules.Restored(kept);
+        client.Send(Events.Start);
+    }
+
+    // Gives the core the snapshot. The note that it is being put back (written before this, StartRules) is taken away only when the core has
+    // answered and the window's thread has carried the answer out: a start that ends anywhere before that begins clean the next time.
+    private async Task RestoreAsync(string saved)
+    {
+        try
+        {
+            _ = await client.SendAsync(Events.Restore(saved));
+        }
+        catch (Exception)
+        {
+            // The core did not get to the end of it: the note stays.
+            return;
+        }
+
+        // Behind the update the core answered with, which was handed to the window's thread before the answer came back here.
+        if (!await OnDispatcherAsync())
+        {
+            return;
+        }
+
+        _ = dispatcher.TryEnqueue(() => StartRules.Restored(kept));
     }
 
     private static bool SnapshotRulesAllow(string? saved) => Navree.Presence.SnapshotRules.ShouldKeep(saved);

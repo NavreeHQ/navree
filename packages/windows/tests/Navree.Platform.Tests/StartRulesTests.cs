@@ -8,6 +8,14 @@ public sealed class StartRulesTests
 
     private static string Folder() => Path.Combine(Path.GetTempPath(), "navree-start-" + Guid.NewGuid().ToString("N"));
 
+    private static void Delete(string folder)
+    {
+        if (Directory.Exists(folder))
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     [TestMethod]
     public void A_start_gives_the_core_the_snapshot_the_last_run_kept_and_goes_on_giving_it()
     {
@@ -18,12 +26,18 @@ public sealed class StartRulesTests
             Assert.IsNull(StartRules.SnapshotToRestore(kept), "a first start has a snapshot");
             kept.Write(StartRules.SnapshotKey, Snapshot);
 
-            Assert.AreEqual(Snapshot, StartRules.SnapshotToRestore(new KeptStore(folder, "Navree.Tests")));
-            Assert.AreEqual(Snapshot, StartRules.SnapshotToRestore(new KeptStore(folder, "Navree.Tests")), "a start used the snapshot up");
+            // Each start is given it, puts it back, and says so when that is over.
+            KeptStore second = new(folder, "Navree.Tests");
+            Assert.AreEqual(Snapshot, StartRules.SnapshotToRestore(second));
+            StartRules.Restored(second);
+            KeptStore third = new(folder, "Navree.Tests");
+            Assert.AreEqual(Snapshot, StartRules.SnapshotToRestore(third), "a start used the snapshot up");
+            StartRules.Restored(third);
+            Assert.IsNull(third.Read(StartRules.RestoringKey));
         }
         finally
         {
-            Directory.Delete(folder, recursive: true);
+            Delete(folder);
         }
     }
 
@@ -56,7 +70,45 @@ public sealed class StartRulesTests
         }
         finally
         {
-            Directory.Delete(folder, recursive: true);
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
+    public void A_start_that_ended_while_it_put_the_snapshot_back_is_followed_by_a_clean_start_and_not_by_the_same_snapshot_for_ever()
+    {
+        string folder = Folder();
+        try
+        {
+            KeptStore first = new(folder, "Navree.Tests");
+            first.Write(StartRules.SnapshotKey, Snapshot);
+
+            // The app starts and gives the core the snapshot. The note that it is being put back is on disk before the core has it.
+            KeptStore dying = new(folder, "Navree.Tests");
+            Assert.AreEqual(Snapshot, StartRules.SnapshotToRestore(dying));
+            Assert.IsNotNull(dying.Read(StartRules.RestoringKey), "nothing on disk says a snapshot is being put back");
+
+            // The app ends there, in the middle of it, with nobody told. The next start is clean: the snapshot is not given back.
+            KeptStore next = new(folder, "Navree.Tests");
+            Assert.IsNull(StartRules.SnapshotToRestore(next), "the start after one that ended while putting the snapshot back was given the same snapshot");
+            Assert.IsNull(next.Read(StartRules.SnapshotKey), "the snapshot is still where a start takes it from");
+            Assert.AreEqual(Snapshot, next.Read(StartRules.AsideKey), "the snapshot was not kept aside for this one start");
+            Assert.IsNull(next.Read(StartRules.RestoringKey), "the note stays: every start would begin clean for ever");
+
+            // The start after that is clean too (nothing was kept since), and what was set aside is gone.
+            KeptStore later = new(folder, "Navree.Tests");
+            Assert.IsNull(StartRules.SnapshotToRestore(later));
+            Assert.IsNull(later.Read(StartRules.AsideKey));
+            Assert.IsNull(later.Read(StartRules.RestoringKey), "a start with no snapshot to put back left a note that one is being put back");
+
+            // A snapshot kept by a run that got through its start is given to the next start as usual.
+            later.Write(StartRules.SnapshotKey, "{\"screens\":[\"/\"]}");
+            KeptStore last = new(folder, "Navree.Tests");
+            Assert.AreEqual("{\"screens\":[\"/\"]}", StartRules.SnapshotToRestore(last));
+        }
+        finally
+        {
+            Delete(folder);
         }
     }
 
@@ -77,7 +129,7 @@ public sealed class StartRulesTests
         }
         finally
         {
-            Directory.Delete(folder, recursive: true);
+            Delete(folder);
         }
     }
 }
