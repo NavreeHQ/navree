@@ -98,13 +98,40 @@ internal sealed class WipeCheck(ShellHost host, ShellWindow window, string folde
         // The app starts again and shows its web page: it finds nothing of the session.
         bool second = await Until(() => WipeProbe.Reports > reports);
         (string cookieAfter, string storedAfter) = second ? WipeProbe.Said(reports) : ("?", "?");
-        Check("the web page shown after signing out finds nothing of the session", second && cookieAfter.Length == 0 && storedAfter.Length == 0, second ? "cookies '" + cookieAfter + "', stored '" + storedAfter + "'" : "no report came; front " + host.State.FrontScreen?.Content?.GetType().Name);
+
+        // When the page did not say anything, what is on disk says how far it got: a web view that started for the session now has
+        // files in the newest folder; one that never started, or started for the session that ended, leaves that folder empty.
+        Check(
+            "the web page shown after signing out finds nothing of the session",
+            second && cookieAfter.Length == 0 && storedAfter.Length == 0,
+            second
+                ? "cookies '" + cookieAfter + "', stored '" + storedAfter + "'"
+                : "no report came; front " + host.State.FrontScreen?.Content?.GetType().Name + "; web folder then: " + Describe());
+        Say("web folder at the end: " + Describe());
     }
 
-    private string Describe() =>
-        Directory.Exists(webFolder)
-            ? Directory.GetFiles(webFolder, "*", SearchOption.AllDirectories).Length.ToString(CultureInfo.InvariantCulture) + " files"
-            : "not there";
+    // The files under the web folder, in all and in each session's folder by its name.
+    private string Describe()
+    {
+        if (!Directory.Exists(webFolder))
+        {
+            return "not there";
+        }
+
+        try
+        {
+            int all = Directory.GetFiles(webFolder, "*", SearchOption.AllDirectories).Length;
+            IEnumerable<string> each = Directory.GetDirectories(webFolder)
+                .OrderBy(folder => folder, StringComparer.Ordinal)
+                .Select(folder => Path.GetFileName(folder) + ": " + Directory.GetFiles(folder, "*", SearchOption.AllDirectories).Length.ToString(CultureInfo.InvariantCulture));
+            return all.ToString(CultureInfo.InvariantCulture) + " files (" + string.Join(", ", each) + ")";
+        }
+        catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+        {
+            // A folder that went while it was being counted.
+            return "could not be counted (" + problem.GetType().Name + ")";
+        }
+    }
 
     private static async Task<bool> Until(Func<bool> condition)
     {
