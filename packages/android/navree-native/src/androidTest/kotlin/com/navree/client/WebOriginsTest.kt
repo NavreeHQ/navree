@@ -264,23 +264,26 @@ class WebOriginsTest {
 
     // What the client cannot check: the platform asks the web view's client about the first address of a request,
     // and "in the case of redirects, this is only called for the initial resource URL, not any subsequent redirect
-    // URLs" (WebViewClient.shouldInterceptRequest). A picture, a script and a fetch of the app's own address that the
-    // app's server redirects elsewhere are loaded from there; the README says so, and the day this test fails it
-    // says something that is no longer true. What holds them is the page's own policy, which the engine checks on
-    // every hop: the test after this one.
+    // URLs" (WebViewClient.shouldInterceptRequest). A picture and a script of the app's own address that the app's
+    // server redirects elsewhere are loaded from there, and the client is never asked about the address they went
+    // to. A fetch's redirect is asked of the client on the system web view this runs on, and refused; the reference
+    // promises only the first address, so the README says so for this version only. The day this test fails the
+    // README says something that is no longer true. What holds every hop is the page's own policy, which the engine
+    // checks: the test after this one.
     @Test
-    fun aPictureAScriptAndAFetchRedirectedElsewhereAreLoadedFromThereAndTheClientIsAskedOnlyTheFirstAddress() {
+    fun aPictureAndAScriptRedirectedElsewhereAreLoadedFromThereAndOnlyAFetchsHopIsAskedOfTheClient() {
         webView(documents = true)
         open("/redirected-loads")
-        val reached = listOf("GET /img", "GET /script.js", "GET /fetch")
-        runCatching { compose.waitUntil(15_000) { otherAsked.containsAll(reached) } }
         val elsewhere = other.url("/").toString().trimEnd('/')
+        runCatching { compose.waitUntil(15_000) { otherAsked.containsAll(listOf("GET /img", "GET /script.js")) && asked.contains("$elsewhere/fetch") } }
+        // As long again for anything else to reach the other origin.
+        Thread.sleep(5_000)
         val text = "the app was asked: $appAsked\nthe other origin was asked: $otherAsked\nthe client was asked about: $asked\n"
         android.util.Log.i("WebOriginsTest", "redirected loads: $text")
         Shots.put("redirect-loads.txt", "a picture, a script and a fetch redirected to another origin, no policy\n$text")
-        assertTrue("the other origin was asked for each: $otherAsked", otherAsked.containsAll(reached))
+        assertEquals("the other origin was asked for the picture and the script, and not for the fetch: $otherAsked", listOf("GET /img", "GET /script.js"), otherAsked.sorted())
         assertTrue("the client was asked about each first address: $asked", listOf("/img-out", "/script-out", "/fetch-out").all { path -> asked.any { it.endsWith(path) } })
-        assertEquals("the client was never asked about an address on the other origin: $asked", emptyList<String>(), asked.filter { it.startsWith(elsewhere) })
+        assertEquals("of the other origin's addresses, the client was asked about the fetch's only: $asked", listOf("$elsewhere/fetch"), asked.filter { it.startsWith(elsewhere) })
     }
 
     @Test
