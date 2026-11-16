@@ -1636,7 +1636,7 @@ impl Chart {
                 Color::Slot(7) => "violet",
                 Color::Slot(_) => "red",
                 Color::Accent => "accent",
-                Color::Other => "neutral",
+                Color::Other | Color::Text => "neutral",
                 Color::Tone(tone) => tone.value().unwrap_or("neutral"),
             })
             .collect();

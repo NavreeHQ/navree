@@ -493,6 +493,8 @@ pub(crate) enum Color {
     Tone(Tone),
     /// The rest, in the quiet ink.
     Other,
+    /// The text ink.
+    Text,
     /// The theme's accent.
     Accent,
 }
@@ -507,6 +509,7 @@ impl Color {
                 None => element.attr("data-color", "other"),
             },
             Self::Other => element.attr("data-color", "other"),
+            Self::Text => element.attr("data-color", "text"),
             Self::Accent => element.attr("data-color", "accent"),
         }
     }

@@ -38,8 +38,8 @@ use crate::components::Tone;
 use crate::node::{Element, Node, Uses, el};
 
 /// A colour from the theme for a chart mark or a gradient stop: one of the eight
-/// categorical chart colours, a tone, the muted ink, the accent, or the mark's own
-/// colour. It is written as a `data-color` or `data-tone` attribute and the stylesheet
+/// categorical chart colours, a tone, the muted ink, the text ink, the accent, or the mark's
+/// own colour. It is written as a `data-color` or `data-tone` attribute and the stylesheet
 /// picks the token, so it follows light and dark and the theme.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[must_use]
@@ -53,6 +53,7 @@ enum Base {
     Slot(u8),
     Tone(Tone),
     Muted,
+    Text,
     Accent,
     Own,
 }
@@ -104,6 +105,16 @@ impl Ink {
         }
     }
 
+    /// The text ink: near black on a light page, near white on a dark one. For a mark that
+    /// is the sum of the others, such as a waterfall's total, set apart from the chart
+    /// colours of its parts.
+    pub const fn text() -> Self {
+        Self {
+            base: Base::Text,
+            mix: Mix::None,
+        }
+    }
+
     /// The theme's accent.
     pub const fn accent() -> Self {
         Self {
@@ -148,6 +159,7 @@ impl Ink {
                     Color::Slot(s) => Base::Slot(s),
                     Color::Tone(t) => Base::Tone(t),
                     Color::Other => Base::Muted,
+                    Color::Text => Base::Text,
                     Color::Accent => Base::Accent,
                 },
                 mix: self.mix,
@@ -163,6 +175,7 @@ impl Ink {
             Base::Slot(s) => Color::Slot(s),
             Base::Tone(t) => Color::Tone(t),
             Base::Muted => Color::Other,
+            Base::Text => Color::Text,
             Base::Accent => Color::Accent,
             Base::Own => Color::Slot(1),
         }
@@ -532,6 +545,9 @@ mod tests {
         );
         let out = render(&Ink::accent().on(el("rect")).into());
         assert_eq!(out, r#"<rect data-color="accent"></rect>"#);
+        let out = render(&Ink::text().on(el("rect")).into());
+        assert_eq!(out, r#"<rect data-color="text"></rect>"#);
+        assert_eq!(Ink::own().resolve(Color::Text), Ink::text());
     }
 
     #[test]

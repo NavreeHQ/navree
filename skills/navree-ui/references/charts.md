@@ -446,8 +446,10 @@ pub fn steps_and_heart(weekdays: Vec<(f64, f64)>, weekends: Vec<(f64, f64)>) -> 
 
 **Colour.** An `Ink` is a colour of the theme, never a hex value:
 `Ink::slot(1..=8)` (the chart colours), `Ink::tone(Tone::Success)` or
-`Tone::named("cyan")`, `Ink::accent()`, `Ink::muted()`, and `Ink::own()` (the
-mark's own colour, inside a gradient). `.vivid()` and `.soft()` mix it
+`Tone::named("cyan")`, `Ink::accent()`, `Ink::muted()`, `Ink::text()` (the
+text ink, black on a light page and white on a dark one, for a total set
+apart from its parts), and `Ink::own()` (the mark's own colour, inside a
+gradient). `.vivid()` and `.soft()` mix it
 toward the text or the surface. A `Gradient` (`horizontal`, `vertical`,
 `diagonal`, `angle`, `radial`, or the presets `sheen`, `fade` and `column`)
 takes stops; `across_plot()` spans the whole plot instead of each mark. A

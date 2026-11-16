@@ -62,6 +62,7 @@ impl Inks {
         match value {
             "accent" => Some(toward(self.get(Token::Accent))),
             "other" => Some(toward(self.get(Token::Fg3))),
+            "text" => Some((fg, fg)),
             slot => {
                 let n: usize = slot.parse().ok().filter(|n| (1..=8).contains(n))?;
                 let token = Token::CHARTS[n - 1];
@@ -944,6 +945,20 @@ mod tests {
             Some((0.22, 99.0))
         );
         assert_eq!(column_inset("url(#c)"), None);
+    }
+
+    #[test]
+    fn the_text_ink_is_the_text_colour_of_the_mode() {
+        for side in Side::BOTH {
+            let palette = *crate::theme::Theme::default().spec().palette(side);
+            let inks = Inks {
+                palette,
+                side,
+                surface: palette.get(Token::Ink0),
+            };
+            let fg = palette.get(Token::Fg);
+            assert_eq!(inks.color("text"), Some((fg, fg)));
+        }
     }
 
     #[test]

@@ -19,6 +19,7 @@
 [data-slot=chart] [data-color="8"]{--c:var(--chart-8)}
 [data-slot=chart] [data-color=other]{--c:var(--fg-3)}
 [data-slot=chart] [data-color=accent]{--c:var(--accent)}
+[data-slot=chart] [data-color=text]{--c:var(--fg)}
 
 /* The legend: a key that mirrors the mark, and the name in text ink. */
 [data-slot=chart-legend]{display:flex;flex-wrap:wrap;gap:.25rem 1rem;margin:0;padding:0;list-style:none;font-size:12px;color:var(--fg-1)}

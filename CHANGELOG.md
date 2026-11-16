@@ -281,6 +281,11 @@ every `@navree/*` package carries the same version.
   the table are as before, and a strip that does not call it is drawn as before.
   `ColorStrip::hide_legend` is a new inherent method: an app whose own extension trait gives
   `ColorStrip` a method of that name calls it through the trait (`MyExt::hide_legend(strip)`).
+- `Ink::text()` paints a chart mark, a gradient stop or a legend's key in the text ink: near black
+  on a light page and near white on a dark one, in every theme, for a mark that is the sum of the
+  others and is set apart from the chart colours of its parts. It writes `data-color="text"`,
+  which the charts sheet and the chart paint sheet each gain a rule for, and a chart picture
+  draws it in the theme's text colour. Every other ink is drawn as before.
 
 ### Fixed
 
