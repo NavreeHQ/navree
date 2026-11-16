@@ -3220,7 +3220,50 @@ mod tests {
             location: Some("/orders/42".to_owned()),
             ..Response::default()
         };
+        // The framework answers a native client's error in the native format.
+        let native = |status: u16, names_her: bool| {
+            Response {
+            status,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            headers: if names_her { her() } else { Vec::new() },
+            body: r#"{"navree":1,"build":"b1","vocab":0,"ops":[{"op":"toast","text":"That didn't work"}]}"#
+                .to_owned(),
+            ..Response::default()
+        }
+        };
         let cases: Vec<(&str, Vec<Response>, bool)> = vec![
+            (
+                "a 303 to the order, whose page is answered 429 in the native format",
+                vec![moved.clone(), native(429, false)],
+                true,
+            ),
+            (
+                "a 303 to the order, whose page is answered 500 in the native format",
+                vec![moved.clone(), native(500, false)],
+                true,
+            ),
+            (
+                "a 303 to the order, whose page is answered 403 in the native format",
+                vec![moved.clone(), native(403, true)],
+                true,
+            ),
+            ("a 429 in the native format", vec![native(429, false)], true),
+            ("a 503 in the native format", vec![native(503, false)], true),
+            (
+                "a 413 that names her, in the native format",
+                vec![native(413, true)],
+                true,
+            ),
+            (
+                "a 422 that names her, in the native format",
+                vec![native(422, true)],
+                true,
+            ),
+            (
+                "a 413 that names nobody, in the native format",
+                vec![native(413, false)],
+                false,
+            ),
             (
                 "a 303 to the order, whose page is answered 429",
                 vec![moved.clone(), json(429)],
