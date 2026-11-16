@@ -98,17 +98,10 @@ internal static class NotificationSurface
         }
     }
 
-    internal static void RemoveAll()
-    {
-        try
-        {
-            _ = AppNotificationManager.Default.RemoveAllAsync();
-        }
-        catch (Exception problem) when (problem is COMException or InvalidOperationException)
-        {
-            // Nothing shown that the system knows of.
-        }
-    }
+    internal static void RemoveAll() => _ = RemoveAllAsync().ContinueWith(static done => _ = done.Exception, TaskScheduler.Default);
+
+    /// <summary>Takes every notification of the app out of the system's notification centre; completes when the system has, and fails when it could not.</summary>
+    internal static async Task RemoveAllAsync() => await AppNotificationManager.Default.RemoveAllAsync();
 
     private static string Tag(string text) => text.Length <= TagLongest ? text : text[..TagLongest];
 }
@@ -121,6 +114,8 @@ internal static class JumpListSurface
         try
         {
             JumpList list = await JumpList.LoadCurrentAsync();
+
+            // An empty list of destinations empties the jump list (the end of a session).
             list.Items.Clear();
             foreach (PlaceDestination destination in destinations.Take(Math.Max(0, limit)))
             {

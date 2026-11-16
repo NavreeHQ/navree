@@ -141,8 +141,8 @@ public sealed class SystemPlace : IDisposable
         // A sign-out the last run left unfinished was finished at this start: what the system still shows of the person who left goes too.
         if (host.FinishedSignOutAtStart)
         {
-            NotificationSurface.RemoveAll();
             Say("a sign-out the last run left unfinished was finished at this start");
+            _ = EndSessionAsync().ContinueWith(done => dispatcher.TryEnqueue(() => Say(done.IsFaulted ? "what the system shows of the session could not all be taken away: " + done.Exception!.InnerException?.GetType().Name : "what the system showed of the session is gone")), TaskScheduler.Default);
         }
 
         schedule = NotificationSchedule.Read(host.Recall(PendingKey));
@@ -325,15 +325,31 @@ public sealed class SystemPlace : IDisposable
         }
     }
 
-    /// <summary>The person signed out: the count, what waits and what is shown all go.</summary>
-    public void EndSession()
+    /// <summary>
+    /// The person signed out, as a step of the wipe on the UI thread: what waits to be notified, the count, what the notification centre shows and
+    /// the jump list all go. Completes when the system has taken them away; fails when it could not, so the wipe reports it and the next start
+    /// takes them away again.
+    /// </summary>
+    /// <returns>When they are gone.</returns>
+    internal async Task EndSessionAsync()
     {
-        Count = null;
+        timer.Stop();
         schedule = new NotificationSchedule();
         Remember();
-        timer.Stop();
-        NotificationSurface.RemoveAll();
+        Count = null;
+        placesKey = string.Empty;
         ApplyBadge();
+        if (Capabilities.Has(Offers, SystemFeature.Notifications))
+        {
+            await NotificationSurface.RemoveAllAsync();
+        }
+
+        if (hasIdentity && Capabilities.Has(Offers, SystemFeature.JumpList) && !await JumpListSurface.UpdateAsync([], 0))
+        {
+            throw new InvalidOperationException("the jump list could not be emptied");
+        }
+
+        Say("the session ended: no notification waits, none is shown, no count, no jump list");
     }
 
     private void Remember() => host.Remember(PendingKey, schedule.Waiting.Count == 0 ? null : schedule.Write());

@@ -253,6 +253,46 @@ public sealed class SessionTests
     }
 
     [TestMethod]
+    public async Task The_notifications_waiting_for_the_person_who_left_are_gone_at_the_next_start_and_their_step_runs_after_the_kept_store()
+    {
+        string folder = Folder();
+        try
+        {
+            SignedInBefore(folder);
+            (SessionKeeper keeper, _, KeptStore kept, _) = Start(folder);
+            using (keeper)
+            {
+                keeper.Write("pending-notifications", "[{\"id\":\"shipped\",\"title\":\"Order for Kavita Rani, Jalandhar has shipped\"}]");
+                await keeper.DrainAsync().WaitAsync(Short);
+                bool keptEmptyBefore = false;
+                WipeReport report = await keeper.EndAsync(
+                    () => { },
+                    null,
+                    [],
+                    [new WipeStep("the notifications, the count and the jump list", () =>
+                    {
+                        keptEmptyBefore = kept.Read("pending-notifications") is null;
+                        throw new InvalidOperationException("the system would not take them away");
+                    })]).WaitAsync(Short);
+
+                Expect.That(keptEmptyBefore, "the waiting notifications were still kept when the step ran");
+                Expect.That(report.Failed.Any(failed => failed.Key == "the notifications, the count and the jump list"), "a step that could not take them away is reported by name");
+            }
+
+            (SessionKeeper next, _, KeptStore nextKept, bool finished) = Start(folder);
+            using (next)
+            {
+                Expect.That(finished, "the next start finishes the sign-out again");
+                Assert.IsNull(nextKept.Read("pending-notifications"), "the next start would notify for the person who left");
+            }
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
     public async Task What_is_written_after_the_core_ended_the_session_is_kept()
     {
         string folder = Folder();

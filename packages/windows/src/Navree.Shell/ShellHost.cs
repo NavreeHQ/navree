@@ -502,6 +502,9 @@ public sealed partial class ShellHost : IDisposable
                         Files.Clear();
                         return Task.CompletedTask;
                     }),
+
+                    // What the system shows or holds for the person (notifications waiting and shown, the count, the jump list), before the windows' own.
+                    new WipeStep("the notifications, the count and the jump list", OnUiAsync(() => Place?.EndSessionAsync() ?? Task.CompletedTask)),
                 }.Concat(moreWipeSteps)]).ConfigureAwait(false);
         }
         catch (Exception problem)
@@ -520,7 +523,6 @@ public sealed partial class ShellHost : IDisposable
             Problem?.Invoke("the wipe did not finish: " + string.Join(", ", report.Failed.Select(failed => failed.Key)));
         }
 
-        Place?.EndSession();
         SessionEnded?.Invoke(report);
     }
 
