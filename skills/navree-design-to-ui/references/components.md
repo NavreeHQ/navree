@@ -57,9 +57,11 @@ is dropped.
 | Headings | `Heading::h1..h4(text)`: the level is the document's |
 | Paragraph, secondary text, lead, code | `Text::new`, `Text::muted`, `.variant(TextVariant::Lead)`, `Text::code`; `.inline()` |
 | Panel, card, tile | `Card::new()` / `Card::titled(..)`, `.description(..)`, `.action(..)`, `.body(..)`, `.footer(..)` |
+| Dark card or band on a light page (a light one on a dark page), with a white button on it | `Card::titled(..).variant(CardVariant::Inverse)`: the inverse surface, everything in it reading the flipped colours; a `Button::primary` on it is the surface's text colour with the surface's colour as its text. Its colours are the theme's `Roles::inverse` |
+| Code panel, dark on a light page, with a copy button | `CodeBlock::new(lang, code).copy_button().inverse()` |
 | Status label, tag, chip | `Badge::new(text).variant(BadgeVariant::Neutral \| Outline \| Success \| Warning \| Danger).icon(..)`: the theme's corners, a pill when its shape says `Corners::badge(Corner::Pill)` |
 | Inline message, banner | `Alert::new(AlertTone::Neutral \| Success \| Warning \| Danger).title(..).body(..)` |
-| Figure with label and change | `Stat::new(label, value).trend(text, good)` |
+| Figure with label and change | `Stat::new(label, value).trend(text, good)`; a dark tile on a light page: `.variant(StatVariant::Inverse)` |
 | Small bar chart | `Bars::new(description, &[values])`: SVG on the server |
 | Line chart, area chart or bar chart (several series, stacked, to 100%, horizontal) | `Chart::line(title)` / `Chart::area(title)` / `Chart::bar(title)` with `.days(..)`, `.categories(..)` or `.times(..)`, `.series(Series::new(name, values))`, `.stacked()`, `.horizontal()`, `.toggles()`, `.annotation(..)`; a table of the same numbers comes with it |
 | Donut chart, pie | `Donut::new(title).part(name, value)`, `.part_tone(name, value, tone)`, `.pie()`, `.center(big, small)` |

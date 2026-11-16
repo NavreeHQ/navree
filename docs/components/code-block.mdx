@@ -58,6 +58,22 @@ The readers are forgiving, not strict: text they do not understand stays plain. 
 
 Every colour is a token, so a theme reaches it, and the pairs are checked against every built-in theme for contrast. Comments are italic as well as quiet, so colour is never the only sign.
 
+## On the inverse surface
+
+`.inverse()` draws the block on the theme's other palette: a dark code panel on a light page, a light one on a dark page. Its text, its colours and its copy button all read the flipped tokens.
+
+```rust
+use navree::ui::*;
+
+CodeBlock::new("sh", "curl -fsSL https://get.example.com | sh\ncrm import --file $FILE")
+    .copy_button()
+    .inverse()
+```
+
+<UiPreview example="code-block/inverse" />
+
+The colours of code are tokens of the palette the block is drawn on, and every one of them is measured there: with no colours of its own, the inverse surface is the theme's other palette, which every theme passes; a theme of your own that sets its inverse surface with `Roles::inverse` has each colour of code measured against that surface, in light and in dark, and `Theme::with_roles` refuses one that falls short of WCAG AA.
+
 ## What the page loads
 
 A page with a code block links one small stylesheet and loads no script.

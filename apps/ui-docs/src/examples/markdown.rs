@@ -79,6 +79,15 @@ pub fn all() -> Vec<Example> {
             .height(150)
             .live(),
         gallery!("code-block", "languages", "Languages", code_block_languages).medium(),
+        single!(
+            "code-block",
+            "inverse",
+            "On the inverse surface",
+            code_block_inverse
+        )
+        .start()
+        .width(620)
+        .height(170),
     ]
 }
 
@@ -186,6 +195,15 @@ fn code_block_default() -> CodeBlock {
 
 fn code_block_copy() -> CodeBlock {
     CodeBlock::new("sh", "navree new orders --kit crm").copy_button()
+}
+
+fn code_block_inverse() -> CodeBlock {
+    CodeBlock::new(
+        "sh",
+        "curl -fsSL https://get.example.com/crm | sh\ncrm import --file \"$FILE\" # once",
+    )
+    .copy_button()
+    .inverse()
 }
 
 fn code_block_languages() -> Vec<(&'static str, CodeBlock)> {

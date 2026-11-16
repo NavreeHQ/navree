@@ -220,6 +220,15 @@ every `@navree/*` package carries the same version.
   a test of their markup. `Button::current`, `ButtonGroup::segmented` and `ButtonGroup::block`
   are new inherent methods: an app whose own extension trait gives either type a method of the
   same name calls it through the trait.
+- A card, a figure tile and a code panel can be drawn on the inverse surface, a dark one on a
+  light page and a light one on a dark page: `CardVariant::Inverse`, `Stat::variant` with the new
+  `StatVariant::Inverse`, and `CodeBlock::inverse()`. Each marks itself `data-inverse`, so its
+  text, a badge, a button and the code's colours in it read the theme's other palette, or the
+  colours a theme gives it with `Roles::inverse`, which are measured with every text pair, the
+  code's colours among them, in light and in dark. None links a stylesheet of its own. A card,
+  stat or code block that asks for none of them is drawn as before. `Stat::variant` and
+  `CodeBlock::inverse` are new inherent methods: an app whose own extension trait gives either
+  type a method of the same name calls it through the trait.
 
 ### Fixed
 

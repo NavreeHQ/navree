@@ -1063,7 +1063,10 @@ Notes on a few: `Tabs` panels can load on first show with `Tab::lazy(src)`;
 `ButtonGroup::segmented()` draws buttons with an `href` as a segmented control
 between places (two halves of an app), each a real link and the one you are on
 `Button::current(true)` (`aria-current="page"`), in the same colours, corner and
-shadow as segmented tabs;
+shadow as segmented tabs; `CardVariant::Inverse`, `StatVariant::Inverse` and
+`CodeBlock::inverse()` draw a card, a figure tile or a code panel on the inverse
+surface (a dark card on a light page), everything in them reading the flipped
+colours;
 `Toast` has four tones, a title and one action; `Message` and `Bubble` draw
 a chat; `Empty` is the plain version of `EmptyState`; `Table` is the small
 static table and `DataTable` the paged, sorted, filtered one; `Pagination`

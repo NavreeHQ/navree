@@ -73,6 +73,9 @@ pub fn all() -> Vec<Example> {
             .start()
             .width(820),
         single!("stat", "bars", "Bars", stat_bars).start(),
+        single!("stat", "inverse", "On the inverse surface", stat_inverse)
+            .start()
+            .width(520),
     ]
 }
 
@@ -375,6 +378,15 @@ fn stat_default() -> Grid {
         Stat::new("Open deals", "312").trend("+12 this week", true),
         Stat::new("Pipeline value", "₹4.2 crore").trend("+3.1%", true),
         Stat::new("Won this month", "₹64 lakh").trend("-2.4%", false),
+    ))
+}
+
+fn stat_inverse() -> Grid {
+    Grid::cols(2).gap(4).children((
+        Stat::new("Invoices due, Mon 16 Nov", "₹9,12,400")
+            .caption("to HDFC ••4521")
+            .variant(StatVariant::Inverse),
+        Stat::new("Won this month", "₹14,80,000").trend("+8.2%", true),
     ))
 }
 

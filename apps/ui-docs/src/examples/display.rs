@@ -16,6 +16,10 @@ pub fn all() -> Vec<Example> {
             .start()
             .width(820),
         single!("card", "plain", "Body only", card_plain).start(),
+        single!("card", "inverse", "On the inverse surface", card_inverse)
+            .start()
+            .width(520)
+            .height(200),
         single!("badge", "default", "Badges", badge_default),
         gallery!("badge", "variants", "Variants", badge_variants).narrow(),
         single!("badge", "icon", "With an icon", badge_icon),
@@ -77,6 +81,18 @@ fn card_plain() -> Card {
     Card::new().body(Text::muted(
         "A card with no header holds anything: a form, a table, a chart.",
     ))
+}
+
+fn card_inverse() -> Card {
+    Card::titled("Security, in every mode")
+        .variant(CardVariant::Inverse)
+        .body(Text::new(
+            "Every team works in its own pipeline, with its own contacts.",
+        ))
+        .footer((
+            Button::primary("Request a quote"),
+            Button::outline("Read the details"),
+        ))
 }
 
 fn badge_default() -> Row {

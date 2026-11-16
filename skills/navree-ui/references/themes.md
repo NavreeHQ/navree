@@ -81,7 +81,10 @@ pub fn themed_shell() -> Shell {
   `selected_row`, and `inverse(Inverse::new().surface(..).raised(..)
   .line(..).text(..).muted(..))`, the colours of the inverse surface: a
   part drawn on the theme's other palette, such as a dark card on a light
-  page. A role whose text fails WCAG AA is refused, in light or in dark.
+  page (`CardVariant::Inverse`, `StatVariant::Inverse`,
+  `CodeBlock::inverse()`). With no `Inverse`, the surface is the other
+  palette, which every theme passes. A role whose text fails WCAG AA is
+  refused, in light or in dark.
 
 ```rust
 use navree::ui::theme::{Corner, Corners, Shape, Theme, ThemeId};

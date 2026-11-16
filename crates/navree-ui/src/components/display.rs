@@ -830,6 +830,11 @@ pub enum CardVariant {
     Ghost,
     /// A dashed line: a place to add something.
     Dashed,
+    /// The inverse surface: the card drawn on the theme's other palette, a dark card on a
+    /// light page and a light one on a dark page. Everything in it (its text, a badge, a
+    /// button) reads the flipped colours, and a theme's
+    /// [`Roles::inverse`](crate::theme::Roles::inverse) sets them to its own.
+    Inverse,
 }
 
 /// A surface for related content.
@@ -881,19 +886,33 @@ impl Card {
         self
     }
 
-    /// Sets how the card is drawn. The default needs nothing more; the others link the
-    /// parts stylesheet.
+    /// Sets how the card is drawn. The default and the inverse surface need nothing more; the
+    /// others link the parts stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{Button, Card, CardVariant, render};
+    ///
+    /// let seats = Card::titled("Seats")
+    ///     .variant(CardVariant::Inverse)
+    ///     .footer(Button::primary("Add seats"));
+    /// let html = render(&seats.into());
+    /// assert!(html.starts_with(r#"<div data-slot="card" data-variant="inverse" data-inverse>"#));
+    /// ```
     pub fn variant(mut self, variant: CardVariant) -> Self {
         let name = match variant {
             CardVariant::Default => None,
             CardVariant::Muted => Some("muted"),
             CardVariant::Ghost => Some("ghost"),
             CardVariant::Dashed => Some("dashed"),
+            CardVariant::Inverse => Some("inverse"),
         };
-        if name.is_some() {
+        if name.is_some() && variant != CardVariant::Inverse {
             self.el = self.el.uses(Uses::PARTS_STYLES);
         }
-        self.el = self.el.attr_opt("data-variant", name);
+        self.el = self
+            .el
+            .attr_opt("data-variant", name)
+            .flag("data-inverse", variant == CardVariant::Inverse);
         self
     }
 
@@ -2127,6 +2146,19 @@ impl Text {
     }
 }
 
+/// How a [`Stat`] is drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum StatVariant {
+    /// A line around a surface, as a card: the default.
+    #[default]
+    Default,
+    /// The inverse surface: the tile drawn on the theme's other palette, a dark tile on a light
+    /// page, for the one figure a page leads with. Its label, figure and caption read the
+    /// flipped colours.
+    Inverse,
+}
+
 /// One figure and what it is: a tile for a dashboard.
 ///
 /// A plain stat is a label, a figure and how it moved. The same tile can carry what a
@@ -2261,6 +2293,27 @@ impl Stat {
     /// Makes the whole tile a link to `href`; the label is the link's name.
     pub fn href(mut self, href: impl Into<Href>) -> Self {
         self.href = Some(href.into());
+        self
+    }
+
+    /// Sets how the tile is drawn. Neither look links a stylesheet of its own.
+    ///
+    /// ```
+    /// use navree_ui::{Stat, StatVariant, render};
+    ///
+    /// let due = Stat::new("Invoices due", "₹9,12,400")
+    ///     .caption("this week")
+    ///     .variant(StatVariant::Inverse);
+    /// let html = render(&due.into());
+    /// assert!(html.starts_with(r#"<div data-slot="stat" data-variant="inverse" data-inverse>"#));
+    /// ```
+    pub fn variant(mut self, variant: StatVariant) -> Self {
+        if variant == StatVariant::Inverse {
+            self.el = self
+                .el
+                .attr("data-variant", "inverse")
+                .flag("data-inverse", true);
+        }
         self
     }
 

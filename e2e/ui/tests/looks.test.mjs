@@ -49,6 +49,14 @@ const contrastOf = (a, b) => {
   return (x + 0.05) / (y + 0.05);
 };
 
+/** `top`, which may be thin (`[r, g, b, alpha]`) or missing, laid over the opaque `base`. */
+const onto = (top, base) => {
+  if (!top) return base;
+  if (top.length === 3) return top;
+  const a = top[3];
+  return [0, 1, 2].map((i) => Math.round(top[i] * a + base[i] * (1 - a)));
+};
+
 for (const name of NAMES) {
   describe(name, { concurrency: false }, () => {
     let browser;
@@ -143,7 +151,8 @@ for (const name of NAMES) {
             ctx.fillStyle = value;
             ctx.fillRect(0, 0, 1, 1);
             const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
-            return a === 0 ? null : [r, g, b];
+            if (a === 0) return null;
+            return a === 255 ? [r, g, b] : [r, g, b, a / 255];
           };
           const out = {};
           for (const prop of props) {
@@ -257,6 +266,96 @@ for (const name of NAMES) {
             }
           }
         }
+      });
+    });
+
+    // ---- A card, a stat and a code block on the inverse surface ----------
+
+    describe("the inverse surface", () => {
+      test("a card, a stat and a code block on the other palette, everything in them reading, light and dark, 1440 and 390 px", async () => {
+        const PROPS = ["background-color", "color", "border-top-color"];
+        for (const path of PAGES) {
+          for (const mode of MODES) {
+            for (const width of WIDTHS) {
+              const page = await open(`${path}?mode=${mode}`, { width });
+              const where = `${path} ${mode} ${width}`;
+              const pageBg = (await styles(page, "main", ["background-color"]))["background-color"] || (await styles(page, "body", ["background-color"]))["background-color"];
+              const card = await styles(page, "[data-proof=inverse-card] [data-slot=card]", PROPS);
+              const title = await styles(page, "[data-proof=inverse-card] [data-slot=card-title]", PROPS);
+              const description = await styles(page, "[data-proof=inverse-card] [data-slot=card-description]", PROPS);
+              const text = await styles(page, "[data-proof=inverse-card] [data-slot=card-content] [data-slot=text]", PROPS);
+              const badge = await styles(page, "[data-proof=inverse-card] [data-slot=badge]", PROPS);
+              const primary = await styles(page, "[data-proof=inverse-card] [data-slot=button][data-variant=primary]", PROPS);
+              const outline = await styles(page, "[data-proof=inverse-card] [data-slot=button][data-variant=outline]", PROPS);
+              const plain = await styles(page, "[data-proof=plain-card] [data-slot=card]", PROPS);
+              const stat = await styles(page, "[data-proof=inverse-stat] [data-slot=stat]", PROPS);
+              const label = await styles(page, "[data-proof=inverse-stat] [data-slot=stat-label]", PROPS);
+              const figure = await styles(page, "[data-proof=inverse-stat] [data-slot=stat-value]", PROPS);
+              const caption = await styles(page, "[data-proof=inverse-stat] [data-slot=stat-caption]", PROPS);
+              const code = await styles(page, "[data-proof=inverse-code] [data-slot=code-block]", PROPS);
+              const pre = await styles(page, "[data-proof=inverse-code] pre", PROPS);
+              const copy = await styles(page, "[data-proof=inverse-code] [data-slot=button]", PROPS);
+              // The surface is the other palette's, far from the page's own; a card drawn as before keeps the page's.
+              assert.ok(contrastOf(card["background-color"], pageBg) >= 3, `${where}: the inverse card stands apart from the page`);
+              assert.deepEqual(stat["background-color"], card["background-color"], `${where}: the stat on the same surface`);
+              assert.deepEqual(code["background-color"], card["background-color"], `${where}: the code panel on the same surface`);
+              assert.ok(contrastOf(plain["background-color"], pageBg) < 3, `${where}: a card drawn as before is on the page's palette`);
+              for (const [what, fg, bg] of [
+                ["the title", title.color, card["background-color"]],
+                ["the description", description.color, card["background-color"]],
+                ["the text", text.color, card["background-color"]],
+                ["a badge", badge.color, onto(badge["background-color"], card["background-color"])],
+                ["the primary button", primary.color, primary["background-color"]],
+                ["the outline button", outline.color, card["background-color"]],
+                ["the stat's label", label.color, stat["background-color"]],
+                ["the stat's figure", figure.color, stat["background-color"]],
+                ["the stat's caption", caption.color, stat["background-color"]],
+                ["the code", pre.color, code["background-color"]],
+              ]) {
+                assert.ok(contrastOf(fg, bg) >= 4.5, `${where}: ${what} reads: ${contrastOf(fg, bg).toFixed(2)}`);
+              }
+              assert.ok(contrastOf(copy.color, code["background-color"]) >= 3, `${where}: the copy button's icon`);
+              // Every colour of code reads on its panel.
+              const kinds = await page.evaluate(() => {
+                const canvas = document.createElement("canvas");
+                canvas.width = canvas.height = 1;
+                const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                const rgb = (value) => {
+                  ctx.clearRect(0, 0, 1, 1);
+                  ctx.fillStyle = value;
+                  ctx.fillRect(0, 0, 1, 1);
+                  return [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+                };
+                const panel = rgb(getComputedStyle(document.querySelector("[data-proof=inverse-code] [data-slot=code-block]")).backgroundColor);
+                return [...document.querySelectorAll("[data-proof=inverse-code] [data-t]")].map((t) => [t.getAttribute("data-t"), rgb(getComputedStyle(t).color), panel]);
+              });
+              assert.ok(new Set(kinds.map(([kind]) => kind)).size >= 4, `${where}: the code is coloured: ${kinds.map(([k]) => k)}`);
+              for (const [kind, fg, bg] of kinds) assert.ok(contrastOf(fg, bg) >= 4.5, `${where}: code of kind ${kind}: ${contrastOf(fg, bg).toFixed(2)}`);
+              if (path === "/looks") {
+                // The theme's own inverse colours: near-black with white text on a light page, the reverse on a dark one.
+                const [surface, ink] = mode === "light" ? [[10, 10, 10], [255, 255, 255]] : [[255, 255, 255], [10, 10, 10]];
+                assert.deepEqual(card["background-color"], surface, `${where}: the surface`);
+                assert.deepEqual(title.color, ink, `${where}: its text`);
+                assert.deepEqual(primary["background-color"], ink, `${where}: the primary button in the text's colour`);
+                assert.deepEqual(primary.color, surface, `${where}: and its text in the surface's`);
+              }
+              assert.ok(await noSidewaysScroll(page), `${where}: no sideways scroll`);
+              assert.deepEqual(await axe(page), [], `${where}: axe`);
+              await shot(page, `inverse-${path.replaceAll("/", "_")}-${mode}-${width}`);
+              await page.done();
+            }
+          }
+        }
+      });
+
+      test("the copy button on the inverse code block is named and reached by keyboard", async () => {
+        const page = await open("/looks?mode=light");
+        const copy = page.locator("[data-proof=inverse-code]").getByRole("button", { name: "Copy code" });
+        assert.equal(await copy.count(), 1);
+        await copy.focus();
+        assert.equal(await page.evaluate(() => document.activeElement.getAttribute("aria-label")), "Copy code");
+        assert.equal(await page.locator("[data-proof=inverse-card]").getByRole("heading", { name: "Security, in every mode" }).count(), 1);
+        await page.done();
       });
     });
   });

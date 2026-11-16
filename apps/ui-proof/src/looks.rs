@@ -133,28 +133,54 @@ fn segmented(path: &str, asked: &Asked) -> Grid {
     ))
 }
 
-/// The same parts on the inverse surface.
-fn inverse(path: &str, asked: &Asked) -> Element {
-    el("section")
-        .attr("data-inverse", "")
-        .attr("data-proof", "inverse")
-        .attr("aria-label", "On the inverse surface")
-        .child(
-            Card::titled("Seats").body(
-                Stack::gap(3).children((
-                    Text::new("Text on the inverse surface."),
-                    el("div")
-                        .attr("data-proof", "inverse-segmented")
-                        .child(mode(path, asked, "Mode on the inverse surface")),
+/// A card, a stat and a code block on the inverse surface, with the parts the other looks
+/// draw inside the card, beside a card drawn as before.
+fn inverse(path: &str, asked: &Asked) -> Grid {
+    Grid::cols(2).gap(4).children((
+        el("div").attr("data-proof", "inverse-card").child(
+            Card::titled("Security, in every mode")
+                .variant(CardVariant::Inverse)
+                .description("Each team in its own pipeline.")
+                .body(
+                    Stack::gap(3).children((
+                        Text::new("Text on the inverse surface."),
+                        Text::muted("A quieter line."),
+                        Badge::new("Isolated").variant(BadgeVariant::Success),
+                        el("div")
+                            .attr("data-proof", "inverse-segmented")
+                            .child(mode(path, asked, "Mode on the inverse surface")),
+                    )),
+                )
+                .footer((
+                    Button::primary("Request a quote"),
+                    Button::outline("Read the details"),
                 )),
-            ),
-        )
+        ),
+        el("div").attr("data-proof", "plain-card").child(
+            Card::titled("This quarter")
+                .description("Drawn as before.")
+                .body(Text::new("Body text on the page's own card.")),
+        ),
+        el("div").attr("data-proof", "inverse-stat").child(
+            Stat::new("Invoices due, Mon 16 Nov", "₹9,12,400")
+                .caption("from 14 customers")
+                .variant(StatVariant::Inverse),
+        ),
+        el("div").attr("data-proof", "inverse-code").child(
+            CodeBlock::new(
+                "rust",
+                "// Import the contacts.\nlet file = \"contacts.csv\";\nlet tries: u8 = 3;\nfn import(file: &str) -> Result<(), Error> {\n    crm::import!(file)\n}",
+            )
+            .copy_button()
+            .inverse(),
+        ),
+    ))
 }
 
 fn page(shell: AppShell, path: &str, asked: &Asked) -> AppPage {
     shell.page("Looks").body(Stack::gap(10).children((
         section("segmented", "Segmented links", segmented(path, asked)),
-        inverse(path, asked),
+        section("inverse", "The inverse surface", inverse(path, asked)),
     )))
 }
 

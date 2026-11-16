@@ -274,7 +274,7 @@ pub fn agra_theme() -> Theme {
 
 ### The inverse surface
 
-The inverse surface is a part of a page drawn on the theme's other palette: a dark card on a light page, a light one on a dark page. A part that draws it, such as an inverse card, is marked `data-inverse`, and the stylesheet flips its colour scheme, so every token in it reads its other value and any component inside reads with no work of its own. A theme with no inverse colours shows its other palette there, which passes every pair already.
+The inverse surface is a part of a page drawn on the theme's other palette: a dark card on a light page, a light one on a dark page. A part that draws it is marked `data-inverse`, and the stylesheet flips its colour scheme, so every token in it reads its other value and any component inside reads with no work of its own. Three components draw it when you ask: a card with `CardVariant::Inverse`, a figure tile with `StatVariant::Inverse` and a code panel with `CodeBlock::inverse()`. A theme with no inverse colours shows its other palette there, which passes every pair already.
 
 `Inverse` sets the surface's own colours, each for a page in light mode and then in dark mode. Each part you set takes the place of tokens inside the surface; the tones, the charts and anything else stay the other palette's.
 

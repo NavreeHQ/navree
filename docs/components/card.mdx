@@ -47,6 +47,21 @@ Card::new()
     .footer(Button::outline("Add a view"))
 ```
 
+## On the inverse surface
+
+`CardVariant::Inverse` draws the card on the theme's other palette: a dark card on a light page, a light one on a dark page. Everything in it reads the flipped colours with no work of its own: its title and text, a badge, a primary button (which takes the surface's text colour, so a white button with dark text on a near-black card) and an outline button.
+
+```rust
+Card::titled("Security, in every mode")
+    .variant(CardVariant::Inverse)
+    .body(Text::new("Every team works in its own pipeline."))
+    .footer(Button::primary("Request a quote"))
+```
+
+<UiPreview example="card/inverse" />
+
+With no colours of its own, the inverse surface is the theme's other palette, which every theme already passes for contrast. A theme of your own sets its surface, raised panels, lines, text and muted text with `Roles::inverse` (see [Themes](/docs/ui/themes/)), and `Theme::with_roles` refuses any of them whose text falls short of WCAG AA, in light and in dark. The card is marked `data-inverse` and links no stylesheet of its own.
+
 ## Headings
 
 The title is an `<h2>`, which suits a card under a page's `<h1>`. Under a section's heading, `.heading(3)` makes it an `<h3>`, and so on, so the outline of the page stays in order.
