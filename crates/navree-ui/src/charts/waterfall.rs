@@ -317,6 +317,10 @@ impl Waterfall {
             .flat_map(|(a, b)| [a, b])
             .fold(0.0_f64, f64::max);
         let ticks = nice(low, high, 5, self.format.whole());
+        // An axis of large amounts writes them short (`₹2.5L`), as a bar chart's does.
+        let compact = self
+            .format
+            .axis_compact(ticks.values.iter().fold(0.0_f64, |m, v| m.max(v.abs())));
         let scale = ticks.scale;
         let mirror = |x: f64| if self.rtl { 100.0 - x } else { x };
         let at = |v: f64| mirror(scale.at(v) * 100.0);
@@ -433,7 +437,11 @@ impl Waterfall {
                     .attr("y", "14")
                     .attr("text-anchor", anchor)
                     .attr_opt("data-minor", (grid.len() > 3 && j % 2 == 1).then_some(""))
-                    .child(self.format.format_places(*v, &numbers, ticks.places))
+                    .child(if compact {
+                        self.format.format_compact(*v, &numbers)
+                    } else {
+                        self.format.format_places(*v, &numbers, ticks.places)
+                    })
                     .into()
             })
             .collect();
@@ -660,6 +668,13 @@ mod tests {
             out.contains(r#"<span data-slot="chart-row-value">₹80,000</span>"#),
             "{out}"
         );
+        // The axis writes large amounts short, so its ticks never run into each other.
+        assert!(
+            out.contains(">₹20K</text>") && out.contains(">₹1L</text>"),
+            "{out}"
+        );
+        let small = html(Waterfall::new("x").start("a", 50).step("b", -20));
+        assert!(small.contains(">50</text>"), "{small}");
     }
 
     #[test]
