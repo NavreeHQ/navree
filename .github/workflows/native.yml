@@ -258,6 +258,39 @@ jobs:
             :navree-push-fcm:assembleDebug \
             :demo:assembleDebug
 
+      # The scripts' own tests: the walk's helpers (a screen is never read from an older dump, and what is
+      # absent is said only of a dump that was made), the reading of a run of the device tests, the script
+      # put at the start of every document of the web view, run in node against a page that changes what the script could use, the script
+      # of the document that takes an origin's service workers and caches away when a session has ended, run
+      # in node against an origin that holds some, and the check that the pictures of a device are pictures.
+      - name: The scripts' own tests
+        run: |
+          python3 -I scripts/ui_test.py
+          python3 -I scripts/read_run_test.py
+          python3 -I scripts/document_script_test.py
+          python3 -I scripts/site_wipe_test.py
+          python3 -I scripts/pictures_check_test.py
+          bash scripts/walk_test.sh
+
+      # The demo as a store ships it (not debuggable), signed with a key made here, to time a start on.
+      - name: Release build of the demo
+        id: release
+        continue-on-error: true
+        run: |
+          gradle --console=plain :demo:assembleRelease
+          apk=$(ls demo/build/outputs/apk/release/*.apk | head -1)
+          keytool -genkeypair -keystore "$RUNNER_TEMP/release.jks" -storepass releasepass -keypass releasepass \
+            -alias release -keyalg RSA -keysize 2048 -validity 30 -dname "CN=Demo"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$RUNNER_TEMP/release.jks" --ks-pass pass:releasepass \
+            --key-pass pass:releasepass --out demo/build/outputs/apk/release/demo-release-signed.apk "$apk"
+
+      # A release build that was not made or not signed is not a green run with nothing said.
+      - name: Say that the release build was not made
+        if: steps.release.outcome == 'failure'
+        run: |
+          echo "::warning title=Release build of the demo::The release build of the demo was not assembled or not signed in this run, so no start of a build as a store ships it is timed."
+          echo "The release build of the demo was not assembled or not signed in this run: its starts are not timed." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Keep Gradle's caches
         if: steps.gradle-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -284,6 +317,7 @@ jobs:
           path: |
             packages/android/navree-native/build/outputs/apk/androidTest/debug/*.apk
             packages/android/demo/build/outputs/apk/debug/*.apk
+            packages/android/demo/build/outputs/apk/release/demo-release-signed.apk
           retention-days: 14
 
   # The store, inbox and board demos, answering native clients, for the device
@@ -339,13 +373,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # `tests` is how many device tests end in a look on that device, skipped ones included: the number in the run's `OK (N tests)`.
           - device: phone
             profile: pixel_7
+            tests: 107
           - device: tablet
             profile: pixel_tablet
+            tests: 107
     env:
       IMAGE: system-images;android-35;google_apis;x86_64
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: packages/android/scripts
+
       - name: The APKs
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -369,7 +410,9 @@ jobs:
             nohup ./inbox-demo > inbox.log 2>&1 &
           PORT=8097 BOARD_SIMULATOR=off BOARD_DATABASE_URL="sqlite://$RUNNER_TEMP/demo/board.db?mode=rwc" \
             nohup ./board-demo > board.log 2>&1 &
-          for port in 8095 8096 8097; do
+          # The demo app's own build reaches its server at 8787: the walk uses this one.
+          PORT=8787 STORE_SIMULATOR=off STORE_DATABASE_URL="sqlite://$RUNNER_TEMP/demo/walk.db?mode=rwc"             nohup ./store-demo > walk-server.log 2>&1 &
+          for port in 8095 8096 8097 8787; do
             for _ in $(seq 1 240); do
               if curl -s -o /dev/null "http://127.0.0.1:$port/"; then echo "port $port answers"; break; fi
               sleep 1
@@ -417,43 +460,157 @@ jobs:
           "$adb" shell wm size
           "$adb" shell wm density
 
+      # What the web view's engine costs the first time something asks for it, asked first by each of the two
+      # things that start it, each in a process of its own, three times. The numbers are in the run's summary.
+      # A run in which an install failed, the instrument crashed or a test did not pass, or that left no
+      # numbers, fails the step.
+      - name: The web view's engine, timed
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          "$adb" install -r -t "$RUNNER_TEMP"/apks/navree-native/build/outputs/apk/androidTest/debug/*.apk
+          echo "### The web view's engine, the first time it is asked for (${{ matrix.device }}, an emulator)" >> "$GITHUB_STEP_SUMMARY"
+          : > "$RUNNER_TEMP/no-skips.txt"
+          status=0
+          for method in theFirstNativeRequestStartsTheEngineThroughTheCookieJar theGuardOnServiceWorkersStartsTheEngineWhenItIsAskedFirst; do
+            for run in 1 2 3; do
+              file="$RUNNER_TEMP/engine-$method-$run.txt"
+              "$adb" logcat -c
+              "$adb" shell am instrument -r -w -e cold 1 -e look light -e device "${{ matrix.device }}" -e class "com.navree.client.WebEngineStartTest#$method" \
+                com.navree.client.test/androidx.test.runner.AndroidJUnitRunner > "$file"
+              python3 -I packages/android/scripts/read_run.py "$file" --look light --count 1 --skips "$RUNNER_TEMP/no-skips.txt" || status=1
+              numbers=$("$adb" logcat -d -s WebEngineStart:I | grep 'WebEngineStart' | sed 's/^.*WebEngineStart *: *//')
+              if [ -z "$numbers" ]; then
+                echo "::error title=The web view's engine, timed::$method, run $run, left no numbers."
+                status=1
+              fi
+              echo "$numbers" | tee -a "$GITHUB_STEP_SUMMARY"
+              echo >> "$GITHUB_STEP_SUMMARY"
+            done
+          done
+          exit $status
+
       - name: Screens
         run: |
           adb="$ANDROID_HOME/platform-tools/adb"
           "$adb" install -r -t "$RUNNER_TEMP"/apks/navree-native/build/outputs/apk/androidTest/debug/*.apk
           status=0
+          # What a run of the device tests said, read from the statuses of its tests (`-r`), not from the line
+          # `OK (N tests)`, which counts a test that skipped on an assumption as run and so cannot see one: the
+          # run finished, no test failed, as many tests ended as this device is expected to end (`matrix.tests`),
+          # and the tests that skipped are the ones scripts/device-skips.txt lists for this look, no more and no fewer.
+          read_run() {
+            local file=$1 what=$2 look=$3 expected=$4
+            sed -n '/^INSTRUMENTATION_RESULT/,$p' "$file" | head -200
+            if [ -n "$expected" ]; then
+              python3 -I packages/android/scripts/read_run.py "$file" --look "$look" --count "$expected" --skips packages/android/scripts/device-skips.txt
+            else
+              python3 -I packages/android/scripts/read_run.py "$file" --look "$look"
+            fi
+          }
+          # A tablet is pictured on its side and upright; a phone upright.
+          orientations="portrait"
+          if [ "${{ matrix.device }}" = tablet ]; then orientations="landscape portrait"; fi
+          "$adb" shell settings put system accelerometer_rotation 0
+          for orientation in $orientations; do
+          # The tablet's image does not turn when the system is told to rotate (its display stays wide),
+          # so upright is the display made 1600 wide and 2560 tall: the window a tablet held upright has.
+          name="${{ matrix.device }}"
+          "$adb" shell settings put system user_rotation 0
+          if [ "${{ matrix.device }}" = tablet ] && [ "$orientation" = portrait ]; then
+            name=tablet-portrait
+            "$adb" shell wm size 1600x2560
+          else
+            "$adb" shell wm size reset
+          fi
+          sleep 3
           for look in light dark large rtl; do
-            night=no; scale=1.0; rtl=0
+            night=no; scale=1.0
             case "$look" in
               dark) night=yes ;;
               large) scale=2.0 ;;
-              rtl) rtl=1 ;;
             esac
             "$adb" shell cmd uimode night "$night"
             "$adb" shell settings put system font_scale "$scale"
-            # Right to left as the developer option sets it: the system property, the setting, and a
-            # change of configuration so the system and every app lay themselves out again.
-            if [ "$rtl" = 1 ]; then
-              for _ in 1 2 3; do "$adb" root && break; sleep 5; done
-              "$adb" wait-for-device
-              "$adb" shell setprop debug.force_rtl true
-              "$adb" shell settings put global debug.force_rtl 1
-              "$adb" shell settings put system font_scale 1.05
-              sleep 3
-              "$adb" shell settings put system font_scale "$scale"
-              sleep 3
-            fi
-            "$adb" shell am instrument -w -e look "$look" -e device "${{ matrix.device }}" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
-              com.navree.client.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/instrument-$look.txt"
-            if ! grep -q '^OK (' "$RUNNER_TEMP/instrument-$look.txt"; then status=1; fi
+            "$adb" shell am instrument -r -w -e look "$look" -e device "$name" -e store http://10.0.2.2:8095 -e inbox http://10.0.2.2:8096 -e board http://10.0.2.2:8097 \
+              com.navree.client.test/androidx.test.runner.AndroidJUnitRunner > "$RUNNER_TEMP/instrument-$name-$look.txt"
+            read_run "$RUNNER_TEMP/instrument-$name-$look.txt" "device tests $name $look" "$look" "${{ matrix.tests }}" || status=1
           done
-          mkdir -p "$RUNNER_TEMP/screens"
-          "$adb" pull /data/local/tmp/navree-screens "$RUNNER_TEMP/screens/" || true
-          cp "$RUNNER_TEMP"/instrument-*.txt "$RUNNER_TEMP/screens/"
-          "$adb" logcat -d > "$RUNNER_TEMP/screens/logcat.txt" || true
-          cp "$RUNNER_TEMP"/demo/*.log "$RUNNER_TEMP/screens/" || true
-          ls -R "$RUNNER_TEMP/screens"
+          done
           exit $status
+
+      # What the device wrote, kept even when the tests failed; a missing piece is said, not skipped.
+      - name: What the device wrote
+        if: always()
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          "$adb" shell wm size reset
+          mkdir -p "$RUNNER_TEMP/screens"
+          if ! "$adb" pull /data/local/tmp/navree-screens "$RUNNER_TEMP/screens/"; then
+            echo "::warning title=Screens::The pictures and notes were not found on the device."
+          fi
+          cp "$RUNNER_TEMP"/instrument-*.txt "$RUNNER_TEMP/screens/" || echo "::warning title=Screens::No run of the device tests left its output."
+          "$adb" logcat -d > "$RUNNER_TEMP/screens/logcat.txt" || echo "::warning title=Screens::The device's log was not read."
+          cp "$RUNNER_TEMP"/demo/*.log "$RUNNER_TEMP/screens/" || echo "::warning title=Screens::The demos' logs were not found."
+          ls -R "$RUNNER_TEMP/screens"
+
+      # The pictures are part of what this job proves: a device whose frames came out black (the same size, one colour) is an error, with the host image said.
+      - name: The pictures are pictures
+        if: always()
+        run: python3 -I packages/android/scripts/pictures_check.py "$RUNNER_TEMP/screens/navree-screens"
+
+      # The demo app itself, on the phone: a start second by second with and without a network,
+      # back, turning, a link, a form, the app ended by the system and opened again.
+      - name: Walk
+        if: always() && matrix.device == 'phone'
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          "$adb" install -r "$RUNNER_TEMP"/apks/demo/build/outputs/apk/debug/demo-debug.apk
+          "$adb" shell cmd uimode night no
+          "$adb" shell settings put system font_scale 1.0
+          chmod +x packages/android/scripts/walk.sh
+          status=0
+          ADB="$adb" OUT="$RUNNER_TEMP/walk" packages/android/scripts/walk.sh || status=$?
+          cp "$RUNNER_TEMP"/demo/walk-server.log "$RUNNER_TEMP/walk/" || echo "::warning title=Walk::The log of the walk's server was not found."
+          exit $status
+
+      # The first frame of the build a store would ship, timed (`am start -W`, three cold starts). Only the first
+      # frame: the release build is not allowed plain http, so it cannot reach the demo's server at 10.0.2.2 and
+      # never shows a page. Each way this can fail is its own warning on the run and a line in the summary; a
+      # run in which the release build starts has no warning.
+      - name: First frame of the release build
+        if: always() && matrix.device == 'phone'
+        run: |
+          adb="$ANDROID_HOME/platform-tools/adb"
+          warn() {
+            echo "::warning title=First frame of the release build::$1"
+            echo "The first frame of the release build is not timed in this run: $1" >> "$GITHUB_STEP_SUMMARY"
+          }
+          apk=$(ls "$RUNNER_TEMP"/apks/demo/build/outputs/apk/release/demo-release-signed.apk 2>/dev/null | head -1)
+          if [ -z "$apk" ]; then warn "no release build was made."; exit 0; fi
+          "$adb" uninstall com.navree.demo > /dev/null
+          if ! "$adb" install -r "$apk"; then warn "the release build was made but could not be installed."; exit 0; fi
+          chmod +x packages/android/scripts/walk.sh
+          if ! ADB="$adb" OUT="$RUNNER_TEMP/walk-release" ONLY=starts FIRST_SCREEN=no BUILD="the release build" packages/android/scripts/walk.sh; then
+            warn "the release build was installed but a start did not begin or the app was not running after its first frame (see walk.txt in the android-walk-release artifact)."
+          fi
+
+      - name: Keep the starts of the release build
+        if: always() && matrix.device == 'phone'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-walk-release
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/walk-release
+          retention-days: 30
+
+      - name: Keep the walk
+        if: always() && matrix.device == 'phone'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-walk
+          if-no-files-found: ignore
+          path: ${{ runner.temp }}/walk
+          retention-days: 30
 
       - name: Keep the screens
         if: always()
