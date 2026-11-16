@@ -1,0 +1,424 @@
+#!/usr/bin/env bash
+# Walks the demo app on a device the way a person does, and says what it saw.
+#
+# The app is installed, its server (the store demo) answers on 10.0.2.2:8787.
+# Each step is a check that prints PASS or FAIL; the pictures of a start, second
+# by second, are folders of frames with the time of each. Needs adb, python3.
+#
+#   ADB=/path/to/adb OUT=walk packages/android/scripts/walk.sh
+
+ADB=${ADB:-adb}
+OUT=${OUT:-walk}
+PKG=com.navree.demo
+ACTIVITY=com.navree.client.NavreeActivity
+ORIGIN=http://10.0.2.2:8787
+HERE=$(cd "$(dirname "$0")" && pwd)
+mkdir -p "$OUT"
+fails=0
+
+say() { echo "$*" | tee -a "$OUT/walk.txt"; }
+
+check() {
+  local name=$1
+  shift
+  if "$@"; then say "PASS $name"; else say "FAIL $name"; fails=$((fails + 1)); fi
+}
+
+ui() { UI_PACKAGE="$PKG" python3 -I "$HERE/ui.py" "$OUT/window.xml" "$@"; }
+
+# The exit status of a command run on the device, said by the device itself: fails when adb did not reach it
+# (nothing came back to say), so a check that something is not so (`ping` finds no one, `pidof` finds no
+# process) is never passed by a dead adb. Usage: device_status "<command>" prints the status.
+device_status() {
+  local out
+  out=$("$ADB" shell "$1; echo status=\$?" 2>/dev/null | tr -d '\r') || return 1
+  case "$out" in
+    *status=*) echo "${out##*status=}" ;;
+    *) return 1 ;;
+  esac
+}
+
+# The window that has the focus is not the app's: the answer names a focused window at all.
+focus_is_not_the_app() {
+  local line
+  line=$("$ADB" shell dumpsys window 2>/dev/null | tr -d '\r' | grep mCurrentFocus | head -1)
+  [ -n "$line" ] && ! printf '%s' "$line" | grep -q "$PKG"
+}
+
+# The app has no process: pidof says so itself (status 1), not for want of an answer.
+app_is_gone() { [ "$(device_status "pidof $PKG > /dev/null")" = 1 ]; }
+
+# What is on the screen, written to $OUT/window.xml; tried again when the device was not still. The
+# file on the device and the one here are removed before each try, so a dump that fails leaves
+# nothing to read, never the screen before it, and what is written is checked to be a dump. Fails
+# when no try made one; every question asked of a screen with no dump fails too (`ui.py` exits 2).
+dump() {
+  local try
+  rm -f "$OUT/window.xml"
+  for try in 1 2 3; do
+    "$ADB" shell rm -f /sdcard/window.xml > /dev/null 2>&1
+    "$ADB" shell uiautomator dump /sdcard/window.xml > /dev/null 2>&1
+    rm -f "$OUT/window.xml"
+    if "$ADB" pull /sdcard/window.xml "$OUT/window.xml" > /dev/null 2>&1 && ui parsed > /dev/null 2>&1; then return 0; fi
+    rm -f "$OUT/window.xml"
+    sleep 1
+  done
+  return 1
+}
+
+# A dump a step goes on to read from: when none could be made that is a failure of its own, in the record.
+look() {
+  dump && return 0
+  say "FAIL no dump of the screen was made${1:+ ($1)}"
+  fails=$((fails + 1))
+  return 1
+}
+
+# Waits up to $2 seconds for a node that says $1.
+wait_for() {
+  local end=$((SECONDS + ${2:-20}))
+  while [ "$SECONDS" -lt "$end" ]; do
+    dump && ui has "$1" && return 0
+    sleep 1
+  done
+  return 1
+}
+
+wait_for_part() {
+  local end=$((SECONDS + ${2:-20}))
+  while [ "$SECONDS" -lt "$end" ]; do
+    dump && ui contains "$1" && return 0
+    sleep 1
+  done
+  return 1
+}
+
+# Taps the node that says $1.
+tap() {
+  dump || return 1
+  local at
+  at=$(ui tap "$1") || return 1
+  "$ADB" shell input tap $at
+}
+
+shot() { "$ADB" exec-out screencap -p > "$OUT/$1.png"; }
+
+# $2 frames of the screen from now, the time of each, taken one after the other.
+strip() {
+  mkdir -p "$OUT/strip-$1"
+  : > "$OUT/strip-$1/times.txt"
+  local start now i
+  start=$(date +%s%N)
+  for i in $(seq 1 "$2"); do
+    now=$(date +%s%N)
+    "$ADB" exec-out screencap -p > "$OUT/strip-$1/$(printf %02d "$i").png"
+    echo "$(printf %02d "$i") $(((now - start) / 1000000)) ms" >> "$OUT/strip-$1/times.txt"
+  done
+}
+
+launch() { "$ADB" shell am start -n "$PKG/$ACTIVITY" > /dev/null; }
+stop_app() { "$ADB" shell am force-stop "$PKG"; }
+alive() { [ -n "$("$ADB" shell pidof "$PKG" | tr -d '\r')" ]; }
+
+net() {
+  if [ "$1" = off ]; then
+    "$ADB" shell svc wifi disable
+    "$ADB" shell svc data disable
+    sleep 3
+    # The device says that it found no one: ping's own status, not an adb that did not answer.
+    local ping_status
+    ping_status=$(device_status "ping -c 1 -W 2 10.0.2.2 > /dev/null 2>&1") || return 1
+    [ "$ping_status" != 0 ]
+  else
+    "$ADB" shell svc wifi enable
+    "$ADB" shell svc data enable
+    local end=$((SECONDS + 30))
+    while [ "$SECONDS" -lt "$end" ]; do
+      "$ADB" shell ping -c 1 -W 2 10.0.2.2 > /dev/null 2>&1 && return 0
+      sleep 2
+    done
+    return 1
+  fi
+}
+
+rotate() {
+  "$ADB" shell settings put system accelerometer_rotation 0
+  "$ADB" shell settings put system user_rotation "$1"
+  sleep 3
+}
+
+# The smallest number among the orders (CS-nnnnnn) that are in the dump.
+lowest_order() { ui texts | grep -o 'CS-[0-9]*' | sort | head -1 | tr -d 'CS-'; }
+
+# The server of the demo, as the walk's machine reaches it (the device reaches it as $ORIGIN).
+SERVER=${SERVER:-http://127.0.0.1:8787}
+
+# Whether the demo's shell, asked as a client asks it, names a person (the header `x-navree-person`).
+# It is asked twice with the cookies of the first answer: a demo that names its visitor by a cookie
+# names it from the second answer on. Prints yes or no; fails when the server does not answer.
+person_named() {
+  local jar headers=""
+  jar=$(mktemp)
+  for _ in 1 2; do
+    headers="$headers
+$(curl -s -S --max-time 15 -D - -o /dev/null -c "$jar" -b "$jar" \
+      -H 'X-Navree-Native: 1' \
+      -H 'X-Navree-Client: platform=android; form=phone; vocab=0; scheme=light; text=1.00' \
+      -H 'Accept: application/vnd.navree.native+json' "$SERVER/_navree/native/shell")" || { rm -f "$jar"; return 1; }
+  done
+  rm -f "$jar"
+  printf '%s' "$headers" | tr -d '\r' | grep -qi '^HTTP/[0-9.]* 200' || return 1
+  if printf '%s' "$headers" | tr -d '\r' | grep -qi '^x-navree-person: *[^ ]'; then echo yes; else echo no; fi
+}
+
+# The first screen shown and nothing of the place the app was in before.
+first_screen_only() { ui contains 'Revenue today' && ui absent-part 'Fulfilment'; }
+
+# Cold starts, timed: what the system says it took to show the first frame (`am start -W`) and, where the
+# build can reach its server, to show the page (the app reports when it is fully drawn), and the app's own
+# marks of where the time went. With FIRST_SCREEN=no only the first frame is timed: a build that cannot reach
+# its server (the release build is not allowed plain http to the demo's address) never shows a page, and
+# asking it for one would only fail. Fails when a start did not begin (`Status: ok` is missing), the app is
+# not running afterwards, or, with FIRST_SCREEN=yes, the first screen is not shown within 30 seconds.
+timed_starts() {
+  local n missing=0 started
+  say "== how long a cold start takes (${1:-this build}, $([ "${FIRST_SCREEN:-yes}" = yes ] && echo 'to the first screen' || echo 'the first frame only'))"
+  for n in 1 2 3; do
+    "$ADB" shell input keyevent KEYCODE_HOME
+    stop_app
+    sleep "${SETTLE:-2}"
+    "$ADB" logcat -c
+    started=$("$ADB" shell am start -W -n "$PKG/$ACTIVITY")
+    printf '%s\n' "$started" | grep -E 'ThisTime|TotalTime|WaitTime' | tr '\n' ' ' | tee -a "$OUT/walk.txt"
+    echo >> "$OUT/walk.txt"
+    if ! printf '%s\n' "$started" | tr -d '\r' | grep -q '^Status: ok'; then
+      say "start $n did not begin: $(printf '%s' "$started" | tr -d '\r' | tr '\n' ' ' | cut -c1-200)"
+      missing=$((missing + 1))
+    elif [ "${FIRST_SCREEN:-yes}" = yes ]; then
+      if ! wait_for Dashboard 30 > /dev/null; then
+        say "start $n did not show the first screen within 30 seconds"
+        missing=$((missing + 1))
+      fi
+    else
+      sleep "${SETTLE:-2}"
+      if ! alive; then
+        say "start $n: the app is not running after its first frame"
+        missing=$((missing + 1))
+      fi
+    fi
+    sleep "${SETTLE:-2}"
+    "$ADB" logcat -d | grep -E 'NavreeStart|Fully drawn' | sed 's/^.*\(NavreeStart\|ActivityTaskManager\)/\1/' | tee -a "$OUT/walk.txt"
+  done
+  [ "$missing" -eq 0 ]
+}
+
+# Sourced, the script only defines its helpers (the tests of the script do).
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then return 0; fi
+
+if [ "${ONLY:-}" = starts ]; then
+  timed_starts "${BUILD:-this build}"
+  exit $?
+fi
+
+# ---------------------------------------------------------------- starts
+
+# The screens' pictures run with animations off; a person's device has them on, and a spinner that waits is a moving one.
+for scale in window_animation_scale transition_animation_scale animator_duration_scale; do
+  "$ADB" shell settings put global "$scale" 1
+done
+
+say "== a start, second by second"
+"$ADB" shell pm clear "$PKG" > /dev/null
+rotate 0
+launch
+strip cold-first 14
+check "a first start shows the first screen" wait_for Dashboard 20
+shot first-screen
+
+"$ADB" shell input keyevent KEYCODE_HOME
+sleep 2
+stop_app
+launch
+strip cold-second 14
+check "a second start shows the first screen" wait_for Dashboard 20
+
+check "every timed start of the debug build shows the first screen" timed_starts "the debug build"
+
+say "== no network at start, with a page kept"
+"$ADB" shell input keyevent KEYCODE_HOME
+stop_app
+check "the network is off" net off
+launch
+strip offline-kept 14
+dump
+shot offline-kept
+check "the app is still running with no network" alive
+ui texts > "$OUT/offline-kept.txt"
+say "offline with a page kept says: $(ui texts | tr '\n' '|' | cut -c1-300)"
+
+say "== the network comes back"
+check "the network is on" net on
+if look "after the network came back" && ui has "Try again" > /dev/null 2>&1; then tap "Try again"; fi
+check "the screen comes once the network is back" wait_for Dashboard 30
+
+say "== no network at start, nothing kept"
+"$ADB" shell input keyevent KEYCODE_HOME
+stop_app
+"$ADB" shell pm clear "$PKG" > /dev/null
+check "the network is off again" net off
+launch
+strip offline-clean 14
+dump
+shot offline-clean
+check "nothing is shown but the way to try again" ui has "Try again"
+check "no person is named with no server to say who" ui absent-part 'Account,'
+check "the network is back" net on
+tap "Try again"
+check "trying again with the network on shows the first screen" wait_for Dashboard 30
+
+# ---------------------------------------------------------------- going about
+
+say "== orders: search, more rows, back"
+tap Orders
+check "Orders opens" wait_for Search 20
+dump
+first=$(ui texts | grep -o 'CS-[0-9]*' | head -1 | tr -d 'CS-')
+say "first order $first"
+shot orders
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do "$ADB" shell input swipe 540 1900 540 600 250; sleep 0.4; done
+sleep 2
+dump
+lowest=$(lowest_order)
+say "after scrolling the lowest order in view is $lowest"
+check "a long list loads more as it is scrolled" bash -c "[ -n '$first' ] && [ -n '$lowest' ] && [ '$lowest' -lt \$(( $first - 25 )) ]"
+shot orders-scrolled
+
+"$ADB" shell input swipe 540 600 540 2000 250
+sleep 1
+"$ADB" shell input swipe 540 600 540 2000 250
+sleep 2
+check "going to the top again shows the search" wait_for Search 10
+
+tap Search
+sleep 1
+dump
+at=$(ui field) || at=""
+if [ -n "$at" ]; then "$ADB" shell input tap $at; fi
+"$ADB" shell input text Kaur
+sleep 3
+dump
+shot search
+check "search shows only matches" bash -c "n=\$(python3 -I '$HERE/ui.py' '$OUT/window.xml' count 'CS-[0-9]+'); k=\$(python3 -I '$HERE/ui.py' '$OUT/window.xml' count 'Kaur'); [ \"\$n\" -gt 0 ] && [ \"\$k\" -ge \"\$n\" ]"
+
+say "== turning the device keeps the place and the words"
+rotate 1
+dump
+shot search-turned
+check "the typed words stay when the device is turned" ui contains Kaur
+rotate 0
+# The keyboard goes with the first back, the search view with the bar's own.
+"$ADB" shell input keyevent KEYCODE_BACK
+sleep 1
+tap Back
+sleep 2
+dump
+# What stays is the words in the bar: the view is closed when its own way back is gone.
+check "the search view is closed" ui absent Back
+
+say "== an order opens and closes"
+dump
+tap "$(ui texts | grep -o 'CS-[0-9]*' | head -1)"
+sleep 3
+dump
+shot order
+check "an order opens" ui contains "Order CS-"
+"$ADB" shell input keyevent KEYCODE_BACK
+sleep 2
+check "back closes the order and the list is there" wait_for Search 10
+
+say "== back, one step at a time"
+"$ADB" shell input keyevent KEYCODE_BACK
+sleep 3
+shot back-from-orders
+dump
+say "after back from Orders it says: $(ui texts | tr '
+' '|' | cut -c1-200)"
+check "back from another destination goes to the first one" wait_for_part "Revenue today" 10
+"$ADB" shell input keyevent KEYCODE_BACK
+sleep 4
+shot back-from-first
+say "focus after the last back: $("$ADB" shell dumpsys window | grep mCurrentFocus | head -1)"
+check "back from the first destination leaves the app" focus_is_not_the_app
+
+say "== a link from outside"
+launch
+wait_for Dashboard 20
+"$ADB" shell am start -n "$PKG/$ACTIVITY" -a android.intent.action.VIEW -d "$ORIGIN/inventory" > /dev/null
+sleep 3
+dump
+shot link-inventory
+check "a link to the app's address opens its screen" ui contains "Units of"
+
+say "== a form, a send, the message that follows"
+dump
+at=$(ui field) || at=""
+if [ -n "$at" ]; then
+  "$ADB" shell input tap $at
+  for _ in 1 2 3 4 5 6 7 8; do "$ADB" shell input keyevent KEYCODE_DEL; done
+  "$ADB" shell input text 7
+  shot restock-typed
+  "$ADB" shell input keyevent KEYCODE_ENTER
+  # The message stays a few seconds: look for it at once, then take its picture.
+  check "the keyboard's action sends the restock and a message follows" wait_for_part "Restocked" 6
+  shot restock-sent
+else
+  say "FAIL no field to type in"
+  fails=$((fails + 1))
+fi
+
+# ---------------------------------------------------------------- the system ends the app
+
+say "== the app ended by the system, and opened again, with no network"
+named=$(person_named) || named=unknown
+say "the demo's shell names a person: $named"
+check "the demo's shell answers" test "$named" != unknown
+# The restock left the keyboard up and the search view open (it takes the focus): back closes them.
+"$ADB" shell input keyevent KEYCODE_BACK
+sleep 1
+if look "after the restock" && ui has Back > /dev/null 2>&1; then tap Back; sleep 1; fi
+tap Orders
+check "Orders is the place it was in" wait_for Fulfilment 20
+"$ADB" shell input keyevent KEYCODE_HOME
+sleep 3
+"$ADB" shell am kill "$PKG"
+sleep 1
+check "the app's process is gone" app_is_gone
+check "the network is off for the return" net off
+"$ADB" shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
+strip returned-offline 12
+dump
+shot returned-offline
+say "returned with no network says: $(ui texts | tr '\n' '|' | cut -c1-300)"
+check "it comes back with the way to try again" ui has "Try again"
+check "no person is named before the server has said who" ui absent-part 'Account,'
+check "the network is back" net on
+tap "Try again" > /dev/null 2>&1
+sleep 6
+dump
+shot returned-online
+say "after trying again it says: $(ui texts | tr '
+' '|' | cut -c1-300)"
+# The core puts a place back only for a person the server names by id. So what the walk expects
+# depends on what the demo's shell says: when it names a person, the app returns to the place it
+# was in; when it does not (the demo names its visitor by a cookie and does not tell the framework
+# who it is), the app starts at its first screen and shows nothing of the earlier place before the
+# server has named the person.
+case "$named" in
+  yes) check "it returns to the place it was in" wait_for_part "Fulfilment" 20 ;;
+  no) check "it starts at its first screen, with nothing of the earlier place" first_screen_only ;;
+  *) check "what it returns to is known only when the demo's shell answers" false ;;
+esac
+check "the person is named once the server has answered" wait_for_part "Account, " 20
+
+say "walk done: $fails failed"
+[ "$fails" -eq 0 ]
