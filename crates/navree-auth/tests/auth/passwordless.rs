@@ -1,12 +1,18 @@
 //! Passwordless sign-in: magic links (`POST /api/auth/magic-link`) and
 //! emailed codes (`POST /api/auth/otp`).
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use navree_auth::{User, login_token, refresh_token};
+use navree_auth::{
+    AuthError, AuthService, ClientMeta, LoginOutcome, ModuleBuilderAuthExt, SignInAttempt,
+    SignInPolicy, User, login_token, refresh_token,
+};
 use navree_contracts::AuditSink;
 use navree_db::Db;
+use navree_kernel::{
+    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
+};
 use navree_orm::Model as _;
 use navree_testing::{TestApp, TestAppBuilder};
 use serde_json::{Value, json};
@@ -467,4 +473,156 @@ async fn a_link_or_code_mailed_to_the_address_held_now_still_proves_it() {
         .assert_json_path("user.email", json!("harpreet.kaur@sutlej.in"))
         .json_value();
     assert!(signed_in["user"]["email_verified_at"].is_string());
+}
+
+/// A link or code is made for the address it is mailed to: an account that
+/// holds another address now (moved here in the database, which leaves its
+/// links and codes in place) is signed in by neither, and nothing is marked.
+#[tokio::test]
+async fn a_link_or_code_made_for_another_address_proves_nothing() {
+    let clock = support::clock();
+    let app = mail_app(&clock)
+        .config("auth.magic_link.url", "https://app.example.com/magic")
+        .build()
+        .await;
+    let user = support::create_user(&app, "harpreet@sutlej.in").await;
+    let client = app.client();
+    client
+        .post("/api/auth/magic-link")
+        .json(&json!({ "email": "harpreet@sutlej.in" }))
+        .send()
+        .await
+        .assert_status(202);
+    let token = link_param(&last_text(&app).await, "token")
+        .expect("a token in the link");
+    client
+        .post("/api/auth/otp")
+        .json(&json!({ "email": "harpreet@sutlej.in" }))
+        .send()
+        .await
+        .assert_status(202);
+    let code = code_in(&last_text(&app).await);
+    let db = app.get::<Db>().await;
+    User::query()
+        .where_key(user.id)
+        .update(&*db, [User::EMAIL.set("simran@sutlej.in".to_owned())])
+        .await
+        .unwrap();
+
+    client
+        .post("/api/auth/magic-link/verify")
+        .json(&json!({ "token": token }))
+        .send()
+        .await
+        .assert_error(401, "Invalid or expired sign-in code");
+    client
+        .post("/api/auth/otp/verify")
+        .json(&json!({ "email": "simran@sutlej.in", "code": code }))
+        .send()
+        .await
+        .assert_error(401, "Invalid or expired sign-in code");
+
+    assert_eq!(stored(&app, user.id).await.email_verified_at, None);
+    let sessions = refresh_token::Model::query()
+        .where_(refresh_token::Model::USER_ID.eq(user.id))
+        .count(&*db)
+        .await
+        .unwrap();
+    assert_eq!(sessions, 0, "no session was started");
+}
+
+/// Once armed with the database and an address, moves the account a sign-in
+/// is for to that address as the sign-in asks the policies: for a sign-in by
+/// link, after the link is used and before the address is marked.
+#[derive(Default)]
+struct MoveOnSignIn(Mutex<Option<(Arc<Db>, String)>>);
+
+/// The sign-in policy that runs [`MoveOnSignIn`]; it lets every sign-in go
+/// on.
+struct MovingPolicy {
+    moves: Arc<MoveOnSignIn>,
+}
+
+impl Injectable for MovingPolicy {
+    fn dependencies() -> Vec<ProviderKey> {
+        vec![ProviderKey::of::<MoveOnSignIn>()]
+    }
+
+    fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async move {
+            Ok(MovingPolicy {
+                moves: r.get::<MoveOnSignIn>().await?,
+            })
+        })
+    }
+}
+
+impl SignInPolicy for MovingPolicy {
+    fn check<'a>(&'a self, attempt: &'a SignInAttempt) -> BoxFuture<'a, Result<(), AuthError>> {
+        Box::pin(async move {
+            let Some(id) = attempt.user_id else {
+                return Ok(());
+            };
+            let armed = self
+                .moves
+                .0
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take();
+            if let Some((db, email)) = armed {
+                User::query()
+                    .where_key(id)
+                    .update(&*db, [User::EMAIL.set(email)])
+                    .await
+                    .expect("the address changes");
+            }
+            Ok(())
+        })
+    }
+}
+
+struct MovingModule(Arc<MoveOnSignIn>);
+
+impl Module for MovingModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.value_arc(self.0.clone()).sign_in_policy::<MovingPolicy>();
+    }
+}
+
+/// The account moves to another address after its link is used and before
+/// the address is marked (a sign-in outside a request, whose steps are
+/// writes of their own): the sign-in goes on, and the new address stays
+/// unverified.
+#[tokio::test]
+async fn an_address_changed_during_a_sign_in_by_link_is_not_marked() {
+    let clock = support::clock();
+    let moves = Arc::new(MoveOnSignIn::default());
+    let app = mail_app(&clock)
+        .config("auth.magic_link.url", "https://app.example.com/magic")
+        .module(MovingModule(moves.clone()))
+        .build()
+        .await;
+    let user = support::create_user(&app, "harpreet@sutlej.in").await;
+    app.client()
+        .post("/api/auth/magic-link")
+        .json(&json!({ "email": "harpreet@sutlej.in" }))
+        .send()
+        .await
+        .assert_status(202);
+    let token = link_param(&last_text(&app).await, "token")
+        .expect("a token in the link");
+    let db = app.get::<Db>().await;
+    *moves.0.lock().unwrap_or_else(PoisonError::into_inner) =
+        Some((db, "simran@sutlej.in".to_owned()));
+
+    let outcome = app
+        .get::<AuthService>()
+        .await
+        .login_with_magic_link(&token, &ClientMeta::default())
+        .await
+        .expect("the sign-in goes on");
+    assert!(matches!(outcome, LoginOutcome::Authenticated { .. }));
+    let account = stored(&app, user.id).await;
+    assert_eq!(account.email, "simran@sutlej.in");
+    assert_eq!(account.email_verified_at, None);
 }
