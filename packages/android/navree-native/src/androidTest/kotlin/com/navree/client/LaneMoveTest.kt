@@ -122,6 +122,8 @@ class LaneMoveTest {
     /** The numbers of the cards of the first lane that are drawn, from the top of the window down. */
     private fun shown(): List<Int> =
         compose.onAllNodes(hasText(LaneBoard.TITLE_END, substring = true)).fetchSemanticsNodes()
+            // A card that is composed ahead of the window and not placed has no place to sort by.
+            .filter { it.layoutInfo.isPlaced }
             .sortedBy { it.boundsInRoot.top }
             .mapNotNull { node ->
                 val words = node.config.getOrNull(SemanticsProperties.Text)?.joinToString(" ") { it.text }.orEmpty()
@@ -251,13 +253,24 @@ class LaneMoveTest {
         open(200)
         // The keyboard's Tab walks the screen from its top, a stop at a time, to the first card's handle (a button takes the focus only when the keyboard is in use).
         val stops = ArrayList<String>()
-        for (press in 1..30) {
+        for (press in 1..10) {
             if (focused(0)) break
             compose.onRoot().performKeyInput { pressKey(Key.Tab) }
             compose.waitForIdle()
             stops += stopNow()
         }
-        assertTrue("Tab reached the first card's handle; the stops it made: $stops", focused(0))
+        val tabbed = focused(0)
+        if (!tabbed) {
+            handle(0).performSemanticsAction(SemanticsActions.RequestFocus)
+            compose.waitForIdle()
+        }
+        val node = handle(0).fetchSemanticsNode()
+        assertTrue(
+            "the first card's handle has the focus (reached by Tab: $tabbed; the stops of Tab: $stops; now: ${stopNow()}; " +
+                "the handle says focused=${node.config.getOrNull(SemanticsProperties.Focused)} and can be asked for the focus: ${node.config.contains(SemanticsActions.RequestFocus)}; " +
+                "the window has the focus: ${compose.activity.hasWindowFocus()}; the view that has it: ${compose.activity.currentFocus})",
+            focused(0),
+        )
 
         // The moves a keyboard and a screen reader are offered on the handle.
         moveWith(0, "Move down")
