@@ -7,9 +7,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -21,9 +21,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -40,8 +40,6 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -49,11 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
@@ -73,7 +66,6 @@ import com.navree.client.R
 import com.navree.client.core.Events
 import com.navree.client.design.ContentRules
 import com.navree.client.design.ListRules
-import com.navree.client.design.ReorderRules
 import com.navree.client.design.ScreenRules
 import com.navree.client.design.SelectionRules
 import com.navree.client.design.childNodes
@@ -180,30 +172,45 @@ internal fun RowView(
     /** The moves of a row that can be moved, offered to TalkBack. */
     moves: List<CustomAccessibilityAction> = emptyList(),
 ) {
+    val began = cardClock()
     val ui = LocalUi.current
     val window = ui.window
+    // A button that only says the row's title is the row's own tap, not a second line under it.
+    val titled = if (row.action == null) ListRules.titleButton(row) else null
+    val shown = if (titled != null) ListRules.withoutTitleButton(row, titled.form) else row
+    val titleUse = titled?.let { ListRules.titleUse(it.button, place.pending) }
     val action = row.action
     val menu = row.menu
     val swipe = row.swipe.firstOrNull()
     var menuOpen by remember { mutableStateOf(false) }
     val badge = row.badge
     val below = ListRules.trailingBelow(window)
-    val selected = isSelected(row.action, place) || place.screen.has(row.id, Navree.State.SELECTED)
+    val selected = isSelected(row.action, row.id, place) || place.screen.has(row.id, Navree.State.SELECTED)
     val state = row.state
     val extra = (if (swipe != null) listOf(CustomAccessibilityAction(swipe.label) { ui.press(place, swipe); true }) else emptyList()) + rowActions(menu, place) + moves
-    val under = row.subtitle != null || row.detail.isNotEmpty() || (below && (badge != null || row.trailing != null))
+    val under = row.subtitle != null || shown.detail.isNotEmpty() || (below && (badge != null || row.trailing != null))
 
     val item: @Composable () -> Unit = {
         ListItem(
-            headlineContent = { Text(row.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            headlineContent = { CardPart("card.title") { Text(row.title, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
             supportingContent = if (under) {
                 {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.subtitle?.let { Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis) }
-                        for (part in row.detail) NodeView(part, place)
-                        if (below) {
-                            row.trailing?.let { NodeView(it, place) }
-                            badge?.let { StatusView(it) }
+                    CardPart("card.supporting") {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            row.subtitle?.let { Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+                            for (run in ListRules.detailRuns(shown.detail)) {
+                                if (run.size > 1) {
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        for (part in run) NodeView(part, place)
+                                    }
+                                } else {
+                                    for (part in run) NodeView(part, place)
+                                }
+                            }
+                            if (below) {
+                                row.trailing?.let { NodeView(it, place) }
+                                badge?.let { StatusView(it) }
+                            }
                         }
                     }
                 }
@@ -212,16 +219,17 @@ internal fun RowView(
             },
             leadingContent = when {
                 row.leading != null -> {
-                    { Leading(row.leading!!, place) }
+                    { CardPart("card.leading") { Leading(row.leading!!, place) } }
                 }
                 state != null -> {
                     { StateMark(state) }
                 }
                 else -> null
             },
-            trailingContent = if ((!below && (row.trailing != null || badge != null)) || menu.isNotEmpty() || handle != null) {
+            trailingContent = if ((!below && (row.trailing != null || badge != null)) || menu.isNotEmpty() || handle != null || titleUse?.busy == true) {
                 {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (titleUse?.busy == true) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         if (!below) {
                             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 row.trailing?.let { trailing ->
@@ -230,8 +238,8 @@ internal fun RowView(
                                 badge?.let { StatusView(it) }
                             }
                         }
-                        if (menu.isNotEmpty()) RowMenu(menu, place, menuOpen) { menuOpen = it }
-                        handle?.invoke()
+                        if (menu.isNotEmpty()) CardPart("card.menu") { RowMenu(menu, place, menuOpen) { menuOpen = it } }
+                        if (handle != null) CardPart("card.handle") { handle() }
                     }
                 }
             } else {
@@ -247,6 +255,7 @@ internal fun RowView(
                             onClick = { ui.act(place, action, from = row.id) },
                         )
                         action != null -> Modifier.clickable(role = Role.Button) { ui.act(place, action, from = row.id) }
+                        titled != null -> Modifier.clickable(enabled = titleUse?.enabled == true, role = Role.Button) { ui.press(place.copy(form = titled.form.id), titled.button) }
                         else -> Modifier
                     },
                 )
@@ -257,127 +266,17 @@ internal fun RowView(
         )
     }
 
+    cardPartSince("row.setup", began)
     Grouped(group) {
-        if (swipe != null) Swipeable(swipe, place, item) else item()
+        CardPart("row.listitem") { if (swipe != null) Swipeable(swipe, place, item) else item() }
     }
 }
 
-/**
- * A list whose rows the person puts in order or moves to another list. A row
- * is dragged by its handle: it lifts and follows the finger, and where it is
- * let go is told to the core as a move; the order then drawn is the one the
- * core's next screen holds. The handle's menu, and TalkBack's actions, move a
- * row up, down, or to another list of the same group.
- */
-@Composable
-internal fun ReorderList(node: Navree.List, place: Place, modifier: Modifier = Modifier) {
-    val ui = LocalUi.current
-    val listId = node.id
-    val ids = node.children.filterIsInstance<Navree.Row>().mapNotNull { it.id }
-    val targets = remember(place.screen.screen, node) { ReorderRules.targets(place.screen.screen?.body, node) }
-    var dragging by remember { mutableStateOf<String?>(null) }
-    var offset by remember { mutableFloatStateOf(0f) }
-    var rowPx by remember { mutableIntStateOf(1) }
-    val lifted = with(LocalDensity.current) { 6.dp.toPx() }
-    val upWords = stringResource(R.string.navree_move_up)
-    val downWords = stringResource(R.string.navree_move_down)
-    val toWords = targets.map { (_, name) -> stringResource(R.string.navree_move_to, name) }
-
-    fun move(item: String, to: Navree.List, before: String?) {
-        val from = listId ?: return
-        val target = to.id ?: return
-        ui.send(Events.move(place.id, item, from, target, before))
-    }
-
-    fun step(item: String, steps: Int) {
-        val landing = ReorderRules.landing(ids, ids.indexOf(item), steps) ?: return
-        move(item, node, landing.before)
-    }
-
-    Column(modifier) {
-        for (child in node.children) {
-            if (child !is Navree.Row || !ReorderRules.draggable(node, child)) {
-                if (child is Navree.Row) RowView(child, place, Group.None) else NodeView(child, place)
-                continue
-            }
-            val id = child.id ?: continue
-            val index = ids.indexOf(id)
-            val up = index > 0
-            val down = index in 0 until ids.lastIndex
-            val moves = buildList {
-                if (up) add(CustomAccessibilityAction(upWords) { step(id, -1); true })
-                if (down) add(CustomAccessibilityAction(downWords) { step(id, 1); true })
-                targets.forEachIndexed { at, (list, _) -> add(CustomAccessibilityAction(toWords[at]) { move(id, list, null); true }) }
-            }
-            val held = dragging == id
-            Box(
-                Modifier
-                    .zIndex(if (held) 1f else 0f)
-                    .onSizeChanged { rowPx = it.height }
-                    .graphicsLayer {
-                        translationY = if (held) offset else 0f
-                        shadowElevation = if (held) lifted else 0f
-                    },
-            ) {
-                RowView(
-                    child,
-                    place,
-                    Group.None,
-                    modifier = if (held) Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh) else Modifier,
-                    moves = moves,
-                    handle = {
-                        var open by remember { mutableStateOf(false) }
-                        Box {
-                            Icon(
-                                Glyphs.DragHandle,
-                                contentDescription = stringResource(R.string.navree_drag_handle),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .pointerInput(id, ids) {
-                                        detectDragGestures(
-                                            onDragStart = {
-                                                dragging = id
-                                                offset = 0f
-                                            },
-                                            onDrag = { change, amount ->
-                                                change.consume()
-                                                offset += amount.y
-                                            },
-                                            onDragEnd = {
-                                                step(id, ReorderRules.steps(offset, rowPx))
-                                                dragging = null
-                                                offset = 0f
-                                            },
-                                            onDragCancel = {
-                                                dragging = null
-                                                offset = 0f
-                                            },
-                                        )
-                                    }
-                                    .clickable(role = Role.Button) { open = true }
-                                    .padding(12.dp),
-                            )
-                            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                                if (up) DropdownMenuItem(text = { Text(upWords) }, onClick = { open = false; step(id, -1) })
-                                if (down) DropdownMenuItem(text = { Text(downWords) }, onClick = { open = false; step(id, 1) })
-                                targets.forEachIndexed { at, (list, _) ->
-                                    DropdownMenuItem(text = { Text(toWords[at]) }, onClick = { open = false; move(id, list, null) })
-                                }
-                            }
-                        }
-                    },
-                )
-            }
-        }
-    }
-}
-
-/** Whether a row leads to the screen shown beside the list. */
-private fun isSelected(action: Navree.Action?, place: Place): Boolean {
-    val shown = place.selectedUrl ?: return false
+/** Whether a row is the open one beside the list: the first that leads to the page shown (the one `place` found), by its id where it has one. */
+private fun isSelected(action: Navree.Action?, rowId: String?, place: Place): Boolean {
     val href = (action as? Navree.Action.Navigate)?.href ?: return false
-    return shown == href || shown.endsWith(href)
+    val open = place.openRow ?: return false
+    return if (open.id != null && rowId != null) open.id == rowId else href == open.href
 }
 
 /**
@@ -421,14 +320,16 @@ private fun Swipeable(action: Navree.Button, place: Place, content: @Composable 
 @Composable
 internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Place) {
     val ui = LocalUi.current
-    val folded = remember(table.columns, row) { ListRules.asListRow(table.columns, row) }
+    // A list with the width of a wide window shows every state column a row has, not only the ones a phone keeps.
+    val wide = LocalPane.current >= ListRules.TABLE_FROM_DP
+    val folded = remember(table.columns, row, wide) { ListRules.asListRow(table.columns, row, wide) }
     val action = folded.action
     val words = folded.lines.filterIsInstance<Navree.Text>().map { it.value }.filter { it.isNotBlank() }
     val parts = folded.lines.filter { it !is Navree.Text }
     val below = ListRules.trailingBelow(ui.window)
     var menuOpen by remember { mutableStateOf(false) }
     val extra = rowActions(folded.menu, place)
-    val selected = isSelected(action, place)
+    val selected = isSelected(action, row.id, place)
     val choosing = Choosing.of(table, place)
     val choosable = SelectionRules.choosable(table, row)
     val ticked = SelectionRules.ticked(table, row, choosing.across)
@@ -458,7 +359,16 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
             table.select != null -> {
                 {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = ticked, onCheckedChange = if (choosable) tick else null, enabled = choosable)
+                        // A box that cannot be ticked (its row cannot be chosen) has no touch slot of its own: it keeps the room of the others, so every row starts alike.
+                        Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp), contentAlignment = Alignment.Center) {
+                            Checkbox(
+                                checked = ticked,
+                                onCheckedChange = if (choosable) tick else null,
+                                enabled = choosable,
+                                // The box says whose it is: the row's words are another stop.
+                                modifier = Modifier.semantics { folded.headline?.let { contentDescription = it } },
+                            )
+                        }
                         folded.leading?.let { leading -> Leading(leading, place) }
                     }
                 }
@@ -479,7 +389,10 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
         } else {
             null
         },
-        colors = ListItemDefaults.colors(containerColor = if (selected || ticked) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent),
+        // A row that is chosen (ticked) and the row that is open beside the list are told apart: the open one is a neutral step above the page.
+        colors = ListItemDefaults.colors(
+            containerColor = if (ticked) MaterialTheme.colorScheme.secondaryContainer else if (selected) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent,
+        ),
         modifier = Modifier
             .then(
                 when {
@@ -502,6 +415,9 @@ internal fun TableItemView(table: Navree.Table, row: Navree.TableRow, place: Pla
     )
 }
 
+/** The space after each column of a table: a figure at the end of its column does not touch the words that start the next. */
+private val TABLE_GUTTER = 16.dp
+
 /** A table where there is room for one: a header row, then rows of cells with a line between. */
 @Composable
 internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Modifier) {
@@ -518,6 +434,7 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
     val choosable = node.rows.filter { SelectionRules.choosable(node, it) }
     val tickedCount = choosable.count { SelectionRules.ticked(node, it, choosing.across) }
     val chooseAll = stringResource(R.string.navree_choose_all_shown)
+    val weights = remember(node.columns, node.rows) { ListRules.columnWeights(node.columns, node.rows) }
     Column(modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             if (node.select != null) {
@@ -533,11 +450,11 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                 )
             }
             node.columns.forEachIndexed { index, column ->
-                if (ListRules.columnWeight(column) == 0f) return@forEachIndexed
+                if (weights[index] == 0f) return@forEachIndexed
                 val sort = column.sort
                 Row(
                     modifier = Modifier
-                        .weight(ListRules.columnWeight(column))
+                        .weight(weights[index])
                         .then(
                             if (sort != null) {
                                 Modifier.clickable(role = Role.Button) {
@@ -551,7 +468,7 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                                 Modifier
                             },
                         )
-                        .padding(end = 8.dp)
+                        .padding(end = TABLE_GUTTER)
                         .padding(vertical = 8.dp)
                         .semantics {
                             heading()
@@ -594,19 +511,22 @@ internal fun TableView(node: Navree.Table, place: Place, modifier: Modifier = Mo
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (node.select != null) {
-                    Checkbox(
-                        checked = ticked,
-                        onCheckedChange = if (canTick) ({ on: Boolean -> choosing.tick(ui, place, row, on) }) else null,
-                        enabled = canTick,
-                    )
+                    Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp), contentAlignment = Alignment.Center) {
+                        Checkbox(
+                            checked = ticked,
+                            onCheckedChange = if (canTick) ({ on: Boolean -> choosing.tick(ui, place, row, on) }) else null,
+                            enabled = canTick,
+                            modifier = Modifier.semantics { ListRules.asListRow(node.columns, row).headline?.let { contentDescription = it } },
+                        )
+                    }
                 }
                 val titleAt = node.columns.indexOfFirst { it.role == Navree.ColumnRole.TITLE }.takeIf { it >= 0 } ?: 0
                 row.cells.forEachIndexed { index, cell ->
                     val end = atEnd(index)
                     val column = node.columns.getOrNull(index)
-                    val weight = ListRules.columnWeight(column)
+                    val weight = weights.getOrElse(index) { 1f }
                     if (weight == 0f) return@forEachIndexed
-                    Box(Modifier.weight(weight).padding(end = 8.dp), contentAlignment = if (end) Alignment.CenterEnd else Alignment.CenterStart) {
+                    Box(Modifier.weight(weight).padding(end = TABLE_GUTTER), contentAlignment = if (end) Alignment.CenterEnd else Alignment.CenterStart) {
                         when {
                             // The naming cell of a row that opens by itself is words, not a second control.
                             index == titleAt && action != null -> {
@@ -665,7 +585,7 @@ private fun TableCell(cell: Navree.Node, end: Boolean, place: Place) {
             overflow = TextOverflow.Ellipsis,
         )
         is Navree.Badge -> StatusView(cell)
-        else -> NodeView(cell, place.copy(inCell = true))
+        else -> CompositionLocalProvider(LocalEndAligned provides end) { NodeView(cell, place.copy(inCell = true)) }
     }
 }
 
