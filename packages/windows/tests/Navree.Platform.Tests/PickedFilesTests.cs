@@ -362,6 +362,28 @@ public sealed class PickedFilesTests
     }
 
     [TestMethod]
+    public async Task The_end_of_a_session_is_not_said_to_be_done_while_a_copy_of_a_photo_is_still_on_disk()
+    {
+        PickedFiles files = new(copies);
+        Picked picked = await files.AddAsync(Write("Moga.jpg", PhotoWithPlace()), Rule(), 0, CancellationToken.None);
+        Assert.IsNotNull(picked.File);
+        string copy = Directory.GetFiles(copies).Single();
+
+        // Another program holds the copy in a way that does not let it be deleted.
+        using (FileStream other = new(copy, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            _ = await Assert.ThrowsExactlyAsync<IOException>(() => files.ClearAsync(), "the files' step said it was done while a copy of a photo was on disk");
+            Assert.IsNull(files.Open(picked.File.Token), "a file of the session that ended is still handed to a request");
+            Assert.AreEqual(1, CopiesOnDisk());
+        }
+
+        // Once it is let go the copy goes: at the next end of a session, or when the registry is made at the next start.
+        _ = new PickedFiles(copies);
+        Assert.AreEqual(0, CopiesOnDisk());
+        await files.ClearAsync().WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [TestMethod]
     public async Task A_copy_still_being_made_when_the_session_ends_is_gone_when_the_clear_is_done_and_does_not_come_back()
     {
         PickedFiles files = new(copies);

@@ -42,7 +42,7 @@ public sealed class PickedFiles
     {
         ArgumentException.ThrowIfNullOrEmpty(copiesFolder);
         folder = copiesFolder;
-        Purge();
+        _ = Purge();
     }
 
     /// <summary>Raised, on whatever thread was reading, with the tokens of files that could not be opened when a request was written.</summary>
@@ -250,16 +250,38 @@ public sealed class PickedFiles
     /// Lets go of every file and deletes every copy: the end of a session. A file still being added is not held when it is done, and deletes
     /// its own copy then; <see cref="ClearAsync"/> also waits for that.
     /// </summary>
-    public void Clear() => _ = End();
+    public void Clear() => _ = End(out _);
 
     /// <summary>
     /// Lets go of every file and deletes every copy, and completes when no file is still being added: a photograph that was being read when
-    /// the session ended has by then been refused and its copy deleted, so nothing of the session is on disk.
+    /// the session ended has by then been refused and its copy deleted, so nothing of the session is on disk. When a copy is still there
+    /// after that (another program holds it), this fails: the sign-out it is a step of is then not finished, and the copy goes at the next
+    /// start, when the registry is made.
     /// </summary>
     /// <returns>When it is so.</returns>
-    public Task ClearAsync() => End();
+    /// <exception cref="IOException">A copy of the session that ended could not be deleted.</exception>
+    public async Task ClearAsync()
+    {
+        await End(out IReadOnlyList<string> left).ConfigureAwait(false);
 
-    private Task End()
+        // Only the copies that were there when the session ended: what whoever comes next has chosen since is theirs.
+        int still = 0;
+        foreach (string file in left)
+        {
+            DeleteQuietly(file);
+            if (File.Exists(file))
+            {
+                still++;
+            }
+        }
+
+        if (still > 0)
+        {
+            throw new IOException(still + " copies of chosen files could not be deleted");
+        }
+    }
+
+    private Task End(out IReadOnlyList<string> left)
     {
         Task none;
         lock (gate)
@@ -271,12 +293,14 @@ public sealed class PickedFiles
                 : (noneAdding ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
         }
 
-        Purge();
+        left = Purge();
         return none;
     }
 
-    private void Purge()
+    // Deletes every copy in the folder; the ones that are still there afterwards.
+    private List<string> Purge()
     {
+        List<string> left = [];
         try
         {
             if (Directory.Exists(folder))
@@ -284,6 +308,10 @@ public sealed class PickedFiles
                 foreach (string file in Directory.GetFiles(folder))
                 {
                     DeleteQuietly(file);
+                    if (File.Exists(file))
+                    {
+                        left.Add(file);
+                    }
                 }
             }
         }
@@ -291,6 +319,8 @@ public sealed class PickedFiles
         {
             // A folder that cannot be listed holds nothing this client can delete; the next purge tries again.
         }
+
+        return left;
     }
 
     private static void DeleteQuietly(string path)
