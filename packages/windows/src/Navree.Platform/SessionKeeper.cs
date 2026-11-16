@@ -54,7 +54,11 @@ public sealed class SessionKeeper : IDisposable
         }
     }
 
-    /// <summary>Whether a sign-out's steps are running.</summary>
+    /// <summary>
+    /// Whether a sign-out is taking away what could rebuild the session: from its start until the cookie file and what the web view keeps are
+    /// gone (the steps before the core is told). Nothing may reach the network for the web view meanwhile; after it, a page of whoever comes
+    /// next loads into an emptied profile.
+    /// </summary>
     public bool Wiping
     {
         get
@@ -253,14 +257,13 @@ public sealed class SessionKeeper : IDisposable
                 ],
                 each).ConfigureAwait(false);
         }
-        catch (Exception)
+        finally
         {
+            // What could rebuild the session is gone (or its step is reported): a page of whoever comes next may load.
             lock (gate)
             {
                 wiping--;
             }
-
-            throw;
         }
 
         bool letGo = tellCore is null;
@@ -294,23 +297,12 @@ public sealed class SessionKeeper : IDisposable
             }
         }
 
-        WipeReport rest;
-        try
-        {
-            rest = await Wipe.RunAsync(
-                [
-                    new WipeStep("what is kept on the device", () => disk.RunAsync(kept.Clear)),
-                    .. afterKept,
-                ],
-                each).ConfigureAwait(false);
-        }
-        finally
-        {
-            lock (gate)
-            {
-                wiping--;
-            }
-        }
+        WipeReport rest = await Wipe.RunAsync(
+            [
+                new WipeStep("what is kept on the device", () => disk.RunAsync(kept.Clear)),
+                .. afterKept,
+            ],
+            each).ConfigureAwait(false);
 
         WipeReport report = new([.. first.Done, .. rest.Done], [.. failed, .. first.Failed, .. rest.Failed]);
         if (report.Complete)

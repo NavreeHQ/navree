@@ -109,13 +109,12 @@ internal sealed class WebPage : Grid
 
         WebPage[] started = [.. kept.Where(page => !page.closed && page.view.CoreWebView2 is not null)];
 
-        // A page that still runs could write again into what is about to be cleared: each is stopped and emptied first, and shown again only
-        // when its screen asks for it.
+        // A page that still runs could write again into what is about to be cleared: each is stopped and emptied first, and stays empty (the
+        // screens it stood for go when the core lets go of the person; a page of whoever comes next is a new one).
         foreach (WebPage page in started)
         {
             try
             {
-                page.loaded = null;
                 page.view.CoreWebView2!.Stop();
                 page.view.CoreWebView2.Navigate("about:blank");
             }
@@ -228,6 +227,14 @@ internal sealed class WebPage : Grid
             // The web view is started and held once, whatever came while it was being started; the newest wish is the one carried out.
             starting ??= StartAsync();
             await starting;
+
+            // A page asked for while a sign-out is still taking away what the web view keeps loads when that is done, not into it (its
+            // requests would be refused meanwhile). The wait is bounded by the wipe's own limit for its steps.
+            for (int waited = 0; host.Wiping && waited < 400; waited++)
+            {
+                await Task.Delay(50);
+            }
+
             if (wanted != web || !host.Origins.Ours(web.Url))
             {
                 return;

@@ -293,6 +293,49 @@ public sealed class SessionTests
     }
 
     [TestMethod]
+    public async Task The_web_view_is_held_off_the_network_only_until_what_could_rebuild_the_session_is_gone()
+    {
+        string folder = Folder();
+        try
+        {
+            (SessionKeeper keeper, _, _, _) = Start(folder);
+            using (keeper)
+            {
+                bool heldDuringWebStep = false;
+                bool heldAfter = true;
+                bool heldWhileTellingCore = true;
+                WipeReport report = await keeper.EndAsync(
+                    () => Expect.That(keeper.Wiping, "the web view may reach the network as the sign-out begins"),
+                    () =>
+                    {
+                        heldWhileTellingCore = keeper.Wiping;
+                        return Task.CompletedTask;
+                    },
+                    [new WipeStep("what the web view keeps", () =>
+                    {
+                        heldDuringWebStep = keeper.Wiping;
+                        return Task.CompletedTask;
+                    })],
+                    [new WipeStep("the pictures", () =>
+                    {
+                        heldAfter = keeper.Wiping;
+                        return Task.CompletedTask;
+                    })]).WaitAsync(Short);
+
+                Expect.That(report.Complete, "the wipe finished");
+                Expect.That(heldDuringWebStep, "the web view may reach the network while what it keeps is being cleared");
+                Expect.That(!heldWhileTellingCore, "a page of whoever comes next is held off the network while the core is told");
+                Expect.That(!heldAfter, "a page of whoever comes next is held off the network after the web view's data is gone");
+                Expect.That(!keeper.Wiping, "held off the network after the sign-out");
+            }
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
     public async Task What_is_written_after_the_core_ended_the_session_is_kept()
     {
         string folder = Folder();
