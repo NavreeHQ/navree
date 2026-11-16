@@ -98,18 +98,21 @@ class WebPageGuardsTest {
         }
     }
 
-    private fun waitFor(seconds: Int, what: () -> Boolean): Boolean {
-        val end = System.currentTimeMillis() + seconds * 1_000L
-        while (System.currentTimeMillis() < end) {
-            if (what()) return true
-            Thread.sleep(250)
-        }
-        return what()
+    /**
+     * Waits up to [seconds] for [what], letting the composition draw meanwhile: the test's clock moves only while the
+     * test waits through the rule, so a web view a state change brings in is made only then.
+     */
+    private fun waitFor(seconds: Int, what: () -> Boolean): Boolean = try {
+        compose.waitUntil(seconds * 1_000L) { what() }
+        true
+    } catch (_: Throwable) {
+        what()
     }
 
     /** The failed screen is shown, and in the time a page takes to load the app's server is asked nothing. */
     private fun refused(what: String) {
         compose.waitUntil(10_000) { compose.onAllNodes(androidx.compose.ui.test.hasText("Try again")).fetchSemanticsNodes().isNotEmpty() }
+        // As long as a page takes to be asked for once the guard is there, with the composition drawing all the while.
         assertTrue("the page was asked for with $what: $asked", !waitFor(5) { asked.isNotEmpty() })
         Shots.put("web-page-$what.txt", "a web page with $what\nthe app's server was asked: $asked\nworkers asked ${workersAsked.get()}, documents asked ${documentsAsked.get()}\n")
         assertEquals("the app's server was asked nothing", emptyList<String>(), asked.toList())
