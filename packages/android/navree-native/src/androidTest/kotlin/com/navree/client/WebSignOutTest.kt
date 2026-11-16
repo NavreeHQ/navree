@@ -118,13 +118,15 @@ class WebSignOutTest {
         compose.runOnUiThread { shown = "$base$path" }
     }
 
-    private fun waitFor(seconds: Int, what: () -> Boolean): Boolean {
-        val end = System.currentTimeMillis() + seconds * 1_000L
-        while (System.currentTimeMillis() < end) {
-            if (what()) return true
-            Thread.sleep(250)
-        }
-        return what()
+    /**
+     * Waits up to [seconds] for [what], letting the composition draw meanwhile: the test's clock moves only while the
+     * test waits through the rule, so a web view a state change brings in is made only then.
+     */
+    private fun waitFor(seconds: Int, what: () -> Boolean): Boolean = try {
+        compose.waitUntil(seconds * 1_000L) { what() }
+        true
+    } catch (_: Throwable) {
+        what()
     }
 
     private fun start() {
