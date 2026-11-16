@@ -179,23 +179,38 @@ internal sealed class FileFieldView
 
         // The button stays enabled while the picker is open: a button that is disabled under the focus gives the focus away to some other part of the window.
         picking = true;
+        IReadOnlyList<string> paths;
         try
         {
             FilePickRequest request = new(FileRules.PickerTypes(input.Accept), input.Multiple, label);
-            IReadOnlyList<string> paths = await host.FilePicker.PickAsync(request, choose.XamlRoot.ContentIslandEnvironment.AppWindowId);
-            picking = false;
-            await OfferAsync(paths);
+            paths = await host.FilePicker.PickAsync(request, choose.XamlRoot.ContentIslandEnvironment.AppWindowId);
+        }
+        catch (Exception)
+        {
+            // The click's handler is the system's: nothing may escape it, or the app ends. The person is told, and can try again or drop the files.
+            Say([FileRules.PickerFailedWords]);
+            return;
         }
         finally
         {
             picking = false;
         }
+
+        try
+        {
+            await OfferAsync(paths);
+        }
+        catch (Exception)
+        {
+            Say([FileRules.PickerFailedWords]);
+        }
     }
 
-    /// <summary>Offers files to the field, as the picker does and a drop does: each is checked, the ones that fit are added, and the others are told in words.</summary>
+    /// <summary>Offers files to the field, as the picker does and a drop does: each is checked, the ones that fit are added, and the others are told in words. It never throws.</summary>
     /// <param name="paths">Where the files are.</param>
+    /// <param name="said">Words already to say, for things a drop could not offer.</param>
     /// <returns>When every file has been looked at and the core told.</returns>
-    internal async Task OfferAsync(IEnumerable<string> paths)
+    internal async Task OfferAsync(IEnumerable<string> paths, IReadOnlyList<string>? said = null)
     {
         if (context.Host is not { } host)
         {
@@ -205,13 +220,21 @@ internal sealed class FileFieldView
         IReadOnlyList<FileRef> before = Held;
         List<FileRef> list = input.Multiple ? [.. before] : [];
         long bytes = list.Sum(file => file.Size);
-        List<string> words = [];
+        List<string> words = [.. said ?? []];
         List<FileRef> added = [];
         foreach (string path in paths)
         {
             FieldRule rule = Rule;
             long total = bytes;
-            Picked result = await Task.Run(() => host.Files.AddAsync(path, rule, total, CancellationToken.None));
+            Picked result;
+            try
+            {
+                result = await Task.Run(() => host.Files.AddAsync(path, rule, total, CancellationToken.None));
+            }
+            catch (Exception)
+            {
+                result = new Picked(null, FileRules.DisplayName(path ?? string.Empty) + " could not be read, so it was not added.");
+            }
             if (result.File is { } file)
             {
                 if (!input.Multiple && added.Count > 0)
@@ -233,8 +256,7 @@ internal sealed class FileFieldView
             }
         }
 
-        refusal.Text = string.Join(" ", words);
-        refusal.Visibility = words.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        Say(words);
         if (added.Count > 0)
         {
             if (!input.Multiple)
@@ -251,6 +273,13 @@ internal sealed class FileFieldView
         {
             Render();
         }
+    }
+
+    // The words under the row: why things were not added, or nothing.
+    private void Say(IReadOnlyList<string> words)
+    {
+        refusal.Text = string.Join(" ", words);
+        refusal.Visibility = words.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void Remove(FileRef file)
@@ -285,33 +314,35 @@ internal sealed class FileFieldView
         }
     }
 
+    // The system's handler of a drop: nothing may escape it, or the app ends. What has a path on this computer is offered; a folder, or a thing
+    // with none (a file on a phone seen through Explorer, a link from a browser), is said in words (FileRules.Sort).
     private async void OnDrop(object sender, DragEventArgs e)
     {
-        if (!Enabled || !e.DataView.Contains(StandardDataFormats.StorageItems))
-        {
-            return;
-        }
-
-        DragOperationDeferral deferral = e.GetDeferral();
-        IReadOnlyList<IStorageItem> items;
         try
         {
-            items = await e.DataView.GetStorageItemsAsync();
-        }
-        finally
-        {
-            deferral.Complete();
-        }
+            if (!Enabled || !e.DataView.Contains(StandardDataFormats.StorageItems))
+            {
+                return;
+            }
 
-        List<string> paths = [.. items.OfType<IStorageFile>().Select(file => file.Path)];
-        if (paths.Count == 0)
-        {
-            refusal.Text = "Folders cannot be added; choose the files in it.";
-            refusal.Visibility = Visibility.Visible;
-            return;
-        }
+            DragOperationDeferral deferral = e.GetDeferral();
+            IReadOnlyList<IStorageItem> items;
+            try
+            {
+                items = await e.DataView.GetStorageItemsAsync();
+            }
+            finally
+            {
+                deferral.Complete();
+            }
 
-        await OfferAsync(paths);
+            Dropped dropped = FileRules.Sort([.. items.Select(item => new DroppedItem(item.Name, item.Path, item is IStorageFolder))]);
+            await OfferAsync(dropped.Paths, dropped.Words);
+        }
+        catch (Exception)
+        {
+            Say([FileRules.DropFailedWords]);
+        }
     }
 
     // ---- drawing -------------------------------------------------------------------------------------------------

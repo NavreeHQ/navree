@@ -50,8 +50,13 @@ public sealed class PickedFiles
     /// <returns>The file held, or the words it was refused with.</returns>
     public async Task<Picked> AddAsync(string path, FieldRule rule, long heldBytes, CancellationToken cancel)
     {
-        ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(rule);
+        if (!FileRules.IsOnThisComputer(path))
+        {
+            // A thing with no path here (dropped from a phone, a link from a browser) is refused with words, never an error.
+            return new Picked(null, FileRules.NotHere(path is null ? null : FileRules.DisplayName(path)));
+        }
+
         string name = FileRules.DisplayName(path);
         try
         {

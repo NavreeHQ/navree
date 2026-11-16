@@ -135,6 +135,21 @@ public sealed class PickedFilesTests
     }
 
     [TestMethod]
+    [DataRow("")]
+    [DataRow("   ")]
+    [DataRow("Lohri at Jalandhar.jpg")]
+    [DataRow("https://charkha.example/photos/lohri.jpg")]
+    public async Task An_item_with_no_path_on_this_computer_is_refused_with_words(string path)
+    {
+        PickedFiles files = new(copies);
+
+        Picked picked = await files.AddAsync(path, Rule(accept: null), 0, CancellationToken.None);
+
+        Assert.IsNull(picked.File);
+        StringAssert.Contains(picked.Refusal, "is not a file on this computer");
+    }
+
+    [TestMethod]
     public async Task A_photo_has_its_place_taken_out_in_a_copy_that_is_what_is_sent_and_the_original_is_left_alone()
     {
         PickedFiles files = new(copies);
