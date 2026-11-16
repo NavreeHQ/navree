@@ -154,9 +154,9 @@ impl ModuleBuilder {
     /// packages may not configure a module of another crate, nor provide a
     /// permission check, the route authorizer, the authenticator, a sign-in
     /// strategy, the workspace gate, where native clients sign in, the options
-    /// of access, workspaces, authentication or the admin panel, or the app's
-    /// shell, nor hook a model of another crate: the boot fails, and the app
-    /// registers the plugin's from a module of its own.
+    /// of access, workspaces, authentication or the admin panel, the app's
+    /// shell, or its clock, nor hook a model of another crate: the boot fails,
+    /// and the app registers the plugin's from a module of its own.
     ///
     /// ```no_run
     /// use navree_kernel::{Module, ModuleBuilder, Navree};

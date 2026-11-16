@@ -1315,6 +1315,7 @@ fn the_app_only_providers_match_their_types() {
         type_name::<navree::helm::HelmOptions>(),
         type_name::<navree::ui::Shell>(),
         type_name::<dyn navree::ui::NativeShellPart>(),
+        type_name::<dyn navree::contracts::Clock>(),
     ]
     .into_iter()
     .collect();

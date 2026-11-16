@@ -523,13 +523,14 @@ pub const RESERVED_NAMESPACES: &[&str] = &[
     "workspace",
 ];
 
-/// The providers that decide who may do what in the app, and the app's
-/// shell, by type name: a module of a plugin that is not first-party may not
-/// register one (value, factory or multi-binding, exported or not). Not
+/// The providers that decide who may do what in the app, the app's shell and
+/// its clock, by type name: a module of a plugin that is not first-party may
+/// not register one (value, factory or multi-binding, exported or not). Not
 /// public API; Navree's own crates and tests use it.
 pub const APP_ONLY_PROVIDERS: &[&str] = &[
     "dyn navree_access::workspace_gate::WorkspaceGate",
     "dyn navree_auth::strategy::Strategy",
+    "dyn navree_contracts::clock::Clock",
     "dyn navree_contracts::permissions::PermissionCheck",
     "dyn navree_http::auth::Authenticator",
     "dyn navree_http::auth::RouteAuthorizer",
@@ -550,6 +551,9 @@ pub(crate) fn app_only_role(provider: &str) -> &'static str {
             "which decides who enters the app's workspaces"
         }
         "dyn navree_auth::strategy::Strategy" => "which signs requests in",
+        "dyn navree_contracts::clock::Clock" => {
+            "which sets the time the app's sessions, signed links and invitations expire by"
+        }
         "dyn navree_contracts::permissions::PermissionCheck" => {
             "which answers the app's permission checks"
         }

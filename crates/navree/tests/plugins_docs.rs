@@ -807,10 +807,11 @@ fn a_plugin_that_configures_a_module_only_it_imports_is_refused_once() {
 /// The guard plugin: its crate is this module, so the app's modules at the top of the file are in
 /// no crate it names.
 mod navree_plugin_guard {
+    use chrono::{DateTime, Utc};
     use http::request::Parts;
     use navree::BoxFuture;
     use navree::auth::{AuthError, SignInAttempt, SignInPolicy, Strategy};
-    use navree::contracts::{PermissionCheck, Principal};
+    use navree::contracts::{Clock, FixedClock, PermissionCheck, Principal};
     use navree::kernel::KernelError;
     use navree::plugin::PluginInfo;
     use navree::prelude::*;
@@ -911,6 +912,13 @@ mod navree_plugin_guard {
         })
     }
 
+    /// The plugin's clock, stopped at the start of 1970, for a module of the app to register.
+    pub fn clock() -> Factory<dyn Clock> {
+        Factory::new(|_| async {
+            Ok(Arc::new(FixedClock::new(DateTime::<Utc>::UNIX_EPOCH)) as Arc<dyn Clock>)
+        })
+    }
+
     /// A module of the plugin's crate that names no plugin, and registers what `.0` adds.
     pub struct Helper(pub fn(&mut ModuleBuilder));
 
@@ -961,6 +969,7 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
 
     use navree::access::{AbilityFactory, WorkspaceGate};
     use navree::auth::{AuthOptions, Strategy};
+    use navree::contracts::Clock;
     use navree::helm::HelmOptions;
     use navree::http::{Authenticator, RouteAuthorizer};
     use navree::ui::NativeShellPart;
@@ -1057,6 +1066,14 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
             }),
             type_name::<dyn NativeShellPart>(),
             "which says where the app's native clients sign in",
+        ),
+        // The time the app's sessions, signed links and invitations expire by.
+        (
+            Provides(|m| {
+                m.factory(navree_plugin_guard::clock());
+            }),
+            type_name::<dyn Clock>(),
+            "which sets the time the app's sessions, signed links and invitations expire by",
         ),
     ];
     for (provides, provider, role) in cases {
@@ -1223,6 +1240,31 @@ async fn the_app_may_register_where_a_plugin_says_native_clients_sign_in() {
     let mut expected = NativeShellParts::default();
     expected.sign_in(NativeSignIn::new("/guard/start", "/guard/exchange"));
     assert_eq!(said, expected);
+
+    app.shutdown().await.unwrap();
+}
+
+/// A module of the app: it registers the guard plugin's clock as the app's.
+struct GuardClock;
+
+impl Module for GuardClock {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.factory(navree_plugin_guard::clock());
+    }
+}
+
+#[tokio::test]
+async fn the_app_may_register_a_plugins_clock() {
+    use chrono::{DateTime, Utc};
+    use navree::contracts::Clock;
+
+    let app = TestApp::builder()
+        .module(navree_plugin_guard::Provides(|_| {}))
+        .module(GuardClock)
+        .build()
+        .await;
+    let clock = app.get::<dyn Clock>().await;
+    assert_eq!(clock.now(), DateTime::<Utc>::UNIX_EPOCH);
 
     app.shutdown().await.unwrap();
 }
