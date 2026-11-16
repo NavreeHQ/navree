@@ -156,6 +156,14 @@ object Shots {
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_TAB)
     }
 
+    /** Shift+Tab, delivered the same way. */
+    fun pressShiftTab() {
+        val now = android.os.SystemClock.uptimeMillis()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.sendKeySync(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_TAB, 0, android.view.KeyEvent.META_SHIFT_ON))
+        instrumentation.sendKeySync(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_TAB, 0, android.view.KeyEvent.META_SHIFT_ON))
+    }
+
     /** Writes a text file beside the pictures, by way of the app's own folder the shell can read. */
     fun put(file: String, text: String) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

@@ -248,7 +248,7 @@ class LiveDemosTest {
 
     /**
      * With the focus nowhere, a keyboard's Tab reaches the screen's search
-     * within as many presses as the screen has things that can take the focus:
+     * within a few presses (14, the navigation and the top bar), however many rows a table has loaded:
      * the search stands at the top of the screen and Tab goes by where things
      * stand. When it does not, the message names every focusable thing and every
      * stop.
@@ -264,7 +264,8 @@ class LiveDemosTest {
         assertTrue("the inventory has things that can take the focus", things.isNotEmpty())
         val stops = ArrayList<String>()
         var reached = false
-        repeat(things.size + 2) {
+        // The top bar is among the first parts of a window whatever the content holds: a few presses, not as many as there are rows.
+        repeat(14) {
             if (reached) return@repeat
             Shots.pressTab()
             compose.waitForIdle()
@@ -274,6 +275,57 @@ class LiveDemosTest {
             if (node.any { nameOf(it).contains("Search", ignoreCase = true) }) reached = true
         }
         assertTrue("Search was never a stop in ${stops.size} presses (the screen has ${things.size} things that can take the focus: $things); the stops were $stops", reached)
+    }
+
+    private val navigation = listOf("Navigation menu", "Dashboard", "Orders", "Inventory")
+
+    /**
+     * The order a keyboard goes through a window in is the order a person reads
+     * it: on a phone the top bar, the content, the bottom navigation; on a
+     * tablet the navigation at the start, the top bar, the content. With the
+     * focus nowhere the first stop is the first part's; Search comes before any
+     * row of the table; Shift+Tab from the first stop goes to the last part.
+     */
+    @Test
+    fun aKeyboardGoesThroughAWindowInTheOrderItIsRead() {
+        val origin = arguments.getString("store")
+        assumeTrue("no store demo was named", origin != null)
+        val app = start(origin!!)
+        send(app, Events.select(2))
+        settled(app)
+        val tablet = Shots.device.startsWith("tablet")
+        val stops = ArrayList<String>()
+        repeat(14) {
+            Shots.pressTab()
+            compose.waitForIdle()
+            stops += compose.onAllNodes(isFocused()).fetchSemanticsNodes().joinToString(" + ") { nameOf(it).take(28) }
+        }
+        val first = stops.first()
+        if (tablet) {
+            assertTrue("on a tablet the first stop is in the navigation at the start: $stops", navigation.any { first.startsWith(it) })
+        } else {
+            assertTrue("on a phone the first stop is in the top bar, where Search and the account are: $stops", first.contains("Search", ignoreCase = true) || first.contains("Account", ignoreCase = true))
+        }
+        val search = stops.indexOfFirst { it.contains("Search", ignoreCase = true) }
+        val row = stops.indexOfFirst { it.startsWith("Units of") || it.contains("Restock") }
+        assertTrue("Search is a stop within 14 presses: $stops", search >= 0)
+        assertTrue("Search comes before any row of the table: $stops", row < 0 || search < row)
+        // Shift+Tab from the first stop goes round to the last part: the navigation on a phone, the content on a tablet.
+        // The walk went on; go back to the first stop by Shift+Tab, then once more.
+        var at = stops.size - 1
+        while (at > 0) {
+            Shots.pressShiftTab()
+            compose.waitForIdle()
+            at--
+        }
+        Shots.pressShiftTab()
+        compose.waitForIdle()
+        val last = compose.onAllNodes(isFocused()).fetchSemanticsNodes().joinToString(" + ") { nameOf(it).take(28) }
+        if (tablet) {
+            assertTrue("on a tablet Shift+Tab from the first stop goes to the content, not to a bar: $last", last.isNotEmpty() && navigation.none { last.startsWith(it) } && !last.contains("Search", ignoreCase = true) && !last.contains("Account", ignoreCase = true))
+        } else {
+            assertTrue("on a phone Shift+Tab from the first stop goes to the bottom navigation: $last", navigation.drop(1).any { last.startsWith(it) })
+        }
     }
 
     /** After a field's keyboard action ends the typing, the out-of-sight place that takes the focus is not a stop of the next Tab. */
