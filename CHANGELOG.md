@@ -7,6 +7,34 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Upgrading
+
+An app with no plugin other than the framework's own packages boots and registers as in 1.2. What to
+look at when you update:
+
+- Sign-in links and codes mailed before the upgrade no longer sign in. A person asks for a new one.
+- During a rolling upgrade, add a module's custom telemetry events and a registered notification
+  channel only once every process runs 1.3: a 1.2 process cannot read a telemetry event of type
+  `custom`, or a `notify.send` job whose `via` is `registered`.
+- `Channel`, `CacheStoreKind`, `QueueDriver`, `SmsDriverKind` and `WhatsAppDriverKind` serialize as
+  their name in every format. A value 1.2 wrote in a binary format such as bincode or postcard does
+  not read back in 1.3. JSON, TOML and the configuration read as before.
+- Several types have new inherent methods, listed under Changed: `plugin`, `plugins`,
+  `plugin_report`, `named`, `type_name`, `namespace`, `contributed`, `context` and the new items of
+  `navree::ui`. If a trait of your own gives one of these types a method of the same name, call
+  yours through the trait (`MyExt::plugin(m, ..)`), because Rust picks the inherent method first.
+  The same holds for the new provided methods `Notification::to_channel` and
+  `Notifiable::route_channel`.
+- A glob import of `navree::ui::*`, `navree::contracts::*` or `navree::view::*` brings in new
+  names. Where one of them meets a name of your own, import the one you mean by name.
+- A tool that reads `introspect --json` or `check --graph` by position finds more entries: the
+  commands `plugins` and `plugin:publish`, and one more provider for each module that takes a
+  driver and for `WorkspaceModule`. Read the entries by name.
+- `ConfigSection::schema()` reports the driver settings as `FieldType::Driver`, where it reported
+  `Choice`, and the enums listed under Changed gain a variant.
+- `Storage::new` refuses a disk whose driver is not built in. Let `StorageModule` build such a
+  disk at boot.
+
 ### Added
 
 - Plugins: a module names itself a plugin with `m.plugin(navree::plugin_info!())`. The boot checks
