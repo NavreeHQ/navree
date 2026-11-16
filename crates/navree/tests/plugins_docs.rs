@@ -1113,5 +1113,8 @@ fn a_plugin_that_hooks_another_crates_model_fails_validate() {
         .expect_err("the plugin hooks the member row")
         .to_string();
     assert_eq!(multi, refused);
-    assert!(!BUILT.load(Ordering::SeqCst), "the hook's factory never ran");
+    assert!(
+        !BUILT.load(Ordering::SeqCst),
+        "the hook's factory never ran"
+    );
 }

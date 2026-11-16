@@ -592,7 +592,12 @@ mod tests {
     #[test]
     fn a_plugin_is_first_party_by_its_modules_own_types_and_keeps_its_reserved_namespace() {
         let version = env!("CARGO_PKG_VERSION");
-        let notes = PluginInfo::new("navree-plugin-flags", "navree_kernel", "flag_notes", version);
+        let notes = PluginInfo::new(
+            "navree-plugin-flags",
+            "navree_kernel",
+            "flag_notes",
+            version,
+        );
         let roots: Vec<Box<dyn Module>> = vec![Box::new(Names(notes))];
         let mut graph = Graph::build(&roots, &[]).expect("a community plugin in its own namespace");
         let m = graph

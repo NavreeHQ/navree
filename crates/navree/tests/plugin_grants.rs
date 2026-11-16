@@ -104,11 +104,7 @@ impl Subject for Report {
 
 /// The app's deals, scoped to workspaces.
 #[derive(Clone, Debug, PartialEq, Eq, navree::orm::Model, serde::Serialize)]
-#[model(
-    table = "deals",
-    subject = "Deal",
-    permission_prefix = "deals"
-)]
+#[model(table = "deals", subject = "Deal", permission_prefix = "deals")]
 struct Deal {
     id: Uuid,
     workspace_id: Uuid,

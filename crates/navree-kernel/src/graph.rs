@@ -952,7 +952,7 @@ impl Source<'_> {
     /// `std::any::type_name` of the module value, as it was passed.
     fn type_name(&self) -> &'static str {
         match self {
-            Source::Root(_, type_name) => *type_name,
+            Source::Root(_, type_name) => type_name,
             Source::Import(passed) => passed.type_name,
         }
     }

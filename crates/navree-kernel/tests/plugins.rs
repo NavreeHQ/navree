@@ -904,7 +904,11 @@ async fn a_wrapper_module_acts_for_the_plugin_that_imports_it_and_for_the_app_th
         Some("navree-plugin-notices")
     );
     assert_eq!(acting_for(&app, ModuleId::named::<String>("Outside")), None);
-    assert_eq!(acting_for(&app, ModuleId::of::<Shop>()), None, "not in the app");
+    assert_eq!(
+        acting_for(&app, ModuleId::of::<Shop>()),
+        None,
+        "not in the app"
+    );
 
     // The app imports it too: the app's.
     let app = Navree::app()
@@ -1127,8 +1131,12 @@ mod navree_plugin_forecast {
     use navree_kernel::{ConfiguredModule, Module, ModuleBuilder, PluginInfo};
 
     /// The plugin's info.
-    const FORECAST: PluginInfo =
-        PluginInfo::new("navree-plugin-forecast", module_path!(), "forecast", "1.0.0");
+    const FORECAST: PluginInfo = PluginInfo::new(
+        "navree-plugin-forecast",
+        module_path!(),
+        "forecast",
+        "1.0.0",
+    );
 
     /// The plugin's module: it names the plugin, then registers what its function adds.
     pub struct ForecastModule(pub fn(&mut ModuleBuilder));
@@ -1198,10 +1206,12 @@ fn a_plugin_configures_a_module_its_types_name() {
     Navree::app()
         .module(ForecastModule(|m| {
             m.import(ForecastStore::from_config())
-                .import(ConfiguredModule::<Holder<StoreOptions>, StoreOptions>::for_root(
-                    StoreOptions,
-                    |_, _| {},
-                ));
+                .import(
+                    ConfiguredModule::<Holder<StoreOptions>, StoreOptions>::for_root(
+                        StoreOptions,
+                        |_, _| {},
+                    ),
+                );
         }))
         .validate()
         .expect("its own store, and a module whose generic arguments name its crate");
