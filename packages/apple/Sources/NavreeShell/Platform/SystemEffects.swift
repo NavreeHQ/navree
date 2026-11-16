@@ -39,6 +39,8 @@ public final class SystemEffects: EffectRunner {
     private(set) var session: Int
     /// The client whose effects these are, once it has asked for one.
     private weak var client: NativeClient?
+    /// The clipboard a `copy` goes to: the system's, or a stand-in in tests.
+    var clipboard: any Clipboard = SystemClipboard()
     private var timers: [Int: Task<Void, Never>] = [:]
 
     static let log = Logger(subsystem: "com.navree.native", category: "effects")
@@ -208,7 +210,7 @@ public final class SystemEffects: EffectRunner {
                 AccessibilityNotification.Announcement(words).post()
             }
         case .copy(let text, let sensitive):
-            Self.copy(text, sensitive: sensitive)
+            clipboard.put(text, options: ClipboardRules.options(sensitive: sensitive))
         case .timer(let timer, let ms):
             timers[timer]?.cancel()
             timers[timer] = Task { [weak self, weak client] in
@@ -284,24 +286,6 @@ public final class SystemEffects: EffectRunner {
         case "medium": UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         default: UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
-        #endif
-    }
-
-    /// The clipboard. A secret stays on this device (no Universal Clipboard)
-    /// and is gone after a minute.
-    static func copy(_ text: String, sensitive: Bool) {
-        #if canImport(UIKit)
-        if sensitive {
-            UIPasteboard.general.setItems(
-                [[UTType.utf8PlainText.identifier: text]],
-                options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(60)]
-            )
-        } else {
-            UIPasteboard.general.string = text
-        }
-        #else
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
         #endif
     }
 
