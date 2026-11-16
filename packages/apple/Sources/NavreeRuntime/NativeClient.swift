@@ -92,7 +92,10 @@ public final class NativeClient {
 
     /// Starts the app once: plainly, or from what was kept of a launch the
     /// system ended (the core checks the snapshot and starts plainly when it
-    /// is not for this launch). Then everything is read once.
+    /// is not for this launch). Then everything is read once. What was kept
+    /// is written into the event as it is, so bytes that do not read (a
+    /// damaged file) make an event the core cannot take: the app then starts
+    /// plainly, as it does with nothing kept.
     public func begin(restoring snapshot: Data? = nil) {
         guard !began else { return }
         began = true
@@ -165,6 +168,10 @@ public final class NativeClient {
             noteStop(words)
         case .failure(let error):
             problem("the core did not take `\(event.tag)`: \(error)")
+            // What was kept did not read, so nothing was started: a plain start is next.
+            if event.tag == CoreEvent.restore(snapshot: Data()).tag {
+                queue.insert((CoreEvent.start.json, CoreEvent.start.tag), at: 0)
+            }
         case .success(let update):
             apply(update.changed)
             // A core found stopped while its parts were read: nothing it asked is carried out.

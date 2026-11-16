@@ -233,4 +233,19 @@ struct LoopTests {
         #expect(top.title == "Order CS-20481")
         #expect(again.client.nav.front == stack.last)
     }
+
+    @Test func whatWasKeptThatDoesNotReadStartsTheAppPlainly() throws {
+        for damaged in [Data("{".utf8), Data(), Data(#"{"version":1,"#.utf8), Data([0xFF, 0xFE])] {
+            let h = try Harness()
+            h.client.begin(restoring: damaged)
+            #expect(h.client.began)
+            // The core could not take the event, and was started plainly at once.
+            #expect(h.problems.list.count == 1, "\(h.problems.list)")
+            #expect(h.problems.list.first?.contains("restore") == true)
+            #expect(h.recorder.takeFetches().map(\.2) == ["https://shop.example/_navree/native/shell"])
+            try h.answer(1, with: "store/shell.json")
+            #expect(h.client.nav.stage == .ready)
+            #expect(h.client.screen(1)?.loading == true)
+        }
+    }
 }
