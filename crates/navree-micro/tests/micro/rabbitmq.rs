@@ -98,10 +98,7 @@ fn broker() -> Option<String> {
 
 #[tokio::test]
 async fn an_unreachable_broker_is_a_transport_error() {
-    let unused = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap();
+    let (_held, unused) = crate::support::nobody_listens();
     let transport = RabbitmqTransport::new(
         format!("amqp://guest:guest@{unused}/%2f"),
         &RabbitmqOptions::default(),

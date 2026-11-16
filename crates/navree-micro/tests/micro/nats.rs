@@ -96,10 +96,7 @@ async fn two_apps_talk_over_core_nats() {
 
 #[tokio::test]
 async fn a_server_that_is_not_there_fails_the_call_as_a_transport_error() {
-    let unused = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap();
+    let (_held, unused) = crate::support::nobody_listens();
     let transport = NatsTransport::new(
         format!("nats://{unused}"),
         &core_nats(),

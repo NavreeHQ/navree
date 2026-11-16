@@ -429,10 +429,7 @@ async fn sasl_plain_authenticates_and_wrong_credentials_fail() {
 
 #[tokio::test]
 async fn the_unreachable_broker_fails_calls() {
-    let unused = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap();
+    let (_held, unused) = crate::support::nobody_listens();
     let shop = KafkaTransport::new(
         unused.to_string(),
         &options(),
@@ -455,10 +452,7 @@ async fn the_unreachable_broker_fails_calls() {
 /// says it is subscribed at once and keeps trying.
 #[tokio::test]
 async fn a_listener_goes_on_while_the_broker_is_unreachable() {
-    let unused = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap();
+    let (_held, unused) = crate::support::nobody_listens();
     let billing = KafkaTransport::new(
         unused.to_string(),
         &options(),
