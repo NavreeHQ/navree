@@ -4210,6 +4210,136 @@ mod tests {
         );
     }
 
+    /// With no callback in the shell, a link on the app's scheme that carries
+    /// both a `code` and a `state` is a sign-in's return whether a sign-in is
+    /// open or not: the open sign-in takes it when the `state` is its own,
+    /// and otherwise it is dropped and said, never opened as a page. That is
+    /// the return of a sign-in another took the place of, one that comes
+    /// twice, and one that comes after its sign-in ended.
+    #[test]
+    fn a_return_of_a_sign_in_that_is_over_is_never_a_page() {
+        let first = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30";
+        let second = "65666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091929394";
+        let (state_one, state_two) = ("ISIjJCUmJygpKissLS4vMA", "hYaHiImKi4yNjo-QkZKTlA");
+        let config = serde_json::json!({
+            "origin": "https://shop.example",
+            "app_id": "CharkhaSupply_8wekyb3d8bbwe",
+            "client": {"platform": "windows", "form": "desktop", "vocab": 0, "text_percent": 100},
+            "sign_in": {"callback": "charkha", "paths": ["/sign-in"]},
+            "deep_links": "origin",
+        });
+        let mut core = Core::new(serde_json::from_value(config).expect("a configuration"));
+        core.send(Event::Start);
+        for (request, body) in [
+            (
+                1,
+                include_str!("../transcripts/fixtures/made/shell-app-nobody-windows.json"),
+            ),
+            (2, include_str!("../transcripts/fixtures/made/welcome.json")),
+        ] {
+            core.send(Event::Response(Response {
+                request,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: body.to_owned(),
+                ..Response::default()
+            }));
+        }
+        let begin = |core: &mut Core, random: u64, bytes: &str| {
+            core.send(Event::Act {
+                screen: Some(1),
+                action: serde_json::from_value(
+                    serde_json::json!({"t": "navigate", "href": "/sign-in"}),
+                )
+                .expect("an action"),
+                form: None,
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            });
+            core.send(Event::Random {
+                request: random,
+                bytes: bytes.to_owned(),
+            });
+        };
+        let link = |core: &mut Core, url: String| core.send(Event::OpenLink { url });
+        let fetched = |update: &Update| -> Vec<String> {
+            update
+                .effects
+                .iter()
+                .filter_map(|effect| match effect {
+                    Effect::Fetch(request) => Some(request.url.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let said = |update: &Update| {
+            update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Report { what, .. } if what == "sign_in"))
+        };
+        // Two taps: the second sign-in takes the place of the first.
+        begin(&mut core, 1, first);
+        begin(&mut core, 2, second);
+        let replaced = link(
+            &mut core,
+            format!("charkha://signed-in?code=OLD0000001&state={state_one}"),
+        );
+        assert!(
+            fetched(&replaced).is_empty() && said(&replaced),
+            "the replaced one's return is dropped and said: {replaced:?}"
+        );
+        // The second one's return is taken, and comes again while it is exchanged.
+        let taken = link(
+            &mut core,
+            format!("charkha://signed-in?code=NEW0000002&state={state_two}"),
+        );
+        assert!(
+            fetched(&taken).iter().any(|url| url.ends_with("/exchange")),
+            "{taken:?}"
+        );
+        let twice = link(
+            &mut core,
+            format!("charkha://signed-in?code=NEW0000002&state={state_two}"),
+        );
+        assert!(
+            fetched(&twice).is_empty() && said(&twice),
+            "the duplicate is dropped and said: {twice:?}"
+        );
+        // After the sign-in ended.
+        let exchange = core.inner.next.request;
+        core.send(Event::Response(Response {
+            request: exchange,
+            status: 400,
+            ..Response::default()
+        }));
+        let late = link(
+            &mut core,
+            format!("charkha://signed-in?code=NEW0000002&state={state_two}"),
+        );
+        assert!(
+            fetched(&late).is_empty() && said(&late),
+            "a late one is dropped and said: {late:?}"
+        );
+        // A link with a code alone, a state alone or an error alone is an ordinary link.
+        for url in [
+            "charkha://orders/7?code=DIWALI24",
+            "charkha://orders/7?state=open",
+            "charkha://orders/7?error=none",
+        ] {
+            let update = link(&mut core, url.to_owned());
+            assert!(
+                fetched(&update)
+                    .iter()
+                    .any(|asked| asked.starts_with("https://shop.example/orders/7")),
+                "{url} is opened: {update:?}"
+            );
+        }
+    }
+
     /// A link that arrives from outside is followed as a link on the web is:
     /// it is only ever a read, a `get` of a page, never a write and never a
     /// form sent. An address on the hand-over's own way back is never opened

@@ -328,12 +328,14 @@ impl Core {
         });
     }
 
-    /// Whether an address is a sign-in session's return. The shell's
-    /// callback is the hand-over's own way back: an address there is a return
-    /// whether or not a sign-in is open, and is never a page. With no callback
-    /// named, a link on the app's own scheme is a return only while a sign-in
-    /// is open and only with that sign-in's `state`; any other link is an
-    /// ordinary link.
+    /// Whether an address is a sign-in session's return, and so never a
+    /// page. The shell's callback is the hand-over's own way back: an address
+    /// there is a return whether or not a sign-in is open. With no callback
+    /// named, a link on the app's own scheme is one when it carries both a
+    /// `code` and a `state`, whether or not a sign-in is open (the return of
+    /// one that was replaced, came twice or is over), and when it carries the
+    /// `state` of the sign-in that is open; a link with a `code` alone, a
+    /// `state` alone or an `error` alone is an ordinary link.
     pub(crate) fn is_return(&self, address: &str) -> bool {
         let Some(routes) = &self.inner.sign_in else {
             return false;
@@ -341,11 +343,15 @@ impl Core {
         if routes.callback.is_some() {
             return self.on_the_way_back(address);
         }
-        match &self.inner.hand_over {
-            Some(HandOver::Open { state, .. }) => {
-                self.on_the_way_back(address)
-                    && query_value(address, "state").is_some_and(|returned| same(&returned, state))
-            }
+        if !self.on_the_way_back(address) {
+            return false;
+        }
+        let state = query_value(address, "state");
+        if state.is_some() && query_value(address, "code").is_some() {
+            return true;
+        }
+        match (&self.inner.hand_over, state) {
+            (Some(HandOver::Open { state: open, .. }), Some(returned)) => same(&returned, open),
             _ => false,
         }
     }
