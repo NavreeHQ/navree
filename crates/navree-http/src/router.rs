@@ -52,8 +52,11 @@ use crate::{
 /// names counts) or has an invalid path, or when routes need an
 /// [`Authenticator`] or a [`RouteAuthorizer`] that is not registered; and
 /// when a mount has no access declaration, needs either of them, has a bad
-/// prefix or overlaps a route or another mount. `HttpModule` runs this check
-/// at boot, so these mistakes stop the app before it binds a port.
+/// prefix or overlaps a route or another mount. It fails the same way when a
+/// module of a plugin that is not one of the framework's own packages answers
+/// the app's errors or adds a layer for every request, which only the app
+/// does. `HttpModule` runs this check at boot, so these mistakes stop the app
+/// before it binds a port.
 pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
     let server = ctx
         .get::<HttpServer>()
@@ -88,6 +91,9 @@ pub async fn build_router(ctx: &AppContext) -> Result<AppRouter, BoxError> {
     // wherever that module is in the order.
     let contributed = ctx.contributions::<crate::ErrorPagesHandle>();
     let mut errors = error_pages_of_plugins(ctx, &contributed);
+    // Only the app adds a layer for every request: such a layer from a module of a plugin
+    // the kernel does not find first-party stops the boot too, in any slot.
+    errors.extend(layers_of_plugins(ctx));
     let pages = contributed.into_iter().next().map(|c| (*c.value).clone());
     let mut routes_router = routing::Router::new();
     // With such a module, a second router with the same paths that finds a request's route
@@ -208,6 +214,30 @@ fn error_pages_of_plugins(
             Some(format!(
                 "plugin `{}` answers the app's errors (m.error_pages in `{}`); only the app chooses that: register the plugin's pages from a module of the app",
                 plugin.info.name, pages.module.name
+            ))
+        })
+        .collect()
+}
+
+/// The refusal of each [`GlobalLayer`] that a module of a plugin the kernel does not find
+/// first-party contributed, in module order and in every slot, [`LayerSlot::Edge`]
+/// included: such a layer runs on every request before the route's access check, so only
+/// the app adds one, from a module of its own. A plugin's own routes and mounts carry
+/// layers of their own, which are not refused. A module of the app, a module that acts for
+/// no plugin and a first-party plugin's module are not refused.
+fn layers_of_plugins(ctx: &AppContext) -> Vec<String> {
+    let contributed = ctx.contributions::<GlobalLayer>();
+    if contributed.is_empty() {
+        return Vec::new();
+    }
+    let plugins = ctx.plugins().plugins;
+    contributed
+        .iter()
+        .filter_map(|layer| {
+            let plugin = community_plugin(&plugins, layer.module.id)?;
+            Some(format!(
+                "plugin `{}` adds the app-wide layer `{}` in `{}`, which runs before every route's access check; only a module of the app adds app-wide layers: remove the plugin or update it to a version that leaves the layer to the app, and to use the plugin's layer, add it from a module of the app (m.http_layer)",
+                plugin.info.name, layer.value.name, layer.module.name
             ))
         })
         .collect()

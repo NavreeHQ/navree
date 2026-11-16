@@ -108,6 +108,10 @@ pub type ApplyLayer =
 /// per app, so it should not have side effects, and it must only add
 /// layers: the router already has navree's single 404 fallback.
 ///
+/// Only the app adds middleware that runs on every request: a module of a
+/// plugin that is not one of the framework's own packages stops the boot
+/// when it contributes one.
+///
 /// Inside the pipeline the request extensions already hold the
 /// `AppContext`, the `navree_contracts::RequestId` and the [`ClientIp`](crate::ClientIp);
 /// from the `AuthContext` slot inward they also hold the
@@ -183,6 +187,12 @@ pub trait ModuleBuilderHttpExt {
     fn controller<C: Controller + Injectable>(&mut self) -> &mut Self;
 
     /// Adds app-wide middleware in a [`LayerSlot`].
+    ///
+    /// Only the app adds middleware that runs on every request: a module of a
+    /// plugin that is not one of the framework's own packages stops the boot
+    /// when it calls this. A plugin ships its layer as a function, the app
+    /// adds it with one line, and a plugin's own routes and mounts may carry
+    /// layers of their own (`Endpoint::layer`, `Mount`).
     fn http_layer(&mut self, layer: GlobalLayer) -> &mut Self;
 
     /// Maps errors of type `E` found in a 500 [`AppError`]'s source chain to

@@ -14,23 +14,19 @@
 use std::any::TypeId;
 use std::marker::PhantomData;
 use std::sync::Mutex;
-use std::time::Duration;
 
 use http::Method;
 use navree::config::ConfigSection;
 use navree::contracts::{PermissionCheck, permitted};
 use navree::crypto::generate_key;
 use navree::db::Db;
-use navree::http::extract::Request;
-use navree::http::{AppRouter, Controller, FallibleLayer, GlobalLayer, LayerSlot, Mount, RouteDef};
+use navree::http::{Controller, GlobalLayer, RouteDef};
 use navree::kernel::ModuleId;
-use navree::plugin::prelude::*;
-use navree::plugin::{ClientModule, PluginInfo};
+use navree::plugin::PluginInfo;
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
 use navree::ui::{AppShell, Shell, Text};
 use navree::workspace::{Members, NewWorkspace, WorkspaceRole, Workspaces};
-use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -38,71 +34,92 @@ use uuid::Uuid;
 // existing-crates: a ledger plugin that connects an existing crate
 // ---------------------------------------------------------------------------
 
-/// The `khata` section.
-#[derive(Clone, Deserialize, ConfigSection)]
-#[config(key = "khata")]
-pub struct KhataOptions {
-    /// Where the ledger service answers.
-    pub base_url: String,
-}
+/// The ledger plugin of the page, a community plugin whose crate is this module. A test
+/// binary is one crate, so the plugin names this module as its crate where the page's plugin
+/// writes `navree::plugin_info!(namespace = "khata")` in a crate of its own; the app's
+/// `AppModule` below is in no crate the plugin names.
+mod khata {
+    use std::time::Duration;
 
-/// The client the ledger crate gives.
-pub struct KhataClient {
-    pub base_url: String,
-}
+    use navree::config::ConfigSection;
+    use navree::http::extract::Request;
+    use navree::http::{AppRouter, FallibleLayer, GlobalLayer, LayerSlot, Mount};
+    use navree::plugin::prelude::*;
+    use navree::plugin::{ClientModule, PluginInfo};
+    use navree::prelude::*;
+    use serde::Deserialize;
 
-/// The ledger crate's client as a module of the plugin.
-pub fn khata_client() -> ClientModule<KhataClient, KhataOptions> {
-    ClientModule::<KhataClient>::new("khata")
-        .options::<KhataOptions>()
-        .connect(|options, _resolver| async move {
-            Ok(KhataClient {
-                base_url: options.base_url.clone(),
+    /// The plugin's info: in the page, `navree::plugin_info!(namespace = "khata")` in the
+    /// plugin's own crate.
+    const KHATA: PluginInfo =
+        PluginInfo::new("navree-plugin-khata", module_path!(), "khata", "1.0.0");
+
+    /// The `khata` section.
+    #[derive(Clone, Deserialize, ConfigSection)]
+    #[config(key = "khata")]
+    pub struct KhataOptions {
+        /// Where the ledger service answers.
+        pub base_url: String,
+    }
+
+    /// The client the ledger crate gives.
+    pub struct KhataClient {
+        pub base_url: String,
+    }
+
+    /// The ledger crate's client as a module of the plugin.
+    pub fn khata_client() -> ClientModule<KhataClient, KhataOptions> {
+        ClientModule::<KhataClient>::new("khata")
+            .options::<KhataOptions>()
+            .connect(|options, _resolver| async move {
+                Ok(KhataClient {
+                    base_url: options.base_url.clone(),
+                })
             })
+            .health(|client| async move {
+                if client.base_url.starts_with("https://") {
+                    Ok(())
+                } else {
+                    Err("the khata service is not on https".into())
+                }
+            })
+            .plugin(KHATA)
+    }
+
+    /// The ledger's entries: the service mounted under `/khata`.
+    async fn entries(request: Request) -> Result<String> {
+        let ctx = request
+            .extensions()
+            .get::<AppContext>()
+            .cloned()
+            .ok_or_else(|| AppError::internal("the request has no app context"))?;
+        let khata = ctx.get::<KhataClient>().await.map_err(AppError::internal)?;
+        Ok(format!("{} {}", khata.base_url, request.uri().path()))
+    }
+
+    /// The ledger's timeout for every request, which the app adds.
+    pub fn khata_timeout() -> GlobalLayer {
+        GlobalLayer::new(LayerSlot::Context, "khata-timeout", |_ctx, router| {
+            Ok(
+                router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
+                    Duration::from_secs(10),
+                ))),
+            )
         })
-        .health(|client| async move {
-            if client.base_url.starts_with("https://") {
-                Ok(())
-            } else {
-                Err("the khata service is not on https".into())
-            }
-        })
-        .plugin(navree::plugin_info!(namespace = "khata"))
-}
+    }
 
-/// The ledger's entries: the service mounted under `/khata`.
-async fn entries(request: Request) -> Result<String> {
-    let ctx = request
-        .extensions()
-        .get::<AppContext>()
-        .cloned()
-        .ok_or_else(|| AppError::internal("the request has no app context"))?;
-    let khata = ctx.get::<KhataClient>().await.map_err(AppError::internal)?;
-    Ok(format!("{} {}", khata.base_url, request.uri().path()))
-}
+    /// The plugin's own module: the ledger under `/khata` for signed-in users.
+    pub struct LedgerModule;
 
-/// The ledger's timeout for every request, which the app adds.
-pub fn khata_timeout() -> GlobalLayer {
-    GlobalLayer::new(LayerSlot::Context, "khata-timeout", |_ctx, router| {
-        Ok(
-            router.layer(FallibleLayer::new(tower::timeout::TimeoutLayer::new(
-                Duration::from_secs(10),
-            ))),
-        )
-    })
-}
-
-/// The plugin's own module: the ledger under `/khata` for signed-in users.
-pub struct LedgerModule;
-
-impl Module for LedgerModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(navree::plugin_info!(namespace = "khata"));
-        m.mount(
-            Mount::new("/khata", AppRouter::from_handler(entries))
-                .authenticated()
-                .throttle(60, Duration::from_secs(60)),
-        );
+    impl Module for LedgerModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(KHATA);
+            m.mount(
+                Mount::new("/khata", AppRouter::from_handler(entries))
+                    .authenticated()
+                    .throttle(60, Duration::from_secs(60)),
+            );
+        }
     }
 }
 
@@ -111,7 +128,7 @@ pub struct AppModule;
 
 impl Module for AppModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.http_layer(khata_timeout())
+        m.http_layer(khata::khata_timeout())
             .map_error::<tower::timeout::error::Elapsed>(|_| {
                 Some(AppError::service_unavailable("The khata took too long."))
             });
@@ -122,8 +139,8 @@ impl Module for AppModule {
 async fn the_existing_crates_page_examples_mount_inside_the_pipeline() {
     let app = TestApp::builder()
         .config("khata.base_url", "https://khata.example/ludhiana")
-        .module(khata_client())
-        .module(LedgerModule)
+        .module(khata::khata_client())
+        .module(khata::LedgerModule)
         .module(AppModule)
         .build()
         .await;
