@@ -17,6 +17,12 @@
 //!   is out cost one more after it lands. A stream that fails comes back
 //!   after 1 s, 2 s, 4 s … 30 s, and its regions then fetch once. Only the
 //!   screen in front holds streams, and a hidden app holds none.
+//! - What a stream says is taken by the page that is on the screen: while
+//!   the screen's page is on its way nothing is asked of the page that is
+//!   going, and once the new one is shown its live regions and lists ask
+//!   what they owe. A fetch the new page took away is no longer counted as
+//!   out. A screen that comes back to the front under a stream that is open
+//!   already (the screen over it kept it open) catches up at once.
 
 use navree_native::Screen;
 use navree_native::node::{Node, Region, Table};
@@ -290,9 +296,17 @@ impl Core {
         ) else {
             return;
         };
-        // The screen was asked for again, or a newer fetch of the region began.
-        if inner.visit != visit || inner.turns.get(region) != Some(&turn) {
+        // A newer fetch of the region began: it is the one that counts.
+        if inner.turns.get(region) != Some(&turn) {
             return;
+        }
+        // The screen was asked for again: this answer is of the page before.
+        // What the region heard meanwhile is asked of the page that comes.
+        if inner.visit != visit {
+            if let Some(sub) = inner.live.get_mut(region) {
+                sub.busy = false;
+            }
+            return self.live_owed(id);
         }
         if let Some(state) = view.regions.get_mut(region) {
             state.loading = false;
@@ -719,12 +733,36 @@ impl Core {
             self.effects.push(Effect::StreamClose { stream: stream.id });
             self.inner.streams.retain(|other| other.id != stream.id);
         }
-        let missed = self
-            .front()
+        let front = self.front();
+        let missed = front
             .and_then(|front| self.inner.screens.get(&front))
             .is_some_and(|inner| inner.missed);
+        if missed
+            && !wanted.is_empty()
+            && let Some(inner) = front.and_then(|front| self.inner.screens.get_mut(&front))
+        {
+            // What the screen in front may have missed is owed by each of its
+            // streams from here on: at once by one that is open (another
+            // screen kept it open), when it opens by one that is not. With no
+            // stream (the app is away) the screen keeps owing it.
+            inner.missed = false;
+        }
         for url in wanted {
-            if self.inner.streams.iter().any(|stream| stream.url == url) {
+            if let Some(at) = self
+                .inner
+                .streams
+                .iter()
+                .position(|stream| stream.url == url)
+            {
+                if missed {
+                    if self.inner.streams[at].open {
+                        if let Some(front) = front {
+                            self.catch_up(front, &url);
+                        }
+                    } else {
+                        self.inner.streams[at].missed = true;
+                    }
+                }
                 continue;
             }
             self.inner.next.stream += 1;
@@ -805,10 +843,73 @@ impl Core {
             inner.missed = false;
         }
         if missed {
-            for region in self.listeners(&url, None) {
-                self.live_fire(front, &region);
+            self.catch_up(front, &url);
+        }
+    }
+
+    /// The parts of the screen `id` that listen to the stream at `url` ask
+    /// again: it may have spoken while they could not hear it.
+    fn catch_up(&mut self, id: ScreenId, url: &str) {
+        for region in self.listeners(url, None) {
+            self.live_fire(id, &region);
+        }
+        self.lists_missed(id, url);
+    }
+
+    /// Whether the page of the screen `id` is being fetched: what its live
+    /// parts would ask now would be asked of the page that is going.
+    pub(crate) fn page_on_its_way(&self, id: ScreenId) -> bool {
+        self.inner
+            .pending
+            .values()
+            .any(|asked| matches!(asked.purpose, Pending::Page { screen, .. } if screen == id))
+    }
+
+    /// The fetches a fresh page has taken from under the live parts of the
+    /// screen `id` are over: none of them is out any more. What they heard
+    /// meanwhile stays owed.
+    pub(crate) fn live_fetches_dropped(&mut self, id: ScreenId) {
+        if let Some(inner) = self.inner.screens.get_mut(&id) {
+            for sub in inner.live.values_mut() {
+                sub.busy = false;
             }
-            self.lists_missed(front, &url);
+        }
+    }
+
+    /// Asks, of the page now on the screen `id`, what its live parts owe: a
+    /// stream spoke, or opened, while its page was on its way or while what
+    /// they asked was dropped. Nothing while a page is still on its way.
+    pub(crate) fn live_owed(&mut self, id: ScreenId) {
+        if self.page_on_its_way(id)
+            || !self
+                .view
+                .screens
+                .get(&id)
+                .is_some_and(|view| matches!(view.content, Content::Native { .. }))
+        {
+            return;
+        }
+        let Some(inner) = self.inner.screens.get(&id) else {
+            return;
+        };
+        let owed = |dirty: bool, busy: bool, timer: Option<u64>| dirty && !busy && timer.is_none();
+        let regions: Vec<String> = inner
+            .live
+            .iter()
+            .filter(|(_, sub)| owed(sub.dirty, sub.busy, sub.timer))
+            .map(|(region, _)| region.clone())
+            .collect();
+        let lists: Vec<String> = inner
+            .live_lists
+            .iter()
+            .filter(|(_, sub)| owed(sub.dirty, sub.busy, sub.timer))
+            .map(|(list, _)| list.clone())
+            .collect();
+        for region in regions {
+            self.live_fire(id, &region);
+        }
+        for list in lists {
+            self.ask_changes(id, &list);
         }
     }
 
@@ -888,13 +989,16 @@ impl Core {
     }
 
     /// Fetches a live region now, or, if its last fetch is still out, once more when it lands.
+    /// While the screen's page is on its way the fetch is owed, and asked of
+    /// the page that comes.
     pub(crate) fn live_fire(&mut self, id: ScreenId, region: &str) {
+        let waits = self.page_on_its_way(id);
         let Some(inner) = self.inner.screens.get_mut(&id) else {
             return;
         };
         let sub = inner.live.entry(region.to_owned()).or_default();
         sub.timer = None;
-        if sub.busy {
+        if sub.busy || waits {
             sub.dirty = true;
             return;
         }

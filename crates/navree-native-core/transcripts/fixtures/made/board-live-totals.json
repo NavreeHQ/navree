@@ -1,0 +1,23 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "",
+  "body": {
+   "t": "region",
+   "id": "totals",
+   "src": "/fragments/totals",
+   "live": {
+    "src": "/broadcasting/stream?topics=board",
+    "event": "board"
+   },
+   "children": [
+    {
+     "t": "text",
+     "value": "₹1,20,000 today"
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,154 @@
+{
+  "about": "A stream that speaks while the page it feeds is being fetched again. What it says is owed, not asked of the page that is going: once the new page is on the screen the region fetches itself and the list asks what changed since the new page's revision, and the region goes on hearing its stream afterwards.",
+  "steps": [
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The board: a region and a list, both kept up to date by one stream.",
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/board-live.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=board","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"stream","stream":1,"state":"open"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The person pulls to refresh: the page is on its way.",
+      "send": {"t":"refresh","screen":1},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The stream speaks meanwhile.",
+      "send": {"t":"stream","stream":1,"state":"event","name":"board"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"timer","timer":1,"ms":300},
+          {"t":"timer","timer":2,"ms":300}
+        ]
+      }
+    },
+    {
+      "note": "The quiet time is over: nothing is asked of the page that is going.",
+      "send": {"t":"timer","timer":1},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"timer","timer":2},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "The new page is on the screen: the region and the list ask now, the list since the new page's revision.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/board-live-later.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/fragments/totals","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","totals"]],"timeout_ms":15000},
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/board/changes?since=0000502","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","cards"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/board-live-totals.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/board-changes.json",
+      "expect": {
+        "changed": [
+          {"t":"redraw","screen":1,"id":"cards","rows":["card-2"],"gone":[]}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/1/content/screen/body/children/1/since","is":"0000503"}
+      ]
+    },
+    {
+      "note": "The stream speaks again: the region still hears it.",
+      "send": {"t":"stream","stream":1,"state":"event","name":"board"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"timer","timer":3,"ms":300},
+          {"t":"timer","timer":4,"ms":300}
+        ]
+      }
+    },
+    {
+      "send": {"t":"timer","timer":3},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/board/changes?since=0000503","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","cards"]],"timeout_ms":10000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"timer","timer":4},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/fragments/totals","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"],["x-navree-region","totals"]],"timeout_ms":15000}
+        ]
+      }
+    }
+  ]
+}

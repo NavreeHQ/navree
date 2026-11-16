@@ -2131,6 +2131,7 @@ impl Core {
             view.failure = None;
         }
         self.drop_pending(|purpose| matches!(purpose, Pending::Region { screen, .. } | Pending::More { screen, .. } if *screen == id));
+        self.live_fetches_dropped(id);
         self.reconcile(id, None);
         if !kept {
             for region in again {
@@ -2192,6 +2193,7 @@ impl Core {
             .find(|route| self.inner.origin.on_route(&route.matches, url))
             .is_none_or(|route| route.chrome);
         self.drop_pending(|purpose| matches!(purpose, Pending::Region { screen, .. } | Pending::More { screen, .. } if *screen == id));
+        self.live_fetches_dropped(id);
         self.touch_screen(id);
     }
 
@@ -2358,7 +2360,12 @@ impl Core {
                 turn,
                 more,
             } => self.options_answered(screen, visit, &form, &field, turn, more, answer),
-            Pending::Page { screen, visit } => self.page_answered(screen, visit, &asked, answer),
+            Pending::Page { screen, visit } => {
+                self.page_answered(screen, visit, &asked, answer);
+                // What its live parts heard while the page was on its way is
+                // asked of the page now on the screen.
+                self.live_owed(screen);
+            }
             Pending::Send {
                 screen,
                 visit,
