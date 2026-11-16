@@ -315,6 +315,46 @@ mod tests {
         assert!(!html.contains("data-ui-form"), "{html}");
     }
 
+    // A switcher that uses no option of the card draws, byte for byte, what
+    // it drew before the card existed: the outline button and the menu.
+    #[test]
+    fn a_switcher_with_no_card_draws_what_it_drew_before() {
+        let html = render(&Node::from(
+            WorkspaceSwitcher::new("Agra")
+                .workspace("agra", "Agra", true)
+                .workspace("gulati", "Gulati", false)
+                .label("Desks")
+                .csrf("tok")
+                .next("/deals"),
+        ));
+        assert_eq!(
+            html,
+            concat!(
+                r#"<button data-slot="button" data-variant="outline" type="button" id="ui-workspace-switcher-trigger" popovertarget="ui-workspace-switcher" aria-haspopup="dialog" title="Agra">"#,
+                r#"<span>Agra</span><svg data-slot="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg></button>"#,
+                r#"<div data-slot="popover-content" id="ui-workspace-switcher" popover="auto" role="dialog" tabindex="-1" aria-label="Desks" data-ui-place data-side="bottom" data-align="start">"#,
+                r#"<div data-slot="menu-links"><form method="post" action="/workspace/switch"><input type="hidden" name="_csrf" value="tok">"#,
+                r#"<input type="hidden" name="workspace" value="agra"><input type="hidden" name="next" value="/deals">"#,
+                r#"<button data-slot="menu-link" type="submit" data-active aria-current="true"><svg data-slot="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Agra</span></button></form>"#,
+                r#"<form method="post" action="/workspace/switch"><input type="hidden" name="_csrf" value="tok">"#,
+                r#"<input type="hidden" name="workspace" value="gulati"><input type="hidden" name="next" value="/deals">"#,
+                r#"<button data-slot="menu-link" type="submit"><span>Gulati</span></button></form></div></div>"#,
+            )
+        );
+        let empty = render(&Node::from(
+            WorkspaceSwitcher::new("Choose a workspace").id("ws"),
+        ));
+        assert_eq!(
+            empty,
+            concat!(
+                r#"<button data-slot="button" data-variant="outline" type="button" id="ws-trigger" popovertarget="ws" aria-haspopup="dialog" title="Choose a workspace">"#,
+                r#"<span>Choose a workspace</span><svg data-slot="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg></button>"#,
+                r#"<div data-slot="popover-content" id="ws" popover="auto" role="dialog" tabindex="-1" aria-label="Workspaces" data-ui-place data-side="bottom" data-align="start">"#,
+                r#"<div data-slot="menu-links"><span data-slot="menu-link" aria-disabled="true">No workspaces yet</span></div></div>"#,
+            )
+        );
+    }
+
     // No token, no field (an app on bearer tokens), and an empty
     // list says so.
     #[test]
