@@ -13,7 +13,11 @@ import java.util.Locale
  *
  * An origin of [also] whose host starts with `*.` stands for every host under
  * that name (a host `*.shop.example` covers `patiala.shop.example`), never for
- * a name that merely ends in the same letters. Plain `http` is an
+ * a name that merely ends in the same letters. The client does not know which
+ * names are public suffixes, where anybody can register a name: a pattern
+ * such as `*.co.in` or `*.github.io` reads, and makes every host under it the
+ * app's own, its pages, its requests and its cookies. Name the app's own
+ * registered domain (`*.shop.co.in`). Plain `http` is an
  * origin only for the machine itself (`localhost`, `127.0.0.1`, `[::1]`, and
  * `10.0.2.2`, the emulator's name for the machine it runs on), and only when
  * [loopbackHttp] says so, which a release build never does.
