@@ -42,11 +42,12 @@ private let measuredCircle: [(style: String, size: Double, weight: Double, boldT
         let outer = metrics.box / 24 * 20 + metrics.stroke
         #expect(abs(outer - size * 0.995) < 0.05 * size / 10)
         #expect(abs(metrics.stroke - size * 0.0831) < 0.01 * size / 10)
-        // The old drawing: a 20-point box at the body's 17 points, scaled
-        // alike, a 2-unit line.
-        let old = 20 * size / 17
-        #expect(metrics.box < old)
-        #expect(metrics.stroke < 2 * old / 24)
+        // Smaller and lighter than a 20-point box at the body's 17 points,
+        // scaled alike, with a 2-unit line: an icon drawn so stands out
+        // beside the system's symbols.
+        let heavy = 20 * size / 17
+        #expect(metrics.box < heavy)
+        #expect(metrics.stroke < 2 * heavy / 24)
     }
 }
 
@@ -93,7 +94,7 @@ private let measuredCircle: [(style: String, size: Double, weight: Double, boldT
     #expect(DrawnIcon.bar(.tabBar).pointSize == 23.4)
     let tab = DrawnIcon.metrics(pointSize: 23.4, weight: 0)
     #expect(abs(tab.box / 24 * 20 + tab.stroke - 23.3) < 0.2)
-    // The old image: a 24-point box with a 20-point icon in it in every bar.
+    // Never a 24-point box with a 20-point icon in it, whatever the bar.
     let mac = DrawnIcon.metrics(pointSize: 13, weight: 0, scale: .large)
     #expect(mac.box < 20)
 }

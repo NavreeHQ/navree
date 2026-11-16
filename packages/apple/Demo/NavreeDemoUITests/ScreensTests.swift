@@ -1,7 +1,7 @@
 import XCTest
 
 /// The store demo's screens, from its recorded answers, each saved as a
-/// picture: what a review against Apple's guidelines looks at.
+/// picture, to be held against Apple's guidelines.
 ///
 /// Every pass runs the screens marked as main; the light and dark passes run
 /// all of them.
