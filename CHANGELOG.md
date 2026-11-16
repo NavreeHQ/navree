@@ -306,6 +306,9 @@ every `@navree/*` package carries the same version.
 
 - Helm reports the real error when the app's templates cannot be built. It used to stop the boot
   saying the app needs `ViewModule`, although the app had it.
+- A lazy region whose fetch failed stayed marked busy (`aria-busy="true"`), so a screen reader was
+  told to wait for content that was not coming. A region that fails now drops the mark as it shows
+  the failure.
 
 ## [1.2.4] - 2026-11-15
 
