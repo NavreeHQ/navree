@@ -9373,6 +9373,7 @@ public static partial class Models
         Unknown,
         Apple,
         Android,
+        Windows,
     }
 
     /// <summary>Reads a <c>SignInPlatform</c>; a word it does not hold is <c>Unknown</c>.</summary>
@@ -9382,6 +9383,7 @@ public static partial class Models
             {
                 "apple" => SignInPlatform.Apple,
                 "android" => SignInPlatform.Android,
+                "windows" => SignInPlatform.Windows,
                 _ => SignInPlatform.Unknown,
             }
             : SignInPlatform.Unknown;
@@ -9392,6 +9394,7 @@ public static partial class Models
         {
             SignInPlatform.Apple => "apple",
             SignInPlatform.Android => "android",
+            SignInPlatform.Windows => "windows",
             _ => "",
         };
 
