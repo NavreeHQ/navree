@@ -64,18 +64,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -101,12 +104,12 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 /** What a field shows under itself: its errors if it has any, its help otherwise. */
-private class Support(val errors: List<String>, val help: String?) {
+internal class Support(val errors: List<String>, val help: String?) {
     val isError: Boolean get() = errors.isNotEmpty()
     val text: String? get() = if (isError) errors.joinToString(" ") else help
 }
 
-private fun support(field: Navree.Field, place: Place): Support = Support(place.errors(field), field.help)
+internal fun support(field: Navree.Field, place: Place): Support = Support(place.errors(field), field.help)
 
 @Composable
 private fun SupportText(support: Support, counter: String? = null) {
@@ -127,6 +130,8 @@ internal fun FieldView(field: Navree.Field, place: Place, modifier: Modifier = M
         is Navree.DateInput -> DateView(field, input, place, modifier)
         is Navree.RangeInput -> DateRangeView(field, input, place, modifier)
         is Navree.SliderInput -> SliderView(field, input, place, modifier)
+        is Navree.ColourInput -> ColourFieldView(field, input, place, modifier)
+        is Navree.FileInput -> FileFieldView(field, input, place, modifier)
         // A screen with an input this client cannot draw was shown in the web view instead.
         else -> Unit
     }
@@ -201,6 +206,9 @@ private fun isLast(field: Navree.Field, place: Place): Boolean {
 private fun TextFieldView(field: Navree.Field, input: Navree.TextInput, place: Place, modifier: Modifier) {
     val ui = LocalUi.current
     val focus = LocalFocusManager.current
+    val sink = LocalFocusSink.current
+    // The keyboard's own action ends the typing: the focus goes to the screen's sink, not to whatever the system finds first.
+    val finished: () -> Unit = { if (sink == null) focus.clearFocus() else sink.take() }
     val current = (place.value(field) as? FieldValue.Text)?.text ?: input.value
     var shown by remember { mutableStateOf(TextFieldValue(current, TextRange(current.length))) }
     val echo = remember { Echo() }
@@ -246,7 +254,7 @@ private fun TextFieldView(field: Navree.Field, input: Navree.TextInput, place: P
             },
         enabled = !field.disabled,
         // In a table's cell the column heading names the field; its own label is said to TalkBack only.
-        label = if (place.inCell) null else FormRules.label(field.label, field.required)?.let { label -> { Text(label) } },
+        label = if (place.inCell) null else FormRules.label(field.label, field.required)?.let { label -> { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
         placeholder = input.placeholder?.let { placeholder -> { Text(placeholder) } },
         prefix = input.prefix?.let { prefix -> { Text(prefix) } },
         suffix = input.suffix?.let { suffix -> { Text(suffix) } },
@@ -288,11 +296,11 @@ private fun TextFieldView(field: Navree.Field, input: Navree.TextInput, place: P
         ),
         keyboardActions = KeyboardActions(
             onDone = {
-                focus.clearFocus()
+                finished()
                 place.form?.let { ui.act(place, Navree.Action.Submit()) }
             },
             onSearch = {
-                focus.clearFocus()
+                finished()
                 place.form?.let { ui.act(place, Navree.Action.Submit()) }
             },
         ),
@@ -366,7 +374,7 @@ private fun FieldLabel(field: Navree.Field) {
 }
 
 @Composable
-private fun FieldSupport(support: Support) {
+internal fun FieldSupport(support: Support) {
     support.text?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = if (support.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -423,7 +431,7 @@ private fun ChoiceView(field: Navree.Field, input: Navree.ChoiceInput, place: Pl
                     onValueChange = {},
                     readOnly = true,
                     enabled = !field.disabled,
-                    label = FormRules.label(field.label, field.required)?.let { label -> { Text(label) } },
+                    label = FormRules.label(field.label, field.required)?.let { label -> { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                     placeholder = input.placeholder?.let { placeholder -> { Text(placeholder) } },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = open) },
                     supportingText = support.text?.let { text -> { Text(text) } },
@@ -487,7 +495,7 @@ private fun ChoiceView(field: Navree.Field, input: Navree.ChoiceInput, place: Pl
 
 /** A field that is filled by picking, not typing: it reads like a text field and opens its picker when touched. */
 @Composable
-private fun PickerField(
+internal fun PickerField(
     field: Navree.Field,
     text: String,
     placeholder: String?,
@@ -498,22 +506,34 @@ private fun PickerField(
     label: String? = field.label,
     description: String? = null,
 ) {
+    // The field is what is seen; the layer over it takes the touch and is the one stop for a screen reader, named by the
+    // field's label and what it holds (a field and a button side by side would be two stops, one of them unnamed).
+    val said = listOfNotNull(FormRules.label(label, field.required), text.ifEmpty { placeholder }).filter { it.isNotBlank() }.joinToString(", ")
     Box(modifier) {
         OutlinedTextField(
             value = text,
             onValueChange = {},
             readOnly = true,
             enabled = !field.disabled,
-            label = FormRules.label(label, field.required)?.let { shown -> { Text(shown) } },
+            label = FormRules.label(label, field.required)?.let { shown -> { Text(shown, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
             placeholder = placeholder?.let { shown -> { Text(shown) } },
             trailingIcon = icon,
             supportingText = support.text?.let { shown -> { Text(shown) } },
             isError = support.isError,
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            // The layer over it is the one stop, for a keyboard's Tab as for a screen reader.
+            modifier = Modifier.fillMaxWidth().focusProperties { canFocus = false }.clearAndSetSemantics {},
         )
         // The field itself would open the keyboard; this takes the touch and opens the picker.
-        Box(Modifier.matchParentSize().clickable(enabled = !field.disabled, role = Role.Button, onClickLabel = description, onClick = onOpen))
+        Box(
+            Modifier
+                .matchParentSize()
+                .semantics {
+                    contentDescription = said
+                    if (support.isError) error(support.text ?: "")
+                }
+                .clickable(enabled = !field.disabled, role = Role.Button, onClickLabel = description, onClick = onOpen),
+        )
     }
 }
 
@@ -550,7 +570,7 @@ private fun ChoicesView(field: Navree.Field, input: Navree.ChoicesInput, place: 
             if (open) {
                 AlertDialog(
                     onDismissRequest = { open = false },
-                    title = field.label?.let { label -> { Text(label) } },
+                    title = field.label?.let { label -> { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
                     text = {
                         LazyColumn {
                             items(input.options) { option ->
