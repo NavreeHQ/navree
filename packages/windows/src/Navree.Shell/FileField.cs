@@ -179,15 +179,17 @@ internal sealed class FileFieldView
 
         // The button stays enabled while the picker is open: a button that is disabled under the focus gives the focus away to some other part of the window.
         picking = true;
-        IReadOnlyList<string> paths;
+        Dropped chosen;
         try
         {
+            // The click's handler is the system's: nothing may escape it, or the app ends. A picker that fails is said in words (FileOffers),
+            // and the person can try again or drop the files.
             FilePickRequest request = new(FileRules.PickerTypes(input.Accept), input.Multiple, label);
-            paths = await host.FilePicker.PickAsync(request, choose.XamlRoot.ContentIslandEnvironment.AppWindowId);
+            Microsoft.UI.WindowId window = choose.XamlRoot.ContentIslandEnvironment.AppWindowId;
+            chosen = await FileOffers.ChosenAsync(() => host.FilePicker.PickAsync(request, window));
         }
         catch (Exception)
         {
-            // The click's handler is the system's: nothing may escape it, or the app ends. The person is told, and can try again or drop the files.
             Say([FileRules.PickerFailedWords]);
             return;
         }
@@ -198,7 +200,7 @@ internal sealed class FileFieldView
 
         try
         {
-            await OfferAsync(paths);
+            await OfferAsync(chosen.Paths, chosen.Words);
         }
         catch (Exception)
         {
@@ -217,60 +219,12 @@ internal sealed class FileFieldView
             return;
         }
 
-        IReadOnlyList<FileRef> before = Held;
-        List<FileRef> list = input.Multiple ? [.. before] : [];
-        long bytes = list.Sum(file => file.Size);
-        List<string> words = [.. said ?? []];
-        List<FileRef> added = [];
-
-        // The session the person chose them in: a file still being looked at when that session ends is not held for whoever comes next.
-        long chosenIn = host.Files.Session;
-        foreach (string path in paths)
+        // Each file is checked and added, or said in words, where no window is needed (FileOffers), so that it is tested without one.
+        Offered offered = await FileOffers.AddAsync(host.Files, paths, Rule, Held, input.Multiple, said);
+        Say(offered.Words);
+        if (offered.Added.Count > 0)
         {
-            FieldRule rule = Rule;
-            long total = bytes;
-            Picked result;
-            try
-            {
-                result = await Task.Run(() => host.Files.AddAsync(path, rule, total, chosenIn, CancellationToken.None));
-            }
-            catch (Exception)
-            {
-                result = new Picked(null, FileRules.DisplayName(path ?? string.Empty) + " could not be read, so it was not added.");
-            }
-            if (result.File is { } file)
-            {
-                if (!input.Multiple && added.Count > 0)
-                {
-                    // A field that takes one file holds the last chosen.
-                    host.Files.Release(added[0].Token);
-                    added.Clear();
-                    list.Clear();
-                    bytes = 0;
-                }
-
-                added.Add(file);
-                list.Add(file);
-                bytes += file.Size;
-            }
-            else if (result.Refusal is { } why)
-            {
-                words.Add(why);
-            }
-        }
-
-        Say(words);
-        if (added.Count > 0)
-        {
-            if (!input.Multiple)
-            {
-                foreach (FileRef replaced in before)
-                {
-                    host.Files.Release(replaced.Token);
-                }
-            }
-
-            Commit(list);
+            Commit([.. offered.Held]);
         }
         else
         {
@@ -329,17 +283,18 @@ internal sealed class FileFieldView
             }
 
             DragOperationDeferral deferral = e.GetDeferral();
-            IReadOnlyList<IStorageItem> items;
+            DataPackageView dragged = e.DataView;
+            Dropped dropped;
             try
             {
-                items = await e.DataView.GetStorageItemsAsync();
+                // A drop the system cannot read (a thing with no file behind it) is said in words, not thrown (FileOffers).
+                dropped = await FileOffers.DroppedAsync(async () => [.. (await dragged.GetStorageItemsAsync()).Select(item => new DroppedItem(item.Name, item.Path, item is IStorageFolder))]);
             }
             finally
             {
                 deferral.Complete();
             }
 
-            Dropped dropped = FileRules.Sort([.. items.Select(item => new DroppedItem(item.Name, item.Path, item is IStorageFolder))]);
             await OfferAsync(dropped.Paths, dropped.Words);
         }
         catch (Exception)
