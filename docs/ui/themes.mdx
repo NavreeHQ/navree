@@ -267,7 +267,7 @@ pub fn agra_theme() -> Theme {
 | `shell_muted` | The sidebar's quieter text: the brand's context line, the user's email, group labels, counts | `--shell-muted` | `fg-3` |
 | `segment_track` | The track of segmented tabs | `--segment-track` | `ink-2` |
 | `segment_on` | The chosen tab on that track | `--segment-on` | `ink-3` |
-| `selected_row` | A selected row of a table | `--row-selected` | `ink-3` |
+| `selected_row` | A selected row of a table, and the row a data table's page shows (`.current_row`) | `--row-selected` | `ink-3` |
 | `inverse` | The inverse surface, below | | the other palette |
 
 `with_roles` checks each role as the token it stands in for: every text pair the components draw with that token is measured again with the role in its place, beside each other role that can sit with it (a ghost button on a card), in light and in dark. A role whose text falls short of WCAG AA is refused, named with its pair and ratio, such as `fg-3 on card is 3.21:1 in light`, as `ImportError::Fields`. (A role can't be named by a `Shortfall`, whose pair is made of tokens.) The short form, the stored theme (a `roles` object) and the Rust export carry the roles, and a part of the page drawn in another theme is drawn without them.

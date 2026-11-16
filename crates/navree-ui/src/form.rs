@@ -792,7 +792,7 @@ impl<T: FieldValue> FieldValue for Option<T> {
 
 /// What separates the values of a [`Many`] while a form is read: a control character
 /// no person types, so no value can hold it. A value that does is left out.
-const SEPARATOR: char = '\u{1f}';
+pub(crate) const SEPARATOR: char = '\u{1f}';
 
 /// The most values one list field takes from a post.
 pub const MAX_MANY: usize = 1000;

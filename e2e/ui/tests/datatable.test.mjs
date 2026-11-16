@@ -1427,6 +1427,110 @@ for (const browserName of browsers) {
       await close();
     });
 
+    test("the row a page shows: one, aria-current, the theme's colour for a chosen row, not selected; the header's text in the theme's style and the muted colour; light and dark, axe", async () => {
+      await reset();
+      for (const colorScheme of ["light", "dark"]) {
+        const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme });
+        const page = await context.newPage();
+        await page.goto(BASE + "/picked");
+        const seen = await page.evaluate(() => {
+          const root = document.getElementById("picked");
+          const current = root.querySelectorAll("tbody tr[aria-current]");
+          const colour = (value) => {
+            const probe = document.createElement("span");
+            probe.style.color = value;
+            root.append(probe);
+            const out = getComputedStyle(probe).color;
+            probe.remove();
+            return out;
+          };
+          // A sortable heading's words are its sort link.
+          const th = getComputedStyle(root.querySelector("thead th[data-col=title] [data-slot=sort-link]"));
+          const plain = getComputedStyle(root.querySelector("thead th[data-col=stage]"));
+          return {
+            marks: [...current].map((row) => row.getAttribute("aria-current")),
+            ticked: root.querySelectorAll("tbody tr[data-selected], tbody input:checked").length,
+            chosen: getComputedStyle(current[0].querySelector("td")).backgroundColor,
+            other: getComputedStyle(root.querySelector("tbody tr:not([aria-current]) td")).backgroundColor,
+            head: [th.fontSize, th.fontWeight, th.color, plain.color],
+            fg2: colour("var(--fg-2)"),
+          };
+        });
+        assert.deepEqual(seen.marks, ["true"], `${colorScheme}: one row is the current one`);
+        assert.equal(seen.ticked, 0, `${colorScheme}: a mark, not a selection`);
+        assert.equal(seen.chosen, colorScheme === "light" ? "rgb(246, 249, 254)" : "rgb(22, 32, 27)", `${colorScheme}: the theme's colour for a chosen row`);
+        assert.notEqual(seen.chosen, seen.other, `${colorScheme}: the other rows keep theirs`);
+        assert.deepEqual(seen.head.slice(0, 2), ["12px", "500"], `${colorScheme}: the theme's table_head`);
+        assert.equal(seen.head[2], seen.fg2, `${colorScheme}: the muted colour, on a sort link too`);
+        assert.equal(seen.head[3], seen.fg2, `${colorScheme}: the muted colour`);
+        assert.deepEqual(await axe(page), [], `${colorScheme}: axe`);
+        await shot(page, `${browserName}-picked-${colorScheme}`);
+        await context.close();
+      }
+    });
+
+    test("the page's own filters by keyboard: chips, a select of the page's choices, a tick and a select with a default, each answered in the URL", async () => {
+      await reset();
+      const { page, close, problems } = await open("/picked");
+      const toolbar = page.locator("#picked [data-slot=table-toolbar]");
+      const show = toolbar.locator("select[name=show]");
+      assert.equal(await show.locator("option[value='']").count(), 0, "a select with a default has no empty choice");
+      assert.equal(await show.inputValue(), "all");
+      assert.equal(await toolbar.locator("select[name=company] option[value='']").count(), 1, "the page's choices, and any");
+      assert.ok((await toolbar.locator("select[name=company] option").count()) > 1, "the page gave its companies");
+      const params = (name) => new URL(page.url()).searchParams.getAll(name).join();
+      // From the search box, Tab reaches the chips, one tab stop; Space turns one on, an arrow moves.
+      await toolbar.locator("input[name=search]").focus();
+      await page.keyboard.press("Tab");
+      assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("value")), "lead", "the first chip");
+      await page.keyboard.press("Space");
+      await page.waitForURL(() => params("stage") === "lead");
+      await settled(page, "picked");
+      await page.locator("#picked [data-slot=toggle-group] input[value=lead]").focus();
+      await page.keyboard.press("ArrowRight");
+      await page.keyboard.press("Space");
+      await page.waitForURL(() => params("stage") === "lead,qualified");
+      await settled(page, "picked");
+      assert.deepEqual(
+        await page.locator("#picked tbody tr[data-key] td:nth-child(2)").evaluateAll((cells) => [...new Set(cells.map((cell) => cell.textContent.trim()))].sort()),
+        ["Lead", "Qualified"],
+        "the page applied the chips"
+      );
+      // Tab leaves the chips for the companies' select; an arrow key chooses.
+      await page.locator("#picked [data-slot=toggle-group] input:checked").first().focus();
+      await page.keyboard.press("Tab");
+      assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("name")), "company");
+      await page.keyboard.press("ArrowDown");
+      await page.waitForURL(() => params("company") !== "");
+      await settled(page, "picked");
+      // The tick: Space turns it on, and off.
+      await toolbar.locator("input[name=active]").focus();
+      await page.keyboard.press("Space");
+      await page.waitForURL(() => params("active") === "true");
+      await settled(page, "picked");
+      assert.equal(await page.locator("#picked tbody tr[data-key] td:last-child").evaluateAll((cells) => cells.every((cell) => cell.textContent.trim() === "Yes")), true, "active only");
+      // The select with a default: another choice is named in the URL, the default is not.
+      await show.focus();
+      await page.keyboard.press("ArrowDown");
+      await page.waitForURL(() => params("show") === "open");
+      await settled(page, "picked");
+      await show.focus();
+      await page.keyboard.press("ArrowUp");
+      await page.waitForURL(() => !new URL(page.url()).searchParams.has("show"));
+      await settled(page, "picked");
+      assert.equal(await show.inputValue(), "all", "the default, held with nothing in the URL");
+      assert.equal(params("stage"), "lead,qualified", "the other filters stay");
+      assert.equal(params("active"), "true");
+      await toolbar.locator("input[name=active]").focus();
+      await page.keyboard.press("Space");
+      await page.waitForURL(() => !new URL(page.url()).searchParams.has("active"));
+      await settled(page, "picked");
+      await shot(page, `${browserName}-picked-filters`);
+      assert.deepEqual(await axe(page), []);
+      assert.deepEqual(problems, []);
+      await close();
+    });
+
     test("live refresh: new rows arrive; typing, menus, selection and the URL are kept", async () => {
       await reset();
       const { page, close, problems } = await open("/live?sort=-closed_on&per_page=10&filter%5Btitle%5D%5Bcontains%5D=Added");

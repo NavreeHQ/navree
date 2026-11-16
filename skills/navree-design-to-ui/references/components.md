@@ -237,7 +237,10 @@ filters, sort, pages, selection, bulk actions and export run on the server.
 | Search box over the table | `#[col(search)]` on the searched columns |
 | Filter per column | `#[col(filter = text \| range \| date \| select \| multi \| boolean \| relation)]`; choices `options = LIST` or `.options(col, Vec<FilterOption>)` from the server |
 | A filter row under the headers | `.filter_row()` |
-| Filters in a bar over the table | `.filter_bar()`, or `#[derive(FilterBar)]` for a toolbar of your own |
+| Filters in a bar over the table | `.filter_bar()` for the columns' filters, as buttons that open each |
+| A toolbar of filters of the page's own: chips, selects, a tick, a sort select | `#[derive(FilterBar)]` and `TableQuery<Row, Filters>`: chips `#[filter(multi)]` on `Option<Many<T>>`, a select an `Option<T>` enum or `#[filter(options = LIST)]` (`options = page` with `.options(name, ..)` for choices from the database), a tick `#[filter(boolean)]` on `Option<bool>`, a select that always holds a value `#[filter(default = "...")]`; the page applies `query.filter()`. Name a sort select `order`, not `sort`, which is the table's own |
+| The chosen row (the one whose detail the page shows) | `.current_row(fn)`, drawn in the theme's `Roles::selected_row` (#F6F9FE in the design gives it); not `.bulk` selection |
+| Header text (12 px, 500, muted) | the theme's `TypeScale::table_head(TextStyle::px(12).weight(500))` and `.muted_header()` on the table |
 | Pages and page size | `#[table(per = 25, per_pages(10, 25, 50, 100))]`; `#[table(cursor)]` for huge tables |
 | Status column | `#[col(badge = tone_fn)]` |
 | Link in a cell, whole-row link | `#[col(link = "/deals/{id}")]`, `.row_href(fn)` |

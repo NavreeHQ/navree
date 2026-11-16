@@ -98,7 +98,7 @@ Group the values by role, then give each role its Navree token:
 | card, panel, sidebar | `ink-1` |
 | cards and inputs apart from the sidebar (white cards on an off-white sidebar) | `card`, `field`: a theme's `Roles`; the sidebar and a table's header keep `ink-1` |
 | a dark card, band, code panel or side panel on a light page (or the other way) | the inverse surface: `Inverse` in a theme's `Roles` |
-| a ghost or icon button's text, the sidebar's secondary lines, a segment's track and chosen tab, a selected row | `ghost-fg`, `shell-muted`, `segment-track`, `segment-on`, `row-selected`: a theme's `Roles` |
+| a ghost or icon button's text, the sidebar's secondary lines, a segment's track and chosen tab, a selected row or the row a page shows (`DataTable::current_row`) | `ghost-fg`, `shell-muted`, `segment-track`, `segment-on`, `row-selected`: a theme's `Roles` |
 | control and field heights (40 px buttons, 44 px inputs on one page), a badge's height | a theme's `Sizes`: `ControlSizes`, `FieldSizes` with `Input::size` for a page's step, `badge_height` |
 | the sidebar's width and insets, the top bar's height, the page's padding and width, card padding | a theme's `Sizes`: `SidebarSizes`, `TopbarSizes`, `PageSizes`, `CardSizes` |
 | a soft shadow under a chosen segment, the current link, a popover or a dialog | a theme's `Elevation::Soft`: `shadow-raised`, `shadow-floating` |

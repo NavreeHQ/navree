@@ -155,6 +155,67 @@ async fn bulk(uow: Uow, request: BulkRequest<Deal>) -> Result<Reply> {
 
 <UiPreview example="data-table/filter-row" />
 
+## Filters of the page's own
+
+Some filters are not a column's: a deal's stages, a company from the database, a "Hot deals only" tick, an order the page applies itself. `#[derive(FilterBar)]` on a struct of `Option` fields makes each one a control in the table's toolbar and a parameter in its URL, and `TableQuery<Row, Filters>` reads them back as `query.filter()`. The table keeps them in every link and form it writes; the page applies them to its query.
+
+<UiPreview example="data-table/page-filters" />
+
+```rust title="src/deals/table.rs"
+const ORDERS: &[(&str, &str)] = &[("closing", "Closing first"), ("largest", "Largest first")];
+
+#[derive(Default, Deserialize, FilterBar)]
+pub struct DealFilter {
+    /// Search
+    #[filter(search)]
+    pub q: Option<String>,
+    /// Stage
+    #[filter(multi)]
+    pub stage: Option<Many<Stage>>,
+    /// Company
+    #[filter(options = page)]
+    pub company: Option<String>,
+    /// Period
+    #[filter(default = "month")]
+    pub period: Option<Period>,
+    /// Hot deals only
+    #[filter(boolean)]
+    pub hot: Option<bool>,
+    /// Order by
+    #[filter(options = ORDERS, default = "closing")]
+    pub order: Option<String>,
+}
+
+DataTable::new("deals", &query, &page).options("company", companies)
+```
+
+| Field | Drawn as | In the URL |
+|---|---|---|
+| `Option<T>`, `T` an enum with `Options` | a select of the enum's choices, with an empty first choice that shows the label and means any | `period=week` |
+| `#[filter(search)]` on `Option<String>` | a search box | `q=text` |
+| `#[filter(multi)]` on `Option<Many<T>>` | chips: a [ToggleGroup](/docs/components/toggle-group/) of checkboxes, any number on | `stage=won&stage=lead` |
+| `#[filter(boolean)]` on `Option<bool>` | a checkbox with its label | `hot=true` while it is ticked |
+| `#[filter(options = LIST)]` | a select or chips of a `(value, label)` list | |
+| `#[filter(options = page)]` | a select or chips of the choices the page gives with `.options(name, choices)`, such as rows of the database | |
+| `#[filter(default = "month")]` on a select | a select with no empty choice: the filter holds the default when the URL names none | nothing while it holds the default |
+
+A value the field's type can't read is left out, and only that value: `stage=won&stage=bogus` reads as `[Won]`. A filter holding its default is no filter: its links don't name it and `query.is_filtered()` doesn't count it. A default is for a select only, since a checkbox or chips that start on could never be turned off by a URL that names nothing; the derive refuses one, and every other control a field can't be drawn as, with the reason. The name of a page's filter is its own: it can't be one the table reads itself (`search`, `sort`, `page`, `per_page`, `cols`, `density` and the others under [The URL](#the-url)).
+
+## The row a page shows, and the header
+
+A page that shows one row's details beside its table, such as a deal's on a company's page, marks that row with `.current_row(fn)`: its `<tr>` says `aria-current="true"`, and the stylesheet draws it in the theme's colour for a chosen row (`Roles::selected_row`, `--row-selected`, which is `ink-3` in a theme that gives none). Only the first row the function says yes to is marked. It is a mark, not a selection: nothing posts it, and the boxes and bulk actions are as they were.
+
+The column headings take the theme's `table_head` [text style](/docs/ui/themes/#type): its size (14 px in a data table without one), weight, line height, tracking and face. `.muted_header()` draws them in the muted text colour, `fg-2`, as a plain [Table](/docs/components/table/) draws its own.
+
+<UiPreview example="data-table/current" />
+
+```rust title="src/companies/pages.rs"
+DataTable::new("deals", &query, &page)
+    .row_href(|deal| format!("/companies/{company}/deals/{}", deal.id))
+    .current_row(|deal| deal.id == shown)
+    .muted_header()
+```
+
 ## Counts and amounts in lakhs and crores
 
 The count under the table (`Showing 1 to 25 of 12,34,567 results`) and the cells of a `Money` column group their digits as `TableLabels::grouping` says: by thousands (`1,234,567`) by default, in lakhs and crores (`12,34,567`) with `Grouping::Indian`. A table that takes its words from navree-i18n (`TableLabels::from_locale(&locale)`) gets the grouping of the locale: `en-IN` and `hi` group in lakhs, `en` and `de` by thousands. To set it yourself:
@@ -219,7 +280,8 @@ A tick in a filter's list, a radio and a select apply at once. The search box an
 
 | Method | Means |
 |---|---|
-| `.detail(fn)`, `.row_actions(fn)`, `.row_href(fn)`, `.sticky_rows(fn)`, `.selectable_if(fn)` | per row |
+| `.detail(fn)`, `.row_actions(fn)`, `.row_href(fn)`, `.sticky_rows(fn)`, `.selectable_if(fn)`, `.current_row(fn)` | per row |
+| `.muted_header()` | the column headings in the muted text colour |
 | `.cell(name, fn)` | draws a column from the whole row, into any component |
 | `.keyboard_grid()` | one tab stop, arrow keys, `Home`, `End`, `Page Up` and `Page Down` |
 | `.live(every)`, `.live_from(url)`, `.refreshable()` | refetches while the page is visible, or when a server-sent event stream speaks, keeping typing, focus and the selection |
@@ -327,6 +389,8 @@ On a desktop with no throttling, a 25-row page sorts in 43 ms, a tick filters it
 | `Down`, `Up`, `Home`, `End`, letters | Move through the items of an open row menu. |
 
 - The sorted header has `aria-sort`; the table has its caption; a refetch marks the table `aria-busy`.
+- The row a page shows (`.current_row(fn)`) has `aria-current="true"`, so a screen reader says it is the current one; it is not selected.
+- A page's own filters are in the toolbar's form: a select and a checkbox are reached with `Tab`, and chips are one tab stop, moved through with the arrow keys and turned on or off with `Space`.
 - A row's actions (`.row_actions(fn)`) are a menu: the button is named "Actions for" and the row's first column, and the items are links and small forms that post, with the keys of a [DropdownMenu](/docs/components/dropdown-menu/). `RowAction::destructive()` marks one, and `RowAction::disabled(true)` shows one that can't be taken. A row whose function returns no actions has no button.
 - Nothing a hover can fire changes anything: every action is a `POST`.
 

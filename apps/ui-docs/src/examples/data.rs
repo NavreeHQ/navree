@@ -44,6 +44,22 @@ pub fn all() -> Vec<Example> {
         single!("data-table", "compact", "Compact rows", data_table_compact)
             .start()
             .height(360),
+        single!(
+            "data-table",
+            "current",
+            "The row a page shows, and a muted header",
+            data_table_current
+        )
+        .start()
+        .height(440),
+        single!(
+            "data-table",
+            "page-filters",
+            "Filters of the page's own",
+            data_table_page_filters
+        )
+        .start()
+        .height(440),
         gallery!(
             "data-table",
             "states",
@@ -264,6 +280,61 @@ fn data_table_compact() -> Node {
     let page = TablePage::new(deals(), 5);
     DataTable::new("deals", &query, &page)
         .caption("Deals")
+        .into()
+}
+
+fn data_table_current() -> Node {
+    let query = TableQuery::<Deal>::parse("/deals", "");
+    let page = TablePage::new(deals(), 5);
+    DataTable::new("deals", &query, &page)
+        .caption("Deals")
+        .row_href(|deal| format!("/deals/{}", deal.id))
+        .current_row(|deal| deal.id == 2)
+        .muted_header()
+        .into()
+}
+
+#[derive(Clone, Copy, Debug, serde::Deserialize, Options, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Stage {
+    Lead,
+    Proposal,
+    Negotiation,
+    Won,
+}
+
+const ORDERS: &[(&str, &str)] = &[("closing", "Closing first"), ("largest", "Largest first")];
+
+#[derive(Default, serde::Deserialize, FilterBar)]
+pub struct DealFilter {
+    /// Stage
+    #[filter(multi)]
+    pub stage: Option<navree::ui::form::Many<Stage>>,
+    /// Company
+    #[filter(options = page)]
+    pub company: Option<String>,
+    /// Hot deals only
+    #[filter(boolean)]
+    pub hot: Option<bool>,
+    /// Order
+    #[filter(options = ORDERS, default = "closing")]
+    pub order: Option<String>,
+}
+
+fn data_table_page_filters() -> Node {
+    let query =
+        TableQuery::<Deal, DealFilter>::parse("/deals", "stage=won&stage=negotiation&hot=true");
+    let page = TablePage::new(deals(), 5);
+    DataTable::new("deals", &query, &page)
+        .caption("Deals")
+        .options(
+            "company",
+            vec![
+                FilterOption::new("sutlej", "Sutlej Supply"),
+                FilterOption::new("haveli", "Haveli Home"),
+            ],
+        )
+        .without_columns_picker()
         .into()
 }
 

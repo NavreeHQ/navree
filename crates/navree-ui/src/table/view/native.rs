@@ -56,7 +56,15 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
         let span = self.span();
         let mut rows = Vec::with_capacity(self.data.rows.len());
         let mut text = String::new();
+        let mut marked = false;
         for row in self.data.rows {
+            // The row the page shows, as the browser's table marks it: the first one only.
+            let current = !marked
+                && self
+                    .current_row
+                    .as_ref()
+                    .is_some_and(|current| current(row));
+            marked |= current;
             let key = row.key();
             let is_open = key
                 .as_ref()
@@ -138,6 +146,7 @@ impl<R: TableRow, F: FilterBar + Default + DeserializeOwned> DataTable<'_, R, F>
                         "data-ui-row-opens",
                         self.row_opens.as_ref().map(|opens| opens(row)),
                     )
+                    .attr_opt("aria-current", current.then_some("true"))
                     .child(cells),
             );
             if let Some(detail) = &self.detail {

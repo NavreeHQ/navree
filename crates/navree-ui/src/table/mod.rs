@@ -650,6 +650,28 @@ pub trait FilterBar {
 
     /// The toolbar's controls.
     fn controls(&self) -> Vec<Node>;
+
+    /// The toolbar's controls, with the choices the page gave its filters by name
+    /// ([`DataTable::options`]): `#[derive(FilterBar)]` draws a select or chips with the
+    /// page's choices when it gave some. Without it, [`controls`](Self::controls).
+    fn controls_with(&self, options: &[(&'static str, Vec<FilterOption>)]) -> Vec<Node> {
+        let _ = options;
+        self.controls()
+    }
+
+    /// The parameters that take several values (`#[filter(multi)]`): the URL names each
+    /// value under the parameter's name, and the table reads them together into the field.
+    /// None without it.
+    fn many() -> &'static [&'static str]
+    where
+        Self: Sized,
+    {
+        &[]
+    }
+
+    /// Gives each filter the URL doesn't name its default (`#[filter(default = "...")]`).
+    /// The table calls it once it has read the URL. Nothing without it.
+    fn fill_defaults(&mut self) {}
 }
 
 /// No filters.
@@ -684,16 +706,93 @@ pub fn select_control(
     options: &'static [(&'static str, &'static str)],
     value: Option<String>,
 ) -> Node {
-    let mut select = NativeSelect::new(name)
-        .prompt(label)
-        .attr("aria-label", label);
-    for (option, text) in options {
-        select = select.option(*option, *text);
+    let choices: Vec<(String, String)> = options
+        .iter()
+        .map(|(option, text)| ((*option).to_owned(), (*text).to_owned()))
+        .collect();
+    choice_control(name, label, &choices, value, true)
+}
+
+/// A select in a toolbar from `choices`, `(value, label)`: with `any`, an empty first choice
+/// that shows `label` and means no filter, as [`select_control`] draws; without it, a select
+/// that always holds one of the choices, for a filter with a default. The derive calls this.
+pub fn choice_control(
+    name: &'static str,
+    label: &'static str,
+    choices: &[(String, String)],
+    value: Option<String>,
+    any: bool,
+) -> Node {
+    let mut select = NativeSelect::new(name);
+    if any {
+        select = select.prompt(label);
+    }
+    let mut select = select.attr("aria-label", label);
+    for (option, text) in choices {
+        select = select.option(option.clone(), text.clone());
     }
     if let Some(value) = value {
         select = select.selected(value);
     }
     select.into()
+}
+
+/// Chips in a toolbar, any number of them on, each posting `name` with its value: a filter
+/// that holds several values (`#[filter(multi)]`). They are a [`ToggleGroup`] of
+/// checkboxes, so they post with the toolbar's form and answer the keyboard with no
+/// script. The derive calls this.
+///
+/// [`ToggleGroup`]: crate::ToggleGroup
+pub fn chips_control(
+    name: &'static str,
+    label: &'static str,
+    choices: &[(String, String)],
+    values: Vec<String>,
+) -> Node {
+    let mut chips = crate::ToggleGroup::multiple(name, label)
+        .variant(crate::ToggleVariant::Outline)
+        .size(crate::Size::Sm);
+    for (value, text) in choices {
+        chips = chips.item(crate::ToggleItem::new(value.clone(), text.clone()));
+    }
+    chips.values(values).into()
+}
+
+/// A checkbox in a toolbar, with its label: a filter that is on or off
+/// (`#[filter(boolean)]`). It posts `name=true` while it is ticked, and nothing
+/// otherwise. The derive calls this.
+pub fn check_control(name: &'static str, label: &'static str, on: bool) -> Node {
+    crate::Checkbox::new(name).checked(on).label(label).into()
+}
+
+/// The choices of one of a page's own filters: the ones the page gave under `name`
+/// ([`DataTable::options`]), else `fixed`. The derive calls this.
+pub fn filter_choices(
+    options: &[(&'static str, Vec<FilterOption>)],
+    name: &str,
+    fixed: &[(&str, &str)],
+) -> Vec<(String, String)> {
+    match options.iter().find(|(given, _)| *given == name) {
+        Some((_, given)) => given
+            .iter()
+            .map(|option| (option.value().to_owned(), option.label().to_owned()))
+            .collect(),
+        None => fixed
+            .iter()
+            .map(|(value, label)| ((*value).to_owned(), (*label).to_owned()))
+            .collect(),
+    }
+}
+
+/// A filter struct holding only `name`'s default, read as the URL would be read: what
+/// `#[filter(default = "...")]` fills an empty filter from. `None` when the text doesn't
+/// read as the field's type. The derive calls this.
+pub fn read_default<F: serde::de::DeserializeOwned>(name: &str, value: &str) -> Option<F> {
+    let encoded = crate::form::encode(&[(name, value)]);
+    F::deserialize(navree_http::extract::urlencoded::Deserializer::new(
+        encoded.as_bytes(),
+    ))
+    .ok()
 }
 
 /// Which way a column is sorted.

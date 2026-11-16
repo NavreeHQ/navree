@@ -170,6 +170,28 @@ every `@navree/*` package carries the same version.
   program, as a described form's are, so it is for words the app knows, never a reader's
   text. A new inherent method: an app whose own extension trait gives `FormView` a `label`
   method calls it through the trait.
+- `DataTable::current_row(fn)` marks the row a page shows, such as the one whose details are
+  open beside the table: its `<tr>` says `aria-current="true"` and is drawn in the theme's
+  colour for a chosen row (`Roles::selected_row`, `ink-3` without one). Only the first row the
+  function says yes to is marked, and it is a mark, not a selection: nothing posts it, and the
+  boxes and bulk actions are as they were. `DataTable::muted_header()` draws the column headings
+  in the muted text colour (`fg-2`), as a plain `Table` draws its own; their size, weight, line
+  height, tracking and face are the theme's `table_head` text style either way. A table that
+  uses neither is drawn as before. Both are new inherent methods: an app whose own extension
+  trait gives `DataTable` a method of either name calls it through the trait.
+- `#[derive(FilterBar)]` draws more than a select and a search box. `#[filter(multi)]` on an
+  `Option<Many<T>>` is chips, a toggle group of checkboxes whose values the URL names one by
+  one (`stage=won&stage=lead`), each read alone, so a bad one drops only itself;
+  `#[filter(boolean)]` on an `Option<bool>` is a checkbox with its label; `#[filter(options =
+  LIST)]` takes the choices of a `(value, label)` list, and `#[filter(options = page)]` the ones
+  the page gives with `DataTable::options(name, ..)`, such as rows of the database; and
+  `#[filter(default = "...")]` makes a select with no empty choice that holds the default when
+  the URL names none, writes nothing into a link while it holds it and isn't counted as a
+  filter. The derive refuses a field it can't draw, with the reason. `FilterBar` has three new
+  methods with defaults (`controls_with`, `many` and `fill_defaults`), so a filter struct that
+  implements it by hand works as before, and a derived one with none of the new options draws,
+  reads and writes what it did. `navree::ui::table` gains the functions the derive calls:
+  `choice_control`, `chips_control`, `check_control`, `filter_choices` and `read_default`.
 
 ### Fixed
 

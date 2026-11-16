@@ -427,53 +427,249 @@ pub(crate) fn table_row(input: DeriveInput) -> syn::Result<TokenStream> {
     })
 }
 
+/// How one of a page's own filters is drawn.
+#[derive(Debug, PartialEq, Eq)]
+enum FilterKind {
+    /// A search box: `#[filter(search)]`.
+    Search,
+    /// A select of one choice: the default.
+    Select,
+    /// Chips, any number on: `#[filter(multi)]`.
+    Multi,
+    /// A checkbox: `#[filter(boolean)]`.
+    Boolean,
+}
+
+/// Where a select's or chips' choices come from.
+enum FilterChoices {
+    /// The element type's `Options`.
+    Type,
+    /// A list: `options = PATH`.
+    List(Path),
+    /// The page, through `DataTable::options`: `options = page`.
+    Page,
+}
+
+/// What `#[filter(...)]` and the field's type say about one of a page's own filters.
+struct FilterField {
+    kind: FilterKind,
+    choices: FilterChoices,
+    default: Option<LitStr>,
+    /// The type of one value: `T` of `Option<T>`, or of `Option<Many<T>>`.
+    element: syn::Type,
+}
+
+/// Reads one field of a `#[derive(FilterBar)]` struct, refusing what can't be drawn.
+fn filter_field(field: &syn::Field) -> syn::Result<FilterField> {
+    let (mut search, mut boolean, mut multi) = (false, false, false);
+    let mut choices = FilterChoices::Type;
+    let mut default: Option<LitStr> = None;
+    for attr in field
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("filter"))
+    {
+        attr.parse_nested_meta(|meta| {
+            let key = meta.path.get_ident().map(ToString::to_string).unwrap_or_default();
+            match key.as_str() {
+                "search" => search = true,
+                "boolean" => boolean = true,
+                "multi" => multi = true,
+                "options" => {
+                    let path: Path = meta.value()?.parse()?;
+                    choices = if path.is_ident("page") {
+                        FilterChoices::Page
+                    } else {
+                        FilterChoices::List(path)
+                    };
+                }
+                "default" => {
+                    let text: LitStr = meta.value()?.parse()?;
+                    if text.value().is_empty() {
+                        return Err(syn::Error::new_spanned(
+                            &text,
+                            "`default` names the value the filter holds when the URL names none: it can't be empty",
+                        ));
+                    }
+                    default = Some(text);
+                }
+                _ => {
+                    return Err(meta.error(format!(
+                        "unknown `filter` option `{key}`: expected search, boolean, multi, options or default"
+                    )));
+                }
+            }
+            Ok(())
+        })?;
+    }
+    let listed = !matches!(choices, FilterChoices::Type);
+    if search && (boolean || multi || listed || default.is_some()) {
+        return Err(syn::Error::new_spanned(
+            &field.ty,
+            "a `search` filter is a search box: it takes no `boolean`, `multi`, `options` or `default`",
+        ));
+    }
+    if boolean && multi {
+        return Err(syn::Error::new_spanned(
+            &field.ty,
+            "a filter is `boolean` (a checkbox) or `multi` (chips), not both",
+        ));
+    }
+    if boolean && listed {
+        return Err(syn::Error::new_spanned(
+            &field.ty,
+            "a `boolean` filter is a checkbox: it takes no `options`",
+        ));
+    }
+    if (boolean || multi) && default.is_some() {
+        return Err(syn::Error::new_spanned(
+            &field.ty,
+            "a `default` is for a select: a checkbox or chips that start on could never be turned off, since the URL would name nothing",
+        ));
+    }
+    let Some(inner) = option_inner(&field.ty) else {
+        return Err(syn::Error::new_spanned(
+            &field.ty,
+            "a filter is optional: write `Option<...>`",
+        ));
+    };
+    let kind = if search {
+        FilterKind::Search
+    } else if boolean {
+        if crate::shared::type_name(inner).as_deref() != Some("bool") {
+            return Err(syn::Error::new_spanned(
+                &field.ty,
+                "a `boolean` filter is ticked or not: write `Option<bool>`",
+            ));
+        }
+        FilterKind::Boolean
+    } else if multi {
+        FilterKind::Multi
+    } else {
+        FilterKind::Select
+    };
+    let element = match (&kind, crate::shared::many_inner(inner)) {
+        (FilterKind::Multi, Some(element)) => element.clone(),
+        (FilterKind::Multi, None) => {
+            return Err(syn::Error::new_spanned(
+                &field.ty,
+                "a `multi` filter holds several values: write `Option<Many<...>>`",
+            ));
+        }
+        (_, Some(_)) => {
+            return Err(syn::Error::new_spanned(
+                &field.ty,
+                "a filter of several values is drawn as chips: add `#[filter(multi)]`",
+            ));
+        }
+        (_, None) => inner.clone(),
+    };
+    Ok(FilterField {
+        kind,
+        choices,
+        default,
+        element,
+    })
+}
+
 pub(crate) fn filter_bar(input: DeriveInput) -> syn::Result<TokenStream> {
     let ui = ui_path(input.ident.span())?;
     let fields = named_fields(&input, "FilterBar")?;
     let case = serde_rename_all(&input.attrs);
     let mut controls = Vec::new();
     let mut params = Vec::new();
+    let mut many = Vec::new();
+    let mut defaults = Vec::new();
     for field in &fields.named {
         let Some(ident) = &field.ident else { continue };
         let rust_name = ident.unraw().to_string();
         let name =
             serde_rename(&field.attrs).unwrap_or_else(|| apply_case(&rust_name, case.as_deref()));
         let label = doc_line(&field.attrs).unwrap_or_else(|| words(&rust_name));
-        let mut search = false;
-        for attr in field
-            .attrs
-            .iter()
-            .filter(|attr| attr.path().is_ident("filter"))
-        {
-            attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("search") {
-                    search = true;
-                    Ok(())
-                } else {
-                    Err(meta.error("unknown `filter` option: expected `search`"))
-                }
-            })?;
-        }
-        let Some(inner) = option_inner(&field.ty) else {
-            return Err(syn::Error::new_spanned(
-                &field.ty,
-                "a filter is optional: write `Option<...>`",
-            ));
-        };
+        let filter = filter_field(field)?;
+        let element = &filter.element;
         let value = format_ident!("__value");
-        params.push(quote! {
-            if let ::core::option::Option::Some(#value) = #ui::form::FieldValue::field_value(&self.#ident) {
-                out.push((#name, #value));
+        let shown = quote!(#ui::form::FieldValue::field_value(&self.#ident));
+        // A filter holding its default is no filter: its links don't name it.
+        params.push(match (&filter.kind, &filter.default) {
+            (FilterKind::Multi, _) => quote! {
+                for #value in #ui::form::FieldValue::field_values(&self.#ident) {
+                    out.push((#name, #value));
+                }
+            },
+            (FilterKind::Boolean, _) => quote! {
+                if self.#ident == ::core::option::Option::Some(true) {
+                    out.push((#name, ::std::string::ToString::to_string("true")));
+                }
+            },
+            (_, Some(default)) => quote! {
+                if let ::core::option::Option::Some(#value) = #shown {
+                    if #value != #default {
+                        out.push((#name, #value));
+                    }
+                }
+            },
+            (_, None) => quote! {
+                if let ::core::option::Option::Some(#value) = #shown {
+                    out.push((#name, #value));
+                }
+            },
+        });
+        // Only a filter whose choices are the page's reads the ones the page gave.
+        let (given, fixed) = match &filter.choices {
+            FilterChoices::Type => (
+                quote!(&[]),
+                quote!(<#element as #ui::form::Options>::OPTIONS),
+            ),
+            FilterChoices::List(path) => (quote!(&[]), quote!(#path)),
+            FilterChoices::Page => (quote!(options), quote!(&[])),
+        };
+        let choices = quote!(&#ui::table::filter_choices(#given, #name, #fixed));
+        controls.push(match filter.kind {
+            FilterKind::Search => {
+                quote!(out.push(#ui::table::search_control(#name, #label, #shown));)
             }
+            FilterKind::Select => {
+                let any = filter.default.is_none();
+                quote!(out.push(#ui::table::choice_control(#name, #label, #choices, #shown, #any));)
+            }
+            FilterKind::Multi => {
+                many.push(name.clone());
+                quote!(out.push(#ui::table::chips_control(#name, #label, #choices, #ui::form::FieldValue::field_values(&self.#ident)));)
+            }
+            FilterKind::Boolean => quote! {
+                out.push(#ui::table::check_control(#name, #label, self.#ident == ::core::option::Option::Some(true)));
+            },
         });
-        controls.push(if search {
-            quote!(out.push(#ui::table::search_control(#name, #label, #ui::form::FieldValue::field_value(&self.#ident)));)
-        } else {
-            quote!(out.push(#ui::table::select_control(#name, #label, <#inner as #ui::form::Options>::OPTIONS, #ui::form::FieldValue::field_value(&self.#ident)));)
-        });
+        if let Some(default) = &filter.default {
+            defaults.push(quote! {
+                if self.#ident.is_none() {
+                    if let ::core::option::Option::Some(mut __filled) =
+                        #ui::table::read_default::<Self>(#name, #default)
+                    {
+                        self.#ident = __filled.#ident.take();
+                    }
+                }
+            });
+        }
     }
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    // Only a struct that has such filters has the methods: the others keep the trait's.
+    let many = (!many.is_empty()).then(|| {
+        quote! {
+            fn many() -> &'static [&'static str] {
+                &[#(#many),*]
+            }
+        }
+    });
+    let defaults = (!defaults.is_empty()).then(|| {
+        quote! {
+            fn fill_defaults(&mut self) {
+                #(#defaults)*
+            }
+        }
+    });
     Ok(quote! {
         #[automatically_derived]
         impl #impl_generics #ui::table::FilterBar for #ident #ty_generics #where_clause {
@@ -484,10 +680,130 @@ pub(crate) fn filter_bar(input: DeriveInput) -> syn::Result<TokenStream> {
             }
 
             fn controls(&self) -> ::std::vec::Vec<#ui::Node> {
+                #ui::table::FilterBar::controls_with(self, &[])
+            }
+
+            fn controls_with(
+                &self,
+                options: &[(&'static str, ::std::vec::Vec<#ui::table::FilterOption>)],
+            ) -> ::std::vec::Vec<#ui::Node> {
+                let _ = options;
                 let mut out = ::std::vec::Vec::new();
                 #(#controls)*
                 out
             }
+
+            #many
+
+            #defaults
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FilterKind, filter_field};
+
+    fn field(code: proc_macro2::TokenStream) -> syn::Field {
+        let item: syn::ItemStruct = syn::parse2(quote::quote!(struct S { #code })).unwrap();
+        item.fields.into_iter().next().unwrap()
+    }
+
+    fn kind(code: proc_macro2::TokenStream) -> FilterKind {
+        filter_field(&field(code))
+            .map(|filter| filter.kind)
+            .unwrap()
+    }
+
+    fn refused(code: proc_macro2::TokenStream) -> String {
+        match filter_field(&field(code)) {
+            Ok(_) => panic!("built"),
+            Err(error) => error.to_string(),
+        }
+    }
+
+    #[test]
+    fn each_kind_of_filter_is_read_from_its_option_and_type() {
+        assert_eq!(
+            kind(quote::quote!(stage: Option<Stage>)),
+            FilterKind::Select
+        );
+        assert_eq!(
+            kind(quote::quote!(#[filter(search)] q: Option<String>)),
+            FilterKind::Search
+        );
+        assert_eq!(
+            kind(quote::quote!(#[filter(boolean)] tier: Option<bool>)),
+            FilterKind::Boolean
+        );
+        assert_eq!(
+            kind(quote::quote!(#[filter(multi)] family: Option<Many<Family>>)),
+            FilterKind::Multi
+        );
+        assert_eq!(
+            kind(quote::quote!(#[filter(multi, options = page)] region: Option<Many<String>>)),
+            FilterKind::Multi
+        );
+        assert_eq!(
+            kind(
+                quote::quote!(#[filter(options = page, default = "north")] region: Option<String>)
+            ),
+            FilterKind::Select
+        );
+        assert_eq!(
+            kind(quote::quote!(#[filter(options = TERMS, default = "month")] term: Option<String>)),
+            FilterKind::Select
+        );
+    }
+
+    #[test]
+    fn a_filter_that_cant_be_drawn_stops_the_build_with_its_reason() {
+        for (code, reason) in [
+            (
+                quote::quote!(#[filter(chips)] a: Option<A>),
+                "unknown `filter` option `chips`",
+            ),
+            (quote::quote!(a: A), "write `Option<...>`"),
+            (
+                quote::quote!(#[filter(boolean)] a: Option<String>),
+                "write `Option<bool>`",
+            ),
+            (
+                quote::quote!(#[filter(multi)] a: Option<A>),
+                "write `Option<Many<...>>`",
+            ),
+            (quote::quote!(a: Option<Many<A>>), "add `#[filter(multi)]`"),
+            (
+                quote::quote!(#[filter(boolean, multi)] a: Option<bool>),
+                "not both",
+            ),
+            (
+                quote::quote!(#[filter(boolean, options = page)] a: Option<bool>),
+                "takes no `options`",
+            ),
+            (
+                quote::quote!(#[filter(boolean, default = "true")] a: Option<bool>),
+                "could never be turned off",
+            ),
+            (
+                quote::quote!(#[filter(multi, default = "a")] a: Option<Many<A>>),
+                "could never be turned off",
+            ),
+            (
+                quote::quote!(#[filter(search, multi)] a: Option<String>),
+                "a `search` filter is a search box",
+            ),
+            (
+                quote::quote!(#[filter(search, default = "x")] a: Option<String>),
+                "a `search` filter is a search box",
+            ),
+            (
+                quote::quote!(#[filter(default = "")] a: Option<A>),
+                "can't be empty",
+            ),
+        ] {
+            let said = refused(code);
+            assert!(said.contains(reason), "{said}");
+        }
+    }
 }

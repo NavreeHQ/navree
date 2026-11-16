@@ -522,6 +522,9 @@ checks bulk actions.
 | A toolbar of the search box only | `.without_columns_picker()` and `.without_density_switch()`: the table draws its starting columns and the default density, and ignores `cols` and `density` |
 | Filter per column | `#[col(filter = text \| range \| date \| select \| multi \| boolean \| relation)]`, choices from `options = LIST` or `.options(col, Vec<FilterOption>)` |
 | Filters under the headers or in a bar | `.filter_row()` or `.filter_bar()` |
+| Filters of the page's own in the toolbar (not a column's) | `#[derive(FilterBar)]` on a struct of `Option` fields, `TableQuery<Row, Filters>`: an enum is a select, `#[filter(search)]` a search box, `#[filter(multi)]` on `Option<Many<T>>` chips, `#[filter(boolean)]` on `Option<bool>` a checkbox, `#[filter(options = LIST)]` or `options = page` (with `.options(name, Vec<FilterOption>)`) the choices, `#[filter(default = "...")]` a select that always holds one; the page applies `query.filter()` itself, and a name is never one the table reads (`search`, `sort`, `page`...) |
+| The row whose details the page shows beside the table | `.current_row(fn)`: `aria-current="true"` and the theme's `Roles::selected_row` colour; a mark, not a selection |
+| Column headings in the muted colour | `.muted_header()`; their size, weight and face are the theme's `TypeScale::table_head` |
 | Page size | `#[table(per = 25, per_pages(10, 25, 50, 100))]` |
 | Huge tables | `#[table(cursor)]` for keyset pages; `capped = n` or `no_count` to stop counting |
 | Status badge, link, row link | `badge = fn`, `link = "/contacts/{id}"`, `.row_href(fn)` |
