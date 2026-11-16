@@ -170,7 +170,9 @@ same `part`s and drawn to 100%: sleep cycles, a week of workouts by kind.
 A colour strip (`ColorStrip`) is a row of equal cells. Each cell is either a
 category (`category` and `cells`) or a reading coloured by its band
 (`colors` and `readings`). For several rows over the same slots, use one
-`Heatmap`: it has one legend for all of them.
+`Heatmap`: it has one legend for all of them. Strips stacked one above
+another each take `hide_legend()` but one, and declare the same categories
+in the same order, so the one legend left names every category.
 
 A range scale (`RangeScale`) puts one value on a scale between two ends,
 with a marker, words at the ends (`ends`) and a track that can be a

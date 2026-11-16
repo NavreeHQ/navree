@@ -74,7 +74,7 @@ is dropped.
 | A day round a clock face | `DayClock::new(title).values(24 values).category(..).moment(Moment::new(hour, name))` |
 | A bar split into parts, sleep stages, time in zones | `Meter::new(title).segment(Segment::new(name, value).ink(..))`, `.minutes()`, `.compact()` in a table cell |
 | Small stacked columns per item | `MiniColumns::new(title).part(name, ink).column(MiniColumn::new(name, [values]))` |
-| A strip of coloured cells over time | `ColorStrip::new(title)` with `.category(..)` and `.cells(..)`, or `.colors(ColorScale)` and `.readings(..)` |
+| A strip of coloured cells over time | `ColorStrip::new(title)` with `.category(..)` and `.cells(..)`, or `.colors(ColorScale)` and `.readings(..)`; strips stacked under one legend: `.hide_legend()` on all but one, the same categories declared on each |
 | A reading on a scale between two ends | `RangeScale::new(title, value).range(min, max).ends(low, high).track(Gradient)` |
 | A change with an arrow, green or red | `Trend::new(change)`, `.up_is_bad()`, on a figure with `Stat::change(..)` |
 | A grid of rows by columns (days by hours, people by weeks, stores by days), one legend for all rows | `Heatmap::new(title).columns(..).row(name, values)`, `.range(low, high)` and `.ink(..)` for five steps, `.colors(ColorScale)` for bands (a soft ink is a light band: diverging scales), `.category(name, ink)` and `.category_row(name, names)` for categories, `.row_summary(RowSummary::Average)`; a missing cell is hollow |

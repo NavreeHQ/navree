@@ -55,6 +55,28 @@ ColorStrip::new("Heart rate zones")
 
 A missing reading is a cell in the quiet colour, named "No value".
 
+## Strips stacked together
+
+Strips stacked one above another, a night each or a service each, read best with one legend for all of them. `.hide_legend()` draws a strip with no legend: give it to every strip but one, and declare the same categories in the same order on each, so the legend you keep names every category, even one that strip has no cell of. The table of each strip still names every cell's category.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+let night = |title: &'static str| {
+    ColorStrip::new(title)
+        .category("Awake", Ink::slot(4))
+        .category("Core", Ink::slot(3))
+        .category("Deep", Ink::slot(7))
+};
+Stack::gap(3).children((
+    night("Monday").id("monday").cells([("11:00 pm", "Core"), ("11:30 pm", "Deep")]).hide_legend(),
+    night("Tuesday").id("tuesday").cells([("11:00 pm", "Awake"), ("11:30 pm", "Core")]),
+))
+```
+
+For many rows over the same slots, a [heat map](/docs/components/heatmap/) draws them as one grid with one legend.
+
 ## Many cells
 
 A strip draws at most 600 cells. A longer one draws every k-th cell and says so; the table lists the cells drawn. `.height(px)` sets the thickness, 4 to 32 (8 by default).

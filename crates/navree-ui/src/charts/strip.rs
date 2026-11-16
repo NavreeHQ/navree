@@ -63,6 +63,7 @@ pub struct ColorStrip {
     format: NumberFormat,
     height: u32,
     shares: bool,
+    legend: bool,
     cell_name: Option<String>,
     value_name: Option<String>,
     motion: Motion,
@@ -89,6 +90,7 @@ impl ColorStrip {
             format: NumberFormat::number(),
             height: 8,
             shares: false,
+            legend: true,
             cell_name: None,
             value_name: None,
             motion: Motion::none(),
@@ -171,6 +173,14 @@ impl ColorStrip {
     /// Writes each category's share of the cells in the legend.
     pub fn legend_shares(mut self) -> Self {
         self.shares = true;
+        self
+    }
+
+    /// Draws the strip with no legend under it: for strips stacked one above another, of
+    /// which one keeps the legend for all. Declare the same categories in the same order on
+    /// each, so the legend kept names every one. The table still names each cell's category.
+    pub fn hide_legend(mut self) -> Self {
+        self.legend = false;
         self
     }
 
@@ -277,20 +287,22 @@ impl ColorStrip {
             .uses(Uses::CHART_PAINT.with(Uses::CHART_LINEAR))
             .child(rects);
 
-        let legend = legend_list(
-            cats.iter()
-                .map(|(name, ink, n)| Entry {
-                    ink: *ink,
-                    name: name.clone(),
-                    value: self
-                        .shares
-                        .then(|| share_text(*n as f64 / total as f64, &numbers)),
-                    index: None,
-                    detail: None,
-                    empty: false,
-                })
-                .collect(),
-        );
+        let legend = self.legend.then(|| {
+            legend_list(
+                cats.iter()
+                    .map(|(name, ink, n)| Entry {
+                        ink: *ink,
+                        name: name.clone(),
+                        value: self
+                            .shares
+                            .then(|| share_text(*n as f64 / total as f64, &numbers)),
+                        index: None,
+                        detail: None,
+                        empty: false,
+                    })
+                    .collect(),
+            )
+        });
 
         let has_values = self.cells.iter().any(|c| c.value.is_some());
         let cell_name = self
@@ -461,6 +473,35 @@ mod tests {
             out.contains(r#"<span data-slot="chart-legend-value">50%</span>"#),
             "{out}"
         );
+    }
+
+    #[test]
+    fn strips_stacked_together_keep_one_legend_for_all() {
+        let quiet = html(stages().hide_legend());
+        assert!(!quiet.contains("chart-legend"), "{quiet}");
+        // The cells and the table still name every category.
+        assert_eq!(count(&quiet, r#"data-slot="strip-cell""#), 4);
+        assert!(
+            quiet.contains(r#"<td data-num=""><span data-color="7">Deep</span></td>"#),
+            "{quiet}"
+        );
+        // Strips that declare the same categories: the one that keeps its legend names each,
+        // even those it has no cell of.
+        let night = |title: &str| {
+            ColorStrip::new(title)
+                .category("Awake", Ink::slot(4))
+                .category("Core", Ink::slot(3))
+                .category("Deep", Ink::slot(7))
+        };
+        let stack = crate::Node::list((
+            night("Monday").cell("1:00 am", "Core").hide_legend(),
+            night("Tuesday").cell("1:00 am", "Awake").hide_legend(),
+            night("Wednesday").cell("1:00 am", "Deep"),
+        ));
+        let out = render(&stack);
+        assert_eq!(count(&out, r#"data-slot="chart-legend""#), 1, "{out}");
+        assert_eq!(count(&out, r#"data-slot="chart-legend-item""#), 3, "{out}");
+        assert!(html(stages()).contains(r#"data-slot="chart-legend""#));
     }
 
     #[test]

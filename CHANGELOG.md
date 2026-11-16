@@ -275,6 +275,12 @@ every `@navree/*` package carries the same version.
   `GridLabels` gains the words it writes. The grid charts' sheet gains its rules, and the charts
   module reads a heat map's tooltip from its table of rows and columns; every other chart's
   tooltip is read as before.
+- `ColorStrip::hide_legend()` draws a strip with no legend under it, for strips stacked one above
+  another that share one legend: give it to every strip but one, and declare the same categories
+  in the same order on each, so the legend kept names every category. The cells, the tooltip and
+  the table are as before, and a strip that does not call it is drawn as before.
+  `ColorStrip::hide_legend` is a new inherent method: an app whose own extension trait gives
+  `ColorStrip` a method of that name calls it through the trait (`MyExt::hide_legend(strip)`).
 
 ### Fixed
 
