@@ -37,6 +37,10 @@ const page = install({
         <div id="late-body" data-slot="proof:late-body" data-ui-keep><button id="late-button" data-ui-click='[["toggle","menu"]]'>Show the zones</button></div>
       </div>
       <div id="two" data-slot="proof:two" data-ui-ext="${EXT}/proof.two-0123456789ab.js" data-ui-props="{}"></div>
+      <div id="grow" data-slot="proof:pad" data-ui-ext="${EXT}/proof.pad-0123456789ab.js" data-ui-props='{"step":1}'></div>
+      <div id="slow" data-slot="proof:slow" data-ui-ext="${EXT}/proof.slow-0123456789ab.js" data-ui-props="{}">
+        <div id="slow-body" data-slot="proof:slow-body" data-ui-keep></div>
+      </div>
       <div id="off-site" data-ui-ext="https://cdn.example${EXT}/proof.pad-0123456789ab.js" data-ui-props="{}"></div>
       <div id="island-route" data-ui-ext="/_navree/ui/island/proof.pad-0123456789ab.js" data-ui-props="{}"></div>
       <div id="with-query" data-ui-ext="${EXT}/proof.pad-0123456789ab.js?v=2" data-ui-props="{}"></div>
@@ -58,10 +62,15 @@ const page = install({
 const told = [];
 console.error = (/** @type {any[]} */ ...args) => void told.push(args.join(" "));
 
+const g = /** @type {any} */ (globalThis);
+// The slow component's script stays on its way until a test lets it come.
+/** @type {() => void} */
+let letSlowCome = () => {};
+g.slowGate = new Promise((/** @type {any} */ go) => (letSlowCome = go));
+
 await import("../src/core.js");
 await import("../src/extensions.js");
 
-const g = /** @type {any} */ (globalThis);
 const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementById(id));
 /** Waits for `done`: a script comes through the module loader in its own time. @param {() => boolean} done @param {string} what */
 async function until(done, what) {
@@ -87,7 +96,7 @@ const PAGE = { "content-type": "text/html; charset=utf-8", "x-navree-page": "1" 
 const NOTHING = { status: 204, headers: {} };
 const REFUSED = { ok: false, status: 0, data: null };
 
-await until(() => ["pad", "gone", "timers", "late", "vendor"].every((id) => $(id).hasAttribute("data-ui-mounted")) && $("two").hasAttribute("data-ui-failed"), "the scripts to mount");
+await until(() => ["pad", "gone", "timers", "late", "vendor", "grow"].every((id) => $(id).hasAttribute("data-ui-mounted")) && $("two").hasAttribute("data-ui-failed"), "the scripts to mount");
 // The library in the vendor's component works on a timer.
 await settle();
 
@@ -232,6 +241,71 @@ test("a sealed body gets its mark back", async () => {
   await settle();
   assert.equal($("vendor-body").hasAttribute("data-ui-click"), false);
   assert.equal($("vendor-body").hasAttribute("data-ui-keep"), true);
+});
+
+test("a body a morph adds to a mounted element, or puts in place of its body, is sealed and is the script's", async () => {
+  const ui = g.uis.grow;
+  // The element had no body; the server's morph gives it one, with a hook drawn in it.
+  beforeSwap($("grow"));
+  const added = document.createElement("div");
+  added.innerHTML = `<div id="grow-body" data-slot="proof:pad-body" data-ui-keep><button id="grow-button" data-ui-click='[["toggle","menu"]]'>Show the zones</button></div>`;
+  $("grow").append(...added.childNodes);
+  swap();
+  assert.equal($("grow-body").hasAttribute("data-ui-stored"), true, "a body added to a mounted element was not sealed");
+  assert.deepEqual(hooks($("grow-body")), []);
+  assert.equal($("grow-button").getAttribute("form"), "ui-sealed");
+  assert.equal(ui.find("#grow-button"), $("grow-button"));
+  assert.equal(ui.stored($("grow-button")), false);
+  // What the script writes there from then on is scrubbed too.
+  const later = document.createElement("button");
+  later.setAttribute("id", "grow-later");
+  later.setAttribute("data-ui-click", '[["toggle","menu"]]');
+  $("grow-body").append(later);
+  await settle();
+  assert.deepEqual(hooks($("grow-body")), []);
+
+  // Another morph puts another element in its place: that one is sealed, and is the script's.
+  beforeSwap($("grow"));
+  const other = document.createElement("div");
+  other.innerHTML = `<section id="grow-section" data-slot="proof:pad-body" data-ui-keep><button id="grow-other" data-ui-click='[["toggle","menu"]]'>Model Town</button></section>`;
+  $("grow-body").replaceWith(...other.childNodes);
+  swap();
+  assert.equal($("grow-section").hasAttribute("data-ui-stored"), true, "a body put in place of another was not sealed");
+  assert.deepEqual(hooks($("grow-section")), []);
+  assert.equal(ui.find("#grow-other"), $("grow-other"));
+  assert.deepEqual(ui.findAll("button"), [$("grow-other")]);
+  $("grow-other").click();
+  assert.equal($("menu").hasAttribute("hidden"), true, "a command in a body added by a morph ran");
+});
+
+test("a body put in place of another while the script is on its way is sealed before the script draws in it", async () => {
+  assert.equal($("slow-body").hasAttribute("data-ui-stored"), true);
+  beforeSwap(document.body);
+  const other = document.createElement("div");
+  other.innerHTML = `<section id="slow-section" data-slot="proof:slow-body" data-ui-keep><button id="slow-drawn" data-ui-click='[["toggle","menu"]]'>Sarabha Nagar</button></section>`;
+  $("slow-body").replaceWith(...other.childNodes);
+  swap();
+  // Sealed before the script comes: what the server drew there is no hook.
+  assert.equal($("slow-section").hasAttribute("data-ui-stored"), true, "the body put in place of another was not sealed");
+  assert.deepEqual(hooks($("slow-section")), []);
+  $("slow-drawn").click();
+  letSlowCome();
+  await until(() => $("slow").hasAttribute("data-ui-mounted"), "the slow script to mount");
+  await settle();
+  assert.ok($("slow-planted"), "the slow script did not draw into its body");
+  assert.equal($("slow-section").hasAttribute("data-ui-stored"), true, "the body the script drew in was not sealed");
+  assert.deepEqual(hooks($("slow-section")), []);
+  $("slow-planted").click();
+  assert.equal($("menu").hasAttribute("hidden"), true, "a command in the slow script's body ran");
+});
+
+test("ui.stored answers for a text node and for something that is no node", () => {
+  const ui = g.uis.pad;
+  const line = ui.find('[data-slot="proof:line"]');
+  assert.equal(ui.stored(line.firstChild), false);
+  assert.equal(ui.stored($("pad-stored").firstChild), true);
+  assert.equal(ui.stored(/** @type {any} */ (globalThis)), false);
+  assert.equal(ui.stored(document.createTextNode("Ludhiana")), false);
 });
 
 test("ui.find skips stored content but searches the owned body", () => {

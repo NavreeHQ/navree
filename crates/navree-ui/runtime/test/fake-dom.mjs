@@ -285,8 +285,10 @@ class FakeNode extends FakeEventTarget {
     /** @type {any[]} */
     this.childNodes = [];
   }
-  // What the morph reads through `Node.prototype` lives on the prototype here too.
+  // What the morph reads through `Node.prototype` lives on the prototype here too. As in a browser, the
+  // getter called on what is no node throws.
   get parentNode() {
+    if (!(this instanceof FakeNode)) throw new TypeError("Illegal invocation");
     return this._parent ?? null;
   }
   set parentNode(node) {
