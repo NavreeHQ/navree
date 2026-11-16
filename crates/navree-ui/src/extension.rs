@@ -15,9 +15,11 @@
 //! and gives it only the routes the extension named.
 //!
 //! The namespace is the plugin's own (a lower-case letter followed by up to 63 lower-case
-//! letters, digits or `_`); an app's own extensions use a namespace no plugin has, such as
-//! `app`. A plugin contributing an extension outside its namespace stops the boot, and so
-//! do two modules giving one extension name to different files.
+//! letters, digits or `_`), in every module of the plugin's crate; an app's own extensions use
+//! `app`, or another namespace no plugin has and the framework does not keep for itself (not
+//! `ui` or `navree`). A module of a plugin contributing an extension outside its namespace
+//! stops the boot, and so do a module of the app taking a plugin's namespace or one the
+//! framework keeps, and two modules giving one extension name to different files.
 
 use std::collections::BTreeSet;
 use std::sync::{Mutex, PoisonError};
@@ -25,8 +27,8 @@ use std::sync::{Mutex, PoisonError};
 use bytes::Bytes;
 use http::{HeaderMap, StatusCode};
 use navree_http::response::{IntoResponse, Response};
-use navree_kernel::__private::is_community_plugin;
-use navree_kernel::AppContext;
+use navree_kernel::__private::RESERVED_NAMESPACES;
+use navree_kernel::{AppContext, ModuleId, PluginReport};
 
 use crate::assets;
 use crate::node::{AttrValue, Node, Uses};
@@ -377,8 +379,9 @@ impl std::fmt::Debug for UiExtension {
 impl UiExtension {
     /// An extension named `name` (1 to 64 lower-case letters, digits and `-`) under
     /// `namespace` (a lower-case letter followed by up to 63 lower-case letters, digits or
-    /// `_`): a plugin's namespace, or one no plugin has, such as `app`, for the app's own. A
-    /// name or a namespace outside those rules fails the build.
+    /// `_`): a plugin's namespace, or for the app's own `app` or another that no plugin has and
+    /// the framework does not keep for itself. A name or a namespace outside those rules fails
+    /// the build; a namespace that is not the contributing module's to use fails the boot.
     pub const fn new(namespace: &'static str, name: &'static str) -> UiExtension {
         assert!(
             navree_kernel::__private::is_namespace(namespace),
@@ -733,12 +736,24 @@ struct First {
     of_plugin: bool,
 }
 
+/// The plugin `module` acts for, first-party or not, as the `plugins` listing lists it: the
+/// plugin it names, the plugin whose crate it is in, or the plugin whose modules alone import
+/// it.
+fn plugin_of(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
+    plugins
+        .iter()
+        .find(|plugin| plugin.modules.iter().any(|member| member.id == module))
+}
+
 /// The extensions the app's modules contributed, checked and ready to serve. Fails with every
-/// problem when a plugin contributes an extension outside its namespace, a module of the app
-/// takes a plugin's namespace, two modules give one name to different files, an extension has
-/// no file, a script has no contract, or a contract is one this toolkit does not run. Two
-/// modules that give one name the same files contribute one extension. Each extension is
-/// logged once, with the size of its files.
+/// problem when a module that acts for a plugin (one that names it, or another module of its
+/// crate) contributes an extension outside the plugin's namespace, another module takes a
+/// plugin's namespace, a module of the app takes a namespace the framework keeps for itself
+/// (but `app`), two modules give one name to different files, an extension has no file, a
+/// script has no contract, or a contract is one this toolkit does not run. The modules of a
+/// first-party plugin may use any namespace but another plugin's. Two modules that give one
+/// name the same files contribute one extension. Each extension is logged once, with the size
+/// of its files.
 pub(crate) fn checked(ctx: &AppContext) -> Result<Extensions, String> {
     let contributed = ctx.contributions::<UiExtension>();
     if contributed.is_empty() {
@@ -751,11 +766,14 @@ pub(crate) fn checked(ctx: &AppContext) -> Result<Extensions, String> {
         let extension: UiExtension = *entry.value;
         let module = &entry.module;
         let stem = extension.stem();
-        let plugin = ctx.plugin(module.id);
+        let acting = plugin_of(&plugins, module.id);
+        let plugin = acting.map(|report| &report.info);
+        let first_party = acting.is_some_and(|report| report.first_party);
 
-        // Whose namespace it is: a plugin keeps to its own, and nobody else takes a plugin's.
+        // Whose namespace it is: a plugin keeps to its own in every module that acts for it,
+        // nobody else takes a plugin's, and the app takes none the framework keeps but `app`.
         match plugin {
-            Some(info) if is_community_plugin(ctx, module.id) => {
+            Some(info) if !first_party => {
                 if info.namespace != extension.namespace() {
                     note(
                         &mut errors,
@@ -782,6 +800,19 @@ pub(crate) fn checked(ctx: &AppContext) -> Result<Extensions, String> {
                             module.name,
                             extension.namespace(),
                             owner.info.name
+                        ),
+                    );
+                } else if plugin.is_none()
+                    && extension.namespace() != "app"
+                    && RESERVED_NAMESPACES.contains(&extension.namespace())
+                {
+                    note(
+                        &mut errors,
+                        format!(
+                            "module `{}` contributes the UI extension `{stem}` under `{}`, which the framework keeps for itself; build it with UiExtension::new(\"app\", \"{}\"), or under a namespace no plugin has",
+                            module.name,
+                            extension.namespace(),
+                            extension.name()
                         ),
                     );
                 }

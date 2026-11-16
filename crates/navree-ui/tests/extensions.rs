@@ -8,8 +8,13 @@ use std::sync::{Arc, Mutex};
 use http::Method;
 use navree_http::{Controller, HttpModule, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
-    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, PluginInfo, ProviderKey, Resolver,
+    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };
+use navree_plugin_geo::{
+    BadgeModule, EmptyModule, GeoHelperModule, GeoMapModule, GeoModule, MapsModule,
+    NewerContractModule, NoContractModule, WideModule,
+};
+use navree_plugin_maps::{MapsHelper, MapsPlugin};
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_ui::table::NoFilter;
 use navree_ui::{
@@ -408,16 +413,6 @@ fn test_view_says_which_extensions_a_page_uses_including_in_table_rows() {
     assert!(!none.uses_extension(&MAP) && !none.uses_extension(&BADGE));
 }
 
-/// The plugin that ships the map: its namespace is `geo`.
-fn geo() -> PluginInfo {
-    PluginInfo::new(
-        "navree-plugin-geo",
-        env!("CARGO_CRATE_NAME"),
-        "geo",
-        "1.0.0",
-    )
-}
-
 /// An extension of another namespace, one of the app's own, a second map with other files, and
 /// extensions whose declarations the boot refuses.
 static PIN: UiExtension = UiExtension::new("maps", "pin").sheet(ExtensionFile::__new(
@@ -451,10 +446,10 @@ static NEWER_TOUR: UiExtension = UiExtension::new("geo", "tour")
     .contract(2);
 static EMPTY: UiExtension = UiExtension::new("geo", "empty");
 
-/// A module of the plugin `geo` that contributes extensions.
+/// A module of the plugin `geo` that contributes extensions (in `navree_plugin_geo`).
 macro_rules! plugin_module {
     ($name:ident, $($extension:expr),+) => {
-        struct $name;
+        pub struct $name;
 
         impl Module for $name {
             fn register(&self, m: &mut ModuleBuilder) {
@@ -478,13 +473,69 @@ macro_rules! app_module {
     };
 }
 
-plugin_module!(GeoModule, MAP, BADGE);
-plugin_module!(MapsModule, PIN);
-plugin_module!(GeoMapModule, MAP);
-plugin_module!(NoContractModule, TOUR);
-plugin_module!(NewerContractModule, NEWER_TOUR);
-plugin_module!(EmptyModule, EMPTY);
-plugin_module!(BadgeModule, BADGE);
+/// The plugin `geo`, which ships the map. A test binary is one crate, so the plugin's crate is
+/// this module, and the app's modules at the top of the file are in no crate it names.
+mod navree_plugin_geo {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+    use navree_ui::UiExtension;
+
+    use super::{BADGE, EMPTY, MAP, NEWER_TOUR, PIN, TOUR, WIDE};
+
+    /// The plugin's info: its namespace is `geo`.
+    fn geo() -> PluginInfo {
+        PluginInfo::new("navree-plugin-geo", module_path!(), "geo", "1.0.0")
+    }
+
+    plugin_module!(GeoModule, MAP, BADGE);
+    plugin_module!(MapsModule, PIN);
+    plugin_module!(GeoMapModule, MAP);
+    plugin_module!(NoContractModule, TOUR);
+    plugin_module!(NewerContractModule, NEWER_TOUR);
+    plugin_module!(EmptyModule, EMPTY);
+    plugin_module!(BadgeModule, BADGE);
+    plugin_module!(WideModule, WIDE);
+
+    /// A module of the plugin's crate that names no plugin: it contributes the extension it
+    /// holds, and acts for the plugin all the same.
+    pub struct GeoHelperModule(pub UiExtension);
+
+    impl Module for GeoHelperModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.contribute(self.0);
+        }
+    }
+}
+
+/// The plugin `maps`, another plugin of the app: its crate is this module.
+mod navree_plugin_maps {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+    use navree_ui::UiExtension;
+
+    /// The plugin's info: its namespace is `maps`.
+    fn maps() -> PluginInfo {
+        PluginInfo::new("navree-plugin-maps", module_path!(), "maps", "1.0.0")
+    }
+
+    /// The plugin's module: it names the plugin and contributes the extension it holds.
+    pub struct MapsPlugin(pub UiExtension);
+
+    impl Module for MapsPlugin {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(maps()).contribute(self.0);
+        }
+    }
+
+    /// A module of the plugin's crate that names no plugin: it contributes the extension it
+    /// holds.
+    pub struct MapsHelper(pub UiExtension);
+
+    impl Module for MapsHelper {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.contribute(self.0);
+        }
+    }
+}
+
 app_module!(Shop, BADGE);
 app_module!(ShopOwn, RATING);
 app_module!(FirstMapModule, MAP);
@@ -860,7 +911,6 @@ static OWN: UiExtension = UiExtension::new("app", "own")
     .contract(1)
     .routes(&["/deliveries/"]);
 
-plugin_module!(WideModule, WIDE);
 app_module!(OwnModule, OWN);
 
 #[tokio::test(flavor = "current_thread")]
@@ -885,6 +935,118 @@ async fn a_route_prefix_without_the_namespace_is_warned_about() {
         "{said:?}"
     );
     app.shutdown().await.unwrap();
+}
+
+/// Extensions under words the framework keeps for itself: `ui`, the toolkit's own, and
+/// `navree`.
+static DIAL: UiExtension = UiExtension::new("ui", "dial").sheet(ExtensionFile::__new(
+    b"/* scoped for ui */",
+    "121212121212",
+    Some("ui"),
+));
+static SEAL: UiExtension = UiExtension::new("navree", "seal").sheet(ExtensionFile::__new(
+    b"/* scoped for navree */",
+    "343434343434",
+    Some("navree"),
+));
+
+app_module!(ShopDial, DIAL);
+app_module!(ShopSeal, SEAL);
+
+/// The boot error of an app that must not boot.
+async fn boot_error(builder: TestAppBuilder) -> String {
+    match builder.try_build().await {
+        Ok(_) => panic!("the app booted"),
+        Err(error) => error.to_string(),
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_module_of_a_plugins_crate_contributes_under_the_plugins_namespace_only() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    // A module of the plugin's crate that names no plugin acts for the plugin: under its
+    // namespace it boots, its file is served, and the log names the plugin.
+    let app = builder()
+        .module(UiModule)
+        .module(GeoMapModule)
+        .module(GeoHelperModule(BADGE))
+        .build()
+        .await;
+    app.client()
+        .get(BADGE.sheet_url().expect("a stylesheet"))
+        .send()
+        .await
+        .assert_status(200);
+    let said = said_about_extensions(&capture);
+    let named = "UI extension geo.badge (plugin `navree-plugin-geo`)";
+    assert!(said.iter().any(|line| line.contains(named)), "{said:?}");
+    app.shutdown().await.unwrap();
+
+    // Under `app` its stylesheet would be scoped to the app's own components, and under `ui` to
+    // the toolkit's: both are another namespace than the plugin's.
+    for extension in [RATING, DIAL] {
+        let refused = builder()
+            .module(UiModule)
+            .module(GeoMapModule)
+            .module(GeoHelperModule(extension));
+        let error = boot_error(refused).await;
+        let (namespace, name) = (extension.namespace(), extension.name());
+        let expected = format!(
+            "plugin `navree-plugin-geo` contributes the UI extension `{namespace}.{name}`, which is not under its namespace: build it with UiExtension::new(\"geo\", \"{name}\")"
+        );
+        assert!(error.contains(&expected), "{error}");
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_module_of_the_app_contributes_under_app_and_not_under_a_word_the_framework_keeps() {
+    // `app` is the app's, beside a plugin.
+    let app = builder()
+        .module(UiModule)
+        .module(GeoMapModule)
+        .module(ShopOwn)
+        .build()
+        .await;
+    app.client()
+        .get(RATING.sheet_url().expect("a stylesheet"))
+        .send()
+        .await
+        .assert_status(200);
+    app.shutdown().await.unwrap();
+
+    // `ui` and `navree` are the framework's, with no plugin in the app or with one.
+    let dial = builder().module(UiModule).module(ShopDial);
+    let error = boot_error(dial).await;
+    let expected = "module `ShopDial` contributes the UI extension `ui.dial` under `ui`, which the framework keeps for itself; build it with UiExtension::new(\"app\", \"dial\"), or under a namespace no plugin has";
+    assert!(error.contains(expected), "{error}");
+    let seal = builder()
+        .module(UiModule)
+        .module(GeoMapModule)
+        .module(ShopSeal);
+    let error = boot_error(seal).await;
+    let expected = "module `ShopSeal` contributes the UI extension `navree.seal` under `navree`, which the framework keeps for itself; build it with UiExtension::new(\"app\", \"seal\"), or under a namespace no plugin has";
+    assert!(error.contains(expected), "{error}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_module_of_another_plugin_is_refused_the_plugins_namespace() {
+    let expected = "plugin `navree-plugin-maps` contributes the UI extension `geo.badge`, which is not under its namespace: build it with UiExtension::new(\"maps\", \"badge\")";
+    // The module that names the other plugin.
+    let named = builder()
+        .module(UiModule)
+        .module(GeoMapModule)
+        .module(MapsPlugin(BADGE));
+    let error = boot_error(named).await;
+    assert!(error.contains(expected), "{error}");
+    // A module of the other plugin's crate that names none acts for that plugin.
+    let helper = builder()
+        .module(UiModule)
+        .module(GeoMapModule)
+        .module(MapsPlugin(PIN))
+        .module(MapsHelper(BADGE));
+    let error = boot_error(helper).await;
+    assert!(error.contains(expected), "{error}");
 }
 
 #[test]

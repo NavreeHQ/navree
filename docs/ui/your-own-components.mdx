@@ -11,7 +11,7 @@ This page builds one component, a rating, from five stars the server draws to a 
 
 Check the [component list](/docs/components/overview/) first. A part that every app would use, such as a new kind of chart or a new picker, belongs in Navree UI itself. Propose it as a pull request to the toolkit instead of building it in your app, so that it comes with the toolkit's themes, tests and docs.
 
-Build a component of your own when it is yours: a map of your delivery area, a field that checks a value against your configuration, a part that wraps a library your plugin ships. It lives in an app or in a plugin crate. An app uses the namespace `app`. A plugin uses its own namespace (`geo`, `announcements`), so what it names can't meet what the app or another plugin names.
+Build a component of your own when it is yours: a map of your delivery area, a field that checks a value against your configuration, a part that wraps a library your plugin ships. It lives in an app or in a plugin crate. An app uses the namespace `app`. A plugin uses its own namespace (`geo`, `announcements`) in every module of its crate, so what it names can't meet what the app or another plugin names.
 
 ## A component is a struct that turns into a node
 
@@ -662,6 +662,7 @@ The boot checks each extension, and stops with every problem it found:
 ```text
 plugin `navree-plugin-geo` contributes the UI extension `maps.pin`, which is not under its namespace: build it with UiExtension::new("geo", "pin")
 module `Shop` contributes the UI extension `geo.badge` under `geo`, the namespace of plugin `navree-plugin-geo`; an app's own extensions use a namespace no plugin has, such as app
+module `Shop` contributes the UI extension `ui.dial` under `ui`, which the framework keeps for itself; build it with UiExtension::new("app", "dial"), or under a namespace no plugin has
 UI extension `geo.map` is contributed by both `FirstMapModule` and `SecondMapModule` with different files; give one another name
 UI extension `geo.empty` has no script and no stylesheet
 UI extension `geo.tour` has a script but declares no contract: add .contract(1)
