@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Takes one picture of the demo app in a simulator, in one of the modes a
-# review against Apple's guidelines looks at, and puts every setting back.
+# Takes one picture of the demo app in a simulator, in one of the modes
+# Apple's guidelines ask an app to hold up in, and puts every setting back.
 #
 #   scripts/evidence.sh <device> <mode> <picture.png> [launch arguments...]
 #

@@ -42,9 +42,9 @@ public enum ShortcutRules {
     public static let quickActionType = "navree.open"
 
     /// The shortcuts: none unless the app turns them on; then the app's first
-    /// destinations, up to the limit (the Home Screen shows four). When the
-    /// server's shell names shortcuts of its own (a protocol proposal), they
-    /// are to come first.
+    /// destinations, up to the limit (the Home Screen shows four). The
+    /// protocol's shell names no shortcuts of its own yet; when it does,
+    /// they are to come first.
     public static func entries(source: Shortcuts, destinations: [PresenceDestination]) -> [ShortcutEntry] {
         guard case .on(let limit) = source, limit > 0 else { return [] }
         return destinations

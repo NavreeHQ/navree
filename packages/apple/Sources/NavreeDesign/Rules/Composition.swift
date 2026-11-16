@@ -135,7 +135,7 @@ public enum CompositionRules {
     // MARK: Room between blocks (a Mac window)
 
     /// A composed screen's room on a Mac, as SwiftUI's grouped form sets out
-    /// its sections on macOS 27 (measured on this Mac, a `Form` with
+    /// its sections on macOS 27 (measured, a `Form` with
     /// `.formStyle(.grouped)`): its first section 20 points under the bar,
     /// 10 between two sections, a section's heading 30 under the section
     /// before it and 10 over its own. iPhone and iPad keep the page's own

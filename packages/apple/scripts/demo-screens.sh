@@ -80,8 +80,8 @@ for pass in $passes; do
         ipad)
             if [ -z "$ipad" ]; then echo "No iPad simulator on $runtime"; continue; fi
             device="$ipad"
-            # One simulator at a time: with two booted, xcodebuild has been
-            # seen to list none.
+            # One simulator at a time: with two booted, xcodebuild may
+            # list none.
             xcrun simctl shutdown "$udid" 2>/dev/null || true
             xcrun simctl boot "$device" 2>/dev/null || true
             xcrun simctl bootstatus "$device" -b >/dev/null
