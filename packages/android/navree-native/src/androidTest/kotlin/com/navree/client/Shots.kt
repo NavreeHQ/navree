@@ -144,6 +144,18 @@ object Shots {
         }
     }
 
+    /**
+     * A keyboard's Tab as the system delivers it to the window, through the
+     * activity: that is what puts Compose into keyboard mode, where a button, a
+     * switch or a picker can take the focus (in touch mode only a text field and
+     * what is made `focusable` itself can). A key event given to the test's root
+     * directly leaves Compose in touch mode, and a walk made with it visits only
+     * the text fields.
+     */
+    fun pressTab() {
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_TAB)
+    }
+
     /** Writes a text file beside the pictures, by way of the app's own folder the shell can read. */
     fun put(file: String, text: String) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

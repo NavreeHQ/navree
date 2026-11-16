@@ -230,7 +230,7 @@ class LiveDemosTest {
         val seen = ArrayList<Stop>()
         // Two stops a row (its field and its button), the page's own controls first, and a margin.
         repeat((fields.size * 3 + 20).coerceAtMost(120)) { press ->
-            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+            Shots.pressTab()
             compose.waitForIdle()
             val stop = focusedStop()
             assertTrue("press ${press + 1} of Tab landed on nothing that can be seen or said; the stops so far: ${seen.map { it.name.take(30) }}", stop != null)
@@ -265,7 +265,7 @@ class LiveDemosTest {
         var reached = false
         repeat(things.size + 2) {
             if (reached) return@repeat
-            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+            Shots.pressTab()
             compose.waitForIdle()
             val node = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
             val named = node.joinToString(" + ") { nameOf(it).take(28) + "#" + it.id }
@@ -292,7 +292,7 @@ class LiveDemosTest {
         Thread.sleep(500)
         assertEquals("no field holds the focus after Done", 0, compose.onAllNodes(hasSetTextAction() and isFocused()).fetchSemanticsNodes().size)
         repeat(6) { press ->
-            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+            Shots.pressTab()
             compose.waitForIdle()
             val stop = focusedStop()
             assertTrue("press ${press + 1} of Tab after Done landed on nothing that can be seen or said", stop != null)

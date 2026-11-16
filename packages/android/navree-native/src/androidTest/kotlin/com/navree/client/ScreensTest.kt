@@ -220,7 +220,7 @@ class ScreensTest {
         val stops = ArrayList<String>()
         val trace = ArrayList<String>()
         repeat(45) { press ->
-            compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+            Shots.pressTab()
             compose.waitForIdle()
             val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
             assertTrue("press ${press + 1} of Tab landed on nothing that can be seen or said; the stops so far: $stops", focused.size == 1)
