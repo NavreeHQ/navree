@@ -63,9 +63,10 @@ const REPORTS_VIEW: &[Permission] = &[Permission::new(
 /// The app's khata tool: a summary for those who can read `khata`, a subject no module
 /// registers.
 fn summary() -> McpItem {
-    McpItem::tool(ToolDef::new("khata_summary").can("read", "khata", None), |_| async {
-        Ok(McpOutput::Json(json!("The khata of Ludhiana is settled.")))
-    })
+    McpItem::tool(
+        ToolDef::new("khata_summary").can("read", "khata", None),
+        |_| async { Ok(McpOutput::Json(json!("The khata of Ludhiana is settled."))) },
+    )
 }
 
 /// The app's khata server, written without the macro.

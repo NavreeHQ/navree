@@ -277,7 +277,9 @@ async fn the_two_ways_out_of_a_channel_under_a_plugins_namespace_boot() {
     for builder in outside {
         let server = Server::serve(builder).await;
         let gurpreet = Uuid::now_v7();
-        let desk = server.auth(Some(gurpreet), SOCKET, "private-support.desk").await;
+        let desk = server
+            .auth(Some(gurpreet), SOCKET, "private-support.desk")
+            .await;
         assert_eq!(desk.status, StatusCode::FORBIDDEN, "{}", desk.json);
         let room = server.auth(Some(gurpreet), SOCKET, "private-chat.7").await;
         assert_eq!(room.status, StatusCode::OK, "{}", room.json);

@@ -777,7 +777,9 @@ impl Controller for BoardController {
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         let declare = self.0.0;
-        vec![declare(RouteDef::on(Method::GET, "/", || async { "Jalandhar" }))]
+        vec![declare(RouteDef::on(Method::GET, "/", || async {
+            "Jalandhar"
+        }))]
     }
 }
 
@@ -809,7 +811,9 @@ async fn an_app_route_may_require_a_permission_the_plugin_describes() {
     // purpose, and the app boots. Who holds it is still the app's grant.
     let app = builder()
         .module(ANNOUNCEMENTS)
-        .module(BoardModule(|route| route.permissions(&["announcements.read"])))
+        .module(BoardModule(|route| {
+            route.permissions(&["announcements.read"])
+        }))
         .try_build()
         .await
         .expect("a route of the app may require a permission the plugin describes");
@@ -821,9 +825,9 @@ async fn an_app_route_may_require_a_permission_the_plugin_describes() {
     // `announcements.archive` is under the namespace and the plugin does not describe it: it is
     // the app's own name under a word the plugin's policies decide, and the boot says both ways
     // out.
-    let app = builder()
-        .module(ANNOUNCEMENTS)
-        .module(BoardModule(|route| route.permissions(&["announcements.archive"])));
+    let app = builder().module(ANNOUNCEMENTS).module(BoardModule(|route| {
+        route.permissions(&["announcements.archive"])
+    }));
     let error = boot_error(app).await;
     let expected = format!(
         "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the permission `announcements.archive` that the route `GET /board` of `BoardModule` requires{NOT_DESCRIBED}"
@@ -886,7 +890,9 @@ async fn an_app_route_may_check_a_subject_registered_as_the_plugins() {
     // Another name under the namespace beside a registered one is refused as well.
     let app = builder()
         .module(NoticeSubjects(subject_of::<Announcement>))
-        .module(BoardModule(|route| route.can(READ, "announcements.Draft", None)));
+        .module(BoardModule(|route| {
+            route.can(READ, "announcements.Draft", None)
+        }));
     let error = boot_error(app).await;
     let expected = format!(
         "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the subject `announcements.Draft` that the route `GET /board` of `BoardModule` checks{NOT_REGISTERED}"
@@ -919,7 +925,9 @@ async fn the_routes_are_read_beside_a_second_provider_of_the_http_options() {
     // the plugin's namespace that the plugin does not describe is still refused.
     let app = builder()
         .module(NoticeSubjects(own_http_options))
-        .module(BoardModule(|route| route.permissions(&["announcements.archive"])));
+        .module(BoardModule(|route| {
+            route.permissions(&["announcements.archive"])
+        }));
     let error = boot_error(app).await;
     let expected = format!(
         "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the permission `announcements.archive` that the route `GET /board` of `BoardModule` requires{NOT_DESCRIBED}"
