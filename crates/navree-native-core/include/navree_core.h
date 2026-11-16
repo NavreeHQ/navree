@@ -58,11 +58,13 @@
  * and for a failure inside the core, which includes a failure while the call's
  * own input is read (for navree_core_new, that is a configuration that does
  * not read: NULL). After such a failure the core has stopped for good: what
- * it held is dropped, nothing it had queued is sent, and every later
- * navree_core_send and navree_core_view answers an error. So does a core
- * whose lock a failure left poisoned. A client says the app must be started
- * again; it still frees the handle. An input that merely does not read is
- * only an error: the core goes on.
+ * it held is dropped, nothing it had queued is sent, and that call and every
+ * later navree_core_send and navree_core_view answer
+ * {"error":"...","stopped":true}. So does a core whose lock a failure left
+ * poisoned. A client tests "stopped" (never the words, which may change),
+ * says the app must be started again, and still frees the handle. No other
+ * answer carries "stopped": an input that merely does not read is only an
+ * error, and the core goes on.
  */
 
 #ifndef NAVREE_CORE_H

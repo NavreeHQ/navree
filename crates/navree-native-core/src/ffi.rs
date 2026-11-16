@@ -24,10 +24,11 @@
 //! is one core for each run of an app.
 //!
 //! No call panics across the boundary. A panic inside the core is caught, the
-//! call answers `{"error":"..."}`, and the core stops for good: what it held
-//! is dropped, nothing it had queued is sent, and every later call on the
-//! handle answers the same error. A client shows that the app must be started
-//! again. Reading what a call is given (the configuration, an event, a query)
+//! call answers `{"error":"...","stopped":true}`, and the core stops for good:
+//! what it held is dropped, nothing it had queued is sent, and every later
+//! call on the handle answers the same. A client tests `stopped`, never the
+//! words, and shows that the app must be started again. No other answer
+//! carries `stopped`. Reading what a call is given (the configuration, an event, a query)
 //! is inside the guard too: a failure there stops the core in the same way
 //! (for the configuration, which no core yet holds, the answer is a null
 //! handle), and a lock a failure left poisoned makes the core it guards a
@@ -94,6 +95,14 @@ fn error(what: &str) -> Vec<u8> {
         .into_bytes()
 }
 
+/// What a stopped core answers: the words, and a mark a client tests
+/// without reading them (`"stopped": true`). Only a core that stopped has it.
+fn stopped() -> Vec<u8> {
+    serde_json::json!({ "error": STOPPED, "stopped": true })
+        .to_string()
+        .into_bytes()
+}
+
 /// The bytes a caller passed, or nothing for a null pointer.
 ///
 /// # Safety
@@ -144,14 +153,14 @@ fn using(
     };
     let core = match &mut *slot {
         Slot::Live(core) => core,
-        Slot::Stopped => return error(STOPPED),
+        Slot::Stopped => return stopped(),
         Slot::Freed => return error(FREED),
     };
     match catch_unwind(AssertUnwindSafe(|| call(core))) {
         Ok(Ok(bytes)) => bytes,
         Ok(Err(_)) | Err(_) => {
             stop(&mut slot);
-            error(STOPPED)
+            stopped()
         }
     }
 }
@@ -522,6 +531,48 @@ mod tests {
             let nav = br#"{"part":"nav"}"#;
             assert!(text(navree_core_view(core, nav.as_ptr(), nav.len())).contains("stopped"));
             navree_core_free(core);
+        }
+    }
+
+    /// A core that stopped says so in a mark a program reads, `"stopped":
+    /// true`, beside the words it has always given; an answer that refuses an
+    /// input, or a freed handle's, has no such mark.
+    #[test]
+    fn a_stopped_core_says_so_in_a_mark_and_a_refusal_does_not() {
+        let read = |bytes: NavreeBytes| -> serde_json::Value {
+            serde_json::from_str(&text(bytes)).expect("an answer is JSON")
+        };
+        // SAFETY: as above; each handle is used until it is freed.
+        unsafe {
+            let core = navree_core_new(CONFIG.as_ptr(), CONFIG.len());
+            let junk = br#"{"t":"teleport"}"#;
+            let refused = read(navree_core_send(core, junk.as_ptr(), junk.len()));
+            assert!(refused["error"].is_string(), "{refused}");
+            assert!(refused.get("stopped").is_none(), "{refused}");
+            let query = br#"{"part":"nowhere"}"#;
+            let refused = read(navree_core_view(core, query.as_ptr(), query.len()));
+            assert!(refused.get("stopped").is_none(), "{refused}");
+
+            on_next_send(|_| panic!("a failure inside the core"));
+            let back = br#"{"t":"back"}"#;
+            for answer in [
+                read(navree_core_send(core, back.as_ptr(), back.len())),
+                read(navree_core_send(core, back.as_ptr(), back.len())),
+                read(navree_core_view(core, std::ptr::null(), 0)),
+            ] {
+                assert_eq!(answer["stopped"], true, "{answer}");
+                assert_eq!(answer["error"], STOPPED, "the words stay: {answer}");
+            }
+            navree_core_free(core);
+            let freed = read(navree_core_send(core, back.as_ptr(), back.len()));
+            assert_eq!(freed["error"], FREED, "{freed}");
+            assert!(freed.get("stopped").is_none(), "{freed}");
+            let none = read(navree_core_send(
+                std::ptr::null_mut(),
+                back.as_ptr(),
+                back.len(),
+            ));
+            assert!(none.get("stopped").is_none(), "{none}");
         }
     }
 
