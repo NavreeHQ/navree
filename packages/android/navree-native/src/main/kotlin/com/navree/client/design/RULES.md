@@ -288,8 +288,10 @@ With nothing opened, the list has the window.
   core holds the token, name, type and size. The form's request streams the copy
   into its multipart body. A copy that is gone is shown as gone ("No longer
   available. Choose it again.") when the app comes back to the front, and no
-  part is sent for it, never an empty one. The copies are removed when a file is
-  removed, at the end of a session, and a day after they were made.
+  part is sent for it, never an empty one. The copies are removed when the
+  form's server takes the form, when the person leaves the form's screen, when a
+  file is removed or replaced, at the end of a session, at the next start, and
+  a day after they were made.
 - Unless the field says `keep_location`, the place a picture was taken is taken
   out of the copy, by what its own first bytes say it is, never by its type or
   name: from a JPEG, PNG or WebP every GPS tag, an XMP packet that names a

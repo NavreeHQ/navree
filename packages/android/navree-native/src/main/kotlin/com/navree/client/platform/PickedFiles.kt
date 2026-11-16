@@ -36,8 +36,11 @@ import java.util.concurrent.ConcurrentHashMap
  * sent, never all into memory. A file that is gone by then is sent as no file,
  * never as an empty one.
  *
- * The folder is emptied at the end of a session, and a copy a past process
- * left (the core's own state did not outlive it) is removed when a session starts.
+ * A copy goes when its form's server took the form ([sent]), when its field
+ * leaves a screen the core no longer holds (the file field drops it), when it
+ * is removed or replaced, a day after it was made (looked at with each new
+ * file), and at the end of a session; a copy a past process left (the core's
+ * own state did not outlive it) is removed when a session starts.
  *
  * Unless the field keeps it, the place a picture was taken is taken out of the
  * copy, or the picture is refused, by what the copy's own bytes say it is
@@ -126,6 +129,11 @@ class PickedFiles internal constructor(private val folder: File) {
     fun drop(token: String) {
         file(token)?.delete()
         types.remove(token)
+    }
+
+    /** Lets the copies under these tokens go: a form sent them and the server took it. */
+    fun sent(tokens: List<String>) {
+        for (token in tokens) drop(token)
     }
 
     /** Lets every copy go: the session ended. */

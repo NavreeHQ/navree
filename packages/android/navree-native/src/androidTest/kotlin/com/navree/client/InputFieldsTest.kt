@@ -737,6 +737,52 @@ class InputFieldsTest {
         waitFor("the field that keeps the place to hold the TIFF") { heldFiles("f-snap").size == 1 }
     }
 
+    // ---------------------------------------------------------------- when the copies go
+
+    /** The copies a sent form carried go once its server took it. */
+    @Test
+    fun theCopyOfAFileGoesWhenItsFormIsSent() {
+        startOnTheClaimsForm()
+        pick("Papers", "Choose files", document("Rasid Ludhiana.pdf", pdf, randomBytes(30_000)))
+        waitFor("the file to reach the core") { heldFiles("f-papers").size == 1 }
+        val token = heldFiles("f-papers").single().token
+        assertNotNull(PickedFiles.of(context).file(token))
+        save()
+        waitFor("the copy to go after the server took the form") { PickedFiles.of(context).file(token) == null }
+    }
+
+    /** The copies of a form's files go when the person leaves its screen. */
+    @Test
+    fun theCopyOfAFileGoesWhenItsScreenIsLeft() {
+        startOnTheClaimsForm()
+        pick("Papers", "Choose files", document("Rasid Ludhiana.pdf", pdf, randomBytes(30_000)))
+        waitFor("the file to reach the core") { heldFiles("f-papers").size == 1 }
+        val token = heldFiles("f-papers").single().token
+        compose.runOnUiThread { app.driver.send(Events.back) }
+        front("Today")
+        waitFor("the copy to go once its screen is left") { PickedFiles.of(context).file(token) == null }
+    }
+
+    /** Every copy goes when the session ends. */
+    @Test
+    fun theCopyOfAFileGoesWhenTheSessionEnds() {
+        startOnTheClaimsForm()
+        pick("Papers", "Choose files", document("Rasid Ludhiana.pdf", pdf, randomBytes(30_000)))
+        waitFor("the file to reach the core") { heldFiles("f-papers").size == 1 }
+        val token = heldFiles("f-papers").single().token
+        compose.runOnUiThread { app.effects.run(com.navree.client.core.Effect.ForgetSession) }
+        waitFor("the copy to go at the end of the session", 30_000) { PickedFiles.of(context).file(token) == null }
+    }
+
+    /** A copy a process that ended left behind goes when the app starts again. */
+    @Test
+    fun aCopyAnEndedProcessLeftGoesWhenTheAppStarts() {
+        val left = File(File(context.cacheDir, "navree-picked").apply { mkdirs() }, "0123456789abcdef0123456789abcdef").apply { writeBytes(randomBytes(1_000)) }
+        assertTrue(left.isFile)
+        startOnTheClaimsForm()
+        waitFor("the copy no token of this process names to go") { !left.exists() }
+    }
+
     // ---------------------------------------------------------------- pictures
 
     /** Both fields as a person sees them, with files chosen, in the look the job set; and the colour dialog open. */

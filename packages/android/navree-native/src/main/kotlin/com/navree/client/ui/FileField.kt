@@ -55,6 +55,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.navree.client.R
 import com.navree.client.core.FieldValue
 import com.navree.client.core.FileRef
+import com.navree.client.core.ScreenView
 import com.navree.client.design.FileRules
 import com.navree.client.design.FormRules
 import com.navree.client.platform.PickedFiles
@@ -62,6 +63,7 @@ import com.navree.protocol.Navree
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.concurrent.thread
 
 /**
  * What the system's picker is asked for, as one contract whatever the field
@@ -111,6 +113,12 @@ private fun words(context: Context, why: FileRules.Refusal): String = when (why)
     is FileRules.Refusal.PlaceUnchecked -> context.getString(R.string.navree_file_place_unchecked, why.name)
 }
 
+/** The tokens of every file a field of any screen the core holds names. */
+internal fun heldTokens(screens: Collection<ScreenView>): Set<String> =
+    screens.flatMap { screen -> screen.forms.values.flatMap { it.fields.values } }
+        .flatMap { (it.value as? FieldValue.Files)?.files.orEmpty() }
+        .mapTo(HashSet()) { it.token }
+
 /**
  * A file field, composed from Material 3's parts as it has no component for
  * one (its component list has none): an outlined box, as a text field is, with
@@ -123,6 +131,10 @@ private fun words(context: Context, why: FileRules.Refusal): String = when (why)
  * file that can no longer be read (the system cleared the copy while the app
  * was away) is shown as gone, and is sent as no file. While the form is on its
  * way the field cannot be changed, as the files it sends are being read.
+ *
+ * When the field leaves the composition and no screen the core still holds
+ * names its files (the person left the form's screen), their copies go. A
+ * field that only scrolled out of sight keeps them: its screen still names them.
  */
 @Composable
 internal fun FileFieldView(field: Navree.Field, input: Navree.FileInput, place: Place, modifier: Modifier) {
@@ -137,6 +149,16 @@ internal fun FileFieldView(field: Navree.Field, input: Navree.FileInput, place: 
     var busy by remember { mutableStateOf(false) }
     val gone = rememberGone(held, store)
     val scope = rememberCoroutineScope()
+    DisposableEffect(store) {
+        onDispose {
+            val mine = latestHeld.map { it.token }
+            if (mine.isNotEmpty()) {
+                // The composition is left after the core's state changed: a screen it no longer holds is gone.
+                val left = mine - heldTokens(ui.driver.screens.values)
+                if (left.isNotEmpty()) thread(name = "navree-picked-drop", isDaemon = true) { left.forEach(store::drop) }
+            }
+        }
+    }
     val plan = remember(input.accept, input.multiple) {
         FileRules.plan(input.accept, input.multiple) { extension -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) }
     }

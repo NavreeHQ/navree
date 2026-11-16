@@ -212,6 +212,8 @@ class CoreHttp(
     loopbackHttp: Boolean = false,
     private val state: StoredState = StoredState { it.run() },
     private val files: (String) -> RequestBody? = { null },
+    /** The tokens of the files a request carried, once its server took it (an answer under 400). */
+    private val sent: (List<String>) -> Unit = {},
     /** Where an answer goes: posted to the thread the core is driven on. */
     private val answer: (JsonObject) -> Unit,
 ) {
@@ -269,6 +271,8 @@ class CoreHttp(
                     } catch (_: Exception) {
                         Events.responseFailed(effect.request, "other")
                     }
+                    // The server took the form: the copies of the files it carried are let go.
+                    if (response.code < 400) fileTokens(effect).takeIf { it.isNotEmpty() }?.let(sent)
                     answer(event)
                 }
             },
@@ -299,6 +303,9 @@ class CoreHttp(
             body = body,
         )
     }
+
+    private fun fileTokens(effect: Effect.Fetch): List<String> =
+        (effect.body as? Body.Multipart)?.parts?.filterIsInstance<Part.File>()?.map { it.token }.orEmpty()
 
     private fun failure(e: IOException): String = when (e) {
         is UnknownHostException, is ConnectException -> "offline"

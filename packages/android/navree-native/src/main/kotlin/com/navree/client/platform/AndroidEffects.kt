@@ -87,7 +87,7 @@ class AndroidEffects(
     }
     /** The files chosen for a form's file fields, which a request that sends them reads from. */
     val picked = PickedFiles.of(app).also { files -> state.always { files.purgeStale() } }
-    val http = CoreHttp(cookies, origins, loopbackHttp, state, picked::body) { post(it) }
+    val http = CoreHttp(cookies, origins, loopbackHttp, state, picked::body, picked::sent) { post(it) }
     private val streams = CoreStreams(http.client, origins, cookies, state) { post(it) }
     private val cache = SealedCache(app)
     private val timers = HashMap<Long, Runnable>()
