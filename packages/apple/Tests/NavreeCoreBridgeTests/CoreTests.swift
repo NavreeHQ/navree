@@ -185,15 +185,20 @@ struct Fetch: Equatable {
     _ = try core.send(Store.answer(1, with: "shell"))
 
     // The dashboard's answer sends it to the web view, at its address on the origin.
-    #expect(try core.send(Store.answer(2, with: "dashboard")).changes == ["screen 1"])
+    let shown = try core.send(Store.answer(2, with: "dashboard"))
+    #expect(shown.changes == ["screen 1"])
     let dashboard = try #require(try core.read(["part": "screen", "id": 1])["content"] as? [String: Any])
     #expect(dashboard["t"] as? String == "web")
     #expect(dashboard["url"] as? String == "\(Local.origin)/")
+    // A page in the web view shares the session's cookies, so who is signed
+    // in may change there: the core asks for the shell again.
+    #expect(shown.effects.fetches == [Fetch(request: 3, method: "get", url: "\(Local.origin)/_navree/native/shell")])
+    #expect(try core.send(Store.answer(3, with: "shell")).changes == ["app", "nav"])
 
     // Orders, the second destination, is drawn natively.
     let selected = try core.send(["t": "select", "destination": 1])
-    #expect(selected.effects.fetches == [Fetch(request: 3, method: "get", url: "\(Local.origin)/orders")])
-    #expect(try core.send(Store.answer(3, with: "orders")).changes == ["screen 2"])
+    #expect(selected.effects.fetches == [Fetch(request: 4, method: "get", url: "\(Local.origin)/orders")])
+    #expect(try core.send(Store.answer(4, with: "orders")).changes == ["screen 2"])
     let orders = try core.read(["part": "screen", "id": 2])
     #expect((orders["content"] as? [String: Any])?["t"] as? String == "native")
     #expect(orders["loading"] as? Bool == false)
@@ -201,14 +206,14 @@ struct Fetch: Equatable {
     // A row's link pushes the order over the list.
     let opened = try core.send(["t": "act", "screen": 2, "action": ["t": "navigate", "href": "/orders/1"]])
     #expect(opened.changes == ["nav", "screen 3"])
-    #expect(opened.effects.fetches == [Fetch(request: 4, method: "get", url: "\(Local.origin)/orders/1")])
+    #expect(opened.effects.fetches == [Fetch(request: 5, method: "get", url: "\(Local.origin)/orders/1")])
     var nav = try core.read(["part": "nav"])
     #expect(nav["selected"] as? Int == 1)
     #expect((nav["destinations"] as? [[String: Any]])?[1]["stack"] as? [Int] == [2, 3])
     #expect(nav["front"] as? Int == 3)
     #expect(nav["can_go_back"] as? Bool == true)
 
-    _ = try core.send(Store.answer(4, with: "order"))
+    _ = try core.send(Store.answer(5, with: "order"))
     let back = try core.send(["t": "back"])
     #expect(back.changes.contains("nav"))
     nav = try core.read(["part": "nav"])

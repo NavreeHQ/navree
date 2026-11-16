@@ -13,7 +13,13 @@ struct EffectTests {
     @Test func aFetchGoesToTheTransportAndItsAnswerBackToTheCore() throws {
         let shell = try Shell()
         shell.client.begin()
-        #expect(shell.transport.fetched.map(\.url) == ["https://shop.example/_navree/native/shell", "https://shop.example/"])
+        // The shell, the first page, and the shell once more: the first page
+        // is the web view's, which shares the session's cookies, so the core
+        // asks who is signed in again.
+        #expect(shell.transport.fetched.map(\.url) == [
+            "https://shop.example/_navree/native/shell", "https://shop.example/",
+            "https://shop.example/_navree/native/shell",
+        ])
         #expect(shell.client.nav.stage == .ready)
         shell.effects.run(.cancel(request: 9), for: shell.client)
         #expect(shell.transport.cancelled == [9])

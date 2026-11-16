@@ -31,11 +31,18 @@ struct LoopTests {
             return
         }
         #expect(url == "https://shop.example/")
+        // A page in the web view shares the session's cookies, so who is
+        // signed in may change there: the core asks for the shell again.
+        #expect(h.recorder.takeFetches().map(\.2) == ["https://shop.example/_navree/native/shell"])
+        try h.answer(3, with: "store/shell.json")
+        #expect(h.client.nav.stage == .ready)
+        #expect(h.client.app?.user?.name == "Ravneet Kaur")
+        #expect(h.recorder.takeFetches().isEmpty)
 
         h.client.send(.select(destination: 1))
         #expect(h.client.nav.selected == 1)
         #expect(h.recorder.takeFetches().map(\.2) == ["https://shop.example/orders"])
-        try h.answer(3, with: "store/orders.json")
+        try h.answer(4, with: "store/orders.json")
         let orders = try #require(h.client.screen(2)?.screen)
         #expect(orders.title == "Orders")
         #expect(h.client.front?.id == 2)
@@ -44,7 +51,7 @@ struct LoopTests {
         #expect(h.client.nav.destinations[1].stack == [2, 3])
         #expect(h.client.nav.front == 3)
         #expect(h.client.nav.canGoBack)
-        try h.answer(4, with: "store/order.json")
+        try h.answer(5, with: "store/order.json")
         #expect(h.client.screen(3)?.screen?.title == "Order CS-20481")
 
         // The system's back gesture took the order away.
@@ -59,9 +66,9 @@ struct LoopTests {
         let h = try Harness()
         try h.started()
         h.client.send(.select(destination: 1))
-        try h.answer(3, with: "store/orders.json")
+        try h.answer(4, with: "store/orders.json")
         h.client.send(.act(.init(screen: 2, action: .navigate(.init(href: "/orders/1")))))
-        try h.answer(4, with: "store/order.json")
+        try h.answer(5, with: "store/order.json")
 
         h.client.send(.act(.init(screen: 3, action: .commands(.init(list: [.open(.init(id: "refund"))])))))
         #expect(h.client.screen(3)?.overlays == ["refund"])
@@ -127,9 +134,9 @@ struct LoopTests {
         let h = try Harness()
         try h.started()
         h.client.send(.select(destination: 1))
-        try h.answer(3, with: "store/orders.json")
+        try h.answer(4, with: "store/orders.json")
         h.client.send(.act(.init(screen: 2, action: .navigate(.init(href: "/activity")))))
-        try h.answer(4, with: "made/activity.json")
+        try h.answer(5, with: "made/activity.json")
         h.recorder.effects.removeAll()
 
         h.client.send(.more(screen: 3, id: "feed", before: false))
@@ -154,7 +161,7 @@ struct LoopTests {
         let h = try Harness()
         try h.started(shell: "made/shell-routes.json")
         h.client.send(.select(destination: 1))
-        try h.answer(3, with: "store/orders.json")
+        try h.answer(4, with: "store/orders.json")
 
         h.client.send(.act(.init(screen: 2, action: .navigate(.init(href: "/orders/1/returns/new", present: .task)))))
         let modal = try #require(h.client.nav.modals.first)
@@ -162,7 +169,7 @@ struct LoopTests {
         #expect(modal.locked == false)
         #expect(modal.stack == [3])
         #expect(h.client.nav.front == 3)
-        try h.answer(4, with: "made/return-task.json")
+        try h.answer(5, with: "made/return-task.json")
         #expect(h.client.screen(3)?.screen != nil)
 
         h.client.send(.dismissed(screen: 3))
@@ -203,9 +210,9 @@ struct LoopTests {
         let h = try Harness()
         try h.started()
         h.client.send(.select(destination: 1))
-        try h.answer(3, with: "store/orders.json")
+        try h.answer(4, with: "store/orders.json")
         h.client.send(.act(.init(screen: 2, action: .navigate(.init(href: "/orders/1")))))
-        try h.answer(4, with: "store/order.json")
+        try h.answer(5, with: "store/order.json")
         let snapshot = try #require(h.client.snapshot())
 
         let again = try Harness()
