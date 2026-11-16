@@ -9,7 +9,9 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use navree_documents::{Documents, DocumentsModule, ModuleBuilderDocumentsExt};
-use navree_kernel::{Module, ModuleBuilder, ModuleId, PluginInfo};
+use navree_kernel::{Module, ModuleBuilder};
+use navree_plugin_announcements::{PluginAfterImport, PluginDocuments, PluginHelperDocuments};
+use navree_plugin_notice_board::NoticeBoardDocuments;
 use navree_testing::{TestApp, TestAppBuilder};
 
 /// Captures formatted tracing output written while the guard is alive (on this thread: use a
@@ -60,24 +62,6 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LogCapture {
     fn make_writer(&'a self) -> Self::Writer {
         self.clone()
     }
-}
-
-fn announcements() -> PluginInfo {
-    PluginInfo::new(
-        "navree-plugin-announcements",
-        env!("CARGO_CRATE_NAME"),
-        "announcements",
-        "1.0.0",
-    )
-}
-
-fn notice_board() -> PluginInfo {
-    PluginInfo::new(
-        "navree-plugin-notice-board",
-        env!("CARGO_CRATE_NAME"),
-        "notice_board",
-        "1.0.0",
-    )
 }
 
 /// A test app with the documents module, reading templates from the folder `dir`.
@@ -146,55 +130,87 @@ impl Module for AppReplacesCrm {
     }
 }
 
-/// The plugin, embedding `path`.
-struct PluginDocuments(&'static str);
-impl Module for PluginDocuments {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements())
-            .document_files([(self.0, "the plugin's invoice")]);
-    }
-}
-
-/// The plugin, importing the CRM's module and embedding `path`.
-struct PluginAfterImport(&'static str);
-impl Module for PluginAfterImport {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements())
-            .import(CrmDocuments)
-            .document_files([(self.0, "the plugin's invoice")]);
-    }
-}
-
-/// Another plugin, importing the first plugin's module and embedding its path again.
-struct NoticeBoardDocuments;
-impl Module for NoticeBoardDocuments {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(notice_board())
-            .import(PluginDocuments("announcements/invoice.html"))
-            .document_files([("announcements/invoice.html", "the notice board's invoice")]);
-    }
-}
-
-/// A module of the app's own crate embedding the invoice with `contents`, for registering
-/// after the plugin's module. This file is one crate, and the plugin names it, so the module
-/// takes the id of a type of another crate, as a module of the app's own crate would have.
+/// A module of the app embedding the invoice with `contents`, for registering after the
+/// plugin's module.
 struct AppDocuments(&'static str);
 impl Module for AppDocuments {
-    fn id(&self) -> ModuleId {
-        ModuleId::named::<String>("AppDocuments")
-    }
-
     fn register(&self, m: &mut ModuleBuilder) {
         m.document_files([("invoices/standard.html", self.0)]);
     }
 }
 
-/// A module of the plugin's own crate that does not call `m.plugin`, and embeds the plugin's
-/// contents again.
-struct PluginHelperDocuments;
-impl Module for PluginHelperDocuments {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.document_files([("invoices/standard.html", "the plugin's invoice")]);
+/// The announcements plugin: its crate is this module, so the app's modules at the top of the
+/// file are in no crate it names.
+mod navree_plugin_announcements {
+    use navree_documents::ModuleBuilderDocumentsExt;
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    use super::CrmDocuments;
+
+    /// The plugin's info.
+    fn announcements() -> PluginInfo {
+        PluginInfo::new(
+            "navree-plugin-announcements",
+            module_path!(),
+            "announcements",
+            "1.0.0",
+        )
+    }
+
+    /// The plugin, embedding `path`.
+    pub struct PluginDocuments(pub &'static str);
+    impl Module for PluginDocuments {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements())
+                .document_files([(self.0, "the plugin's invoice")]);
+        }
+    }
+
+    /// The plugin, importing the CRM's module and embedding `path`.
+    pub struct PluginAfterImport(pub &'static str);
+    impl Module for PluginAfterImport {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements())
+                .import(CrmDocuments)
+                .document_files([(self.0, "the plugin's invoice")]);
+        }
+    }
+
+    /// A module of the plugin's own crate that does not call `m.plugin`, and embeds the
+    /// plugin's contents again.
+    pub struct PluginHelperDocuments;
+    impl Module for PluginHelperDocuments {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.document_files([("invoices/standard.html", "the plugin's invoice")]);
+        }
+    }
+}
+
+/// The notice board plugin, another plugin: its crate is this module.
+mod navree_plugin_notice_board {
+    use navree_documents::ModuleBuilderDocumentsExt;
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    use super::navree_plugin_announcements::PluginDocuments;
+
+    /// The plugin's info.
+    fn notice_board() -> PluginInfo {
+        PluginInfo::new(
+            "navree-plugin-notice-board",
+            module_path!(),
+            "notice_board",
+            "1.0.0",
+        )
+    }
+
+    /// Another plugin, importing the first plugin's module and embedding its path again.
+    pub struct NoticeBoardDocuments;
+    impl Module for NoticeBoardDocuments {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(notice_board())
+                .import(PluginDocuments("announcements/invoice.html"))
+                .document_files([("announcements/invoice.html", "the notice board's invoice")]);
+        }
     }
 }
 

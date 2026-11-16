@@ -12,25 +12,66 @@ use navree_view::{
 };
 use serde_json::json;
 
+use crate::navree_plugin_announcements::{
+    AnnouncementsModule, Hook, Registers, RegistersAfterImport,
+};
 use crate::support::{options, views_dir};
 
-fn announcements() -> PluginInfo {
-    PluginInfo::new(
-        "navree-plugin-announcements",
-        env!("CARGO_CRATE_NAME"),
-        "announcements",
-        "1.0.0",
-    )
-}
+/// The announcements plugin: its crate is this module, so the app's modules at the top of the
+/// file are in no crate it names.
+mod navree_plugin_announcements {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+    use navree_view::template::Environment;
+    use navree_view::{ModuleBuilderPluginTemplatesExt, ModuleBuilderViewExt};
 
-/// The plugin: `m.plugin_templates` before `m.plugin`, from the fixtures folder.
-struct AnnouncementsModule;
-impl Module for AnnouncementsModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin_templates(navree_macros::embed_templates!(
-            "tests/fixtures/plugin-views"
-        ))
-        .plugin(announcements());
+    use crate::AppMail;
+
+    /// The plugin's info.
+    fn announcements() -> PluginInfo {
+        PluginInfo::new(
+            "navree-plugin-announcements",
+            module_path!(),
+            "announcements",
+            "1.0.0",
+        )
+    }
+
+    /// The plugin: `m.plugin_templates` before `m.plugin`, from the fixtures folder.
+    pub struct AnnouncementsModule;
+    impl Module for AnnouncementsModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin_templates(navree_macros::embed_templates!(
+                "tests/fixtures/plugin-views"
+            ))
+            .plugin(announcements());
+        }
+    }
+
+    /// The plugin, registering the template `.0` with `m.templates`.
+    pub struct Registers(pub &'static str);
+    impl Module for Registers {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements())
+                .templates(&[(self.0, "<p>from the plugin</p>")]);
+        }
+    }
+
+    /// The plugin, importing the app's mail module and registering the template `.0`.
+    pub struct RegistersAfterImport(pub &'static str);
+    impl Module for RegistersAfterImport {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements())
+                .import(AppMail)
+                .templates(&[(self.0, "<p>from the plugin</p>")]);
+        }
+    }
+
+    /// A hook of the plugin that changes the environment as `.0` says.
+    pub struct Hook(pub fn(&mut Environment));
+    impl Module for Hook {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements()).view_environment(self.0);
+        }
     }
 }
 
@@ -92,8 +133,13 @@ fn unsafe_template_paths_fail_the_boot() {
     struct Unsafe;
     impl Module for Unsafe {
         fn register(&self, m: &mut ModuleBuilder) {
-            m.plugin(announcements())
-                .plugin_templates(TemplateDir::from(UNSAFE));
+            m.plugin(PluginInfo::new(
+                "navree-plugin-announcements",
+                env!("CARGO_CRATE_NAME"),
+                "announcements",
+                "1.0.0",
+            ))
+            .plugin_templates(TemplateDir::from(UNSAFE));
         }
     }
     let text = Navree::app()
@@ -169,25 +215,6 @@ struct AppMail;
 impl Module for AppMail {
     fn register(&self, m: &mut ModuleBuilder) {
         m.templates(&[("mail/welcome.html", "Welcome from the app")]);
-    }
-}
-
-/// The plugin, registering the template `name` with `m.templates`.
-struct Registers(&'static str);
-impl Module for Registers {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements())
-            .templates(&[(self.0, "<p>from the plugin</p>")]);
-    }
-}
-
-/// The plugin, importing the app's mail module and registering the template `name`.
-struct RegistersAfterImport(&'static str);
-impl Module for RegistersAfterImport {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements())
-            .import(AppMail)
-            .templates(&[(self.0, "<p>from the plugin</p>")]);
     }
 }
 
@@ -268,14 +295,7 @@ async fn a_plugins_template_outside_its_namespace_fails_the_boot() {
     }
 }
 
-/// A hook of the plugin, or of the app, that changes the environment as `change` says.
-struct Hook(fn(&mut Environment));
-impl Module for Hook {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements()).view_environment(self.0);
-    }
-}
-
+/// A hook of the app that changes the environment as `.0` says.
 struct AppHook(fn(&mut Environment));
 impl Module for AppHook {
     fn register(&self, m: &mut ModuleBuilder) {

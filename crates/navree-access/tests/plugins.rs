@@ -90,6 +90,15 @@ mod navree_plugin_announcements {
         }
     }
 
+    /// A module of the plugins' crate that names no plugin, and describes `.0`.
+    pub struct Extras(pub &'static [Permission]);
+
+    impl Module for Extras {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.permissions(self.0);
+        }
+    }
+
     /// A subject of the announcements plugin's crate, under its namespace.
     pub struct Announcement;
 
@@ -108,7 +117,7 @@ mod navree_plugin_announcements {
     }
 }
 
-use navree_plugin_announcements::{Announcement, Bulletin, Plugin};
+use navree_plugin_announcements::{Announcement, Bulletin, Extras, Plugin};
 
 /// A module of the app, named `name`, that describes `permissions`.
 struct Plain(&'static str, &'static [Permission]);
@@ -295,6 +304,31 @@ async fn a_plugin_permission_outside_its_namespace_fails_the_boot() {
         .try_build()
         .await
         .expect("a module of the app boots");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_module_of_a_plugins_crate_is_held_to_its_namespace_without_naming_it() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    // `Extras` names no plugin, and is in the announcements plugin's crate: it acts for the
+    // plugin.
+    let app = builder()
+        .module(ANNOUNCEMENTS)
+        .module(Extras(POSTS_PUBLISH));
+    let error = boot_error(app).await;
+    assert!(
+        error.contains(
+            "plugin `navree-plugin-announcements` declares the permission `posts.publish`, which does not start with `announcements.`"
+        ),
+        "{error}"
+    );
+    // The same permission from a module of the app, beside the plugin, boots.
+    builder()
+        .module(ANNOUNCEMENTS)
+        .module(Plain("Reports", POSTS_PUBLISH))
+        .try_build()
+        .await
+        .expect("a module of the app boots beside the plugin");
 }
 
 #[tokio::test(flavor = "current_thread")]

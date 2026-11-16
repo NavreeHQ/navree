@@ -381,9 +381,18 @@ mod navree_plugin_pretty {
             (self.0)(m);
         }
     }
+
+    /// A module of the plugin's crate that names no plugin, and registers what `.0` registers.
+    pub struct Helper(pub fn(&mut ModuleBuilder));
+
+    impl Module for Helper {
+        fn register(&self, m: &mut ModuleBuilder) {
+            (self.0)(m);
+        }
+    }
 }
 
-use navree_plugin_pretty::{PrettyPanel, PrettyStaff};
+use navree_plugin_pretty::{Helper, PrettyPanel, PrettyStaff};
 
 /// Lets every user work in every workspace.
 fn every_workspace(m: &mut ModuleBuilder) {
@@ -432,6 +441,28 @@ async fn a_plugin_may_not_decide_who_works_in_other_workspaces() {
         // The same call from a module of the app boots.
         builder().module(Adds(registers)).build().await;
     }
+}
+
+#[tokio::test]
+async fn a_module_of_a_plugins_crate_may_not_decide_who_works_in_other_workspaces() {
+    // `Helper` names no plugin, and is in the pretty plugin's crate: it acts for the plugin.
+    let error = boot_error(
+        builder()
+            .module(PrettyStaff(|_| {}))
+            .module(Helper(every_workspace)),
+    )
+    .await;
+    let expected = "plugin `navree-plugin-pretty` decides who works in workspaces they are not members of (m.helm_staff_workspaces in `Helper`); only the app decides that: call it from a module of the app";
+    assert!(
+        error.contains(expected),
+        "expected `{expected}` in:\n{error}"
+    );
+    // The same call from a module of the app, beside the plugin, boots.
+    builder()
+        .module(PrettyStaff(|_| {}))
+        .module(Adds(every_workspace))
+        .build()
+        .await;
 }
 
 /// A page with no template.

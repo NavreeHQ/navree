@@ -17,13 +17,14 @@ mod support;
 
 use std::sync::{Arc, Mutex};
 
-use navree_kernel::{App, BootErrors, Module, ModuleBuilder, ModuleId, Navree, PluginInfo};
-use navree_view::{
-    ModuleBuilderPluginTemplatesExt, ModuleBuilderViewExt, TemplateDir, ViewModule, ViewOptions,
-    Views,
-};
+use navree_kernel::{App, BootErrors, Module, ModuleBuilder, ModuleId, Navree};
+use navree_view::{ModuleBuilderViewExt, ViewModule, ViewOptions, Views};
 use serde_json::json;
 
+use crate::navree_plugin_announcements::{
+    AnnouncementsModule, Ledger, LooseAnnouncementsModule, PluginHelperModule, PluginShellModule,
+};
+use crate::navree_plugin_notice_board::NoticeBoardPlugin;
 use crate::support::{options, views_dir};
 
 /// Captures formatted tracing output written while the guard is alive (on
@@ -89,15 +90,6 @@ impl Module for Boxed {
     }
 }
 
-fn announcements() -> PluginInfo {
-    PluginInfo::new(
-        "navree-plugin-announcements",
-        env!("CARGO_CRATE_NAME"),
-        "announcements",
-        "1.0.0",
-    )
-}
-
 /// An app module with a welcome mail.
 struct CrmModule;
 impl Module for CrmModule {
@@ -114,27 +106,6 @@ impl Module for NoticeBoardModule {
     }
 }
 
-const ANNOUNCEMENT_VIEWS: &[(&str, &str)] = &[("list.html", "the plugin's list")];
-
-/// A plugin with a list under its namespace.
-struct AnnouncementsModule;
-impl Module for AnnouncementsModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements())
-            .plugin_templates(TemplateDir::from(ANNOUNCEMENT_VIEWS));
-    }
-}
-
-/// A plugin that also registers a welcome mail of its own, outside its namespace.
-struct LooseAnnouncementsModule;
-impl Module for LooseAnnouncementsModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements())
-            .templates(&[("mail/welcome.html", "Welcome from Harpreet Sandhu")])
-            .plugin_templates(TemplateDir::from(ANNOUNCEMENT_VIEWS));
-    }
-}
-
 /// An app module that imports the plugin and replaces its list.
 struct ShellModule;
 impl Module for ShellModule {
@@ -144,56 +115,108 @@ impl Module for ShellModule {
     }
 }
 
-/// A module of a plugin that imports the CRM and replaces its welcome mail.
-struct PluginShellModule;
-impl Module for PluginShellModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements())
-            .import(CrmModule)
-            .templates(&[("mail/welcome.html", "Welcome from the plugin's shell")]);
-    }
-}
-
-fn notice_board() -> PluginInfo {
-    PluginInfo::new(
-        "navree-plugin-notice-board",
-        env!("CARGO_CRATE_NAME"),
-        "notice_board",
-        "1.0.0",
-    )
-}
-
-/// A module of another plugin that imports the announcements plugin and
-/// replaces its list.
-struct NoticeBoardPlugin;
-impl Module for NoticeBoardPlugin {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(notice_board())
-            .import(AnnouncementsModule)
-            .templates(&[("announcements/list.html", "the notice board's list")]);
-    }
-}
-
-/// A module of the app's own crate with the welcome mail `text`, for registering after a
-/// plugin. This file is one crate, and the plugin names it, so the module takes the id of a
-/// type of another crate, as a module of the app's own crate would have.
+/// A module of the app with the welcome mail `text`, for registering after a plugin.
 struct AppWelcomeModule(&'static str);
 impl Module for AppWelcomeModule {
-    fn id(&self) -> ModuleId {
-        ModuleId::named::<String>("AppWelcomeModule")
-    }
-
     fn register(&self, m: &mut ModuleBuilder) {
         m.templates(&[("mail/welcome.html", self.0)]);
     }
 }
 
-/// A module of the plugin's own crate that does not call `m.plugin`, and registers the
-/// plugin's welcome mail again.
-struct PluginHelperModule;
-impl Module for PluginHelperModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.templates(&[("mail/welcome.html", "Welcome from the plugin's shell")]);
+/// The announcements plugin: its crate is this module, so the app's modules at the top of the
+/// file are in no crate it names.
+mod navree_plugin_announcements {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+    use navree_view::{ModuleBuilderPluginTemplatesExt, ModuleBuilderViewExt, TemplateDir};
+
+    use crate::CrmModule;
+
+    /// The plugin's info.
+    fn announcements() -> PluginInfo {
+        PluginInfo::new(
+            "navree-plugin-announcements",
+            module_path!(),
+            "announcements",
+            "1.0.0",
+        )
+    }
+
+    const ANNOUNCEMENT_VIEWS: &[(&str, &str)] = &[("list.html", "the plugin's list")];
+
+    /// A plugin with a list under its namespace.
+    pub struct AnnouncementsModule;
+    impl Module for AnnouncementsModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements())
+                .plugin_templates(TemplateDir::from(ANNOUNCEMENT_VIEWS));
+        }
+    }
+
+    /// A plugin that also registers a welcome mail of its own, outside its namespace.
+    pub struct LooseAnnouncementsModule;
+    impl Module for LooseAnnouncementsModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements())
+                .templates(&[("mail/welcome.html", "Welcome from Harpreet Sandhu")])
+                .plugin_templates(TemplateDir::from(ANNOUNCEMENT_VIEWS));
+        }
+    }
+
+    /// A module of a plugin that imports the CRM and replaces its welcome mail.
+    pub struct PluginShellModule;
+    impl Module for PluginShellModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements())
+                .import(CrmModule)
+                .templates(&[("mail/welcome.html", "Welcome from the plugin's shell")]);
+        }
+    }
+
+    /// A module of the plugin's own crate that does not call `m.plugin`, and registers the
+    /// plugin's welcome mail again.
+    pub struct PluginHelperModule;
+    impl Module for PluginHelperModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.templates(&[("mail/welcome.html", "Welcome from the plugin's shell")]);
+        }
+    }
+
+    /// A module of the plugin's own crate that does not call `m.plugin`, with a welcome mail
+    /// of the plugin's ledger.
+    pub struct Ledger;
+    impl Module for Ledger {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.templates(&[("mail/welcome.html", "Welcome to the ledger of Ludhiana")]);
+        }
+    }
+}
+
+/// The notice board plugin, another plugin: its crate is this module.
+mod navree_plugin_notice_board {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+    use navree_view::ModuleBuilderViewExt;
+
+    use crate::navree_plugin_announcements::AnnouncementsModule;
+
+    /// The plugin's info.
+    fn notice_board() -> PluginInfo {
+        PluginInfo::new(
+            "navree-plugin-notice-board",
+            module_path!(),
+            "notice_board",
+            "1.0.0",
+        )
+    }
+
+    /// A module of another plugin that imports the announcements plugin and
+    /// replaces its list.
+    pub struct NoticeBoardPlugin;
+    impl Module for NoticeBoardPlugin {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(notice_board())
+                .import(AnnouncementsModule)
+                .templates(&[("announcements/list.html", "the notice board's list")]);
+        }
     }
 }
 
@@ -475,6 +498,43 @@ async fn a_module_of_the_plugins_own_crate_that_names_no_plugin_does_not_settle_
             .all(|line| !line.contains("is replaced by")),
         "nothing was said at info"
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_module_of_a_plugins_crate_that_names_no_plugin_is_held_to_the_template_rules() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+
+    // The ledger names no plugin, and is in the announcements plugin's crate: it acts for the
+    // plugin, so a name it shares with the CRM fails the boot.
+    let error = boot(vec![
+        Box::new(CrmModule),
+        Box::new(AnnouncementsModule),
+        Box::new(Ledger),
+    ])
+    .await
+    .expect_err("fails")
+    .to_string();
+    assert!(
+        error.contains(
+            "embedded template `mail/welcome.html` is registered by both `CrmModule` and `Ledger`; a plugin's templates are under its namespace"
+        ),
+        "{error}"
+    );
+
+    // The same registration from a module of the app, beside the same plugin, warns.
+    let app = boot(vec![
+        Box::new(CrmModule),
+        Box::new(AnnouncementsModule),
+        Box::new(NoticeBoardModule),
+    ])
+    .await
+    .expect("boots");
+    assert!(capture.lines().iter().any(|line| line.contains("WARN")
+        && line.contains(
+            "embedded template `mail/welcome.html` is registered by both `CrmModule` and `NoticeBoardModule`; `NoticeBoardModule`'s is used, and this becomes an error in 2.0"
+        )));
+    app.shutdown().await.unwrap();
 }
 
 #[tokio::test(flavor = "current_thread")]

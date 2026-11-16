@@ -7,10 +7,10 @@ use bytes::Bytes;
 use navree_config::{ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::{Clock, Dispatcher, ModuleBuilderJobsExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::__private::{imports, is_app_module, is_community_plugin};
+use navree_kernel::__private::{imports, is_app_module};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, ConfiguredModule, Contributed, Factory, Lifecycle, Module,
-    ModuleBuilder, ModuleId, ModuleInfo, ProviderKey, Resolver,
+    ModuleBuilder, ModuleId, ModuleInfo, PluginReport, ProviderKey, Resolver,
 };
 use navree_storage::Storage;
 
@@ -101,27 +101,29 @@ struct Takeover {
 }
 
 /// Checks the files the modules embed, in dependency order, and fails with
-/// every error, one per line. Only a module of a plugin the kernel does not
-/// find first-party is held to a rule, and the only thing an app of 1.2 can see
-/// is the warning for a path two of its modules embed with different contents
-/// (the later module's file is still the one used).
+/// every error, one per line. Only a module that acts for a plugin the kernel
+/// does not find first-party is held to a rule, and the only thing an app of
+/// 1.2 can see is the warning for a path two of its modules embed with
+/// different contents (the later module's file is still the one used).
 ///
-/// - A module of such a plugin embeds a path under its namespace, or exactly
-///   the path of a module it imports.
+/// - A module acting for such a plugin embeds a path under its namespace, or
+///   exactly the path of a module it imports.
 /// - Two modules that embed one path with different contents: a warning, or an
-///   error when either module belongs to such a plugin. Equal contents say
+///   error when either module acts for such a plugin. Equal contents say
 ///   nothing, and one module embedding a path twice replaces silently.
 /// - A module that imports the other and replaces its path is said at `info`,
-///   unless it belongs to such a plugin: then a warning when the file is
-///   another such plugin's, and otherwise an error while the plugin's version is
-///   the one rendered. It is not when `templates` has a file at that path, or
-///   when a module of the app embeds the path after it, with the same contents
-///   or others.
+///   unless it acts for such a plugin: then a warning when the file is another
+///   such plugin's, and otherwise an error while the plugin's version is the
+///   one rendered. It is not when `templates` has a file at that path, or when
+///   a module of the app embeds the path after it, with the same contents or
+///   others.
 fn check_document_files(
     ctx: &AppContext,
     contributions: &[Contributed<DocumentFiles>],
     templates: &Templates,
 ) -> Result<(), String> {
+    // Every plugin, with the modules that act for it.
+    let plugins = ctx.plugins().plugins;
     // Who embeds each path, for a plugin that replaces what it imports.
     let mut embedded_by: HashMap<&str, Vec<ModuleId>> = HashMap::new();
     for contributed in contributions {
@@ -137,10 +139,8 @@ fn check_document_files(
     let mut takeovers = Vec::new();
     for contributed in contributions {
         let module = &contributed.module;
-        let plugin = ctx
-            .plugin(module.id)
-            .filter(|_| is_community_plugin(ctx, module.id))
-            .map(|info| (info.name, info.namespace));
+        let plugin = community_plugin(&plugins, module.id)
+            .map(|plugin| (plugin.info.name, plugin.info.namespace));
         for (path, contents) in &contributed.value.0 {
             if let Some((plugin, namespace)) = plugin
                 && !under_namespace(path, namespace)
@@ -157,7 +157,15 @@ fn check_document_files(
                 && !close_takeover(ctx, path, module, &mut takeovers)
                 && previous_contents != contents
             {
-                say_duplicate(ctx, path, previous, module, &mut takeovers, &mut errors);
+                say_duplicate(
+                    ctx,
+                    &plugins,
+                    path,
+                    previous,
+                    module,
+                    &mut takeovers,
+                    &mut errors,
+                );
             }
         }
     }
@@ -167,6 +175,15 @@ fn check_document_files(
     } else {
         Err(errors.join("\n"))
     }
+}
+
+/// The plugin the kernel does not find first-party that `module` acts for, if
+/// it acts for one: the plugin whose modules in `plugins` (the app's `plugins`
+/// listing) include it.
+fn community_plugin(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
+    plugins.iter().find(|plugin| {
+        !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
+    })
 }
 
 /// Whether `path` starts with `namespace` and a slash.
@@ -222,13 +239,15 @@ fn close_takeover(
 
 /// What it means that `module`, after `previous`, embeds the file `path` with
 /// other contents, when `module` does not close a takeover of it: said at
-/// `info` when `module` imports `previous` and is not a module of a plugin the
-/// kernel does not find first-party; when it is, a warning if `previous`
-/// belongs to such a plugin too, and a takeover otherwise. When it does not
-/// import `previous`, an error when either belongs to such a plugin, and
-/// otherwise a warning.
+/// `info` when `module` imports `previous` and does not act for a plugin the
+/// kernel does not find first-party (`plugins`, the app's `plugins` listing,
+/// says which modules act for one); when it does, a warning if `previous` acts
+/// for such a plugin too, and a takeover otherwise. When it does not import
+/// `previous`, an error when either acts for such a plugin, and otherwise a
+/// warning.
 fn say_duplicate(
     ctx: &AppContext,
+    plugins: &[PluginReport],
     path: &str,
     previous: &ModuleInfo,
     module: &ModuleInfo,
@@ -237,31 +256,30 @@ fn say_duplicate(
 ) {
     let (first, second) = (previous.name, module.name);
     if imports(ctx, module.id, previous.id) {
-        let community = ctx
-            .plugin(module.id)
-            .filter(|_| is_community_plugin(ctx, module.id));
-        match community {
+        match community_plugin(plugins, module.id) {
             None => {
                 tracing::info!(
                     target: "navree::documents",
                     "document file `{path}` of `{first}` is replaced by `{second}`'s"
                 );
             }
-            Some(plugin) if is_community_plugin(ctx, previous.id) => {
+            Some(plugin) if community_plugin(plugins, previous.id).is_some() => {
                 tracing::warn!(
                     target: "navree::documents",
                     "document file `{path}` of `{first}` is replaced by `{second}`'s, a module of the plugin `{}`",
-                    plugin.name
+                    plugin.info.name
                 );
             }
             Some(plugin) => takeovers.push(Takeover {
                 path: path.to_owned(),
                 first,
                 second,
-                plugin: plugin.name,
+                plugin: plugin.info.name,
             }),
         }
-    } else if is_community_plugin(ctx, previous.id) || is_community_plugin(ctx, module.id) {
+    } else if community_plugin(plugins, previous.id).is_some()
+        || community_plugin(plugins, module.id).is_some()
+    {
         errors.push(format!(
             "document file `{path}` is embedded by both `{first}` and `{second}`; a plugin's document files are under its namespace"
         ));
@@ -394,14 +412,15 @@ pub trait ModuleBuilderDocumentsExt {
     /// or exactly the path of a module it imports; any other path fails the
     /// boot. Two modules that embed one path with different contents log a
     /// warning at boot and the later module's file is used; when one of them
-    /// belongs to such a plugin, the boot fails. A module of such a plugin may
+    /// acts for such a plugin, the boot fails. A module of such a plugin may
     /// replace a path of a module it imports when the file is another plugin's,
     /// with a warning; replacing a file of the app or of the framework fails the
     /// boot while the plugin's version is the one used. It is not when a
     /// `documents.templates` folder has a file at that path, or when a module of
-    /// the app, one that names no plugin and is in no crate that a plugin of the
-    /// app names, embeds the path after the plugin's module, with the plugin's
-    /// contents or its own. The replacement is then said at `info`.
+    /// the app, one that acts for no plugin (it names none, its type is in no
+    /// plugin's crate, and a generic module the app imports is the app's),
+    /// embeds the path after the plugin's module, with the plugin's contents or
+    /// its own. The replacement is then said at `info`.
     ///
     /// ```ignore
     /// m.document_files([

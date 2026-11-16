@@ -5,12 +5,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use navree_config::{Config, ModuleBuilderConfigExt};
-use navree_kernel::__private::{
-    imports, is_app_module, is_community_plugin, is_safe_relative_path,
-};
+use navree_kernel::__private::{imports, is_app_module, is_safe_relative_path};
 use navree_kernel::{
     AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ModuleId, ModuleInfo,
-    ProviderKey, Resolver,
+    PluginReport, ProviderKey, Resolver,
 };
 
 use navree_template::Environment;
@@ -198,7 +196,7 @@ struct Takeover {
 /// One template a module registers.
 struct Entry {
     module: ModuleInfo,
-    /// The plugin's name and namespace, when the module names a plugin the
+    /// The plugin's name and namespace, when the module acts for a plugin the
     /// kernel does not find first-party.
     plugin: Option<(&'static str, &'static str)>,
     /// The template's full name.
@@ -212,38 +210,38 @@ struct Entry {
 /// namespace), modules in dependency order, so that a module's template
 /// replaces one of the same name from a module it imports.
 ///
-/// A template that a module of a plugin the kernel does not find first-party
-/// registers with `m.templates` is an error unless its name starts with the
-/// plugin's namespace and a slash and is a safe relative path, or is exactly
-/// the name of a template that a module it imports registers (replacing that
-/// one is the case below).
+/// A template that a module acting for a plugin the kernel does not find
+/// first-party registers with `m.templates` is an error unless its name starts
+/// with the plugin's namespace and a slash and is a safe relative path, or is
+/// exactly the name of a template that a module it imports registers
+/// (replacing that one is the case below).
 ///
 /// Two other modules that embed one name with different text are reported: a
-/// warning, or an error when either module belongs to such a plugin. A module
-/// of such a plugin that replaces a template of a module it imports is an error
-/// too, unless the template is another such plugin's or the app's own version
-/// is the one rendered: that is a [`Takeover`], settled by a template file once
-/// the files are read.
+/// warning, or an error when either module acts for such a plugin. A module
+/// acting for such a plugin that replaces a template of a module it imports is
+/// an error too, unless the template is another such plugin's or the app's own
+/// version is the one rendered: that is a [`Takeover`], settled by a template
+/// file once the files are read.
 fn embedded_templates(ctx: &AppContext) -> Found {
+    // Every plugin, with the modules that act for it.
+    let plugins = ctx.plugins().plugins;
     // Every template of every module, in order.
     let mut entries: Vec<Entry> = Vec::new();
     for contributed in ctx.contributions::<EmbeddedTemplates>() {
         let module = contributed.module;
-        let info = ctx.plugin(module.id);
         // A plugin's templates go under its namespace. A module that names no
         // plugin and has files to publish fails the boot before this runs, so
         // a namespaced contribution without a plugin holds no templates.
         let namespace = if contributed.value.under_namespace {
-            match info {
+            match ctx.plugin(module.id) {
                 Some(info) => Some(info.namespace),
                 None => continue,
             }
         } else {
             None
         };
-        let plugin = info
-            .filter(|_| is_community_plugin(ctx, module.id))
-            .map(|info| (info.name, info.namespace));
+        let plugin = community_plugin(&plugins, module.id)
+            .map(|plugin| (plugin.info.name, plugin.info.namespace));
         for &(path, source) in &contributed.value.templates {
             let name = match namespace {
                 Some(namespace) => format!("{namespace}/{path}"),
@@ -305,11 +303,20 @@ fn embedded_templates(ctx: &AppContext) -> Found {
             && !close_takeover(ctx, name, module, &mut found)
             && previous_source != source
         {
-            say_duplicate(ctx, name, &previous, module, &mut found);
+            say_duplicate(ctx, &plugins, name, &previous, module, &mut found);
         }
         found.templates.push((name.clone(), source));
     }
     found
+}
+
+/// The plugin the kernel does not find first-party that `module` acts for, if
+/// it acts for one: the plugin whose modules in `plugins` (the app's `plugins`
+/// listing) include it.
+fn community_plugin(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
+    plugins.iter().find(|plugin| {
+        !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
+    })
 }
 
 /// Whether `name` starts with `namespace` and a slash.
@@ -365,14 +372,16 @@ fn close_takeover(ctx: &AppContext, name: &str, module: &ModuleInfo, found: &mut
 /// with other text, when `module` does not close a takeover of it.
 ///
 /// When `module` imports `previous` (a module may replace what it imports)
-/// there are three outcomes: said at `info` when `module` is not a module of a
-/// plugin the kernel does not find first-party; when it is, a warning if
-/// `previous` belongs to such a plugin too (another plugin's template), and a
+/// there are three outcomes: said at `info` when `module` does not act for a
+/// plugin the kernel does not find first-party (`plugins`, the app's `plugins`
+/// listing, says which modules act for one); when it does, a warning if
+/// `previous` acts for such a plugin too (another plugin's template), and a
 /// takeover otherwise (a template of the app or of the framework). When it does
-/// not import `previous`, an error when either belongs to such a plugin, and
+/// not import `previous`, an error when either acts for such a plugin, and
 /// otherwise a warning.
 fn say_duplicate(
     ctx: &AppContext,
+    plugins: &[PluginReport],
     name: &str,
     previous: &ModuleInfo,
     module: &ModuleInfo,
@@ -380,21 +389,18 @@ fn say_duplicate(
 ) {
     let (first, second) = (previous.name, module.name);
     if imports(ctx, module.id, previous.id) {
-        let community = ctx
-            .plugin(module.id)
-            .filter(|_| is_community_plugin(ctx, module.id));
-        match community {
+        match community_plugin(plugins, module.id) {
             None => {
                 tracing::info!(
                     target: "navree::view",
                     "embedded template `{name}` of `{first}` is replaced by `{second}`'s"
                 );
             }
-            Some(plugin) if is_community_plugin(ctx, previous.id) => {
+            Some(plugin) if community_plugin(plugins, previous.id).is_some() => {
                 tracing::warn!(
                     target: "navree::view",
                     "embedded template `{name}` of `{first}` is replaced by `{second}`'s, a module of the plugin `{}`",
-                    plugin.name
+                    plugin.info.name
                 );
             }
             Some(plugin) => {
@@ -402,11 +408,13 @@ fn say_duplicate(
                     name: name.to_owned(),
                     first,
                     second,
-                    plugin: plugin.name,
+                    plugin: plugin.info.name,
                 });
             }
         }
-    } else if is_community_plugin(ctx, previous.id) || is_community_plugin(ctx, module.id) {
+    } else if community_plugin(plugins, previous.id).is_some()
+        || community_plugin(plugins, module.id).is_some()
+    {
         found.errors.push(format!(
             "embedded template `{name}` is registered by both `{first}` and `{second}`; a plugin's templates are under its namespace"
         ));
@@ -530,29 +538,28 @@ struct EnvironmentHook(Arc<ConfigureEnvironment>);
 /// Applies every contributed environment change to `views`, modules in
 /// dependency order (a later module's filter replaces an earlier one's).
 ///
-/// The change of a module of a plugin the kernel does not find first-party
-/// runs between two fingerprints of the environment, and is an error for each
-/// difference but a filter, test, function or global added, replaced or removed
-/// whose name starts with the plugin's namespace and an underscore. The
-/// environment then holds what the hook did, and the boot fails. Every other
-/// module's change runs unchecked.
+/// The change of a module that acts for a plugin the kernel does not find
+/// first-party runs between two fingerprints of the environment, and is an
+/// error for each difference but a filter, test, function or global added,
+/// replaced or removed whose name starts with the plugin's namespace and an
+/// underscore. The environment then holds what the hook did, and the boot
+/// fails. Every other module's change runs unchecked.
 fn configure_environment(ctx: &AppContext, views: &mut Views) -> Vec<String> {
+    let plugins = ctx.plugins().plugins;
     let mut errors = Vec::new();
     for contributed in ctx.contributions::<EnvironmentHook>() {
         let configure = contributed.value.0.clone();
-        let plugin = ctx
-            .plugin(contributed.module.id)
-            .filter(|_| is_community_plugin(ctx, contributed.module.id));
-        let Some(plugin) = plugin else {
+        let Some(plugin) = community_plugin(&plugins, contributed.module.id) else {
             views.configure(|env| configure(env));
             continue;
         };
+        let namespace = plugin.info.namespace;
         let before = views.fingerprint();
         views.configure(|env| configure(env));
-        for change in before.changes_outside(&views.fingerprint(), plugin.namespace) {
+        for change in before.changes_outside(&views.fingerprint(), namespace) {
             errors.push(format!(
-                "plugin `{}`: m.view_environment in `{}` {change}; a plugin's environment hook only adds filters, tests, functions and globals named `{}_..`",
-                plugin.name, contributed.module.name, plugin.namespace
+                "plugin `{}`: m.view_environment in `{}` {change}; a plugin's environment hook only adds filters, tests, functions and globals named `{namespace}_..`",
+                plugin.info.name, contributed.module.name
             ));
         }
     }
@@ -569,7 +576,7 @@ pub trait ModuleBuilderViewExt {
     /// module's template overrides one of the same name from a module it
     /// imports (directly or not). Two other modules that embed one name with
     /// different text log a warning at boot and the later module's template is
-    /// used; when one of the two belongs to a plugin that is not one of the
+    /// used; when one of the two acts for a plugin that is not one of the
     /// framework's own, the boot fails (a plugin's templates are under its
     /// namespace, see
     /// [`ModuleBuilderPluginTemplatesExt::plugin_templates`](crate::ModuleBuilderPluginTemplatesExt::plugin_templates)).
@@ -587,10 +594,10 @@ pub trait ModuleBuilderViewExt {
     /// folder holds a file of that name (letter for letter, with or without
     /// reloading), or when a module of the app registers the name after the
     /// plugin's module, with the plugin's text or with its own. A module of the
-    /// app is one that names no plugin and is in no crate that a plugin of the
-    /// app names; it is after the plugin's module when it imports it or is
-    /// registered after it. The replacement is then said at `info` and the boot
-    /// goes on.
+    /// app is one that acts for no plugin: it names none, its type is in no
+    /// plugin's crate, and a generic module the app imports is the app's; it is
+    /// after the plugin's module when it imports it or is registered after it.
+    /// The replacement is then said at `info` and the boot goes on.
     ///
     /// ```
     /// use navree_kernel::{Module, ModuleBuilder};
