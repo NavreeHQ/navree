@@ -94,11 +94,18 @@ struct Harness {
         client.problem = { problems.list.append($0) }
     }
 
-    /// Answers request `request` with a fixture of the core's conversations.
+    /// The id of the store's person, as the core's own conversations have it.
+    static let person = "0193a4b2-0000-7000-8000-00000000ra01"
+
+    /// Answers request `request` with a fixture of the core's conversations,
+    /// as the framework's server answers: every answer of the app names the
+    /// person it was made for by their id (`x-navree-person`). The core tells
+    /// one person from another by that id: a person named without one is
+    /// kept no snapshot.
     func answer(_ request: Int, with fixture: String, status: Int = 200) throws {
         client.send(.response(Response(
             request: request, status: status, contentType: "application/vnd.navree.native+json",
-            body: try Transcripts.fixture(fixture)
+            headers: [["x-navree-person", Self.person]], body: try Transcripts.fixture(fixture)
         )))
     }
 
