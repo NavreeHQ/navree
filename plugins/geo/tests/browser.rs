@@ -444,12 +444,27 @@ async fn pin_offset(page: &Page) -> Result<f64, BrowserError> {
     .await
 }
 
-/// How many requests the page made that are not for a tile.
-async fn requests(page: &Page) -> Result<u64, BrowserError> {
+/// The addresses of what the page has loaded that is not a tile, in the order it arrived.
+async fn request_names(page: &Page) -> Result<Vec<String>, BrowserError> {
     page.script(
-        "return performance.getEntriesByType('resource').filter((e) => !e.name.includes('/geo-test/tiles/')).length",
+        "return performance.getEntriesByType('resource').map((e) => e.name).filter((name) => !name.includes('/geo-test/tiles/'))",
     )
     .await
+}
+
+/// The same list once it has stopped growing: read until two readings 300 ms apart agree. The
+/// browser lists an answer when it has arrived, so one still on its way is not in the list yet.
+async fn settled_requests(page: &Page) -> Result<Vec<String>, BrowserError> {
+    let mut last = request_names(page).await?;
+    for _ in 0..20 {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let now = request_names(page).await?;
+        if now == last {
+            break;
+        }
+        last = now;
+    }
+    Ok(last)
 }
 
 /// The column and row of the tile that holds `at` at `zoom`, as a map of Web Mercator tiles
@@ -634,11 +649,15 @@ async fn use_my_location_is_a_button_that_submits_nothing() -> Result<(), Browse
     page.assert_visible(r#"css=[data-slot="geo:locate"]"#)
         .await?;
 
-    let before = requests(&page).await?;
+    // The field's map asks where its tiles are and draws once it is told. An answer that was
+    // still on its way when the count was taken would be counted as the button's, so the page is
+    // left to finish loading first.
+    page.wait_for(DRAWN_MAP).await?;
+    let before = settled_requests(&page).await?;
     page.press("Use my location").await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
     page.assert_path_is("/deliveries/new").await?;
-    assert_eq!(requests(&page).await?, before, "the button sent a request");
+    assert_eq!(request_names(&page).await?, before, "the button sent a request");
 
     // The rule that hides it waits for the runtime's mark on the page: without it, the button is
     // not shown.
