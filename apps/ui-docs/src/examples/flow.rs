@@ -31,6 +31,14 @@ pub fn all() -> Vec<Example> {
             .start()
             .width(390)
             .height(120),
+        single!("stepper", "tiles", "Tiles", stepper_tiles)
+            .start()
+            .width(820)
+            .height(110),
+        single!("stepper", "track", "A track", stepper_track)
+            .start()
+            .width(820)
+            .height(90),
         single!("wizard", "thumb", "A wizard step", wizard_thumb)
             .start()
             .width(820)
@@ -141,6 +149,24 @@ fn stepper_default() -> Stepper {
         .step(Step::new("Review"))
         .step(Step::new("Done").state(StepState::Disabled))
         .current(3)
+}
+
+fn stepper_tiles() -> Stepper {
+    Stepper::new("Import contacts")
+        .variant(StepperVariant::Tiles)
+        .step(Step::new("File").link("/imports/new/file"))
+        .step(Step::new("Columns").link("/imports/new/columns"))
+        .step(Step::new("Matches"))
+        .step(Step::new("Owners"))
+        .step(Step::new("Import"))
+        .current(2)
+}
+
+fn stepper_track() -> Stepper {
+    Stepper::new("Deal")
+        .variant(StepperVariant::Track)
+        .steps(["Lead", "Qualified", "Proposal", "Closing", "Won"].map(Step::new))
+        .current(2)
 }
 
 fn stepper_vertical() -> Stepper {

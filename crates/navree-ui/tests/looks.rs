@@ -118,10 +118,12 @@ fn the_segmented_group_reads_the_segment_roles_toggle_corners_and_control_height
 
 /// The hooks the looks sheet's rules are keyed on: each a value a page writes only when it asks
 /// for that look, so none of them reaches a part drawn as it always was.
-const HOOKS: [&str; 3] = [
+const HOOKS: [&str; 5] = [
     "[data-slot=button-group][data-variant=segmented]",
     "[data-slot=button-group][data-block]",
     "[data-slot=button][data-variant=destructive-outline]",
+    "[data-slot=stepper][data-variant=tiles]",
+    "[data-slot=stepper][data-variant=track]",
 ];
 
 #[test]
@@ -417,5 +419,98 @@ fn the_destructive_outline_draws_the_danger_colour_and_the_tints_every_theme_alr
                 on.describe()
             );
         }
+    }
+}
+
+// ---- Stepper looks: tiles and a track ---------------------------------------------------------
+
+fn setup(variant: StepperVariant) -> Stepper {
+    Stepper::new("Import contacts")
+        .variant(variant)
+        .step(Step::new("File").link("/imports/new/file"))
+        .step(Step::new("Columns").link("/imports/new/columns"))
+        .step(Step::new("Matches").description("Waiting for the first row"))
+        .step(Step::new("Owners"))
+        .step(Step::new("Import").state(StepState::Disabled))
+        .current(2)
+}
+
+#[test]
+fn tiles_and_a_track_keep_every_state_its_words_and_one_current_step() {
+    for (variant, name) in [
+        (StepperVariant::Tiles, "tiles"),
+        (StepperVariant::Track, "track"),
+    ] {
+        let out = html(setup(variant));
+        assert!(
+            out.starts_with(&format!(
+                r#"<div data-slot="stepper" data-orientation="horizontal" data-variant="{name}"><ol data-slot="stepper-list" aria-label="Import contacts">"#
+            )),
+            "{out}"
+        );
+        assert_eq!(out.matches(r#"aria-current="step""#).count(), 1, "{out}");
+        for words in ["(completed)", "(current step)", "(not available yet)"] {
+            assert!(out.contains(words), "{name}: {words} in {out}");
+        }
+        // The steps that are done are links back; the current one is not.
+        assert_eq!(out.matches("<a ").count(), 2, "{out}");
+        keeps_the_contract(name, setup(variant).into());
+        assert!(
+            !View::new("x")
+                .body(setup(variant))
+                .to_html()
+                .contains("<script")
+        );
+    }
+    // Every tile keeps its name, so tiles write no count; a track writes the count a row of
+    // circles does.
+    assert!(!html(setup(StepperVariant::Tiles)).contains("stepper-count"));
+    assert!(html(setup(StepperVariant::Track)).contains("Step 3 of 5"));
+    // A track is always a row; tiles stack as circles do.
+    assert!(
+        html(setup(StepperVariant::Track).vertical())
+            .contains(r#"data-orientation="horizontal" data-variant="track""#)
+    );
+    assert!(
+        html(setup(StepperVariant::Tiles).vertical())
+            .contains(r#"data-orientation="vertical" data-variant="tiles""#)
+    );
+    // Circles are the stepper as it was.
+    let before = Stepper::new("Import contacts")
+        .step(Step::new("File").link("/imports/new/file"))
+        .step(Step::new("Columns").link("/imports/new/columns"))
+        .step(Step::new("Matches").description("Waiting for the first row"))
+        .step(Step::new("Owners"))
+        .step(Step::new("Import").state(StepState::Disabled))
+        .current(2);
+    assert_eq!(html(setup(StepperVariant::Circles)), html(before));
+    assert!(
+        View::new("x")
+            .body(setup(StepperVariant::Circles))
+            .uses()
+            .is_none()
+    );
+}
+
+#[test]
+fn the_tiles_and_the_track_read_the_theme_and_draw_their_text_on_pairs_every_theme_passes() {
+    use navree_ui::theme::{Paint, PairKind, SURFACES, Token, pairs};
+
+    let css = looks_source();
+    for read in [
+        "border-radius:var(--radius-card,var(--radius-lg))",
+        "border-color:var(--accent);box-shadow:inset 0 0 0 .5px var(--accent)",
+        "background:color-mix(in oklab,var(--success) 12%,transparent);color:color-mix(in oklab,var(--success) 80%,var(--fg))",
+        "border-radius:var(--radius-panel,var(--radius-lg));background:var(--ink-1)",
+        "border-color:var(--success);background:var(--success)",
+        "[data-state=upcoming] [data-slot=step-title]{color:var(--fg-3)}",
+    ] {
+        assert!(css.contains(read), "{read}");
+    }
+    // A done tile's text on its tint is the success badge's pair, over any surface.
+    for surface in SURFACES {
+        assert!(pairs().iter().any(|pair| pair.kind == PairKind::Text
+            && pair.text == Paint::Mix(Token::Success, 80, Token::Fg)
+            && pair.on == Paint::Tint(Token::Success, 12, surface)));
     }
 }

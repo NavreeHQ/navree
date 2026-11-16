@@ -130,6 +130,16 @@ for (const name of NAMES) {
       });
     };
 
+    /** The styles of what `selector` finds while the pointer rests on it, once its fill shows. */
+    const hovering = async (page, selector, props) => {
+      for (let tries = 0; ; tries++) {
+        await page.locator(selector).hover();
+        const seen = await styles(page, selector, props);
+        if (seen["background-color"] || tries >= 20) return seen;
+        await page.waitForTimeout(50);
+      }
+    };
+
     const noSidewaysScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 
     /**
@@ -388,9 +398,7 @@ for (const name of NAMES) {
               assert.equal(outline["border-top-left-radius"], plainOutline["border-top-left-radius"], `${where}: the button's corner`);
               assert.equal(outline.height, plainOutline.height, `${where}: a control's height`);
               // On hover: the destructive button's own tint at rest, and the text still reads.
-              await page.locator("[data-proof=destructive-outline] [data-slot=button]").hover();
-              await page.waitForFunction(() => getComputedStyle(document.querySelector("[data-proof=destructive-outline] [data-slot=button]")).backgroundColor !== "rgba(0, 0, 0, 0)");
-              const hovered = await styles(page, "[data-proof=destructive-outline] [data-slot=button]", PROPS);
+              const hovered = await hovering(page, "[data-proof=destructive-outline] [data-slot=button]", PROPS);
               assert.ok(Math.abs(hovered["background-color"][3] - 0.1) < 0.02, `${where}: a 10% tint on hover: ${hovered["background-color"]}`);
               assert.deepEqual(hovered["background-color"], solidTint["background-color"], `${where}: the destructive button's tint`);
               assert.ok(contrastOf(hovered.color, onto(hovered["background-color"], pageBg)) >= 4.5, `${where}: its text on its hover`);
@@ -414,6 +422,88 @@ for (const name of NAMES) {
         const page = await open("/looks?mode=light");
         assert.equal(await page.locator("#buttons").getByRole("button", { name: "Delete deal" }).count(), 1);
         assert.equal(await page.locator("#buttons").getByRole("link", { name: "Refund" }).count(), 1);
+        await page.done();
+      });
+    });
+
+    // ---- The stepper's tiles and track --------------------------------
+
+    describe("stepper looks", () => {
+      test("tiles and a track: their states in words, one current step, the theme's corners and colours, light and dark, 1440 and 390 px, outside and inside the inverse surface", async () => {
+        for (const path of PAGES) {
+          for (const mode of MODES) {
+            for (const width of WIDTHS) {
+              const page = await open(`${path}?mode=${mode}`, { width });
+              const where = `${path} ${mode} ${width}`;
+              const pageBg = (await styles(page, "body", ["background-color"]))["background-color"];
+              // Each stepper is a named list with one current step, its state in words.
+              for (const id of ["tiles", "track", "inverse-track"]) {
+                const list = page.locator(`[data-proof=${id}] [data-slot=stepper-list]`);
+                assert.equal(await list.getAttribute("aria-label"), id === "tiles" ? "Import contacts" : "Deal", `${where} ${id}: named`);
+                assert.equal(await page.locator(`[data-proof=${id}] [aria-current=step]`).count(), 1, `${where} ${id}: one current step`);
+                assert.equal(await page.locator(`[data-proof=${id}] [data-ui-sr]`).first().textContent(), " (completed)", `${where} ${id}: a state in words`);
+              }
+              // Tiles: a bordered tile each, the done ones tinted, the current one outlined 1.5 px in the accent.
+              const tile = (state) => styles(page, `[data-proof=tiles] [data-state=${state}] > [data-slot=step-trigger]`, ["background-color", "color", "border-top-width", "border-top-color", "border-top-left-radius", "box-shadow"]);
+              const accent = (await styles(page, "[data-proof=tiles] [data-state=current] [data-slot=step-indicator]", ["background-color"]))["background-color"];
+              const done = await tile("done");
+              const current = await tile("current");
+              const upcoming = await tile("upcoming");
+              assert.equal(done["background-color"].length, 4, `${where}: a done tile is tinted`);
+              assert.ok(contrastOf(done.color, onto(done["background-color"], pageBg)) >= 4.5, `${where}: a done tile's text`);
+              assert.equal(upcoming["background-color"], null, `${where}: an upcoming tile has no fill`);
+              // A 1 px line and a half-pixel ring inside it in the accent: 1.5 px, which a border alone can't draw.
+              assert.equal(current["border-top-width"], "1px", `${where}: the current tile's line`);
+              assert.match(current["box-shadow"], /inset/, `${where}: and its ring`);
+              assert.match(current["box-shadow"], /0\.5px/, `${where}: of half a pixel`);
+              assert.deepEqual(current["border-top-color"], accent, `${where}: in the accent`);
+              assert.equal(upcoming["box-shadow"], "none", `${where}: another tile has no ring`);
+              assert.equal(current["border-top-left-radius"], path === "/looks" ? "16px" : "6px", `${where}: the card corner`);
+              const titles = await page.locator("[data-proof=tiles] [data-slot=step-title]").evaluateAll((all) => all.map((t) => t.getBoundingClientRect().width));
+              assert.ok(titles.every((w) => w > 20), `${where}: every tile keeps its name: ${titles}`);
+              assert.equal(await page.locator("[data-proof=tiles] [data-slot=stepper-line], [data-proof=tiles] [data-slot=stepper-count]").count(), 0, `${where}: no count under tiles`);
+              // Track: a muted box, 8 px dots joined by hairlines, the current dot in the success tone and its name bold.
+              for (const id of ["track", "inverse-track"]) {
+                const box = await styles(page, `[data-proof=${id}] [data-slot=stepper]`, ["background-color", "padding-top", "padding-left", "border-top-left-radius"]);
+                const dot = (state) => styles(page, `[data-proof=${id}] [data-state=${state}] [data-slot=step-indicator]`, ["background-color", "width", "height", "border-top-color"]);
+                const title = (state) => styles(page, `[data-proof=${id}] [data-state=${state}] [data-slot=step-title]`, ["color", "font-weight", "font-size"]);
+                const now = await dot("current");
+                const later = await dot("upcoming");
+                assert.deepEqual([now.width, now.height], ["8px", "8px"], `${where} ${id}: an 8 px dot`);
+                assert.equal(later["background-color"], null, `${where} ${id}: a later dot is hollow`);
+                assert.deepEqual([box["padding-top"], box["padding-left"]], ["14px", "18px"], `${where} ${id}: the box's padding`);
+                assert.equal(box["border-top-left-radius"], path === "/looks" ? "12px" : "6px", `${where} ${id}: the panel corner`);
+                const bold = await title("current");
+                assert.equal(bold["font-weight"], "600", `${where} ${id}: the current name is bold`);
+                assert.equal(bold["font-size"], "13px", `${where} ${id}: 13 px names`);
+                for (const state of ["done", "current", "upcoming"]) {
+                  const t = await title(state);
+                  assert.ok(contrastOf(t.color, box["background-color"]) >= 4.5, `${where} ${id}: a ${state} name reads`);
+                }
+                const line = await page.locator(`[data-proof=${id}] [data-slot=step]`).first().evaluate((step) => {
+                  const after = getComputedStyle(step, "::after");
+                  return [after.height, after.width];
+                });
+                assert.equal(line[0], "1px", `${where} ${id}: a hairline`);
+                if (width === 1440 && id === "track") assert.equal(line[1], "24px", `${where} ${id}: 24 px between dots`);
+              }
+              const success = (await styles(page, "[data-proof=track] [data-state=current] [data-slot=step-indicator]", ["background-color"]))["background-color"];
+              assert.ok(contrastOf(success, (await styles(page, "[data-proof=track] [data-slot=stepper]", ["background-color"]))["background-color"]) >= 3, `${where}: the current dot stands out`);
+              assert.ok(await noSidewaysScroll(page), `${where}: no sideways scroll`);
+              assert.deepEqual(await axe(page), [], `${where}: axe`);
+              await shot(page, `steps-${path.replaceAll("/", "_")}-${mode}-${width}`);
+              await page.done();
+            }
+          }
+        }
+      });
+
+      test("a done tile is a link to its step and the current one is not", async () => {
+        const page = await open("/looks?mode=light");
+        const links = page.locator("[data-proof=tiles]").getByRole("link");
+        assert.deepEqual(await links.allTextContents(), ["File (completed)", "Columns (completed)"]);
+        await links.first().focus();
+        assert.equal(await page.evaluate(() => document.activeElement.getAttribute("href")), "/looks#file");
         await page.done();
       });
     });

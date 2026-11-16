@@ -704,7 +704,7 @@ pub const COMPONENTS: &[Component] = &[
     component(
         "stepper",
         "Stepper",
-        &["Stepper", "Step", "StepState", "StepperLabels"],
+        &["Stepper", "Step", "StepState", "StepperLabels", "StepperVariant"],
         "thumb",
     )
     .parts("default"),

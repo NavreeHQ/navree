@@ -279,6 +279,8 @@ Other lists and moves:
 | Design element | navree-ui |
 |---|---|
 | Step bar | `Stepper::new(label).step(Step::new(..).state(StepState::Error)).current(n)`, `.vertical()`, a step that is a link: `Step::new(..).link(href)` |
+| Setup progress as bordered tiles (done tinted green with a tick, current outlined) | `Stepper::new(..).variant(StepperVariant::Tiles)`: card corner, success tint, 1.5 px accent line on the current tile; every name kept on a phone |
+| A thing's place in its life as an inline track (dots joined by hairlines, current dot green, later ones hollow) | `Stepper::new(..).variant(StepperVariant::Track)`: a muted box with the panel corner, 8 px dots, 24 px hairlines, 13 px names, the current one 600; names only, always a row |
 | A form in steps, with a review | `Wizard::new(id).base(url).step(WizardStep::of::<T>(id, label)).review()`; each step is a `Form` struct, progress is a `Draft` on the server (`DraftStore`) |
 | Tree of folders, links or choices | `Tree::new(id, label).node(TreeNode::branch(..) \| leaf(..) \| lazy(id, label, src))`, `.select(TreeSelect::Single \| Multiple)`, `.cascade()` |
 | Row of tools with a More menu | `Toolbar::new(id, label).item(ToolbarItem::button(..) \| icon_toggle(..) \| radios(..) \| link(..) \| group(..) \| separator())` |

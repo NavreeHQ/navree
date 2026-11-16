@@ -237,6 +237,15 @@ every `@navree/*` package carries the same version.
   surface needs no variant: a primary button there takes the surface's text colour, with the
   surface's colour as its text, and an outline button its lines and text. The other variants
   are drawn as before.
+- `Stepper::variant` takes a `StepperVariant`: `Circles`, the stepper as it was and the
+  default; `Tiles`, each step a bordered tile with the theme's card corner, the done ones
+  tinted in the success tone with their tick and the current one outlined 1.5 px in the
+  accent, every tile keeping its name on a phone; and `Track`, the steps in a row inside a
+  muted box with the panel corner, 8 px dots joined by hairlines, the current step's dot in
+  the success tone and its name bold, later steps hollow and quieter. The states, their words
+  for assistive technology, `aria-current="step"` and the links are the same in each; the
+  looks sheet draws the two new ones. `Stepper::variant` is a new inherent method: an app whose
+  own extension trait gives `Stepper` a method of that name calls it through the trait.
 
 ### Fixed
 

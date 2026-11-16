@@ -11,7 +11,7 @@ use std::borrow::Cow;
 use super::super::components::{Orientation, icon};
 use crate::html::Href;
 use crate::icons;
-use crate::node::{Element, Node, el, into_node};
+use crate::node::{Element, Node, Uses, el, into_node};
 
 /// Where a step stands.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -39,6 +39,33 @@ impl StepState {
             Self::Done => "done",
             Self::Error => "error",
             Self::Disabled => "disabled",
+        }
+    }
+}
+
+/// How a [`Stepper`] looks.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum StepperVariant {
+    /// Numbered circles joined by lines: the default.
+    #[default]
+    Circles,
+    /// Each step a bordered tile, the done ones tinted in the success tone with a tick and the
+    /// current one outlined in the accent. On a narrow screen every tile keeps its name and the
+    /// tiles wrap onto more rows.
+    Tiles,
+    /// The steps in a row in a muted box: small dots joined by hairlines, the current step's
+    /// dot in the success tone and its name bold, the steps after it hollow and quieter. It
+    /// shows each step's name only, and is always a row.
+    Track,
+}
+
+impl StepperVariant {
+    const fn value(self) -> Option<&'static str> {
+        match self {
+            Self::Circles => None,
+            Self::Tiles => Some("tiles"),
+            Self::Track => Some("track"),
         }
     }
 }
@@ -166,6 +193,7 @@ pub struct Stepper {
     steps: Vec<Step>,
     current: Option<usize>,
     orientation: Orientation,
+    variant: StepperVariant,
     labels: StepperLabels,
     count: bool,
 }
@@ -180,6 +208,7 @@ impl Stepper {
             steps: Vec::new(),
             current: None,
             orientation: Orientation::Horizontal,
+            variant: StepperVariant::Circles,
             labels: StepperLabels::default(),
             count: true,
         }
@@ -208,6 +237,26 @@ impl Stepper {
     /// Stacks the steps, with their descriptions beside the indicators.
     pub fn vertical(mut self) -> Self {
         self.orientation = Orientation::Vertical;
+        self
+    }
+
+    /// Sets how the steps are drawn: circles joined by lines (the default), tiles or a
+    /// track. The states, their words and the links are the same in each. Tiles and a track
+    /// link the looks stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{Step, Stepper, StepperVariant, render};
+    ///
+    /// let deal = Stepper::new("Deal")
+    ///     .variant(StepperVariant::Track)
+    ///     .steps(["Lead", "Proposal", "Won"].map(Step::new))
+    ///     .current(1);
+    /// let html = render(&deal.into());
+    /// assert!(html.starts_with(r#"<div data-slot="stepper" data-orientation="horizontal" data-variant="track">"#));
+    /// assert!(html.contains(r#"aria-current="step""#));
+    /// ```
+    pub fn variant(mut self, variant: StepperVariant) -> Self {
+        self.variant = variant;
         self
     }
 
@@ -246,6 +295,11 @@ impl Stepper {
             })
             .collect();
         let total = self.steps.len();
+        // A track is always a row; tiles keep every name, so they need no count.
+        let orientation = match self.variant {
+            StepperVariant::Track => Orientation::Horizontal,
+            _ => self.orientation,
+        };
         let now = states.iter().position(|state| *state == StepState::Current);
         let items: Vec<Element> = self
             .steps
@@ -254,7 +308,9 @@ impl Stepper {
             .enumerate()
             .map(|(at, (step, state))| item(at, step, state, &self.labels))
             .collect();
-        let count = (self.count && self.orientation == Orientation::Horizontal)
+        let count = (self.count
+            && orientation == Orientation::Horizontal
+            && self.variant != StepperVariant::Tiles)
             .then_some(now)
             .flatten()
             .map(|at| {
@@ -268,11 +324,16 @@ impl Stepper {
                             .replace("{total}", &total.to_string()),
                     )
             });
-        el("div")
+        let root = el("div")
             .slot("stepper")
-            .attr("data-orientation", self.orientation.as_str())
-            .children((self.el.children(items), count))
-            .into()
+            .attr("data-orientation", orientation.as_str())
+            .attr_opt("data-variant", self.variant.value());
+        let root = if self.variant == StepperVariant::Circles {
+            root
+        } else {
+            root.uses(Uses::LOOKS)
+        };
+        root.children((self.el.children(items), count)).into()
     }
 }
 

@@ -146,6 +146,9 @@ fn inverse(path: &str, asked: &Asked) -> Grid {
                         Text::new("Text on the inverse surface."),
                         Text::muted("A quieter line."),
                         Badge::new("Isolated").variant(BadgeVariant::Success),
+                        el("div")
+                            .attr("data-proof", "inverse-track")
+                            .child(deal_track()),
                         el("div").attr("data-proof", "inverse-destructive").child(
                             Button::new("Revoke access").variant(ButtonVariant::DestructiveOutline),
                         ),
@@ -180,6 +183,32 @@ fn inverse(path: &str, asked: &Asked) -> Grid {
     ))
 }
 
+/// An import's steps as tiles, and a deal's place in its pipeline as a track.
+fn steps() -> Stack {
+    Stack::gap(4).children((
+        el("div").attr("data-proof", "tiles").child(import_setup()),
+        el("div").attr("data-proof", "track").child(deal_track()),
+    ))
+}
+
+fn import_setup() -> Stepper {
+    Stepper::new("Import contacts")
+        .variant(StepperVariant::Tiles)
+        .step(Step::new("File").link("/looks#file"))
+        .step(Step::new("Columns").link("/looks#columns"))
+        .step(Step::new("Matches").description("Waiting for the first row"))
+        .step(Step::new("Owners"))
+        .step(Step::new("Import"))
+        .current(2)
+}
+
+fn deal_track() -> Stepper {
+    Stepper::new("Deal")
+        .variant(StepperVariant::Track)
+        .steps(["Lead", "Qualified", "Proposal", "Closing", "Won"].map(Step::new))
+        .current(2)
+}
+
 /// The destructive outline button beside the variants drawn as before.
 fn buttons() -> Row {
     Row::gap(2).wrap().children((
@@ -208,6 +237,7 @@ fn page(shell: AppShell, path: &str, asked: &Asked) -> AppPage {
     shell.page("Looks").body(Stack::gap(10).children((
         section("segmented", "Segmented links", segmented(path, asked)),
         section("buttons", "Buttons", buttons()),
+        section("steps", "Steps", steps()),
         section("inverse", "The inverse surface", inverse(path, asked)),
     )))
 }

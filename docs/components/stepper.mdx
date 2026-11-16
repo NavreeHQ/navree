@@ -1,6 +1,6 @@
 ---
 title: "Stepper"
-description: "The steps of a task and where the person is in them: done, current, with an error, not yet open. Horizontal or vertical, and it works with no script."
+description: "The steps of a task and where the person is in them: done, current, with an error, not yet open. Circles, tiles or a track, horizontal or vertical, and it works with no script."
 ---
 
 <UiPreview example="stepper/default" />
@@ -64,6 +64,42 @@ A horizontal stepper in a box narrower than 36 rem keeps the current step's name
 
 A stepper with more steps than fit on a line wraps onto another.
 
+## Looks
+
+`.variant(StepperVariant)` changes how the steps are drawn; the states, their words and the links stay the same. `Circles` is the default above.
+
+`Tiles` draws each step as a bordered tile: a step that is done is tinted in the success tone with its tick, and the current one is outlined in the accent. Use it for a short setup, where each step is a place to go back to. In a narrow box the tiles wrap onto more rows and every tile keeps its name.
+
+```rust
+use navree::ui::*;
+
+Stepper::new("Import contacts")
+    .variant(StepperVariant::Tiles)
+    .step(Step::new("File").link("/imports/new/file"))
+    .step(Step::new("Columns").link("/imports/new/columns"))
+    .step(Step::new("Matches"))
+    .step(Step::new("Owners"))
+    .step(Step::new("Import"))
+    .current(2)
+```
+
+<UiPreview example="stepper/tiles" />
+
+`Track` draws the steps in a row inside a muted box: small dots joined by hairlines, the current step's dot in the success tone and its name bold, the steps after it hollow and quieter. Use it for where one thing stands in its life, such as an order or a booking. It shows each step's name and leaves out descriptions, and it is always a row: `.vertical()` does not change it.
+
+```rust
+use navree::ui::*;
+
+Stepper::new("Deal")
+    .variant(StepperVariant::Track)
+    .steps(["Lead", "Qualified", "Proposal", "Closing", "Won"].map(Step::new))
+    .current(2)
+```
+
+<UiPreview example="stepper/track" />
+
+The tiles take the theme's card corner and the track the panel corner; their colours are the theme's tokens. Both link a small stylesheet of their own, the looks sheet; a stepper of circles links nothing new.
+
 ## Keyboard and accessibility
 
 <UiA11y>
@@ -93,3 +129,7 @@ A stepper with more steps than fit on a line wraps onto another.
 ### StepperLabels
 
 <UiProps type="StepperLabels" />
+
+### StepperVariant
+
+<UiProps type="StepperVariant" />
