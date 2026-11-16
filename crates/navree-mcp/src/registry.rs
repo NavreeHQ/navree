@@ -5,8 +5,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
+use navree_http::__private::DeclaredAccess;
 use navree_http::AccessSpec;
-use navree_kernel::{AppContext, BoxFuture, Injectable, KernelError, ModuleId, Resolver};
+use navree_kernel::{AppContext, BoxError, BoxFuture, Injectable, KernelError, ModuleId, Resolver};
 
 use crate::item::{Handler, ItemDef, McpItem, McpServer, PromptDef, ResourceDef, ToolDef};
 use crate::uri::UriTemplate;
@@ -241,6 +242,27 @@ impl fmt::Debug for McpRegistry {
             )
             .finish()
     }
+}
+
+/// What the app's tools, resources and prompts declare about who may use
+/// them, each with the module that registered its server: what `McpModule`
+/// contributes as its `AccessDeclarations`, so a boot check that reads every
+/// handler's access reads these too.
+pub(crate) async fn declared_access(ctx: AppContext) -> Result<Vec<DeclaredAccess>, BoxError> {
+    let mut declared = Vec::new();
+    for contributed in ctx.contributions::<ServerRegistration>() {
+        let registration = &contributed.value;
+        let resolver = ctx.resolver_for(registration.module);
+        for item in (registration.resolve)(resolver).await? {
+            declared.push(DeclaredAccess {
+                what: format!("the MCP {} `{}`", item.kind(), item.name()),
+                module: Some(registration.module),
+                module_name: contributed.module.name,
+                access: item.access().clone(),
+            });
+        }
+    }
+    Ok(declared)
 }
 
 /// What is wrong with an access declaration (deny by default).

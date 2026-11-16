@@ -1,18 +1,26 @@
 //! A plugin's middleware in a service with no `HttpModule`: only the app adds a layer that wraps
-//! every message handler, as only the app adds one for every request.
+//! every message handler, as only the app adds one for every request. And what the service's
+//! message patterns require under a plugin's namespace, which the boot reads as it reads a
+//! route's, with or without `HttpModule`.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use navree_access::AccessModule;
 use navree_config::{ConfigModule, ConfigSources};
+use navree_contracts::Permission;
+use navree_db::DatabaseModule;
 use navree_http::{CurrentPrincipal, LayerSlot, ModuleBuilderHttpExt, Result};
 use navree_kernel::{AppBuilder, Module, ModuleBuilder, Navree};
 use navree_macros::{injectable, message_handlers};
 use navree_micro::{MicroFake, MicroModule, MicroOptions, ModuleBuilderMicroExt};
-use navree_testing::{TestApp, TestAuthenticator, principal};
+use navree_testing::{TestApp, TestAuthenticator, principal, temp_sqlite_url};
 use uuid::Uuid;
 
+use crate::support::{access, give_role};
+
 use navree_plugin_khata::LedgerModule;
+use navree_plugin_reports::ReportsPlugin;
 
 /// Harpreet Sandhu, of Ludhiana.
 const HARPREET: Uuid = Uuid::from_u128(0x0192_f0c1_0000_7000_8000_0000_0000_00a1);
@@ -231,5 +239,117 @@ async fn a_service_with_no_plugin_answers_as_before() {
         .await
         .unwrap();
     assert_eq!(me, HARPREET);
+    app.shutdown().await.unwrap();
+}
+
+/// The reports plugin, a community plugin whose crate is this module: its namespace is
+/// `reports`.
+mod navree_plugin_reports {
+    use navree_contracts::{ModuleBuilderPermissionsExt, Permission};
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    /// The plugin's info.
+    const REPORTS: PluginInfo =
+        PluginInfo::new("navree-plugin-reports", module_path!(), "reports", "1.0.0");
+
+    /// The plugin's module: it names the plugin and describes the permissions `.0`.
+    pub struct ReportsPlugin(pub &'static [Permission]);
+
+    impl Module for ReportsPlugin {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(REPORTS).permissions(self.0);
+        }
+    }
+}
+
+/// What the reports plugin describes, when it describes anything.
+const REPORTS_VIEW: &[Permission] = &[Permission::new(
+    "reports.view",
+    "See the sales reports of the Ludhiana office",
+)];
+
+/// The service's sales figures.
+#[injectable]
+pub struct Sales;
+
+#[message_handlers]
+impl Sales {
+    /// The month's sales, for the holders of `reports.view`.
+    #[message_pattern("sales.month")]
+    #[permissions("reports.view")]
+    async fn month(&self) -> Result<u32> {
+        Ok(1200)
+    }
+}
+
+/// The service's sales feature: its handlers.
+struct SalesModule;
+
+impl Module for SalesModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.message_handlers::<Sales>();
+    }
+}
+
+/// A service with the access module and no `HttpModule`: its configuration, the database at
+/// `database`, its messages on `micro` and its sales.
+fn sales_service(micro: &MicroFake, database: &str) -> AppBuilder {
+    let sources = ConfigSources::new()
+        .set("database.url", database)
+        .set("database.migrate_on_boot", true);
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(DatabaseModule)
+        .module(AccessModule::for_root(access()))
+        .module(MicroModule::for_root(MicroOptions {
+            service: "sales".into(),
+            ..MicroOptions::from(micro.transport())
+        }))
+        .module(SalesModule)
+}
+
+#[tokio::test]
+async fn a_message_pattern_under_a_plugins_namespace_is_read_without_http() {
+    // `sales.month` asks for `reports.view`, which no subject maps and the reports plugin does
+    // not describe: the plugin's policies would decide who may send the message. The service
+    // has no `HttpModule`, and the boot still reads the pattern.
+    let (database, _keep) = temp_sqlite_url();
+    let micro = MicroFake::new();
+    let builder = sales_service(&micro, &database).module(ReportsPlugin(&[]));
+    let error = match TestAuthenticator::install(builder).boot().await {
+        Ok(_) => panic!("the service booted beside the plugin"),
+        Err(error) => error.to_string(),
+    };
+    let expected = "plugin `navree-plugin-reports` uses the namespace `reports`, the first word of the permission `reports.view` that the message pattern `sales.month` of `SalesModule` requires, and the plugin describes no permission of that name; a plugin's policies decide the names under its namespace, so they would decide who may use it: require a permission the plugin describes, or name the app's permission under another word";
+    assert!(error.contains(expected), "{error}");
+
+    // The plugin describes `reports.view`: the pattern requires it on purpose, the service
+    // boots, and who may send the message is the service's grant.
+    let (database, _keep) = temp_sqlite_url();
+    let micro = MicroFake::new();
+    let builder = sales_service(&micro, &database).module(ReportsPlugin(REPORTS_VIEW));
+    let app = TestApp::from_builder(builder).await;
+    let (harpreet, meera) = (Uuid::now_v7(), Uuid::now_v7());
+    give_role(&app, harpreet, "munshi", &["reports.view"]).await;
+    let month: u32 = micro
+        .client()
+        .acting_as(principal(harpreet))
+        .send("sales.month", &())
+        .await
+        .unwrap();
+    assert_eq!(month, 1200);
+    micro
+        .client()
+        .acting_as(principal(meera))
+        .request("sales.month", &())
+        .await
+        .assert_error(403, "Forbidden");
+    app.shutdown().await.unwrap();
+
+    // Without the plugin the service boots as before.
+    let (database, _keep) = temp_sqlite_url();
+    let micro = MicroFake::new();
+    let app = TestApp::from_builder(sales_service(&micro, &database)).await;
+    assert!(app.ctx().plugins().plugins.is_empty());
     app.shutdown().await.unwrap();
 }

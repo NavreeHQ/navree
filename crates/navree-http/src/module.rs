@@ -12,6 +12,7 @@ use navree_kernel::{
 use tokio::sync::watch;
 
 use crate::body::BodyError;
+use crate::declared::{AccessDeclarations, routes_and_mounts};
 use crate::extract::rejection;
 use crate::maintenance::{MaintenanceInfo, MaintenanceMode};
 use crate::mount::mount_table;
@@ -90,6 +91,9 @@ fn register(m: &mut ModuleBuilder, options: Option<HttpOptions>) {
         .map_error::<rejection::MultipartError>(|r| Some(r.to_app_error()))
         .map_error::<rejection::WebSocketRejection>(|r| Some(r.to_app_error()))
         .map_error::<BodyError>(|r| Some(AppError::rejection(r.status(), r.to_string())))
+        // What the routes and the mounts declare, for the boot checks that read every
+        // handler's access.
+        .contribute(AccessDeclarations::new(routes_and_mounts))
         .command(CommandSpec::new(
             "serve",
             "Start the HTTP server ([--addr HOST:PORT])",

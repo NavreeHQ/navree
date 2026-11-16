@@ -16,7 +16,9 @@ use navree_access::{
     UPDATE,
 };
 use navree_contracts::{ModuleBuilderPermissionsExt, Permission, permission_catalog, permitted};
-use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{
+    AppRouter, Controller, ModuleBuilderHttpExt, ModuleBuilderMountExt, Mount, RouteDef,
+};
 use navree_kernel::{
     BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ModuleId, PluginInfo, ProviderKey,
     Resolver,
@@ -890,6 +892,72 @@ async fn an_app_route_may_check_a_subject_registered_as_the_plugins() {
         "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the subject `announcements.Draft` that the route `GET /board` of `BoardModule` checks{NOT_REGISTERED}"
     );
     assert!(error.contains(&expected), "{error}");
+}
+
+/// What the khata plugin describes, when it describes anything.
+const KHATA_VIEW: &[Permission] = &[Permission::new(
+    "khata.view",
+    "Open the khata of the Ludhiana office",
+)];
+
+/// A module of the app that mounts the ledger service of another crate under `/khata`, with the
+/// access `.0` declares.
+struct KhataMount(fn(Mount) -> Mount);
+
+impl Module for KhataMount {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let ledger = AppRouter::from_handler(|| async { "the khata of Ludhiana" });
+        m.mount((self.0)(Mount::new("/khata", ledger)));
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_mount_of_the_app_is_read_as_a_route_is() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+
+    // A mount declares access as a route does: its permission under the plugin's namespace,
+    // which the plugin does not describe, would be decided by the plugin's policies.
+    let khata = Plugin(plugin("navree-plugin-khata", "khata"), &[]);
+    let mount = KhataMount(|mount| mount.permissions(&["khata.view"]));
+    let error = boot_error(builder().module(mount).module(khata)).await;
+    let expected = format!(
+        "plugin `navree-plugin-khata` uses the namespace `khata`, the first word of the permission `khata.view` that the mount `/khata` of `KhataMount` requires{NOT_DESCRIBED}"
+    );
+    assert!(error.contains(&expected), "{error}");
+
+    // The subject a mount checks.
+    let khata = Plugin(plugin("navree-plugin-khata", "khata"), &[]);
+    let mount = KhataMount(|mount| mount.can("view", "khata"));
+    let error = boot_error(builder().module(mount).module(khata)).await;
+    let expected = format!(
+        "plugin `navree-plugin-khata` uses the namespace `khata`, the first word of the subject `khata` that the mount `/khata` of `KhataMount` checks{NOT_REGISTERED}"
+    );
+    assert!(error.contains(&expected), "{error}");
+
+    // The plugin describes `khata.view`: the mount requires it on purpose, the app boots, and
+    // who passes the mount is the app's grant.
+    let khata = Plugin(plugin("navree-plugin-khata", "khata"), KHATA_VIEW);
+    let app = builder()
+        .module(KhataMount(|mount| mount.permissions(&["khata.view"])))
+        .module(khata)
+        .try_build()
+        .await
+        .expect("a mount of the app may require a permission the plugin describes");
+    let (harpreet, meera) = (Uuid::now_v7(), Uuid::now_v7());
+    give_role(&app, harpreet, "munshi", &["khata.view"]).await;
+    let entries = |user: Uuid| app.acting_as(principal(user)).get("/khata/entries");
+    entries(harpreet).send().await.assert_status(200);
+    entries(meera).send().await.assert_status(403);
+
+    // Under another word, the app's mount boots beside the plugin.
+    let khata = Plugin(plugin("navree-plugin-khata", "khata"), &[]);
+    builder()
+        .module(KhataMount(|mount| mount.permissions(&["ledger.view"])))
+        .module(khata)
+        .try_build()
+        .await
+        .expect("a mount of the app under another word boots beside the plugin");
 }
 
 #[tokio::test(flavor = "current_thread")]

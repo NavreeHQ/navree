@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use navree_config::{Config, ModuleBuilderConfigExt};
+use navree_http::__private::AccessDeclarations;
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
     ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
@@ -101,6 +102,8 @@ fn register(m: &mut ModuleBuilder, options: Option<McpOptions>) {
         .exports::<McpRegistry>()
         .controller::<McpController>()
         .http_layer(challenge_layer())
+        // What the items declare, for the boot checks that read every handler's access.
+        .contribute(AccessDeclarations::new(crate::registry::declared_access))
         .command(serve_command());
 }
 

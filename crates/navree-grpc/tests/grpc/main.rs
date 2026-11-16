@@ -9,6 +9,7 @@ mod attacks;
 mod channels;
 mod metrics;
 mod pipeline;
+mod plugins;
 mod protocols;
 mod serving;
 mod streaming;

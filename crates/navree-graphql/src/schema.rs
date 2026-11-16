@@ -13,7 +13,8 @@ use async_graphql::{BatchRequest, BatchResponse, Data, Executor, Request, Respon
 use navree_contracts::Principal;
 use navree_db::Db;
 use navree_events::EventBus;
-use navree_http::{Authenticator, ErrorMapper, RouteAuthorizer};
+use navree_http::__private::DeclaredAccess;
+use navree_http::{AccessSpec, Authenticator, CanSpec, ErrorMapper, RouteAuthorizer};
 use navree_kernel::{
     AppContext, BoxError, BoxFuture, Injectable, KernelError, ModuleId, Resolver, WeakAppContext,
 };
@@ -390,6 +391,43 @@ impl Executor for GraphqlSchema {
 fn data<T: Send + Sync + 'static>(data: &Data) -> Option<&T> {
     data.get(&TypeId::of::<T>())
         .and_then(|value| value.downcast_ref::<T>())
+}
+
+/// What the app's root fields declare about who may resolve them, each with
+/// the module that registered its resolver: what `GraphqlModule` contributes
+/// as its `AccessDeclarations`, so a boot check that reads every handler's
+/// access reads these too.
+pub(crate) async fn declared_access(ctx: AppContext) -> Result<Vec<DeclaredAccess>, BoxError> {
+    let mut declared = Vec::new();
+    for registration in ctx.contributions::<ResolverRegistration>() {
+        let resolver = ctx.resolver_for(registration.value.module);
+        let fields = (registration.value.resolve)(resolver).await?.fields;
+        for field in fields {
+            let access = field.access;
+            declared.push(DeclaredAccess {
+                what: format!("the GraphQL {} `{}`", field.kind.as_str(), field.name),
+                module: Some(registration.value.module),
+                module_name: registration.module.name,
+                access: AccessSpec {
+                    public: access.public,
+                    authenticated: access.authenticated,
+                    roles: owned(access.roles),
+                    permissions: owned(access.permissions),
+                    can: access.can.map(|can| CanSpec {
+                        action: can.action.to_owned(),
+                        subject: can.subject.to_owned(),
+                        from: can.from.map(str::to_owned),
+                    }),
+                },
+            });
+        }
+    }
+    Ok(declared)
+}
+
+/// `names` as owned strings.
+fn owned(names: &[&str]) -> Vec<String> {
+    names.iter().map(|name| (*name).to_owned()).collect()
 }
 
 /// Checks that the app can serve each field's access declaration.

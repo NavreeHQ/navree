@@ -113,6 +113,7 @@ mod compression;
 mod controller;
 mod cors;
 pub mod csrf;
+mod declared;
 mod error;
 mod error_pages;
 pub mod extract;
@@ -170,5 +171,6 @@ pub use workspace::RequestWorkspace;
 /// Items Navree's own crates use; not public API.
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::declared::{AccessDeclarations, DeclaredAccess, declared_access};
     pub use crate::router::layers_of_plugins;
 }

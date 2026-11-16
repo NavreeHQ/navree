@@ -2,6 +2,7 @@
 //! put gRPC on the HTTP port.
 
 use navree_config::ModuleBuilderConfigExt;
+use navree_http::__private::AccessDeclarations;
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{ConfiguredModule, Module, ModuleBuilder};
 
@@ -72,5 +73,7 @@ fn register(m: &mut ModuleBuilder, options: Option<GrpcOptions>) {
         .exports::<GrpcChannels>()
         .http_layer(shared_port_layer())
         .http_layer(http_context_layer())
-        .map_error::<tonic::Status>(|status| Some(error_from_status(status)));
+        .map_error::<tonic::Status>(|status| Some(error_from_status(status)))
+        // What the methods declare, for the boot checks that read every handler's access.
+        .contribute(AccessDeclarations::new(crate::server::declared_access));
 }

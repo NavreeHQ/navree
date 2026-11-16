@@ -5,6 +5,7 @@ use std::sync::Arc;
 use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::HealthCheck;
 use navree_db::ModuleBuilderDbExt;
+use navree_http::__private::AccessDeclarations;
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
     AppContext, BoxError, CommandSpec, Factory, Module, ModuleBuilder, ModuleId, ProviderKey,
@@ -191,6 +192,8 @@ fn register(m: &mut ModuleBuilder, options: Option<MicroOptions>, clients: &[Str
         )
         .http_layer(http_context_layer())
         .map_error::<MicroError>(|error| Some(error.to_app_error()))
+        // What the patterns declare, for the boot checks that read every handler's access.
+        .contribute(AccessDeclarations::new(crate::pipeline::declared_access))
         .migrations(store::migrations());
     for name in clients {
         let client_name = name.clone();

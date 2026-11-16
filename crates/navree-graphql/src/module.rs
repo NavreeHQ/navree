@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use navree_config::ModuleBuilderConfigExt;
+use navree_http::__private::AccessDeclarations;
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
     ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
@@ -97,6 +98,8 @@ fn register(m: &mut ModuleBuilder, options: Option<GraphqlOptions>) {
         )
         .exports::<GraphqlSchema>()
         .controller::<GraphqlController>()
+        // What the fields declare, for the boot checks that read every handler's access.
+        .contribute(AccessDeclarations::new(crate::schema::declared_access))
         .command(schema_command());
 }
 

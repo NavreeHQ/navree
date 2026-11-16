@@ -11,6 +11,7 @@ mod endpoint;
 mod errors;
 mod identity;
 mod loaders;
+mod plugins;
 mod schema;
 mod subscriptions;
 mod units_of_work;

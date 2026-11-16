@@ -7,16 +7,18 @@
 //! catalog and nothing reads the descriptions, while a workspace role still
 //! holds what `workspace.roles` lists. Then the boot asks each policy of a
 //! community plugin what it writes, as each principal it knows, and, once
-//! every controller is built, reads what the app's routes require under a
-//! community plugin's namespace: a permission the plugin describes and a
-//! subject registered as the plugin's are the plugin's own names, which the
-//! app may require, and any other name under the namespace is refused.
+//! every handler is built, reads what the app's handlers of every kind (a
+//! route, a mount, a message pattern, a gRPC method, an MCP item, a GraphQL
+//! field) require under a community plugin's namespace: a permission the
+//! plugin describes and a subject registered as the plugin's are the plugin's
+//! own names, which the app may require, and any other name under the
+//! namespace is refused.
 
 use std::collections::BTreeSet;
 
 use navree_config::Config;
 use navree_contracts::{Permission, permission_catalog};
-use navree_http::{HttpOptions, RouteMeta, route_table};
+use navree_http::__private::{DeclaredAccess, declared_access};
 use navree_kernel::{AppContext, Contributed, ModuleId, ModuleInfo, PluginReport};
 use uuid::Uuid;
 
@@ -299,28 +301,31 @@ pub(crate) fn is_under(name: &str, namespace: &str) -> bool {
         .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
 }
 
-/// Checks, once every controller is built, the permissions and the subjects
-/// that the routes of modules not acting for a community plugin declare under
-/// the plugin's namespace. A permission the plugin describes, and a subject
-/// registered as the plugin's, is the plugin's own name, used on purpose: the
-/// route may require it. Any other name under the namespace is the app's own
-/// (a permission prefix no subject registers stands for itself), and the
-/// plugin's policies, which decide the names under its namespace, would
-/// decide who may open the route: it is refused. An app with no community
-/// plugin, or without HttpModule, has nothing to check. Mounts are not read.
-pub(crate) async fn check_routes(ctx: &AppContext) -> Result<(), AccessError> {
+/// Checks, once every handler is built, the permissions and the subjects
+/// that the handlers of modules not acting for a community plugin declare
+/// under the plugin's namespace. A permission the plugin describes, and a
+/// subject registered as the plugin's, is the plugin's own name, used on
+/// purpose: the handler may require it. Any other name under the namespace is
+/// the app's own (a permission prefix no subject registers stands for
+/// itself), and the plugin's policies, which decide the names under its
+/// namespace, would decide who may call the handler: it is refused.
+///
+/// The handlers are those of every kind whose module contributes its
+/// declarations (navree-http's `AccessDeclarations`): the routes and mounts
+/// of `HttpModule`, the message patterns of navree-micro, the gRPC methods of
+/// navree-grpc, the items of navree-mcp and the fields of navree-graphql.
+/// Each kind is read where its module is in the app, with or without
+/// `HttpModule`, and a kind that cannot be read stops the boot. An app with
+/// no community plugin has nothing to check.
+pub(crate) async fn check_declared(ctx: &AppContext) -> Result<(), AccessError> {
     let plugins = ctx.plugins().plugins;
     if plugins.iter().all(|plugin| plugin.first_party) {
         return Ok(());
     }
-    // Without HttpModule the app has no routes.
-    if ctx.try_get::<HttpOptions>().await.is_none() {
-        return Ok(());
-    }
-    let routes = route_table(ctx)
+    let declared = declared_access(ctx)
         .await
         .map_err(|error| AccessError::Config(error.to_string()))?;
-    routes_under_namespaces(&plugins, &OwnNames::of(ctx), &routes)
+    under_namespaces(&plugins, &OwnNames::of(ctx), &declared)
 }
 
 /// What the app's modules describe and register, read to tell a community
@@ -369,28 +374,26 @@ fn lists(plugin: &PluginReport, module: ModuleId) -> bool {
     plugin.modules.iter().any(|member| member.id == module)
 }
 
-/// The first route of `routes` whose module does not act for a community
+/// The first handler of `handlers` whose module does not act for a community
 /// plugin of `plugins` and that requires a permission the plugin does not
 /// describe, or checks a subject not registered as the plugin's, under that
-/// plugin's namespace.
-fn routes_under_namespaces(
+/// plugin's namespace. A handler of no known module is held as the app's.
+fn under_namespaces(
     plugins: &[PluginReport],
     own: &OwnNames,
-    routes: &[RouteMeta],
+    handlers: &[DeclaredAccess],
 ) -> Result<(), AccessError> {
-    for route in routes {
-        let acting = route
-            .module_id
+    for handler in handlers {
+        let acting = handler
+            .module
             .and_then(|module| community_plugin(plugins, module));
-        let module = route.module.unwrap_or("?");
-        let (method, path) = (&route.method, &route.full_path);
+        let label = format!("{} of `{}`", handler.what, handler.module_name);
         for plugin in plugins.iter().filter(|plugin| !plugin.first_party) {
             if acting.is_some_and(|acting| acting.info.name == plugin.info.name) {
                 continue;
             }
             let namespace = plugin.info.namespace;
-            let label = format!("the route `{method} {path}` of `{module}`");
-            for permission in &route.access.permissions {
+            for permission in &handler.access.permissions {
                 if is_under(permission, namespace) && !own.describes(plugin, permission) {
                     let declared = format!("the permission `{permission}` that {label} requires");
                     return Err(not_its_own(
@@ -401,7 +404,7 @@ fn routes_under_namespaces(
                     ));
                 }
             }
-            if let Some(can) = &route.access.can
+            if let Some(can) = &handler.access.can
                 && is_under(&can.subject, namespace)
                 && !own.registers(plugin, &can.subject)
             {
@@ -430,8 +433,8 @@ fn namespace_holds(plugin: &PluginReport, declared: &str) -> AccessError {
 }
 
 /// The refusal of a name under the namespace of the community plugin
-/// `plugin` that a route of another module declares and that is not the
-/// plugin's own: `declared` is the permission or the subject with the route
+/// `plugin` that a handler of another module declares and that is not the
+/// plugin's own: `declared` is the permission or the subject with the handler
 /// that declares it, `lacks` what the plugin would have to do for the name to
 /// be its own, and `ways` the two ways out.
 fn not_its_own(plugin: &PluginReport, declared: &str, lacks: &str, ways: &str) -> AccessError {

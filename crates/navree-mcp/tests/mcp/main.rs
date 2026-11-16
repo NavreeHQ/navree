@@ -8,6 +8,7 @@ mod boot;
 mod http;
 mod notifications;
 mod observability;
+mod plugins;
 mod prompts;
 mod resources;
 mod security;

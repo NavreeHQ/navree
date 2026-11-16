@@ -9,6 +9,7 @@ use std::sync::{Arc, OnceLock};
 
 use navree_contracts::{AuditSink, HealthCheck};
 use navree_db::Db;
+use navree_http::__private::DeclaredAccess;
 use navree_http::body::Body;
 use navree_http::{
     AccessSpec, Authenticator, ErrorMapper, HttpOptions, HttpServer, RouteAuthorizer,
@@ -361,6 +362,52 @@ async fn build(
         shares_http_port: options.addr.is_none(),
     })?;
     Ok((edge, names))
+}
+
+/// What the app's gRPC methods declare about who may call them, each with
+/// the module that registered its service: the methods of every
+/// `#[grpc_service]`, then the service default and the methods of every
+/// wrapped tonic server. `GrpcModule` contributes it as its
+/// `AccessDeclarations`, so a boot check that reads every handler's access
+/// reads these too.
+pub(crate) async fn declared_access(ctx: AppContext) -> Result<Vec<DeclaredAccess>, BoxError> {
+    let mut declared = Vec::new();
+    for registration in ctx.contributions::<ServiceRegistration>() {
+        let resolver = ctx.resolver_for(registration.value.module);
+        let resolved = (registration.value.resolve)(resolver).await?;
+        let service = resolved.name;
+        for method in resolved.methods {
+            declared.push(DeclaredAccess {
+                what: format!("the gRPC method `{}` (`{service}`)", method.name),
+                module: Some(registration.value.module),
+                module_name: registration.module.name,
+                access: method.meta.access,
+            });
+        }
+    }
+    for registration in ctx.contributions::<TonicRegistration>() {
+        let wrapped = &*registration.value;
+        let service = wrapped.name;
+        let module = Some(registration.module.id);
+        let module_name = registration.module.name;
+        if let Some(default) = &wrapped.default {
+            declared.push(DeclaredAccess {
+                what: format!("the gRPC service `{service}`"),
+                module,
+                module_name,
+                access: default.access.clone(),
+            });
+        }
+        for method in &wrapped.methods {
+            declared.push(DeclaredAccess {
+                what: format!("the gRPC method `{}` (`{service}`)", method.name),
+                module,
+                module_name,
+                access: method.meta.access.clone(),
+            });
+        }
+    }
+    Ok(declared)
 }
 
 /// The access rule a `#[grpc_service]` method and a wrapped tonic server

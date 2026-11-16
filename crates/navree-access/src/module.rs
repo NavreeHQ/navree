@@ -192,23 +192,24 @@ fn register(m: &mut ModuleBuilder, options: AccessOptions) {
         .controller::<AccessAdminController>()
         .migrations(migrations())
         .map_error::<AccessError>(map_access_error)
-        // Once every controller is built: under a plugin's namespace, a route of the app
+        // Once every handler is built: under a plugin's namespace, a handler of the app
         // declares the plugin's own names only.
-        .value(RouteNamespaces)
-        .lifecycle::<RouteNamespaces>();
+        .value(DeclaredNamespaces)
+        .lifecycle::<DeclaredNamespaces>();
     for command in commands() {
         m.command(command);
     }
 }
 
-/// Checks at boot, once every controller is built, the permissions and
-/// subjects the app's routes declare against the namespaces of community
-/// plugins (`catalog::check_routes`).
-struct RouteNamespaces;
+/// Checks at boot, once every handler is built, the permissions and subjects
+/// that the app's handlers of every kind declare (routes, mounts, message
+/// patterns, gRPC methods, MCP items, GraphQL fields) against the namespaces
+/// of community plugins (`catalog::check_declared`).
+struct DeclaredNamespaces;
 
-impl Lifecycle for RouteNamespaces {
+impl Lifecycle for DeclaredNamespaces {
     fn on_bootstrap(&self, ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
-        Box::pin(async move { Ok(crate::catalog::check_routes(&ctx).await?) })
+        Box::pin(async move { Ok(crate::catalog::check_declared(&ctx).await?) })
     }
 }
 

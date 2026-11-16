@@ -17,7 +17,7 @@ use navree_contracts::{
     AuditEntry, AuditKind, AuditSink, AuthState, AuthVia, Principal, RequestId,
 };
 use navree_db::Uow;
-use navree_http::__private::layers_of_plugins;
+use navree_http::__private::{DeclaredAccess, layers_of_plugins};
 use navree_http::AppRouter;
 use navree_http::body::{Body, to_bytes};
 use navree_http::extract::Request;
@@ -464,6 +464,28 @@ impl MessageRouter {
         }
         Ok(request)
     }
+}
+
+/// What the app's message and event patterns declare about who may send
+/// them, each with the module that registered its handlers: what
+/// `MicroModule` contributes as its `AccessDeclarations`, so a boot check
+/// that reads every handler's access reads these too, in a service with or
+/// without `HttpModule`.
+pub(crate) async fn declared_access(ctx: AppContext) -> Result<Vec<DeclaredAccess>, BoxError> {
+    let mut declared = Vec::new();
+    for registration in ctx.contributions::<HandlerRegistration>() {
+        let resolver = ctx.resolver_for(registration.value.module);
+        let resolved = (registration.value.resolve)(resolver).await?;
+        for def in resolved.patterns {
+            declared.push(DeclaredAccess {
+                what: format!("the {} pattern `{}`", def.kind, def.pattern),
+                module: Some(registration.value.module),
+                module_name: registration.module.name,
+                access: def.meta.access,
+            });
+        }
+    }
+    Ok(declared)
 }
 
 /// Marks an event's request: it is not authenticated.
