@@ -2348,7 +2348,10 @@ impl Core {
                 .header(navree_native::PERSON_HEADER)
                 .is_some_and(|id| !id.is_empty()),
             first_hop,
-            carried_write: matches!(asked.purpose, Pending::Send { write: true, .. }),
+            carried_write: matches!(
+                asked.purpose,
+                Pending::Send { write: true, .. } | Pending::Move { .. }
+            ),
             made_here: self.inner.synthetic,
         }
     }
@@ -3354,6 +3357,85 @@ mod tests {
                 core.inner.epoch > epoch,
                 counts,
                 "{what}: counted as a write, or not"
+            );
+        }
+    }
+
+    /// A move is a write. When its answer does not say whether the server
+    /// moved the row (a timeout, a 5xx, a 429), it counts as a write and the
+    /// page is asked for again, so the row stands where the server has it; it
+    /// is not put back by guess. Only when the server cannot have run it (a
+    /// 413 that names nobody, on the first hop) is the row simply put back.
+    #[test]
+    fn a_move_whose_answer_does_not_say_counts_as_a_write() {
+        let json = |status: u16| Response {
+            status,
+            content_type: Some("application/json".to_owned()),
+            body: "{}".to_owned(),
+            ..Response::default()
+        };
+        let cases: Vec<(&str, Response, bool)> = vec![
+            (
+                "a timeout",
+                Response {
+                    error: Some(TransportError::Timeout),
+                    ..Response::default()
+                },
+                true,
+            ),
+            ("a 503", json(503), true),
+            ("a 429", json(429), true),
+            ("a 413 that names nobody", json(413), false),
+        ];
+        for (what, answer, counts) in cases {
+            let mut core = started();
+            core.send(Event::Response(Response {
+                request: 2,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: include_str!("../transcripts/fixtures/made/packing.json").to_owned(),
+                ..Response::default()
+            }));
+            let epoch = core.inner.epoch;
+            let moved = core.send(Event::Move {
+                screen: 1,
+                item: "p-2".to_owned(),
+                from: "to-pack".to_owned(),
+                to: "packed".to_owned(),
+                before: Some("p-7".to_owned()),
+            });
+            let request = moved
+                .effects
+                .iter()
+                .find_map(|effect| match effect {
+                    Effect::Fetch(request) if request.method == Verb::Post => Some(request.request),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{what}: the move is posted: {moved:?}"));
+            let update = core.send(Event::Response(Response { request, ..answer }));
+            let holder = core
+                .view
+                .screens
+                .get(&1)
+                .and_then(ScreenView::screen)
+                .and_then(|screen| crate::lists::list_holding(screen, "p-2"));
+            let asked_again = update.effects.iter().any(|effect| {
+                matches!(effect, Effect::Fetch(request) if request.method == Verb::Get && request.url == "https://shop.example/")
+            });
+            assert_eq!(
+                core.inner.epoch > epoch,
+                counts,
+                "{what}: counted as a write, or not"
+            );
+            assert_eq!(
+                asked_again, counts,
+                "{what}: the page is asked for again, or not: {update:?}"
+            );
+            let stands = if counts { "packed" } else { "to-pack" };
+            assert_eq!(
+                holder.as_deref(),
+                Some(stands),
+                "{what}: where the row stands"
             );
         }
     }

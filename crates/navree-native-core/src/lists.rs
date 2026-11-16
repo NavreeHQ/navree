@@ -1147,18 +1147,36 @@ impl Core {
             .screens
             .get(&id)
             .is_some_and(|inner| inner.visit == visit);
+        // A move is a write, decided as every write is. One the server may
+        // have run is counted, and when its answer does not say where the row
+        // is, the page is asked for again so the row stands where the server
+        // has it. Only one the server cannot have run is simply put back.
+        let ran = self.inner.write_may_have_run;
+        if ran {
+            self.wrote(id);
+        }
         match answer {
             Answer::Failed(failure) => {
-                if same {
+                if ran {
+                    if same {
+                        self.fetch_page(id, false);
+                    }
+                } else if same {
                     self.put_back(id, item, from, at);
                 }
                 self.failed(failure, Some(id));
             }
-            Answer::Empty => self.wrote(id),
+            Answer::Empty => {}
             Answer::Left(_) | Answer::Html { .. } => {
                 // Not an answer a move has: the page says where its rows are.
-                self.wrote(id);
-                self.fetch_page(id, false);
+                if ran {
+                    self.fetch_page(id, false);
+                } else {
+                    if same {
+                        self.put_back(id, item, from, at);
+                    }
+                    self.notice(Notice::Failed, Some(id));
+                }
             }
             Answer::Tree {
                 status,
@@ -1177,9 +1195,7 @@ impl Core {
                 }
                 let ops = std::mem::take(&mut read.envelope.ops);
                 let taken = status < 400;
-                if taken {
-                    self.wrote(id);
-                } else {
+                if !taken {
                     // The server said no: the row goes back, and what it said why is said.
                     if same {
                         self.put_back(id, item, from, at);
