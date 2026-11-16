@@ -19,10 +19,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -40,6 +48,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -100,7 +109,42 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
         if (!spark && unit != null && !node.horizontal) Text(unit, style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
         val count = node.labels.size.coerceAtLeast(node.series.maxOfOrNull { it.values.size } ?: 0)
         val height = if (spark) 40.dp else if (node.horizontal) (28f * count.coerceAtLeast(1) * scale.coerceIn(1f, 1.5f)).dp else (184f * scale.coerceIn(1f, 1.4f)).dp
-        Canvas(Modifier.fillMaxWidth().height(height).clearAndSetSemantics { contentDescription = said }) {
+        // The mark a finger is on, and where the plot stood when it was last drawn.
+        // It is not keyed on the node: a new answer of the same length arrives while a finger is down, and the gesture keeps writing to the state the drawing reads.
+        var touched by remember { mutableStateOf<Int?>(null) }
+        val geometry = remember { floatArrayOf(0f, 0f) }
+        val barKind = node.kind == Navree.ChartKind.BAR || node.kind == Navree.ChartKind.FUNNEL
+        val reads = Modifier.pointerInput(count, rtl, barKind) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                fun markAt(x: Float) = AxisRules.touchIndex(x, geometry[0], geometry[1], count, barKind, rtl)
+                try {
+                    // The chart reads out for a finger held on it, or one that slides along it (the chart takes that slide, so a screen of days does not turn);
+                    // a finger that goes up, or that the page takes to scroll it, is not a reading.
+                    var ended = false
+                    var along = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis / 2) {
+                        awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }.also { if (it == null) ended = true }
+                    }
+                    if (ended) return@awaitEachGesture
+                    if (along == null) {
+                        touched = markAt((currentEvent.changes.firstOrNull { it.id == down.id } ?: down).position.x)
+                        along = awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() } ?: return@awaitEachGesture
+                    }
+                    touched = markAt(along.position.x)
+                    horizontalDrag(down.id) {
+                        it.consume()
+                        touched = markAt(it.position.x)
+                    }
+                } finally {
+                    touched = null
+                }
+            }
+        }
+        val readOut = touched?.takeIf { it < count }?.let { readOutLines(node, it).joinToString(", ") }
+        Canvas(Modifier.fillMaxWidth().height(height).then(if (spark || node.horizontal) Modifier else reads).clearAndSetSemantics {
+            contentDescription = said
+            readOut?.let { stateDescription = it }
+        }) {
             if (count == 0) return@Canvas
             // Room for the value axis' numbers or the levels' names at the start, and the labels under.
             val axisWords = if (spark) emptyList() else if (node.levels.isNotEmpty()) node.levels else listOf(amount(bounds.high), amount(bounds.low))
@@ -108,6 +152,8 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
             val gutter = if (spark || node.horizontal || AxisRules.namesInside(node)) 0f else (axisWords.maxOfOrNull { measurer.measure(it, small).size.width } ?: 0) + 8.dp.toPx()
             val labelsRoom = if (spark || node.horizontal) 0f else measurer.measure("0", small).size.height + 6.dp.toPx()
             val plot = Rect(if (rtl) 0f else gutter, 4.dp.toPx(), if (rtl) size.width - gutter else size.width, size.height - labelsRoom)
+            geometry[0] = plot.left
+            geometry[1] = plot.width
             fun x(at: Float): Float = if (rtl) plot.right - at * plot.width else plot.left + at * plot.width
             fun y(value: Double): Float = plot.bottom - bounds.at(value).coerceIn(-0.05f, 1.05f) * plot.height
             if (node.horizontal) {
@@ -123,23 +169,24 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
                 }
                 val rows = if (node.levels.isNotEmpty()) node.levels.indices.map { it.toDouble() } else listOf(bounds.low, (bounds.low + bounds.high) / 2, bounds.high)
                 for (value in rows) drawLine(scheme.outlineVariant, Offset(plot.left, y(value)), Offset(plot.right, y(value)), strokeWidth = 1f)
-                // The value axis: the levels' names, or its lowest and highest numbers.
-                if (node.levels.isNotEmpty()) {
-                    node.levels.forEachIndexed { index, word ->
-                        val text = measurer.measure(word, small)
-                        val line = y(index.toDouble())
-                        // Above its line, the top one under it; on the card's own colour so the line behind does not run through the letters.
-                        val top = if (index == node.levels.lastIndex) line + 2.dp.toPx() else line - text.size.height - 1.dp.toPx()
-                        val left = if (rtl) plot.right - text.size.width - 4.dp.toPx() else plot.left + 4.dp.toPx()
-                        drawRoundRect(scheme.surfaceContainerLow.copy(alpha = 0.8f), Offset(left - 2.dp.toPx(), top), Size(text.size.width + 4.dp.toPx(), text.size.height.toFloat()), CornerRadius(3.dp.toPx()))
-                        drawText(text, topLeft = Offset(left, top))
-                    }
-                } else {
+                // The value axis: the levels' names (drawn over the series, below), or its lowest and highest numbers.
+                if (node.levels.isEmpty()) {
                     for (value in listOf(bounds.low, bounds.high)) {
                         val text = measurer.measure(amount(value), small)
                         val left = if (rtl) plot.right + 8.dp.toPx() else plot.left - 8.dp.toPx() - text.size.width
                         drawText(text, topLeft = Offset(left, (y(value) - text.size.height / 2f).coerceIn(0f, size.height - text.size.height)))
                     }
+                }
+            }
+            // The levels' names stand above their lines, the top one under it, on the card's own colour: drawn after the series, so a line that runs through the start of a name does not cross its letters.
+            fun levelNames() {
+                node.levels.forEachIndexed { index, word ->
+                    val text = measurer.measure(word, small)
+                    val line = y(index.toDouble())
+                    val top = if (index == node.levels.lastIndex) line + 2.dp.toPx() else line - text.size.height - 1.dp.toPx()
+                    val left = if (rtl) plot.right - text.size.width - 4.dp.toPx() else plot.left + 4.dp.toPx()
+                    drawRoundRect(scheme.surfaceContainerLow, Offset(left - 2.dp.toPx(), top), Size(text.size.width + 4.dp.toPx(), text.size.height.toFloat()), CornerRadius(3.dp.toPx()))
+                    drawText(text, topLeft = Offset(left, top))
                 }
             }
             val bar = node.kind == Navree.ChartKind.BAR || node.kind == Navree.ChartKind.FUNNEL
@@ -187,6 +234,7 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
                     if (spark) drawCircle(inks[s].mark, 3.5.dp.toPx(), points.last())
                 }
             }
+            if (!spark && node.levels.isNotEmpty()) levelNames()
             if (!spark) {
                 node.references.forEachIndexed { index, reference ->
                     val value = reference.value ?: return@forEachIndexed
@@ -202,17 +250,54 @@ internal fun ChartView(node: Navree.Chart, modifier: Modifier = Modifier) {
                     }
                 }
                 // The labels under: every one when there are few, else the first, middle and last.
-                val shown = if (count <= 8) node.labels.indices.toList() else listOf(0, node.labels.size / 2, node.labels.lastIndex).distinct()
-                for (at in shown) {
-                    val word = node.labels.getOrNull(at) ?: continue
+                // Only a short series measures its labels to know how many fit; a long one draws its first, middle and last.
+                val shown = if (count <= 8) {
+                    val widest = node.labels.maxOfOrNull { measurer.measure(it, small).size.width } ?: 0
+                    val slot = if (bar) plot.width / count else if (count > 1) plot.width / (count - 1) else plot.width
+                    val step = AxisRules.labelStep(widest.toFloat(), slot, 6.dp.toPx())
+                    node.labels.indices.filter { it % step == 0 }
+                } else {
+                    listOf(0, node.labels.size / 2, node.labels.lastIndex).distinct()
+                }
+                // Where each would stand, kept inside the chart; one that comes up against the one before it gives way (the last stays).
+                val standing = shown.mapNotNull { at ->
+                    val word = node.labels.getOrNull(at) ?: return@mapNotNull null
                     val text = measurer.measure(word, small)
                     val centre = if (bar) x((at + 0.5f) / count) else x(if (count > 1) at.toFloat() / (count - 1) else 0.5f)
                     val left = (centre - text.size.width / 2f).coerceIn(plot.left - (if (rtl) 0f else gutter), size.width - text.size.width)
-                    drawText(text, topLeft = Offset(left, plot.bottom + 6.dp.toPx()))
+                    Triple(text, left, left + text.size.width)
+                }
+                for (at in AxisRules.fit(standing.map { it.second to it.third }, 6.dp.toPx())) {
+                    drawText(standing[at].first, topLeft = Offset(standing[at].second, plot.bottom + 6.dp.toPx()))
+                }
+                // What a finger is on: a rule down the mark, and its label and values in a small card.
+                touched?.takeIf { it < count }?.let { at ->
+                    val centre = if (bar) x((at + 0.5f) / count) else x(if (count > 1) at.toFloat() / (count - 1) else 0.5f)
+                    drawLine(scheme.outline, Offset(centre, plot.top), Offset(centre, plot.bottom), strokeWidth = 1.dp.toPx())
+                    val lines = readOutLines(node, at)
+                    val words = lines.map { measurer.measure(it, small.copy(color = scheme.inverseOnSurface)) }
+                    val width = (words.maxOfOrNull { it.size.width } ?: 0) + 16.dp.toPx()
+                    val tall = words.sumOf { it.size.height } + 12.dp.toPx()
+                    val left = (centre - width / 2f).coerceIn(0f, (size.width - width).coerceAtLeast(0f))
+                    drawRoundRect(scheme.inverseSurface, Offset(left, plot.top), Size(width, tall), CornerRadius(6.dp.toPx()))
+                    var top = plot.top + 6.dp.toPx()
+                    for (word in words) {
+                        drawText(word, topLeft = Offset(left + 8.dp.toPx(), top))
+                        top += word.size.height
+                    }
                 }
             }
         }
         if (!spark && node.series.size > 1) Key(node.series.mapIndexed { index, series -> inks[index].mark to series.label })
+    }
+}
+
+/** What a chart says of one of its marks: the mark's label, then each series' value (with the series' name where there are several). */
+internal fun readOutLines(node: Navree.Chart, at: Int): List<String> = buildList {
+    node.labels.getOrNull(at)?.let { add(it) }
+    for (series in node.series) {
+        val value = series.shown.getOrNull(at) ?: series.values.getOrNull(at)?.let(::amount) ?: "-"
+        add(if (node.series.size > 1) series.label + " " + value else value)
     }
 }
 
@@ -405,7 +490,7 @@ internal fun MatrixHeatmapView(node: Navree.MatrixHeatmap, modifier: Modifier = 
                             Box(Modifier.size(side).clip(RoundedCornerShape(4.dp)).background(colour), contentAlignment = Alignment.Center) {
                                 if (value != null && side >= 36.dp) {
                                     Text(
-                                        String.format(Locale.getDefault(), "%.2f", value),
+                                        com.navree.client.design.BidiRules.amount(String.format(Locale.getDefault(), "%.2f", value)),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if (strength > 0.55f) onMark(colour) else scheme.onSurface,
                                         maxLines = 1,

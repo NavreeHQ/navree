@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -198,7 +199,7 @@ internal fun HintMark(hint: Navree.Hint, modifier: Modifier = Modifier) {
     val state = rememberTooltipState(isPersistent = true)
     val scope = rememberCoroutineScope()
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        positionProvider = insetTooltip(TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above)),
         tooltip = {
             RichTooltip(title = hint.title?.let { title -> { Text(title) } }) { Text(hint.text) }
         },
@@ -349,13 +350,14 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
     val grownAll = progress.map { grown(it) }
     val said = node.summary ?: rings.joinToString(". ") { "${it.name} ${it.shown ?: it.value?.let(::amount) ?: "–"}" }
     val low = node.prominence == Navree.Prominence.LOW
-    // Under other parts the rings and their heading start at the same edge; beside them, and small ones (the day's scores in the bar), they keep to their own width.
     val beside = LocalInLine.current || low
-    Column(if (beside) modifier else modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // The rings and their heading are one group the width of the wider of the two, the heading and the dial at the group's start edge: a stack that
+    // centres its parts (its `align`) then centres the group, which a Column that took the whole width would have left at the start.
+    Column(if (node.id != null) modifier.testTag("rings:${node.id}") else modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // The rings keep to the width of their words, so what stands beside them keeps the rest of the line.
         if (!low) ChartHeading(node.title, node.hint, fill = false)
         val dial: @Composable () -> Unit = {
-            Box(Modifier.size(diameter.dp).clearAndSetSemantics { contentDescription = said }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(diameter.dp).then(if (node.id != null) Modifier.testTag("dial:${node.id}") else Modifier).clearAndSetSemantics { contentDescription = said }, contentAlignment = Alignment.Center) {
                 Canvas(Modifier.fillMaxSize()) {
                     val px = stroke.dp.toPx()
                     rings.indices.forEach { index ->
@@ -381,10 +383,19 @@ internal fun RingsView(node: Navree.Rings, modifier: Modifier = Modifier) {
             }
         }
         if (node.legend && !low) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            // A set of rings that is given more width than its dial and legend need (a card on a tablet) has them stand together in the middle of that width;
+            // its title stays at the start. Beside other parts, and where the width is taken up, nothing changes.
+            Row(
+                if (beside) Modifier else Modifier.centredWhenShort(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
                 dial()
                 // The legend is as wide as its words, so what stands beside the rings keeps the rest of the line.
-                Column(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    Modifier.weight(1f, fill = false).then(if (node.id != null) Modifier.testTag("legend:${node.id}") else Modifier),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     rings.forEachIndexed { index, ring ->
                         Column {
                             Text(ring.name, style = MaterialTheme.typography.labelLarge, color = inks[index].mark)
@@ -567,11 +578,17 @@ internal fun DayClockView(node: Navree.DayClock, modifier: Modifier = Modifier) 
                 }
                 // The day's total in the hole, as large as it can be without touching the bars.
                 node.shown?.let { shown ->
-                    val hole = 2f * (inner - width * 0.9f) / density
-                    val value = measurer.measure(shown, valueStyle.copy(color = scheme.onSurface, fontSize = ClockRules.centreSp(hole, shown.length, valueStyle.fontSize.value, scale).sp))
-                    val unit = (node.unit ?: node.label)?.let {
-                        measurer.measure(it, unitStyle.copy(color = words, fontSize = ClockRules.centreSp(hole, it.length + 2, unitStyle.fontSize.value, scale).sp))
-                    }
+                    // Two lines stand in the hole (the total, and its unit under it): each has the chord of the circle at its own height, narrower than the hole, so both are held to less of it.
+                    val hole = 2f * (inner - width * 0.9f) / density * (if ((node.unit ?: node.label) != null) 0.74f else 1f)
+                    val valueSp = ClockRules.centreSp(hole, shown.length, valueStyle.fontSize.value, scale)
+                    val unitSp = (node.unit ?: node.label)?.let { ClockRules.centreSp(hole, it.length + 2, unitStyle.fontSize.value, scale) }
+                    fun lines(shrink: Float): Pair<androidx.compose.ui.text.TextLayoutResult, androidx.compose.ui.text.TextLayoutResult?> =
+                        measurer.measure(shown, valueStyle.copy(color = scheme.onSurface, fontSize = (valueSp * shrink).sp)) to
+                            (node.unit ?: node.label)?.let { measurer.measure(it, unitStyle.copy(color = words, fontSize = ((unitSp ?: 1f) * shrink).sp)) }
+                    // The two lines also stand inside the hole as tall as it is: at the largest text they are made smaller together.
+                    var (value, unit) = lines(1f)
+                    val shrink = ClockRules.centreFit((value.size.height + (unit?.size?.height ?: 0)).toFloat(), 2f * (inner - width * 0.9f))
+                    if (shrink < 1f) lines(shrink).let { value = it.first; unit = it.second }
                     val total = value.size.height + (unit?.size?.height ?: 0)
                     var top = c.y - total / 2f
                     drawText(value, topLeft = Offset(c.x - value.size.width / 2f, top))
@@ -832,7 +849,7 @@ internal fun DayPagerView(node: Navree.DayPager, place: Place, modifier: Modifie
             // The step back points to the start of the line: the forward chevron, turned.
             Icon(Glyphs.ChevronRight, contentDescription = previous, modifier = Modifier.scale(-1f, 1f))
         }
-        TextButton(onClick = { if (node.pick != null) choosing = true }, enabled = node.pick != null, modifier = Modifier.semantics { contentDescription = "${node.day}. $choose" }) {
+        TextButton(onClick = { if (node.pick != null) choosing = true }, enabled = node.pick != null, modifier = Modifier.weight(1f, fill = false).semantics { contentDescription = "${node.day}. $choose" }) {
             Text(node.day, style = if (inBar) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onClick = { go(node.next) }, enabled = node.next != null) {
