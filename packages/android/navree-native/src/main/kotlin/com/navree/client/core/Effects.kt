@@ -117,7 +117,7 @@ sealed interface Effect {
                 "cache_clear" -> CacheClear
                 "announce" -> Announce(
                     text = s("text"),
-                    notice = s("notice")?.let { word -> Notice.entries.firstOrNull { it.wire == word } },
+                    notice = s("notice")?.let { word -> Notice.read(word) },
                     count = l("count")?.toInt(),
                 )
                 "copy" -> Copy(s("text") ?: "", b("sensitive"))
@@ -175,4 +175,6 @@ val Notice.wire: String
         Notice.FieldsNeedAttention -> "fields_need_attention"
         Notice.Loaded -> "loaded"
         Notice.SecondStep -> "second_step"
+        Notice.SavedNotRefreshed -> "saved_not_refreshed"
+        Notice.Unknown -> "unknown"
     }

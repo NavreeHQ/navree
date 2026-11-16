@@ -4,6 +4,8 @@ import com.navree.protocol.Navree
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
@@ -51,18 +53,45 @@ enum class Failure {
     @SerialName("config") Config,
 }
 
-/** A message of the core's own, worded by the client. */
-@Serializable
+/**
+ * A message of the core's own, worded by the client. Read by the core's word
+ * for it ([wire]); a word this build does not know is [Unknown], which is
+ * still a notice and is still said, in words that fit its tone.
+ */
+@Serializable(with = NoticeSerializer::class)
 enum class Notice {
-    @SerialName("offline") Offline,
-    @SerialName("timeout") Timeout,
-    @SerialName("failed") Failed,
-    @SerialName("unsaved") Unsaved,
-    @SerialName("loading") Loading,
-    @SerialName("copied") Copied,
-    @SerialName("fields_need_attention") FieldsNeedAttention,
-    @SerialName("loaded") Loaded,
-    @SerialName("second_step") SecondStep,
+    Offline,
+    Timeout,
+    Failed,
+    Unsaved,
+    Loading,
+    Copied,
+    FieldsNeedAttention,
+    Loaded,
+    SecondStep,
+
+    /** It was saved, but the screen could not be brought up to date: the server's answer was larger than an answer may be. */
+    SavedNotRefreshed,
+
+    /** A notice a core newer than this build said: the client has no words of its own for it. */
+    Unknown,
+    ;
+
+    companion object {
+        /** The notice the core's word stands for; [Unknown] for a word this build does not know. */
+        fun read(word: String): Notice = entries.firstOrNull { it != Unknown && it.wire == word } ?: Unknown
+    }
+}
+
+object NoticeSerializer : KSerializer<Notice> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("com.navree.client.core.Notice", PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: Decoder): Notice {
+        val word = ((decoder as? JsonDecoder)?.decodeJsonElement() as? JsonPrimitive)?.contentOrNull
+        return if (word == null) Notice.Unknown else Notice.read(word)
+    }
+
+    override fun serialize(encoder: Encoder, value: Notice) = encoder.encodeString(value.wire)
 }
 
 /** The window's width class, as the client reported it. */

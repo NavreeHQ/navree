@@ -9,6 +9,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
@@ -25,6 +26,13 @@ interface Engine {
 fun interface EffectRunner {
     fun run(effect: Effect)
 }
+
+/**
+ * What a core that has stopped answers every call with, word for word (`STOPPED`
+ * in the core's `ffi.rs`). The client reads the answer's `stopped` mark; the
+ * words are how a core built before the mark says the same.
+ */
+internal const val CORE_STOPPED = "the core stopped after a failure inside it and can't be used again"
 
 /**
  * The loop of the runtime core: one event in, the parts that changed read
@@ -52,6 +60,15 @@ class Driver(private val engine: Engine) {
     var messages: List<Message> by mutableStateOf(emptyList())
         private set
 
+    /**
+     * The core stopped after a failure inside it: it answers nothing more, and
+     * the app can only be started again. Set by the answer that says so, to an
+     * event or to a view (its `stopped` mark, or the core's own words for it);
+     * from then on nothing is sent to the core.
+     */
+    var stopped: Boolean by mutableStateOf(false)
+        private set
+
     private var sending = false
     private val queued = ArrayDeque<JsonObject>()
 
@@ -61,12 +78,15 @@ class Driver(private val engine: Engine) {
      * always sees one event at a time, in order.
      */
     fun send(event: JsonObject) {
+        // A core that stopped answers every call the same: nothing more is asked of it.
+        if (stopped) return
         queued.addLast(event)
         if (sending) return
         sending = true
         try {
-            while (queued.isNotEmpty()) handle(queued.removeFirst())
+            while (queued.isNotEmpty() && !stopped) handle(queued.removeFirst())
         } finally {
+            if (stopped) queued.clear()
             sending = false
         }
     }
@@ -90,12 +110,31 @@ class Driver(private val engine: Engine) {
             problems("the core answered what does not read")
             return
         }
+        if (stops(update)) {
+            halt()
+            return
+        }
         (update["error"] as? JsonPrimitive)?.contentOrNull?.let {
             problems("the core refused ${event["t"]}: $it")
             return
         }
-        for (change in (update["changed"] as? JsonArray).orEmpty()) refresh(change as? JsonObject ?: continue)
+        for (change in (update["changed"] as? JsonArray).orEmpty()) {
+            refresh(change as? JsonObject ?: continue)
+            // A view found the core stopped: the rest of this answer is the answer of a core that is gone.
+            if (stopped) return
+        }
         for (effect in (update["effects"] as? JsonArray).orEmpty()) carryOut(Effect.read(effect))
+    }
+
+    /** Whether an answer of the core says it has stopped for good: the mark, or the words a core without the mark says it in. */
+    private fun stops(answer: JsonObject): Boolean =
+        (answer["stopped"] as? JsonPrimitive)?.booleanOrNull == true || (answer["error"] as? JsonPrimitive)?.contentOrNull == CORE_STOPPED
+
+    private fun halt() {
+        if (stopped) return
+        stopped = true
+        queued.clear()
+        problems("the core stopped after a failure inside it: the app must be started again")
     }
 
     /**
@@ -149,8 +188,16 @@ class Driver(private val engine: Engine) {
     /**
      * What the core keeps for a launch after the system ended the app, as
      * JSON text to store as it is, or null when there is nothing to keep.
+     * A snapshot that says `person_unknown` (the app's shell has not yet named
+     * anybody in this launch, so it holds nothing of a person) is nothing to
+     * keep: the one already stored stays. A core that does not send the field
+     * sends snapshots that are always kept.
      */
-    fun snapshot(): String? = query(part("snapshot"))?.toString()
+    fun snapshot(): String? {
+        val snapshot = query(part("snapshot")) ?: return null
+        val unknown = ((snapshot as? JsonObject)?.get("person_unknown") as? JsonPrimitive)?.contentOrNull == "true"
+        return if (unknown) null else snapshot.toString()
+    }
 
     private fun readScreen(id: Long) {
         val view = query(
@@ -169,8 +216,9 @@ class Driver(private val engine: Engine) {
             .getOrElse { problems("the core failed to answer a view: ${it.message}"); return null }
         val answer = runCatching { CoreJson.parseToJsonElement(bytes.decodeToString()) }.getOrNull() ?: return null
         if (answer is JsonNull) return null
-        if (answer is JsonObject && answer["error"] != null && answer.size == 1) {
-            problems("the core refused a view: ${answer["error"]}")
+        // An answer that carries an `error` is the core's refusal whatever else it holds: no part of the view state has that key.
+        if (answer is JsonObject && answer["error"] != null) {
+            if (stops(answer)) halt() else problems("the core refused a view: ${answer["error"]}")
             return null
         }
         return answer

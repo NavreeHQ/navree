@@ -12,6 +12,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -137,6 +138,98 @@ class DriverTest {
     }
 
     @Test
+    fun a_view_answered_with_an_error_is_refused_whatever_else_the_answer_holds() {
+        // The answer reads as a place to be in, and says it is an error: it is the error.
+        val refused = """{"error":"the query does not read: missing field","stage":"ready","destinations":[{"label":"Orders","href":"/orders","items":[],"stack":[1]}],"front":1}"""
+        val engine = Scripted(ArrayDeque(listOf("""{"changed":[{"t":"nav"}],"effects":[]}""")), mapOf("nav" to refused))
+        val driver = Driver(engine)
+        val problems = ArrayList<String>()
+        driver.problems = { problems += it }
+        driver.send(Events.start)
+        assertEquals("nothing of the refused answer is drawn", Stage.Starting, driver.nav.stage)
+        assertTrue(driver.nav.destinations.isEmpty())
+        assertTrue("the refusal is reported: $problems", problems.any { "refused a view" in it })
+    }
+
+    private val stoppedAnswer = """{"error":"the core stopped after a failure inside it and can't be used again","stopped":true}"""
+
+    @Test
+    fun a_core_that_says_it_has_stopped_is_asked_nothing_more() {
+        val engine = Scripted(ArrayDeque(listOf(stoppedAnswer)), emptyMap())
+        val driver = Driver(engine)
+        val ran = ArrayList<Effect>()
+        driver.effects = EffectRunner { ran += it }
+        assertFalse(driver.stopped)
+        driver.send(Events.start)
+        assertTrue("the mark is read", driver.stopped)
+        driver.send(Events.back)
+        driver.send(Events.foreground)
+        assertEquals("no event is sent to a core that stopped", 1, engine.sent.size)
+        assertTrue(ran.isEmpty())
+    }
+
+    @Test
+    fun a_stop_is_read_from_a_view_as_from_an_event_and_from_the_cores_words_where_the_mark_is_missing() {
+        // A view answered by a core that stopped meanwhile.
+        val viewed = Driver(Scripted(ArrayDeque(listOf("""{"changed":[{"t":"nav"}],"effects":[{"t":"haptic","kind":"success"}]}""")), mapOf("nav" to stoppedAnswer)))
+        val ran = ArrayList<Effect>()
+        viewed.effects = EffectRunner { ran += it }
+        viewed.send(Events.start)
+        assertTrue(viewed.stopped)
+        assertEquals("nothing of the answer the stop came in is drawn", Stage.Starting, viewed.nav.stage)
+        assertTrue("nor are the effects that came with it carried out", ran.isEmpty())
+        // A core built before the mark says it in its words alone.
+        val worded = Driver(Scripted(ArrayDeque(listOf("""{"error":"$CORE_STOPPED"}""")), emptyMap()))
+        worded.send(Events.start)
+        assertTrue(worded.stopped)
+        // An input that merely does not read is only an error: the core goes on.
+        val refusing = Scripted(ArrayDeque(listOf("""{"error":"the event does not read: unknown variant"}""")), emptyMap())
+        val going = Driver(refusing)
+        going.send(Events.start)
+        going.send(Events.back)
+        assertFalse(going.stopped)
+        assertEquals(2, refusing.sent.size)
+    }
+
+    @Test
+    fun the_words_a_stopped_core_is_known_by_are_the_cores_own() {
+        // The unit tests run in the client's own folder; the core's source is three folders up in the same tree.
+        val source = java.io.File("../../../crates/navree-native-core/src/ffi.rs")
+        org.junit.Assume.assumeTrue("the core's source is beside the client", source.isFile)
+        val words = Regex("const STOPPED: &str =\\s*\"([^\"]+)\"").find(source.readText())?.groupValues?.get(1)
+        assertEquals(words, CORE_STOPPED)
+    }
+
+    @Test
+    fun a_notice_is_read_by_the_cores_word_and_one_this_build_does_not_know_is_still_a_notice() {
+        val messages = """[{"id":1,"tone":"warning","notice":"saved_not_refreshed"},{"id":2,"tone":"danger","notice":"said_by_a_newer_core"},{"id":3,"tone":"neutral","text":"Packed"},{"id":4,"tone":"danger","notice":"failed"}]"""
+        val driver = Driver(Scripted(ArrayDeque(listOf("""{"changed":[{"t":"messages"}],"effects":[]}""")), mapOf("messages" to messages)))
+        driver.send(Events.start)
+        assertEquals(
+            listOf(Notice.SavedNotRefreshed, Notice.Unknown, null, Notice.Failed),
+            driver.messages.map { it.notice },
+        )
+        assertEquals("a message with words of its own has no notice", "Packed", driver.messages[2].text)
+        // An announcement names its notice the same way.
+        assertEquals(Effect.Announce(null, Notice.Loaded, 20), Effect.read(Json.parseToJsonElement("""{"t":"announce","notice":"loaded","count":20}""")))
+        assertEquals(Notice.Unknown, (Effect.read(Json.parseToJsonElement("""{"t":"announce","notice":"said_by_a_newer_core"}""")) as Effect.Announce).notice)
+    }
+
+    @Test
+    fun every_notice_the_core_can_say_has_a_word_this_build_knows() {
+        val known = Notice.entries.filter { it != Notice.Unknown }.map { it.wire }
+        for (word in known) assertEquals(word, Notice.read(word).wire)
+        assertEquals(Notice.Unknown, Notice.read("said_by_a_newer_core"))
+        // The unit tests run in the client's own folder; the core's source is three folders up in the same tree.
+        val source = java.io.File("../../../crates/navree-native-core/src/schema.rs")
+        org.junit.Assume.assumeTrue("the core's source is beside the client", source.isFile)
+        val list = Regex("fn notice\\(\\) -> Value \\{\\s*words\\(&\\[(.*?)\\]\\)", RegexOption.DOT_MATCHES_ALL).find(source.readText())?.groupValues?.get(1)
+        val said = Regex("\"([a-z_]+)\"").findAll(list.orEmpty()).map { it.groupValues[1] }.toList()
+        assertTrue("the core's list of notices was found: $said", said.size >= 10)
+        assertEquals("the core's notices, each known to this build by its word", said.sorted(), known.sorted())
+    }
+
+    @Test
     fun rows_named_again_read_their_screen_again() {
         val engine = Scripted(
             ArrayDeque(listOf("""{"changed":[{"t":"nav"}],"effects":[]}""", """{"changed":[{"t":"redraw","screen":1,"id":"inbox","rows":["c-88"],"gone":[]}],"effects":[]}""")),
@@ -147,6 +240,14 @@ class DriverTest {
         assertNull(driver.screens[1])
         driver.send(Events.refresh(1))
         assertEquals("Orders", driver.screens[1]!!.screen!!.title)
+    }
+
+    @Test
+    fun a_snapshot_taken_before_the_shell_named_anybody_is_not_kept() {
+        val unknown = Driver(Scripted(ArrayDeque(), mapOf("snapshot" to """{"version":1,"screens":[],"person_unknown":true}""")))
+        assertNull("the stored snapshot stays", unknown.snapshot())
+        val known = Driver(Scripted(ArrayDeque(), mapOf("snapshot" to """{"version":1,"screens":[],"person_unknown":false}""")))
+        assertEquals("""{"version":1,"screens":[],"person_unknown":false}""", known.snapshot())
     }
 
     @Test
@@ -282,8 +383,17 @@ class ConfigTest {
         assertEquals(listOf("clipboard", "share"), client["caps"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertEquals("Android's back goes to the first destination before it leaves", "true", config["back_to_first"]!!.jsonPrimitive.content)
         assertNull("a release build takes no plain http", config["loopback_http"])
-        assertTrue("a part this build does not draw goes to the web view", config["undrawable"]!!.jsonArray.any { it.jsonPrimitive.content == "input:file" })
+        val undrawable = config["undrawable"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals("only the web part is told as one this build does not draw", listOf("web"), undrawable)
+        assertFalse("a file field is drawn", "input:file" in undrawable)
+        assertFalse("a colour field is drawn", "input:colour" in undrawable)
         assertNull("no package name, no hand-over", config["app_id"])
+    }
+
+    @Test
+    fun the_most_a_file_may_have_is_the_apps_to_set_and_is_a_hundred_mebibytes_unless_it_does() {
+        assertEquals(100L * 1024 * 1024, NavreeConfig(origin = "https://store.example.in", name = "Store", seed = null).mostFileBytes)
+        assertEquals(5_000_000L, NavreeConfig(origin = "https://store.example.in", name = "Store", seed = null, mostFileBytes = 5_000_000).mostFileBytes)
     }
 
     @Test
