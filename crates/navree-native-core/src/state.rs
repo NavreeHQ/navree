@@ -1031,9 +1031,10 @@ pub(crate) struct Inner {
     pub event_start: u64,
     /// An answer the core makes itself (a request never sent) is being read.
     pub synthetic: bool,
-    /// The answer being read says its request never left the device: no
-    /// network, or one the core failed itself. A write that never left did
-    /// not happen.
+    /// The answer being read says its request was never acted on: no
+    /// network, one the core failed itself, or an answer that says it could
+    /// not be handled (408, 413, 414, 429, 431). A write answered so did not
+    /// happen.
     pub never_left: bool,
     /// An address an answer gave did not read, and that was said, in this event.
     pub refusal_said: bool,

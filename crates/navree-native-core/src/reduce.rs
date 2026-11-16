@@ -10,7 +10,8 @@
 //! - A write makes every other screen out of date; each is fetched again when
 //!   it comes to the front. So does a write whose answer failed or was too
 //!   large to read: the server may have written before it did. A write that
-//!   never left the device (no network) is no write.
+//!   never left the device (no network), or that the server answered as one
+//!   it could not handle (408, 413, 414, 429, 431), is no write.
 //! - What can't be read is never a crash: the web view for a page, a fresh
 //!   fetch for a change to one.
 
@@ -80,6 +81,14 @@ pub(crate) fn header_safe(value: &str) -> String {
 /// who is signed in.
 pub(crate) fn got_through(response: &Response) -> bool {
     response.error.is_none() && response.status < 500 && response.status != 429
+}
+
+/// Whether an answer says its request could not be handled, before the app
+/// acted on it: too slow to arrive (408), a body too large (413), an address
+/// too long (414), too many requests (429), headers too large (431). What a
+/// layer in front of the app's own code answers so names nobody.
+pub(crate) fn not_handled(response: &Response) -> bool {
+    response.error.is_none() && matches!(response.status, 408 | 413 | 414 | 429 | 431)
 }
 
 /// What an answer that asks for a newer app gives: its address only when it
@@ -2282,8 +2291,11 @@ impl Core {
         let Some(asked) = self.inner.pending.remove(&response.request) else {
             return;
         };
-        self.inner.never_left =
-            self.inner.synthetic || response.error == Some(TransportError::Offline);
+        // A write that never left the device, or that the server said it could
+        // not handle, did not happen.
+        self.inner.never_left = self.inner.synthetic
+            || response.error == Some(TransportError::Offline)
+            || not_handled(&response);
         let response = self.same_session(&asked, response);
         let response = self.keeping(&asked, response);
         let Some(response) = self.follow(&asked, response) else {
@@ -2972,6 +2984,24 @@ mod tests {
                     status: 503,
                     content_type: Some("text/html".to_owned()),
                     body: "<p>".to_owned(),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a 413: the server did not take the body",
+                false,
+                Response {
+                    status: 413,
+                    content_type: Some("application/json".to_owned()),
+                    body: "{}".to_owned(),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a 429: the server did not take the request",
+                false,
+                Response {
+                    status: 429,
                     ..Response::default()
                 },
             ),
