@@ -53,7 +53,9 @@ public struct SettingsShell: View {
         case .general:
             GeneralSettingsPane(configuration: session.configuration)
         case .server:
-            if let client = session.client {
+            if let client = session.client, client.stopped {
+                StoppedView { session.restart() }
+            } else if let client = session.client {
                 SettingsContent(client: client, configuration: session.configuration)
             } else {
                 ContentUnavailableView("No Settings", systemImage: "gearshape")

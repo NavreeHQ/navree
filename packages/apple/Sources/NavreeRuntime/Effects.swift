@@ -161,7 +161,7 @@ extension Update {
             return .failure(.unreadable)
         }
         if let error = object["error"] as? String {
-            return .failure(.refused(error))
+            return .failure(CoreAnswer.isStop(object) ? .stopped(error) : .refused(error))
         }
         let changed = (object["changed"] as? [[String: Any]] ?? []).map(Change.init)
         var effects: [CoreEffect] = []
@@ -177,12 +177,42 @@ extension Update {
     }
 }
 
-/// What went wrong with the core itself: a bug to log, never something to draw.
+/// What went wrong with the core itself. A refusal and an answer that does
+/// not read are bugs to log, never something to draw. A stop is drawn: the
+/// person is told the app must be started again.
 public enum CoreError: Error, Equatable, Sendable {
-    /// The core answered `{"error":…}`.
+    /// The core answered `{"error":…}`: an event or a query that does not
+    /// read. The core goes on.
     case refused(String)
+    /// The core answered `{"error":…,"stopped":true}`: it failed inside and
+    /// has stopped for good. Every later call answers the same.
+    case stopped(String)
     /// What came back is not JSON the client reads.
     case unreadable
+}
+
+/// What the core's answers say about the core itself.
+public enum CoreAnswer {
+    /// The words every call answers once the core has stopped, as the core
+    /// writes them (`STOPPED` in `crates/navree-native-core/src/ffi.rs`). A
+    /// stop is read by its mark; the words are only for an answer without one.
+    public static let stoppedWords = "the core stopped after a failure inside it and can't be used again"
+
+    /// Whether an answer says the core has stopped for good: an error that
+    /// carries `"stopped": true`, or, with no mark at all, the core's own
+    /// words for it. An input that did not read, a freed core and no core
+    /// are errors, and not a stop.
+    public static func isStop(_ answer: [String: Any]) -> Bool {
+        guard let error = answer["error"] as? String else { return false }
+        if let mark = answer["stopped"] { return (mark as? Bool) == true }
+        return error == stoppedWords
+    }
+
+    /// The same, for an answer as the core gave it; `false` for what does not read.
+    public static func isStop(_ answer: Data) -> Bool {
+        guard let object = (try? JSONSerialization.jsonObject(with: answer)) as? [String: Any] else { return false }
+        return isStop(object)
+    }
 }
 
 extension Change {

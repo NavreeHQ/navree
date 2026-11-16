@@ -33,6 +33,12 @@ public final class KeptFiles: Sendable {
         try? Data(contentsOf: file(key))
     }
 
+    /// Whether anything is kept under `key`, which can be told while the
+    /// device is locked and the file itself cannot be read.
+    public func holds(_ key: String) -> Bool {
+        FileManager.default.fileExists(atPath: file(key).path)
+    }
+
     /// Writes `value` under `key`; `nil` deletes it.
     public func write(_ key: String, _ value: String?) {
         writeData(key, value.map { Data($0.utf8) })
