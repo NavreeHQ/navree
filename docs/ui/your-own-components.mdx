@@ -458,11 +458,17 @@ What a control draws follows a few rules, which `kit::assert_control` checks in 
 - Every `input`, `select`, `textarea` and `button` it draws is disabled when `field.disabled` is.
 - The form field is drawn outside the control's owned bodies, so the seal doesn't detach it from its form.
 
-The check runs on every path a value arrives by, before the field's type reads it. `Err` is the message the field shows. The paths are a derived form read with `Submit`, a step of a `Wizard`, a draft read back with `Draft::read_for`, a described form through `check_controls`, and an inline edit through `EditedValue::read`. An optional field left empty is not checked. A field that is not optional and is missing from the post reads as empty, and is checked as that.
+The check runs where Navree UI reads a form, before the field's type reads the value. `Err` is the message the field shows. An optional field left empty is not checked. A field that is not optional and is missing from the post reads as empty, and is checked as that. What reads the form decides what the check is given:
+
+- **The app and its configuration:** a derived form read with `Submit`, which finds them itself, and, given a `Language` made by `Language::of(Some(&ctx)).await`, `decode_for`, `TestView::submit_as_for`, a step of a `Wizard`, a draft read back with `Draft::read_for`, a described form through `check_controls`, and an inline edit through `EditedValue::read`.
+- **Neither:** `decode`, `decode_with`, `Draft::read`, `TestView::submit_as`, and those above given a `Language` made with `new` or `english`, as a wizard's own language is.
+- **No check at all:** `navree::http::Form<T>`, `Json<T>` and `Query<T>`, which know nothing of controls; the text `Rejected::values()` and `Draft::value` give back as it was posted; and `EditedValue::text` and `read_built_in`.
+
+So read a form that has a control in one of the ways the first item lists. A wizard keeps what was typed on Save, Back and a move by the stepper without checking it, and checks it on Next, on Finish and in `Draft::read_for`.
 
 A check can read the app. `ControlCx` gives it `messages()`, the app's validation messages in the reader's language, `app()`, the app, and `config()`, the app's configuration. `config()` reads the configuration files. Options a module sets in code reach a check through `app()?.contributions::<T>()`, which is synchronous.
 
-`app()` and `config()` are there when the value arrives through an app: `Submit`, `EditedValue::read`, a wizard step given `Language::of(Some(&ctx)).await`, a draft read with `read_for`, `check_controls`. `decode` and `decode_with` give a check neither, and neither does a `Language` made with `new` or `english`. A check that can't do its work without them refuses the value: a value that could not be checked is not accepted.
+`app()` and `config()` are there in the ways the first item lists, and `None` in those the second lists. A check that can't do its work without them refuses the value: a value that could not be checked is not accepted.
 
 ```rust
 /// A pin code, held to the ones the app delivers to (`delivery.pin_codes` in its configuration).

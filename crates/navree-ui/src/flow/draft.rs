@@ -104,7 +104,10 @@ impl Draft {
         self.steps.get(step)
     }
 
-    /// The value posted for `field` in `step`: the first, when there are several.
+    /// The value posted for `field` in `step`: the first, when there are several. It is the text
+    /// as it was posted, never checked: a wizard keeps what was typed on Save, Back and a move
+    /// by the stepper without running the step's rules or a control's check. Read a step that
+    /// must hold to them with [`read_for`](Self::read_for).
     pub fn value(&self, step: &str, field: &str) -> Option<&str> {
         self.steps
             .get(step)?
@@ -114,7 +117,10 @@ impl Draft {
             .map(|(_, value)| value.as_str())
     }
 
-    /// A step read into the struct that is its form, with its rules run.
+    /// A step read into the struct that is its form, with its rules run. It reads with no app, as
+    /// `decode` does: a control's check is given neither the app nor its configuration, and one
+    /// that needs them refuses. A step with such a control is read with
+    /// [`read_for`](Self::read_for).
     pub fn read<T>(&self, step: &str) -> Result<T, crate::form::FieldErrors>
     where
         T: crate::form::Form + serde::de::DeserializeOwned + navree_validation::Validate,
@@ -128,7 +134,8 @@ impl Draft {
     }
 
     /// [`read`](Self::read) in the reader's language: the app's validation messages and
-    /// the reader's date, time and slider words.
+    /// the reader's date, time and slider words. Given a `Language` made by `Language::of`, a
+    /// control's check is given the app and its configuration too.
     pub fn read_for<T>(
         &self,
         step: &str,

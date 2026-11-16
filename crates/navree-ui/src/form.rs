@@ -102,8 +102,8 @@ pub enum Widget {
     File,
     /// A field drawn by a control of your own ([`FieldControl`], written
     /// `#[form(control = PATH)]` on a derived form): the control draws it, and the value it
-    /// posts is held to the control's own check, on every path the value arrives by, before the
-    /// field's type reads it.
+    /// posts is held to the control's own check before the field's type reads it, wherever the
+    /// toolkit reads the form ([`FieldControl`] lists where).
     Control(Control),
 }
 
@@ -134,10 +134,23 @@ impl Widget {
 /// [`secret`](FieldControl::secret), and the toolkit keeps the value as it keeps a password
 /// input's: it is never shown again, given back or kept in a draft.
 ///
-/// The check runs on every path a value arrives by: a derived form read with [`Submit`], a
-/// step of a [`Wizard`](crate::Wizard), a draft read back with
-/// [`Draft::read_for`](crate::Draft::read_for), a described form through [`check_controls`],
-/// and an inline edit through [`EditedValue::read`](crate::table::EditedValue::read).
+/// The check runs where the toolkit reads a form, before the field's type reads the value. What
+/// reads the form decides what the check is given:
+///
+/// - The app and its configuration: a derived form read with [`Submit`], which finds them
+///   itself, and, given a [`Language`] made by `Language::of`, [`decode_for`],
+///   `TestView::submit_as_for`, a step of a [`Wizard`](crate::Wizard), a draft read back with
+///   [`Draft::read_for`](crate::Draft::read_for), a described form through [`check_controls`],
+///   and an inline edit through [`EditedValue::read`](crate::table::EditedValue::read).
+/// - Neither, so a check that needs them refuses: [`decode`], [`decode_with`],
+///   [`Draft::read`](crate::Draft::read), `TestView::submit_as`, and those above given a
+///   [`Language`] made with `new` or `english`, as a wizard's own language is.
+/// - No check at all: the HTTP crate's own `Form<T>` (`navree::http::Form`), `Json<T>` and
+///   `Query<T>`, which know nothing of controls; the text [`Rejected::values`] and
+///   [`Draft::value`](crate::Draft::value) give back as it was posted; and
+///   [`EditedValue::text`](crate::table::EditedValue::text) and `read_built_in`.
+///
+/// So read a form that has a control in one of the ways the first item lists.
 ///
 /// A control is one value for the life of the program, shared by every request, so it is
 /// `Send`, `Sync` and [`RefUnwindSafe`]: a form that holds one can cross a caught panic as a
@@ -195,10 +208,10 @@ pub trait FieldControl: Send + Sync + RefUnwindSafe + 'static {
     fn draw(&self, field: &ControlField<'_>) -> Node;
 
     /// The server's check of a posted value, before the field's type reads it: `Err` is the
-    /// message shown. It is called only through [`Control::check`], so it runs on every path the
-    /// value arrives by. In a form, when the check refuses a text that the field's type cannot
-    /// read either, the check's message is the field's one error; a text the check accepts and
-    /// the type cannot read gets the form's own words for a value that is not valid.
+    /// message shown. It is called only through [`Control::check`], where the trait's own docs
+    /// say and nowhere else. In a form, when the check refuses a text that the field's
+    /// type cannot read either, the check's message is the field's one error; a text the check
+    /// accepts and the type cannot read gets the form's own words for a value that is not valid.
     ///
     /// A check that cannot do its work without the app or the configuration (`cx.app()` or
     /// `cx.config()` is `None`) refuses the value: a value that could not be checked is not
@@ -322,8 +335,8 @@ impl Control {
         self.0
     }
 
-    /// The one function every path runs a control's check through: `Err` is the message the
-    /// field shows.
+    /// The one function a control's check is run through, wherever it runs: `Err` is the message
+    /// the field shows.
     pub fn check(&self, value: &str, cx: &ControlCx<'_>) -> Result<(), String> {
         self.0.check(value, cx)
     }

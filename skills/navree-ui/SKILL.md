@@ -860,11 +860,16 @@ static RATING: UiExtension = UiExtension::new("app", "rating")
   relative to its `Cargo.toml`.
 
 A form field of your own is a `FieldControl`: `draw` draws a form field named
-`field.name`, and `check` is the server's check of what it posts, on every path
-the value arrives by (`Submit`, a wizard step, a draft, `check_controls`,
-`EditedValue::read`). `cx.config()` reads the configuration files, and
-`cx.app()` the app. Keep the control in a `static` and name it in a derived
-form with `#[form(control = RATING_FIELD)]`.
+`field.name`, and `check` is the server's check of what it posts, run where
+Navree UI reads a form (`Submit`, a wizard step, `Draft::read_for`,
+`check_controls`, `EditedValue::read`; with no app and no configuration in
+`decode`, `Draft::read` and `TestView::submit_as`). `navree::http::Form`,
+`Json`, `Query`, `Rejected::values` and `Draft::value` never run it, so read a
+form with a control through `Submit`. `cx.config()` reads the configuration
+files, and `cx.app()` the app. A control whose value is a secret says so with
+`fn secret(&self) -> bool { true }`. Keep the control in a `static` and name it
+in a derived form with `#[form(control = RATING_FIELD)]`, on a field of one
+value.
 
 ```rust
 use navree::ui::{Control, ControlCx, ControlField, FieldControl, Form, Validate};
