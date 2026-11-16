@@ -1,6 +1,6 @@
 ---
 name: navree-native
-description: "Makes a Navree UI app answer native clients (iPhone, iPad, Android phones and tablets) from the same pages, so each system draws them with its own components: turns on the preview (`ui-native-preview`), says what a page's parts are (`AppPage::actions` and `Button::role` for a screen's actions, `Button::presented` for how the screen a button or a link leads to opens, `Button::undoable`, `Button::standard` and `Button::reason`, `#[col(role = ..)]` and `DataTable::row_opens` for records, `Item` lists, a sheet that is a task or a glance, `native::only` and `native::web_only`), reads `navree native:coverage` (the grades idiom, layout and web) and `native.toml`, tests a page as a native client with `TestNative`, and says plainly what falls back to the web view and what does not exist yet (device features from a page, watch and TV, widgets, Windows and Linux clients, the app on the device). Use when asked to make a Navree app a native app or an iOS or Android app, to make a page look right on a phone, to read or raise native coverage, or to ask whether a part is native. This is the entry point: it says which of `navree-native-design`, `navree-native-apple` and `navree-native-android` to load next."
+description: "Makes a Navree UI app answer native clients (iPhone, iPad, Android phones and tablets) from the same pages, so each system draws them with its own components: turns on the preview (`ui-native-preview`), says what a page's parts are (`AppPage::actions` and `Button::role` for a screen's actions, `Button::presented` for how the screen a button or a link leads to opens, `Button::undoable`, `Button::standard` and `Button::reason`, `#[col(role = ..)]` and `DataTable::row_opens` for records, `Item` lists, a sheet that is a task or a glance, `native::only` and `native::web_only`), reads `navree native:coverage` (the grades idiom, layout and web) and `native.toml`, tests a page as a native client with `TestNative`, and says plainly what falls back to the web view and what does not exist yet (device features from a page, watch and TV, widgets, a Linux client, the app on the device). Use when asked to make a Navree app a native app or an iOS or Android app, to make a page look right on a phone, to read or raise native coverage, or to ask whether a part is native. This is the entry point: it says which of `navree-native-design`, `navree-native-apple` and `navree-native-android` to load next."
 ---
 
 # Navree Native (preview)
@@ -595,7 +595,9 @@ Say these plainly to the owner; do not build around them.
   take a strict subset and an "open on your phone" screen.
 - **Widgets, complications, live activities.** Not built. They are written for
   their surface, not lowered from a page.
-- **Windows and Linux clients.** Not built.
+- **A Linux client.** Not built. A Windows client is in the repository
+  (`packages/windows`, for Windows 11 on WinUI 3), in preview; sign-in
+  through the browser is not available on Windows yet.
 - **The app on the device** (the Rust server running inside the app, offline).
   Not built; it needs a trust design of its own.
 - **Project scaffolding.** There is no `navree native:init`, `native:run` or
