@@ -128,16 +128,31 @@ public sealed class RulesTests
     }
 
     [TestMethod]
-    public void The_core_names_nine_notices_and_each_has_words_that_a_name_it_does_not_know_lacks()
+    public void The_core_names_ten_notices_and_each_has_words_that_a_name_it_does_not_know_lacks()
     {
-        foreach (string notice in new[] { "offline", "timeout", "failed", "unsaved", "loading", "copied", "fields_need_attention", "loaded", "second_step" })
+        foreach (string notice in new[] { "offline", "timeout", "failed", "unsaved", "loading", "copied", "fields_need_attention", "loaded", "second_step", "saved_not_refreshed" })
         {
             Assert.IsNotNull(Words.Notice(notice), notice);
         }
 
+        // A change that was saved is said to be saved, whatever else the notice says.
+        StringAssert.StartsWith(Words.Notice("saved_not_refreshed"), "Saved.");
         Assert.IsNull(Words.Notice("from_the_future"));
         Assert.AreEqual("You are offline", Words.Failure("offline").Title);
         Assert.AreEqual("Something went wrong", Words.Failure("anything else").Title);
+    }
+
+    [TestMethod]
+    public void Every_notice_the_cores_own_schema_names_has_words()
+    {
+        // The list is the core's, read from its schema: a notice the core gains has no words here until this client gives it some.
+        using JsonDocument schema = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repository.Root, "crates/navree-native-core/schema/navree-native-core.schema.json")));
+        string[] notices = [.. schema.RootElement.GetProperty("$defs").GetProperty("Message").GetProperty("properties").GetProperty("notice").GetProperty("enum").EnumerateArray().Select(word => word.GetString()!)];
+        Assert.IsTrue(notices.Length >= 10, "the core's notices were not found in its schema");
+        foreach (string notice in notices)
+        {
+            Assert.IsFalse(string.IsNullOrWhiteSpace(Words.Notice(notice)), "the notice " + notice + " has no words");
+        }
     }
 
     [TestMethod]

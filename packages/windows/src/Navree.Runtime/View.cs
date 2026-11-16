@@ -84,6 +84,9 @@ public enum Notice
 
     /// <summary>A second step of signing in follows.</summary>
     SecondStep,
+
+    /// <summary>The change was saved, and the screen could not be brought up to date.</summary>
+    SavedNotRefreshed,
 }
 
 /// <summary>The window's width class, as the client reported it.</summary>

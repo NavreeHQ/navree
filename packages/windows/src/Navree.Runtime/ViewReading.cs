@@ -268,9 +268,29 @@ public static class ViewReading
                 "fields_need_attention" => Notice.FieldsNeedAttention,
                 "loaded" => Notice.Loaded,
                 "second_step" => Notice.SecondStep,
+                "saved_not_refreshed" => Notice.SavedNotRefreshed,
                 _ => Notice.Unknown,
             }
             : Notice.Unknown;
+
+    /// <summary>The core's word for a notice: what <see cref="ReadNotice"/> read it from.</summary>
+    /// <param name="notice">The notice.</param>
+    /// <returns>The word, or nothing for a notice this build does not know.</returns>
+    public static string NoticeWord(Notice notice) =>
+        notice switch
+        {
+            Notice.Offline => "offline",
+            Notice.Timeout => "timeout",
+            Notice.Failed => "failed",
+            Notice.Unsaved => "unsaved",
+            Notice.Loading => "loading",
+            Notice.Copied => "copied",
+            Notice.FieldsNeedAttention => "fields_need_attention",
+            Notice.Loaded => "loaded",
+            Notice.SecondStep => "second_step",
+            Notice.SavedNotRefreshed => "saved_not_refreshed",
+            _ => string.Empty,
+        };
 
     private static Stage ReadStage(JsonElement json) =>
         json.ValueKind == JsonValueKind.String

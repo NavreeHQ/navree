@@ -410,7 +410,7 @@ public sealed partial class ShellWindow : Window
 
     private void ShowMessage(Message message)
     {
-        string text = message.Text ?? (message.Notice is Notice notice ? Words.Notice(NoticeName(notice)) : null) ?? string.Empty;
+        string text = message.Text ?? (message.Notice is Notice notice ? Words.Notice(ViewReading.NoticeWord(notice)) : null) ?? string.Empty;
         InfoBar bar = new()
         {
             IsOpen = true,
@@ -454,21 +454,6 @@ public sealed partial class ShellWindow : Window
 
         Announce(string.Join(". ", new[] { message.Title, text }.Where(part => !string.IsNullOrEmpty(part))));
     }
-
-    private static string NoticeName(Notice notice) =>
-        notice switch
-        {
-            Notice.Offline => "offline",
-            Notice.Timeout => "timeout",
-            Notice.Failed => "failed",
-            Notice.Unsaved => "unsaved",
-            Notice.Loading => "loading",
-            Notice.Copied => "copied",
-            Notice.FieldsNeedAttention => "fields_need_attention",
-            Notice.Loaded => "loaded",
-            Notice.SecondStep => "second_step",
-            _ => string.Empty,
-        };
 
     // What assistive technology is told, without moving the focus.
     private void Announce(string text)

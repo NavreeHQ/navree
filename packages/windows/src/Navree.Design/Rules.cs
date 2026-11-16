@@ -198,6 +198,7 @@ public static class Words
             "fields_need_attention" => "Some fields need attention.",
             "loaded" => "Loaded",
             "second_step" => "One more step to finish signing in.",
+            "saved_not_refreshed" => "Saved. The screen could not be brought up to date.",
             _ => null,
         };
 

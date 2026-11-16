@@ -288,7 +288,7 @@ public sealed partial class ShellHost : IDisposable
                 session.ClearKept();
                 break;
             case AnnounceEffect announce:
-                string? said = announce.Text ?? (announce.Notice is Notice notice ? Words.Notice(NoticeName(notice)) : null);
+                string? said = announce.Text ?? (announce.Notice is Notice notice ? Words.Notice(ViewReading.NoticeWord(notice)) : null);
                 if (said is not null)
                 {
                     Announcement?.Invoke(said);
@@ -340,21 +340,6 @@ public sealed partial class ShellHost : IDisposable
                 break;
         }
     }
-
-    private static string NoticeName(Notice notice) =>
-        notice switch
-        {
-            Notice.Offline => "offline",
-            Notice.Timeout => "timeout",
-            Notice.Failed => "failed",
-            Notice.Unsaved => "unsaved",
-            Notice.Loading => "loading",
-            Notice.Copied => "copied",
-            Notice.FieldsNeedAttention => "fields_need_attention",
-            Notice.Loaded => "loaded",
-            Notice.SecondStep => "second_step",
-            _ => string.Empty,
-        };
 
     private async Task FetchAsync(FetchEffect fetch)
     {
