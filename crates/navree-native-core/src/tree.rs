@@ -512,11 +512,14 @@ fn form_stem(handle: &str) -> std::borrow::Cow<'_, str> {
     while !handle.is_char_boundary(end) {
         end -= 1;
     }
-    // FNV-1a: the same number on every device, for as long as the id is.
-    let number = handle.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
-        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
-    });
-    std::borrow::Cow::Owned(format!("{}~{number:08x}", &handle[..end]))
+    // FNV-1a over 64 bits: the same number on every device, for as long as
+    // the id is, and too wide for two ids of one page to share by chance.
+    let number = handle
+        .bytes()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
+        });
+    std::borrow::Cow::Owned(format!("{}~{number:016x}", &handle[..end]))
 }
 
 /// A name not in `taken`: `stem`, or `stem~2`, `stem~3`, ... The next suffix
@@ -1088,6 +1091,28 @@ mod tests {
             children,
             ..Stack::default()
         })
+    }
+
+    /// The stem of a long form id carries a 64-bit number made of all of it:
+    /// two ids that begin alike and whose 32-bit numbers are the same still
+    /// get stems of their own.
+    #[test]
+    fn a_long_form_ids_stem_carries_a_sixty_four_bit_number() {
+        // FNV-1a over 32 bits gives both 0xbb325f42.
+        let one = "order-form-for-the-workshop-at-ludhiana-and-amritsar-branch-01139599";
+        let two = "order-form-for-the-workshop-at-ludhiana-and-amritsar-branch-01322382";
+        let (one, two) = (form_stem(one), form_stem(two));
+        assert_ne!(one, two);
+        for stem in [&one, &two] {
+            let number = stem.rsplit('~').next().unwrap_or("");
+            assert_eq!(number.len(), 16, "{stem}");
+            assert!(
+                number.bytes().all(|byte| byte.is_ascii_hexdigit()),
+                "{stem}"
+            );
+        }
+        // A short id is its own stem.
+        assert_eq!(form_stem("note"), "note");
     }
 
     /// A form with no id is named from its address, and an address may be
