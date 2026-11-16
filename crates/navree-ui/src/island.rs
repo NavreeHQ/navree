@@ -90,6 +90,10 @@ impl IslandScript {
     /// The script `bytes`, named `name` (1 to 64 lowercase letters, digits and `-`), at
     /// most `most` bytes long. A script past its ceiling, or a name of anything else,
     /// fails the app's build.
+    ///
+    /// The script is hashed while the app compiles, and the compiler limits that work: a
+    /// script past about 500 KB stops the build (`long_running_const_eval`) unless the
+    /// `static` that holds it carries `#[allow(long_running_const_eval)]`.
     pub const fn new(name: &'static str, bytes: &'static [u8], most: usize) -> Self {
         let letters = name.as_bytes();
         assert!(
