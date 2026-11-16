@@ -1308,7 +1308,12 @@ fn every_permission_a_framework_crate_declares_is_under_a_reserved_word() {
             .iter()
             .map(|(_, prefix)| prefix.split('.').next().unwrap()),
     );
-    let declared = declared_permissions();
+    let (declared, unread) = declared_permissions();
+    // A permission required in a form the scan cannot read would be checked by nothing here.
+    assert!(
+        unread.is_empty(),
+        "a permission is required in a form the scan cannot read: write it as a string or as a constant of its crate, or list it in READ_WHERE_WRITTEN with where its value is read: {unread:#?}"
+    );
     for (file, permission) in &declared {
         let word = permission.split('.').next().unwrap();
         assert!(
@@ -1442,8 +1447,17 @@ fn permission_prefixes() -> Vec<(String, String)> {
 /// - the subject of `.can(action, "subject", ..)` when it is a string whose first word is
 ///   lower-case (a capitalised subject is never a namespace).
 ///
-/// A permission a crate builds at run time (`format!`) escapes it.
-fn declared_permissions() -> Vec<(String, String)> {
+/// With them, every item of a `.permissions(&[..])` or `#[permissions(..)]` list that is
+/// neither a string nor a constant of the crate, as `file: item`, but for the ones
+/// [`READ_WHERE_WRITTEN`] lists: such an item is a permission the scan cannot read where it is
+/// required.
+///
+/// A framework permission is written in one of these forms. A permission a crate builds at run
+/// time (`format!`), one passed as a whole list (`.permissions(&list)`), one given to
+/// `permitted(..)` or to another builder (`.permission("..")`), and a constant written over two
+/// lines, as a `static` or of another type than `&str`, escape it; so does code after a file's
+/// first test module.
+fn declared_permissions() -> (Vec<(String, String)>, Vec<String>) {
     let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     let mut folders: Vec<std::path::PathBuf> = std::fs::read_dir(&crates)
         .expect("the crates folder")
@@ -1451,6 +1465,7 @@ fn declared_permissions() -> Vec<(String, String)> {
         .collect();
     folders.sort();
     let mut declared: Vec<(String, String)> = Vec::new();
+    let mut unread: Vec<String> = Vec::new();
     for folder in folders {
         let name = folder
             .file_name()
@@ -1519,8 +1534,10 @@ fn declared_permissions() -> Vec<(String, String)> {
                 for (at, _) in text.match_indices(needle) {
                     let list = until(&text[at + needle.len()..], end);
                     for item in list.split(',').map(str::trim) {
-                        if let Some(permission) = resolve(item) {
-                            declared.push((file.clone(), permission));
+                        match resolve(item) {
+                            Some(permission) => declared.push((file.clone(), permission)),
+                            None if item.is_empty() || read_where_written(file, item) => {}
+                            None => unread.push(format!("{file}: `{item}`")),
                         }
                     }
                 }
@@ -1558,7 +1575,30 @@ fn declared_permissions() -> Vec<(String, String)> {
         }
     }
     declared.sort();
-    declared
+    (declared, unread)
+}
+
+/// The items of `.permissions(&[..])` lists in the framework's source that are neither a string
+/// nor a constant of the crate, each with its file: the permission each one stands for is
+/// written, and read by the scan, elsewhere. `permission.as_str()` is the option
+/// `auth.impersonation.permission`, whose default the scan reads as an option's; `permission`
+/// is one of navree-workflows' `VIEW_PERMISSION` and `MANAGE_PERMISSION`, which it reads by
+/// their names.
+const READ_WHERE_WRITTEN: [(&str, &str); 2] = [
+    (
+        "navree-auth/src/session_controller.rs",
+        "permission.as_str()",
+    ),
+    ("navree-workflows/src/controller.rs", "permission"),
+];
+
+/// Whether [`READ_WHERE_WRITTEN`] lists `item` of `file` (a path below `crates/`, with the
+/// separators of this system).
+fn read_where_written(file: &str, item: &str) -> bool {
+    let file = file.replace('\\', "/");
+    READ_WHERE_WRITTEN
+        .iter()
+        .any(|(path, written)| file.ends_with(*path) && *written == item)
 }
 
 /// `text` up to its first `end`, or all of it.
