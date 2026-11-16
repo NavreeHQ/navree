@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Navree.Platform;
 using Navree.Presence;
 using Navree.Protocol;
 using Navree.Runtime;
@@ -35,18 +36,27 @@ public sealed partial class ShellHost
     /// <returns>The value.</returns>
     internal string? Recall(string key) => kept.Read(key);
 
-    /// <summary>Keeps a value under a key for the next launch, in order with the rest, or takes the key away when there is none.</summary>
+    /// <summary>
+    /// Keeps a value under a key for the next launch, in order with the rest, or takes the key away when there is none. Nothing is kept while a
+    /// sign-out is under way, and nothing asked before one is kept after it (<see cref="SessionKeeper"/>).
+    /// </summary>
     /// <param name="key">The key.</param>
     /// <param name="value">The value.</param>
-    internal void Remember(string key, string? value) => disk.Run(() => kept.Write(key, value));
+    internal void Remember(string key, string? value) => session.Write(key, value);
 
     /// <summary>
     /// Keeps what the core says it needs to start again where the person was. A snapshot that says it holds nobody (<c>person_unknown</c>) is not
-    /// kept, so a visitor's blank one never replaces a person's.
+    /// kept, so a visitor's blank one never replaces a person's; nor is one asked for while a sign-out is under way, or one whose session ended
+    /// while it was being made.
     /// </summary>
-    /// <returns>Whether a snapshot was kept.</returns>
+    /// <returns>Whether a snapshot was given to be kept.</returns>
     public async Task<bool> KeepSnapshotAsync()
     {
+        if (session.Stamp() is not long stamp)
+        {
+            return false;
+        }
+
         string? snapshot;
         try
         {
@@ -62,7 +72,7 @@ public sealed partial class ShellHost
             return false;
         }
 
-        Remember(SnapshotKey, snapshot);
+        session.Write(stamp, SnapshotKey, snapshot);
         return true;
     }
 

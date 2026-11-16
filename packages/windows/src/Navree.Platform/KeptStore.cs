@@ -11,6 +11,7 @@ namespace Navree.Platform;
 /// </summary>
 public sealed class KeptStore
 {
+    private const string WipeMarkName = "signing-out.mark";
     private readonly string folder;
     private readonly byte[] entropy;
     private readonly object gate = new();
@@ -82,7 +83,7 @@ public sealed class KeptStore
         }
     }
 
-    /// <summary>Throws away everything kept.</summary>
+    /// <summary>Throws away everything kept. The mark of a sign-out under way stays (<see cref="MarkWipe"/>).</summary>
     public void Clear()
     {
         lock (gate)
@@ -91,8 +92,51 @@ public sealed class KeptStore
             {
                 foreach (string file in Directory.GetFiles(folder))
                 {
-                    File.Delete(file);
+                    if (!string.Equals(Path.GetFileName(file), WipeMarkName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Delete(file);
+                    }
                 }
+            }
+        }
+    }
+
+    /// <summary>Whether a sign-out was started and not finished: the mark <see cref="MarkWipe"/> leaves is there.</summary>
+    public bool WipeMarked
+    {
+        get
+        {
+            lock (gate)
+            {
+                return File.Exists(Path.Combine(folder, WipeMarkName));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Leaves the mark that a sign-out is under way, and asks the system to write it through to the disk before this returns
+    /// (<see cref="FileStream.Flush(bool)"/> with true). It holds nothing of the person.
+    /// </summary>
+    public void MarkWipe()
+    {
+        lock (gate)
+        {
+            Directory.CreateDirectory(folder);
+            using FileStream mark = new(Path.Combine(folder, WipeMarkName), FileMode.Create, FileAccess.Write, FileShare.None, 1, FileOptions.WriteThrough);
+            mark.WriteByte((byte)'1');
+            mark.Flush(flushToDisk: true);
+        }
+    }
+
+    /// <summary>Takes the mark of a sign-out under way away: the sign-out has finished.</summary>
+    public void UnmarkWipe()
+    {
+        lock (gate)
+        {
+            string mark = Path.Combine(folder, WipeMarkName);
+            if (File.Exists(mark))
+            {
+                File.Delete(mark);
             }
         }
     }

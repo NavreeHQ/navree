@@ -108,6 +108,23 @@ internal sealed class WebPage : Grid
         }
 
         WebPage[] started = [.. kept.Where(page => !page.closed && page.view.CoreWebView2 is not null)];
+
+        // A page that still runs could write again into what is about to be cleared: each is stopped and emptied first, and shown again only
+        // when its screen asks for it.
+        foreach (WebPage page in started)
+        {
+            try
+            {
+                page.loaded = null;
+                page.view.CoreWebView2!.Stop();
+                page.view.CoreWebView2.Navigate("about:blank");
+            }
+            catch (Exception problem)
+            {
+                note("screen " + page.screen + ": the page could not be emptied: " + problem.GetType().Name);
+            }
+        }
+
         foreach (WebPage page in started)
         {
             try
@@ -308,7 +325,8 @@ internal sealed class WebPage : Grid
                 return;
             }
 
-            if (!host.Origins.Ours(uri))
+            // While a sign-out's steps run, nothing is asked of the network: no answer can put a cookie into what is being cleared.
+            if (!host.Origins.Ours(uri) || host.Wiping)
             {
                 args.Response = web.Environment.CreateWebResourceResponse(null, 403, "Blocked", string.Empty);
                 return;

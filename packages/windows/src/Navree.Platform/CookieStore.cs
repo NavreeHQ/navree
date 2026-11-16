@@ -8,13 +8,27 @@ namespace Navree.Platform;
 /// The cookies of the app's origins, and of nothing else: an answer's <c>Set-Cookie</c> is kept only when the
 /// address it came from is the app's own, and a request carries cookies only to an address that is the app's own.
 /// A cookie is kept for the host that set it unless it names a domain that host is under; <c>Secure</c> ones are sent
-/// over <c>https</c> only.
+/// over <c>https</c> only. Each clear ends a session: the store's <see cref="Session"/> number moves on, and the cookies of an answer to a
+/// request made under an earlier number are not kept.
 /// </summary>
 public sealed class CookieStore
 {
     private readonly Origins origins;
     private readonly object gate = new();
     private readonly List<Held> held = [];
+    private long session;
+
+    /// <summary>The number of the session the store holds cookies for; it moves on at every <see cref="Clear"/>.</summary>
+    public long Session
+    {
+        get
+        {
+            lock (gate)
+            {
+                return session;
+            }
+        }
+    }
 
     /// <summary>Makes an empty store for an app.</summary>
     /// <param name="origins">The app's origins.</param>
@@ -40,8 +54,19 @@ public sealed class CookieStore
     /// <param name="url">The whole address the answer came from.</param>
     /// <param name="setCookie">The values of its <c>Set-Cookie</c> headers.</param>
     /// <param name="now">The time now.</param>
-    public void Store(string url, IEnumerable<string> setCookie, DateTimeOffset now)
+    public void Store(string url, IEnumerable<string> setCookie, DateTimeOffset now) => Store(url, setCookie, now, null);
+
+    /// <summary>
+    /// Keeps the cookies an answer set, when the address it came from is the app's own and the session its request was made under is
+    /// still the store's: an answer that arrives after the store was cleared sets nothing.
+    /// </summary>
+    /// <param name="url">The whole address the answer came from.</param>
+    /// <param name="setCookie">The values of its <c>Set-Cookie</c> headers.</param>
+    /// <param name="now">The time now.</param>
+    /// <param name="madeUnder">The <see cref="Session"/> the request was made under; null for the one now.</param>
+    public void Store(string url, IEnumerable<string> setCookie, DateTimeOffset now, long? madeUnder)
     {
+        ArgumentNullException.ThrowIfNull(setCookie);
         if (!origins.Ours(url) || !Uri.TryCreate(url, UriKind.Absolute, out Uri? address))
         {
             return;
@@ -49,6 +74,11 @@ public sealed class CookieStore
 
         lock (gate)
         {
+            if (madeUnder is long made && made != session)
+            {
+                return;
+            }
+
             foreach (string text in setCookie)
             {
                 Held? cookie = Parse(text, address, now);
@@ -105,21 +135,28 @@ public sealed class CookieStore
         }
     }
 
-    /// <summary>Throws away every cookie.</summary>
+    /// <summary>Throws away every cookie and ends the session they were for: <see cref="Session"/> moves on.</summary>
     public void Clear()
     {
         lock (gate)
         {
             held.Clear();
+            session++;
         }
     }
 
-    /// <summary>Writes the cookies that outlive a session as JSON, to be kept on the device.</summary>
+    /// <summary>Writes every cookie the store holds as JSON, to be kept on the device.</summary>
     /// <returns>JSON text.</returns>
-    public string Export()
+    public string Export() => Export(out _);
+
+    /// <summary>Writes every cookie the store holds as JSON, with the session they are for, read together.</summary>
+    /// <param name="forSession">The <see cref="Session"/> the cookies are for.</param>
+    /// <returns>JSON text.</returns>
+    public string Export(out long forSession)
     {
         lock (gate)
         {
+            forSession = session;
             return JsonSerializer.Serialize(
                 held.Select(cookie => new string[]
                 {
@@ -134,7 +171,7 @@ public sealed class CookieStore
         }
     }
 
-    /// <summary>Reads what <see cref="Export"/> wrote.</summary>
+    /// <summary>Reads what <see cref="Export()"/> wrote.</summary>
     /// <param name="json">The JSON text.</param>
     public void Import(string json)
     {

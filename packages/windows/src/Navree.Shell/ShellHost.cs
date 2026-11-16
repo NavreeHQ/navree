@@ -23,12 +23,11 @@ public sealed partial class ShellHost : IDisposable
     private readonly Dictionary<long, CancellationTokenSource> running = [];
     private readonly Dictionary<long, CancellationTokenSource> timers = [];
     private readonly Dictionary<long, CancellationTokenSource> streams = [];
-    private readonly SerialQueue disk = new();
+    private readonly SessionKeeper session;
     private readonly CancellationTokenSource stopped = new();
     private readonly EnvironmentWatcher environment;
     private readonly ForegroundTracker foreground = new();
     private readonly List<WipeStep> moreWipeSteps = [];
-    private string lastCookies = string.Empty;
 
     /// <summary>Makes the host and its core. Nothing is sent to the core until <see cref="Start"/>.</summary>
     /// <param name="options">What the app says.</param>
@@ -52,11 +51,16 @@ public sealed partial class ShellHost : IDisposable
 
         IFetcher answering = options.Fetcher ?? network!;
         fetcher = options.AnswerFirst is null ? answering : new FirstAnswer(options.AnswerFirst, answering);
-        if (kept.Read("cookies") is string saved)
+
+        // A sign-out the last run did not finish is finished before anything kept is read: no cookie, no page and no web data of the
+        // person who left is taken in. No web view runs yet, so the web view's folder can be deleted.
+        session = new SessionKeeper(kept, cookies);
+        string webFolder = options.WebFolder ?? WebData.DefaultFolder(options.AppName);
+        FinishedSignOutAtStart = session.Open(() =>
         {
-            cookies.Import(saved);
-            lastCookies = cookies.Export();
-        }
+            Files.Clear();
+            return WebData.DeleteAsync(webFolder, TimeSpan.FromSeconds(3)).GetAwaiter().GetResult();
+        });
 
         client = new CoreClient(ClientEnvironment.Config(options), OnUpdate, OnProblem);
 
@@ -108,15 +112,18 @@ public sealed partial class ShellHost : IDisposable
         Options.Place.Scheme is not null && State.App?.User is Models.User user && !AccountRules.OffersSignOut(user.Menu);
 
     /// <summary>
-    /// Signs the person out on this device: what could rebuild the session goes first (the cookies, what is kept, what the web view
-    /// keeps), then the core is told the client ended the session itself and starts again from the shell.
+    /// Signs the person out on this device: what could rebuild the session goes first (the cookies, the cookie file, what the web view
+    /// keeps), then the core is told the client ended the session itself and starts again from the shell, then the rest is wiped
+    /// (<see cref="SessionKeeper.EndAsync"/>).
     /// </summary>
-    /// <returns>When the wipe has finished and the core is told.</returns>
-    public async Task SignOutHereAsync()
-    {
-        await ForgetAsync();
-        client.Send(Events.SignedOut);
-    }
+    /// <returns>When the wipe has finished and the core has let go.</returns>
+    public Task SignOutHereAsync() => EndSessionAsync(coreEnded: false);
+
+    /// <summary>Whether the last run left a sign-out unfinished and this start finished it before reading anything.</summary>
+    public bool FinishedSignOutAtStart { get; }
+
+    /// <summary>Whether a sign-out's steps are running: the web view asks nothing of the network meanwhile.</summary>
+    internal bool Wiping => session.Wiping;
 
     /// <summary>
     /// A window says whether it is shown (not minimised, not hidden). The core is told the app went to the background when the last
@@ -176,7 +183,7 @@ public sealed partial class ShellHost : IDisposable
         environment.Dispose();
         client.Dispose();
         network?.Dispose();
-        disk.Dispose();
+        session.Dispose();
     }
 
     // Runs a step that must be on the UI thread, and completes when it has been.
@@ -280,13 +287,13 @@ public sealed partial class ShellHost : IDisposable
                 RunDevice(device);
                 break;
             case CacheReadEffect read:
-                disk.Run(() => client.Send(Events.Cache(read.Key, kept.Read(read.Key))));
+                session.Read(read.Key, value => client.Send(Events.Cache(read.Key, value)));
                 break;
             case CacheWriteEffect write:
-                disk.Run(() => kept.Write(write.Key, write.Value));
+                session.Write(write.Key, write.Value);
                 break;
             case CacheClearEffect:
-                disk.Run(kept.Clear);
+                session.ClearKept();
                 break;
             case AnnounceEffect announce:
                 string? said = announce.Text ?? (announce.Notice is Notice notice ? Words.Notice(NoticeName(notice)) : null);
@@ -333,7 +340,8 @@ public sealed partial class ShellHost : IDisposable
                 client.Send(Events.Random(random.Request, Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(Math.Clamp(random.Bytes, 1, 1024)))));
                 break;
             case ForgetSessionEffect:
-                _ = ForgetAsync();
+                // Its first part (the cookies out of memory, the work under way stopped) is done before the next effect of this update runs.
+                _ = EndSessionAsync(coreEnded: true);
                 break;
             default:
                 Problem?.Invoke("an effect this build does not know: " + effect.GetType().Name);
@@ -386,18 +394,9 @@ public sealed partial class ShellHost : IDisposable
             ? Events.ResponseFailed(fetch.Request, result.Error)
             : Events.Response(fetch.Request, result.Status, result.ContentType, result.Location, result.Headers, result.Body);
         client.Send(answer);
-        KeepCookies();
-    }
 
-    // What the cookie store holds is kept for the next launch, protected for this person on this device.
-    private void KeepCookies()
-    {
-        string now = cookies.Export();
-        if (now != lastCookies)
-        {
-            lastCookies = now;
-            disk.Run(() => kept.Write("cookies", now));
-        }
+        // What the cookie store holds is kept for the next launch, protected for this person on this device.
+        session.KeepCookies();
     }
 
     private async Task StreamAsync(StreamOpenEffect open)
@@ -484,35 +483,38 @@ public sealed partial class ShellHost : IDisposable
         }
     }
 
-    // The end of a session: what could rebuild it goes first, in order, each step with a limit.
-    private async Task ForgetAsync()
+    // The end of a session, on the UI thread: everything that writes for the person is stopped or refused at once, then what could rebuild the
+    // session goes first, then the rest, each step with a limit (SessionKeeper). The core is told when the client ended it; when the core ended it,
+    // it has let go already.
+    private async Task EndSessionAsync(bool coreEnded)
     {
-        WipeReport report = await Wipe.RunAsync(
-            [.. new[]
-            {
-                new WipeStep("the cookies", () =>
+        WipeReport report;
+        try
+        {
+            report = await session.EndAsync(
+                StopWork,
+                coreEnded ? null : () => client.SendAsync(Events.SignedOut),
+                [new WipeStep("what the web view keeps", OnUiAsync(() => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName), what => ReportProblem("web wipe " + what))))],
+                [.. new[]
                 {
-                    cookies.Clear();
-                    lastCookies = string.Empty;
-                    return Task.CompletedTask;
-                }),
-                new WipeStep("what is kept on the device", () =>
-                {
-                    kept.Clear();
-                    return Task.CompletedTask;
-                }),
-                new WipeStep("the files chosen for forms", () =>
-                {
-                    Files.Clear();
-                    return Task.CompletedTask;
-                }),
-                new WipeStep("what the web view keeps", OnUiAsync(() => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName), what => ReportProblem("web wipe " + what)))),
-            }.Concat(moreWipeSteps)]).ConfigureAwait(false);
+                    new WipeStep("the files chosen for forms", () =>
+                    {
+                        Files.Clear();
+                        return Task.CompletedTask;
+                    }),
+                }.Concat(moreWipeSteps)]).ConfigureAwait(false);
+        }
+        catch (Exception problem)
+        {
+            report = new WipeReport([], [new KeyValuePair<string, string>("the start of the sign-out", problem.GetType().Name)]);
+        }
+
         if (!await OnDispatcherAsync().ConfigureAwait(false))
         {
             return;
         }
 
+        Place?.HoldSnapshots(false);
         if (!report.Complete)
         {
             Problem?.Invoke("the wipe did not finish: " + string.Join(", ", report.Failed.Select(failed => failed.Key)));
@@ -520,6 +522,30 @@ public sealed partial class ShellHost : IDisposable
 
         Place?.EndSession();
         SessionEnded?.Invoke(report);
+    }
+
+    // On the UI thread, before the first step of a sign-out: every request, stream and timer under way for the person is cancelled and forgotten
+    // (nothing of it is told to the core), and the snapshot timer stops until the sign-out is over.
+    private void StopWork()
+    {
+        foreach (Dictionary<long, CancellationTokenSource> work in new[] { running, streams, timers })
+        {
+            foreach (CancellationTokenSource source in work.Values)
+            {
+                try
+                {
+                    source.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // It had ended.
+                }
+            }
+
+            work.Clear();
+        }
+
+        Place?.HoldSnapshots(true);
     }
 
     // Asks what the app answers by itself first, and the fetcher behind it for the rest.

@@ -92,6 +92,8 @@ public sealed class HttpFetcher : IFetcher, IDisposable
         timeout.CancelAfter(TimeSpan.FromMilliseconds(Math.Clamp(effect.TimeoutMs, 1000, 120_000)));
         try
         {
+            // The session the request is made under, read before its cookies are: the answer's cookies are kept only while it lasts.
+            long session = cookies.Session;
             using HttpRequestMessage? request = Build(effect);
             if (request is null)
             {
@@ -101,7 +103,7 @@ public sealed class HttpFetcher : IFetcher, IDisposable
             using HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
             if (response.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? setCookie))
             {
-                cookies.Store(effect.Url, setCookie, clock());
+                cookies.Store(effect.Url, setCookie, clock(), session);
             }
 
             byte[]? body = await ReadCappedAsync(response.Content, timeout.Token).ConfigureAwait(false);

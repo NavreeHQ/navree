@@ -89,6 +89,11 @@ internal sealed class WipeCheck(ShellHost host, ShellWindow window, string folde
         bool ended = await Until(() => report is not null);
         Check("the wipe ran and every step of it finished", ended && report!.Complete && report.Done.Count >= 3, ended ? "done: " + string.Join(", ", report!.Done) + "; failed: " + string.Join(", ", report.Failed.Select(f => f.Key + " (" + f.Value + ")")) : "no report came");
         Say("web folder after: " + Describe());
+        if (host.Options.KeptFolder is string keptFolder)
+        {
+            KeptStore onDisk = new(keptFolder, host.Options.AppName);
+            Check("after signing out no cookie file and no mark of an unfinished sign-out are on disk", onDisk.Read(SessionKeeper.CookiesKey) is null && !onDisk.WipeMarked, "cookie file " + (onDisk.Read(SessionKeeper.CookiesKey) is null ? "none" : "there") + ", mark " + (onDisk.WipeMarked ? "there" : "none"));
+        }
 
         // The app starts again and shows its web page: it finds nothing of the session.
         bool second = await Until(() => WipeProbe.Reports > reports);

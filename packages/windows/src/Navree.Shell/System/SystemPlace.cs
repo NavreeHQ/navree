@@ -138,6 +138,13 @@ public sealed class SystemPlace : IDisposable
         snapshotTimer.Start();
         host.CoreStopped += () => Say("the core stopped");
 
+        // A sign-out the last run left unfinished was finished at this start: what the system still shows of the person who left goes too.
+        if (host.FinishedSignOutAtStart)
+        {
+            NotificationSurface.RemoveAll();
+            Say("a sign-out the last run left unfinished was finished at this start");
+        }
+
         schedule = NotificationSchedule.Read(host.Recall(PendingKey));
         if (schedule.Waiting.Count > 0)
         {
@@ -301,6 +308,21 @@ public sealed class SystemPlace : IDisposable
         NotificationSurface.Remove(id);
         Remember();
         Arm();
+    }
+
+    /// <summary>Stops the snapshot timer while a sign-out is under way, and starts it again after.</summary>
+    /// <param name="hold">Whether to stop it.</param>
+    internal void HoldSnapshots(bool hold)
+    {
+        if (hold)
+        {
+            snapshotTimer.Stop();
+            changedSinceSnapshot = false;
+        }
+        else
+        {
+            snapshotTimer.Start();
+        }
     }
 
     /// <summary>The person signed out: the count, what waits and what is shown all go.</summary>
