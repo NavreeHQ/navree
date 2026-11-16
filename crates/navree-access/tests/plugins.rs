@@ -7,15 +7,17 @@ mod database;
 #[path = "module/support.rs"]
 mod support;
 
+use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
-use navree_access::{AbilityFactory, AccessModule, Subject};
+use navree_access::{AbilityFactory, AccessModule, Policy, Subject};
 use navree_contracts::{ModuleBuilderPermissionsExt, Permission, permission_catalog, permitted};
 use navree_kernel::{Module, ModuleBuilder, ModuleId, PluginInfo};
-use navree_testing::{TestAppBuilder, principal};
+use navree_testing::{TestApp, TestAppBuilder, TestResponse, principal};
+use serde_json::json;
 use uuid::Uuid;
 
-use crate::support::{RecordingAudit, SUPER_ADMIN, give_role};
+use crate::support::{RecordingAudit, SUPER_ADMIN, give_role, insert_post};
 
 /// The warnings logged on this thread while the guard lives (the tests run on a
 /// current-thread runtime, so the boot logs on this thread).
@@ -73,7 +75,11 @@ impl tracing::Subscriber for Warnings {
 /// app's subjects (types of this binary outside the module, such as the posts of
 /// `support`) belong to another crate, as they do in an app.
 mod navree_plugin_announcements {
-    use navree_access::Subject;
+    use std::marker::PhantomData;
+
+    use navree_access::{
+        ALL, AbilityCtx, AccessModule, MANAGE, Policy, READ, Rules, Subject, UPDATE,
+    };
     use navree_contracts::{ModuleBuilderPermissionsExt, Permission};
     use navree_kernel::{Module, ModuleBuilder, ModuleId, PluginInfo};
 
@@ -150,10 +156,115 @@ mod navree_plugin_announcements {
             (self.0)(m);
         }
     }
+
+    /// A module of the announcements plugin that registers its subject `Announcement` and
+    /// the policy `P`.
+    pub struct PolicyModule<P>(pub PhantomData<fn() -> P>);
+
+    impl<P: Policy> Module for PolicyModule<P> {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(super::plugin("navree-plugin-announcements", "announcements"))
+                .import(AccessModule::for_subject::<Announcement>())
+                .import(AccessModule::for_policy::<P>());
+        }
+    }
+
+    /// Six lines that would make every signed-in user a super-admin.
+    pub struct Open;
+
+    impl Policy for Open {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.user.is_some() {
+                rules.can(MANAGE, ALL);
+            }
+        }
+    }
+
+    /// Lets every signed-in user update the app's posts.
+    pub struct Everyone;
+
+    impl Policy for Everyone {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.user.is_some() {
+                rules.can(UPDATE, "Post");
+            }
+        }
+    }
+
+    /// Lets every signed-in user read the plugin's announcements.
+    pub struct NoticePolicy;
+
+    impl Policy for NoticePolicy {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.user.is_some() {
+                rules.can(READ, "announcements.Announcement");
+            }
+        }
+    }
+
+    /// Lets guests update the app's posts.
+    pub struct ForGuests;
+
+    impl Policy for ForGuests {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.user.is_none() {
+                rules.can(UPDATE, "Post");
+            }
+        }
+    }
+
+    /// Lets holders of the built-in workspace role `viewer` update the app's posts.
+    pub struct ForViewers;
+
+    impl Policy for ForViewers {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.has_role("viewer") {
+                rules.can(UPDATE, "Post");
+            }
+        }
+    }
+
+    /// Lets holders of the role `billing` update the app's posts.
+    pub struct ForBilling;
+
+    impl Policy for ForBilling {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.has_role("billing") {
+                rules.can(UPDATE, "Post");
+            }
+        }
+    }
+
+    /// Lets holders of the role `super-admin` update the app's posts.
+    pub struct ForSuperAdmins;
+
+    impl Policy for ForSuperAdmins {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.has_role("super-admin") {
+                rules.can(UPDATE, "Post");
+            }
+        }
+    }
+
+    /// Lets holders of `announcements.read` update the app's posts.
+    pub struct ForReaders;
+
+    impl Policy for ForReaders {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            let reads = ctx
+                .permissions
+                .iter()
+                .any(|permission| permission == "announcements.read");
+            if reads {
+                rules.can(UPDATE, "Post");
+            }
+        }
+    }
 }
 
 use navree_plugin_announcements::{
-    Announcement, Bulletin, Everything, Extras, NoticeSubjects, Plugin, Unnamed,
+    Announcement, Bulletin, Everyone, Everything, Extras, ForBilling, ForGuests, ForReaders,
+    ForSuperAdmins, ForViewers, NoticePolicy, NoticeSubjects, Open, Plugin, PolicyModule, Unnamed,
 };
 
 /// A module of the app, named `name`, that describes `permissions`.
@@ -270,6 +381,37 @@ impl Subject for Ledger {
 /// Registers the subject `S` from the module `m` is the builder of.
 fn subject_of<S: Subject + Send + Sync + 'static>(m: &mut ModuleBuilder) {
     m.import(AccessModule::for_subject::<S>());
+}
+
+/// The announcements plugin's module that registers the policy `P`.
+fn plugin_policy<P: Policy>() -> PolicyModule<P> {
+    PolicyModule(PhantomData)
+}
+
+/// What the boot says of the announcements plugin's policy `P`, which writes a rule on
+/// `subject`.
+fn writes_outside<P: Policy>(subject: &str) -> String {
+    let policy = std::any::type_name::<P>();
+    format!(
+        "plugin `navree-plugin-announcements` registers the policy `{policy}` in `AccessPolicy<{policy}>`, which writes a rule on `{subject}`; a plugin's policy writes rules on its own subjects only (register it from a module of the app to apply it to `{subject}`)"
+    )
+}
+
+/// Asserts that the app of `builder`, with the announcements plugin's policy `P`, fails the
+/// boot because `P` writes a rule on the app's posts.
+async fn assert_refused_on_posts<P: Policy>(builder: TestAppBuilder) {
+    let error = boot_error(builder.module(plugin_policy::<P>())).await;
+    let expected = writes_outside::<P>("Post");
+    assert!(error.contains(&expected), "{expected}\n{error}");
+}
+
+/// `user` renames the post `post` (`PATCH /api/posts/{post}`).
+async fn rename(app: &TestApp, user: Uuid, post: Uuid) -> TestResponse {
+    app.acting_as(principal(user))
+        .patch(&format!("/api/posts/{post}"))
+        .json(&json!({ "title": "Office hours in Amritsar" }))
+        .send()
+        .await
 }
 
 /// The test app of the module tests (posts, the access module, a database of
@@ -624,5 +766,137 @@ async fn an_app_that_describes_no_permission_boots_as_before() {
             .any(|warning| warning.contains("permission `")),
         "{:?}",
         warnings.all()
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_policy_on_all_fails_the_boot() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    let error = boot_error(builder().module(plugin_policy::<Open>())).await;
+    assert!(
+        error.contains(
+            "plugin `navree-plugin-announcements` registers the policy `plugins::navree_plugin_announcements::Open` in `AccessPolicy<plugins::navree_plugin_announcements::Open>`, which writes a rule on `all`; a plugin's policy writes rules on its own subjects only"
+        ),
+        "{error}"
+    );
+    // `all` is no subject the app could apply it to.
+    assert!(!error.contains("register it from a module of the app"), "{error}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_policy_on_another_subject_fails_the_boot() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    let error = boot_error(builder().module(plugin_policy::<Everyone>())).await;
+    assert!(
+        error.contains(
+            "plugin `navree-plugin-announcements` registers the policy `plugins::navree_plugin_announcements::Everyone` in `AccessPolicy<plugins::navree_plugin_announcements::Everyone>`, which writes a rule on `Post`; a plugin's policy writes rules on its own subjects only (register it from a module of the app to apply it to `Post`)"
+        ),
+        "{error}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_boot_asks_a_plugin_policy_as_each_principal_it_knows() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    // A guest; any signed-in user; a built-in workspace role; the app's super-admin role.
+    assert_refused_on_posts::<ForGuests>(builder()).await;
+    assert_refused_on_posts::<Everyone>(builder()).await;
+    assert_refused_on_posts::<ForViewers>(builder()).await;
+    assert_refused_on_posts::<ForSuperAdmins>(builder()).await;
+    // A role the app's configuration names, for workspaces or for organizations.
+    for key in [
+        "workspace.roles.billing.permissions",
+        "workspace.organizations.roles.billing.permissions",
+    ] {
+        let billing = builder().config(key, json!(["posts.read"]));
+        assert_refused_on_posts::<ForBilling>(billing).await;
+    }
+    // A user who holds every permission the plugin describes.
+    assert_refused_on_posts::<ForReaders>(builder().module(ANNOUNCEMENTS)).await;
+    // A role named nowhere the boot looks is not asked at boot: every ability build leaves
+    // the policy's rules on the app's posts out.
+    builder()
+        .module(plugin_policy::<ForBilling>())
+        .try_build()
+        .await
+        .expect("a role the boot does not know is not asked");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_policy_on_its_own_subject_applies_and_names_its_plugin() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    let app = builder()
+        .module(plugin_policy::<NoticePolicy>())
+        .try_build()
+        .await
+        .expect("a plugin's policy on its own subject boots");
+
+    // `plugins` lists the policy's module under the plugin, with what it registers.
+    let plugins = app.ctx().plugins().plugins;
+    let plugin = plugins
+        .iter()
+        .find(|plugin| plugin.info.name == "navree-plugin-announcements")
+        .expect("the plugin is listed");
+    let policy = plugin
+        .modules
+        .iter()
+        .find(|module| {
+            module.id.name() == "AccessPolicy<plugins::navree_plugin_announcements::NoticePolicy>"
+        })
+        .expect("the policy's module is listed under its plugin");
+    assert_eq!(
+        policy.contributions,
+        [("navree_access::records::PolicyRegistration", 1)]
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_app_may_register_a_plugin_policy() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    let (harpreet, kuldeep) = (Uuid::now_v7(), Uuid::now_v7());
+
+    // Without a line of the app, Kuldeep Gill may not rename Harpreet Sandhu's post.
+    let app = builder()
+        .module(ANNOUNCEMENTS)
+        .try_build()
+        .await
+        .expect("the support app boots beside the plugin");
+    let post = insert_post(&app, "Ludhiana timings", Some(harpreet), "draft", false).await;
+    rename(&app, kuldeep, post.id).await.assert_status(403);
+
+    // The app imports the plugin's policy from its own root: it applies to the app's posts.
+    let app = builder()
+        .module(AccessModule::for_policy::<Everyone>())
+        .module(ANNOUNCEMENTS)
+        .try_build()
+        .await
+        .expect("the app's registration of a plugin's policy boots");
+    let post = insert_post(&app, "Ludhiana timings", Some(harpreet), "draft", false).await;
+    rename(&app, kuldeep, post.id).await.assert_status(200);
+
+    // The app and the plugin both import it: the policy is the app's.
+    let app = builder()
+        .module(AccessModule::for_policy::<Everyone>())
+        .module(plugin_policy::<Everyone>())
+        .try_build()
+        .await
+        .expect("a policy the app imports as well boots");
+    let post = insert_post(&app, "Ludhiana timings", Some(harpreet), "draft", false).await;
+    rename(&app, kuldeep, post.id).await.assert_status(200);
+    let listed: Vec<&str> = app
+        .ctx()
+        .plugins()
+        .plugins
+        .iter()
+        .flat_map(|plugin| plugin.modules.iter().map(|module| module.id.name()))
+        .collect();
+    assert!(
+        !listed.iter().any(|name| name.starts_with("AccessPolicy<")),
+        "the policy's module is the app's: {listed:?}"
     );
 }

@@ -241,8 +241,8 @@ impl AbilityFactory {
     /// abilities for another scope (navree-workspace's workspace roles) calls
     /// this, so policies apply there too.
     pub fn define_rules(&self, ctx: &AbilityCtx, rules: &mut Rules) {
-        for define in &self.subjects.policies {
-            define(ctx, rules);
+        for policy in &self.subjects.policies {
+            (policy.define)(ctx, rules);
         }
         (self.options.abilities)(ctx, rules);
     }

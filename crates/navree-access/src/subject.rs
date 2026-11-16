@@ -8,10 +8,11 @@ use std::fmt;
 use std::sync::Arc;
 
 use navree_db::{Record, Uow};
-use navree_kernel::{AppContext, BoxError, BoxFuture};
+use navree_kernel::{AppContext, BoxError, BoxFuture, PluginInfo};
 use serde_json::Value;
 
-use crate::engine::{Subject, value_json};
+use crate::catalog::{community_plugin, is_under};
+use crate::engine::{ALL, Rule, Subject, value_json};
 use crate::error::AccessError;
 
 /// A subject registered with the access module (a module contribution).
@@ -121,8 +122,68 @@ pub(crate) struct Subjects {
     /// Permission prefix → subject type.
     pub(crate) prefixes: Arc<BTreeMap<String, String>>,
     loaders: HashMap<String, Arc<dyn SubjectLoader>>,
-    /// The registered policies' rule definitions, in module order.
-    pub(crate) policies: Vec<fn(&crate::AbilityCtx, &mut crate::Rules)>,
+    /// The registered policies, in module order, each once.
+    pub(crate) policies: Vec<RegisteredPolicy>,
+}
+
+/// A registered policy, and the plugin it acts for when the kernel does not
+/// find that plugin first-party.
+pub(crate) struct RegisteredPolicy {
+    /// Adds the policy's rules ([`Policy::define`](crate::Policy::define)).
+    pub(crate) define: fn(&crate::AbilityCtx, &mut crate::Rules),
+    /// The plugin, when every module that registers the policy acts for a
+    /// community plugin; `None` for a policy of the app.
+    pub(crate) plugin: Option<PluginPolicy>,
+}
+
+/// A policy of a community plugin: what its rules may name.
+pub(crate) struct PluginPolicy {
+    /// The plugin's name.
+    pub(crate) plugin: &'static str,
+    /// The policy's type name.
+    pub(crate) policy: &'static str,
+    /// The first module that registers it.
+    pub(crate) module: &'static str,
+    /// The subjects its rules may name.
+    pub(crate) own: OwnSubjects,
+}
+
+impl PluginPolicy {
+    /// The policy `policy` that `module`, a module acting for `plugin`,
+    /// registers.
+    fn new(plugin: &PluginInfo, policy: &'static str, module: &'static str) -> Self {
+        PluginPolicy {
+            plugin: plugin.name,
+            policy,
+            module,
+            own: OwnSubjects {
+                namespace: plugin.namespace,
+            },
+        }
+    }
+
+    /// The first subject of `rule` that is not one of the plugin's own
+    /// (`all` included), if any.
+    pub(crate) fn outside<'r>(&self, rule: &'r Rule) -> Option<&'r str> {
+        rule.subject
+            .iter()
+            .map(String::as_str)
+            .find(|subject| !self.own.contains(subject))
+    }
+}
+
+/// The subjects a plugin's policy may write rules on: the names under the
+/// plugin's namespace (the namespace, or the namespace, `.` and a name),
+/// never `all`.
+pub(crate) struct OwnSubjects {
+    namespace: &'static str,
+}
+
+impl OwnSubjects {
+    /// Whether `subject` is one of the plugin's own.
+    pub(crate) fn contains(&self, subject: &str) -> bool {
+        subject != ALL && is_under(subject, self.namespace)
+    }
 }
 
 impl Subjects {
@@ -163,12 +224,40 @@ impl Subjects {
                 loaders.insert(registration.subject.to_owned(), loader.clone());
             }
         }
-        let mut policies: Vec<fn(&crate::AbilityCtx, &mut crate::Rules)> = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        for contributed in ctx.contributions::<crate::records::PolicyRegistration>() {
-            // A policy registered by two modules applies once.
-            if seen.insert(contributed.value.name) {
-                policies.push(contributed.value.define);
+        let registrations = ctx.contributions::<crate::records::PolicyRegistration>();
+        // The plugins listing, read only when a policy is registered.
+        let plugins = if registrations.is_empty() {
+            Vec::new()
+        } else {
+            ctx.plugins().plugins
+        };
+        let mut policies: Vec<RegisteredPolicy> = Vec::new();
+        // Policy name → its index in `policies`.
+        let mut seen: HashMap<&'static str, usize> = HashMap::new();
+        for contributed in &registrations {
+            let registration = &contributed.value;
+            let plugin = community_plugin(&plugins, contributed.module.id);
+            match seen.get(registration.name) {
+                // A policy registered by two modules applies once; it is the
+                // app's as soon as one of them acts for no community plugin.
+                Some(&index) => {
+                    if plugin.is_none() {
+                        policies[index].plugin = None;
+                    }
+                }
+                None => {
+                    seen.insert(registration.name, policies.len());
+                    policies.push(RegisteredPolicy {
+                        define: registration.define,
+                        plugin: plugin.map(|plugin| {
+                            PluginPolicy::new(
+                                &plugin.info,
+                                registration.name,
+                                contributed.module.name,
+                            )
+                        }),
+                    });
+                }
             }
         }
         Ok(Subjects {
@@ -176,6 +265,11 @@ impl Subjects {
             loaders,
             policies,
         })
+    }
+
+    /// Whether a policy acts for a community plugin.
+    pub(crate) fn has_plugin_policies(&self) -> bool {
+        self.policies.iter().any(|policy| policy.plugin.is_some())
     }
 
     /// The record loader of `subject`.

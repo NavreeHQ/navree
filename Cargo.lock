@@ -4204,6 +4204,7 @@ dependencies = [
  "http",
  "insta",
  "navree-bounded",
+ "navree-config",
  "navree-contracts",
  "navree-db",
  "navree-http",

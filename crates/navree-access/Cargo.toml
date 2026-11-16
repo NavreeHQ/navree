@@ -35,6 +35,7 @@ test-mysql = ["navree-db/mysql"]
 chrono = { workspace = true }
 http = { workspace = true }
 navree-bounded = { workspace = true }
+navree-config = { workspace = true }
 navree-contracts = { workspace = true }
 navree-db = { workspace = true }
 navree-http = { workspace = true }

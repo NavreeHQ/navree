@@ -101,6 +101,14 @@ fn deleted<S: SubjectRecords>(json: &Value) -> bool {
 /// are added to every principal's rules before the app's abilities
 /// function, so the app can still override them.
 ///
+/// A policy that a plugin's module registers (a plugin that is not one of
+/// the framework's own packages) writes rules only on the plugin's own
+/// subjects: the names under its namespace (`announcements.Announcement`). A
+/// rule on another subject, or on `all`, stops the boot when the boot sees
+/// it, and is left out with a warning when only a real user brings it out.
+/// The app applies a plugin's policy to anything by importing
+/// `AccessModule::for_policy` of it from a module of its own.
+///
 /// ```
 /// use navree_access::{AbilityCtx, Policy, Rules, READ, UPDATE, field};
 ///

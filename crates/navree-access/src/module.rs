@@ -96,6 +96,14 @@ impl AccessModule {
 
     /// Registers policy `P`: its rules join every principal's rules, before
     /// the app's abilities function.
+    ///
+    /// A policy that a plugin's module registers (a plugin that is not one of
+    /// the framework's own packages) writes rules only on the plugin's own
+    /// subjects: the names under its namespace (`announcements.Announcement`).
+    /// A rule on another subject, or on `all`, stops the boot when the boot
+    /// sees it, and is left out with a warning when only a real user brings
+    /// it out. The app applies a plugin's policy to anything by importing
+    /// `AccessModule::for_policy` of it from a module of its own.
     pub fn for_policy<P: Policy>() -> impl Module {
         AccessPolicy::<P>(PhantomData)
     }
@@ -121,8 +129,16 @@ fn register(m: &mut ModuleBuilder, options: AccessOptions) {
             Factory::<AbilityFactory>::new(|r: Resolver| async move {
                 let db = r.get::<Db>().await?;
                 let options = r.get::<AccessOptions>().await?;
-                let subjects = Subjects::collect(&r.app())?;
-                crate::catalog::check(&r.app())?;
+                let app = r.app();
+                let subjects = Subjects::collect(&app)?;
+                // The roles a plugin's policy is asked as at boot; an app with
+                // no plugin policy asks nothing.
+                let roles = if subjects.has_plugin_policies() {
+                    crate::catalog::probe_roles(&app, &options).await
+                } else {
+                    Vec::new()
+                };
+                crate::catalog::check(&app, &subjects, &roles)?;
                 Ok(Arc::new(AbilityFactory::new(
                     db,
                     options,
