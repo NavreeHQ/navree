@@ -306,6 +306,21 @@ every `@navree/*` package carries the same version.
   the error, or an `ErrorShell` that builds the shell around it, can say so and offer to stop it.
   It is `None` for a request of the user's own, for a guest, and after a panic or a timeout, which
   cannot say. `ErrorContext::new` leaves it `None`.
+- The error pages `UiModule` draws on their own (for a guest, for a 401, a 429 and a 503, and when
+  the shell can't be built) can take the app's look. `PagesOptions::shell_look()` draws them in the
+  registered `Shell`'s default appearance, offered themes, stylesheets, typefaces and title
+  template; `PagesOptions::appearance(..)`, `stylesheet(..)` and `font(..)` give a look of their
+  own. The reader's theme cookie and the address's `?theme=` and `?mode=` lie over the appearance.
+  `PagesOptions::offer_sign_in(true)` adds "Sign in" beside a guest's own actions, and
+  `ErrorPage::offer_sign_in()` does the same on a page you build.
+  `PagesOptions::stop_impersonating(path)` makes an error page seen during an impersonation say so and offer
+  "Stop impersonating", a form that posts to `path` with the session's token, in the shell and on
+  its own; `ErrorPage::impersonating(href)` and `ErrorPage::csrf(token)` do it on a page you
+  build. An address to stop at that is not a path on the site is dropped. `StateLabels` gains
+  `impersonating` and `stop_impersonating`. With none of these set, every page is drawn as before.
+  `ErrorPage::offer_sign_in`, `impersonating` and `csrf` are new inherent methods: an app whose own
+  extension trait gives `ErrorPage` a method of one of these names calls it through the trait
+  (`MyExt::csrf(page, ..)`).
 
 ### Fixed
 

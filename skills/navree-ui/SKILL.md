@@ -442,6 +442,32 @@ impl ErrorsModule {
 }
 ```
 
+The `ErrorContext` names the user and, during an impersonation, the user
+acting as them (`request.impersonator`): an `ErrorShell` that sees one adds
+`.action("Stop impersonating", "/impersonate/stop")` to the `UserMenu`.
+
+A guest's page, and a 401, 429 or 503 for anyone, stands on its own in
+Navree's own look unless you ask. `shell_look()` gives it the registered
+`Shell`'s look (default appearance, offered themes, stylesheets, typefaces,
+title template), with the reader's theme cookie and `?theme=`/`?mode=` over
+it; an app with an `ErrorShell` gives `appearance(..)`, `stylesheet(..)` and
+`font(..)` instead. `offer_sign_in(true)` adds Sign in beside a guest's
+own actions. `stop_impersonating(path)` makes an error page seen during an
+impersonation say so and offer a Stop impersonating form, in the shell and
+on its own. An error page in the shell reads the address's query, so
+`?mode=light` holds there as on every page.
+
+```rust
+pub fn ui_in_the_apps_look() -> impl Module {
+    UiModule::with_pages(
+        PagesOptions::default()
+            .shell_look()
+            .offer_sign_in(true)
+            .stop_impersonating("/impersonate/stop"),
+    )
+}
+```
+
 The same markup fits places inside a page. `Forbidden` is for a card, tab
 or row the user may not see (it never says whether the thing exists),
 `NotFound` for a record that is gone, `SignInRequired` for a part that

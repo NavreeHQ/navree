@@ -58,6 +58,33 @@ A guest gets a page on its own: the same stylesheet, one `h1` and no script. So 
 
 After a form posted without JavaScript, the page offers Home and a plain sign-in, and no Reload or Try again: a link would repeat the request as a `GET` of an address that only takes a `POST`.
 
+### Your app's look on a page on its own
+
+A page on its own is drawn in Navree's own look unless you ask for yours. `PagesOptions::shell_look()` draws it in the look of your registered `Shell`: its default appearance, the themes it offers, its stylesheets and typefaces, and its title template ("Page not found · Kesar"). The reader's theme cookie and a `?theme=` or `?mode=` in the address lie over the appearance, as on any page of the shell. The page keeps its own `h1` and still runs no script.
+
+```rust
+UiModule::with_pages(PagesOptions::default().shell_look().offer_sign_in(true))
+```
+
+An app that builds its shell for each request, with an `ErrorShell`, gives the look itself: `.appearance(Appearance::new(Theme::OCEAN, Mode::Light))`, `.stylesheet(&SHEET)` and `.font(&FACE)` on `PagesOptions`. `.offer_sign_in(true)` adds Sign in beside a guest's own actions, so someone signed out who lands on a missing page can get back in; the 401 page has it already.
+
+### During an impersonation
+
+When an administrator acts as another user, `ErrorContext::impersonator` names the administrator. An `ErrorShell` can read it to put Stop impersonating in the user menu of the shell around the page:
+
+```rust
+m.contribute(ErrorShell::new(|request| async move {
+    let menu = UserMenu::new("Harleen Kaur", "harleen@agra.in").action("Sign out", "/sign-out");
+    let menu = match request.impersonator {
+        Some(_) => menu.action("Stop impersonating", "/impersonate/stop"),
+        None => menu,
+    };
+    request.user.map(|_| Shell::new("Agra").user(menu))
+}));
+```
+
+`PagesOptions::stop_impersonating("/impersonate/stop")` makes the page itself say so, in the shell and on its own: a line that the reader is acting as another user, and a Stop impersonating button, a form that posts to that address with the session's token. `AuthPages` from `navree-auth` serves `/impersonate/stop`. The address must be a path on your site; any other is dropped when the app boots.
+
 ## Sign in, and back to where you were
 
 A 401 shows a button to your sign-in page with the page the user was on as `next`. `AuthPages`, from `navree-auth`, is that page: it signs the browser in on its session, with two-factor authentication, and sends it back to `next` (see [signing in with a session](/docs/basics/sessions-and-csrf/#signing-in-with-a-session)). Set the address once:

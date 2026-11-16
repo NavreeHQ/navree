@@ -33,6 +33,9 @@ use crate::module::UiAlways;
 use crate::node::{Node, el};
 use crate::op::{Envelope, Op, ToastTone};
 use crate::shell::Shell;
+use crate::theme::Appearance;
+use crate::view::View;
+use crate::{AppFont, AppSheet};
 
 /// The request header the runtime adds to a region's fetch, naming the region.
 pub const REGION_HEADER: &str = "x-navree-region";
@@ -376,7 +379,40 @@ fn page_of(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> 
     if options.debug {
         page = page.debug(debug_details(request, error));
     }
+    if options.offer_sign_in && request.user.is_none() {
+        page = page.offer_sign_in();
+    }
+    // Only for the user someone acts as: a guest has no one acting as them.
+    if let (Some(_), Some(_), Some(stop)) = (
+        request.user,
+        request.impersonator,
+        options.stop_impersonating.as_deref(),
+    ) {
+        page = page.impersonating(Href::from(stop));
+        if let Some(token) = csrf_of(&request.headers) {
+            page = page.csrf(token);
+        }
+    }
     page
+}
+
+/// The session's CSRF token, from the cookie the session sets for scripts and forms.
+fn csrf_of(headers: &http::HeaderMap) -> Option<String> {
+    let cookie = navree_http::csrf::XSRF_COOKIE;
+    headers
+        .get_all(http::header::COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(';'))
+        .find_map(|pair| match pair.trim().split_once('=') {
+            Some((name, token)) if name == cookie => {
+                navree_http::extract::urlencoded::parse(format!("x={token}").as_bytes())
+                    .next()
+                    .map(|(_, token)| token.into_owned())
+            }
+            _ => None,
+        })
+        .filter(|token| !token.is_empty())
 }
 
 /// Where to come back to after signing in: the page the user is on. A region fetch or an
@@ -532,9 +568,100 @@ async fn document(
         let in_shell = if fresh { in_shell.fresh() } else { in_shell };
         return in_shell.into_response();
     }
-    let view = page.into_view();
+    let view = match look_of(request, options).await {
+        Some(look) => look.dress(page),
+        None => page.into_view(),
+    };
     let view = if fresh { view.fresh() } else { view };
     view.into_response()
+}
+
+/// How a page drawn on its own looks when the options give it the app's look.
+struct Look {
+    appearance: Appearance,
+    sheets: Vec<AppSheet>,
+    fonts: Vec<AppFont>,
+    /// The registered shell the look comes from, for its title template.
+    shell: Option<Shell>,
+}
+
+impl Look {
+    /// `page` on its own, in this look.
+    fn dress(self, page: ErrorPage) -> View {
+        let short = page.short_title();
+        let title = match &self.shell {
+            Some(shell) => shell.document_title(&short),
+            None => short,
+        };
+        let mut view = page.into_view_titled(title).appearance(self.appearance);
+        for sheet in &self.sheets {
+            view = view.stylesheet(sheet);
+        }
+        for font in &self.fonts {
+            view = view.font(font);
+        }
+        view
+    }
+}
+
+/// The look the options give a page drawn on its own, or `None` for Navree's own look: the
+/// appearance given or the registered shell's, under the reader's theme cookie and the
+/// address's `?theme=` and `?mode=`, and the stylesheets and typefaces of both.
+async fn look_of(request: &ErrorContext, options: &PagesOptions) -> Option<Look> {
+    if !options.shell_look
+        && options.appearance.is_none()
+        && options.stylesheets.is_empty()
+        && options.fonts.is_empty()
+    {
+        return None;
+    }
+    let shell = if options.shell_look {
+        registered_shell(request).await
+    } else {
+        None
+    };
+    let base = options
+        .appearance
+        .clone()
+        .or_else(|| {
+            shell
+                .as_ref()
+                .map(|shell| shell.default_appearance().clone())
+        })
+        .unwrap_or_default();
+    // The shell reads the reader's choice as on any of its pages, and keeps only the themes it
+    // offers; with no shell, the built-in ones.
+    let reader = shell
+        .clone()
+        .unwrap_or_else(|| Shell::new(""))
+        .appearance(base)
+        .for_request(path_and_query(&request.uri), &request.headers);
+    let mut sheets: Vec<AppSheet> = shell
+        .iter()
+        .flat_map(|shell| shell.stylesheets().iter().copied())
+        .collect();
+    let mut fonts: Vec<AppFont> = shell
+        .iter()
+        .flat_map(|shell| shell.fonts().iter().copied())
+        .collect();
+    sheets.extend(options.stylesheets.iter().copied());
+    fonts.extend(options.fonts.iter().copied());
+    Some(Look {
+        appearance: reader.appearance(),
+        sheets,
+        fonts,
+        shell,
+    })
+}
+
+/// The app's registered `Shell`, for its look: within the same second as a shell that is built,
+/// and never taking the answer down with it.
+async fn registered_shell(request: &ErrorContext) -> Option<Shell> {
+    let attempt = AssertUnwindSafe(request.ctx.try_get::<Shell>()).catch_unwind();
+    match tokio::time::timeout(SHELL_DEADLINE, attempt).await {
+        Ok(Ok(Some(shell))) => Some((*shell).clone()),
+        _ => None,
+    }
 }
 
 /// The request's path with its query, as [`Shell::for_request`] reads it.
@@ -921,5 +1048,138 @@ mod tests {
         assert_eq!(retry_after(&with("999999999")), None);
         assert_eq!(retry_after(&with("Wed, 21 Oct 2026 07:28:00 GMT")), None);
         assert_eq!(retry_after(&AppError::not_found()), None);
+    }
+
+    /// A request in which Ishaan Verma, an administrator, acts as Harleen Kaur.
+    fn impersonated(uri: &str, cookie: &str) -> ErrorContext {
+        let mut request = context(
+            Method::GET,
+            uri,
+            &[("accept", "text/html"), ("cookie", cookie)],
+        );
+        request.user = Some(uuid::Uuid::from_u128(7));
+        request.impersonator = Some(uuid::Uuid::from_u128(9));
+        request
+    }
+
+    #[test]
+    fn an_impersonation_is_said_and_can_be_stopped_with_the_sessions_token() {
+        let options = PagesOptions::default().stop_impersonating("/impersonate/stop");
+        let request = impersonated("/deals/7", "sid=1; XSRF-TOKEN=a%2Bb%3D; theme=ocean");
+        let html = page_of(&request, &AppError::not_found(), &options)
+            .into_view()
+            .to_html();
+        assert!(
+            html.contains("You&#39;re acting as another user."),
+            "{html}"
+        );
+        assert!(
+            html.contains(r#"<form method="post" action="/impersonate/stop"><input type="hidden" name="_csrf" value="a+b="><button"#),
+            "{html}"
+        );
+        assert!(html.contains("Stop impersonating"), "{html}");
+        assert!(
+            !html.contains("<script"),
+            "a form posts with no script: {html}"
+        );
+        // Not asked for: nothing is said.
+        let quiet = page_of(&request, &AppError::not_found(), &PagesOptions::default())
+            .into_view()
+            .to_html();
+        assert!(!quiet.contains("Stop impersonating"), "{quiet}");
+        // A request of the user's own, and a guest, are no impersonation.
+        let mut own = impersonated("/deals/7", "");
+        own.impersonator = None;
+        let html = page_of(&own, &AppError::not_found(), &options)
+            .into_view()
+            .to_html();
+        assert!(!html.contains("Stop impersonating"), "{html}");
+        let mut guest = impersonated("/deals/7", "");
+        guest.user = None;
+        let html = page_of(&guest, &AppError::not_found(), &options)
+            .into_view()
+            .to_html();
+        assert!(!html.contains("Stop impersonating"), "{html}");
+        // A region's state leaves it to the page around it.
+        let fragment = page_of(&request, &AppError::not_found(), &options)
+            .into_fragment()
+            .to_html();
+        assert!(!fragment.contains("Stop impersonating"), "{fragment}");
+        // With no session token, the form still names its target.
+        let bare = page_of(
+            &impersonated("/x", "sid=1"),
+            &AppError::not_found(),
+            &options,
+        )
+        .into_view()
+        .to_html();
+        assert!(
+            bare.contains(r#"<form method="post" action="/impersonate/stop"><button"#),
+            "{bare}"
+        );
+    }
+
+    #[test]
+    fn an_address_to_stop_at_that_is_not_on_this_site_is_dropped() {
+        for wrong in [
+            "https://evil.example/stop",
+            "//evil.example/stop",
+            "javascript:alert(1)",
+            "",
+        ] {
+            let options = PagesOptions::default().stop_impersonating(wrong).checked();
+            assert_eq!(options.stop_impersonating, None, "{wrong}");
+        }
+        let options = PagesOptions::default()
+            .stop_impersonating("/impersonate/stop")
+            .checked();
+        assert_eq!(
+            options.stop_impersonating.as_deref(),
+            Some("/impersonate/stop")
+        );
+    }
+
+    #[test]
+    fn a_guest_is_offered_sign_in_beside_home_when_asked() {
+        let options = PagesOptions::default().offer_sign_in(true);
+        let guest = context(Method::GET, "/missing", &[("accept", "text/html")]);
+        let html = page_of(&guest, &AppError::not_found(), &options)
+            .into_view()
+            .to_html();
+        assert!(html.contains("Go to home"), "{html}");
+        assert!(
+            html.contains(r#"href="/sign-in?next=%2Fmissing""#),
+            "{html}"
+        );
+        // Off by default, and never for a signed-in user.
+        let html = page_of(&guest, &AppError::not_found(), &PagesOptions::default())
+            .into_view()
+            .to_html();
+        assert!(!html.contains("/sign-in"), "{html}");
+        let mut user = guest.clone();
+        user.user = Some(uuid::Uuid::from_u128(7));
+        let html = page_of(&user, &AppError::not_found(), &options)
+            .into_view()
+            .to_html();
+        assert!(!html.contains("/sign-in"), "{html}");
+        // The sign-in page itself offers it once.
+        let html = page_of(&guest, &AppError::unauthenticated(), &options)
+            .into_view()
+            .to_html();
+        assert_eq!(html.matches(r#"href="/sign-in"#).count(), 1, "{html}");
+    }
+
+    #[test]
+    fn the_sessions_token_is_read_from_its_cookie_and_nothing_else() {
+        let token = |cookie: &str| {
+            let mut headers = HeaderMap::new();
+            headers.insert(http::header::COOKIE, HeaderValue::from_str(cookie).unwrap());
+            csrf_of(&headers)
+        };
+        assert_eq!(token("XSRF-TOKEN=abc").as_deref(), Some("abc"));
+        assert_eq!(token("a=1; XSRF-TOKEN=a%2Bb%3D").as_deref(), Some("a+b="));
+        assert_eq!(token("XSRF-TOKENS=abc"), None);
+        assert_eq!(token("XSRF-TOKEN="), None);
+        assert_eq!(csrf_of(&HeaderMap::new()), None);
     }
 }
