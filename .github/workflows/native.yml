@@ -376,10 +376,10 @@ jobs:
           # `tests` is how many device tests end in a look on that device, skipped ones included: the number in the run's `OK (N tests)`.
           - device: phone
             profile: pixel_7
-            tests: 107
+            tests: 112
           - device: tablet
             profile: pixel_tablet
-            tests: 107
+            tests: 112
     env:
       IMAGE: system-images;android-35;google_apis;x86_64
     steps:
