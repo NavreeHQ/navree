@@ -544,6 +544,12 @@ checks bulk actions.
 | Saved views | `.views(&views, url)`; the table `navree_ui_table_views` comes from your migration |
 | Empty, loading, failed | `.empty(..)`, `.loading()`, `.failed(message)` |
 
+Build the table after the handler's last `.await`: it keeps its row
+functions as closures that need not be `Send`, so a table held across an
+`.await` makes the handler's future not `Send` and the route fails to
+compile ("future cannot be sent between threads safely ... `DataTable`").
+Load first, then build the table and return the page.
+
 ```rust
 use http::StatusCode;
 use navree::ui::{BulkAction, BulkRequest, RowAction, TablePage};

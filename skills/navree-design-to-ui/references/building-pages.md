@@ -250,6 +250,8 @@ impl DealPages {
         query: TableQuery<DealRow>,
     ) -> Result<AppPage> {
         let page = query.load_as(scope.query(), &uow, DealRow::from_record).await?;
+        // The table is built after the last `.await`: its row functions need not be `Send`,
+        // so one held across an `.await` would make the handler's future not `Send`.
         Ok(shell
             .page("Deals")
             .actions(Button::primary("New deal").icon(icons::PLUS).href("/deals/new"))

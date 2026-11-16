@@ -572,6 +572,9 @@ type RowFn<'a, R, T> = Box<dyn Fn(&R) -> T + 'a>;
 
 /// A table with search, filters, sort links, selection and pagination, as one region.
 ///
+/// It keeps the functions it is given for each row as closures that need not be `Send`: build it
+/// after a handler's last `.await`, so the handler's future stays `Send`.
+///
 /// ```ignore
 /// DataTable::new("deals", &query, &page).caption("Deals").sticky_header()
 /// ```
