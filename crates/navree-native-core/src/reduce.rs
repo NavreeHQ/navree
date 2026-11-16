@@ -126,7 +126,7 @@ impl Heard {
     ///    414, 431;
     /// 3. the answer names the person (the app's own handler made it) with a
     ///    status by which a handler says it refused this request and did
-    ///    nothing: 400, 403, 404, 405, 406, 409, 410, 412, 415, 422, 428.
+    ///    nothing: 400, 402, 403, 404, 405, 406, 409, 410, 412, 415, 422, 428.
     ///
     /// Anything else may follow a write that ran: 408, 413, 429 and 431 that
     /// name a person (a handler can reach them after it has begun), 401 and
@@ -151,7 +151,7 @@ impl Heard {
         let refused_by_the_handler = self.names_someone
             && matches!(
                 self.status,
-                400 | 403 | 404 | 405 | 406 | 409 | 410 | 412 | 415 | 422 | 428
+                400 | 402 | 403 | 404 | 405 | 406 | 409 | 410 | 412 | 415 | 422 | 428
             );
         !(refused_for_its_size || refused_by_the_handler)
     }
@@ -3159,7 +3159,7 @@ mod tests {
             (303, true, true, true),
             (400, true, true, false),
             (401, true, true, true),
-            (402, true, true, true),
+            (402, true, true, false),
             (403, true, true, false),
             (404, true, true, false),
             (405, true, true, false),
