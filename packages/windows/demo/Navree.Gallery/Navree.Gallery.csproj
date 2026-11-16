@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The gallery of the controls: a small app that shows each in every state, for pictures and for a person at a keyboard. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>Navree.Gallery</RootNamespace>
+    <AssemblyName>Navree.Gallery</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+
+    <!-- Starts from a folder with no registration and no package identity, and carries the
+         Windows App SDK's runtime beside it. -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <!-- The script the gallery starts to listen to the events its own window raises. -->
+  <ItemGroup>
+    <None Include="Tools\watch-uia.ps1" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The gallery measures the control with the build that carries the measuring symbol (see the control's project file). -->
+    <ProjectReference Include="..\..\src\Navree.Controls\Navree.Controls.csproj" AdditionalProperties="NavreeMeasuring=true" />
+    <ProjectReference Include="..\..\src\Navree.Design\Navree.Design.csproj" />
+  </ItemGroup>
+
+</Project>
