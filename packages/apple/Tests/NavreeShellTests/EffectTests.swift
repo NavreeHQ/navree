@@ -111,6 +111,50 @@ struct EffectTests {
         #expect(answers.allSatisfy { $0.1 == .refused(.notBuilt) })
     }
 
+    @Test func aShareIsShownWhetherOrNotTheCoreWaitsForWhatCameOfIt() {
+        let calls = DeviceCalls(signedWith: [], origin: nil)
+        var answers: [(Int, CoreEvent.DeviceOutcome)] = []
+        calls.answer = { answers.append(($0, $1)) }
+        let sheets = Sheets()
+        calls.showShare = { items, title, done in
+            sheets.items.append(items.count)
+            sheets.shown.append(title ?? "")
+            sheets.finish.append(done)
+            return true
+        }
+        let share = Navree.Share(text: "Order CS-20481 for Gurleen Bhullar, Amritsar", title: "Order CS-20481")
+        // A control that shares and asks for nothing back.
+        calls.run(call: 1, device: .call(.share(share)), posts: false, options: nil)
+        // One whose result the core posts.
+        calls.run(call: 2, device: .call(.share(share)), posts: true, options: nil)
+        #expect(sheets.shown == ["Order CS-20481", "Order CS-20481"])
+        #expect(sheets.items == [1, 1])
+        #expect(answers.isEmpty)
+        // The person shared from both: only the one the core waits for is answered.
+        for done in sheets.finish { done(true) }
+        #expect(answers.map(\.0) == [2])
+        let shared = CoreEvent.DeviceOutcome.done([Navree.Pair(name: "completed", value: "true")])
+        #expect(answers.first?.1 == shared)
+
+        // A share with nothing to show, and one no sheet could be shown for.
+        calls.run(call: 3, device: .call(.share(Navree.Share())), posts: true, options: nil)
+        calls.showShare = { _, _, _ in false }
+        calls.run(call: 4, device: .call(.share(share)), posts: true, options: nil)
+        calls.run(call: 5, device: .call(.share(share)), posts: false, options: nil)
+        #expect(sheets.shown.count == 2)
+        #expect(answers.map(\.0) == [2, 3, 4])
+        let refusal: Navree.Refusal = DeviceCalls.shares ? .unavailable : .unsupported
+        #expect(answers.dropFirst().allSatisfy { $0.1 == .refused(refusal) })
+    }
+
+    /// The share sheets a test was asked to show.
+    @MainActor
+    final class Sheets {
+        var shown: [String] = []
+        var items: [Int] = []
+        var finish: [@MainActor (Bool) -> Void] = []
+    }
+
     @Test func applesSignInTakesTheHashOfTheCoresNonce() {
         // SHA-256, lower-case hex: the test vector of FIPS 180-2.
         #expect(SheetRequest.hashed("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
