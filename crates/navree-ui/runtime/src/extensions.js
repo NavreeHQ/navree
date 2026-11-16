@@ -16,7 +16,8 @@
 // so whatever the script or a library it bundles writes there later, and however. What the script is
 // given reaches only the routes the server wrote on its element, through core's own write path. The
 // body of a plugin's island is sealed the same way, when the islands module asks before it imports the
-// island's script. On a page that starts clean nothing here runs.
+// island's script, and from then on at each scan: a body a morph puts in place of the island's body is
+// sealed too. On a page that starts clean nothing here runs.
 import { E, T, all, attr, body, byId, cookie, emit, every, fetchHere, fresh, has, head, holds, make, on, set, stored, unset } from "./dom.js";
 
 /** A UI extension's file: at the extension route, by namespace, name and content hash. */
@@ -272,6 +273,12 @@ const mounted = new Map();
 const touched = new Set();
 /** Whether the page was swapped since the last scan. */
 let paged = false;
+/**
+ * The islands of plugins whose body was sealed when the islands module asked, each with the script it named
+ * then: one that still names it is mounted or mounting, or its script failed after the seal.
+ * @type {WeakMap<Element, string | null>}
+ */
+const islands = new WeakMap();
 
 /**
  * Gives a mounted element its props as they are now: to its `update`, or, when they changed and it has
@@ -342,9 +349,12 @@ function leave(el) {
  * Mounts what is new, gives props to what has new ones or was morphed, and lets go of what left the page,
  * went into stored content, or names another script. Stored content and sealed bodies are never mounted:
  * `every` leaves them out. A body a morph added to an element mounted or mounting, or put in place of
- * another, is sealed here, before its script is given anything more.
+ * another, is sealed here, before its script is given anything more. So is the body a plugin's island has
+ * now, once the island has asked for its seal and for as long as it names the same script: a morph may have
+ * put another in its place. An island that never asked, an app's own or one not mounted yet, is left as it is.
  */
 function scan() {
+  for (const el of every("[data-ui-island]")) if (islands.get(el) === attr(el, "data-ui-island")) all(el, ":scope > [data-slot=island-body]").forEach(seal);
   for (const [el, m] of mounted) if (!holds(document, el) || stored(el) || attr(el, "data-ui-ext") !== m.at) leave(el);
   for (const el of every("[data-ui-ext]:not([data-ui-island])")) {
     const m = mounted.get(el), props = attr(el, "data-ui-props") || "";
@@ -396,7 +406,8 @@ if (!fresh()) {
   scan();
   // The islands module asks for a plugin's island body to be sealed before it imports the island's
   // script, with an event sent to the body: an island's body is sealed as an owned body is, and the
-  // ask is cancelled to say so. Nothing else is sealed this way.
+  // ask is cancelled to say so. Nothing else is sealed this way. The island is noted with the script it
+  // names, so each scan seals the body it has by then.
   on(
     document,
     "ui:seal",
@@ -404,6 +415,8 @@ if (!fresh()) {
       const b = e.target;
       if (b instanceof Element && E.matches.call(b, "[data-ui-island] > [data-slot=island-body]")) {
         seal(b);
+        const el = /** @type {Element} */ (up.call(b));
+        islands.set(el, attr(el, "data-ui-island"));
         e.preventDefault();
       }
     },
