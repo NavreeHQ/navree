@@ -13,15 +13,6 @@ publish = false
 [lints.rust]
 unsafe_code = "forbid"
 
-# What `navree plugin:add` reads from the crate. Cargo ignores it.
-[package.metadata.navree.plugin]
-namespace = "geo"
-title = "Maps and places"
-module = "GeoModule"
-features = ["ui"]
-config = ["geo"]
-policy = { img_src = ["https://tile.openstreetmap.org"] }
-
 [dependencies]
 # A path rather than `workspace = true`: on Rust 1.95, the minimum version, Cargo
 # cannot turn off default features that the workspace entry leaves on. A plugin
