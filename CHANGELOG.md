@@ -100,6 +100,18 @@ every `@navree/*` package carries the same version.
 - The sidebar's header slot stands one gap between the sidebar's blocks under the brand
   (`--sidebar-gap`, 8 px as before when a theme's shape doesn't set it), and a switcher drawn as
   a card lines up with the links' rows.
+- The brand row of the app shell takes more of the app's mark: `Shell::logo_dark(src)` is the
+  mark in dark mode (a page in light or in dark draws the one it needs, and a page that follows
+  the device draws a `<picture>` whose dark source the browser picks), and
+  `Shell::logo_style(LogoStyle::Bare)` draws the mark alone, 22 px with no tile, in a row 30 px
+  high. `Shell::badge(badge)` puts a badge at the end of the row in place of the context line,
+  and `AppShell::badge(badge)` one for a request; it hides with the name when the sidebar folds.
+  `BadgeVariant::Solid` fills a badge with the accent and draws its text in the accent's ink, as
+  a primary button is drawn, for a marker such as "Internal"; a table's badge column draws it as
+  `Neutral`. A shell with none of these is drawn as before, `LogoStyle::Tile` being the default.
+  `Shell::logo_dark`, `logo_style` and `badge` and `AppShell::badge` are new inherent methods: an
+  app whose own extension trait gives `Shell` or `AppShell` a method of one of these names calls
+  it through the trait.
 
 ## [1.7.0] - 2026-11-27
 

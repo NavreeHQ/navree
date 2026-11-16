@@ -449,3 +449,188 @@ fn a_shell_that_uses_no_new_option_draws_what_it_drew_before() {
     }
     assert!(changed.is_empty(), "{}", changed.join("\n\n"));
 }
+
+/// A page of `shell`, as HTML.
+fn drawn(shell: &Shell) -> String {
+    shell.page("Deals", "/deals").to_view().to_html()
+}
+
+/// What a page of `shell` loads.
+fn loads(shell: &Shell) -> navree_ui::Uses {
+    shell.page("Deals", "/deals").to_view().uses()
+}
+
+/// The source of the shell parts stylesheet.
+fn shell_parts() -> String {
+    std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("styles/41-shell-parts.css"),
+    )
+    .unwrap()
+    .replace("\r\n", "\n")
+}
+
+// The brand row
+
+#[test]
+fn a_bare_mark_has_no_tile_and_brings_the_shell_parts() {
+    let bare = store()
+        .logo("/brand/rangla.svg")
+        .logo_style(navree_ui::LogoStyle::Bare);
+    let html = drawn(&bare);
+    assert!(
+        html.contains(r#"<a data-slot="sidebar-brand" href="/" title="Rangla Store" data-logo="bare"><span data-slot="sidebar-logo"><img src="/brand/rangla.svg" alt=""></span>"#),
+        "{html}"
+    );
+    assert!(loads(&bare).has(navree_ui::Uses::SHELL_PARTS));
+    let tile = store().logo_style(navree_ui::LogoStyle::Tile);
+    assert!(!drawn(&tile).contains("data-logo"));
+    assert!(!loads(&tile).has(navree_ui::Uses::SHELL_PARTS));
+    assert_eq!(navree_ui::LogoStyle::default(), navree_ui::LogoStyle::Tile);
+    let css = shell_parts();
+    let at = css
+        .find("[data-slot=sidebar-brand][data-logo=bare]{")
+        .unwrap();
+    let rule = &css[at..at + css[at..].find('\n').unwrap()];
+    for part in [
+        "gap:.625rem",
+        "padding:.25rem .5rem",
+        "background:none",
+        "width:1.375rem;height:1.375rem",
+    ] {
+        assert!(rule.contains(part), "{part} in {rule}");
+    }
+}
+
+#[test]
+fn a_dark_mark_is_drawn_in_dark_and_chosen_by_the_device_when_the_page_follows_it() {
+    let shell = |mode: Mode| {
+        store()
+            .logo("/brand/light.svg")
+            .logo_dark("/brand/dark.svg")
+            .appearance(Appearance::new(Theme::NAVREE, mode))
+    };
+    let light = drawn(&shell(Mode::Light));
+    assert!(
+        light.contains(
+            r#"<span data-slot="sidebar-logo"><img src="/brand/light.svg" alt=""></span>"#
+        ),
+        "{light}"
+    );
+    assert!(!light.contains("dark.svg"), "{light}");
+    let dark = drawn(&shell(Mode::Dark));
+    assert!(
+        dark.contains(
+            r#"<span data-slot="sidebar-logo"><img src="/brand/dark.svg" alt=""></span>"#
+        ),
+        "{dark}"
+    );
+    assert!(!dark.contains("light.svg"), "{dark}");
+    assert!(!loads(&shell(Mode::Dark)).has(navree_ui::Uses::SHELL_PARTS));
+    let system = drawn(&shell(Mode::System));
+    assert!(
+        system.contains(concat!(
+            r#"<span data-slot="sidebar-logo"><picture><source media="(prefers-color-scheme: dark)" srcset="/brand/dark.svg">"#,
+            r#"<img src="/brand/light.svg" alt=""></picture></span>"#
+        )),
+        "{system}"
+    );
+    assert!(loads(&shell(Mode::System)).has(navree_ui::Uses::SHELL_PARTS));
+    assert!(shell_parts().contains("[data-slot=sidebar-logo] > picture{display:contents}"));
+    // The reader's choice of mode on the request picks the mark too.
+    let chosen = shell(Mode::Light)
+        .for_request("/deals?mode=dark", &HeaderMap::new())
+        .page("Deals")
+        .to_view()
+        .to_html();
+    assert!(
+        chosen.contains(r#"<img src="/brand/dark.svg" alt="">"#),
+        "{chosen}"
+    );
+    // A dark mark alone draws Navree's mark; a hostile one goes nowhere; a space or a comma
+    // can't split the candidate.
+    let alone = drawn(&store().logo_dark("/brand/dark.svg"));
+    assert!(!alone.contains("dark.svg"), "{alone}");
+    let hostile = drawn(
+        &store()
+            .logo("/brand/light.svg")
+            .logo_dark("javascript:alert(1)")
+            .appearance(Appearance::new(Theme::NAVREE, Mode::System)),
+    );
+    assert!(!hostile.contains("javascript"), "{hostile}");
+    let spaced = drawn(
+        &store()
+            .logo("/brand/light.svg")
+            .logo_dark("/brand/dark mark,2x.svg")
+            .appearance(Appearance::new(Theme::NAVREE, Mode::System)),
+    );
+    assert!(
+        spaced.contains(r#"srcset="/brand/dark%20mark%2C2x.svg""#),
+        "{spaced}"
+    );
+}
+
+#[test]
+fn a_badge_ends_the_brand_row_in_place_of_the_context_line() {
+    let internal = || Badge::new("Internal").variant(BadgeVariant::Solid);
+    let shell = store().badge(internal());
+    let html = drawn(&shell);
+    assert!(
+        html.contains(concat!(
+            r#"<span data-slot="sidebar-brand-text"><span data-slot="sidebar-brand-name">Rangla Store</span></span>"#,
+            r#"<span data-slot="badge" data-variant="solid">Internal</span></a>"#
+        )),
+        "{html}"
+    );
+    assert!(!html.contains("Store operations"), "{html}");
+    let uses = loads(&shell);
+    assert!(uses.has(navree_ui::Uses::SHELL_PARTS) && uses.has(navree_ui::Uses::PARTS_STYLES));
+    // A request's badge in place of the shell's; none, and the context line is back.
+    let request = store()
+        .badge(Badge::new("Staging"))
+        .for_request("/", &HeaderMap::new())
+        .badge(internal())
+        .page("Home")
+        .to_view()
+        .to_html();
+    assert!(
+        request.contains(">Internal</span></a>") && !request.contains("Staging"),
+        "{request}"
+    );
+    assert!(
+        drawn(&store())
+            .contains(r#"<span data-slot="sidebar-brand-context">Store operations</span>"#)
+    );
+    // In the top bar of the Header layout, the badge goes with the brand.
+    let header = drawn(&store().layout(ShellLayout::Header).badge(internal()));
+    let bar = &header[header.find(r#"data-slot="topbar-brand""#).unwrap()..];
+    assert!(
+        bar[..bar.find("</a>").unwrap()].contains("Internal"),
+        "{header}"
+    );
+    // It hides with the app's name when the sidebar folds.
+    assert!(shell_parts().contains(
+        "@media (min-width:768px){[data-collapsed] > [data-slot=sidebar] [data-slot=sidebar-brand] > [data-slot=badge]{display:none}}"
+    ));
+}
+
+#[test]
+fn a_solid_badge_is_filled_with_the_accent_and_comes_with_the_parts_styles() {
+    let node: navree_ui::Node = Badge::new("Internal").variant(BadgeVariant::Solid).into();
+    assert_eq!(
+        navree_ui::render(&node),
+        r#"<span data-slot="badge" data-variant="solid">Internal</span>"#
+    );
+    assert_eq!(
+        navree_ui::measure(&node).uses,
+        navree_ui::Uses::PARTS_STYLES
+    );
+    let parts = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("styles/extra/parts.css"),
+    )
+    .unwrap();
+    assert!(parts.contains(
+        "[data-slot=badge][data-variant=solid]{background:var(--accent);color:var(--accent-ink)}"
+    ));
+    let plain: navree_ui::Node = Badge::new("Won").variant(BadgeVariant::Success).into();
+    assert!(navree_ui::measure(&plain).uses.is_none());
+}

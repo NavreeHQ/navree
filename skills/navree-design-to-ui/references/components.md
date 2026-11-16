@@ -22,7 +22,8 @@ is dropped.
 |---|---|---|
 | App frame: sidebar, top bar, content | `Shell` (registered once), `AppShell` (extractor), `AppPage` | `shell.page(title).crumb(..).actions(..).body(..)` |
 | Sidebar group, link, nested link, count | `NavGroup::new(label)`, `NavGroup::plain()`, `NavItem::new(label, href).icon(..).count(..).sub(..)` | `NavItem::current(true)` when several links differ only in their query |
-| Product name, environment tag | `Shell::new(name)`, `.context("Production")` | the context is text, not a pill |
+| Product name, environment tag | `Shell::new(name)`, `.context("Production")`; `.badge(Badge::new("Internal").variant(BadgeVariant::Solid))` at the end of the brand row, `AppShell::badge(..)` for one request | the context is a line under the name; a badge takes its place and hides when the sidebar folds |
+| The app's mark | `Shell::logo(src)`, `.logo_dark(src)` for a dark sidebar, `.logo_style(LogoStyle::Bare)` for the mark alone (22 px, no tile, a 30 px row) | the name takes the theme's `brand` text style |
 | Search in the top bar | `Shell::search(node)` | a form with `Input::search`, or a command palette: `Node::list((Command::trigger(id, label), palette))` |
 | User at the foot of the sidebar | `UserMenu::new(name, email).link(..).action(..)`; `AppShell::user_menu(menu)` for one request | `action` posts; the avatar is an icon, never initials |
 | A workspace switcher under the app's name | `Shell::header_slot(node)`; `AppShell::header_slot(node)` for one request | `navree_workspace::WorkspaceSwitcher` is the node; a two-line card with the organisation's tile is `.variant(SwitcherVariant::Card).media(Avatar::initials(name).solid()).description("City · Role")`, in the theme's `card` colour and `field` corner, lined up with the sidebar's rows |

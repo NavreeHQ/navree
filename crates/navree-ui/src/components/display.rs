@@ -505,6 +505,11 @@ pub enum BadgeVariant {
     Warning,
     /// Bad news.
     Danger,
+    /// Filled with the accent, its text in the accent's ink, as a primary button is drawn: a
+    /// marker that stands out, such as "Internal" in the brand row. Its styles come with the
+    /// parts stylesheet. A table's badge column (`#[col(badge = ..)]`) draws it as
+    /// [`Neutral`](Self::Neutral): a cell is no place for a marker.
+    Solid,
 }
 
 /// A short label beside something.
@@ -580,6 +585,10 @@ impl Badge {
             BadgeVariant::Success => self.el.attr("data-variant", "success"),
             BadgeVariant::Warning => self.el.attr("data-variant", "warning"),
             BadgeVariant::Danger => self.el.attr("data-variant", "danger"),
+            BadgeVariant::Solid => self
+                .el
+                .attr("data-variant", "solid")
+                .uses(Uses::PARTS_STYLES),
         };
         self
     }

@@ -17,14 +17,14 @@ use navree_http::response::{IntoResponse, Response};
 
 use crate::app_files::{AppFont, AppSheet};
 use crate::components::{
-    Avatar, Breadcrumb, Button, ButtonVariant, Separator, Size, Toast, Toaster, icon,
+    Avatar, Badge, Breadcrumb, Button, ButtonVariant, Separator, Size, Toast, Toaster, icon,
 };
 use crate::form::csrf_field;
 use crate::html::Href;
 use crate::icons::{self, Icon};
 use crate::node::{Element, IntoNodes, Node, Uses, el};
 use crate::op::ToastTone;
-use crate::theme::{Appearance, Density, Theme, ThemeMenu, ThemeSetting};
+use crate::theme::{Appearance, Density, Mode, Theme, ThemeMenu, ThemeSetting};
 use crate::view::View;
 
 mod contribute;
@@ -38,6 +38,17 @@ pub use contribute::{
 mod native;
 #[cfg(feature = "native-preview")]
 pub(crate) use native::{PageNote, contributed as native_contributed, routes as native_routes};
+
+/// What a page puts in its sidebar, each the request's or else the shell's own.
+#[derive(Clone, Copy)]
+struct Slots<'a> {
+    /// The person at the foot.
+    user: Option<&'a UserMenu>,
+    /// What stands under the brand.
+    header: Option<&'a Node>,
+    /// The badge at the end of the brand row.
+    badge: Option<&'a Node>,
+}
 
 /// The cookie holding a toast for the next page.
 pub(crate) const FLASH_COOKIE: &str = "navree_ui_flash";
@@ -117,6 +128,18 @@ impl Collapse {
             Self::Never => "never",
         }
     }
+}
+
+/// How the app's mark is drawn at the start of the brand row.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum LogoStyle {
+    /// The mark in a tile of the theme's raised colour, 32 px square: the default.
+    #[default]
+    Tile,
+    /// The mark alone, 22 px, with no tile behind it, and the row 30 px high with room at its
+    /// sides: for a mark drawn to stand on the sidebar's own colour.
+    Bare,
 }
 
 /// The tone a flash holds before its text, success being the plain case. The text
@@ -559,6 +582,9 @@ pub struct Shell {
     name: Cow<'static, str>,
     context: Option<Cow<'static, str>>,
     logo: Option<Href>,
+    logo_dark: Option<Href>,
+    logo_style: LogoStyle,
+    badge: Option<Node>,
     header_slot: Option<Node>,
     home: Href,
     groups: Vec<NavGroup>,
@@ -585,6 +611,9 @@ impl Shell {
             name: name.into(),
             context: None,
             logo: None,
+            logo_dark: None,
+            logo_style: LogoStyle::Tile,
+            badge: None,
             header_slot: None,
             home: Href::from("/"),
             groups: Vec::new(),
@@ -763,6 +792,48 @@ impl Shell {
         self
     }
 
+    /// Draws the picture at `src` as the app's mark in dark mode, in place of the
+    /// [`logo`](Self::logo): a mark drawn for a light sidebar that would vanish on a dark one.
+    /// A page in light or in dark draws the one it needs; a page that follows the device draws
+    /// a `<picture>` whose dark source the browser picks with `prefers-color-scheme`, as
+    /// [`Picture::dark`](crate::Picture::dark) does. Without a `logo` it draws nothing.
+    ///
+    /// ```
+    /// use navree_ui::Shell;
+    /// use navree_ui::theme::{Appearance, Mode, Theme};
+    ///
+    /// let shell = Shell::new("Agra").logo("/mark.svg").logo_dark("/mark-dark.svg");
+    /// let dark = shell
+    ///     .clone()
+    ///     .appearance(Appearance::new(Theme::NAVREE, Mode::Dark))
+    ///     .page("Deals", "/deals");
+    /// assert!(dark.to_view().to_html().contains(r#"<img src="/mark-dark.svg" alt="">"#));
+    /// ```
+    #[must_use]
+    pub fn logo_dark(mut self, src: impl Into<Href>) -> Self {
+        self.logo_dark = Some(src.into());
+        self
+    }
+
+    /// Sets how the mark is drawn: in a tile ([`LogoStyle::Tile`], the default) or alone
+    /// ([`LogoStyle::Bare`]).
+    #[must_use]
+    pub fn logo_style(mut self, style: LogoStyle) -> Self {
+        self.logo_style = style;
+        self
+    }
+
+    /// Puts `badge` at the end of the brand row, in place of the [context](Self::context)
+    /// line: a marker such as "Internal" or "Staging"
+    /// (`Badge::new("Internal").variant(BadgeVariant::Solid)`). It hides with the app's name
+    /// when the sidebar folds to its icons. [`AppShell::badge`] sets one for a request, in
+    /// place of this one.
+    #[must_use]
+    pub fn badge(mut self, badge: Badge) -> Self {
+        self.badge = Some(badge.into());
+        self
+    }
+
     /// Puts `slot` in the sidebar's header, under the app's name: a workspace switcher.
     /// [`AppShell::header_slot`] sets one for a request, in place of this one. It hides
     /// with the names when the sidebar folds to its icons.
@@ -849,26 +920,57 @@ impl Shell {
         AppShell::read(Arc::new(self.clone()), path, query, headers)
     }
 
-    /// The app's mark and name, linking home.
-    fn brand(&self) -> Element {
+    /// The app's mark, as a page in `mode` draws it, and whether it is a `<picture>` of a
+    /// light and a dark mark.
+    fn mark(&self, mode: Mode) -> (Node, bool) {
+        let img = |src: &Href| Node::from(el("img").attr("src", src.clone()).attr("alt", ""));
+        match (&self.logo, &self.logo_dark) {
+            (None, _) => (Node::Static(LOGO), false),
+            (Some(light), None) => (img(light), false),
+            (Some(_), Some(dark)) if mode == Mode::Dark => (img(dark), false),
+            (Some(light), Some(_)) if mode == Mode::Light => (img(light), false),
+            (Some(light), Some(dark)) => (
+                el("picture")
+                    .children((
+                        el("source")
+                            .attr("media", "(prefers-color-scheme: dark)")
+                            .attr("srcset", candidate(dark)),
+                        img(light),
+                    ))
+                    .into(),
+                true,
+            ),
+        }
+    }
+
+    /// The app's mark and name, linking home, as a page in `mode` draws them, with `badge` at
+    /// the end of the row in place of the context line.
+    fn brand(&self, mode: Mode, badge: Option<&Node>) -> Element {
+        let bare = self.logo_style == LogoStyle::Bare;
+        let (mark, picture) = self.mark(mode);
         el("a")
             .slot("sidebar-brand")
             .href(self.home.clone())
             .attr("title", self.name.clone())
             .flag("data-ui-prefetch", self.prefetch_home)
+            .attr_opt("data-logo", bare.then_some("bare"))
+            .uses(if bare || picture || badge.is_some() {
+                Uses::SHELL_PARTS
+            } else {
+                Uses::NONE
+            })
             .children((
-                el("span").slot("sidebar-logo").child(match &self.logo {
-                    Some(src) => Node::from(el("img").attr("src", src.clone()).attr("alt", "")),
-                    None => Node::Static(LOGO),
-                }),
+                el("span").slot("sidebar-logo").child(mark),
                 el("span").slot("sidebar-brand-text").children((
                     el("span")
                         .slot("sidebar-brand-name")
                         .child(self.name.clone()),
                     self.context
                         .clone()
+                        .filter(|_| badge.is_none())
                         .map(|context| el("span").slot("sidebar-brand-context").child(context)),
                 )),
+                badge.cloned(),
             ))
     }
 
@@ -957,10 +1059,15 @@ impl Shell {
         path: &str,
         csrf: Option<&str>,
         footer: bool,
-        user: Option<&UserMenu>,
-        slot: Option<&Node>,
+        mode: Mode,
+        slots: Slots<'_>,
     ) -> Element {
-        let header = self.brand();
+        let Slots {
+            user,
+            header: slot,
+            badge,
+        } = slots;
+        let header = self.brand(mode, badge);
         let best = self.best(path);
         let groups: Vec<Element> = self
             .groups
@@ -1084,6 +1191,11 @@ impl Shell {
     }
 }
 
+/// `href` as the one candidate of a `srcset`, in which a space or a comma would end it.
+fn candidate(href: &Href) -> String {
+    href.as_str().replace(' ', "%20").replace(',', "%2C")
+}
+
 /// The Navree mark, as compile-time markup.
 const LOGO: &str = r#"<svg viewBox="0 0 32 32" aria-hidden="true" fill="currentColor"><path d="M1.5 9.5 30.5 7c-.9 2.4-1.9 4.3-3.1 5.7H3.4c-.8-.9-1.4-1.9-1.9-3.2Z"/><path d="M4.4 14.5H26c-1.6 2-3.6 3.3-6.5 3.8H10c-2.4-.5-4.2-1.8-5.6-3.8Z"/><path d="M13 18.3h6.4L16.4 26h-2Z"/></svg>"#;
 
@@ -1112,6 +1224,8 @@ pub struct AppPage {
     user: Option<UserMenu>,
     /// The request's header slot, in place of the shell's.
     header_slot: Option<Node>,
+    /// The request's badge in the brand row, in place of the shell's.
+    badge: Option<Node>,
     app_sheets: Vec<AppSheet>,
     app_fonts: Vec<AppFont>,
     /// What stands in the middle of the top bar for this page.
@@ -1150,6 +1264,7 @@ impl AppPage {
             status: StatusCode::OK,
             user: None,
             header_slot: None,
+            badge: None,
             app_sheets: shell.app_sheets.clone(),
             app_fonts: shell.app_fonts.clone(),
             topbar: None,
@@ -1354,10 +1469,16 @@ impl AppPage {
             self.sheets.extend(menu.sheets());
         }
         let user = self.user.as_ref().or(shell.user.as_ref());
+        let mode = self.appearance.mode();
+        let badge = self.badge.as_ref().or(shell.badge.as_ref());
         let start = Node::list((
             trigger,
             (!header).then(Separator::vertical),
-            header.then(|| el("div").slot("topbar-brand").child(shell.brand())),
+            header.then(|| {
+                el("div")
+                    .slot("topbar-brand")
+                    .child(shell.brand(mode, badge))
+            }),
             header.then(|| shell.topnav(&self.path)),
             (!header).then(|| crumbs.clone()),
         ));
@@ -1430,8 +1551,12 @@ impl AppPage {
                     &self.path,
                     self.csrf.as_deref(),
                     !header,
-                    user,
-                    self.header_slot.as_ref().or(shell.header_slot.as_ref()),
+                    mode,
+                    Slots {
+                        user,
+                        header: self.header_slot.as_ref().or(shell.header_slot.as_ref()),
+                        badge,
+                    },
                 ),
                 el("div").slot("sidebar-overlay"),
                 el("div").slot("sidebar-inset").children((topbar, main)),
@@ -1503,6 +1628,8 @@ pub struct AppShell {
     links: Vec<NavGroup>,
     /// The line below the app's name for this request, in place of the shell's.
     context: Option<Cow<'static, str>>,
+    /// The badge at the end of the brand row for this request, in place of the shell's.
+    badge: Option<Node>,
 }
 
 impl AppShell {
@@ -1524,6 +1651,7 @@ impl AppShell {
         page.theme_locked = self.workspace.locked;
         page.user = self.user_menu.clone();
         page.header_slot = self.header_slot.clone();
+        page.badge = self.badge.clone();
         page
     }
 
@@ -1608,6 +1736,30 @@ impl AppShell {
     #[must_use]
     pub fn header_slot(mut self, slot: impl Into<Node>) -> Self {
         self.header_slot = Some(slot.into());
+        self
+    }
+
+    /// Puts `badge` at the end of the brand row for this request, in place of the shell's
+    /// [`badge`](Shell::badge) and of its context line: "Internal" on the pages of a staff
+    /// area.
+    ///
+    /// ```
+    /// use http::HeaderMap;
+    /// use navree_ui::{Badge, BadgeVariant, Shell};
+    ///
+    /// let html = Shell::new("Agra")
+    ///     .context("Sales")
+    ///     .for_request("/", &HeaderMap::new())
+    ///     .badge(Badge::new("Internal").variant(BadgeVariant::Solid))
+    ///     .page("Home")
+    ///     .to_view()
+    ///     .to_html();
+    /// assert!(html.contains(r#"<span data-slot="badge" data-variant="solid">Internal</span></a>"#));
+    /// assert!(!html.contains("sidebar-brand-context"));
+    /// ```
+    #[must_use]
+    pub fn badge(mut self, badge: Badge) -> Self {
+        self.badge = Some(badge.into());
         self
     }
 
@@ -1696,6 +1848,7 @@ impl AppShell {
             header_slot: None,
             links: Vec::new(),
             context: None,
+            badge: None,
         }
     }
 

@@ -97,6 +97,7 @@ fn badge_variants() -> impl IntoIterator<Item = (&'static str, Badge)> {
             Badge::new("At risk").variant(BadgeVariant::Warning),
         ),
         ("Danger", Badge::new("Lost").variant(BadgeVariant::Danger)),
+        ("Solid", Badge::new("Internal").variant(BadgeVariant::Solid)),
     ]
 }
 

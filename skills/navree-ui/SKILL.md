@@ -763,7 +763,12 @@ app made by `navree new` does this in one extractor, `Desk`
 (`src/ui/shell.rs`): take `Desk` where this skill says `AppShell`. On the
 `AppShell`, `header_slot(node)` puts a workspace switcher under the app's name
 (`Shell::header_slot` for every page) and `csrf(token)` gives the shell's own
-forms the session's token.
+forms the session's token. The brand row takes the app's
+mark (`Shell::logo(src)`, `.logo_dark(src)` for dark mode,
+`.logo_style(LogoStyle::Bare)` for the mark alone with no tile) and a badge
+at its end in place of the context line (`Shell::badge(..)`,
+`AppShell::badge(..)` for a request:
+`Badge::new("Internal").variant(BadgeVariant::Solid)`).
 
 ## What is not shipped
 

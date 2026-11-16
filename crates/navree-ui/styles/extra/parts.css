@@ -53,6 +53,9 @@ h6[data-slot=heading]{font-size:.75rem;letter-spacing:.04em;text-transform:upper
 }
 [data-slot=progress-value]{flex:none;min-width:2.5ch;color:var(--fg-2);font-size:12px;font-variant-numeric:tabular-nums;text-align:end}
 
+/* Badge: filled with the accent */
+[data-slot=badge][data-variant=solid]{background:var(--accent);color:var(--accent-ink)}
+
 /* Card: variants */
 [data-slot=card][data-variant=muted]{border-color:transparent;background:var(--ink-2)}
 [data-slot=card][data-variant=ghost]{border-color:transparent;background:transparent}

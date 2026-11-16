@@ -671,7 +671,7 @@ pub const COMPONENTS: &[Component] = &[
         "app-shell",
         "App shell",
         &[
-            "Shell", "NavGroup", "NavItem", "UserMenu", "AppPage", "AppShell",
+            "Shell", "NavGroup", "NavItem", "UserMenu", "AppPage", "AppShell", "LogoStyle",
         ],
         "default",
     )

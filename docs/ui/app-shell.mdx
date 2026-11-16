@@ -93,7 +93,26 @@ The same page after the button is pressed: the sidebar sits over the page and th
 - **The user menu:** `.link` adds a page to read; `.action` adds a button that posts, for signing out or switching workspace. It works with JavaScript off and carries the session's CSRF token when there is one.
 - **For one request:** `AppShell::user_menu(menu)` puts the person signed in at the foot, `AppShell::context(text)` sets the line below the app's name, `AppShell::header_slot(node)` puts something under the app's name, one gap between the sidebar's blocks below it (a workspace switcher, which `SwitcherVariant::Card` draws as a card lined up with the links' rows; `Shell::header_slot` for every page), and `AppShell::csrf(token)` gives the shell's own forms the session's token. The app's one `Shell` stays as it is.
 - **Counts that come later:** `NavGroup::lazy(id, src)` makes a group a region fetched once the page is up, so a page never waits for its counts; `Shell::live_group(id, path)` draws the answer, the group with its counts. The source is an address on your site: one that is not a `LocalHref` (or is `#`) leaves the group with no source, and it is never fetched.
-- **Your mark:** `Shell::logo(src)` draws a picture of yours in place of Navree's.
+- **Your mark:** `Shell::logo(src)` draws a picture of yours in place of Navree's; see [the brand row](#the-brand-row).
+
+## The brand row
+
+The sidebar opens with the app's mark and name, linking home (`Shell::home`), and a line under the name (`Shell::context`: a workspace, a plan). The name is drawn in the `brand` style of the theme's [type scale](/docs/ui/themes/#type).
+
+- **Your mark:** `Shell::logo(src)` draws a picture of yours in place of Navree's: a path on the app, an `https://` URL, or an [`AppImage`](/docs/ui/app-styles/#pictures) the toolkit serves. It is decorative, beside the app's name.
+- **A dark mark:** `Shell::logo_dark(src)` is the mark on a dark sidebar, for a mark drawn for a light one. A page in light or in dark draws the one it needs; a page that follows the device draws a `<picture>`, and the browser picks the dark source with `prefers-color-scheme`.
+- **A bare mark:** the mark stands in a 32 px tile of the theme's raised colour. `Shell::logo_style(LogoStyle::Bare)` draws it alone, 22 px, with no tile: the row is 30 px high, with 8 px at its sides and 10 px between the mark and the name.
+- **A badge:** `Shell::badge(badge)` puts a [badge](/docs/components/badge/) at the end of the row, in place of the context line: a marker such as "Internal" or "Staging". `AppShell::badge(badge)` sets one for a request, in place of the shell's: the pages of a staff area. It hides with the name when the sidebar folds.
+
+```rust
+Shell::new("Kesar")
+    .logo("/brand/kesar.svg")
+    .logo_dark("/brand/kesar-dark.svg")
+    .logo_style(LogoStyle::Bare)
+    .badge(Badge::new("Internal").variant(BadgeVariant::Solid))
+```
+
+A bare or dark mark and a badge are drawn by the shell parts stylesheet, which a page links only when it draws one of them.
 
 ## Only what a reader may use
 
@@ -222,6 +241,10 @@ Nothing is fetched ahead of a click unless you ask, link by link. `NavItem::pref
 ### Shell
 
 <UiProps type="Shell" />
+
+### LogoStyle
+
+<UiProps type="LogoStyle" />
 
 ### NavGroup
 

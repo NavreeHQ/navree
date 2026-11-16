@@ -177,7 +177,7 @@ pub use select::{
     Select, SelectLabels,
 };
 pub use shell::{
-    AppPage, AppShell, Collapse, ModuleBuilderShellExt, NativeClient, NativeFamily,
+    AppPage, AppShell, Collapse, LogoStyle, ModuleBuilderShellExt, NativeClient, NativeFamily,
     NativeShellPart, NativeShellParts, NativeSignIn, NavGroup, NavItem, Shell, ShellLayout,
     ShellNavItem, UserMenu,
 };
