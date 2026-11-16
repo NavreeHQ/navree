@@ -1007,6 +1007,123 @@ impl FieldControl for Misnamed {
     }
 }
 
+/// A control that draws its form field inside an owned body, where the seal takes it out of the
+/// form.
+struct SealedField;
+
+impl FieldControl for SealedField {
+    fn name(&self) -> &'static str {
+        "app.sealed"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("div")
+            .slot("app:sealed")
+            .child(
+                el("div")
+                    .slot("app:sealed-body")
+                    .flag("data-ui-keep", true)
+                    .child(
+                        el("input")
+                            .attr("type", "text")
+                            .attr("name", field.name.to_owned())
+                            .flag("disabled", field.disabled),
+                    ),
+            )
+            .into()
+    }
+}
+
+/// A control that posts through a hidden input, and labels the part that stands in for it with
+/// an element that is not the field's label.
+struct LabelledElsewhere;
+
+impl FieldControl for LabelledElsewhere {
+    fn name(&self) -> &'static str {
+        "app.swatch-elsewhere"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("div")
+            .slot("app:swatch-elsewhere")
+            .children((
+                el("input")
+                    .attr("type", "hidden")
+                    .attr("name", field.name.to_owned())
+                    .flag("disabled", field.disabled),
+                el("span")
+                    .flag("data-field-control", true)
+                    .attr("tabindex", "0")
+                    .attr_opt(
+                        "aria-labelledby",
+                        field.label_id.map(|_| "drop_at-help".to_owned()),
+                    )
+                    .attr_opt(
+                        "aria-label",
+                        field.label_id.is_none().then(|| field.label.to_owned()),
+                    ),
+            ))
+            .into()
+    }
+}
+
+/// A control that posts through a hidden input, and labels the part that stands in for it with
+/// the field's label among the ids of `aria-labelledby`.
+struct HiddenLabelled;
+
+impl FieldControl for HiddenLabelled {
+    fn name(&self) -> &'static str {
+        "app.swatch-labelled"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("div")
+            .slot("app:swatch-labelled")
+            .children((
+                el("input")
+                    .attr("type", "hidden")
+                    .attr("name", field.name.to_owned())
+                    .flag("disabled", field.disabled),
+                el("span")
+                    .flag("data-field-control", true)
+                    .attr("tabindex", "0")
+                    .attr_opt(
+                        "aria-labelledby",
+                        field.label_id.map(|id| format!("{id} swatch-name")),
+                    )
+                    .attr_opt(
+                        "aria-label",
+                        field.label_id.is_none().then(|| field.label.to_owned()),
+                    ),
+            ))
+            .into()
+    }
+}
+
+/// A control whose fieldset and output do not follow `disabled`.
+struct IgnoresDisabledSet;
+
+impl FieldControl for IgnoresDisabledSet {
+    fn name(&self) -> &'static str {
+        "app.swatch-set"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("div")
+            .slot("app:swatch-set")
+            .children((
+                el("fieldset").child(
+                    el("input")
+                        .attr("type", "text")
+                        .attr("name", field.name.to_owned())
+                        .flag("disabled", field.disabled),
+                ),
+                el("output").child("#e8b4b8"),
+            ))
+            .into()
+    }
+}
+
 /// What `kit::assert_control` says is wrong with `control`.
 fn said_of(control: &dyn FieldControl) -> String {
     let result = catch_unwind(AssertUnwindSafe(|| kit::assert_control(control)));
@@ -1053,6 +1170,29 @@ fn assert_control_refuses_an_unlabelled_hidden_control_one_that_ignores_disabled
 
     kit::assert_control(&PIN_CODE);
     kit::assert_control(&DELIVERY_PIN);
+}
+
+// A field that sits only inside an owned body never posts; a stand-in labelled by another element
+// is not labelled by the field's label; and a fieldset and an output are form fields, disabled
+// with the rest. The label's id among the ids of `aria-labelledby` is a label.
+#[test]
+fn assert_control_refuses_a_sealed_field_a_label_elsewhere_and_an_enabled_fieldset() {
+    assert_eq!(
+        said_of(&SealedField),
+        "control app.sealed: drop_at is drawn inside an owned body (data-ui-keep), where it never posts; draw it outside the control's owned bodies"
+    );
+
+    assert_eq!(
+        said_of(&LabelledElsewhere),
+        "control app.swatch-elsewhere: drop_at is hidden, and no part marked data-field-control is labelled"
+    );
+
+    assert_eq!(
+        said_of(&IgnoresDisabledSet),
+        "control app.swatch-set: with disabled set, div[app:swatch-set] > fieldset is not disabled\ncontrol app.swatch-set: with disabled set, div[app:swatch-set] > output is not disabled"
+    );
+
+    kit::assert_control(&HiddenLabelled);
 }
 
 // An inline edit is held to the control's check before the app stores anything: refused with a

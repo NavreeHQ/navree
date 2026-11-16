@@ -106,16 +106,24 @@ pub fn stored_twin(node: &Node) -> Node {
 /// The name of the form field [`assert_control`] draws a control for.
 const CONTROL_FIELD: &str = "drop_at";
 
+/// What a form takes into its post, as the runtime's seal lists it: every one of them a control
+/// draws is disabled with the field.
+const FORM_FIELDS: [&str; 7] = [
+    "input", "select", "textarea", "button", "fieldset", "output", "object",
+];
+
 /// What a control draws, checked against the rules of a control; fails the test with every line
 /// of what is wrong when there is something. The control is drawn three times, for the field
 /// `drop_at`: with a label id, with a label id and read-only, and with no label id (as in a table
-/// cell). It must draw a form field named `drop_at`, and that field is the part a person uses; or
-/// the control marks the part a person uses `data-field-control` and labels it (`aria-labelledby`
-/// when there is a label id, `aria-label` when there is none). With the field read-only, every
-/// `input`, `select`, `textarea` and `button` it draws is disabled. It sets no
-/// `aria-describedby` on the part the field ties its id and descriptions to, the first form
-/// field or part marked `data-field-control`: `described_by` is for its other parts. And what it
-/// draws keeps the rules [`problems`] checks.
+/// cell). It must draw a form field named `drop_at`, and not only inside its owned bodies (an
+/// element below its root marked `data-ui-keep`), where the runtime's seal takes a form field out
+/// of its form. That field is the part a person uses; or the control marks the part a person uses
+/// `data-field-control` and labels it: `aria-labelledby` naming the label's id among its ids when
+/// there is a label id, `aria-label` when there is none. With the field read-only, every
+/// `input`, `select`, `textarea`, `button`, `fieldset`, `output` and `object` it draws is
+/// disabled. It sets no `aria-describedby` on the part the field ties its id and descriptions
+/// to, the first form field or part marked `data-field-control`: `described_by` is for its other
+/// parts. And what it draws keeps the rules [`problems`] checks.
 ///
 /// ```
 /// use navree_ui::form::{ControlField, FieldControl};
@@ -173,46 +181,49 @@ fn control_problems(control: &dyn FieldControl) -> Vec<String> {
     for field in &draws {
         let node = control.draw(field);
         let mut parts = Vec::new();
-        elements(&node, "", 0, &mut parts);
+        elements(&node, "", 0, None, &mut parts);
 
-        let named: Vec<&Element> = parts
+        let named: Vec<&Part<'_>> = parts
             .iter()
-            .map(|(element, _)| *element)
-            .filter(|element| {
-                matches!(element.tag(), "input" | "select" | "textarea")
-                    && text(element, "name") == Some(CONTROL_FIELD)
+            .filter(|part| {
+                matches!(part.element.tag(), "input" | "select" | "textarea")
+                    && text(part.element, "name") == Some(CONTROL_FIELD)
             })
             .collect();
         if named.is_empty() {
             say(format!(
                 "control {name}: draws no form field named {CONTROL_FIELD}"
             ));
-        } else if named.iter().all(|element| is_hidden(element)) {
+        } else {
+            // The seal takes a form field inside an owned body out of its form: it never posts.
+            if named.iter().all(|part| part.in_body) {
+                say(format!(
+                    "control {name}: {CONTROL_FIELD} is drawn inside an owned body (data-ui-keep), where it never posts; draw it outside the control's owned bodies"
+                ));
+            }
             // The field posts, but nobody can use it: a part of the control stands in for it,
             // and has to be named for assistive technology.
-            let label = if field.label_id.is_some() {
-                "aria-labelledby"
-            } else {
-                "aria-label"
-            };
-            let labelled = parts.iter().any(|(element, _)| {
-                element.get("data-field-control").is_some()
-                    && text(element, label).is_some_and(|value| !value.trim().is_empty())
-            });
-            if !labelled {
-                say(format!(
-                    "control {name}: {CONTROL_FIELD} is hidden, and no part marked data-field-control is labelled"
-                ));
+            if named.iter().all(|part| is_hidden(part.element)) {
+                let labelled = parts.iter().any(|part| {
+                    part.element.get("data-field-control").is_some()
+                        && is_labelled(part.element, field.label_id)
+                });
+                if !labelled {
+                    say(format!(
+                        "control {name}: {CONTROL_FIELD} is hidden, and no part marked data-field-control is labelled"
+                    ));
+                }
             }
         }
 
         if field.disabled {
-            for (element, path) in &parts {
-                if matches!(element.tag(), "input" | "select" | "textarea" | "button")
-                    && element.get("disabled").is_none()
+            for part in &parts {
+                if FORM_FIELDS.contains(&part.element.tag())
+                    && part.element.get("disabled").is_none()
                 {
                     say(format!(
-                        "control {name}: with disabled set, {path} is not disabled"
+                        "control {name}: with disabled set, {} is not disabled",
+                        part.path
                     ));
                 }
             }
@@ -233,22 +244,58 @@ fn control_problems(control: &dyn FieldControl) -> Vec<String> {
     found
 }
 
-/// Every element of `node` with its path (see [`problems`]), in document order.
-fn elements<'a>(node: &'a Node, above: &str, depth: u32, out: &mut Vec<(&'a Element, String)>) {
+/// One element of what a control draws.
+struct Part<'a> {
+    element: &'a Element,
+    /// Where it is (see [`problems`]).
+    path: String,
+    /// Whether it sits inside an owned body: an element above it, below the control's root,
+    /// marked `data-ui-keep`.
+    in_body: bool,
+}
+
+/// Whether a control's part stands labelled for assistive technology: `aria-labelledby` names
+/// the label's id among its ids when there is a label, and `aria-label` says something when
+/// there is none.
+fn is_labelled(element: &Element, label_id: Option<&str>) -> bool {
+    match label_id {
+        Some(id) => text(element, "aria-labelledby")
+            .is_some_and(|ids| ids.split_ascii_whitespace().any(|named| named == id)),
+        None => text(element, "aria-label").is_some_and(|label| !label.trim().is_empty()),
+    }
+}
+
+/// Every element of `node` with its path (see [`problems`]), in document order. `within` is
+/// `None` above the control's root, and below it whether an owned body holds the node.
+fn elements<'a>(
+    node: &'a Node,
+    above: &str,
+    depth: u32,
+    within: Option<bool>,
+    out: &mut Vec<Part<'a>>,
+) {
     if depth > MAX_DEPTH {
         return;
     }
     match node {
         Node::Element(element) => {
             let path = path_to(element, above);
-            out.push((element, path.clone()));
+            let in_body = within.unwrap_or(false);
+            // Below the root, an element marked `data-ui-keep` is an owned body: what it holds
+            // is in it.
+            let holds = in_body || (within.is_some() && element.get("data-ui-keep").is_some());
+            out.push(Part {
+                element,
+                path: path.clone(),
+                in_body,
+            });
             for child in element.child_nodes() {
-                elements(child, &path, depth + 1, out);
+                elements(child, &path, depth + 1, Some(holds), out);
             }
         }
         Node::Fragment(nodes) => {
             for child in nodes {
-                elements(child, above, depth + 1, out);
+                elements(child, above, depth + 1, within, out);
             }
         }
         Node::Empty | Node::Text(_) | Node::Int(_) | Node::Raw(_) | Node::Static(_) => {}
