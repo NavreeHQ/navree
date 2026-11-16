@@ -790,7 +790,10 @@ async fn a_secret_drawn_by_a_control_is_never_shown_again_given_back_or_kept() {
             .find(|field| field.name == name)
             .expect("the field")
     };
-    assert!(field("password").secret, "a control under a password's name");
+    assert!(
+        field("password").secret,
+        "a control under a password's name"
+    );
     assert!(!field("code").secret, "a secret by its control's word only");
     assert!(!field("full_name").secret);
 
@@ -802,8 +805,14 @@ async fn a_secret_drawn_by_a_control_is_never_shown_again_given_back_or_kept() {
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let html = response.text();
     assert!(html.contains("Use at least 12 characters"), "{html}");
-    assert!(html.contains(r#"value="Simran Kaur""#), "what was typed: {html}");
-    assert!(!html.contains(password), "the password is shown again: {html}");
+    assert!(
+        html.contains(r#"value="Simran Kaur""#),
+        "what was typed: {html}"
+    );
+    assert!(
+        !html.contains(password),
+        "the password is shown again: {html}"
+    );
     assert!(!html.contains(code), "the code is shown again: {html}");
 
     // The handler of a refused form is given the name back, and neither secret.
@@ -1100,7 +1109,8 @@ impl FieldControl for HiddenLabelled {
     }
 }
 
-/// A control whose fieldset and output do not follow `disabled`.
+/// A control whose fieldset does not follow `disabled`, beside an output, which has no `disabled`
+/// to follow.
 struct IgnoresDisabledSet;
 
 impl FieldControl for IgnoresDisabledSet {
@@ -1173,8 +1183,9 @@ fn assert_control_refuses_an_unlabelled_hidden_control_one_that_ignores_disabled
 }
 
 // A field that sits only inside an owned body never posts; a stand-in labelled by another element
-// is not labelled by the field's label; and a fieldset and an output are form fields, disabled
-// with the rest. The label's id among the ids of `aria-labelledby` is a label.
+// is not labelled by the field's label; and a fieldset is disabled with the rest, while an output,
+// which HTML gives no `disabled`, is not asked for one. The label's id among the ids of
+// `aria-labelledby` is a label.
 #[test]
 fn assert_control_refuses_a_sealed_field_a_label_elsewhere_and_an_enabled_fieldset() {
     assert_eq!(
@@ -1189,7 +1200,7 @@ fn assert_control_refuses_a_sealed_field_a_label_elsewhere_and_an_enabled_fields
 
     assert_eq!(
         said_of(&IgnoresDisabledSet),
-        "control app.swatch-set: with disabled set, div[app:swatch-set] > fieldset is not disabled\ncontrol app.swatch-set: with disabled set, div[app:swatch-set] > output is not disabled"
+        "control app.swatch-set: with disabled set, div[app:swatch-set] > fieldset is not disabled"
     );
 
     kit::assert_control(&HiddenLabelled);
@@ -1275,7 +1286,11 @@ async fn an_edited_value_is_refused_from_another_site_in_another_body_and_by_a_g
     let elsewhere: [&[(&str, &str)]; 4] = [
         &[form, ("sec-fetch-site", "same-site")],
         &[form, ("sec-fetch-site", "cross-site")],
-        &[form, ("host", "app.example"), ("origin", "https://evil.example")],
+        &[
+            form,
+            ("host", "app.example"),
+            ("origin", "https://evil.example"),
+        ],
         &[form, ("cookie", "sid=abc")],
     ];
     for headers in elsewhere {

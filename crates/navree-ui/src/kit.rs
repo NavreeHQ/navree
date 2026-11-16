@@ -106,11 +106,9 @@ pub fn stored_twin(node: &Node) -> Node {
 /// The name of the form field [`assert_control`] draws a control for.
 const CONTROL_FIELD: &str = "drop_at";
 
-/// What a form takes into its post, as the runtime's seal lists it: every one of them a control
-/// draws is disabled with the field.
-const FORM_FIELDS: [&str; 7] = [
-    "input", "select", "textarea", "button", "fieldset", "output", "object",
-];
+/// The form fields that can be disabled: every one of them a control draws is disabled with the
+/// field. (An `output` and an `object` belong to a form too, but HTML gives them no `disabled`.)
+const FORM_FIELDS: [&str; 5] = ["input", "select", "textarea", "button", "fieldset"];
 
 /// What a control draws, checked against the rules of a control; fails the test with every line
 /// of what is wrong when there is something. The control is drawn three times, for the field
@@ -120,7 +118,7 @@ const FORM_FIELDS: [&str; 7] = [
 /// of its form. That field is the part a person uses; or the control marks the part a person uses
 /// `data-field-control` and labels it: `aria-labelledby` naming the label's id among its ids when
 /// there is a label id, `aria-label` when there is none. With the field read-only, every
-/// `input`, `select`, `textarea`, `button`, `fieldset`, `output` and `object` it draws is
+/// `input`, `select`, `textarea`, `button` and `fieldset` it draws is
 /// disabled. It sets no `aria-describedby` on the part the field ties its id and descriptions
 /// to, the first form field or part marked `data-field-control`: `described_by` is for its other
 /// parts. And what it draws keeps the rules [`problems`] checks.

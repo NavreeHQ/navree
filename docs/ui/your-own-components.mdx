@@ -455,7 +455,7 @@ What a control draws follows a few rules, which `kit::assert_control` checks in 
 
 - It draws a form field named `field.name`, and that is the part a person uses. When that field is hidden, the control marks the part a person uses `data-field-control` and labels it: `aria-labelledby` with the label's id, or `aria-label` when there is none.
 - The field gives the first form field it finds in what the control draws, or the first part marked `data-field-control`, its id, its `aria-invalid` and its `aria-describedby`. The control sets none of those on that part, and uses `described_by` for its other parts.
-- Every form field it draws (`input`, `select`, `textarea`, `button`, `fieldset`, `output` and `object`) is disabled when `field.disabled` is.
+- Every form field it draws that can be disabled (`input`, `select`, `textarea`, `button` and `fieldset`) is disabled when `field.disabled` is.
 - The form field is drawn outside the control's owned bodies, so the seal doesn't detach it from its form. A field named `field.name` that sits only inside an element marked `data-ui-keep` never posts.
 
 The check runs where Navree UI reads a form, before the field's type reads the value. `Err` is the message the field shows. An optional field left empty is not checked. A field that is not optional and is missing from the post reads as empty, and is checked as that. What reads the form decides what the check is given:
