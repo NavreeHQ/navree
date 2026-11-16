@@ -407,8 +407,10 @@ async fn the_frameworks_audit_module_keeps_the_apps_audit_sink_beside_a_plugin()
     use navree_plugin_roster::RosterModule;
 
     // navree-audit's module acts for no plugin: beside a community plugin it registers the
-    // app's audit sink as before.
+    // app's audit sink as before. Its route asks for `audit.read`, which needs the access
+    // module, so this app, which has none, leaves the route out.
     let app = workspace_app()
+        .config("audit.routes", false)
         .module(navree::audit::AuditModule::from_config())
         .module(RosterModule(|_| {}))
         .build()
