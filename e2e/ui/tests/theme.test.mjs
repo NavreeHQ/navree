@@ -4,7 +4,8 @@
 // stylesheet is slow, a theme change that never paints between two themes, system mode
 // following the device live, the menu by keyboard and with JavaScript off, hostile
 // cookies, URLs, posts and stylesheet names, each layout and how it folds, the builder
-// end to end, and the app, workspace, user and URL levels. Run with the proof app serving:
+// end to end, the app, workspace, user and URL levels, and a theme's shape and colour roles
+// reaching the components (`/themes/shaped`). Run with the proof app serving:
 //
 //   cargo run --release -p ui-proof -- serve          # UI_PROOF_URL, default http://127.0.0.1:8090
 //   UI_BROWSERS=chromium,firefox,webkit npm test -- tests/theme.test.mjs
@@ -769,6 +770,111 @@ for (const name of NAMES) {
       assert.deepEqual(await axe(page), [], "axe on the scopes page");
       await shot(page, "scopes-locked");
       await post("/themes/scopes/reset", "");
+      await page.done();
+    });
+
+    /** The computed styles a theme's shape and roles reach, on the proof app's shaped page. */
+    const shapedStyles = (page) =>
+      page.evaluate(() => {
+        const style = (selector) => {
+          const found = document.querySelector(selector);
+          if (!found) throw new Error(`no ${selector}`);
+          return getComputedStyle(found);
+        };
+        const button = style("[data-slot=page-actions] [data-slot=button]");
+        const input = style("main [data-slot=input]");
+        // The first card on the page, before the one on the inverse surface.
+        const card = style("main [data-slot=card]");
+        const sidebar = style("[data-slot=sidebar]");
+        const title = style("[data-slot=page-title]");
+        const inverse = style("[data-proof-inverse] [data-slot=card]");
+        const inverseText = style("[data-proof-inverse] [data-slot=card-title]");
+        const inverseButton = style("[data-proof-inverse] [data-slot=button]");
+        return {
+          button: [button.borderTopLeftRadius, button.height],
+          badge: style("main [data-slot=badge]").borderTopLeftRadius,
+          input: [input.borderTopLeftRadius, input.height, input.backgroundColor],
+          card: [card.borderTopLeftRadius, card.backgroundColor],
+          checkboxCorner: getComputedStyle(document.documentElement).getPropertyValue("--radius").trim(),
+          sidebar: [sidebar.width, sidebar.backgroundColor],
+          topbar: style("[data-slot=topbar]").height,
+          title: [title.fontSize, title.fontFamily],
+          heading: style("main h2[data-slot=heading]").fontFamily,
+          body: style("main [data-slot=text]").fontFamily,
+          current: style("[data-slot=sidebar-item][aria-current=page]").boxShadow,
+          plain: style("[data-slot=sidebar-item]:not([aria-current])").boxShadow,
+          inverse: [inverse.backgroundColor, inverseText.color, inverseButton.backgroundColor, inverseButton.color],
+        };
+      });
+
+    /** WCAG's ratio of two computed `rgb()` colours. */
+    const contrastOf = (a, b) => {
+      const lum = (text) => {
+        const [r, g, b] = text.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
+        const c = (v) => ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+        return 0.2126 * c(r) + 0.7152 * c(g) + 0.0722 * c(b);
+      };
+      const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+      return (x + 0.05) / (y + 0.05);
+    };
+
+    test("a theme's shape and roles reach the components: corners, sizes, the display face, a soft shadow, white cards and the inverse surface, light and dark", async () => {
+      for (const mode of ["light", "dark"]) {
+        const page = await open(`/themes/shaped?mode=${mode}`);
+        const seen = await shapedStyles(page);
+        // Pill buttons and badges, 12 px fields, 16 px cards; controls and fields 44 px high.
+        assert.deepEqual(seen.button, ["999px", "44px"], `${mode}: a button`);
+        assert.equal(seen.badge, "999px", `${mode}: a badge`);
+        assert.deepEqual(seen.input.slice(0, 2), ["12px", "44px"], `${mode}: a field`);
+        assert.equal(seen.card[0], "16px", `${mode}: a card`);
+        assert.equal(seen.checkboxCorner, "4px", `${mode}: a checkbox keeps the spec's corner`);
+        // A sidebar 248 px wide and a top bar 60 px high.
+        assert.equal(seen.sidebar[0], "248px", `${mode}: the sidebar`);
+        assert.equal(seen.topbar, "60px", `${mode}: the top bar`);
+        // A 32 px page title and headings in the display face, body text in the text face.
+        assert.equal(seen.title[0], "32px", `${mode}: the page title`);
+        assert.match(seen.title[1], /Proof Display/, `${mode}: the page title's face`);
+        assert.match(seen.heading, /Proof Display/, `${mode}: a heading's face`);
+        assert.doesNotMatch(seen.body, /Proof Display/, `${mode}: body text keeps the text face`);
+        // One soft shadow on the current link, none on the others.
+        assert.notEqual(seen.current, "none", `${mode}: the current link is raised`);
+        assert.equal(seen.plain, "none", `${mode}: another link is flat`);
+        // White cards and fields on a tinted sidebar in light; the dark palette's own in dark.
+        if (mode === "light") {
+          assert.equal(seen.card[1], "rgb(255, 255, 255)", "a white card");
+          assert.equal(seen.input[2], "rgb(255, 255, 255)", "a white field");
+          assert.equal(seen.sidebar[1], "rgb(250, 250, 249)", "the sidebar's tint");
+          assert.deepEqual(seen.inverse.slice(0, 2), ["rgb(10, 10, 10)", "rgb(255, 255, 255)"], "the inverse surface");
+        } else {
+          assert.equal(seen.card[1], "rgb(18, 18, 18)", "the dark card");
+          assert.deepEqual(seen.inverse.slice(0, 2), ["rgb(255, 255, 255)", "rgb(10, 10, 10)"], "the inverse surface");
+        }
+        // The inverse surface's text and its primary button read.
+        assert.ok(contrastOf(seen.inverse[0], seen.inverse[1]) >= 4.5, `${mode}: text on the inverse surface`);
+        assert.ok(contrastOf(seen.inverse[2], seen.inverse[3]) >= 4.5, `${mode}: the primary button on it`);
+        assert.ok(await noSidewaysScroll(page), `${mode}: no sideways scroll`);
+        assert.deepEqual(await axe(page), [], `${mode}: axe`);
+        await shot(page, `shaped-${mode}`);
+        await page.done();
+      }
+    });
+
+    test("a built-in theme beside the shaped page keeps its own corners, sizes, faces and no shadow", async () => {
+      const page = await open("/themes/layouts/sidebar?theme=ocean&mode=light");
+      const seen = await page.evaluate(() => {
+        const style = (selector) => getComputedStyle(document.querySelector(selector));
+        return {
+          button: [
+            style("[data-slot=page-actions] [data-slot=button]").borderTopLeftRadius,
+            style("[data-slot=page-actions] [data-slot=button]").height,
+          ],
+          sidebar: style("[data-slot=sidebar]").width,
+          // The current link is a sub-item here, under Layouts.
+          current: style("[data-slot=sidebar] [aria-current=page]").boxShadow,
+          title: style("[data-slot=page-title]").fontSize,
+        };
+      });
+      assert.deepEqual(seen, { button: ["4px", "32px"], sidebar: "256px", current: "none", title: "20px" });
       await page.done();
     });
   });

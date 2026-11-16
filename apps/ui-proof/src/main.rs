@@ -23,6 +23,7 @@
 //! | `/themes/layouts/{layout}` | the same page in each layout, folding three ways |
 //! | `/themes/builder` | the theme builder, saving to memory and importing |
 //! | `/themes/scopes` | the app's, a workspace's (locked or not) and a user's choice |
+//! | `/themes/shaped` | a theme with a shape and colour roles, and the inverse surface |
 //! | `/pages` | error pages, sign-in and the states inside a page, in every case |
 //! | `/flow` | the stepper, slider, tree view and toolbar in every state, and a wizard at `/flow/wizard/start` |
 //! | `/markdown` | Markdown and code blocks: a reply, tables, links, pictures, raw HTML, code in every language, and `/markdown/render?text=` for any text |
@@ -186,6 +187,7 @@ impl Module for ProofModule {
         m.contribute(app_blocks::BRAND);
         m.contribute(app_blocks::FONT);
         m.contribute(app_blocks::MARK);
+        m.contribute(themes::DISPLAY);
     }
 }
 
