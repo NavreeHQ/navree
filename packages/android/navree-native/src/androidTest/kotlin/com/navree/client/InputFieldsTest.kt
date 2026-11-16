@@ -206,7 +206,8 @@ class InputFieldsTest {
         waitFor("the picker to be asked") { picker.launches.get() > before }
     }
 
-    private fun document(name: String, type: String?, bytes: ByteArray, knowsSize: Boolean = true): Uri = TestDocuments.add(context, name, type, bytes, knowsSize)
+    private fun document(name: String, type: String?, bytes: ByteArray, knowsSize: Boolean = true, claimedSize: Long? = null): Uri =
+        TestDocuments.add(context, name, type, bytes, knowsSize, claimedSize)
 
     private fun randomBytes(size: Int, seed: Long = 42): ByteArray = ByteArray(size).also { Random(seed).nextBytes(it) }
 
@@ -781,6 +782,30 @@ class InputFieldsTest {
         assertTrue(left.isFile)
         startOnTheClaimsForm()
         waitFor("the copy no token of this process names to go") { !left.exists() }
+    }
+
+    // ---------------------------------------------------------------- a provider that lies about a size
+
+    /**
+     * The limit holds against what a provider says: a document that says it has
+     * 10 bytes and has 5 000, and one whose bytes never end, are refused as too
+     * large at a limit of 1 000, and no copy of either is left.
+     */
+    @Test
+    fun aDocumentLargerThanItsProviderSaysOrThatNeverEndsIsRefusedAndLeavesNoCopy() {
+        startOnTheClaimsForm()
+        PickedFiles.of(context).mostBytes = 1_000
+        val folder = File(context.cacheDir, "navree-picked")
+        val before = folder.list()?.toSet().orEmpty()
+        pick("Papers", "Choose files", document("Rasid Moga.pdf", pdf, randomBytes(5_000), claimedSize = 10))
+        reveal(compose.onNode(hasText("Rasid Moga.pdf is larger than", substring = true))).assertExists()
+        assertTrue("a document larger than it says is not held", heldFiles("f-papers").isEmpty())
+        pick("Papers", "Choose files", TestDocuments.addEndless("Rasid Faridkot.pdf", pdf, randomBytes(4_096), claimedSize = 100))
+        reveal(compose.onNode(hasText("Rasid Faridkot.pdf is larger than", substring = true))).assertExists()
+        assertTrue("a document that never ends is not held", heldFiles("f-papers").isEmpty())
+        pick("Papers", "Choose files", TestDocuments.addEndless("Rasid Mansa.pdf", pdf, randomBytes(4_096)))
+        reveal(compose.onNode(hasText("Rasid Mansa.pdf is larger than", substring = true))).assertExists()
+        assertEquals("no copy of any of them is left", before, folder.list()?.toSet().orEmpty())
     }
 
     // ---------------------------------------------------------------- pictures

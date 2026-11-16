@@ -9,7 +9,9 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.concurrent.thread
 
 /**
  * A documents provider a device test hands the file field's picker result
@@ -17,10 +19,12 @@ import java.util.concurrent.ConcurrentHashMap
  * either a size or none (a provider that does not know it, as a cloud drive
  * does not), and its bytes are a file in the app's cache that the test writes.
  * It is read as the system's pickers' documents are: by `content://` address,
- * through the resolver, with no permission.
+ * through the resolver, with no permission. A document may also say a size
+ * that is not its own, or be a stream that never ends: a provider may do
+ * either, and the client must hold.
  */
 class TestDocuments : ContentProvider() {
-    private class Document(val file: File, val name: String, val type: String?, val knowsSize: Boolean)
+    private class Document(val file: File?, val name: String, val type: String?, val size: Long?, val endless: ByteArray? = null)
 
     override fun onCreate(): Boolean = true
 
@@ -29,7 +33,7 @@ class TestDocuments : ContentProvider() {
     override fun query(uri: Uri, projection: Array<String>?, selection: String?, selectionArgs: Array<String>?, sortOrder: String?): Cursor? {
         val document = document(uri) ?: return null
         val cursor = MatrixCursor(arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE))
-        cursor.addRow(arrayOf<Any?>(document.name, if (document.knowsSize) document.file.length() else null))
+        cursor.addRow(arrayOf<Any?>(document.name, document.size))
         return cursor
     }
 
@@ -37,7 +41,17 @@ class TestDocuments : ContentProvider() {
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
         val document = document(uri) ?: throw java.io.FileNotFoundException(uri.toString())
-        return ParcelFileDescriptor.open(document.file, ParcelFileDescriptor.MODE_READ_ONLY)
+        val endless = document.endless ?: return ParcelFileDescriptor.open(document.file!!, ParcelFileDescriptor.MODE_READ_ONLY)
+        // A pipe the provider writes the same bytes into for as long as the reader reads.
+        val (read, write) = ParcelFileDescriptor.createPipe()
+        thread(name = "test-documents-endless", isDaemon = true) {
+            try {
+                ParcelFileDescriptor.AutoCloseOutputStream(write).use { out -> while (true) out.write(endless) }
+            } catch (_: IOException) {
+                // The reader closed its end.
+            }
+        }
+        return read
     }
 
     override fun insert(uri: Uri, values: ContentValues?): Uri? = null
@@ -50,18 +64,31 @@ class TestDocuments : ContentProvider() {
         private const val AUTHORITY = "com.navree.client.test.documents"
         private val documents = ConcurrentHashMap<String, Document>()
 
-        /** Writes [bytes] as a document and gives the address a picker would hand back. */
-        fun add(context: Context, name: String, type: String?, bytes: ByteArray, knowsSize: Boolean = true): Uri {
+        private fun address(id: String): Uri = Uri.parse("content://$AUTHORITY/document/$id")
+
+        /**
+         * Writes [bytes] as a document and gives the address a picker would hand
+         * back. Its size is its own, none when not [knowsSize], or [claimedSize]
+         * when that is given.
+         */
+        fun add(context: Context, name: String, type: String?, bytes: ByteArray, knowsSize: Boolean = true, claimedSize: Long? = null): Uri {
             val id = java.util.UUID.randomUUID().toString()
             val folder = File(context.cacheDir, "test-documents").apply { mkdirs() }
             val file = File(folder, id).apply { writeBytes(bytes) }
-            documents[id] = Document(file, name, type, knowsSize)
-            return Uri.parse("content://$AUTHORITY/document/$id")
+            documents[id] = Document(file, name, type, claimedSize ?: if (knowsSize) bytes.size.toLong() else null)
+            return address(id)
+        }
+
+        /** A document whose bytes never end: [chunk] again and again. Its size is [claimedSize], or none. */
+        fun addEndless(name: String, type: String?, chunk: ByteArray, claimedSize: Long? = null): Uri {
+            val id = java.util.UUID.randomUUID().toString()
+            documents[id] = Document(null, name, type, claimedSize, endless = chunk)
+            return address(id)
         }
 
         /** Lets every document go. */
         fun clear() {
-            documents.values.forEach { it.file.delete() }
+            documents.values.forEach { it.file?.delete() }
             documents.clear()
         }
     }
