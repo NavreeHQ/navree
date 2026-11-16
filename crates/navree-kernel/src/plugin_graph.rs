@@ -4,6 +4,7 @@ use std::any::TypeId;
 use std::collections::BTreeMap;
 
 use crate::KernelError;
+use crate::command::FRAMEWORK_COMMANDS;
 use crate::graph::{Graph, ModuleNode, ROOT};
 use crate::plugin::{
     APP_ONLY_PROVIDERS, FIRST_PARTY, MODEL_HOOK_KEY, PluginInfo, PublishTag, Publishable,
@@ -80,14 +81,16 @@ impl Graph {
     ///     whose type does not name the plugin's crate:
     ///     `PluginConfiguresModule` (a second configured instance of a module
     ///     reads the same way, see `configured_twice`), and that module is left
-    ///     out of steps 11 and 12;
+    ///     out of steps 11 to 13;
     /// 11. a module that acts for a plugin that is not first-party and
     ///     registers a provider (value, factory or multi-binding) whose key is
     ///     on [`APP_ONLY_PROVIDERS`]: one `PluginProvidesAppOnly` per module and
     ///     type name;
     /// 12. such a module registering a provider keyed `dyn ModelHook<M>` of
     ///     navree-orm ([`MODEL_HOOK_KEY`]) whose model `M` is not a type of the
-    ///     plugin's crate: one `PluginHooksModel` per module and model.
+    ///     plugin's crate: one `PluginHooksModel` per module and model;
+    /// 13. such a module registering a command with the name of one of the
+    ///     framework's own (`plugins`, `check`, ..): `PluginCommand`.
     pub(crate) fn check_plugins(&mut self, errors: &mut Vec<KernelError>) {
         let version = env!("CARGO_PKG_VERSION");
         // Each plugin's modules, plugins in first-seen order.
@@ -273,8 +276,8 @@ impl Graph {
         self.first_party.extend(first_party);
 
         // Step 10. A module whose configured instance it refuses is left out of
-        // steps 11 and 12: what it registers is the configured module's, and
-        // the refusal already names it.
+        // steps 11 to 13: what it registers is the configured module's, and the
+        // refusal already names it.
         let mut configured_refused: Vec<usize> = Vec::new();
         for m in self.import_order() {
             let module = &self.modules[m];
@@ -348,6 +351,27 @@ impl Graph {
                     errors.push(KernelError::PluginHooksModel {
                         plugin: info.name,
                         model,
+                        module: module.name,
+                        reason: self.acts_for_reason(m, info),
+                    });
+                }
+            }
+        }
+
+        // Step 13.
+        for m in self.import_order() {
+            let Some(info) = self.community_plugin(m) else {
+                continue;
+            };
+            if configured_refused.contains(&m) {
+                continue;
+            }
+            let module = &self.modules[m];
+            for command in &module.commands {
+                if FRAMEWORK_COMMANDS.contains(&command.name) {
+                    errors.push(KernelError::PluginCommand {
+                        plugin: info.name,
+                        command: command.name,
                         module: module.name,
                         reason: self.acts_for_reason(m, info),
                     });

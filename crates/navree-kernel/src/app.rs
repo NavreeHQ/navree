@@ -185,10 +185,11 @@ impl AppBuilder {
     ///   [offline](CommandSpec::offline) skips the boot and the shutdown hooks;
     /// - no command runs `serve` if a module registers it, else `help`.
     ///
-    /// The built-ins `plugins` and `plugin:publish` yield: when a module
-    /// registers a command of one of these names, that command runs instead,
-    /// with its arguments, and `help` and `introspect` no longer list the
-    /// built-in.
+    /// The built-ins `plugins` and `plugin:publish` yield: when a module of the
+    /// app registers a command of one of these names, that command runs
+    /// instead, with its arguments, and `help` and `introspect` no longer list
+    /// the built-in. A module of a plugin that is not one of the framework's own
+    /// may not register a command of a built-in's name.
     pub async fn run_with_args(self, args: Vec<String>) -> Result<(), BoxError> {
         let mut args = args.into_iter();
         let command = args.next();

@@ -276,6 +276,22 @@ pub enum KernelError {
         /// parentheses after a space; empty when it names it.
         reason: String,
     },
+    /// A module that acts for a plugin that is not first-party registers a
+    /// command with the name of one of the framework's own.
+    #[error(
+        "plugin `{plugin}` registers the command `{command}` in `{module}`{reason}, a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise"
+    )]
+    PluginCommand {
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The command's name.
+        command: &'static str,
+        /// The module that registers it.
+        module: &'static str,
+        /// Why `module` acts for the plugin when it does not name it, in
+        /// parentheses after a space; empty when it names it.
+        reason: String,
+    },
     /// A module that acts for a plugin that is not first-party hooks a model of
     /// another crate.
     #[error(

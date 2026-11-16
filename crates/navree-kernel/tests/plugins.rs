@@ -1290,3 +1290,56 @@ fn a_crates_own_list_of_modules_passes_each_as_what_it_is() {
         "module `Claim` names the plugin `navree-flags`, which is another crate's; a plugin's modules are in its own crate (a ClientModule names it through an options type of the plugin's crate)"
     );
 }
+
+// A plugin's commands.
+
+/// The listing plugin: its crate is this module.
+mod navree_plugin_listing {
+    use navree_kernel::{CommandSpec, Module, ModuleBuilder, PluginInfo};
+
+    /// The plugin's info.
+    const LISTING: PluginInfo =
+        PluginInfo::new("navree-plugin-listing", module_path!(), "listing", "1.0.0");
+
+    /// The plugin's module: it registers the command `.0`.
+    pub struct Commands(pub &'static str);
+
+    impl Module for Commands {
+        fn register(&self, m: &mut ModuleBuilder) {
+            let command = CommandSpec::new(self.0, "The plugin's", |_, _| async { Ok(()) });
+            m.plugin(LISTING).command(command);
+        }
+    }
+}
+
+/// A module of the app that registers the command `.0`.
+struct AppCommand(&'static str);
+
+impl Module for AppCommand {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let command = CommandSpec::new(self.0, "The app's", |_, _| async { Ok(()) });
+        m.command(command);
+    }
+}
+
+#[test]
+fn a_plugin_may_not_take_the_name_of_a_framework_command() {
+    use navree_plugin_listing::Commands;
+    // A plugin's `plugins` would print its own listing in place of the framework's, and its
+    // `check` would stand beside the framework's in the app's list.
+    for name in ["plugins", "plugin:publish", "check", "help"] {
+        assert_eq!(
+            errors(Navree::app().module(Commands(name))),
+            format!(
+                "plugin `navree-plugin-listing` registers the command `{name}` in `Commands`, a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise"
+            )
+        );
+    }
+    // A command of its own name is the plugin's, and the app's module takes the built-in's
+    // name beside it, as before.
+    Navree::app()
+        .module(Commands("listing:show"))
+        .module(AppCommand("plugins"))
+        .validate()
+        .expect("the plugin's own command, and the app's `plugins`");
+}

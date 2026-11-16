@@ -156,8 +156,9 @@ impl ModuleBuilder {
     /// strategy, the workspace gate, where native clients sign in, the options
     /// of access, workspaces, authentication or the admin panel, the app's
     /// shell, its clock, or an observer of every commit, nor hook a model of
-    /// another crate: the boot fails, and the app registers the plugin's from a
-    /// module of its own.
+    /// another crate, nor register a command with the name of one of the
+    /// framework's own (`plugins`, `check`, ..): the boot fails, and the app
+    /// registers the plugin's from a module of its own.
     ///
     /// ```no_run
     /// use navree_kernel::{Module, ModuleBuilder, Navree};
@@ -289,7 +290,9 @@ impl ModuleBuilder {
         self
     }
 
-    /// Registers a CLI command (names must be unique across the app).
+    /// Registers a CLI command (names must be unique across the app). A module
+    /// of a plugin that is not one of the framework's own may not take the name
+    /// of one of the framework's commands (`plugins`, `check`, `help`, ..).
     pub fn command(&mut self, cmd: CommandSpec) -> &mut Self {
         self.commands.push(cmd);
         self

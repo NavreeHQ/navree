@@ -1406,6 +1406,7 @@ fn is_plugin_error(error: &KernelError) -> bool {
             | KernelError::PluginConfiguresModule { .. }
             | KernelError::PluginProvidesAppOnly { .. }
             | KernelError::PluginHooksModel { .. }
+            | KernelError::PluginCommand { .. }
     )
 }
 

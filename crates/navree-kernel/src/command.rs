@@ -104,6 +104,22 @@ pub(crate) const BUILT_INS: [(&str, &str); 5] = [
 /// Built-in commands that give way to a module command of the same name.
 pub(crate) const YIELDING: [&str; 2] = ["plugins", "plugin:publish"];
 
+/// The names of the framework's own commands: the built-ins, and the other
+/// names [`AppBuilder::run_with_args`](crate::AppBuilder::run_with_args) takes
+/// for them. A module of a plugin that is not first-party may not register a
+/// command of one of these names (the app's own module may, and runs in place
+/// of a built-in that yields).
+pub(crate) const FRAMEWORK_COMMANDS: [&str; 8] = [
+    "--help",
+    "-h",
+    "check",
+    "help",
+    "introspect",
+    "list",
+    "plugin:publish",
+    "plugins",
+];
+
 /// The built-in commands of an app with `report`'s modules, as (usage,
 /// about): [`BUILT_INS`] without one that yields to a module command of its
 /// name.
