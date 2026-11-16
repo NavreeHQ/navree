@@ -282,7 +282,7 @@ pub use options::{
     SessionAuthOptions, TrustedIssuerOptions, TwoFactorOptions, VerificationOptions,
 };
 #[cfg(feature = "ui")]
-pub use pages::AuthPages;
+pub use pages::{AuthForm, AuthPages, AuthWords};
 pub use passkeys::confirm::{CONFIRM_TTL_SECS, ConfirmAction};
 pub use passkeys::controller::{ConfirmOptionsInput, ConfirmPasskeyInput};
 pub use passkeys::controller::{

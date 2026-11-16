@@ -4,6 +4,10 @@
 mod account;
 mod passkey;
 mod passwordless;
+mod words;
+
+pub use words::AuthWords;
+use words::{Label, Page};
 
 use std::collections::BTreeMap;
 use std::convert::Infallible;
@@ -26,7 +30,7 @@ use navree_ui::form::{FieldErrors, FormView, Rejected};
 use navree_ui::pages::{PagesOptions, ReturnTo};
 use navree_ui::theme::{Appearance, Theme, ThemeMenu};
 use navree_ui::{
-    Alert, AlertTone, AppFont, AppSheet, AuthLayout, Button, Card, Element, Form, LocalHref,
+    Alert, AlertTone, AppFont, AppSheet, AuthLayout, Button, ButtonVariant, Card, Form, LocalHref,
     NativeCall, NativeFamily, NativeThen, Node, Presented, Reply, Shell, Stack, Submit, Text,
     Validate, View, el,
 };
@@ -100,6 +104,17 @@ const SIGN_UP_PER_MINUTE: u32 = 5;
 /// panel beside the form and [`theme_menu`](Self::theme_menu) a menu of light
 /// and dark in the corner ([`AuthLayout`]).
 ///
+/// What the pages say and how they draw it are options too, none of which
+/// changes a route, a check or an answer: [`words`](Self::words) gives each
+/// page's title, the line under it and the fields' labels in the app's words
+/// ([`AuthWords`]); [`form_style`](Self::form_style) draws the form with no card
+/// ([`AuthForm::Plain`]); [`app_name_line`](Self::app_name_line) leaves out the
+/// line with the app's name; [`links_as`](Self::links_as) draws the links under
+/// a form as buttons; [`layout`](Self::layout) sets the [`AuthLayout`]'s own
+/// options; [`setup_sign_out`](Self::setup_sign_out) puts a Sign out button on
+/// the two-factor set-up page. An app that uses none of them gets the pages it
+/// always got.
+///
 /// ```no_run
 /// use navree_auth::{AuthModule, AuthPages};
 /// use navree_kernel::Navree;
@@ -132,6 +147,24 @@ pub struct AuthPages {
     aside: Option<Node>,
     theme_menu: bool,
     dress: Option<fn(View) -> View>,
+    words: AuthWords,
+    form: AuthForm,
+    no_app_name_line: bool,
+    links: Option<ButtonVariant>,
+    layout: Option<fn(AuthLayout) -> AuthLayout>,
+    setup_sign_out: bool,
+}
+
+/// How the sign-in pages draw their form ([`AuthPages::form_style`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AuthForm {
+    /// The title, then the form in a card that holds the line about it: the default.
+    #[default]
+    Card,
+    /// The title, the line about the form under it as quiet text, then the form on the
+    /// page, with no card around it.
+    Plain,
 }
 
 impl AuthPages {
@@ -240,6 +273,58 @@ impl AuthPages {
     /// of `ui.home`.
     pub fn home(mut self, path: impl Into<String>) -> Self {
         self.home = Some(path.into());
+        self
+    }
+
+    /// What the pages say: each page's title (its tab's too) and the line under it, and
+    /// the labels of their fields, in the app's words or language. A word the app doesn't
+    /// give is the page's own. The words are text, escaped when drawn; the fields post
+    /// under their own names as before.
+    pub fn words(mut self, words: AuthWords) -> Self {
+        self.words = words;
+        self
+    }
+
+    /// How each page draws its form: in a card under the title ([`AuthForm::Card`], the
+    /// default), or on the page with no card around it, the line about it under the title
+    /// ([`AuthForm::Plain`]).
+    pub fn form_style(mut self, style: AuthForm) -> Self {
+        self.form = style;
+        self
+    }
+
+    /// Whether the line with the app's name ([`app_name`](Self::app_name)) stands over
+    /// each page's title. It does by default; without it the panel beside the form is
+    /// still named after the app.
+    pub fn app_name_line(mut self, shown: bool) -> Self {
+        self.no_app_name_line = !shown;
+        self
+    }
+
+    /// Draws the links under a form (a forgotten password, the other ways in, back to
+    /// signing in) as buttons of `variant`, as wide as the form, to the same places, in
+    /// place of plain links.
+    pub fn links_as(mut self, variant: ButtonVariant) -> Self {
+        self.links = Some(variant);
+        self
+    }
+
+    /// Hands every page's [`AuthLayout`] to `dress` before it is drawn, for the layout's
+    /// own options: the panel after the form, inset and on the inverse surface, the app's
+    /// brand at the top of the form's column and a line at its foot, the form's width.
+    /// [`aside`](Self::aside) and [`theme_menu`](Self::theme_menu) have set the layout's
+    /// panel and corner by then.
+    pub fn layout(mut self, dress: fn(AuthLayout) -> AuthLayout) -> Self {
+        self.layout = Some(dress);
+        self
+    }
+
+    /// Puts a Sign out button on the two-factor set-up page (`/account/two-factor`), so a
+    /// user a policy makes set it up can leave without doing so. It posts to `POST
+    /// /sign-out` with the session's token, as the shell's user menu does; that route is
+    /// one a user who must set two-factor authentication up reaches.
+    pub fn setup_sign_out(mut self) -> Self {
+        self.setup_sign_out = true;
         self
     }
 }
@@ -416,6 +501,12 @@ impl Paths {
                 theme_menu: pages.theme_menu,
                 dress: pages.dress,
                 app_name: pages.app_name.clone(),
+                words: pages.words.clone(),
+                form: pages.form,
+                app_name_line: !pages.no_app_name_line,
+                links: pages.links,
+                layout: pages.layout,
+                setup_sign_out: pages.setup_sign_out,
             }),
             app_name: pages.app_name.clone(),
             two_factor: format!("{sign_in}/two-factor"),
@@ -619,6 +710,18 @@ struct Dressing {
     theme_menu: bool,
     dress: Option<fn(View) -> View>,
     app_name: Option<String>,
+    /// What the pages say.
+    words: AuthWords,
+    /// How a page draws its form.
+    form: AuthForm,
+    /// Whether the app's name stands over each page's title.
+    app_name_line: bool,
+    /// The look of the links under a form, when they are buttons.
+    links: Option<ButtonVariant>,
+    /// What the app sets on each page's layout.
+    layout: Option<fn(AuthLayout) -> AuthLayout>,
+    /// Whether the set-up page has a Sign out button.
+    setup_sign_out: bool,
 }
 
 /// How one request's page looks: the reader's appearance, and the address the
@@ -849,24 +952,38 @@ where
     }
 }
 
-/// A page holding one card, in the app's look.
-fn page(paths: &Paths, title: &'static str, description: &'static str, body: Node) -> View {
+/// A page holding one form, in the app's look and words: in a card, or on the page.
+fn page(paths: &Paths, kind: Page, body: Node) -> View {
     let dressing = &paths.dressing;
+    let title = dressing.words.title(kind);
+    let lead = dressing.words.lead(kind).to_owned();
     let look = LOOK.try_with(Clone::clone).unwrap_or_else(|_| Look {
         appearance: dressing.appearance.clone(),
         back: paths.sign_in.clone(),
         expired: false,
     });
     // The sign-in page says it in its own notice.
-    let expired = (look.expired && title != "Sign in")
+    let expired = (look.expired && kind != Page::SignIn)
         .then(|| Alert::new(AlertTone::Warning).title("Your session expired. Please try again."));
-    let heading = paths.app_name.clone().map(Text::muted);
-    let card = Stack::gap(4).children((
-        heading,
-        el("h1").slot("page-title").child(title),
-        expired,
-        Card::new().description(description).body(body),
-    ));
+    let heading = paths
+        .app_name
+        .clone()
+        .filter(|_| dressing.app_name_line)
+        .map(Text::muted);
+    let title_line = el("h1").slot("page-title").child(title.to_owned());
+    let card = match dressing.form {
+        AuthForm::Card => Stack::gap(4).children((
+            heading,
+            title_line,
+            expired,
+            Card::new().description(lead).body(body),
+        )),
+        AuthForm::Plain => Stack::gap(6).children((
+            Stack::gap(2).children((heading, title_line, Text::muted(lead))),
+            expired,
+            body,
+        )),
+    };
     let mut layout = AuthLayout::new(card);
     if let Some(aside) = &dressing.aside {
         layout = layout.aside(aside.clone());
@@ -889,6 +1006,9 @@ fn page(paths: &Paths, title: &'static str, description: &'static str, body: Nod
             view = view.theme_sheet(&theme);
         }
         layout = layout.corner(menu);
+    }
+    if let Some(dress) = dressing.layout {
+        layout = dress(layout);
     }
     view = view.body(layout);
     if let Some(appearance) = look.appearance {
@@ -917,21 +1037,48 @@ fn page(paths: &Paths, title: &'static str, description: &'static str, body: Nod
     }
 }
 
-/// A link under a form.
-fn link(text: &'static str, href: &str) -> Node {
+/// A link under a form: plain, or a button as wide as the form when the app asks
+/// ([`AuthPages::links_as`]).
+fn link(paths: &Paths, text: &'static str, href: &str) -> Node {
     // On a screen of a native app each is a link of its own, which leads on with a
     // way back; in a browser it is the link it was.
-    el("a")
-        .href(href)
-        .child(text)
-        .presented(Presented::Push)
-        .into()
+    match paths.dressing.links {
+        Some(variant) => Button::new(text)
+            .variant(variant)
+            .href(href)
+            .block()
+            .presented(Presented::Push)
+            .into(),
+        None => el("a")
+            .href(href)
+            .child(text)
+            .presented(Presented::Push)
+            .into(),
+    }
 }
 
 /// A link to a page that loads a script of its own: the browser reloads the
 /// whole page, so the script runs.
-fn plain_link(text: &'static str, href: &str) -> Element {
-    el("a").href(href).flag("data-ui-noboost", true).child(text)
+///
+/// In an app that can, `call` starts on the device what the page would (the system's
+/// own sheet); every other client follows the link to the page.
+fn plain_link(paths: &Paths, text: &'static str, href: &str, call: Option<NativeCall>) -> Node {
+    let Some(variant) = paths.dressing.links else {
+        let link = el("a").href(href).flag("data-ui-noboost", true).child(text);
+        return match call {
+            Some(call) => link.native_call(call).into(),
+            None => link.into(),
+        };
+    };
+    let button = Button::new(text).variant(variant).href(href).block();
+    let mut button: Node = match call {
+        Some(call) => button.native_call(call).into(),
+        None => button.into(),
+    };
+    if let Node::Element(element) = &mut button {
+        *element = std::mem::replace(element, el("a")).flag("data-ui-noboost", true);
+    }
+    button
 }
 
 /// What the sign-in page offers the native client that asks, where its app can
@@ -945,6 +1092,23 @@ struct NativeWays {
     sheets: Vec<(&'static str, NativeCall)>,
 }
 
+impl Paths {
+    /// `form` with the labels the app gave its `fields` ([`AuthWords`]); a field the app
+    /// gave no label keeps its own.
+    fn labelled<T: navree_ui::form::Form>(
+        &self,
+        mut form: FormView<T>,
+        fields: &[(&str, Label)],
+    ) -> FormView<T> {
+        for (field, label) in fields {
+            if let Some(text) = self.dressing.words.label_of(*label) {
+                form = form.label(field, text);
+            }
+        }
+        form
+    }
+}
+
 /// The sign-in page around `form`; `next` travels to the other ways in.
 fn sign_in_page(
     paths: &Paths,
@@ -953,23 +1117,22 @@ fn sign_in_page(
     next: Option<&str>,
     ways: NativeWays,
 ) -> View {
-    let mut others = vec![link("Forgot your password?", &paths.forgot)];
+    let mut others = vec![link(paths, "Forgot your password?", &paths.forgot)];
     if let Some(sign_up) = &paths.sign_up {
         others.push(link(
+            paths,
             "New here? Create an account",
             paths.with_next(sign_up, next).as_str(),
         ));
     }
     if paths.has_passkey {
-        let passkey = plain_link(
+        others.push(plain_link(
+            paths,
             "Sign in with a passkey",
             paths.with_next(&paths.passkey, next).as_str(),
-        );
-        others.push(match ways.passkey {
             // In an app that can, the system's own sheet; the page for every other client.
-            Some(call) => passkey.native_call(call).into(),
-            None => passkey.into(),
-        });
+            ways.passkey,
+        ));
     }
     let sheets: Vec<Node> = ways
         .sheets
@@ -979,20 +1142,29 @@ fn sign_in_page(
     let sheets = (!sheets.is_empty()).then(|| Node::from(Stack::gap(2).children(sheets)));
     if paths.has_magic_link {
         others.push(link(
+            paths,
             "Email me a sign-in link",
             paths.with_next(&paths.magic_link, next).as_str(),
         ));
     }
     if paths.has_code {
         others.push(link(
+            paths,
             "Email me a sign-in code",
             paths.with_next(&paths.code, next).as_str(),
         ));
     }
+    let form = paths.labelled(
+        form,
+        &[
+            ("email", Label::Email),
+            ("password", Label::Password),
+            ("remember", Label::Remember),
+        ],
+    );
     page(
         paths,
-        "Sign in",
-        "Use the email address and password of your account.",
+        Page::SignIn,
         Stack::gap(4)
             .children((
                 notice,
@@ -1054,14 +1226,23 @@ fn onward(target: LocalHref) -> Reply {
 
 /// The sign-up page around `form`.
 fn sign_up_page(paths: &Paths, form: FormView<SignUpForm>, next: Option<&str>) -> View {
+    let form = paths.labelled(
+        form,
+        &[
+            ("name", Label::Name),
+            ("email", Label::Email),
+            ("password", Label::Password),
+            ("password_confirmation", Label::PasswordAgain),
+        ],
+    );
     page(
         paths,
-        "Create an account",
-        "Your name, your email address and a password.",
+        Page::SignUp,
         Stack::gap(4)
             .children((
                 Node::from(form.one_column().submit("Create the account")),
                 link(
+                    paths,
                     "Already have an account? Sign in",
                     paths.with_next(&paths.sign_in, next).as_str(),
                 ),
@@ -1071,14 +1252,20 @@ fn sign_up_page(paths: &Paths, form: FormView<SignUpForm>, next: Option<&str>) -
 }
 
 fn two_factor_page(paths: &Paths, form: FormView<TwoFactorForm>) -> View {
+    let form = paths.labelled(
+        form,
+        &[
+            ("code", Label::AuthenticatorCode),
+            ("recovery_code", Label::RecoveryCode),
+        ],
+    );
     page(
         paths,
-        "Two-factor authentication",
-        "Enter the code your authenticator app shows now, or one of your recovery codes.",
+        Page::TwoFactor,
         Stack::gap(4)
             .children((
                 Node::from(form.one_column().submit("Continue")),
-                link("Sign in as someone else", &paths.sign_in),
+                link(paths, "Sign in as someone else", &paths.sign_in),
             ))
             .into(),
     )
@@ -1090,15 +1277,15 @@ fn forgot_page(paths: &Paths, form: FormView<ForgotForm>, sent: bool) -> View {
             "If an account uses that address, we have sent it a link to choose a new password.",
         )
     });
+    let form = paths.labelled(form, &[("email", Label::Email)]);
     page(
         paths,
-        "Forgot your password?",
-        "We will email you a link to choose a new one.",
+        Page::ForgotPassword,
         Stack::gap(4)
             .children((
                 sent,
                 Node::from(form.one_column().submit("Send the link")),
-                link("Back to sign in", &paths.sign_in),
+                link(paths, "Back to sign in", &paths.sign_in),
             ))
             .into(),
     )
@@ -1112,15 +1299,21 @@ fn reset_page(paths: &Paths, form: FormView<ResetForm>, refused: bool) -> View {
                 "Ask for a new one from the forgotten password page.",
             ))
     });
+    let form = paths.labelled(
+        form,
+        &[
+            ("password", Label::NewPassword),
+            ("password_confirmation", Label::NewPasswordAgain),
+        ],
+    );
     page(
         paths,
-        "Choose a new password",
-        "Changing it signs you out everywhere.",
+        Page::ResetPassword,
         Stack::gap(4)
             .children((
                 refused,
                 Node::from(form.one_column().submit("Change the password")),
-                link("Ask for a new link", &paths.forgot),
+                link(paths, "Ask for a new link", &paths.forgot),
             ))
             .into(),
     )

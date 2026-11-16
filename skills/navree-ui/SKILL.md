@@ -491,7 +491,9 @@ picks the control:
 `autofocus`, `wide` and `skip` (never drawn, never read). `FormView` draws
 the form: `.post(url)`, `.submit(label)`, `.cancel(label, href)`,
 `.options(field, choices)`, `.choices(field, choices)`, `.search(field,
-url)`, `.one_column()`, `.csrf(token)` and `.id_prefix(prefix)`, which keeps
+url)`, `.one_column()`, `.label(field, text)` (a label chosen at run time,
+from words the app knows, never a reader's text), `.csrf(token)` and
+`.id_prefix(prefix)`, which keeps
 two forms of one type on a page (two dialogs) from repeating their ids; call
 `Rejected::id_prefix` with the same prefix when you answer a refusal.
 

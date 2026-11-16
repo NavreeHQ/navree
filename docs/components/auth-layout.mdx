@@ -63,7 +63,7 @@ AuthLayout::new(form)
     .body_width(400)
 ```
 
-These options are styled in a small stylesheet of their own, which a page links only when its layout uses one. A layout with none of them is drawn exactly as before. The panel's colours and corner come from your theme, so a theme sets them for every page at once: its `Roles::inverse` for the surface, text and lines, and its `Corners::panel` for the corner.
+navree-auth's sign-in pages take them through `AuthPages::layout`, a function that gets each page's layout ([how](/docs/basics/sessions-and-csrf/#in-the-apps-words-and-the-designs-layout)). These options are styled in a small stylesheet of their own, which a page links only when its layout uses one. A layout with none of them is drawn exactly as before. The panel's colours and corner come from your theme, so a theme sets them for every page at once: its `Roles::inverse` for the surface, text and lines, and its `Corners::panel` for the corner.
 
 ## Keyboard and accessibility
 

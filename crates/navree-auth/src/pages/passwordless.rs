@@ -16,7 +16,8 @@ use navree_ui::{Alert, AlertTone, Form, Node, Reply, Stack, Submit, Validate};
 use serde::Deserialize;
 
 use super::{
-    PagesController, Paths, api, field_error, link, page, signed_in_redirect, too_many, wait_text,
+    Label, Page, PagesController, Paths, api, field_error, link, page, signed_in_redirect,
+    too_many, wait_text,
 };
 use crate::{AuthError, ClientMeta, SessionSignIn};
 
@@ -119,16 +120,16 @@ fn link_request_page(
             .title("If an account uses that address, we have sent it a link to sign in with.")
     });
     let refused = refused.map(|message| Alert::new(AlertTone::Danger).title(message));
+    let form = paths.labelled(form, &[("email", Label::Email)]);
     page(
         paths,
-        "Email me a sign-in link",
-        "We will email you a link that signs you in, without a password.",
+        Page::MagicLink,
         Stack::gap(4)
             .children((
                 sent,
                 refused,
                 Node::from(form.one_column().submit("Send the link")),
-                link("Sign in with a password", &paths.sign_in),
+                link(paths, "Sign in with a password", &paths.sign_in),
             ))
             .into(),
     )
@@ -148,16 +149,16 @@ fn link_confirm_page(
             ))
     });
     let refused = refused.map(|message| Alert::new(AlertTone::Danger).title(message));
+    let form = paths.labelled(form, &[("remember", Label::Remember)]);
     page(
         paths,
-        "Continue signing in",
-        "Press the button to finish signing in with the link from your email.",
+        Page::MagicLinkConfirm,
         Stack::gap(4)
             .children((
                 expired,
                 refused,
                 Node::from(form.one_column().submit("Sign in")),
-                link("Ask for a new link", &paths.magic_link),
+                link(paths, "Ask for a new link", &paths.magic_link),
             ))
             .into(),
     )
@@ -169,15 +170,15 @@ fn code_request_page(
     refused: Option<String>,
 ) -> navree_ui::View {
     let refused = refused.map(|message| Alert::new(AlertTone::Danger).title(message));
+    let form = paths.labelled(form, &[("email", Label::Email)]);
     page(
         paths,
-        "Email me a sign-in code",
-        "We will email you a short code that signs you in, without a password.",
+        Page::Code,
         Stack::gap(4)
             .children((
                 refused,
                 Node::from(form.one_column().submit("Send the code")),
-                link("Sign in with a password", &paths.sign_in),
+                link(paths, "Sign in with a password", &paths.sign_in),
             ))
             .into(),
     )
@@ -189,15 +190,18 @@ fn code_page(paths: &Paths, form: FormView<CodeForm>, sent: bool) -> navree_ui::
             "If an account uses that address, we have sent it a code. It works for a few minutes.",
         )
     });
+    let form = paths.labelled(
+        form,
+        &[("code", Label::EmailedCode), ("remember", Label::Remember)],
+    );
     page(
         paths,
-        "Enter the code",
-        "Type the code from the email we sent you.",
+        Page::CodeEntry,
         Stack::gap(4)
             .children((
                 sent,
                 Node::from(form.one_column().submit("Sign in")),
-                link("Ask for a new code", &paths.code),
+                link(paths, "Ask for a new code", &paths.code),
             ))
             .into(),
     )

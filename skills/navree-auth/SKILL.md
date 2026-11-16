@@ -71,6 +71,9 @@ Details of the account flows: `references/account-flows.md`. Sessions,
 step-up, impersonation, passwordless, platform and token exchange, and signing
 a browser in on the session cookie (the Navree UI pages, `AuthPages`, and the
 JSON routes of a single-page app): `references/sessions-and-sign-in.md`.
+`AuthPages` says the app's own words (`AuthWords`) and draws a form with no
+card (`AuthForm::Plain`), links as buttons and the layout a design asks for,
+all as typed options: see the same file.
 
 ## Sensitive routes: step-up and impersonation guards
 

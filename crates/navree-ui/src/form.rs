@@ -1428,6 +1428,58 @@ impl<T: Form> FormView<T> {
         self
     }
 
+    /// Gives the field `field` the label `label` in place of the one its type gives (its doc
+    /// comment, or `#[form(label = "...")]`): words chosen when the page is drawn, such as an
+    /// app's own settings give. The label is text, escaped when it is drawn. The field still
+    /// posts under its own name, and the messages of the form's own checks still name it by
+    /// its type's label. A field a [`FieldControl`] draws is given it as its
+    /// [`ControlField::label`]. A name the form has no field of changes nothing.
+    ///
+    /// Each label is kept for as long as the program runs, once for each different text, as a
+    /// [`DescribedForm`](crate::described::DescribedForm)'s are: give it words from a set the
+    /// app knows (its settings, its languages), never text a reader sent.
+    ///
+    /// ```
+    /// # // In navree-ui's own examples the derive names the crate `crate`: these are its paths.
+    /// # use navree_ui::{InputKind, form};
+    /// use navree_ui::form::FormView;
+    /// use navree_ui::{Form, Validate, render};
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Deserialize, Validate, Form)]
+    /// struct SignIn {
+    ///     /// Email
+    ///     #[validate(email)]
+    ///     email: String,
+    /// }
+    ///
+    /// # fn main() {
+    /// let html = render(&FormView::<SignIn>::new().label("email", "Work email").into());
+    /// assert!(html.contains(r#"<label data-slot="label" for="sign-in-email">Work email</label>"#));
+    /// assert!(html.contains(r#"name="email""#));
+    /// # }
+    /// ```
+    pub fn label(mut self, field: &str, label: impl Into<String>) -> Self {
+        let label = label.into();
+        let differs = |known: &FormField| known.name == field && known.label != label;
+        if self.shape.fields.iter().any(differs) {
+            let fields = self
+                .shape
+                .fields
+                .iter()
+                .map(|known| {
+                    let mut known = *known;
+                    if known.name == field {
+                        known.label = crate::described::keep_str(&label);
+                    }
+                    known
+                })
+                .collect();
+            self.shape.fields = crate::described::keep_slice(fields);
+        }
+        self
+    }
+
     /// Adds a hidden field that posts `value` as `name`, as it is: an id, or the step
     /// the form is at. The field is the page's, not one of the form's own, so a form
     /// read back with [`Submit`] drops it.

@@ -223,6 +223,19 @@ hold for both).
   gives it a call; every other native client gets it in its web view, as
   before, and so are the other pages. An app whose build opens `/sign-in` in
   the system's sign-in session never asks for the page and is offered no call.
+- What the pages say and show, as typed options (no markup, no CSS):
+  `words(AuthWords::new().sign_in(title, lead).email_label("Work email"))`
+  gives each page's title and the line under it and the fields' labels (the
+  pages' own English by default; text, escaped); `form_style(AuthForm::Plain)`
+  draws the form with no card (the line under the title as quiet text);
+  `app_name_line(false)` drops the line with the app's name over the title
+  (the panel keeps the name); `links_as(ButtonVariant::Ghost)` draws the
+  links under a form as full-width buttons to the same places;
+  `layout(|l| l.aside_end().aside_inset().aside_inverse().brand(..))` hands
+  every page's `AuthLayout` to a function of yours; `setup_sign_out()` puts a
+  Sign out button on the set-up page that posts to `POST /sign-out` with the
+  session's token. None of them changes a route, a check or an answer, and
+  an app that uses none of them gets the pages it always got.
 - `POST /api/auth/session/login`, `/session/2fa/verify`,
   `/session/magic-link/verify` and `/session/otp/verify` are the JSON routes of
   a single-page app on the cookie (no token; the `X-XSRF-TOKEN` header).

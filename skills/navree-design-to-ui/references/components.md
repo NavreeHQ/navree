@@ -295,7 +295,8 @@ second at the most.
 | How the browser's tab reads | `Shell::title_template("{} · App")`, `AppPage::document_title(..)` |
 | Sign-in and sign-up pages with the app's panel beside the form | `AuthPages` with `.sign_up()`, `.aside(..)`, `.theme_menu()`; a guest page of your own in an `AuthLayout` |
 | A sign-in board with the panel on the right, inset from the edges with large corners, dark on a light page | `AuthLayout::aside_end()`, `.aside_inset()` (corner from the theme's `Corners::panel`), `.aside_inverse()` (colours from `Roles::inverse`) |
-| A brand above the sign-in form that stays on a phone, a footer line under it, a narrower form column | `AuthLayout::brand(Brand::new(..).mark(..))`, `.footer(..)`, `.body_width(400)` |
+| A brand above the sign-in form that stays on a phone, a footer line under it, a narrower form column | `AuthLayout::brand(Brand::new(..).mark(..))`, `.footer(..)`, `.body_width(400)`; on `AuthPages`, the same through `.layout(\|l\| l.brand(..)..)` |
+| A sign-in page with its own heading and line, "Work email", no card around the form, no product-name line, links as ghost buttons | `AuthPages::words(AuthWords::new().sign_in(title, lead).email_label("Work email"))`, `.form_style(AuthForm::Plain)`, `.app_name_line(false)`, `.links_as(ButtonVariant::Ghost)` |
 
 ## Public pages
 

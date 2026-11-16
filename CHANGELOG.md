@@ -148,6 +148,28 @@ every `@navree/*` package carries the same version.
   brand out, as it does the panel, and says the footer's line after the form. The six methods
   are new inherent methods of `AuthLayout`: an app whose own extension trait gives it a method
   of the same name calls it through the trait.
+- `AuthPages` says the app's own words and draws its pages the way a design asks, with typed
+  options only. `words(AuthWords)` gives each page's title (its tab's too) and the line under
+  it, for the sign-in, sign-up, second-factor, password, sign-in link and code, passkey and
+  two-factor set-up pages, and the labels of their fields (`email_label("Work email")` and
+  nine more); a word an app doesn't give is the page's own English, and every word is text,
+  escaped. `form_style(AuthForm::Plain)` draws the form with no card, the line under the title
+  as quiet text; `app_name_line(false)` leaves out the line with the app's name over the
+  title; `links_as(ButtonVariant)` draws the links under a form as buttons as wide as the form,
+  to the same places; `layout(fn(AuthLayout) -> AuthLayout)` sets the layout's own options on
+  every page; `setup_sign_out()` puts a Sign out button on the two-factor set-up page, which
+  posts to `POST /sign-out` with the session's token, a route a user who must set two-factor
+  authentication up already reaches. No route, check, answer or log changes, and an app that
+  uses none of the options gets the pages it got before, held byte for byte by a test.
+  `AuthForm` is `#[non_exhaustive]`. The six methods are new inherent methods of `AuthPages`:
+  an app whose own extension trait gives it a method of the same name calls it through the
+  trait.
+- `FormView::label(field, text)` gives a derived form's field a label chosen when the page is
+  drawn, in place of its doc comment: words an app's settings give. The field posts under its
+  name as before, and the label is text. Each different label is kept for the life of the
+  program, as a described form's are, so it is for words the app knows, never a reader's
+  text. A new inherent method: an app whose own extension trait gives `FormView` a `label`
+  method calls it through the trait.
 
 ### Fixed
 

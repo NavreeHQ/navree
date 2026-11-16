@@ -550,6 +550,15 @@ the reader's own theme and mode laid over them.
   with no shell, or a look of their own; `aside(..)` puts the app's panel
   beside the form on a wide screen; `theme_menu()` puts light and dark in
   the corner; `view(fn)` dresses each page last (its language, say).
+- A design's own words and look are options too, never markup:
+  `words(AuthWords::new().sign_in(title, lead).email_label("Work email"))`
+  (every page's title and line, every field's label; the pages' English by
+  default), `form_style(AuthForm::Plain)` (no card around the form),
+  `app_name_line(false)` (no line with the app's name over the title),
+  `links_as(ButtonVariant::Ghost)` (the links under a form as full-width
+  buttons), `layout(|l| l.aside_end().aside_inset().aside_inverse().brand(..))`
+  (the `AuthLayout` options below, on every page) and `setup_sign_out()` (a
+  Sign out button on the two-factor set-up page).
 
 The page around each form is the auth layout (`AuthLayout`): the form, and
 the app's panel beside it on a wide screen (alone on a phone). Use it for a

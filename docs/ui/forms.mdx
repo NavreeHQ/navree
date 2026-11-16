@@ -85,6 +85,8 @@ FormView::<NewDeal>::new()
 
 Fields sit in two columns where there is room, and a `wide` field takes both; `FormView::one_column()` puts each field on its own line.
 
+`FormView::label(field, text)` gives a field a label chosen when the page is drawn, in place of its doc comment or `label = "..."`: words an app's settings give, such as "Work email" for `email`. The label is text, escaped. The field still posts under its own name, so the handler reads it as before, and the messages of the form's own checks still name the field by the label its type gives; a name the form has no field of changes nothing.
+
 ## Two forms of one type on a page
 
 Every id a form writes is made of its type's id and the field's name (`new-deal-title`), so the same form drawn twice, as in two dialogs, repeats them: a label would find the wrong field, and an `aria-describedby` the wrong help. `FormView::id_prefix` puts a prefix and a hyphen before every id the form writes and every reference to one: the form's own id, each field's, the ids of its help and its error, and those of the pickers, uploads, sliders and controls of your own it draws.
