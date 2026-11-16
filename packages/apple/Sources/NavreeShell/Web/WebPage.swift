@@ -10,7 +10,9 @@ import WebKit
 /// What a page in it can do is what a browser tab on the same site can do, and
 /// nothing more: there is no script bridge to the app, no pop-up, no file. A
 /// link the person taps is the core's to follow (a native screen, the system
-/// browser, or nothing): the web view's own navigation is cancelled.
+/// browser, or nothing): the web view's own navigation is cancelled. What a
+/// page does by itself (its script, a redirect) stays on the origin or goes
+/// nowhere, and is never told to the core as a tap (``WebNavigationRules``).
 struct WebPageView {
     let url: URL
     let serial: Int
@@ -134,22 +136,25 @@ struct WebPageView {
             _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction
         ) async -> WKNavigationActionPolicy {
             guard let url = navigationAction.request.url else { return .cancel }
-            let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
-            if !isMainFrame {
-                return url.scheme == "about" || isThePagesOwn(url) ? .allow : .cancel
-            }
-            if url == loaded && navigationAction.navigationType != .linkActivated {
+            let mainFrame = navigationAction.targetFrame?.isMainFrame ?? true
+            let decision = WebNavigationRules.decide(
+                linkActivated: navigationAction.navigationType == .linkActivated, mainFrame: mainFrame,
+                ours: isThePagesOwn(url), loaded: url == loaded, empty: url.scheme == "about"
+            )
+            switch decision {
+            case .allow:
                 return .allow
-            }
-            if navigationAction.navigationType == .linkActivated || !isThePagesOwn(url) {
-                // A link, or a page that would leave for elsewhere: the core decides.
+            case .tap:
+                // A link the person tapped: the core decides where it leads.
                 parent.client.send(.webLink(screen: parent.screen, url: url.absoluteString))
-                // A first page stopped on its way is a screen that failed, not a blank one.
-                if !shown { parent.failed() }
-                return .cancel
+            case .cancel:
+                // The page's script, a redirect or a form would leave the
+                // origin: it goes nowhere, and nobody is told it was a tap.
+                break
             }
-            // A form posted, a redirect of the page's own, the page's own reload: it stays.
-            return .allow
+            // A first page stopped on its way is a screen that failed, not a blank one.
+            if mainFrame, !shown { parent.failed() }
+            return .cancel
         }
 
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
@@ -191,8 +196,11 @@ struct WebPageView {
             _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
             for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
-            // A page that asks for a new window gets a link, which the core follows.
-            if let url = navigationAction.request.url {
+            // A link the person tapped that asks for a new window is a link,
+            // which the core follows; a window a script asks for is not
+            // opened, and nobody is told.
+            let linkActivated = navigationAction.navigationType == .linkActivated
+            if WebNavigationRules.newWindow(linkActivated: linkActivated) == .tap, let url = navigationAction.request.url {
                 parent.client.send(.webLink(screen: parent.screen, url: url.absoluteString))
             }
             return nil
