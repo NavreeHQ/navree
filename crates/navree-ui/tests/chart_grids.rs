@@ -303,6 +303,30 @@ fn a_heat_map_draws_a_cell_for_each_row_at_each_column_one_legend_and_its_table(
     );
 }
 
+/// A cell with no data and the legend's key for it are drawn alike: hollow, with a dashed edge.
+#[test]
+fn the_key_for_no_data_is_hollow_like_the_cell() {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("styles/extra/chart-grids.css");
+    let css = std::fs::read_to_string(path).unwrap();
+    assert!(
+        css.contains(
+            ":is([data-slot=heat-cell],[data-slot=heat-key])[data-level=none]{background:none;outline:1px dashed"
+        ),
+        "the rule for no data draws the key too"
+    );
+    let html = render(
+        &Heatmap::new("Gaps")
+            .columns(["a", "b"])
+            .row("r", [Some(1.0), None])
+            .into(),
+    );
+    assert!(
+        html.contains(r#"<li><span data-slot="heat-key" data-level="none"></span>No data</li>"#),
+        "{html}"
+    );
+}
+
 #[test]
 fn a_heat_maps_scale_names_its_bands_in_the_one_legend() {
     let html = render(
