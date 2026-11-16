@@ -138,7 +138,8 @@ object WebRules {
      * The same script puts a check in front of the page's own `WebSocket`,
      * `WebSocketStream`, `Worker` and `SharedWorker`, which are not requests the
      * web view's client is asked about: one is made only for an address on the
-     * origins (so never from a `blob:` or `data:` address). What the page hands
+     * [origins], the app's own and its web hosts' (so never from a `blob:` or
+     * `data:` address). What the page hands
      * over is turned into a string once; that string, resolved against the
      * document's real base, is what is checked, and it is what the real
      * constructor gets, so an object whose conversion answers differently the

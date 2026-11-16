@@ -344,7 +344,8 @@ With nothing opened, the list has the window.
   phone the bottom navigation is reached by Shift+Tab from the top.
 - A service worker a page registers is held to the origins the web view is:
   its requests to any other origin are answered 403. A page's own scripts open
-  a socket or start a worker only for an address on the app's origins, checked
+  a socket or start a worker only for an address on the app's origins or a
+  host the app names for the web view (`webHosts`), checked
   by the script at the start of every document with what it took before any
   script of the page ran; so it holds against a page's scripts that run after
   it, in the documents it runs in. Two ways round it remain: the first, empty

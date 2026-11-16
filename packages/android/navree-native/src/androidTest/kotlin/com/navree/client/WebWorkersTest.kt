@@ -467,6 +467,25 @@ class WebWorkersTest {
         assertTrue("the app's own sockets open: $ownSockets", waitFor(5) { ownSockets.isNotEmpty() })
     }
 
+    // A host the app names for the web view is one a page's socket may go to, as its loads may; a host it does not
+    // name is refused. The other server here is the named host; the unnamed one is the same server by its address.
+    @Test
+    fun aSocketGoesToAHostTheAppNamesForTheWebViewAndNoOther() {
+        documentChecks()
+        serve({
+            "<p>ours</p><script>" +
+                madeOrRefused("named", "var s = new WebSocket('ws://localhost:${other.port}/socket')") +
+                madeOrRefused("unnamed", "new WebSocket('ws://127.0.0.1:${other.port}/socket')") +
+                "</script>"
+        })
+        openedBy(Origins(base, loopbackHttp = true, webHosts = listOf("localhost:${other.port}")))
+        waitForSaid(2)
+        assertTrue("the named host's socket reached it: $otherAsked", waitFor(10) { otherAsked.contains("UPGRADE /socket") })
+        settle("socket-web-host.txt", "a socket to a host in webHosts, and one to an address that is not")
+        assertEquals("what the page was told", listOf("named-made", "unnamed-refused"), said.sorted())
+        assertEquals("only the named host's socket reached the server: $otherAsked", listOf("UPGRADE /socket"), otherAsked.toList())
+    }
+
     @Test
     fun aSocketReachesAnotherOriginWhereNothingChecksTheDocument() {
         serve({ socketsOfThePage() })
