@@ -1060,6 +1060,10 @@ come from the component catalog of the docs
 | Foundations | Foundations (tokens, sizes), Themes, the Theme builder, Icons, Flags, Commands (`Cmd`, `Reply`, `Op`), Regions, Islands (`Island`, `IslandScript`), Errors and states |
 
 Notes on a few: `Tabs` panels can load on first show with `Tab::lazy(src)`;
+`ButtonGroup::segmented()` draws buttons with an `href` as a segmented control
+between places (two halves of an app), each a real link and the one you are on
+`Button::current(true)` (`aria-current="page"`), in the same colours, corner and
+shadow as segmented tabs;
 `Toast` has four tones, a title and one action; `Message` and `Bubble` draw
 a chat; `Empty` is the plain version of `EmptyState`; `Table` is the small
 static table and `DataTable` the paged, sorted, filtered one; `Pagination`

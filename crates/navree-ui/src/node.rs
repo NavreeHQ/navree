@@ -352,6 +352,10 @@ impl Uses {
     /// the window's edges, a brand and a footer in the form's column, and the column's
     /// width. A layout that uses none of them links the app blocks' sheet alone.
     pub const AUTH_LAYOUT: Self = Self(1 << 46);
+    /// The looks stylesheet: no script, only the styles of the looks a component takes when
+    /// a page asks for one, such as a segmented button group, linked on a page that draws
+    /// one. A component drawn as it always was never links it.
+    pub const LOOKS: Self = Self(1 << 47);
 
     /// Both sets together.
     #[must_use]

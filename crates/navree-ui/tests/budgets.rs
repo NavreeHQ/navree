@@ -906,6 +906,78 @@ fn the_auth_layout_sheet_is_at_most_1_kb_gzip_and_only_a_layout_with_options_lin
     );
 }
 
+/// The looks a component takes only when a page asks for one (a segmented button group, and
+/// the others beside it) share a sheet of their own, linked by a page that draws one of them
+/// and by no other, and at most 3 KB gzip like the other parts' sheets.
+#[test]
+fn the_looks_sheet_is_at_most_3_kb_gzip_and_comes_only_with_a_look() {
+    use navree_ui::ButtonGroup;
+
+    assert!(size("looks") <= 3 * 1024, "{}", size("looks"));
+    let page = |body: Node| linked(&View::new("x").body(body).to_html());
+    let segmented = ButtonGroup::new("Mode").segmented().children((
+        Button::new("Mine").href("/m").current(true),
+        Button::new("Team").href("/t"),
+    ));
+    assert_eq!(page(segmented.into()), (vec![], vec!["navree-ui", "looks"]));
+    let plain = ButtonGroup::new("View").children(Button::new("List"));
+    assert_eq!(page(plain.into()), (vec![], vec!["navree-ui"]));
+}
+
+/// The looks sheet's bit is its own.
+#[test]
+fn the_looks_sheet_has_a_bit_of_its_own() {
+    let all = [
+        Uses::CORE,
+        Uses::SIDEBAR,
+        Uses::OVERLAY,
+        Uses::TABLE,
+        Uses::SELECT,
+        Uses::MENUS,
+        Uses::LIVE,
+        Uses::DATES,
+        Uses::DATE_TEXT,
+        Uses::TIME,
+        Uses::PHONE,
+        Uses::THEME_BUILDER,
+        Uses::CHARTS,
+        Uses::SLIDER,
+        Uses::TREE,
+        Uses::TOOLBAR,
+        Uses::SORTABLE,
+        Uses::SPLIT,
+        Uses::KEYS,
+        Uses::LAZY,
+        Uses::MARKDOWN,
+        Uses::UPLOAD,
+        Uses::OTP,
+        Uses::CAROUSEL,
+        Uses::MENUBAR,
+        Uses::ISLAND,
+        Uses::PARTS,
+        Uses::PARTS_STYLES,
+        Uses::GENUI,
+        Uses::CHART_RADIAL,
+        Uses::COUNT_UP,
+        Uses::CHART_PAINT,
+        Uses::CHART_LINEAR,
+        Uses::CHART_GRIDS,
+        Uses::APP_BLOCKS,
+        Uses::MARKETING,
+        Uses::SORTABLE_GRID,
+        Uses::SORTABLE_GRID_STYLES,
+        Uses::EXTENSIONS,
+        Uses::EXTENSION_SHEETS,
+        Uses::SHELL_PARTS,
+        Uses::AUTH_LAYOUT,
+    ];
+    let looks = Uses::LOOKS;
+    assert!(!looks.is_none());
+    for other in all {
+        assert!(!other.meets(looks), "{other:?} and {looks:?}");
+    }
+}
+
 /// The bits are one each, so a page asks for exactly what it names.
 #[test]
 fn no_two_modules_share_a_bit() {

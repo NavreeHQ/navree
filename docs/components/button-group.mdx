@@ -32,6 +32,25 @@ Group a few actions on the same thing: views of one list, zoom in and out. For o
 
 <UiPreview example="button-group/vertical" />
 
+## Segmented links
+
+`.segmented()` draws the group as a segmented control: a track, the buttons on it, and the current one raised. Give each button an `href` and mark the page you are on with `.current(true)`: each item stays a real link, with a link's keys, and the page needs no script. Use it to move between places, such as two halves of an app. To switch views inside one page, use [Tabs](/docs/components/tabs/) with `TabsVariant::Segmented`; to choose a value a form posts, use a [ToggleGroup](/docs/components/toggle-group/).
+
+```rust
+use navree::ui::*;
+
+ButtonGroup::new("Mode").segmented().block().children((
+    Button::new("Mine").href("/deals/mine").current(mode == Mode::Mine),
+    Button::new("Team").href("/deals/team").current(mode == Mode::Team),
+))
+```
+
+<UiPreview example="button-group/segmented" />
+
+The track and the chosen item take the theme's segment colours (`Roles::segment_track` and `Roles::segment_on`), the toggle corner (`Corners::toggle`) and the raised shadow (`Elevation::Soft`), the same values segmented tabs read, so a segmented group of links and segmented tabs look alike. Each item is as tall as a control of its size, less the track's padding. `.block()` fills the width and shares it equally among the items.
+
+A segmented group links a small stylesheet of its own, the looks sheet; a group drawn as before links nothing new.
+
 ## Keyboard and accessibility
 
 <UiA11y>
@@ -40,9 +59,11 @@ Group a few actions on the same thing: views of one list, zoom in and out. For o
 |---|---|
 | `Tab` | Moves to the next button in the group, then out of it. |
 | `Enter`, `Space` | Presses the focused button. |
+| `Enter` | On a segmented link, follows it. |
 
 - The group has `role="group"` and an `aria-label`, so a screen reader announces its name when focus enters it.
 - Each button keeps its own name; icon-only buttons in a group need `Button::icon_only` and its label.
+- In a group of links, every link is a tab stop, as links are. The current one is `aria-current="page"`, which a screen reader reads as "current page", and forced-colours mode draws it in the highlight colours.
 
 </UiA11y>
 

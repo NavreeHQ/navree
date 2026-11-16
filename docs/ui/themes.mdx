@@ -128,7 +128,7 @@ The spec's `Radius` sets two corners: one for controls, one for surfaces. `Corne
 |---|---|---|---|
 | `button` | Buttons, the outer corners of a button group | `--radius-button` | `--radius` |
 | `badge` | Badges, the count on a tab | `--radius-badge` | `--radius` |
-| `toggle` | Toggles, toggle group items, segmented tabs and their track, the switch and its thumb | `--radius-toggle` | `--radius`; the track `--radius-lg` |
+| `toggle` | Toggles, toggle group items, segmented tabs and their track, a segmented button group and its track, the switch and its thumb | `--radius-toggle` | `--radius`; the track `--radius-lg` |
 | `avatar` | Avatars | `--radius-avatar` | `--radius` |
 | `field` | Inputs, text areas, selects, input groups, the select and combobox controls, the phone input | `--radius-field` | `--radius` |
 | `nav` | The sidebar's items, brand and user rows, the top bar's links, the rows of menus and lists | `--radius-nav` | `--radius` |
@@ -208,7 +208,7 @@ pub fn agra_theme() -> Theme {
 
 | Builder | Sets | Tokens | Without it |
 |---|---|---|---|
-| `ControlSizes` | Buttons, toggles and toggle group items of each `Size`, an icon-only one's width, and segmented tabs, whose track is the step's height | `--control-xs` to `--control-lg` | 24, 28, 32 and 36 px |
+| `ControlSizes` | Buttons, toggles and toggle group items of each `Size`, an icon-only one's width, and segmented tabs and segmented button groups, whose track is the step's height | `--control-xs` to `--control-lg` | 24, 28, 32 and 36 px |
 | `FieldSizes` | Inputs, input groups, native selects, the select and combobox controls and the phone input of each `Size`, and their side padding | `--field-xs` to `--field-lg`, `--field-px` | 24, 28, 32 and 36 px; 10 px |
 | `badge_height` | A badge | `--badge-h` | 20 px |
 | `SidebarSizes` | The sidebar's width, the space above its first block and below its last, at its sides and between its blocks, and its links' height | `--sidebar-w`, `--sidebar-pad-y`, `--sidebar-pad-x`, `--sidebar-gap`, `--sidebar-item-h` | 256 px; 8 px; 8 px; 8 px; 32 px |
@@ -265,8 +265,8 @@ pub fn agra_theme() -> Theme {
 | `field` | Inputs, text areas, selects, input groups, checkboxes and radios, the select and combobox controls, the phone input | `--field` | `ink-1` |
 | `ghost_text` | A ghost button's text, such as the top bar's icon buttons | `--ghost-fg` | `fg-2` |
 | `shell_muted` | The sidebar's quieter text: the brand's context line, the user's email, group labels, counts | `--shell-muted` | `fg-3` |
-| `segment_track` | The track of segmented tabs | `--segment-track` | `ink-2` |
-| `segment_on` | The chosen tab on that track | `--segment-on` | `ink-3` |
+| `segment_track` | The track of segmented tabs and of a segmented button group | `--segment-track` | `ink-2` |
+| `segment_on` | The chosen tab, or the current link, on that track | `--segment-on` | `ink-3` |
 | `selected_row` | A selected row of a table, and the row a data table's page shows (`.current_row`) | `--row-selected` | `ink-3` |
 | `inverse` | The inverse surface, below | | the other palette |
 

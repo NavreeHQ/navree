@@ -208,6 +208,18 @@ every `@navree/*` package carries the same version.
   before is built as it was. The derive refuses `mono` on a field nobody types into or that a
   `control` draws, and a size that isn't `xs`, `sm`, `md` or `lg`. The rules for both are in the
   parts stylesheet.
+- `ButtonGroup::segmented()` draws a group as a segmented control: a track in the theme's
+  segment colour, its buttons on it and the current one raised in the chosen segment's colour,
+  with the toggle corner and the raised shadow, the values segmented tabs read, so the two look
+  alike. Its items are often links to other places: each stays a real link, with a link's keys,
+  and the page needs no script. `Button::current(true)` marks the link to the page shown with
+  `aria-current="page"` (an app wrote it with `.attr(..)` before) and draws it raised;
+  `ButtonGroup::block()` fills the width and shares it among the buttons. These looks are drawn
+  by a new stylesheet, `looks`, which a page links only when it draws one of them (`Uses::LOOKS`);
+  a group and a button that use none of them are drawn as before and link nothing new, held by
+  a test of their markup. `Button::current`, `ButtonGroup::segmented` and `ButtonGroup::block`
+  are new inherent methods: an app whose own extension trait gives either type a method of the
+  same name calls it through the trait.
 
 ### Fixed
 

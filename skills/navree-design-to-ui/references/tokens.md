@@ -50,7 +50,7 @@ theme sets the same tokens to other values.
 | `radius-button` to `radius-overlay` | unset | unset | a kind of part's own corner, from a theme's shape (below) |
 | `card`, `field` | unset (`ink-1`) | unset (`ink-1`) | cards and fields apart from the sidebar: a theme's roles (below) |
 | `ghost-fg`, `shell-muted` | unset (`fg-2`, `fg-3`) | unset | a ghost button's text; the sidebar's quieter text |
-| `segment-track`, `segment-on`, `row-selected` | unset (`ink-2`, `ink-3`) | unset | segmented tabs' track and chosen tab; a selected row |
+| `segment-track`, `segment-on`, `row-selected` | unset (`ink-2`, `ink-3`) | unset | the track and chosen item of segmented tabs and of a segmented button group; a selected row |
 | `sidebar-w` | `16rem` | `16rem` | the open sidebar; a theme's `SidebarSizes::width` |
 | `sidebar-w-icon` | `3rem` | `3rem` | the sidebar as icons |
 | `topbar-h` | `3rem` | `3rem` | the top bar; a theme's `TopbarSizes::height` |

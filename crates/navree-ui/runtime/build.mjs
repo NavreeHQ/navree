@@ -59,6 +59,8 @@ const MODULE_STYLES = {
   "toolbar-styles": ["35-toolbar.css"],
   "dates-styles": ["36-dates.css"],
   "time-styles": ["36-time.css"],
+  // The looks a component takes only when a page asks for one. No script.
+  looks: ["39-looks.css"],
   "shell-parts": ["41-shell-parts.css"],
 };
 const OWNED = new Set(Object.values(MODULE_STYLES).flat());

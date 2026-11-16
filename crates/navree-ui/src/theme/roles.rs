@@ -222,12 +222,12 @@ impl Roles {
         self.with(3, light, dark)
     }
 
-    /// The track of segmented tabs. Without it, `ink-2`.
+    /// The track of segmented tabs and of a segmented button group. Without it, `ink-2`.
     pub const fn segment_track(self, light: Rgb, dark: Rgb) -> Self {
         self.with(4, light, dark)
     }
 
-    /// The chosen tab on a segmented track. Without it, `ink-3`.
+    /// The chosen tab, or the current link, on a segmented track. Without it, `ink-3`.
     pub const fn segment_on(self, light: Rgb, dark: Rgb) -> Self {
         self.with(5, light, dark)
     }

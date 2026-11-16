@@ -4,7 +4,7 @@ use super::{Size, icon, root_methods};
 use crate::cmd::Commands;
 use crate::html::Href;
 use crate::icons::Icon;
-use crate::node::{Element, IntoNodes, Node, el, into_node};
+use crate::node::{Element, IntoNodes, Node, Uses, el, into_node};
 
 /// How a button looks.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -142,6 +142,25 @@ impl Button {
     /// Makes this a link.
     pub fn href(mut self, href: impl Into<Href>) -> Self {
         self.href = Some(href.into());
+        self
+    }
+
+    /// Says this link is the page being shown: `aria-current="page"`, which a screen reader
+    /// reads out. The button is drawn raised, as the chosen item of a
+    /// [segmented](ButtonGroup::segmented) group is. `false` writes nothing.
+    ///
+    /// ```
+    /// use navree_ui::{Button, render};
+    ///
+    /// let mine = Button::new("Mine").href("/deals/mine").current(true);
+    /// assert!(render(&mine.into()).contains(r#"aria-current="page""#));
+    /// let team = Button::new("Team").href("/deals/team").current(false);
+    /// assert!(!render(&team.into()).contains("aria-current"));
+    /// ```
+    pub fn current(mut self, current: bool) -> Self {
+        if current {
+            self.el = self.el.attr("aria-current", "page");
+        }
         self
     }
 
@@ -440,6 +459,34 @@ impl ButtonGroup {
     /// Stacks the buttons.
     pub fn vertical(mut self) -> Self {
         self.el = self.el.attr("data-orientation", "vertical");
+        self
+    }
+
+    /// Draws the group as a segmented control: a track in the theme's segment colour, its
+    /// buttons on it, and the [current](Button::current) one raised in the chosen segment's
+    /// colour, as [segmented tabs](crate::TabsVariant::Segmented) are drawn. Its items are
+    /// often links, one to each place: each stays a link, with a link's keys, and the page
+    /// needs no script. It links the looks stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{Button, ButtonGroup, render};
+    ///
+    /// let mode = ButtonGroup::new("Mode").segmented().block().children((
+    ///     Button::new("Mine").href("/deals/mine").current(true),
+    ///     Button::new("Team").href("/deals/team"),
+    /// ));
+    /// let html = render(&mode.into());
+    /// assert!(html.contains(r#"data-variant="segmented""#));
+    /// assert!(html.contains(r#"<a data-slot="button" aria-current="page" href="/deals/mine">"#));
+    /// ```
+    pub fn segmented(mut self) -> Self {
+        self.el = self.el.attr("data-variant", "segmented").uses(Uses::LOOKS);
+        self
+    }
+
+    /// Fills the width, sharing it equally among the buttons. It links the looks stylesheet.
+    pub fn block(mut self) -> Self {
+        self.el = self.el.flag("data-block", true).uses(Uses::LOOKS);
         self
     }
 

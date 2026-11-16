@@ -59,6 +59,8 @@ With `.href`, the button is an `<a>`. Use it to go somewhere, not to change some
 
 <UiPreview example="button/link" />
 
+`.current(true)` marks the link to the page being shown with `aria-current="page"`, and draws it raised; `.current(false)` writes nothing, so you can pass a comparison. In a [segmented ButtonGroup](/docs/components/button-group/#segmented-links) the current link is the chosen segment.
+
 ## Submitting a form
 
 A button's `type` is `button` unless you say otherwise: `.submit()` makes it submit its form and `.kind(ButtonKind::Reset)` reset it. `.named(name, value)` posts a value with the click, for a form with two submit buttons.

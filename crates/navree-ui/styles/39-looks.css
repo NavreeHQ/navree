@@ -1,0 +1,19 @@
+/*
+ * navree-ui's stylesheet: the looks a component takes only when a page asks for one, in a
+ * sheet of their own that such a page links. Written for Navree; every colour is a token or a
+ * colour role, every corner, height and shadow a value of the theme. The sheet every page
+ * loads draws each component's own look, which none of these rules touches.
+ */
+
+/* A segmented button group: a track, its links or buttons on it, and the current one raised,
+   drawn as segmented tabs are. A block group shares its width among its buttons. */
+[data-slot=button-group][data-variant=segmented]{gap:.125rem;padding:.1875rem;border-radius:var(--radius-toggle,var(--radius-lg));background:var(--segment-track,var(--ink-2));
+  & > [data-slot=button]{height:calc(var(--control-md,2.25rem) - .375rem);margin:0;border-radius:var(--radius-toggle,var(--radius));background:transparent;color:var(--fg-2);
+    &:hover{background:transparent;color:var(--fg)}
+    &[aria-current]{border-color:var(--line-2);background:var(--segment-on,var(--ink-3));color:var(--fg)}
+    &[data-size=sm]{height:calc(var(--control-sm,1.875rem) - .375rem)}
+    &[data-size=lg]{height:calc(var(--control-lg,2.625rem) - .375rem)}
+  }
+  &[data-orientation=vertical] > [data-slot=button]{border-radius:var(--radius-toggle,var(--radius))}
+}
+[data-slot=button-group][data-block]{display:flex;& > [data-slot=button]{flex:1}}

@@ -119,10 +119,11 @@ the app's own: `icon_file!` and `icon_set!` compile it from an SVG file
 | Design element | navree-ui |
 |---|---|
 | Button | `Button::primary`, `Button::outline`, `Button::ghost`, `Button::destructive`, `Button::new(..).variant(ButtonVariant::Secondary \| Link)`; `.size(Size::Xs \| Sm \| Md \| Lg)`, `.icon(..)`, `.icon_end(..)`, `.block()`, `.disabled(..)`, `.pending(..)` |
-| Link styled as a button | `Button::...(..).href(url)`; `.prefetch()` for safe links |
+| Link styled as a button | `Button::...(..).href(url)`; `.prefetch()` for safe links; `.current(true)` on the link to the page shown (`aria-current="page"`, drawn raised) |
 | Icon-only button | `Button::icon_only(icons::NAME, "Accessible name")` |
 | Button that opens a dialog | `.opens_dialog(id)`, `.closes_dialog(id)` |
-| Button group | `ButtonGroup::new(label).children(..)`, `.vertical()` |
+| Button group | `ButtonGroup::new(label).children(..)`, `.vertical()`, `.block()` (fills the width, shared equally) |
+| Segmented control of links, a pill track between two places (Mine / Team) | `ButtonGroup::new(label).segmented().children((Button::new(..).href(..).current(true), ..))`: a track in `segment-track`, the current link raised in `segment-on` with `shadow-raised`, the toggle corner; items stay links, no script. Item height is the control height less the track's 6 px |
 | Two-state button | `Toggle::new(name, label).pressed(..)`: a checkbox underneath, so it posts |
 | Segmented control, view switch | `ToggleGroup::single(name, label).item(ToggleItem::new(value, label))`, `.value(..)`, `.variant(ToggleVariant::Outline)`, `.joined()`; `ToggleGroup::multiple(..)` for several on. Radios and checkboxes underneath, so it posts |
 | Menu from a button | `DropdownMenu::new(id, label).item(MenuItem::link(..) \| action(..) \| post(..))`, `.separator()`, `.group(MenuGroup::new(..))`, `.checkbox(..)`, `.radios(..)`, `.submenu(MenuSub::new(..))`; `DropdownMenu::icon(id, icon, label)` for a row's menu, `.align(PopupAlign::End)` |

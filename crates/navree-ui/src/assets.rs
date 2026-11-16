@@ -127,6 +127,7 @@ fn sheet_modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::TOOLBAR, TOOLBAR_STYLES_URL),
         (Uses::DATES, DATES_STYLES_URL),
         (Uses::TIME, TIME_STYLES_URL),
+        (Uses::LOOKS, LOOKS_URL),
         (Uses::SHELL_PARTS, SHELL_PARTS_URL),
         (Uses::THEME_BUILDER, THEME_BUILDER_URL),
         (Uses::MARKDOWN, MARKDOWN_URL),

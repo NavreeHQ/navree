@@ -38,6 +38,7 @@
 //! | `/auth-layouts` | the page of a sign-in form: the panel first or after it, flush or inset and inverse, a brand and a footer, a form with no card and links as buttons, `?case=` one of them |
 //! | `/islands` | a part of the page drawn in the browser by a script of the app's own, through a morph and away |
 //! | `/extensions` | components of the app's own and of a plugin: mounting, new props and leaving, owned bodies and the seal, calls to the app's routes, a script that asks for another site's file, a sheet scoped to its components, pages that start clean, an inline editor with a control of a plugin's own, and the plugin's map |
+//! | `/looks` | the looks a component takes when asked, in a shaped theme and in the built-in one (`/looks/plain`), and on the inverse surface |
 //! | `/parts` | the small parts of the base components, the colour picker, an avatar group, a trace, a questionnaire, a select with flags, flags by pointer and a sparkline in each row |
 //! | `/site` | a public website of marketing blocks: home, pricing, privacy, contact, sitemap and robots |
 //! | `/widgets` | a home-screen widget builder: a sortable grid of tiles, saved as they move, and the widget drawn as a PNG on the server |
@@ -73,6 +74,7 @@ mod gallery;
 mod grids;
 mod icons_flags;
 mod islands;
+mod looks;
 mod markdown;
 mod menubar;
 mod menus;
@@ -182,6 +184,7 @@ impl Module for ProofModule {
             .controller::<extensions::ExtensionPages>()
             .controller::<compare::ComparePages>()
             .controller::<parts::PartsPages>()
+            .controller::<looks::LookPages>()
             .controller::<site::SitePages>()
             .controller::<widgets::WidgetPages>();
         // The script the islands page draws its island with, served by the toolkit.
