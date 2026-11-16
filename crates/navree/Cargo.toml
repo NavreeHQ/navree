@@ -987,6 +987,10 @@ name = "plugin_collisions"
 required-features = ["http", "queue", "testing", "time", "ui", "view"]
 
 [[test]]
+name = "plugin_grants"
+required-features = ["full", "sqlite"]
+
+[[test]]
 name = "plugins_docs"
 required-features = ["access", "cache", "db", "helm", "http", "queue", "sqlite", "storage", "testing", "ui", "view", "workspace"]
 
