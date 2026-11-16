@@ -363,8 +363,10 @@ jobs:
 
   # The device tests on an emulator, on a phone and on a tablet: each screen in
   # four looks (light, dark, the largest text, right to left), photographed.
+  # The tablet is two jobs, on its side and upright: four looks to a job, each
+  # job with the whole of the time limit.
   android-screens:
-    name: Android screens (${{ matrix.device }})
+    name: Android screens (${{ matrix.name }})
     needs: [changes, android, android-demo]
     if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
@@ -374,10 +376,20 @@ jobs:
       matrix:
         include:
           # `tests` is how many device tests end in a look on that device, skipped ones included: the number in the run's `OK (N tests)`.
+          # `held` is how the device is held, and `name` what the job, its upload and the device tests call the device held so.
           - device: phone
+            name: phone
+            held: portrait
             profile: pixel_7
             tests: 113
           - device: tablet
+            name: tablet
+            held: landscape
+            profile: pixel_tablet
+            tests: 113
+          - device: tablet
+            name: tablet-portrait
+            held: portrait
             profile: pixel_tablet
             tests: 113
     env:
@@ -507,9 +519,8 @@ jobs:
               python3 -I packages/android/scripts/read_run.py "$file" --look "$look"
             fi
           }
-          # A tablet is pictured on its side and upright; a phone upright.
-          orientations="portrait"
-          if [ "${{ matrix.device }}" = tablet ]; then orientations="landscape portrait"; fi
+          # A tablet is pictured on its side and upright, each in a job of its own; a phone upright.
+          orientations="${{ matrix.held }}"
           "$adb" shell settings put system accelerometer_rotation 0
           for orientation in $orientations; do
           # The tablet's image does not turn when the system is told to rotate (its display stays wide),
@@ -616,7 +627,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: android-screens-${{ matrix.device }}
+          name: android-screens-${{ matrix.name }}
           if-no-files-found: ignore
           path: ${{ runner.temp }}/screens
           retention-days: 30
