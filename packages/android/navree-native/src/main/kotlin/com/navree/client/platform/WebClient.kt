@@ -238,7 +238,8 @@ internal fun guardDocuments(view: WebView, origins: Origins, told: Told): Boolea
  * Puts the origin rules on the requests of service workers too: a page of the
  * app may register one, and its requests do not pass through the web view's
  * client. A worker's request to any origin but the app's (and its named web
- * hosts) is answered 403. The setting is the process's. Throws when the
+ * hosts) is answered 403. The setting is the process's: other code that sets
+ * a client of its own replaces this one, and nothing tells. Throws when the
  * system's web view cannot take it.
  */
 internal fun setServiceWorkerRules(origins: Origins) {
