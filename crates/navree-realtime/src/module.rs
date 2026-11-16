@@ -65,8 +65,9 @@ use crate::{Backplane, BackplaneKind, Live, Realtime, RealtimeOptions};
 /// [`from_config`](RealtimeModule::from_config), it reads the `realtime`
 /// configuration section ([`RealtimeOptions`]), so the app must include
 /// `ConfigModule`. Invalid options, malformed channel patterns, a pattern
-/// registered twice and a plugin's pattern outside the plugin's namespace
-/// (see [`ModuleBuilderRealtimeExt::channel`]) fail the boot.
+/// registered twice, a plugin's pattern outside the plugin's namespace and
+/// another module's pattern under it (see
+/// [`ModuleBuilderRealtimeExt::channel`]) fail the boot.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RealtimeModule;
 
@@ -109,8 +110,9 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
             r.get::<CheckedBackplanes>().await?;
             let app = r.app();
             let channels = app.contributions::<ChannelRegistration>();
-            // A plugin's module authorizes channels under the plugin's namespace only.
-            outside_namespace(&app, &channels)?;
+            // A plugin's module authorizes channels under the plugin's namespace only, and
+            // only a plugin's modules authorize channels there.
+            channels_of_plugins(&app, &channels)?;
             let cors_origins = match app.try_get::<HttpOptions>().await {
                 Some(http) => http.cors.allowed_origins.clone(),
                 None => Vec::new(),
@@ -160,11 +162,19 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
 /// a module authorizes channels whose name starts with the namespace and `.`
 /// only, so its authorizer never decides one of the app's own private or
 /// presence channels (`private-users.{id}`). The app authorizes any channel
-/// with a plugin's function from a module of its own. The refusals are
-/// joined with `; `, as `Realtime::new` joins its own; a module of the app,
-/// a module that acts for no plugin and a first-party plugin's module are
-/// not refused.
-fn outside_namespace(
+/// with a plugin's function from a module of its own.
+///
+/// It refuses too each pattern whose first segment is such a plugin's
+/// namespace that a module not acting for that plugin registers
+/// (`chat.support` beside a plugin whose namespace is `chat`): the first
+/// matching pattern decides a channel, in module order, so the plugin's
+/// `chat.{room}` would otherwise decide the app's channel, or the app's the
+/// plugin's.
+///
+/// The refusals are joined with `; `, as `Realtime::new` joins its own. A
+/// first-party plugin's module is not held to a namespace, and the app's
+/// patterns under words no such plugin holds are not refused.
+fn channels_of_plugins(
     app: &AppContext,
     channels: &[Contributed<ChannelRegistration>],
 ) -> Result<(), BoxError> {
@@ -172,24 +182,36 @@ fn outside_namespace(
         return Ok(());
     }
     let plugins = app.plugins().plugins;
-    let refusals: Vec<String> = channels
-        .iter()
-        .filter_map(|registration| {
-            let plugin = community_plugin(&plugins, registration.module.id)?;
+    let mut refusals: Vec<String> = Vec::new();
+    for registration in channels {
+        let pattern = registration.value.pattern;
+        let module = registration.module.name;
+        if let Some(plugin) = community_plugin(&plugins, registration.module.id) {
             let namespace = plugin.info.namespace;
-            let pattern = registration.value.pattern;
             let under = pattern
                 .strip_prefix(namespace)
                 .is_some_and(|rest| rest.starts_with('.'));
-            if under {
-                return None;
+            if !under {
+                refusals.push(format!(
+                    "channel pattern `{pattern}` of module `{module}`: plugin `{}` authorizes channels under `{namespace}.` only, and only a module of the app authorizes the app's other channels: remove the plugin or update it to a version that names its channels under `{namespace}.`, and to use the plugin's authorizer for `{pattern}`, register it from a module of the app (m.channel)",
+                    plugin.info.name
+                ));
             }
-            Some(format!(
-                "channel pattern `{pattern}` of module `{}`: plugin `{}` authorizes channels under `{namespace}.` only, and only a module of the app authorizes the app's other channels: remove the plugin or update it to a version that names its channels under `{namespace}.`, and to use the plugin's authorizer for `{pattern}`, register it from a module of the app (m.channel)",
-                registration.module.name, plugin.info.name
-            ))
-        })
-        .collect();
+            continue;
+        }
+        // The first segment, a literal when it is a namespace: the channels under a
+        // community plugin's namespace are the plugin's.
+        let first = pattern.split('.').next().unwrap_or(pattern);
+        let owner = plugins
+            .iter()
+            .find(|plugin| !plugin.first_party && plugin.info.namespace == first);
+        if let Some(owner) = owner {
+            refusals.push(format!(
+                "channel pattern `{pattern}` of module `{module}`: `{first}` is the namespace of plugin `{}`, whose authorizer would decide the channels named under it, and only the plugin's modules authorize channels there: name the app's channel under another word, or remove the plugin",
+                owner.info.name
+            ));
+        }
+    }
     if refusals.is_empty() {
         Ok(())
     } else {
@@ -331,7 +353,9 @@ pub trait ModuleBuilderRealtimeExt {
     /// authorizes channels under the plugin's namespace only
     /// (`announcements.{id}`): another pattern fails the boot. The app
     /// authorizes any channel with the plugin's function from a module of
-    /// its own.
+    /// its own, but none whose first segment is such a plugin's namespace
+    /// (`announcements.board` beside that plugin fails the boot): the
+    /// channels named under it are the plugin's.
     ///
     /// The module does not need to import `RealtimeModule`.
     ///
