@@ -314,6 +314,9 @@ every `@navree/*` package carries the same version.
 
 - Changing an account's email address ends the sign-in links and codes it has not used yet, so one
   mailed to the old address no longer signs in.
+- An email verification link marks the address verified only when the account still holds the
+  address the link was mailed to as the mark is written; otherwise it answers 403
+  `invalid_verification_link` and marks nothing.
 
 ## [1.2.4] - 2026-11-15
 

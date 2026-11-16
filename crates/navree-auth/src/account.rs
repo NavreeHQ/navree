@@ -215,8 +215,9 @@ impl AuthService {
     /// Marks the user's email address verified (the signed
     /// `GET /auth/email/verify/{id}/{hash}` link; the route checks the
     /// signature): [`AuthError::InvalidVerificationLink`] unless `hash` is
-    /// the SHA-256 of the user's current address. Verifying twice is
-    /// harmless. Audited as `auth.email_verified`.
+    /// the SHA-256 of the user's current address, checked again on the row
+    /// the write marks. Verifying twice is harmless. Audited as
+    /// `auth.email_verified`.
     pub async fn verify_email(
         &self,
         user_id: Uuid,
@@ -227,7 +228,7 @@ impl AuthService {
             .find_user(user_id)
             .await?
             .ok_or(AuthError::InvalidVerificationLink)?;
-        if !constant_time_eq(email_hash(&user.email).as_bytes(), hash.as_bytes()) {
+        if !holds_address(&user, hash) {
             return Err(AuthError::InvalidVerificationLink);
         }
         if user.email_verified_at.is_some() {
@@ -238,12 +239,24 @@ impl AuthService {
             .actor(user.id)
             .subject(USER_SUBJECT, user.id.to_string());
         self.write(Some(user.id), |uow| async move {
+            // The write reads the row again (locked where the database can):
+            // only the address the link was mailed to is marked.
+            let (mut proved, mut marked) = (false, false);
             let user = user::update(&uow, user.id, |user| {
-                user.email_verified_at = Some(now);
-                user.updated_at = now;
+                proved = holds_address(user, hash);
+                if proved && user.email_verified_at.is_none() {
+                    user.email_verified_at = Some(now);
+                    user.updated_at = now;
+                    marked = true;
+                }
             })
             .await?;
-            self.audit_after_commit(&uow, audit).await;
+            if !proved {
+                return Err(AuthError::InvalidVerificationLink);
+            }
+            if marked {
+                self.audit_after_commit(&uow, audit).await;
+            }
             Ok(user)
         })
         .await
@@ -602,6 +615,11 @@ impl std::fmt::Debug for ProfileUpdate {
 /// The hash in verification links: SHA-256 of the address, lower-case hex.
 fn email_hash(email: &str) -> String {
     sha256_hex(email.as_bytes())
+}
+
+/// Whether `hash`, a verification link's, is that of `user`'s address.
+fn holds_address(user: &User, hash: &str) -> bool {
+    constant_time_eq(email_hash(&user.email).as_bytes(), hash.as_bytes())
 }
 
 /// `parts` joined with single slashes, with a leading slash and no trailing
