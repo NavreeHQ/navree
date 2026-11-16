@@ -17,6 +17,16 @@ enum StartRules {
         kept + "-aside"
     }
 
+    /// Whether what the core gives to keep is stored. Not what it gives
+    /// while it does not know whose it is (`person_unknown`: this launch's
+    /// shell has not answered yet, or the server names the person without an
+    /// id). That holds nothing, and storing it would put nothing in the
+    /// place of what is stored: where a person was, and what they typed.
+    static func stores(_ snapshot: Data) -> Bool {
+        let object = (try? JSONSerialization.jsonObject(with: snapshot)) as? [String: Any]
+        return object?["person_unknown"] as? Bool != true
+    }
+
     /// What the window's core is given at this start, or `nil` to start
     /// plainly. `restoring` says the system brings the window back; `kept`
     /// is the key what is kept of the window is written under.

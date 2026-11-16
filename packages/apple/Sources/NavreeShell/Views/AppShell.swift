@@ -264,10 +264,13 @@ final class Session {
 
     /// The app went away: what the core keeps for a launch the system may
     /// end. A core that has stopped has nothing to give, and what was kept
-    /// before it stopped stays as it is.
+    /// before it stopped stays as it is; so does what was kept while the
+    /// core does not know whose its snapshot is (``StartRules/stores(_:)``).
     func keep() {
         guard let client, let effects, !client.stopped else { return }
-        effects.keep(snapshot: client.snapshot(), under: kept)
+        let snapshot = client.snapshot()
+        if let snapshot, !StartRules.stores(snapshot) { return }
+        effects.keep(snapshot: snapshot, under: kept)
     }
 
     /// The window's core stopped. That is written down beside what is kept
