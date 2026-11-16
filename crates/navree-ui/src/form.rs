@@ -154,7 +154,9 @@ impl Widget {
 ///
 /// A control is one value for the life of the program, shared by every request, so it is
 /// `Send`, `Sync` and [`RefUnwindSafe`]: a form that holds one can cross a caught panic as a
-/// form without one can. A unit struct, as below, is all three.
+/// form without one can. A unit struct, as below, is all three. A control that keeps state
+/// behind a lock that is not `RefUnwindSafe`, such as a cache from another crate, wraps it in
+/// [`AssertUnwindSafe`](std::panic::AssertUnwindSafe).
 ///
 /// ```
 /// use navree_ui::form::{Control, ControlCx, ControlField, FieldControl};
@@ -237,6 +239,12 @@ pub trait FieldControl: Send + Sync + RefUnwindSafe + 'static {
 
 /// What a control's check may read: the app's validation messages, and, when the value arrives
 /// through an app, the app and its configuration.
+///
+/// `config()` is the whole of the app's configuration, every section, not only the plugin's
+/// own. A check is given no request: nothing of who posts the value or in which workspace, so a
+/// rule that depends on them belongs in the handler. And it runs synchronously while the form is
+/// read: it reads what is in memory and waits on nothing, since input or output of its own
+/// would hold the thread that reads the form.
 ///
 /// ```
 /// use navree_ui::form::ControlCx;

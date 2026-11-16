@@ -466,7 +466,7 @@ The check runs where Navree UI reads a form, before the field's type reads the v
 
 So read a form that has a control in one of the ways the first item lists. A wizard keeps what was typed on Save, Back and a move by the stepper without checking it, and checks it on Next, on Finish and in `Draft::read_for`.
 
-A check can read the app. `ControlCx` gives it `messages()`, the app's validation messages in the reader's language, `app()`, the app, and `config()`, the app's configuration. `config()` reads the configuration files. Options a module sets in code reach a check through `app()?.contributions::<T>()`, which is synchronous.
+A check can read the app. `ControlCx` gives it `messages()`, the app's validation messages in the reader's language, `app()`, the app, and `config()`, the app's configuration. `config()` reads the configuration files, the whole of them, not only the plugin's section. Options a module sets in code reach a check through `app()?.contributions::<T>()`, which is synchronous. A check is given no request, so it knows nothing of who posts the value or in which workspace: a rule that depends on them belongs in the handler. It runs synchronously while the form is read, so it reads what is in memory and waits on nothing.
 
 `app()` and `config()` are there in the ways the first item lists, and `None` in those the second lists. A check that can't do its work without them refuses the value: a value that could not be checked is not accepted.
 
