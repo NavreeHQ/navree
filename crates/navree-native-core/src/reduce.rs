@@ -3995,6 +3995,132 @@ mod tests {
         );
     }
 
+    /// A link that arrives from outside is followed as a link on the web is:
+    /// it is only ever a read, a `get` of a page, never a write and never a
+    /// form sent. An address on the hand-over's own way back is never opened
+    /// as a page, whether or not a sign-in is open: the open sign-in takes it
+    /// when it carries its `state`, and otherwise it is dropped.
+    #[test]
+    fn a_link_from_outside_is_only_a_read_and_the_way_back_is_never_a_page() {
+        let state = "ISIjJCUmJygpKissLS4vMA";
+        let core_on = |platform: &str, shell: &str| -> Core {
+            let config = serde_json::json!({
+                "origin": "https://shop.example",
+                "app_id": "com.charkha.supply",
+                "client": {"platform": platform, "form": "phone", "vocab": 0, "text_percent": 100},
+                "sign_in": {"callback": "charkha", "paths": ["/sign-in"]},
+                "deep_links": "origin",
+            });
+            let mut core = Core::new(serde_json::from_value(config).expect("a configuration"));
+            core.send(Event::Start);
+            core.send(Event::Response(Response {
+                request: 1,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: shell.to_owned(),
+                ..Response::default()
+            }));
+            core.send(Event::Response(Response {
+                request: 2,
+                status: 200,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: include_str!("../transcripts/fixtures/made/welcome.json").to_owned(),
+                ..Response::default()
+            }));
+            core
+        };
+        let link = |core: &mut Core, url: &str| {
+            core.send(Event::OpenLink {
+                url: url.to_owned(),
+            })
+        };
+        let fetches = |update: &Update| -> Vec<Request> {
+            update
+                .effects
+                .iter()
+                .filter_map(|effect| match effect {
+                    Effect::Fetch(request) => Some(request.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let windows = include_str!("../transcripts/fixtures/made/shell-app-nobody-windows.json");
+        let apple = include_str!("../transcripts/fixtures/made/shell-app-nobody.json");
+
+        // Only ever a read, whatever the link names.
+        let mut reads = 0;
+        for (platform, shell) in [("windows", windows), ("ios", apple)] {
+            for url in [
+                "charkha://orders/7?intent=cancel",
+                "charkha://orders/new?item=lota&qty=2",
+                "charkha://signed-in?token=T0K3N",
+                "https://shop.example/orders/7/cancel?confirm=1",
+                "https://shop.example/reports",
+                "https://shop.example/sign-out",
+            ] {
+                let mut core = core_on(platform, shell);
+                let update = link(&mut core, url);
+                for request in fetches(&update) {
+                    assert!(
+                        request.method == Verb::Get && request.body.is_none() && !request.xsrf,
+                        "{platform} {url}: only a read: {request:?}"
+                    );
+                    reads += 1;
+                }
+            }
+        }
+        assert!(reads >= 8, "the links were followed: {reads}");
+
+        // The way back the shell names is never a page.
+        let callback = "https://shop.example/app/signed-in";
+        let mut core = core_on("ios", apple);
+        for url in [
+            format!("{callback}?code=Tq7uX0b2c9&state={state}"),
+            format!("{callback}/?token=T0K3N"),
+            callback.to_owned(),
+        ] {
+            let update = link(&mut core, &url);
+            assert!(
+                fetches(&update).is_empty(),
+                "with no sign-in open, {url} is dropped: {update:?}"
+            );
+        }
+        core.send(Event::Act {
+            screen: Some(1),
+            action: serde_json::from_value(
+                serde_json::json!({"t": "navigate", "href": "/sign-in"}),
+            )
+            .expect("an action"),
+            form: None,
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        core.send(Event::Random {
+            request: 1,
+            bytes: "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30".to_owned(),
+        });
+        let update = link(
+            &mut core,
+            &format!("{callback}?code=PLANTED000&state=not-the-state"),
+        );
+        assert!(
+            fetches(&update).is_empty(),
+            "with a sign-in open, another state is dropped: {update:?}"
+        );
+        let update = link(
+            &mut core,
+            &format!("{callback}?code=Tq7uX0b2c9&state={state}"),
+        );
+        let taken = fetches(&update);
+        assert!(
+            taken.len() == 1 && taken[0].url.ends_with("/api/auth/app/exchange"),
+            "the open sign-in takes its own: {update:?}"
+        );
+    }
+
     /// The retry keeps its pace: a request that got through asks for the shell
     /// again at most once in each pause, and only while the shell's own last
     /// failure was the network's or a timeout; the pause is not kept while
