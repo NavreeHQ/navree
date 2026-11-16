@@ -279,6 +279,7 @@ internal sealed class WebPage : Grid, ILiveWebView
         {
             Children.Clear();
             Children.Add(Look.Label("The web view is not available on this device (" + problem.GetType().Name + ").", muted: true));
+            host.ReportProblem("a web page was not shown: the web view could not be started (" + problem.GetType().Name + ")");
         }
     }
 
