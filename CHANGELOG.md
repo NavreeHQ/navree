@@ -163,6 +163,29 @@ every `@navree/*` package carries the same version.
   that sends a password field outside one.
 - `Page::assert_no_policy_violations` (navree-browser) fails when a page reported a content security
   policy violation.
+- A plugin that is not one of the framework's own packages grants nothing through the framework's
+  registration APIs. A module that acts for it (one that names it, a module of its crate, or a
+  generic module that only plugin modules import, such as the one `AccessModule::for_policy` makes)
+  stops the boot when it registers a policy with a rule on a subject that is not the plugin's or
+  on `all` (a rule that only a real user brings out is left out at every ability build and logged
+  at `navree::security`); registers a subject named outside the plugin's namespace
+  (`announcements.Announcement`); configures a module of another crate; provides a permission
+  check, the route authorizer, the authenticator, a sign-in strategy, the workspace gate, where
+  native clients sign in, the clock, an observer of every commit, the options of access,
+  workspaces, authentication or Helm, or the app's shell; adds a layer for every request; decides
+  who works as staff in Helm; authorizes a realtime channel outside its namespace; scopes a subject
+  that is not its own to workspaces; registers a global scope or a model hook on a model of
+  another crate; or registers a command named like one of the framework's own (`check`, `help`,
+  `list`, `introspect`, `plugins`, `plugin:publish`, `--help` and `-h`). The app registers the
+  plugin's piece from a module of its own, and that line is the grant. Each refusal names the
+  plugin and the module and most say what to do; those for a configured module, a provider, a hook
+  and a command also say why a module that does not name the plugin acts for it. A module of a
+  plugin's crate keeps its UI extensions under the plugin's namespace, and a module of the app
+  takes `app` or a namespace that no plugin and no part of the framework keeps. The rules hold a
+  plugin to what it declares; they are not a sandbox, and a crate linked into the app runs with the
+  app's rights.
+- `access:explain` and `GET /api/me/abilities` name the plugin of each rule its policy wrote: the
+  rule's `reason` is the policy and the plugin.
 - Navree Native: the Apple client for iPhone, iPad and Mac is in the repository (`packages/apple`,
   a Swift package), in preview. It runs the example apps on simulators and on a Mac. No package is
   published, and nothing has run on a real device.
@@ -170,10 +193,10 @@ every `@navree/*` package carries the same version.
 ### Changed
 
 - `introspect --json` gives each module its `type` and lists the plugins under `plugins`; its
-  `commands` list includes `plugins` and `plugin:publish` unless a module registers a command of
-  that name, which then runs instead, so a tool that reads the commands by position finds two more
-  entries before the app's own. `help` lists the two among the built-in commands, so its first
-  column is wider.
+  `commands` list includes `plugins` and `plugin:publish` unless a module of the app registers a
+  command of that name, which then runs instead, so a tool that reads the commands by position
+  finds two more entries before the app's own. `help` lists the two among the built-in commands, so
+  its first column is wider.
 - An app with `CacheModule`, `QueueModule`, `SessionModule`, `RealtimeModule`, `MailModule`,
   `StorageModule`, `NotifyModule`, `SearchModule` or `AiModule` lists one more provider of that
   module in `check --graph` and `introspect --json`: the one the boot builds to check the drivers
@@ -203,8 +226,9 @@ every `@navree/*` package carries the same version.
   any other template while the plugin's version is the one rendered. It is not when the app has a
   file of that name in a template folder (the name letter for letter), or a module of the app
   registers the template after the plugin's module, with the plugin's text or its own; an `info`
-  line then says so. A module of the app is one that names no plugin and is in no crate that a
-  plugin of the app names. `i18n:publish validation` writes through the same checked writer as
+  line then says so. A module of the app is one that acts for no plugin: it names none, is in no
+  crate that a plugin of the app names, and is not a generic module that only plugin modules
+  import. `i18n:publish validation` writes through the same checked writer as
   `plugin:publish`: a link in a file's place, or in the place of one of its folders, is refused,
   and a file that `--force` replaces is replaced by a rename; its usage line names `<plugin>`, and
   the text for an unknown name lists the plugins that ship translations. `AppSheet`, `AppFont`,
@@ -315,6 +339,23 @@ every `@navree/*` package carries the same version.
   `data-ui-fresh-page` on the document's root element and the header `x-navree-fresh`, and their
   answers are not drawn into other pages' regions. An app with none of these keeps the pages,
   headers and navigation of 1.2.2.
+- An app with no plugin other than the framework's own packages registers as in 1.2: policies,
+  subjects, configured modules, providers, layers for every request, Helm's staff policies,
+  realtime channels, workspace scopes, global scopes, model hooks and commands work for every
+  module as before.
+- `plugins` (and the `plugins` of `introspect --json`) lists, under a plugin, every module that
+  acts for it: a module that names it, a module of its crate, and a generic module that only
+  plugin modules import, such as the one `AccessModule::for_policy` makes for its policy.
+  `config:publish --plugin` publishes the sections of those modules too, and the checks of
+  templates and documents, of permissions, of error pages and of Helm's staff policies hold them
+  to the plugin's rules. When the checks refuse the app, `plugins` prints the listing before the
+  refusals.
+- A module that acts for a plugin and imports a configured instance (`for_root`, `from_config`) of
+  a module of another crate is a boot error. In 1.2 the same two modules gave `ConfiguredTwice`
+  when the app configured the module too, and otherwise the configured instance replaced the
+  app's without a word.
+- `KernelError` (it is `#[non_exhaustive]`) gains the variants `PluginConfiguresModule`,
+  `PluginProvidesAppOnly`, `PluginCommand` and `PluginHooksModel`.
 
 ### Fixed
 
