@@ -114,12 +114,28 @@ public final class SystemEffects: EffectRunner {
     /// client ended it, drops what it held of the person and starts again.
     func sessionEnded() {
         session = keeper.number
+        named = nil
         if let client, client.began { client.send(.signedOut) }
     }
 
     /// This window's own core ended the session, and goes on in the one that follows.
     func caughtUp() {
         session = keeper.number
+        named = nil
+    }
+
+    /// The person this window's core last said is signed in.
+    private var named: SessionKeeper.Person?
+
+    /// Hears who the window's core says is signed in. Somebody else than
+    /// before, with no sign-out between, is a change of person the core was
+    /// not told of by a sign-out: the session takes away what was the last
+    /// person's (``SessionKeeper/personChanged(by:)``).
+    private func hear(_ user: Navree.User?) {
+        guard let user else { return }
+        let now = SessionKeeper.Person(name: user.name, email: user.email)
+        defer { named = now }
+        if let named, named != now { keeper.personChanged(by: self) }
     }
 
     /// What loads the pictures of a screen, with the session's cookies.
@@ -127,6 +143,7 @@ public final class SystemEffects: EffectRunner {
 
     public func run(_ effect: CoreEffect, for client: NativeClient) {
         self.client = client
+        hear(client.app?.user)
         if keeper.pushAwaitsSignIn, client.app?.user != nil {
             keeper.pushAwaitsSignIn = false
             AppEvents.registerForPush()
