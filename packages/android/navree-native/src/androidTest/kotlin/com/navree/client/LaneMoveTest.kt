@@ -6,7 +6,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.InputMode
-import androidx.compose.ui.platform.InputModeManager
+import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -272,32 +272,55 @@ class LaneMoveTest {
         Shots.take("lane-dropped")
     }
 
+    /** What the window says of the focus and of the input mode, in words: the activity, the view that has the focus, the view that holds the composition. */
+    private fun windowSays(): String {
+        val activity = compose.activity
+        val content = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+        val host = generateSequence<android.view.View>(content) { (it as? android.view.ViewGroup)?.takeIf { group -> group.childCount > 0 }?.getChildAt(0) }.last()
+        val mode = inputModes?.inputMode
+        return "window focus=${activity.hasWindowFocus()}, touch mode=${host.isInTouchMode}, compose input mode=$mode, " +
+            "the view that has the focus=${activity.currentFocus?.javaClass?.simpleName}, found from the top=${activity.window.decorView.findFocus()?.javaClass?.simpleName}, " +
+            "the composition's view ${host.javaClass.simpleName}: focusable=${host.isFocusable} in touch mode=${host.isFocusableInTouchMode} has focus=${host.hasFocus()} shown=${host.isShown}"
+    }
+
     @Test
     fun aCardMovedByTheKeyboardAndByItsMenuKeepsTheFocusAndStandsWhereTheMoveSays() {
         open(200)
-        // As the screens' own Tab walks do: the screen has settled, and the key goes to the root.
+        // As the screens' own Tab walks do: the screen has settled, then the keyboard's keys, given to the system, with the focus nowhere.
         Thread.sleep(1_500)
         compose.waitForIdle()
-        // The keyboard's Tab walks the screen from its top, a stop at a time, to the first card's handle (a button takes the focus only when the keyboard is in use).
-        // A button takes the focus only while the keyboard is what is in use: the test says so through the composition, as a keyboard's first key would.
-        var keyboard = false
-        compose.runOnUiThread { keyboard = inputModes?.requestInputMode(InputMode.Keyboard) == true }
-        compose.waitForIdle()
-        handle(0).performSemanticsAction(SemanticsActions.RequestFocus)
-        compose.waitForIdle()
-        // And if that was not enough, Tab, given to the system as a keyboard gives it, walks to the handle.
+        val said = ArrayList<String>()
+        said += "before the first key: ${windowSays()}; the focus: ${stopNow()}"
+        mark(said.last())
+        // Tab walks the screen from its top, a stop at a time, to the first card's handle.
         val stops = ArrayList<String>()
-        for (press in 1..10) {
+        for (press in 1..40) {
             if (focused(0)) break
             pressKey(KeyEvent.KEYCODE_TAB)
-            stops += stopNow()
+            stops += stopNow().take(40)
+            if (press == 1) said += "after the first Tab: ${windowSays()}"
+        }
+        val tabbed = focused(0)
+        mark("Tab reached the handle: $tabbed; the stops: $stops")
+        if (!tabbed) {
+            // Say more, for whoever reads why: the composition is asked for the keyboard, and the handle for the focus.
+            var granted = false
+            compose.runOnUiThread { granted = inputModes?.requestInputMode(InputMode.Keyboard) == true }
+            compose.waitForIdle()
+            said += "after asking for the keyboard (granted: $granted): ${windowSays()}"
+            val asked = runCatching { handle(0).performSemanticsAction(SemanticsActions.RequestFocus) }.exceptionOrNull()
+            compose.waitForIdle()
+            said += "after asking the handle for the focus (${asked ?: "no error"}): has it: ${focused(0)}, ${windowSays()}"
         }
         val node = handle(0).fetchSemanticsNode()
+        Shots.put("${Shots.device}-${Shots.look}-lane-keyboard-trace.txt", (said + trace).joinToString("
+") + "
+")
         assertTrue(
-            "the first card's handle has the focus (the keyboard was granted: $keyboard; the stops of Tab: $stops; now: ${stopNow()}; " +
+            "the first card's handle has the focus by Tab alone (reached by Tab: $tabbed; the stops of Tab: $stops; now: ${stopNow()}; " +
                 "the handle says focused=${node.config.getOrNull(SemanticsProperties.Focused)} and can be asked for the focus: ${node.config.contains(SemanticsActions.RequestFocus)}; " +
-                "the window has the focus: ${compose.activity.hasWindowFocus()}; the view that has it: ${compose.activity.currentFocus})",
-            focused(0),
+                "the window: ${said.joinToString(" || ")})",
+            tabbed,
         )
 
         // The moves a keyboard and a screen reader are offered on the handle.
