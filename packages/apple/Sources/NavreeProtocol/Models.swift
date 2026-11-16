@@ -9434,6 +9434,7 @@ extension Navree {
     public enum SignInPlatform: String, Codable, Hashable, Sendable, CaseIterable {
         case apple = "apple"
         case android = "android"
+        case windows = "windows"
     }
 }
 

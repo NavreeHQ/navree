@@ -3017,6 +3017,7 @@ public object Navree {
     public enum class SignInPlatform {
         @SerialName("apple") APPLE,
         @SerialName("android") ANDROID,
+        @SerialName("windows") WINDOWS,
     }
 
     /** `SignInProvider`. */
