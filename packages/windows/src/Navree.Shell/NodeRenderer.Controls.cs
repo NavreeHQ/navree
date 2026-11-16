@@ -771,8 +771,16 @@ internal sealed partial class NodeRenderer
                         UpdateTextOnSelect = false,
                         Text = options.FirstOrDefault(option => option.Value == chosen)?.Label ?? string.Empty,
                     };
+                    // The words of every option the box has been given, by value: what the box says when the core sets the value itself.
+                    Dictionary<string, string> words = new(StringComparer.Ordinal);
+                    ShownValue choiceShown = new(chosen);
                     void Offer(IReadOnlyList<Models.ChoiceOption> found, bool more, string typed)
                     {
+                        foreach (Models.ChoiceOption option in found)
+                        {
+                            words[option.Value] = option.Label;
+                        }
+
                         offered = ChoiceRules.Offer(found, more, choice.Create?.Label, typed);
                         finder.ItemsSource = offered;
                     }
@@ -793,6 +801,7 @@ internal sealed partial class NodeRenderer
                         {
                             case ChoiceAct.Send when line?.Value is string value:
                                 box.Text = line.Label;
+                                choiceShown.Chose(value, DateTime.UtcNow);
                                 send(new TextValue(value));
                                 break;
                             case ChoiceAct.More:
@@ -816,6 +825,13 @@ internal sealed partial class NodeRenderer
                             {
                                 finder.IsSuggestionListOpen = true;
                             }
+                        }
+
+                        // The box names the option the core holds when the core set it itself (the form answered fresh, a value the server
+                        // chose): what the box says is what the form sends. Words being typed for a search are not a value, and are left.
+                        if (view?.Value is TextValue held0 && choiceShown.Takes(held0.Text, DateTime.UtcNow))
+                        {
+                            finder.Text = words.TryGetValue(held0.Text, out string? named) ? named : string.Empty;
                         }
                     };
                 }
@@ -892,11 +908,13 @@ internal sealed partial class NodeRenderer
 
                         if (combo.SelectedIndex >= 0 && combo.SelectedIndex < options.Count)
                         {
-                            send(new TextValue(options[combo.SelectedIndex].Value));
+                            chosen = options[combo.SelectedIndex].Value;
+                            send(new TextValue(chosen));
                         }
                         else if (goesOn && combo.SelectedIndex == options.Count)
                         {
-                            // Not a choice: the entry that asks for more. The choice that stood stays, and the options that come are put in the list.
+                            // Not a choice: the entry that asks for more. The choice that stood (the last one made, or the core's) stays, and the
+                            // options that come are put in the list.
                             comboApplying = true;
                             try
                             {
@@ -937,9 +955,13 @@ internal sealed partial class NodeRenderer
                                 }
                             }
 
-                            if (view?.Value is TextValue now && IndexOfValue(latest, now.Text) is int at && at != combo.SelectedIndex)
+                            if (view?.Value is TextValue now)
                             {
-                                combo.SelectedIndex = at;
+                                chosen = now.Text;
+                                if (IndexOfValue(latest, now.Text) is int at && at != combo.SelectedIndex)
+                                {
+                                    combo.SelectedIndex = at;
+                                }
                             }
                         }
                         finally
@@ -957,50 +979,94 @@ internal sealed partial class NodeRenderer
                     boxes.Children.Add(Look.Label(header, "BodyTextBlockStyle"));
                 }
 
-                HashSet<string> picked = [.. held?.Value is ManyValue held3 ? held3.Values : many.Values];
-                foreach (Models.ChoiceOption option in held?.Options ?? many.Options)
+                // The boxes show what the core holds for the field, and a tick sends what the boxes show: a form answered fresh has no tick,
+                // and a tick made after it is sent alone.
+                TickedValues ticks = new(held?.Value is ManyValue held3 ? held3.Values : many.Values);
+                IReadOnlyList<Models.ChoiceOption> manyOptions = held?.Options ?? many.Options;
+                List<(CheckBox Box, string Value)> ticked = [];
+                int firstBox = boxes.Children.Count;
+                void FillBoxes()
                 {
-                    CheckBox check = new() { Content = option.Label, IsChecked = picked.Contains(option.Value) };
-                    string value = option.Value;
-                    check.Click += (_, _) =>
+                    while (boxes.Children.Count > firstBox)
                     {
-                        if (check.IsChecked == true)
-                        {
-                            picked.Add(value);
-                        }
-                        else
-                        {
-                            picked.Remove(value);
-                        }
+                        boxes.Children.RemoveAt(boxes.Children.Count - 1);
+                    }
 
-                        send(new ManyValue([.. picked]));
-                    };
-                    boxes.Children.Add(check);
+                    ticked.Clear();
+                    foreach (Models.ChoiceOption option in manyOptions)
+                    {
+                        CheckBox check = new() { Content = option.Label, IsChecked = ticks.Has(option.Value) };
+                        string value = option.Value;
+                        check.Click += (_, _) => send(new ManyValue(ticks.Tick(value, check.IsChecked == true, DateTime.UtcNow)));
+                        boxes.Children.Add(check);
+                        ticked.Add((check, value));
+                    }
                 }
 
+                FillBoxes();
                 control = boxes;
+                show = view =>
+                {
+                    IReadOnlyList<Models.ChoiceOption> latest = view?.Options ?? many.Options;
+                    bool others = !ChoiceRules.SameOptions(manyOptions, latest);
+                    bool took = view?.Value is ManyValue now && ticks.Takes(now.Values, DateTime.UtcNow);
+                    if (others)
+                    {
+                        manyOptions = latest;
+                        FillBoxes();
+                    }
+                    else if (took)
+                    {
+                        foreach ((CheckBox box, string value) in ticked)
+                        {
+                            box.IsChecked = ticks.Has(value);
+                        }
+                    }
+                };
                 break;
             case Models.DateInput date:
                 string day = held?.Value is TextValue held4 ? held4.Text : date.Value;
-                bool hasDate = DateTimeOffset.TryParse(day, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out DateTimeOffset moment);
                 if (date.Kind == Models.DateKind.Time)
                 {
-                    // A time is picked with a time picker and sent as hours and minutes, not as a day.
-                    TimePicker clock = new() { Header = header, IsEnabled = !field.Disabled, SelectedTime = hasDate || TimeSpan.TryParse(day, System.Globalization.CultureInfo.InvariantCulture, out _) ? (hasDate && day.Contains(':', StringComparison.Ordinal) ? moment.TimeOfDay : TimeSpan.Parse(day, System.Globalization.CultureInfo.InvariantCulture)) : null, MinuteIncrement = 5 };
+                    // A time is picked with a time picker and sent as hours and minutes, not as a day. Words that hold no time of day (a day
+                    // with no time, a number, a time past the day's end) show no time: the picker is never given what it cannot hold.
+                    ShownValue timeShown = new(ShownForms.Time(day));
+                    TimePicker clock = new() { Header = header, IsEnabled = !field.Disabled, SelectedTime = ShownForms.TimeOf(day), MinuteIncrement = 5 };
+                    bool clockApplying = false;
                     clock.SelectedTimeChanged += (_, e) =>
                     {
-                        if (e.NewTime is TimeSpan chosenTime)
+                        if (!clockApplying && e.NewTime is TimeSpan chosenTime)
                         {
-                            send(new TextValue(chosenTime.ToString(@"hh\:mm", System.Globalization.CultureInfo.InvariantCulture)));
+                            string time = ShownForms.Time(chosenTime);
+                            timeShown.Chose(time, DateTime.UtcNow);
+                            send(new TextValue(time));
                         }
                     };
                     control = clock;
-                    show = view => clock.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
+                    show = view =>
+                    {
+                        clock.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
+
+                        // The picker shows the time the core holds when the core set it itself, and none when the core holds none.
+                        if (view?.Value is TextValue now && timeShown.Takes(ShownForms.Time(now.Text), DateTime.UtcNow))
+                        {
+                            clockApplying = true;
+                            try
+                            {
+                                clock.SelectedTime = ShownForms.TimeOf(now.Text);
+                            }
+                            finally
+                            {
+                                clockApplying = false;
+                            }
+                        }
+                    };
                     break;
                 }
 
+                ShownValue dayShown = new(ShownForms.Day(day));
                 CalendarDatePicker picker = new() { Header = header, IsEnabled = !field.Disabled };
-                if (hasDate)
+                if (ShownForms.DayOf(day) is DateTimeOffset moment)
                 {
                     picker.Date = moment;
                 }
@@ -1027,21 +1093,34 @@ internal sealed partial class NodeRenderer
                     };
                 }
 
+                // A day the person picks is sent; a day the core itself puts in the picker is not sent back.
+                bool pickerApplying = false;
                 picker.DateChanged += (_, e) =>
                 {
-                    if (e.NewDate is DateTimeOffset chosenDate)
+                    if (!pickerApplying && e.NewDate is DateTimeOffset chosenDate)
                     {
-                        send(new TextValue(chosenDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)));
+                        string picked = ShownForms.Day(chosenDate);
+                        dayShown.Chose(picked, DateTime.UtcNow);
+                        send(new TextValue(picked));
                     }
                 };
                 control = picker;
                 show = view =>
                 {
                     picker.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
-                    if (view?.Value is TextValue now && DateTimeOffset.TryParse(now.Text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeLocal, out DateTimeOffset shown)
-                        && picker.Date?.Date != shown.Date)
+
+                    // The picker shows the day the core holds when the core set it itself, and none when the core holds none.
+                    if (view?.Value is TextValue now && dayShown.Takes(ShownForms.Day(now.Text), DateTime.UtcNow))
                     {
-                        picker.Date = shown;
+                        pickerApplying = true;
+                        try
+                        {
+                            picker.Date = ShownForms.DayOf(now.Text);
+                        }
+                        finally
+                        {
+                            pickerApplying = false;
+                        }
                     }
                 };
                 break;
@@ -1051,24 +1130,30 @@ internal sealed partial class NodeRenderer
                 double.TryParse(slider.Max, System.Globalization.CultureInfo.InvariantCulture, out double high);
                 double.TryParse(number, System.Globalization.CultureInfo.InvariantCulture, out double current);
                 Slider bar = new() { Header = header, Minimum = low, Maximum = high > low ? high : low + 1, Value = current, IsEnabled = !field.Disabled };
+                ShownValue numberShown = new(ShownForms.Number(number));
                 bool sliding = false;
                 bar.ValueChanged += (_, e) =>
                 {
                     if (!sliding)
                     {
-                        send(new TextValue(e.NewValue.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                        string moved = e.NewValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        numberShown.Chose(ShownForms.Number(moved), DateTime.UtcNow);
+                        send(new TextValue(moved));
                     }
                 };
                 control = bar;
                 show = view =>
                 {
                     bar.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
-                    if (view?.Value is TextValue now && double.TryParse(now.Text, System.Globalization.CultureInfo.InvariantCulture, out double set) && set != bar.Value)
+
+                    // The slider stands at the number the core holds when the core set it itself; a number the core took away puts the slider
+                    // where a field with no number is drawn (its least), and the answers to a drag never move it back.
+                    if (view?.Value is TextValue now && numberShown.Takes(ShownForms.Number(now.Text), DateTime.UtcNow))
                     {
                         sliding = true;
                         try
                         {
-                            bar.Value = set;
+                            bar.Value = ShownForms.NumberOf(now.Text) ?? 0;
                         }
                         finally
                         {
