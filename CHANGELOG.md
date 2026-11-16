@@ -312,6 +312,10 @@ every `@navree/*` package carries the same version.
 - With `Shell::collapse(Collapse::Never)`, the top bar of a wide screen had no fold button but
   kept the separator that stands after it. The separator now goes with the button; on a phone,
   where the button opens the sidebar, both stay.
+- An error page drawn in the app's shell was given the request's path without its query, so a
+  theme or a mode asked for in the address (`?mode=light`) was dropped on it while every other page
+  of the shell honoured it. The shell is now applied to the path and the query, as the `AppShell`
+  extractor does.
 
 ## [1.7.0] - 2026-11-27
 

@@ -401,6 +401,25 @@ async fn a_signed_in_user_gets_the_error_inside_the_shell() {
     }
 }
 
+/// The shell around an error page reads the address as any page of it does: a mode or a theme
+/// asked for in the query holds, and the rest of the query is the theme menu's way back.
+#[tokio::test]
+async fn a_mode_asked_for_in_the_address_holds_on_an_error_page_in_the_shell() {
+    let app = app().await;
+    let response = get_as_user(&app, "/nowhere?mode=light").await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let text = response.text();
+    assert!(text.contains(r#"data-slot="sidebar""#), "{text}");
+    assert!(text.contains(r#"data-mode="light""#), "{text}");
+    let themed = get_as_user(&app, "/secret?theme=ocean&mode=light")
+        .await
+        .text();
+    assert!(themed.contains(r#"data-theme="ocean""#), "{themed}");
+    // With nothing asked, the shell's own look, as before.
+    let plain = get_as_user(&app, "/nowhere").await.text();
+    assert!(!plain.contains("data-mode="), "{plain}");
+}
+
 #[tokio::test]
 async fn without_a_shell_the_page_stands_alone() {
     let app = app_with(false, false).await;

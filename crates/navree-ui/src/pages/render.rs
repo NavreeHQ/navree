@@ -526,7 +526,8 @@ async fn document(
     #[cfg(feature = "native-preview")]
     let wants_shell = wants_shell && !crate::asked::in_web_view(&request.headers);
     if wants_shell && let Some(shell) = shell_of(request).await {
-        let app = shell.for_request(request.uri.path(), &request.headers);
+        // The path and its query: a `?theme=` or `?mode=` in the address holds here too.
+        let app = shell.for_request(path_and_query(&request.uri), &request.headers);
         let in_shell = page.in_shell(&app);
         let in_shell = if fresh { in_shell.fresh() } else { in_shell };
         return in_shell.into_response();
@@ -534,6 +535,12 @@ async fn document(
     let view = page.into_view();
     let view = if fresh { view.fresh() } else { view };
     view.into_response()
+}
+
+/// The request's path with its query, as [`Shell::for_request`] reads it.
+fn path_and_query(uri: &http::Uri) -> &str {
+    uri.path_and_query()
+        .map_or_else(|| uri.path(), |both| both.as_str())
 }
 
 /// How long the app's shell gets to be built. The page on its own is the answer when it takes

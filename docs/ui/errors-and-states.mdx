@@ -50,6 +50,8 @@ m.contribute(ErrorShell::new(|request| async move { shell_for(request.user).awai
 
 The builder runs only for an error, and it has one second. One that is slower, that panics or that returns `None` leaves the page on its own, with no sidebar, and never turns the answer into JSON.
 
+The shell is applied to the request's path and query, as on any of its pages: a theme or a mode asked for in the address (`?theme=ocean&mode=light`) holds on an error page too, and the reader's choice in the theme cookie does as well.
+
 A module of a plugin that is not one of the framework's own packages may contribute neither error pages (`m.error_pages`) nor an `ErrorShell`, and the boot stops if one does: the app registers such a plugin's pages, or its shell, from a module of its own.
 
 A guest gets a page on its own: the same stylesheet, one `h1` and no script. So does a 401, a 429 and a 503 for anyone, because those must work when much else does not, and so does a panic. The page carries the build, so a boosted link to it is shown in place and costs one request.
