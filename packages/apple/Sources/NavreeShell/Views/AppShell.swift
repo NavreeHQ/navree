@@ -1,3 +1,4 @@
+import Accessibility
 import NavreeCoreBridge
 import NavreeDesign
 import NavreeProtocol
@@ -43,7 +44,9 @@ public struct AppShell: View {
 
     public var body: some View {
         Group {
-            if let client = session.client {
+            if let client = session.client, client.stopped {
+                StoppedView { session.restart() }
+            } else if let client = session.client {
                 Chrome(client: client, configuration: session.configuration, commands: session.commands)
                     // Moved between the window under an item in the menu bar and a
                     // full window, the chrome is laid out anew for the window it
@@ -126,6 +129,26 @@ public struct AppShell: View {
     }
 }
 
+/// What a window shows when its core has stopped: that the app must be
+/// started again, and the button that does it.
+struct StoppedView: View {
+    let restart: @MainActor () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("The App Stopped", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("Something went wrong inside the app and it can't go on. Start it again to carry on.")
+        } actions: {
+            Button("Start Again", action: restart)
+                .buttonStyle(.borderedProminent)
+        }
+        .onAppear {
+            AccessibilityNotification.Announcement(String(localized: "The app stopped. Start it again to carry on.")).post()
+        }
+    }
+}
+
 /// The room a sheet has in the window, given to every sheet the window's
 /// screens open: on a Mac, the window's size under its bar, so a sheet in a
 /// window narrower than a form (the window under an item in the menu bar)
@@ -148,68 +171,104 @@ struct SheetRoom: ViewModifier {
 /// for as long as the scene lives. The session the core's requests run in is
 /// not the window's: every window of the app shares the one ``SessionKeeper``
 /// holds.
+///
+/// A core that fails inside stops for good. The window then says the app
+/// must be started again and offers it (``restart()``): a new core, started
+/// plainly, takes the stopped one's place.
 @MainActor
 @Observable
 final class Session {
     let configuration: ShellConfiguration
-    let client: NativeClient?
-    let effects: SystemEffects?
+    private(set) var client: NativeClient?
+    @ObservationIgnored private(set) var effects: SystemEffects?
     /// What the menu bar's commands act on in this window.
-    let commands: WindowCommands?
+    private(set) var commands: WindowCommands?
+    /// Whether the window's core keeps pages between launches.
+    private let keeps: Bool
+    /// The session the window takes part in, when it is not the app's own.
+    private let given: SessionKeeper?
     @ObservationIgnored private var heard: DeviceTraits
     @ObservationIgnored private var width: Width?
     @ObservationIgnored private var launched = false
+    /// The window's scene, as it was named when its core first started.
+    @ObservationIgnored private var scene = ""
     /// The name what is kept of this window is written under.
     @ObservationIgnored private var kept = Session.snapshot
 
     /// With `keeps` false the window's core keeps nothing between launches
-    /// (a window beside the app's main ones).
-    init(configuration: ShellConfiguration, keeps: Bool = true) {
+    /// (a window beside the app's main ones). `keeper` is the session the
+    /// window takes part in: the app's one session unless a test gives another.
+    init(configuration: ShellConfiguration, keeps: Bool = true, keeper: SessionKeeper? = nil) {
         self.configuration = configuration
+        self.keeps = keeps
+        given = keeper
         let device = Session.device()
         heard = device
+        make(device)
+    }
+
+    /// Makes the window's core, its client and what carries out its effects.
+    /// A configuration the core does not read makes none.
+    private func make(_ device: DeviceTraits) {
         let config = CoreConfiguration.json(configuration, device: device, keeps: keeps)
-        guard let core = Core(config: config) else {
-            client = nil
-            effects = nil
-            commands = nil
-            return
-        }
+        guard let core = Core(config: config) else { return }
         // The session is opened before a transport is made over it: a
         // sign-out that was cut short is finished before anything is read.
-        let keeper = SessionKeeper.shared(for: configuration)
+        let keeper = given ?? SessionKeeper.shared(for: configuration)
         let effects = SystemEffects(
             transport: configuration.transport(), keeper: keeper,
             signedWith: configuration.signedWith, origin: configuration.base, site: configuration.site,
             pictureHosts: configuration.pictureHosts
         )
-        self.effects = effects
         let client = NativeClient(core: core, effects: effects)
+        client.onStop = { [weak self] in self?.coreStopped() }
+        self.effects = effects
         self.client = client
         commands = WindowCommands(client: client)
     }
 
     /// Starts once: from what was kept of this window when the system brings
-    /// back a scene it ended, else plainly (and what was kept is let go).
-    /// `main` is false for a window beside the app's main ones, which does
-    /// not decide what stays of the windows before.
+    /// back a scene it ended, else plainly (and what was kept is let go); and
+    /// plainly after the window's core stopped (``StartRules``). `main` is
+    /// false for a window beside the app's main ones, which does not decide
+    /// what stays of the windows before.
     func begin(restoring: Bool, scene: String = "", main: Bool = true) {
         guard let client, let effects, !client.began else { return }
+        self.scene = scene
         effects.begins(restoring: main ? restoring : nil)
         // Each window runs a core of its own, and its place is kept under its own name.
         kept = scene.isEmpty ? Self.snapshot : Self.snapshot + "-" + scene
-        let snapshot = restoring ? effects.snapshots.readData(kept) : nil
-        if snapshot == nil { effects.keep(snapshot: nil, under: kept) }
-        client.begin(restoring: snapshot)
+        client.begin(restoring: StartRules.snapshot(restoring: restoring, kept: kept, in: effects.snapshots))
         // The token is asked for at every launch of a build signed for push.
         if configuration.signedWith.contains(.pushNotifications) { AppEvents.registerForPush() }
         launch(configuration.launch, in: client)
     }
 
-    /// The app went away: what the core keeps for a launch the system may end.
+    /// The app went away: what the core keeps for a launch the system may
+    /// end. A core that has stopped has nothing to give, and what was kept
+    /// before it stopped stays as it is.
     func keep() {
-        guard let client, let effects else { return }
+        guard let client, let effects, !client.stopped else { return }
         effects.keep(snapshot: client.snapshot(), under: kept)
+    }
+
+    /// The window's core stopped. That is written down beside what is kept
+    /// of the window, so the start that follows, in this run or the next,
+    /// is a plain one; and what the core had asked for is dropped.
+    private func coreStopped() {
+        effects?.keep(snapshot: Data("stopped".utf8), under: StartRules.stoppedKey(kept))
+        effects?.stopWork()
+    }
+
+    /// Starts the window again after its core stopped: a new core in the
+    /// stopped one's place, started plainly and told the window's width.
+    /// The stopped core is let go, which gives its handle back.
+    func restart() {
+        guard let stopped = client, stopped.stopped else { return }
+        make(heard)
+        guard let client, client !== stopped else { return }
+        begin(restoring: false, scene: scene, main: false)
+        if let width { client.send(.window(width: width)) }
     }
 
     func window(_ width: Width) {

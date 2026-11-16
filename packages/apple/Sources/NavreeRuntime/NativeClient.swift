@@ -57,6 +57,16 @@ public final class NativeClient {
         NativeClient.log.fault("\(text)")
     }
 
+    /// The core has stopped for good after a failure inside it
+    /// (`"stopped": true` in an answer): what it held is dropped, nothing it
+    /// had queued is sent, and every later call would answer the same. What
+    /// is here is what it last said; nothing more is sent to it. The app
+    /// tells the person it must be started again, and starts a new core.
+    public private(set) var stopped = false
+
+    /// Called once, when the core is first found stopped.
+    @ObservationIgnored public var onStop: @MainActor () -> Void = {}
+
     @ObservationIgnored private let core: Core
     @ObservationIgnored private var queue: [(json: Data, tag: String)] = []
     @ObservationIgnored private var sending = false
@@ -95,8 +105,10 @@ public final class NativeClient {
         send(json: event.json, tag: event.tag)
     }
 
-    /// Tells the core an event already written as JSON.
+    /// Tells the core an event already written as JSON. A core that has
+    /// stopped is told nothing more.
     func send(json: Data, tag: String) {
+        guard !stopped else { return }
         queue.append((json, tag))
         guard !sending else { return }
         sending = true
@@ -104,6 +116,16 @@ public final class NativeClient {
         while !queue.isEmpty {
             handle(queue.removeFirst())
         }
+    }
+
+    /// The core said it has stopped, in `words` of its own: said once, and
+    /// what waited to be sent is let go.
+    func noteStop(_ words: String) {
+        guard !stopped else { return }
+        stopped = true
+        queue.removeAll()
+        problem("the core stopped and must be started again: \(words)")
+        onStop()
     }
 
     /// Reads every part again: at start, and after the interface was made
@@ -128,19 +150,25 @@ public final class NativeClient {
 
     /// What the core keeps for a launch after the system ended the app, as
     /// JSON to store as it is, or `nil` when there is nothing to keep. It
-    /// holds what the person typed.
+    /// holds what the person typed. A core that has stopped has none to
+    /// give, which says nothing about what was stored before: see ``stopped``.
     public func snapshot() -> Data? {
-        query(Self.part("snapshot"))
+        stopped ? nil : query(Self.part("snapshot"))
     }
 
     // MARK: - The loop
 
     private func handle(_ event: (json: Data, tag: String)) {
+        guard !stopped else { return }
         switch Update.read(core.send(event.json)) {
+        case .failure(.stopped(let words)):
+            noteStop(words)
         case .failure(let error):
             problem("the core did not take `\(event.tag)`: \(error)")
         case .success(let update):
             apply(update.changed)
+            // A core found stopped while its parts were read: nothing it asked is carried out.
+            guard !stopped else { return }
             for tag in update.unread {
                 problem("an effect did not read: \(tag)")
             }
@@ -222,11 +250,16 @@ public final class NativeClient {
 
     /// Reads a part: `nil` when there is none (`null`) or the core refused the query.
     private func query(_ query: Data) -> Data? {
+        guard !stopped else { return nil }
         let data = core.view(query)
         if data.isEmpty || data == Data("null".utf8) { return nil }
         if data.starts(with: Data(#"{"error":"#.utf8)) {
             let words = String(decoding: data, as: UTF8.self)
-            problem("the core refused a query: \(words)")
+            if CoreAnswer.isStop(data) {
+                noteStop(words)
+            } else {
+                problem("the core refused a query: \(words)")
+            }
             return nil
         }
         return data
