@@ -55,6 +55,10 @@ class PickedFiles internal constructor(private val folder: File) {
     /** What a file was chosen as: its media type, by token. A token that is here was made by this process. */
     private val types = ConcurrentHashMap<String, String>()
 
+    /** Which session the store is in: one more at each [clear]. Read and changed under [lock]. */
+    private var generation = 0L
+    private val lock = Any()
+
     /** What came of one chosen document. */
     sealed interface Result {
         data class Kept(val file: FileRef) : Result
@@ -72,6 +76,7 @@ class PickedFiles internal constructor(private val folder: File) {
      * background thread and stops when the caller's job is cancelled.
      */
     suspend fun keep(resolver: ContentResolver, uri: Uri, accept: String?, keepLocation: Boolean, held: Long = 0): Result = withContext(Dispatchers.IO) {
+        val session = synchronized(lock) { generation }
         val (shownName, knownSize) = describe(resolver, uri)
         val name = FileRules.displayName(shownName ?: uri.lastPathSegment)
         val mime = mimeOf(resolver, uri, name)
@@ -109,7 +114,17 @@ class PickedFiles internal constructor(private val folder: File) {
             copy.delete()
             return@withContext Result.Refused(FileRules.Refusal.Unreadable(name))
         }
-        types[token] = mime
+        // A session that ended while the file was read takes its copy with it: no token of it outlives the end.
+        val kept = synchronized(lock) {
+            if (generation != session) false else {
+                types[token] = mime
+                true
+            }
+        }
+        if (!kept) {
+            copy.delete()
+            return@withContext Result.Refused(FileRules.Refusal.Unreadable(name))
+        }
         Result.Kept(FileRef(token = token, name = name, mediaType = mime, size = copy.length()))
     }
 
@@ -136,9 +151,12 @@ class PickedFiles internal constructor(private val folder: File) {
         for (token in tokens) drop(token)
     }
 
-    /** Lets every copy go: the session ended. */
+    /** Lets every copy go: the session ended. A file still being read when this runs is not kept either. */
     fun clear() {
-        types.clear()
+        synchronized(lock) {
+            generation++
+            types.clear()
+        }
         folder.deleteRecursively()
     }
 
