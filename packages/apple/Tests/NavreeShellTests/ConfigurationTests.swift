@@ -9,10 +9,13 @@ import Testing
 @testable import NavreeShell
 
 @Test func aBuildWithNoTeamListsOnlyWhatAnyAppCanDo() {
-    #expect(
-        CoreConfiguration.caps(signedWith: [], signInScheme: nil)
-            == ["clipboard", "local_notification", "open_settings", "open_url", "request_review", "share"]
-    )
+    var listed = ["clipboard", "local_notification", "open_settings", "open_url", "request_review"]
+    // The share sheet is listed where the build shows one: on iPhone and iPad.
+    #if canImport(UIKit)
+    listed.append("share")
+    #endif
+    #expect(CoreConfiguration.caps(signedWith: [], signInScheme: nil) == listed)
+    #expect(CoreConfiguration.caps(signedWith: [], signInScheme: nil).contains("share") == DeviceCalls.shares)
 }
 
 @Test func aSignInSessionIsListedOnlyWhenItCanComeBack() {

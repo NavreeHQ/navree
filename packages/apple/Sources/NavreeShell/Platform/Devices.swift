@@ -66,8 +66,8 @@ final class DeviceCalls {
 
     func run(call: Int, device: DeviceRequest, posts: Bool, options: Navree.JSONValue?) {
         switch device {
-        case .call(.share(let share)) where posts:
-            self.share(call, share)
+        case .call(.share(let share)):
+            self.share(call, share, posts: posts)
         case .call(.openSettings(let settings)):
             open(settings: settings.page)
             if posts { answer(call, .done([])) }
@@ -127,19 +127,46 @@ final class DeviceCalls {
 
     // MARK: - Share
 
-    private func share(_ call: Int, _ share: Navree.Share) {
+    /// Whether this build shows the system's share sheet: on iPhone and
+    /// iPad. Where it does not, `share` is not among the app's capabilities.
+    nonisolated static var shares: Bool {
         #if canImport(UIKit)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// What shows the system's share sheet for the items, under the title,
+    /// and hears whether the person shared. `false` when no sheet was shown.
+    var showShare: @MainActor ([Any], String?, @escaping @MainActor (Bool) -> Void) -> Bool = DeviceCalls.systemShare
+
+    /// A share is shown whether or not the core waits for what came of it: a
+    /// control that shares and asks for nothing back is still a share. Only
+    /// a result the core waits for is answered.
+    private func share(_ call: Int, _ share: Navree.Share, posts: Bool) {
         var items: [Any] = []
         if let text = share.text { items.append(text) }
         if let link = Self.link(share, site: site) { items.append(link) }
         if items.isEmpty, let title = share.title { items.append(title) }
-        guard !items.isEmpty, let top = Windows.top else { return answer(call, .refused(.unavailable)) }
-        let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        if let title = share.title { sheet.title = title }
-        sheet.completionWithItemsHandler = { [weak self] _, completed, _, _ in
-            MainActor.assumeIsolated {
+        var shown = false
+        if !items.isEmpty {
+            shown = showShare(items, share.title) { [weak self] completed in
+                guard posts else { return }
                 self?.answer(call, .done([Navree.Pair(name: "completed", value: completed ? "true" : "false")]))
             }
+        }
+        if !shown, posts { answer(call, .refused(Self.shares ? .unavailable : .unsupported)) }
+    }
+
+    /// The system's share sheet, over whatever the app shows now.
+    static func systemShare(_ items: [Any], _ title: String?, _ done: @escaping @MainActor (Bool) -> Void) -> Bool {
+        #if canImport(UIKit)
+        guard let top = Windows.top else { return false }
+        let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        if let title { sheet.title = title }
+        sheet.completionWithItemsHandler = { _, completed, _, _ in
+            MainActor.assumeIsolated { done(completed) }
         }
         if let popover = sheet.popoverPresentationController, let view = top.view {
             popover.sourceView = view
@@ -147,8 +174,9 @@ final class DeviceCalls {
             popover.permittedArrowDirections = []
         }
         top.present(sheet, animated: true)
+        return true
         #else
-        answer(call, .refused(.unsupported))
+        return false
         #endif
     }
 
