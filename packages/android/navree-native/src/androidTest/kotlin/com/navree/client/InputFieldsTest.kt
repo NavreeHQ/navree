@@ -3,6 +3,7 @@ package com.navree.client
 import android.graphics.Bitmap
 import android.net.Uri
 import android.text.format.Formatter
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
@@ -34,6 +35,7 @@ import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.navree.client.core.Content
 import com.navree.client.core.Events
 import com.navree.client.core.FieldValue
@@ -393,16 +395,18 @@ class InputFieldsTest {
                 config.getOrNull(SemanticsProperties.EditableText)?.text,
             ).filter { it.isNotEmpty() }.joinToString(" | ").ifEmpty { null }
         }
+        // A real key event to the window in front, as a keyboard's: it takes the window out of touch mode, where Compose does not
+        // give the focus to what is only clickable. (A small helper of this class: another branch has one, `Shots.pressTab()`, to merge with.)
         fun key(code: Int) {
-            Shots.shell("input keyevent $code")
-            Thread.sleep(250)
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(code)
             compose.waitForIdle()
+            Thread.sleep(150)
         }
         val outside = ArrayList<String>()
         var reached = false
         repeat(12) { press ->
             if (!reached) {
-                key(61)
+                key(KeyEvent.KEYCODE_TAB)
                 val name = focusedName()
                 assertNotNull("press ${press + 1} of Tab landed on nothing that can be seen or said; the stops so far: $outside", name)
                 outside += name!!
@@ -410,13 +414,13 @@ class InputFieldsTest {
             }
         }
         assertTrue("Tab reached the colour field as a stop named by its label and value; the stops: $outside", reached)
-        key(66)
+        key(KeyEvent.KEYCODE_ENTER)
         Thread.sleep(1200)
         compose.waitForIdle()
         val inside = LinkedHashSet<String>()
         var nothing = 0
         repeat(28) { press ->
-            key(61)
+            key(KeyEvent.KEYCODE_TAB)
             val name = focusedName()
             // The first Tab after a window opens may only bring the window's focus in; every later one must stop on something named.
             if (name == null) {
