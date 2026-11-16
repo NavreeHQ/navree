@@ -82,6 +82,18 @@ class ColourRulesTest {
     }
 
     @Test
+    fun a_hex_value_is_one_run_left_to_right_in_a_right_to_left_line_and_as_it_is_in_a_left_to_right_one() {
+        assertEquals("\u2066#16a34a\u2069", BidiRules.codes("#16a34a", rtl = true))
+        assertEquals("a short value too", "\u2066#ABC\u2069", BidiRules.codes("#ABC", rtl = true))
+        assertEquals("#16a34a", BidiRules.codes("#16a34a", rtl = false))
+        assertEquals("what is not a colour is left alone", "#12zz", BidiRules.codes("#12zz", rtl = true))
+        assertEquals("#1234", BidiRules.codes("#1234", rtl = true))
+        assertEquals("a name that starts with a hash is no colour", "#festive", BidiRules.codes("#festive", rtl = true))
+        // What a screen reader is told: the value stays one run, so it is read as it is written.
+        assertEquals(0x16a34a, ColourRules.parse(BidiRules.codes("#16a34a", rtl = true).filter { it != '\u2066' && it != '\u2069' }))
+    }
+
+    @Test
     fun a_mark_on_a_colour_is_black_on_a_light_colour_and_white_on_a_dark_one() {
         assertEquals(0x000000, ColourRules.onColour(0xffffff))
         assertEquals(0x000000, ColourRules.onColour(0xeab308))

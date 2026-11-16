@@ -10,9 +10,17 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -22,11 +30,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,18 +47,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import com.navree.client.R
 import com.navree.client.core.FieldValue
+import com.navree.client.design.BidiRules
 import com.navree.client.design.ColourRules
 import com.navree.protocol.Navree
 import kotlin.math.roundToInt
@@ -71,7 +90,7 @@ internal fun ColourFieldView(field: Navree.Field, input: Navree.ColourInput, pla
     PickerField(
         field = field,
         // What the page holds is shown as it is when it is not a colour the client can read.
-        text = rgb?.let(ColourRules::hex) ?: held,
+        text = rgb?.let { hexShown(ColourRules.hex(it)) } ?: held,
         placeholder = null,
         support = support,
         icon = { Swatch(rgb, Modifier.size(24.dp)) },
@@ -125,7 +144,11 @@ private fun familyName(rgb: Int): String = stringResource(
 
 /** What a screen reader says of a colour: its family and its hex value, as in "Green, #16a34a". */
 @Composable
-private fun colourName(rgb: Int): String = stringResource(R.string.navree_colour_named, familyName(rgb), ColourRules.hex(rgb))
+private fun colourName(rgb: Int): String = stringResource(R.string.navree_colour_named, familyName(rgb), hexShown(ColourRules.hex(rgb)))
+
+/** A hex value as it is shown and read: one run left to right whatever the direction of the line, as a value reads the same in every direction. */
+@Composable
+private fun hexShown(hex: String): String = BidiRules.codes(hex, LocalLayoutDirection.current == LayoutDirection.Rtl)
 
 /**
  * The dialog. The colour being chosen is a draft: a swatch, a slider or the
@@ -149,11 +172,17 @@ private fun ColourDialog(title: String?, start: Int?, onDone: (Int) -> Unit, onD
         typed = ColourRules.hex(ColourRules.fromHsl(next))
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = title?.let { shown -> { Text(shown) } },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val wrongWords = stringResource(R.string.navree_colour_hex_wrong, hexShown("#16a34a"))
+    val hintWords = stringResource(R.string.navree_colour_hex_hint, hexShown("#16a34a"))
+    ColourDialogFrame(
+        title = title,
+        onDismiss = onDismiss,
+        buttons = {
+            TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+            TextButton(onClick = { parsed?.let(onDone) }, enabled = parsed != null) { Text(stringResource(android.R.string.ok)) }
+        },
+        body = {
+            run {
                 // The colour as it stands: a swatch, and its words.
                 // With nothing typed there is no colour yet; with something that is not a colour yet, the one the sliders stand at.
                 val previewed: Int? = parsed ?: if (typed.isEmpty()) null else ColourRules.fromHsl(hsl)
@@ -184,7 +213,6 @@ private fun ColourDialog(title: String?, start: Int?, onDone: (Int) -> Unit, onD
                 HslSlider(stringResource(R.string.navree_hue), stringResource(R.string.navree_degrees, hsl.hue.roundToInt()), hsl.hue, 360f) { set(hsl.copy(hue = it)) }
                 HslSlider(stringResource(R.string.navree_saturation), stringResource(R.string.navree_percent_value, hsl.saturation.roundToInt()), hsl.saturation, 100f) { set(hsl.copy(saturation = it)) }
                 HslSlider(stringResource(R.string.navree_lightness), stringResource(R.string.navree_percent_value, hsl.lightness.roundToInt()), hsl.lightness, 100f) { set(hsl.copy(lightness = it)) }
-                val wrongWords = stringResource(R.string.navree_colour_hex_wrong)
                 OutlinedTextField(
                     value = typed,
                     onValueChange = { next ->
@@ -194,7 +222,9 @@ private fun ColourDialog(title: String?, start: Int?, onDone: (Int) -> Unit, onD
                         ColourRules.parse(text)?.let { packed = ColourRules.toHsl(it, hsl.hue).let { found -> floatArrayOf(found.hue, found.saturation, found.lightness) } }
                     },
                     label = { Text(stringResource(R.string.navree_colour_hex)) },
-                    supportingText = { Text(if (wrong) wrongWords else stringResource(R.string.navree_colour_hex_hint)) },
+                    supportingText = { Text(if (wrong) wrongWords else hintWords) },
+                    // What is typed is a value, not prose: it reads left to right and stands at the left whatever the direction of the screen.
+                    textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr),
                     trailingIcon = if (wrong) ({ Icon(Glyphs.Error, contentDescription = null) }) else null,
                     isError = wrong,
                     singleLine = true,
@@ -204,9 +234,53 @@ private fun ColourDialog(title: String?, start: Int?, onDone: (Int) -> Unit, onD
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { parsed?.let(onDone) }, enabled = parsed != null) { Text(stringResource(android.R.string.ok)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } },
     )
+}
+
+/**
+ * Material's dialog, laid out here so that its buttons stay above the keyboard.
+ * A dialog's window does not move out of the keyboard's way by itself: with
+ * `DialogProperties(decorFitsSystemWindows = false)` it is told to use window
+ * insets and the soft input mode is set to adjust nothing (the properties' own
+ * reference says so), so the window fills the screen and the dialog stands in
+ * the middle of what the system bars, a cut-out and the keyboard leave
+ * (`WindowInsets.safeDrawing`, which holds the keyboard's insets, applied as
+ * padding). Its body scrolls, and its title and buttons do not.
+ */
+@Composable
+private fun ColourDialogFrame(title: String?, onDismiss: () -> Unit, buttons: @Composable RowScope.() -> Unit, body: @Composable ColumnScope.() -> Unit) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))
+                // A tap beside the dialog leaves it, as a tap outside a dialog's window does.
+                .pointerInput(Unit) { detectTapGestures { onDismiss() } }
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                modifier = Modifier
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth()
+                    .pointerInput(Unit) { detectTapGestures { } }
+                    .semantics { paneTitle = title.orEmpty() },
+                shape = AlertDialogDefaults.shape,
+                color = AlertDialogDefaults.containerColor,
+                contentColor = AlertDialogDefaults.textContentColor,
+                tonalElevation = AlertDialogDefaults.TonalElevation,
+            ) {
+                Column(Modifier.padding(24.dp)) {
+                    title?.let {
+                        Text(it, style = MaterialTheme.typography.headlineSmall, color = AlertDialogDefaults.titleContentColor, modifier = Modifier.padding(bottom = 16.dp).semantics { heading() })
+                    }
+                    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) { body() }
+                    Row(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), content = buttons)
+                }
+            }
+        }
+    }
 }
 
 /** One of the three sliders: its name and value above, and the value said to a screen reader as words, not as a share of the track. */

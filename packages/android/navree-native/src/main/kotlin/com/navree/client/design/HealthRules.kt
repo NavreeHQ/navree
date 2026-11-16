@@ -284,6 +284,7 @@ object BidiRules {
 
     private val PHONE = Regex("""^\+?\d[\d\s().-]{5,}\d$""")
     private val EMAIL = Regex("""^[^\s@]+@[^\s@]+\.[^\s@]+$""")
+    private val HEX_COLOUR = Regex("""^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$""")
     private val ISO_DATE = Regex("""^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$""")
     private val DAY_FIRST_DATE = Regex("""^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$""")
 
@@ -301,7 +302,7 @@ object BidiRules {
     }
 
     /**
-     * A phone number or an e-mail address in a right to left line, read left to
+     * A phone number, an e-mail address or a hex colour in a right to left line, read left to
      * right as Android's right to left guidance has it (a number read right to
      * left has its groups reversed); any other text as it is, and every text
      * as it is in a left to right line, where an isolate says nothing and only
@@ -309,7 +310,7 @@ object BidiRules {
      * phone number.
      */
     fun codes(text: String, rtl: Boolean): String =
-        if (rtl && !isDate(text) && (PHONE.matches(text) || EMAIL.matches(text))) amount(text) else text
+        if (rtl && !isDate(text) && (PHONE.matches(text) || EMAIL.matches(text) || HEX_COLOUR.matches(text))) amount(text) else text
 }
 
 /** Parts of a whole: a meter's segments, a column's parts, a strip's cells. */

@@ -48,8 +48,8 @@
     <string name="navree_choose_colour">Choose a colour</string>
     <string name="navree_colour_named">%1$s, %2$s</string>
     <string name="navree_colour_hex">Hex value</string>
-    <string name="navree_colour_hex_hint">Six hex digits, like #16a34a</string>
-    <string name="navree_colour_hex_wrong">Not a colour. Use six hex digits, like #16a34a.</string>
+    <string name="navree_colour_hex_hint">Six hex digits, like %1$s</string>
+    <string name="navree_colour_hex_wrong">Not a colour. Use six hex digits, like %1$s.</string>
     <string name="navree_hue">Hue</string>
     <string name="navree_saturation">Saturation</string>
     <string name="navree_lightness">Lightness</string>

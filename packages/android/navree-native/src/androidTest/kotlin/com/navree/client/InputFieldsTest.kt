@@ -305,9 +305,17 @@ class InputFieldsTest {
         compose.waitForIdle()
     }
 
+    /** What a screen reader is told, without the marks that keep a value one run in a right to left line. */
+    private fun plain(text: String) = text.replace("\u2066", "").replace("\u2069", "")
+
+    /** A node whose description, read without those marks, is [text]. */
+    private fun describedAs(text: String) = SemanticsMatcher("is described as $text") { node ->
+        plain(node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", ").orEmpty()) == text
+    }
+
     /** The swatch of a colour: a selectable with a name that ends in its value (the field's own overlay, which names the value too, is not one). */
     private fun isSwatch(hex: String) = SemanticsMatcher("is the swatch $hex") { node ->
-        val said = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", ").orEmpty()
+        val said = plain(node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", ").orEmpty())
         said.endsWith(", $hex") && !said.startsWith("Label colour") && node.config.contains(SemanticsProperties.Selected)
     }
 
@@ -318,14 +326,14 @@ class InputFieldsTest {
     fun choosingASwatchSendsTheValueInTheProtocolsFormAndTheFormPostsIt() {
         startOnTheClaimsForm()
         assertEquals("the page's own value is held first", FieldValue.Text("#16a34a"), held("f-label"))
-        reveal(compose.onNode(hasContentDescription("Label colour, #16a34a"))).assertExists()
+        reveal(compose.onNode(describedAs("Label colour, #16a34a"))).assertExists()
         openColour()
         swatch("#2563eb").performClick()
         compose.waitForIdle()
         assertEquals("nothing is sent until the choice is confirmed", FieldValue.Text("#16a34a"), held("f-label"))
         compose.onNodeWithText("OK").performClick()
         waitFor("the colour to reach the core") { held("f-label") == FieldValue.Text("#2563eb") }
-        reveal(compose.onNode(hasContentDescription("Label colour, #2563eb"))).assertExists()
+        reveal(compose.onNode(describedAs("Label colour, #2563eb"))).assertExists()
         save()
         val body = claims.posts.last().body!!.utf8()
         assertTrue("the form posts the colour as #rrggbb under the field's name: $body", body.contains("label=%232563eb"))
@@ -360,12 +368,12 @@ class InputFieldsTest {
         openColour()
         swatch("#16a34a").assertIsSelected()
         val chosenSwatch = SemanticsMatcher("is a chosen swatch") { node ->
-            val said = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", ").orEmpty()
+            val said = plain(node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", ").orEmpty())
             Regex("^[A-Za-z]+, #[0-9a-f]{6}$").matches(said) && node.config.getOrNull(SemanticsProperties.Selected) == true
         }
         val selected = compose.onAllNodes(chosenSwatch).fetchSemanticsNodes()
         assertEquals("one swatch is chosen", 1, selected.size)
-        val name = selected.single().config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", ").orEmpty()
+        val name = plain(selected.single().config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", ").orEmpty())
         assertEquals("it is named by its colour's family and its value", "Green, #16a34a", name)
         for (rgb in ColourRules.PALETTE) {
             val swatches = compose.onAllNodes(isSwatch(ColourRules.hex(rgb))).fetchSemanticsNodes()
@@ -434,12 +442,49 @@ class InputFieldsTest {
             }
         }
         for (rgb in ColourRules.PALETTE) {
-            assertTrue("a stop for the swatch ${ColourRules.hex(rgb)}; the stops: $inside", inside.any { it.contains(", ${ColourRules.hex(rgb)}") })
+            assertTrue("a stop for the swatch ${ColourRules.hex(rgb)}; the stops: $inside", inside.any { plain(it).contains(", ${ColourRules.hex(rgb)}") })
         }
         for (control in listOf("Hue", "Saturation", "Lightness", "Cancel", "OK")) {
             assertTrue("a stop named $control; the stops: $inside", inside.any { it.startsWith(control) })
         }
-        assertTrue("a stop for the hex box, named by what it holds or by its label; the stops: $inside", inside.any { it.contains("Hex value") || it.startsWith("#") })
+        assertTrue("a stop for the hex box, named by what it holds or by its label; the stops: $inside", inside.any { it.contains("Hex value") || plain(it).startsWith("#") })
+    }
+
+    /** Where the keyboard's top edge is in the window of the colour dialog, in pixels, or null while it is not showing. */
+    private fun keyboardTop(): Int? {
+        val node = compose.onAllNodes(hasText("OK")).fetchSemanticsNodes().firstOrNull() ?: return null
+        val view = node.root as? android.view.View ?: return null
+        val insets = androidx.core.view.ViewCompat.getRootWindowInsets(view) ?: return null
+        val keyboard = androidx.core.view.WindowInsetsCompat.Type.ime()
+        if (!insets.isVisible(keyboard)) return null
+        return view.rootView.height - insets.getInsets(keyboard).bottom
+    }
+
+    /**
+     * A person types a hex value on a phone: with the keyboard up, the dialog's
+     * OK and Cancel are wholly above the keyboard (and below the top of the
+     * window), the hex box is above it too, and Cancel can be pressed.
+     */
+    @Test
+    fun theColourDialogsButtonsAndHexBoxStayAboveTheKeyboardWhileAHexValueIsTyped() {
+        startOnTheClaimsForm()
+        openColour()
+        compose.onNode(hasSetTextAction()).performClick()
+        waitFor("the keyboard to show", 30_000) { keyboardTop() != null }
+        Thread.sleep(1000)
+        compose.waitForIdle()
+        val top = keyboardTop()!!
+        for (name in listOf("OK", "Cancel")) {
+            val bounds = compose.onNodeWithText(name).fetchSemanticsNode().boundsInWindow
+            assertTrue("$name ends at ${bounds.bottom} px, below the keyboard's top edge at $top px", bounds.bottom <= top + 0.5f)
+            assertTrue("$name starts at ${bounds.top} px, above the window", bounds.top >= 0f)
+        }
+        val box = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInWindow
+        assertTrue("the hex box ends at ${box.bottom} px, below the keyboard's top edge at $top px", box.bottom <= top + 0.5f)
+        Shots.take("inputs-colour-sheet-keyboard")
+        compose.onNodeWithText("Cancel").performClick()
+        waitFor("the dialog to close") { compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isEmpty() }
+        assertEquals("Cancel sent nothing", FieldValue.Text("#16a34a"), held("f-label"))
     }
 
     // ---------------------------------------------------------------- the file field
