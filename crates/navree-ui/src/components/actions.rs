@@ -23,6 +23,10 @@ pub enum ButtonVariant {
     Destructive,
     /// Looks like a link.
     Link,
+    /// Something that destroys, quieter than [`Destructive`](Self::Destructive): the danger
+    /// colour on no fill, with a faint line of it around, and a thin tint of it on hover. It
+    /// links the looks stylesheet.
+    DestructiveOutline,
 }
 
 /// What a `<button>` does in a form.
@@ -391,6 +395,9 @@ impl Button {
             ButtonVariant::Ghost => root.attr("data-variant", "ghost"),
             ButtonVariant::Destructive => root.attr("data-variant", "destructive"),
             ButtonVariant::Link => root.attr("data-variant", "link"),
+            ButtonVariant::DestructiveOutline => root
+                .attr("data-variant", "destructive-outline")
+                .uses(Uses::LOOKS),
         };
         root = root
             .attr_opt("data-size", self.size.as_str())

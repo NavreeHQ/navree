@@ -358,5 +358,64 @@ for (const name of NAMES) {
         await page.done();
       });
     });
+
+    // ---- A destructive outline button, and buttons on the inverse surface
+
+    describe("button variants", () => {
+      test("a destructive outline: the danger colour, a faint line of it and no fill, a thin tint on hover, light and dark, 1440 and 390 px, outside and inside the inverse surface", async () => {
+        const PROPS = ["background-color", "color", "border-top-color", "border-top-left-radius", "height"];
+        for (const path of PAGES) {
+          for (const mode of MODES) {
+            for (const width of WIDTHS) {
+              const page = await open(`${path}?mode=${mode}`, { width });
+              const where = `${path} ${mode} ${width}`;
+              const pageBg = (await styles(page, "body", ["background-color"]))["background-color"];
+              const outline = await styles(page, "[data-proof=destructive-outline] [data-slot=button]", PROPS);
+              const link = await styles(page, "[data-proof=destructive-outline-link] [data-slot=button]", PROPS);
+              const solidTint = await styles(page, "[data-proof=destructive] [data-slot=button]", PROPS);
+              const plainOutline = await styles(page, "[data-proof=outline] [data-slot=button]", PROPS);
+              const inside = await styles(page, "[data-proof=inverse-destructive] [data-slot=button]", PROPS);
+              const card = await styles(page, "[data-proof=inverse-card] [data-slot=card]", ["background-color"]);
+              // No fill, a thin line of the danger colour, and the danger colour as its text.
+              assert.equal(outline["background-color"], null, `${where}: no fill`);
+              assert.equal(outline["border-top-color"].length, 4, `${where}: the line is the danger colour laid thin`);
+              assert.ok(Math.abs(outline["border-top-color"][3] - 0.3) < 0.02, `${where}: at 30%: ${outline["border-top-color"]}`);
+              assert.deepEqual(outline.color, (await styles(page, "[data-proof=destructive] [data-slot=button]", ["color"])).color, `${where}: the destructive button's text colour`);
+              assert.ok(contrastOf(outline.color, pageBg) >= 4.5, `${where}: its text on the page`);
+              assert.ok(contrastOf(inside.color, card["background-color"]) >= 4.5, `${where}: its text on the inverse surface`);
+              assert.deepEqual([link["background-color"], link.color], [null, outline.color], `${where}: the same look as a small link`);
+              // The theme's button corner and control heights.
+              assert.equal(outline["border-top-left-radius"], plainOutline["border-top-left-radius"], `${where}: the button's corner`);
+              assert.equal(outline.height, plainOutline.height, `${where}: a control's height`);
+              // On hover: the destructive button's own tint at rest, and the text still reads.
+              await page.locator("[data-proof=destructive-outline] [data-slot=button]").hover();
+              await page.waitForFunction(() => getComputedStyle(document.querySelector("[data-proof=destructive-outline] [data-slot=button]")).backgroundColor !== "rgba(0, 0, 0, 0)");
+              const hovered = await styles(page, "[data-proof=destructive-outline] [data-slot=button]", PROPS);
+              assert.ok(Math.abs(hovered["background-color"][3] - 0.1) < 0.02, `${where}: a 10% tint on hover: ${hovered["background-color"]}`);
+              assert.deepEqual(hovered["background-color"], solidTint["background-color"], `${where}: the destructive button's tint`);
+              assert.ok(contrastOf(hovered.color, onto(hovered["background-color"], pageBg)) >= 4.5, `${where}: its text on its hover`);
+              // The variants drawn as before keep their look.
+              assert.equal(plainOutline["background-color"], null, `${where}: an outline button`);
+              assert.equal(solidTint["background-color"].length, 4, `${where}: the destructive button's tint`);
+              await page.mouse.move(0, 0);
+              // On the inverse surface, the primary button's hover still reads.
+              await page.locator("[data-proof=inverse-card] [data-slot=button][data-variant=primary]").hover();
+              const primary = await styles(page, "[data-proof=inverse-card] [data-slot=button][data-variant=primary]", PROPS);
+              assert.ok(contrastOf(primary.color, onto(primary["background-color"], card["background-color"])) >= 4.5, `${where}: the inverse primary button on hover`);
+              assert.deepEqual(await axe(page), [], `${where}: axe`);
+              await shot(page, `buttons-${path.replaceAll("/", "_")}-${mode}-${width}`);
+              await page.done();
+            }
+          }
+        }
+      });
+
+      test("a destructive outline is a button, or a link when it has somewhere to go, named by its words", async () => {
+        const page = await open("/looks?mode=light");
+        assert.equal(await page.locator("#buttons").getByRole("button", { name: "Delete deal" }).count(), 1);
+        assert.equal(await page.locator("#buttons").getByRole("link", { name: "Refund" }).count(), 1);
+        await page.done();
+      });
+    });
   });
 }

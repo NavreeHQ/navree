@@ -1278,6 +1278,7 @@ impl Cx {
         let (role, prominence) = match attr(element, "data-variant").as_deref() {
             Some("primary") => (n::Role::Primary, n::Prominence::High),
             Some("destructive") => (n::Role::Destructive, n::Prominence::High),
+            Some("destructive-outline") => (n::Role::Destructive, n::Prominence::Medium),
             Some("outline") => (n::Role::Secondary, n::Prominence::Medium),
             Some("ghost" | "link") => (n::Role::None, n::Prominence::Low),
             None | Some("secondary") => (n::Role::None, n::Prominence::Medium),

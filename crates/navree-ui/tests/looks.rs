@@ -118,9 +118,10 @@ fn the_segmented_group_reads_the_segment_roles_toggle_corners_and_control_height
 
 /// The hooks the looks sheet's rules are keyed on: each a value a page writes only when it asks
 /// for that look, so none of them reaches a part drawn as it always was.
-const HOOKS: [&str; 2] = [
+const HOOKS: [&str; 3] = [
     "[data-slot=button-group][data-variant=segmented]",
     "[data-slot=button-group][data-block]",
+    "[data-slot=button][data-variant=destructive-outline]",
 ];
 
 #[test]
@@ -340,5 +341,81 @@ fn a_theme_whose_inverse_surface_hides_a_colour_of_code_is_refused() {
                 && what.contains(" in light, on the inverse surface;")),
             "{colour}: {errors:?}"
         );
+    }
+}
+
+// ---- Button variants: a destructive outline, and a button on the inverse surface ------------
+
+#[test]
+fn a_destructive_outline_button_names_its_look_and_links_the_looks_sheet() {
+    let end = Button::new("Delete deal").variant(ButtonVariant::DestructiveOutline);
+    assert_eq!(
+        html(end.clone()),
+        r#"<button data-slot="button" data-variant="destructive-outline" type="button">Delete deal</button>"#
+    );
+    keeps_the_contract("destructive outline", end.into());
+    // As a link, small, with an icon: the same look.
+    let refund = html(
+        Button::new("Refund")
+            .variant(ButtonVariant::DestructiveOutline)
+            .size(Size::Sm)
+            .icon(icons::ROTATE_CCW)
+            .href("/invoices/7/refund"),
+    );
+    assert!(
+        refund.starts_with(r#"<a data-slot="button" data-variant="destructive-outline" data-size="sm" href="/invoices/7/refund">"#),
+        "{refund}"
+    );
+}
+
+#[test]
+fn a_destructive_outline_button_is_read_by_a_native_client_as_a_destructive_action() {
+    use navree_native::node::{self as n, Node as N};
+    use navree_ui::native::lower;
+
+    let lowered = lower(
+        &Button::new("Delete deal")
+            .variant(ButtonVariant::DestructiveOutline)
+            .into(),
+    );
+    let N::Button(button) = lowered.node else {
+        panic!("not a button: {:?}", lowered.node);
+    };
+    assert_eq!(button.role, n::Role::Destructive);
+    assert_eq!(button.prominence, n::Prominence::Medium);
+}
+
+#[test]
+fn the_destructive_outline_draws_the_danger_colour_and_the_tints_every_theme_already_passes() {
+    use navree_ui::theme::{Paint, PairKind, SURFACES, Token, pairs};
+
+    let css = looks_source();
+    let at = css
+        .find("[data-slot=button][data-variant=destructive-outline]{")
+        .expect("the rule");
+    let rule = &css[at..at + css[at..].find('\n').unwrap()];
+    for part in [
+        "border-color:color-mix(in oklab,var(--danger) 30%,transparent)",
+        "background:transparent",
+        "color:var(--danger)",
+        "&:hover{background:color-mix(in oklab,var(--danger) 10%,transparent)}",
+    ] {
+        assert!(rule.contains(part), "{part} in {rule}");
+    }
+    // Its text on any surface, and on its hover tint over any surface, are pairs every theme
+    // is already checked with: the danger text of a field's error and the destructive button.
+    for surface in SURFACES {
+        for on in [
+            Paint::Token(surface),
+            Paint::Tint(Token::Danger, 10, surface),
+        ] {
+            assert!(
+                pairs().iter().any(|pair| pair.kind == PairKind::Text
+                    && pair.text == Paint::Token(Token::Danger)
+                    && pair.on == on),
+                "danger on {}",
+                on.describe()
+            );
+        }
     }
 }

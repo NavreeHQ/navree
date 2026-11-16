@@ -66,6 +66,10 @@ fn button_variants() -> impl IntoIterator<Item = (&'static str, Button)> {
         ("Ghost", Button::ghost("Save")),
         ("Destructive", Button::destructive("Delete")),
         (
+            "Destructive outline",
+            Button::new("Delete deal").variant(ButtonVariant::DestructiveOutline),
+        ),
+        (
             "Link",
             Button::new("Read more").variant(ButtonVariant::Link),
         ),

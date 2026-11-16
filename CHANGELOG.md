@@ -229,6 +229,14 @@ every `@navree/*` package carries the same version.
   stat or code block that asks for none of them is drawn as before. `Stat::variant` and
   `CodeBlock::inverse` are new inherent methods: an app whose own extension trait gives either
   type a method of the same name calls it through the trait.
+- `ButtonVariant::DestructiveOutline` is a destructive action that waits beside others: the
+  danger colour on no fill, a line of it mixed 30% into transparent, and on hover the 10% tint
+  the destructive button rests on, so its text sits on pairs every theme is already checked
+  with. It is drawn by the looks sheet, which a page links only when it draws one, and a native
+  client reads it as a destructive action of medium prominence. A button inside the inverse
+  surface needs no variant: a primary button there takes the surface's text colour, with the
+  surface's colour as its text, and an outline button its lines and text. The other variants
+  are drawn as before.
 
 ### Fixed
 

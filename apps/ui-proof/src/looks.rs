@@ -146,6 +146,9 @@ fn inverse(path: &str, asked: &Asked) -> Grid {
                         Text::new("Text on the inverse surface."),
                         Text::muted("A quieter line."),
                         Badge::new("Isolated").variant(BadgeVariant::Success),
+                        el("div").attr("data-proof", "inverse-destructive").child(
+                            Button::new("Revoke access").variant(ButtonVariant::DestructiveOutline),
+                        ),
                         el("div")
                             .attr("data-proof", "inverse-segmented")
                             .child(mode(path, asked, "Mode on the inverse surface")),
@@ -177,9 +180,34 @@ fn inverse(path: &str, asked: &Asked) -> Grid {
     ))
 }
 
+/// The destructive outline button beside the variants drawn as before.
+fn buttons() -> Row {
+    Row::gap(2).wrap().children((
+        el("span")
+            .attr("data-proof", "destructive-outline")
+            .child(Button::new("Delete deal").variant(ButtonVariant::DestructiveOutline)),
+        el("span")
+            .attr("data-proof", "destructive-outline-link")
+            .child(
+                Button::new("Refund")
+                    .variant(ButtonVariant::DestructiveOutline)
+                    .size(Size::Sm)
+                    .icon(icons::ROTATE_CCW)
+                    .href("/looks#buttons"),
+            ),
+        el("span")
+            .attr("data-proof", "destructive")
+            .child(Button::destructive("Delete")),
+        el("span")
+            .attr("data-proof", "outline")
+            .child(Button::outline("Cancel")),
+    ))
+}
+
 fn page(shell: AppShell, path: &str, asked: &Asked) -> AppPage {
     shell.page("Looks").body(Stack::gap(10).children((
         section("segmented", "Segmented links", segmented(path, asked)),
+        section("buttons", "Buttons", buttons()),
         section("inverse", "The inverse surface", inverse(path, asked)),
     )))
 }

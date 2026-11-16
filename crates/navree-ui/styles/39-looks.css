@@ -17,3 +17,7 @@
   &[data-orientation=vertical] > [data-slot=button]{border-radius:var(--radius-toggle,var(--radius))}
 }
 [data-slot=button-group][data-block]{display:flex;& > [data-slot=button]{flex:1}}
+
+/* A destructive button with a line: the danger colour on no fill, a faint line of it, and a thin
+   tint of it on hover, the destructive button's own tint at rest. */
+[data-slot=button][data-variant=destructive-outline]{border-color:color-mix(in oklab,var(--danger) 30%,transparent);background:transparent;color:var(--danger);&:hover{background:color-mix(in oklab,var(--danger) 10%,transparent)}}

@@ -120,7 +120,7 @@ the app's own: `icon_file!` and `icon_set!` compile it from an SVG file
 
 | Design element | navree-ui |
 |---|---|
-| Button | `Button::primary`, `Button::outline`, `Button::ghost`, `Button::destructive`, `Button::new(..).variant(ButtonVariant::Secondary \| Link)`; `.size(Size::Xs \| Sm \| Md \| Lg)`, `.icon(..)`, `.icon_end(..)`, `.block()`, `.disabled(..)`, `.pending(..)` |
+| Button | `Button::primary`, `Button::outline`, `Button::ghost`, `Button::destructive`, `Button::new(..).variant(ButtonVariant::Secondary \| Link \| DestructiveOutline)` (DestructiveOutline: danger text with a faint danger line, no fill: "Delete deal", "Refund"; a white button on a dark card is `primary` inside `CardVariant::Inverse`); `.size(Size::Xs \| Sm \| Md \| Lg)`, `.icon(..)`, `.icon_end(..)`, `.block()`, `.disabled(..)`, `.pending(..)` |
 | Link styled as a button | `Button::...(..).href(url)`; `.prefetch()` for safe links; `.current(true)` on the link to the page shown (`aria-current="page"`, drawn raised) |
 | Icon-only button | `Button::icon_only(icons::NAME, "Accessible name")` |
 | Button that opens a dialog | `.opens_dialog(id)`, `.closes_dialog(id)` |
