@@ -2,7 +2,12 @@ package com.navree.client
 
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.InputModeManager
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -49,7 +54,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * and by its handle's menu, and a card that is scrolled out of the lane and back
  * shows what it showed. The server is a stand-in that records what it is told.
  */
-@OptIn(ExperimentalTestApi::class)
+@OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
 @RunWith(AndroidJUnit4::class)
 class LaneMoveTest {
     @get:Rule
@@ -61,6 +66,8 @@ class LaneMoveTest {
     }
 
     private val server = MockWebServer()
+
+    private var inputModes: InputModeManager? = null
 
     /** The forms of the moves the server was told, in order. */
     private val moves = CopyOnWriteArrayList<Map<String, String>>()
@@ -100,7 +107,12 @@ class LaneMoveTest {
             made = NavreeSession(compose.activity.application, config, origin.toHttpUrl())
             made.effects.activity = compose.activity
         }
-        compose.setContent { Shots.Looked { Host(made) } }
+        compose.setContent {
+            // The way the screen is in use (a finger or a keyboard) is the composition's to say; the test asks for the keyboard through it.
+            val modes = LocalInputModeManager.current
+            SideEffect { inputModes = modes }
+            Shots.Looked { Host(made) }
+        }
         compose.waitUntil(180_000) {
             val front = made.driver.nav.front?.let { made.driver.screens[it] }
             (front?.content as? Content.Native)?.screen?.title == "Board" && !front.loading
@@ -267,20 +279,22 @@ class LaneMoveTest {
         Thread.sleep(1_500)
         compose.waitForIdle()
         // The keyboard's Tab walks the screen from its top, a stop at a time, to the first card's handle (a button takes the focus only when the keyboard is in use).
+        // A button takes the focus only while the keyboard is what is in use: the test says so through the composition, as a keyboard's first key would.
+        var keyboard = false
+        compose.runOnUiThread { keyboard = inputModes?.requestInputMode(InputMode.Keyboard) == true }
+        compose.waitForIdle()
+        handle(0).performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.waitForIdle()
+        // And if that was not enough, Tab, given to the system as a keyboard gives it, walks to the handle.
         val stops = ArrayList<String>()
         for (press in 1..10) {
             if (focused(0)) break
             pressKey(KeyEvent.KEYCODE_TAB)
             stops += stopNow()
         }
-        val tabbed = focused(0)
-        if (!tabbed) {
-            handle(0).performSemanticsAction(SemanticsActions.RequestFocus)
-            compose.waitForIdle()
-        }
         val node = handle(0).fetchSemanticsNode()
         assertTrue(
-            "the first card's handle has the focus (reached by Tab: $tabbed; the stops of Tab: $stops; now: ${stopNow()}; " +
+            "the first card's handle has the focus (the keyboard was granted: $keyboard; the stops of Tab: $stops; now: ${stopNow()}; " +
                 "the handle says focused=${node.config.getOrNull(SemanticsProperties.Focused)} and can be asked for the focus: ${node.config.contains(SemanticsActions.RequestFocus)}; " +
                 "the window has the focus: ${compose.activity.hasWindowFocus()}; the view that has it: ${compose.activity.currentFocus})",
             focused(0),
