@@ -324,13 +324,45 @@ protocol SecretSlot: Sendable {
 }
 
 /// One Keychain item that never syncs and never moves to another device, and
-/// that can be read after the first unlock (so a refresh in the background works).
+/// that can be read after the first unlock (so a refresh in the background
+/// works).
+///
+/// It is kept in the data protection keychain on every system
+/// (`kSecUseDataProtectionKeychain`), with the class
+/// `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` and never marked to
+/// synchronise: such an item does not go to a new device, and is not in a
+/// backup restored on another one. On iPhone and iPad that keychain is the
+/// only one. On a Mac it is not the default: without the key, an item goes
+/// into the login keychain's file, where that class does not apply and the
+/// item goes wherever the file goes, so the key is always set.
+///
+/// On a Mac the data protection keychain is given only to an app signed with
+/// an application identifier that a provisioning profile authorises. A Mac
+/// build without one has no such keychain: nothing is kept (the system
+/// answers that an entitlement is missing), the session lasts as long as the
+/// app runs, and it is never put in the login keychain instead.
 struct KeychainSlot: SecretSlot {
     let service: String
     let account: String
 
-    private var query: [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
+    /// What finds the item, in the data protection keychain on every system.
+    var query: [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+            kSecAttrAccount as String: account, kSecUseDataProtectionKeychain as String: true,
+        ]
+    }
+
+    /// How the item is kept: readable after the first unlock, on this device only.
+    static var kept: [String: Any] {
+        [kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+    }
+
+    /// Whether a delete that answered `status` left nothing behind: it
+    /// deleted the item, there was none, or the build has no keychain to
+    /// keep one in.
+    static func isGone(_ status: OSStatus) -> Bool {
+        status == errSecSuccess || status == errSecItemNotFound || status == errSecMissingEntitlement
     }
 
     func read() -> Data? {
@@ -343,18 +375,17 @@ struct KeychainSlot: SecretSlot {
     }
 
     func write(_ data: Data) {
-        let attributes: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-        ]
+        var attributes = Self.kept
+        attributes[kSecValueData as String] = data
         var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
             var item = query
             item.merge(attributes) { _, new in new }
             status = SecItemAdd(item as CFDictionary, nil)
         }
-        // A build with no signature at all has no Keychain: the session then
-        // lasts only as long as the app runs.
+        // A build with no keychain of its own (no signature at all; on a Mac,
+        // no application identifier): the session then lasts only as long as
+        // the app runs.
         if status != errSecSuccess {
             Self.log.error("the session could not be kept in the Keychain: \(status, privacy: .public)")
         }
@@ -364,9 +395,9 @@ struct KeychainSlot: SecretSlot {
 
     func delete() -> Bool {
         let status = SecItemDelete(query as CFDictionary)
-        if status != errSecSuccess && status != errSecItemNotFound {
+        if !Self.isGone(status) {
             Self.log.error("the session could not be taken out of the Keychain: \(status, privacy: .public)")
         }
-        return status == errSecSuccess || status == errSecItemNotFound
+        return Self.isGone(status)
     }
 }
