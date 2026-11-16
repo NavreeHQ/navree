@@ -810,9 +810,7 @@ mod navree_plugin_guard {
     /// The plugin's part of the native clients' shell document, for a module of the app to
     /// register.
     pub fn native_sign_in() -> Factory<dyn NativeShellPart> {
-        Factory::new(|_| async {
-            Ok(Arc::new(SignInHere) as Arc<dyn NativeShellPart>)
-        })
+        Factory::new(|_| async { Ok(Arc::new(SignInHere) as Arc<dyn NativeShellPart>) })
     }
 
     /// The plugin's clock, stopped at the start of 1970, for a module of the app to register.
@@ -837,9 +835,7 @@ mod navree_plugin_guard {
 
     /// The plugin's observer of every commit, for a module of the app to register.
     pub fn change_observer() -> Factory<dyn ChangeObserver> {
-        Factory::new(|_| async {
-            Ok(Arc::new(Watches) as Arc<dyn ChangeObserver>)
-        })
+        Factory::new(|_| async { Ok(Arc::new(Watches) as Arc<dyn ChangeObserver>) })
     }
 
     /// A module of the plugin's crate that names no plugin, and registers what `.0` adds.
