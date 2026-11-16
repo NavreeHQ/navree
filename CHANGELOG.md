@@ -327,6 +327,11 @@ every `@navree/*` package carries the same version.
   what the seal does not stop, the refresh a written `meta` schedules or a request to a host the
   policy allows among it, and asks authors to escape data before a library writes it as HTML.
 
+### Security
+
+- Changing an account's email address ends the sign-in links and codes it has not used yet, so one
+  mailed to the old address no longer signs in.
+
 ## [1.2.4] - 2026-11-15
 
 ### Fixed

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use navree_auth::login_token;
+use navree_auth::{User, login_token, refresh_token};
 use navree_contracts::AuditSink;
 use navree_db::Db;
 use navree_orm::Model as _;
@@ -12,7 +12,7 @@ use navree_testing::{TestApp, TestAppBuilder};
 use serde_json::{Value, json};
 
 use crate::support::{
-    self, RecordingSink, enable_two_factor, link_param, sent_mail, tokens, totp_code,
+    self, PASSWORD, RecordingSink, enable_two_factor, link_param, sent_mail, tokens, totp_code,
 };
 
 const SENT: &str = "If the email address is registered, a sign-in message has been sent.";
@@ -42,6 +42,16 @@ fn code_in(text: &str) -> String {
         .chars()
         .take_while(char::is_ascii_digit)
         .collect()
+}
+
+/// The account `id` as it is stored now.
+async fn stored(app: &TestApp, id: uuid::Uuid) -> User {
+    let db = app.get::<Db>().await;
+    User::find(&*db, id)
+        .await
+        .unwrap()
+        .expect("the account")
+        .into_inner()
 }
 
 #[tokio::test]
@@ -313,4 +323,148 @@ async fn passwordless_sign_ins_keep_the_second_factor() {
         .await
         .assert_status(200)
         .assert_json_path("user.email", json!("anu@example.com"));
+}
+
+/// A link or code mailed to an account's address signs in only while the
+/// account holds that address: once it moves to another, neither signs in,
+/// no session starts and the new address stays unverified.
+#[tokio::test]
+async fn a_link_mailed_before_an_address_change_does_not_prove_the_new_address() {
+    let clock = support::clock();
+    let app = mail_app(&clock)
+        .config("auth.magic_link.url", "https://app.example.com/magic")
+        .build()
+        .await;
+    let (user, access, _) = support::signed_in(&app, "harpreet@sutlej.in").await;
+    let client = app.client();
+    for path in ["/api/auth/magic-link", "/api/auth/otp"] {
+        client
+            .post(path)
+            .json(&json!({ "email": "harpreet@sutlej.in" }))
+            .send()
+            .await
+            .assert_status(202);
+    }
+    let mails = sent_mail(&app).await;
+    let text_of = |subject: &str| {
+        mails
+            .iter()
+            .find(|mail| mail.subject == subject)
+            .and_then(|mail| mail.text.clone())
+            .expect("the mail and its text body")
+    };
+    let token = link_param(&text_of("Your sign-in link"), "token")
+        .expect("a token in the link");
+    let code = code_in(&text_of("Your sign-in code"));
+
+    client
+        .patch("/api/auth/me")
+        .bearer(&access)
+        .json(&json!({ "email": "simran@sutlej.in", "current_password": PASSWORD }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("email_verified_at", Value::Null);
+    let db = app.get::<Db>().await;
+    let unused = login_token::Model::query()
+        .where_(login_token::Model::USER_ID.eq(user.id))
+        .where_null(login_token::Model::USED_AT)
+        .count(&*db)
+        .await
+        .unwrap();
+    assert_eq!(unused, 0, "the change ends the link and the code");
+    let sessions = || {
+        refresh_token::Model::query()
+            .where_(refresh_token::Model::USER_ID.eq(user.id))
+    };
+    let before = sessions().count(&*db).await.unwrap();
+
+    client
+        .post("/api/auth/magic-link/verify")
+        .json(&json!({ "token": token }))
+        .send()
+        .await
+        .assert_error(401, "Invalid or expired sign-in code");
+    for email in ["simran@sutlej.in", "harpreet@sutlej.in"] {
+        client
+            .post("/api/auth/otp/verify")
+            .json(&json!({ "email": email, "code": code }))
+            .send()
+            .await
+            .assert_error(401, "Invalid or expired sign-in code");
+    }
+
+    let account = stored(&app, user.id).await;
+    assert_eq!(account.email, "simran@sutlej.in");
+    assert_eq!(account.email_verified_at, None);
+    assert_eq!(
+        sessions().count(&*db).await.unwrap(),
+        before,
+        "no session was started"
+    );
+}
+
+/// The positive side: a link outlives a change of name, and a code mailed to
+/// the account's new address signs in and verifies that address.
+#[tokio::test]
+async fn a_link_or_code_mailed_to_the_address_held_now_still_proves_it() {
+    let clock = support::clock();
+    let app = mail_app(&clock)
+        .config("auth.magic_link.url", "https://app.example.com/magic")
+        .build()
+        .await;
+    let (_, access, _) = support::signed_in(&app, "harpreet@sutlej.in").await;
+    let client = app.client();
+    let update_profile = |body: Value| {
+        let (client, access) = (client.clone(), access.clone());
+        async move {
+            client
+                .patch("/api/auth/me")
+                .bearer(&access)
+                .json(&body)
+                .send()
+                .await
+                .assert_status(200)
+        }
+    };
+
+    client
+        .post("/api/auth/magic-link")
+        .json(&json!({ "email": "harpreet@sutlej.in" }))
+        .send()
+        .await
+        .assert_status(202);
+    let token = link_param(&last_text(&app).await, "token")
+        .expect("a token in the link");
+    update_profile(json!({ "name": "Harpreet Kaur" })).await;
+    let signed_in = client
+        .post("/api/auth/magic-link/verify")
+        .json(&json!({ "token": token }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("user.email", json!("harpreet@sutlej.in"))
+        .json_value();
+    assert!(signed_in["user"]["email_verified_at"].is_string());
+
+    let moved = json!({ "email": "harpreet.kaur@sutlej.in", "current_password": PASSWORD });
+    update_profile(moved)
+        .await
+        .assert_json_path("email_verified_at", Value::Null);
+    client
+        .post("/api/auth/otp")
+        .json(&json!({ "email": "harpreet.kaur@sutlej.in" }))
+        .send()
+        .await
+        .assert_status(202);
+    let code = code_in(&last_text(&app).await);
+    let signed_in = client
+        .post("/api/auth/otp/verify")
+        .json(&json!({ "email": "harpreet.kaur@sutlej.in", "code": code }))
+        .send()
+        .await
+        .assert_status(200)
+        .assert_json_path("user.email", json!("harpreet.kaur@sutlej.in"))
+        .json_value();
+    assert!(signed_in["user"]["email_verified_at"].is_string());
 }
