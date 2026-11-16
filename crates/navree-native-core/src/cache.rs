@@ -249,8 +249,9 @@ impl Core {
     /// emptied and nobody is cleared; the shell is asked again (once, while
     /// none is on its way) and it says. An answer the core made itself, one
     /// that never came from the app, one from another origin that names
-    /// nobody, and one that did not get through to the app (a 5xx, a 429)
-    /// and names nobody are not compared. Any answer that names a person is,
+    /// nobody, and one that did not get through to the app (a 5xx) or says
+    /// its request could not be handled (408, 413, 414, 429, 431) and names
+    /// nobody are not compared. Any answer that names a person is,
     /// and so is every other answer that names nobody: a 401 or a 403 among
     /// them is the news that the session ended.
     pub(crate) fn same_session(&mut self, asked: &Asked, mut response: Response) -> Response {
@@ -267,11 +268,14 @@ impl Core {
         let made_for = response
             .header(navree_native::PERSON_HEADER)
             .filter(|id| !id.is_empty());
-        // What a proxy or a gateway in front of the app answers while the app
-        // restarts or sheds load names nobody: it is not the app's word on
-        // who is signed in, and the next answer that gets through is. Such an
-        // answer is never kept, so passing it over keeps nothing of anybody.
-        if made_for.is_none() && !crate::reduce::got_through(&response) {
+        // What a proxy, a gateway or a layer in front of the app's own code
+        // answers while the app restarts, sheds load or refuses a request it
+        // could not handle names nobody: it is not the app's word on who is
+        // signed in, and the next answer that gets through is. Such an answer
+        // is never kept, so passing it over keeps nothing of anybody.
+        if made_for.is_none()
+            && (!crate::reduce::got_through(&response) || crate::reduce::not_handled(&response))
+        {
             return response;
         }
         // A session belongs to a host: an answer from another origin the app

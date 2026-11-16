@@ -1,0 +1,32 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Inventory",
+  "body": {
+   "t": "form",
+   "id": "proof",
+   "method": "post",
+   "action": "/inventory/18/proof",
+   "children": [
+    {
+     "t": "field",
+     "id": "note",
+     "name": "note",
+     "label": "Note",
+     "input": {
+      "t": "text"
+     }
+    },
+    {
+     "t": "button",
+     "label": "Send",
+     "action": {
+      "t": "submit"
+     }
+    }
+   ]
+  }
+ }
+}
