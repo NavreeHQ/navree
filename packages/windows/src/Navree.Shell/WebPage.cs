@@ -334,7 +334,7 @@ internal sealed class WebPage : Grid
             throw;
         }
 
-        Hold(view.CoreWebView2!);
+        await HoldAsync(view.CoreWebView2!);
         BrowserProcesses.Add((int)view.CoreWebView2!.BrowserProcessId);
 
         // A page whose screen left while it was being started is not kept: its web view is closed.
@@ -345,7 +345,7 @@ internal sealed class WebPage : Grid
     }
 
     // The web view's settings and every callback that holds it to the app's origins.
-    private void Hold(CoreWebView2 web)
+    private async Task HoldAsync(CoreWebView2 web)
     {
         web.Settings.AreHostObjectsAllowed = false;
         web.Settings.IsWebMessageEnabled = false;
@@ -399,8 +399,9 @@ internal sealed class WebPage : Grid
         };
 
         // The layer that sees what a callback does not: a document that is not the app's own is emptied before anything in it runs.
+        // The script is waited for: it is in place before the first page is asked for, not only for the pages after it.
         string allowed = JsonSerializer.Serialize(host.Origins.Documents);
-        _ = web.AddScriptToExecuteOnDocumentCreatedAsync(
+        _ = await web.AddScriptToExecuteOnDocumentCreatedAsync(
             "(function(){var allowed=" + allowed + ";try{var o=location.origin;if(o==='null'||location.protocol==='about:'||location.protocol==='data:'){return;}" +
             "var ok=allowed.some(function(a){var star=a.indexOf('://*.');if(star<0){return a===o;}var scheme=a.slice(0,star+3);var rest=a.slice(star+4);return o.indexOf(scheme)===0&&o.slice(scheme.length).endsWith(rest)&&o.slice(scheme.length).length>rest.length;});" +
             "if(!ok){window.stop();document.documentElement.innerHTML='';}}catch(e){}})();");
