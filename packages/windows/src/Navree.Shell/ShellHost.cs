@@ -28,6 +28,7 @@ public sealed partial class ShellHost : IDisposable
     private readonly WebProfiles webProfiles;
     private readonly List<string> startNotes = [];
     private bool started;
+    private Task? signingOut;
     private readonly CancellationTokenSource stopped = new();
     private readonly EnvironmentWatcher environment;
     private readonly ForegroundTracker foreground = new();
@@ -131,8 +132,8 @@ public sealed partial class ShellHost : IDisposable
     /// keeps), then the core is told the client ended the session itself and starts again from the shell, then the rest is wiped
     /// (<see cref="SessionKeeper.EndAsync"/>).
     /// </summary>
-    /// <returns>When the wipe has finished and the core has let go.</returns>
-    public Task SignOutHereAsync() => EndSessionAsync(coreEnded: false);
+    /// <returns>When the wipe has finished and the core has let go. A sign-out asked for while one is running is that one.</returns>
+    public Task SignOutHereAsync() => signingOut is { IsCompleted: false } running ? running : signingOut = EndSessionAsync(coreEnded: false);
 
     /// <summary>Whether the last run left a sign-out unfinished and this start finished it before reading anything.</summary>
     public bool FinishedSignOutAtStart { get; }
@@ -392,7 +393,7 @@ public sealed partial class ShellHost : IDisposable
                 _ = EndSessionAsync(coreEnded: true);
                 break;
             default:
-                Problem?.Invoke("an effect this build does not know: " + effect.GetType().Name);
+                Problem?.Invoke("an effect this build does not know: " + (effect is UnknownEffect unknown ? unknown.Tag : effect.GetType().Name));
                 break;
         }
     }
