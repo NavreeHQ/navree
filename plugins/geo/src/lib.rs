@@ -10,7 +10,9 @@
 //! - [`LOCATION`] is a [`FieldControl`](navree::ui::form::FieldControl): a text field for a
 //!   point, a map to click on and a button that picks where the device is. A form names it with
 //!   `#[form(control = navree_plugin_geo::LOCATION)]` and a table cell with `EditCell::control`.
-//!   The server holds the point to the delivery area on every path it arrives by.
+//!   The server holds the point to the delivery area wherever Navree UI reads the field with the
+//!   app (`Submit`, a wizard step, `Draft::read_for`, `EditedValue::read`), and refuses it where
+//!   there is no app to read the area from.
 //! - [`GeoModule`] registers all of it: the component's files, the page sources it asks for, the
 //!   `geo` settings ([`GeoOptions`]) and two routes under `/geo/`.
 //!

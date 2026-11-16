@@ -4,8 +4,10 @@
 //! A form names it with `#[form(control = navree_plugin_geo::LOCATION)]`, and a table cell with
 //! `EditCell::control(.., Control::new(&navree_plugin_geo::LOCATION))`. The field posts the text
 //! of a [`GeoPoint`] under the field's name, and the server holds that text to the delivery area
-//! on every path it arrives by: a form, a step of a wizard, a draft read back, and an inline
-//! edit.
+//! wherever Navree UI reads it with the app: a form read with `Submit`, a step of a wizard given
+//! the app's language, a draft read back with `Draft::read_for`, and an inline edit read with
+//! `EditedValue::read`. Read with no app, the point is refused, since the area can't be read;
+//! read where no check runs (`navree::http::Form`), it is not held to the area.
 
 use navree::config::ConfigSection;
 use navree::ui::form::{ControlCx, ControlField, FieldControl};
@@ -84,17 +86,22 @@ impl FieldControl for LocationControl {
     }
 
     /// Holds a posted point to the delivery area in the app's `geo` settings. A text that is not a
-    /// point is refused with how to write one. With no configuration to read (a form decoded with
-    /// no app) the area is the default one: Ludhiana, Jalandhar and Amritsar.
+    /// point is refused with how to write one. Read with no app (`decode`, `Draft::read`, a wizard
+    /// left in English), the check has no area to read and refuses every point: a point that
+    /// could not be held to the app's area is not taken. An app with no configuration at all has
+    /// the default area, Ludhiana, Jalandhar and Amritsar, as [`GeoModule`](crate::GeoModule)
+    /// gives it.
     fn check(&self, value: &str, cx: &ControlCx<'_>) -> Result<(), String> {
         let at: GeoPoint = value
             .parse()
             .map_err(|error: ParsePointError| error.to_string())?;
-        let options = match cx.config() {
-            Some(config) => config
+        let options = match (cx.config(), cx.app()) {
+            (Some(config), _) => config
                 .section_or_default::<GeoOptions>(GeoOptions::KEY)
                 .map_err(|_| UNREADABLE.to_owned())?,
-            None => GeoOptions::default(),
+            // An app with no configuration: its area is the one the module gives it.
+            (None, Some(_)) => GeoOptions::default(),
+            (None, None) => return Err(UNREADABLE.to_owned()),
         };
         if options.holds(at) {
             Ok(())

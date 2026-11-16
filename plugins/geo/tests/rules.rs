@@ -1,6 +1,7 @@
 //! The geo plugin booted in an app: the rules its map and its field keep, the delivery area held
-//! on every path a drop point arrives by, and what the plugin asks the page policy for. A test
-//! binary of its own: it reads the lines the boot logs.
+//! wherever a drop point is read with the app (and every point refused where it is read with
+//! none), and what the plugin asks the page policy for. A test binary of its own: it reads the
+//! lines the boot logs.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -9,7 +10,7 @@ use http::{Method, StatusCode};
 use navree::http::response::{IntoResponse, Response};
 use navree::http::{Controller, Extension, HttpModule, ModuleBuilderHttpExt as _, Path, RouteDef};
 use navree::testing::{TestApp, TestAppBuilder, TestResponse, principal};
-use navree::ui::form::{Control, Language, Rejected};
+use navree::ui::form::{Control, Language, Rejected, decode, decode_for};
 use navree::ui::{
     Directive, EditedValue, Form, FormView, Money, Node, PAGE_CSP, PagePolicy, Reply, Submit,
     TestView, UiModule, Validate, View, kit, render,
@@ -29,6 +30,9 @@ const BROWSER: &str = "text/html,application/xhtml+xml,*/*;q=0.8";
 /// What a person is told when a point is outside the delivery area, and when it is not a point.
 const REFUSAL: &str = "Pick a place inside the delivery area: Ludhiana, Jalandhar or Amritsar";
 const NOT_A_POINT: &str = "Enter the point as latitude,longitude, such as 30.9010,75.8573";
+
+/// What a person is told when the check has no delivery area to read.
+const UNREADABLE: &str = "The delivery area cannot be checked right now";
 
 /// A tile of the map, as OpenStreetMap's host would be asked for it.
 const TILE: &str = "https://tile.openstreetmap.org/13/5890/3400.png";
@@ -338,6 +342,59 @@ async fn a_point_outside_the_delivery_area_is_refused_in_the_form_and_in_the_tab
             .copied(),
         Some(point("30.8890,75.8340"))
     );
+}
+
+/// A delivery to Harpreet Sandhu with its drop point at `drop_at`, as a form posts it.
+fn delivery_at(drop_at: &str) -> Vec<(String, String)> {
+    [
+        ("recipient", "Harpreet Sandhu"),
+        ("drop_at", drop_at),
+        ("charge", "40"),
+    ]
+    .iter()
+    .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
+    .collect()
+}
+
+// With no app the check has no delivery area to read, and refuses every point, one inside the
+// default area too. In an app that names an area of its own, a point of the default area outside
+// it is refused wherever it is read with the app.
+#[tokio::test]
+async fn the_drop_point_check_refuses_without_an_app_and_holds_to_the_apps_own_area() {
+    let sarabha = delivery_at("30.8890,75.8340");
+    assert_eq!(
+        decode::<NewDelivery>(&sarabha).unwrap_err()["drop_at"],
+        [UNREADABLE]
+    );
+    assert_eq!(
+        decode_for::<NewDelivery>(&sarabha, &Language::english()).unwrap_err()["drop_at"],
+        [UNREADABLE]
+    );
+
+    let _one = ONE_BOOT.lock().await;
+    let ludhiana = json!([{
+        "name": "Ludhiana",
+        "south_west": "30.80,75.70",
+        "north_east": "31.00,75.98",
+    }]);
+    let app = builder().config("geo.area", ludhiana).build().await;
+    let language = Language::of(Some(app.ctx())).await;
+    let refusal = ["Pick a place inside the delivery area: Ludhiana"];
+    let jalandhar = delivery_at("31.3080,75.5810");
+    assert_eq!(
+        decode_for::<NewDelivery>(&jalandhar, &language).unwrap_err()["drop_at"],
+        refusal
+    );
+    assert!(decode_for::<NewDelivery>(&sarabha, &language).is_ok());
+
+    let body = "recipient=Harpreet+Sandhu&drop_at=31.3080%2C75.5810&charge=40";
+    let response = post(&app, "/deliveries", body, true).await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        response.json_value()["ops"][0]["fields"],
+        json!({ "drop_at": refusal })
+    );
+    app.shutdown().await.unwrap();
 }
 
 // The plugin boots with the toolkit, asks for the tile host and gets nothing until the app says

@@ -14,8 +14,10 @@ What it shows, in one small crate:
 - **A form field of its own.** `LOCATION` is a field control: a text field for a point, a map to
   click on, and a button that picks where the device is. A derived form names it with
   `#[form(control = navree_plugin_geo::LOCATION)]`, and a table cell with `EditCell::control`.
-  The server holds the point to the delivery area in the `geo` settings on every path it arrives
-  by: a form, a wizard step, a draft read back and an inline edit.
+  The server holds the point to the delivery area in the `geo` settings wherever Navree UI reads
+  the field with the app: a form read with `Submit`, a wizard step, a draft read back with
+  `Draft::read_for` and an inline edit read with `EditedValue::read`. Where there is no app to
+  read the area from, such as `decode` in a test, every point is refused.
 - **A source the app has to allow.** The map's tiles come from OpenStreetMap. The plugin asks for
   that host, and the app allows it in `ui.policy.allow.geo.img_src`. Until it does, the map shows
   its fallback and the page loads nothing from the host.
