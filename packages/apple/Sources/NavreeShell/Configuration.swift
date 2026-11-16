@@ -33,6 +33,15 @@ public struct ShellConfiguration: Sendable {
     /// `https`, each named exactly (`images.store.example.in`). None by
     /// default. A picture from one of them is asked for with no cookie.
     public var pictureHosts: [String]
+    /// Hosts other than the origin's that may serve what a page in the web
+    /// view draws inside it (styles, scripts, fonts, pictures, frames), over
+    /// `https`: a name of two labels or more, or `*.` and such a name for one
+    /// label or more under it. None by default. Each is the web view's alone:
+    /// never used for a native request, a picture or a cookie, and never
+    /// the page itself. A page whose own Content-Security-Policy lets in a
+    /// payment frame or a captcha names the same host here once more. Never
+    /// name a host anyone can publish on (`*.cloudfront.net`).
+    public var webHosts: [String]
     /// What answers the core's requests: the network, or (for a demo or a
     /// test) answers the app has with it.
     public var transport: @MainActor @Sendable () -> any Transport
@@ -55,7 +64,7 @@ public struct ShellConfiguration: Sendable {
         origin: String, loopbackHTTP: Bool = false, appID: String = Bundle.main.bundleIdentifier ?? "",
         appVersion: String, signInScheme: String? = nil, signInPaths: [String] = ["/auth/*/redirect"],
         signedWith: Set<Entitlement>? = nil, openAnyLink: Bool = false, keepsSession: Bool = true,
-        pictureHosts: [String] = [],
+        pictureHosts: [String] = [], webHosts: [String] = [],
         transport: (@MainActor @Sendable () -> any Transport)? = nil, webContent: WebContent = .network,
         launch: Launch = Launch(), presence: Presence = Presence(), windows: WindowLook = WindowLook(),
         icons: [AppIcon] = []
@@ -71,6 +80,7 @@ public struct ShellConfiguration: Sendable {
         self.openAnyLink = openAnyLink
         self.keepsSession = keepsSession
         self.pictureHosts = pictureHosts
+        self.webHosts = webHosts
         let keeps = keepsSession
         let loopback = loopbackHTTP
         let origin = origin

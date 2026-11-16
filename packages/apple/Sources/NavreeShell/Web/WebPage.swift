@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import NavreeProtocol
 import NavreeRuntime
@@ -38,7 +39,15 @@ struct WebPageView {
         settings.preferences.javaScriptCanOpenWindowsAutomatically = false
         settings.defaultWebpagePreferences.allowsContentJavaScript = true
         // No `WKScriptMessageHandler` is ever added to the user content
-        // controller: the page has no way to reach the app.
+        // controller: the page has no way to reach the app. The one script
+        // added runs first in every frame, in a world of its own, and empties
+        // a document of another origin.
+        if let site = configuration.site {
+            settings.userContentController.addUserScript(WKUserScript(
+                source: WebRules.documentScript(site: site, hosts: configuration.webHosts), injectionTime: .atDocumentStart,
+                forMainFrameOnly: false, in: .defaultClient
+            ))
+        }
         let view = WKWebView(frame: .zero, configuration: settings)
         view.navigationDelegate = coordinator
         view.uiDelegate = coordinator
@@ -108,6 +117,9 @@ struct WebPageView {
             let content = parent.configuration.webContent
             let cookies = made.cookies
             Task { @MainActor in
+                // Nothing loads before the rules of what a page may load are
+                // in place: a page that cannot be held to them is a failed one.
+                guard await self.rule(view) else { return self.parent.failed() }
                 await jar?.ready(view.configuration.websiteDataStore.httpCookieStore, session: cookies)
                 // The session ended meanwhile: this web view is on its way out.
                 guard self.isCurrent else { return }
@@ -125,6 +137,24 @@ struct WebPageView {
             }
         }
 
+        /// Whether the content rules are in the view.
+        private var ruled = false
+
+        /// Puts the content rules in the view once: what a page may load
+        /// inside it (``WebRules``). `false` when they could not be made, and
+        /// then the page is not loaded.
+        private func rule(_ view: WKWebView) async -> Bool {
+            if ruled { return true }
+            guard let site = parent.configuration.site, let store = WKContentRuleListStore.default() else { return false }
+            let source = WebRules.contentRules(site: site, hosts: parent.configuration.webHosts)
+            let name = "navree-web-" + SHA256.hash(data: Data(source.utf8)).map { String(format: "%02x", $0) }.joined()
+            guard let list = try? await store.compileContentRuleList(forIdentifier: name, encodedContentRuleList: source)
+            else { return false }
+            view.configuration.userContentController.add(list)
+            ruled = true
+            return true
+        }
+
         /// Whether `url` is the app's own: on the configured origin, whole,
         /// whatever address the page was loaded from. What else may load is
         /// the core's to say.
@@ -137,9 +167,14 @@ struct WebPageView {
         ) async -> WKNavigationActionPolicy {
             guard let url = navigationAction.request.url else { return .cancel }
             let mainFrame = navigationAction.targetFrame?.isMainFrame ?? true
+            // The page itself is always the origin's own; a frame inside it
+            // may also be of a host the app names for the web view.
+            let configuration = parent.configuration
+            let ours = mainFrame
+                ? isThePagesOwn(url) : WebRules.allowsFrame(url, site: configuration.site, hosts: configuration.webHosts)
             let decision = WebNavigationRules.decide(
                 linkActivated: navigationAction.navigationType == .linkActivated, mainFrame: mainFrame,
-                ours: isThePagesOwn(url), loaded: url == loaded, empty: url.scheme == "about"
+                ours: ours, loaded: url == loaded, empty: url.scheme == "about"
             )
             switch decision {
             case .allow:
