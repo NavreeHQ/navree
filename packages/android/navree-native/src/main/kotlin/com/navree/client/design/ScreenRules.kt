@@ -137,6 +137,8 @@ data class ScreenPlan(
     val pullToRefresh: Boolean,
     /** Whether the search is the screen's own, or the search box of its main table's query. */
     val searchInQuery: Boolean = false,
+    /** Whether the bar says the screen's title, so a heading that says it again is left out. */
+    val titleInBar: Boolean = false,
 )
 
 /**
@@ -172,6 +174,21 @@ data class ScreenPlan(
  *   scroll up.
  */
 object ScreenRules {
+    /**
+     * Whether a node is a heading that only says the screen's title, which the
+     * top app bar already says: it is not said a second time under the bar.
+     */
+    fun repeatsTitle(node: Navree.Node, title: String?, titleInBar: Boolean): Boolean =
+        titleInBar && node is Navree.Text && node.heading != null && title != null && node.value.trim().equals(title.trim(), ignoreCase = true)
+
+    /**
+     * Whether the top app bar says the screen's title: a plain bar does. No bar
+     * (a screen without the app's chrome), the search bar (it shows the field)
+     * and a bar that holds the day pager (it shows the day) do not, and then a
+     * heading in the body is the only place the screen is named.
+     */
+    fun titleInBar(bar: BarKind, pagerInBar: Boolean): Boolean = (bar == BarKind.Small || bar == BarKind.TwoLine) && !pagerInBar
+
     fun plan(screen: Navree.Screen, context: ScreenContext, window: WindowInfo): ScreenPlan {
         val modal = context.presentation != Presentation.Stack
         val form = screen.body as? Navree.Form
@@ -261,6 +278,7 @@ object ScreenRules {
             avatar = avatar,
             pullToRefresh = screen.refresh && context.presentation == Presentation.Stack,
             searchInQuery = searchPlace != SearchPlace.None && screen.search == null,
+            titleInBar = titleInBar(bar, PagerRules.inBar(screen) != null),
         )
     }
 
@@ -299,6 +317,23 @@ object ScreenRules {
      */
     fun twoPanes(window: WindowInfo, first: Navree.Screen?, depth: Int): Boolean =
         depth >= 2 && window.width >= WidthClass.Expanded && window.height != HeightClass.Compact && isCollection(first?.body)
+
+    /**
+     * What a split draws where there is room for one pane: the pane the server
+     * says is in hand (the one that holds a pane marked `current`, however deep),
+     * with an inspector beside it under it. A split with none in hand draws
+     * both, the list first. The pane out of hand is not drawn: it is where Back goes.
+     */
+    fun splitPanes(split: Navree.Split): List<Navree.Node> {
+        fun holdsCurrent(node: Navree.Node) = node.walk().any { it is Navree.Pane && it.current }
+        val primary = split.primary
+        val detail = split.detail
+        return when {
+            holdsCurrent(detail) -> listOf(detail)
+            holdsCurrent(primary) -> if (detail is Navree.Pane && detail.role == Navree.PaneRole.INSPECTOR) listOf(primary, detail) else listOf(primary)
+            else -> listOf(primary, detail)
+        }
+    }
 
     /** The width of the list pane, in dp, when there are two. */
     fun listPaneDp(window: WindowInfo): Int = if (window.width >= WidthClass.Large) 412 else 360
@@ -369,6 +404,48 @@ object FilterRules {
         if (input !is Navree.ChoicesInput && input !is Navree.ChoiceInput && input !is Navree.ToggleInput) return false
         val name = field.name.lowercase()
         return !(name.contains("per_page") || name.contains("perpage") || name.contains("page_size") || name == "limit" || name.endsWith("[size]"))
+    }
+
+    /**
+     * A row of filters: the filters of a form, the links or buttons that go
+     * with them (clearing them), and the one box of words they filter by, if
+     * the form has one.
+     */
+    data class Bar(val fields: List<Navree.Field>, val actions: List<Navree.Node>, val search: Navree.Field? = null)
+
+    /**
+     * Whether a form is only a set of filters on what is shown under it: it
+     * asks with a read, every field is a choice or a switch (at least one a
+     * choice) but for one box of words, and nothing else stands in it but the
+     * links or buttons that go with them. Such a form is a row of chips that
+     * scrolls along, under its box of words, not a stack of fields. A button
+     * that sends the form is left out: each choice, and the keyboard's own
+     * action in the box, ask by themselves.
+     */
+    fun bar(form: Navree.Form): Bar? {
+        if (form.method != Navree.Method.GET || form.id == null) return null
+        val all = form.fields()
+        val words = all.filter { !isFilter(it) }
+        val search = words.singleOrNull()?.takeIf { field ->
+            val kind = (field.input as? Navree.TextInput)?.kind
+            kind == Navree.TextKind.SEARCH || kind == Navree.TextKind.PLAIN
+        }
+        if (words.isNotEmpty() && search == null) return null
+        val fields = all.filter(::isFilter)
+        if (fields.isEmpty() || fields.all { it.input is Navree.ToggleInput }) return null
+        val actions = ArrayList<Navree.Node>()
+        var other = false
+        fun visit(node: Navree.Node) {
+            when (node) {
+                is Navree.Field -> Unit
+                is Navree.Button -> if (node.action !is Navree.Action.Submit) actions += node
+                is Navree.Link -> actions += node
+                is Navree.Grid, is Navree.Stack -> node.childNodes().forEach(::visit)
+                else -> other = true
+            }
+        }
+        form.children.forEach(::visit)
+        return if (other) null else Bar(fields, actions, search)
     }
 }
 
