@@ -26,7 +26,12 @@ struct WebPageView {
     @MainActor
     func makeWebView(_ coordinator: Coordinator) -> WKWebView {
         let settings = WKWebViewConfiguration()
-        settings.websiteDataStore = .default()
+        // The session's own store, never the app's default one: a page of the
+        // next person finds nothing a page of the last one left. The web
+        // view is held to the session it was made in.
+        let effects = client.effects as? SystemEffects
+        settings.websiteDataStore = effects?.keeper.webStore() ?? .nonPersistent()
+        coordinator.made = (effects?.keeper.number ?? 0, effects?.jar?.session ?? 0)
         settings.applicationNameForUserAgent = Wire.userAgentToken(platform: Self.platform, lib: Library.version)
         settings.preferences.javaScriptCanOpenWindowsAutomatically = false
         settings.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -64,6 +69,16 @@ struct WebPageView {
         private var shown = false
         /// How often the page's process has ended since its serial moved.
         private var ended = 0
+        /// The session the web view was made in, by the session's number and
+        /// the jar's: its store is that session's, and once the session has
+        /// ended it loads nothing more and gives the jar nothing.
+        var made = (session: 0, cookies: 0)
+
+        /// Whether the session the web view was made in is still the session.
+        private var isCurrent: Bool {
+            guard let effects = parent.client.effects as? SystemEffects else { return true }
+            return effects.keeper.number == made.session
+        }
 
         init(_ parent: WebPageView) {
             self.parent = parent
@@ -80,7 +95,8 @@ struct WebPageView {
             }
         }
 
-        /// Copies the session in, then loads: from the network, or the markup the app supplies.
+        /// Makes the store hold the session's cookies, then loads: from the
+        /// network, or the markup the app supplies.
         func load(_ url: URL, serial: Int, in view: WKWebView) {
             if serial != self.serial { ended = 0 }
             self.serial = serial
@@ -88,8 +104,11 @@ struct WebPageView {
             shown = false
             let jar = (parent.client.effects as? SystemEffects)?.jar
             let content = parent.configuration.webContent
+            let cookies = made.cookies
             Task { @MainActor in
-                await jar?.copy(into: view.configuration.websiteDataStore.httpCookieStore)
+                await jar?.ready(view.configuration.websiteDataStore.httpCookieStore, session: cookies)
+                // The session ended meanwhile: this web view is on its way out.
+                guard self.isCurrent else { return }
                 switch content {
                 case .network:
                     view.load(URLRequest(url: url))
@@ -160,8 +179,11 @@ struct WebPageView {
             guard let jar = (parent.client.effects as? SystemEffects)?.jar, let site = parent.configuration.site,
                 let url = webView.url, isThePagesOwn(url)
             else { return }
+            let cookies = made.cookies
             Task { @MainActor in
-                await jar.adopt(from: webView.configuration.websiteDataStore.httpCookieStore, host: site.host)
+                await jar.adopt(
+                    from: webView.configuration.websiteDataStore.httpCookieStore, host: site.host, session: cookies
+                )
             }
         }
 

@@ -14,6 +14,14 @@ public protocol Transport: AnyObject {
     func close(stream: Int)
     /// The cookie store the web view shares, when there is one.
     var jar: CookieJar? { get }
+    /// The session ended: every request and stream under way is dropped, and
+    /// none of them is answered or reported.
+    func stop()
+}
+
+extension Transport {
+    /// A transport with nothing under way has nothing to drop.
+    public func stop() {}
 }
 
 /// Carries out the core's `fetch` effects with `URLSession`: exactly the
@@ -129,6 +137,15 @@ public final class HTTPTransport: Transport {
 
     public func cancel(_ request: Int) {
         tasks.removeValue(forKey: request)?.cancel()
+    }
+
+    /// Drops every request and stream under way. Each task finds itself
+    /// gone from the list when it ends, and says nothing.
+    public func stop() {
+        for task in tasks.values { task.cancel() }
+        tasks.removeAll()
+        for task in open.values { task.cancel() }
+        open.removeAll()
     }
 
     /// The `response` event for an answer: a redirect as it came, anything

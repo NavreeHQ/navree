@@ -144,8 +144,10 @@ struct SheetRoom: ViewModifier {
     }
 }
 
-/// The core, the client over it, and what carries out its effects, for as
-/// long as the scene lives.
+/// One window's core, the client over it, and what carries out its effects,
+/// for as long as the scene lives. The session the core's requests run in is
+/// not the window's: every window of the app shares the one ``SessionKeeper``
+/// holds.
 @MainActor
 @Observable
 final class Session {
@@ -157,23 +159,27 @@ final class Session {
     @ObservationIgnored private var heard: DeviceTraits
     @ObservationIgnored private var width: Width?
     @ObservationIgnored private var launched = false
-    /// The name what this window keeps is written under.
+    /// The name what is kept of this window is written under.
     @ObservationIgnored private var kept = Session.snapshot
 
-    init(configuration: ShellConfiguration) {
+    /// With `keeps` false the window's core keeps nothing between launches
+    /// (a window beside the app's main ones).
+    init(configuration: ShellConfiguration, keeps: Bool = true) {
         self.configuration = configuration
         let device = Session.device()
         heard = device
-        let config = CoreConfiguration.json(configuration, device: device)
+        let config = CoreConfiguration.json(configuration, device: device, keeps: keeps)
         guard let core = Core(config: config) else {
             client = nil
             effects = nil
             commands = nil
             return
         }
+        // The session is opened before a transport is made over it: a
+        // sign-out that was cut short is finished before anything is read.
+        let keeper = SessionKeeper.shared(for: configuration)
         let effects = SystemEffects(
-            transport: configuration.transport(),
-            cache: KeptFiles(Self.cacheFolder(configuration.origin), in: .cachesDirectory),
+            transport: configuration.transport(), keeper: keeper,
             signedWith: configuration.signedWith, origin: configuration.base, site: configuration.site,
             pictureHosts: configuration.pictureHosts
         )
@@ -183,15 +189,17 @@ final class Session {
         commands = WindowCommands(client: client)
     }
 
-    /// Starts once: from the kept snapshot when the system brings back a
-    /// scene it ended, else plainly (and what was kept is let go).
-    func begin(restoring: Bool, scene: String = "") {
+    /// Starts once: from what was kept of this window when the system brings
+    /// back a scene it ended, else plainly (and what was kept is let go).
+    /// `main` is false for a window beside the app's main ones, which does
+    /// not decide what stays of the windows before.
+    func begin(restoring: Bool, scene: String = "", main: Bool = true) {
         guard let client, let effects, !client.began else { return }
-        // Each scene runs a core of its own: its pages and its snapshot are kept apart.
-        effects.keep(for: scene)
+        effects.begins(restoring: main ? restoring : nil)
+        // Each window runs a core of its own, and its place is kept under its own name.
         kept = scene.isEmpty ? Self.snapshot : Self.snapshot + "-" + scene
         let snapshot = restoring ? effects.snapshots.readData(kept) : nil
-        if snapshot == nil { effects.snapshots.writeData(kept, nil) }
+        if snapshot == nil { effects.keep(snapshot: nil, under: kept) }
         client.begin(restoring: snapshot)
         // The token is asked for at every launch of a build signed for push.
         if configuration.signedWith.contains(.pushNotifications) { AppEvents.registerForPush() }
@@ -201,7 +209,7 @@ final class Session {
     /// The app went away: what the core keeps for a launch the system may end.
     func keep() {
         guard let client, let effects else { return }
-        effects.snapshots.writeData(kept, client.snapshot())
+        effects.keep(snapshot: client.snapshot(), under: kept)
     }
 
     func window(_ width: Width) {

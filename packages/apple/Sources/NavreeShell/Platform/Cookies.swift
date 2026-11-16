@@ -69,33 +69,74 @@ public struct CookieRecord: Sendable, Equatable, Codable {
             : host == domain
     }
 
+    /// What tells one cookie from another: its name, its domain and its path.
+    struct Key: Hashable, Sendable {
+        var name: String
+        var domain: String
+        var path: String
+    }
+
+    var key: Key {
+        Key(name: name, domain: domain.lowercased(), path: path)
+    }
+
     /// This machine, where a browser treats plain `http` as secure.
     static func isLoopback(_ host: String) -> Bool {
         host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
     }
 }
 
-/// The one place the session lives, by name: the native requests read and
-/// write it, it is copied into the web view's store before a page loads, and
-/// it takes back what a page set. Its master copy is in the Keychain, for this
-/// device only, so a backup restored elsewhere is not signed in.
+/// The cookies of a web view's store, as the jar reads and writes them: the
+/// system's `WKHTTPCookieStore`, or a stand-in in tests.
+@MainActor
+protocol WebCookies: AnyObject {
+    /// Every cookie the store holds.
+    func held() async -> [HTTPCookie]
+    func put(_ cookie: HTTPCookie) async
+    func drop(_ cookie: HTTPCookie) async
+}
+
+extension WKHTTPCookieStore: WebCookies {
+    func held() async -> [HTTPCookie] { await allCookies() }
+    func put(_ cookie: HTTPCookie) async { await setCookie(cookie) }
+    func drop(_ cookie: HTTPCookie) async { await deleteCookie(cookie) }
+}
+
+/// The one place the session's cookies live, for every window of the app:
+/// the native requests read and write it, the web view's store is made to
+/// hold the same before a page loads, and it takes what a page set. Its
+/// master copy is one Keychain item (``KeychainSlot`` says what the system
+/// does with it), so the web view's store is never where a session comes
+/// back from.
 ///
 /// It holds what the origin's answers set: the runtime core decides which
 /// addresses are asked, and the jar keeps what they say.
 @MainActor
 public final class CookieJar {
     private(set) var records: [CookieRecord] = []
-    private let keychain: KeychainSlot?
+    private let slot: (any SecretSlot)?
     /// The origin whose session this is: what every address a request, a
     /// picture or the web view goes to is checked against. `nil` when the
     /// configured text is not an origin, and then no address is ours.
     public let site: Origin?
 
+    /// The Keychain service every app's session is kept under, by its origin.
+    static let service = "com.navree.native.session"
+
     /// A jar for the app at `origin`; `persistent` keeps it in the Keychain.
-    public init(origin: String, loopbackHTTP: Bool = false, persistent: Bool = true) {
+    public convenience init(origin: String, loopbackHTTP: Bool = false, persistent: Bool = true) {
+        self.init(
+            origin: origin, loopbackHTTP: loopbackHTTP,
+            slot: persistent ? KeychainSlot(service: Self.service, account: origin) : nil
+        )
+    }
+
+    /// A jar whose master copy is kept in `slot`. With `reads` false nothing
+    /// is taken from the slot: the session it holds was ended.
+    init(origin: String, loopbackHTTP: Bool = false, slot: (any SecretSlot)?, reads: Bool = true) {
         site = Origin(origin, loopbackHTTP: loopbackHTTP)
-        keychain = persistent ? KeychainSlot(service: "com.navree.native.session", account: origin) : nil
-        if let data = keychain?.read(), let saved = try? JSONDecoder().decode([CookieRecord].self, from: data) {
+        self.slot = slot
+        if reads, let data = slot?.read(), let saved = try? JSONDecoder().decode([CookieRecord].self, from: data) {
             records = saved.filter { $0.expires.map { $0 > Date() } ?? true }
         }
     }
@@ -133,7 +174,7 @@ public final class CookieJar {
     /// and dropping any that have expired.
     public func merge(_ cookies: [CookieRecord], at now: Date = Date()) {
         for cookie in cookies {
-            records.removeAll { $0.name == cookie.name && $0.domain == cookie.domain && $0.path == cookie.path }
+            records.removeAll { $0.key == cookie.key }
             if cookie.expires.map({ $0 > now }) ?? true {
                 records.append(cookie)
             }
@@ -141,31 +182,104 @@ public final class CookieJar {
         save()
     }
 
-    /// Copies the session into the web view's store, before a page loads:
-    /// after the wipe of a session that ended, never before it.
-    public func copy(into store: WKHTTPCookieStore) async {
-        await wiping?.value
-        for record in records {
-            if let cookie = record.cookie {
-                await store.setCookie(cookie)
-            }
+    // MARK: - The web view's store
+
+    /// What the web view's store held of the origin's cookies, by value, when
+    /// the jar last looked: what tells a cookie a page set, changed or took
+    /// away from one that only stayed. `nil` until the jar has made the store
+    /// of this session its own.
+    private var seen: [CookieRecord.Key: String]?
+    /// Whether a piece of work on the web view's store is under way, and what waits for it to end.
+    private var working = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    /// Before a page loads: takes what the page before it set (as
+    /// ``adopt(from:host:session:)`` does), then makes the store hold the
+    /// session's cookies for the origin and no other cookie of the origin. A
+    /// cookie an answer has since taken away is taken out of the store too,
+    /// and at the first page of a launch the store is made to hold what the
+    /// jar holds, never the other way round. Nothing is done for a session
+    /// that has ended: `session` is the number the web view's store was made
+    /// under.
+    func ready(_ store: any WebCookies, session: Int) async {
+        await myTurn()
+        defer { turnOver() }
+        guard session == self.session else { return }
+        if seen != nil { await collect(from: store, session: session) }
+        guard session == self.session else { return }
+        let mine = records.filter { isTheSites($0) }
+        let keys = Set(mine.map(\.key))
+        for cookie in await store.held() {
+            let record = CookieRecord(cookie)
+            if isTheSites(record), !keys.contains(record.key) { await store.drop(cookie) }
+        }
+        for record in mine {
+            if let cookie = record.cookie { await store.put(cookie) }
+        }
+        guard session == self.session else { return }
+        seen = Dictionary(mine.map { ($0.key, $0.value) }, uniquingKeysWith: { _, last in last })
+    }
+
+    /// After a page of `host` finished, when `host` is the origin's own:
+    /// takes what the page set, changed or took away in the web view's store
+    /// since the jar last looked, and nothing else. A cookie the page left as
+    /// it was says nothing, so what an answer set meanwhile stands. Nothing is
+    /// taken from a store the jar has not made its own (``ready(_:session:)``),
+    /// nor for a session that has ended.
+    func adopt(from store: any WebCookies, host: String, session: Int) async {
+        guard let site, host.lowercased() == site.host else { return }
+        await myTurn()
+        defer { turnOver() }
+        await collect(from: store, session: session)
+    }
+
+    private func collect(from store: any WebCookies, session: Int) async {
+        guard session == self.session, let before = seen else { return }
+        let found = await store.held().map(CookieRecord.init).filter { isTheSites($0) }
+        guard session == self.session else { return }
+        let now = Dictionary(found.map { ($0.key, $0) }, uniquingKeysWith: { _, last in last })
+        var changed = false
+        for (key, record) in now where before[key] != record.value {
+            // The page set it, or changed it.
+            records.removeAll { $0.key == key }
+            if record.expires.map({ $0 > Date() }) ?? true { records.append(record) }
+            changed = true
+        }
+        for (key, value) in before where now[key] == nil {
+            // The page took it away: it goes, unless an answer has set another since.
+            let held = records.count
+            records.removeAll { $0.key == key && $0.value == value }
+            changed = changed || records.count != held
+        }
+        seen = now.mapValues(\.value)
+        if changed { save() }
+    }
+
+    /// Whether a cookie is one the origin's own host is sent.
+    private func isTheSites(_ record: CookieRecord) -> Bool {
+        guard let site else { return false }
+        return record.matches(host: site.host)
+    }
+
+    /// One piece of work on the web view's store at a time, in the order
+    /// asked: waits until the work before this has ended.
+    private func myTurn() async {
+        guard working else {
+            working = true
+            return
+        }
+        await withCheckedContinuation { (next: CheckedContinuation<Void, Never>) in
+            waiting.append(next)
         }
     }
 
-    /// Takes back what a page of `host` set in the web view's store, when
-    /// `host` is the origin's own: never another site's, and nothing that a
-    /// session which ended meanwhile left there.
-    public func adopt(from store: WKHTTPCookieStore, host: String) async {
-        guard let site, host.lowercased() == site.host else { return }
-        let session = self.session
-        await wiping?.value
-        let cookies = await store.allCookies().map(CookieRecord.init).filter { $0.matches(host: site.host) }
-        guard session == self.session else { return }
-        let others = records.filter { !$0.matches(host: site.host) }
-        let next = others + cookies
-        guard next != records else { return }
-        records = next
-        save()
+    /// This piece of work has ended: the next one waiting goes on.
+    private func turnOver() {
+        if waiting.isEmpty {
+            working = false
+        } else {
+            waiting.removeFirst().resume()
+        }
     }
 
     /// The hosts the jar holds cookies for: the app's origins.
@@ -173,104 +287,45 @@ public final class CookieJar {
         Set(records.map { $0.domain.hasPrefix(".") ? String($0.domain.dropFirst()) : $0.domain }.map { $0.lowercased() })
     }
 
+    // MARK: - The end of a session
+
     /// The number of the session the jar holds: it moves on each time a
     /// session ends, so what an ended session's answers bring is told apart.
     public private(set) var session = 0
 
-    /// The wipe of the web view's store still under way, if any.
-    private var wiping: Task<Void, Never>?
-
-    /// How long the wipe of the web view's store may take before what waits
-    /// for it goes on all the same.
-    static let wipeLimit: Duration = .seconds(5)
-
-    /// Ends the session on this device. At once: the jar and its Keychain
-    /// item are emptied, and what an answer of the ended session brings later
-    /// is dropped. Then, before the web view's store is used again, it loses
-    /// every cookie and all stored data of the origin's host, and of any
-    /// other host the jar held. What waits for that waits `wipeLimit` at most.
+    /// Ends the session the jar holds, at once: its cookies go from memory
+    /// and from the Keychain, what an answer or a page of the ended session
+    /// brings later is dropped, and the web view's store it knew is never
+    /// read again. `false` when the Keychain item could not be deleted.
     @discardableResult
-    public func forget(_ store: WKWebsiteDataStore?) -> Task<Void, Never> {
-        let hosts = Self.wiped(held: self.hosts, site: site)
+    public func forget() -> Bool {
         records = []
+        seen = nil
         session += 1
-        keychain?.delete()
-        let wipe = Task { @MainActor in
-            if let store { await Self.wipe(store, hosts: hosts) }
-        }
-        let limit = Task { _ = try? await Task.sleep(for: Self.wipeLimit) }
-        let done = Task { await Self.first(wipe, limit) }
-        wiping = done
-        return done
-    }
-
-    /// The hosts whose cookies and data a wipe takes from the web view's
-    /// store: the configured origin's always, whatever the jar still held,
-    /// and the hosts the jar held.
-    nonisolated static func wiped(held: Set<String>, site: Origin?) -> Set<String> {
-        held.union(site.map { Set([$0.host]) } ?? Set())
-    }
-
-    /// Whether a record of the web view's store, named by the site it
-    /// belongs to (`shop.example` for `eu.shop.example`), is one of `hosts`'.
-    nonisolated static func holds(_ displayName: String, of hosts: Set<String>) -> Bool {
-        hosts.contains { host in displayName == host || host.hasSuffix("." + displayName) }
-    }
-
-    /// Takes out of the web view's store every cookie and all stored data of `hosts`.
-    static func wipe(_ store: WKWebsiteDataStore, hosts: Set<String>) async {
-        for cookie in await store.httpCookieStore.allCookies() {
-            let record = CookieRecord(cookie)
-            if hosts.contains(where: { record.matches(host: $0) }) {
-                await store.httpCookieStore.deleteCookie(cookie)
-            }
-        }
-        let kinds = WKWebsiteDataStore.allWebsiteDataTypes()
-        let found = await store.dataRecords(ofTypes: kinds)
-        let ours = found.filter { holds($0.displayName, of: hosts) }
-        await store.removeData(ofTypes: kinds, for: ours)
-    }
-
-    /// Returns when the first of two tasks has ended; the other goes on.
-    nonisolated static func first(_ one: Task<Void, Never>, _ other: Task<Void, Never>) async {
-        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-            let gate = Gate(done)
-            Task { await one.value; gate.open() }
-            Task { await other.value; gate.open() }
-        }
+        return slot?.delete() ?? true
     }
 
     private func save() {
-        guard let keychain else { return }
+        guard let slot else { return }
         if records.isEmpty {
-            keychain.delete()
+            _ = slot.delete()
         } else if let data = try? JSONEncoder().encode(records) {
-            keychain.write(data)
+            slot.write(data)
         }
     }
 }
 
-/// Lets one waiter go the first time it is opened; later openings do nothing.
-final class Gate: @unchecked Sendable {
-    private let lock = NSLock()
-    private var waiting: CheckedContinuation<Void, Never>?
-
-    init(_ waiting: CheckedContinuation<Void, Never>) {
-        self.waiting = waiting
-    }
-
-    func open() {
-        let waiting = lock.withLock {
-            defer { self.waiting = nil }
-            return self.waiting
-        }
-        waiting?.resume()
-    }
+/// Where the jar's master copy is kept: one Keychain item, or a stand-in in tests.
+protocol SecretSlot: Sendable {
+    func read() -> Data?
+    func write(_ data: Data)
+    /// Deletes what is kept; `false` when it is still there afterwards.
+    func delete() -> Bool
 }
 
 /// One Keychain item that never syncs and never moves to another device, and
 /// that can be read after the first unlock (so a refresh in the background works).
-struct KeychainSlot: Sendable {
+struct KeychainSlot: SecretSlot {
     let service: String
     let account: String
 
@@ -307,7 +362,11 @@ struct KeychainSlot: Sendable {
 
     static let log = Logger(subsystem: "com.navree.native", category: "session")
 
-    func delete() {
-        SecItemDelete(query as CFDictionary)
+    func delete() -> Bool {
+        let status = SecItemDelete(query as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            Self.log.error("the session could not be taken out of the Keychain: \(status, privacy: .public)")
+        }
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 }
