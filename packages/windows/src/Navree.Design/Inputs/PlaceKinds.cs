@@ -56,6 +56,15 @@ public enum PictureKind
 
     /// <summary>A camera's raw picture whose first bytes say so, whatever the file is named.</summary>
     Raw,
+
+    /// <summary>A GIMP document (XCF).</summary>
+    Gimp,
+
+    /// <summary>An OpenRaster document: a ZIP archive whose first file says so.</summary>
+    OpenRaster,
+
+    /// <summary>JPEG XR (HD Photo).</summary>
+    JpegXr,
 }
 
 /// <summary>Reads what kind of file a file is from its first bytes.</summary>
@@ -113,6 +122,24 @@ public static class PlaceKinds
         if (IsRaw(head))
         {
             return PictureKind.Raw;
+        }
+
+        // A GIMP document: "byte[9] "gimp xcf " File type identification" (the XCF format's own page, developer.gimp.org/core/standards/xcf).
+        if (head.StartsWith("gimp xcf "u8))
+        {
+            return PictureKind.Gimp;
+        }
+
+        // JPEG XR: a file begins with a FIXED_FILE_HEADER_II_2BYTES field "equal to 0x4949, followed by a FIXED_FILE_HEADER_0XBC_BYTE field
+        // equal to 0xBC" (the IANA registration of image/jxr). It begins as a little-endian TIFF does, with another number where 42 would be.
+        if (head.StartsWith((ReadOnlySpan<byte>)[0x49, 0x49, 0xBC]))
+        {
+            return PictureKind.JpegXr;
+        }
+
+        if (IsOpenRaster(head))
+        {
+            return PictureKind.OpenRaster;
         }
 
         if (head.StartsWith("II*\0"u8) || head.StartsWith("MM\0*"u8))
@@ -173,6 +200,9 @@ public static class PlaceKinds
         PictureKind.JpegXl => "image/jxl",
         PictureKind.Jpeg2000 => "image/jp2",
         PictureKind.Photoshop => "image/vnd.adobe.photoshop",
+        PictureKind.Gimp => "image/x-xcf",
+        PictureKind.OpenRaster => "image/openraster",
+        PictureKind.JpegXr => "image/jxr",
         _ => null,
     };
 
@@ -186,9 +216,27 @@ public static class PlaceKinds
         PictureKind.BigTiff => "BigTIFF",
         PictureKind.OtherMedia => "ISO media",
         PictureKind.Photoshop => "Photoshop",
+        PictureKind.Gimp => "GIMP",
+        PictureKind.OpenRaster => "OpenRaster",
+        PictureKind.JpegXr => "JPEG XR",
         PictureKind.Raw => "raw",
         _ => kind.ToString().ToUpperInvariant(),
     };
+
+    // An OpenRaster document is a ZIP archive: "The first file in the archive must be called `mimetype`", "It must be STORED without
+    // compression", and it "must contain the string `image/openraster`" (the OpenRaster file layout specification, openraster.org). In a
+    // ZIP archive's first file header the name's length is at byte 26, the length of what follows the name at byte 28, and the name at byte
+    // 30, with the file's content after them.
+    private static bool IsOpenRaster(ReadOnlySpan<byte> head)
+    {
+        if (head.Length < 38 || !head.StartsWith("PK\u0003\u0004"u8) || BinaryPrimitives.ReadUInt16LittleEndian(head[26..]) != 8 || !head[30..38].SequenceEqual("mimetype"u8))
+        {
+            return false;
+        }
+
+        int content = 38 + BinaryPrimitives.ReadUInt16LittleEndian(head[28..]);
+        return content <= head.Length && head[content..].StartsWith("image/openraster"u8);
+    }
 
     // A camera's raw picture by its first bytes. From ExifTool's list of file signatures (lib/Image/ExifTool.pm, %magicNumber): Fujifilm RAF
     // 'FUJIFILM', Sigma X3F 'FOVb', Minolta MRW '\0MR[MI]', Canon CRW '(II|MM).{4}HEAP(CCDR|JPGM)'. Not in that list, and written here from

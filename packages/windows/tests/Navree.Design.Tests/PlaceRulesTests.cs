@@ -382,6 +382,11 @@ public sealed class PlaceRulesTests
     [DataRow(new byte[] { 0x49, 0x49, 0x55, 0, 0x18, 0, 0, 0 }, PictureKind.Raw)]
     [DataRow(new byte[] { 0x49, 0x49, 0x2A, 0, 0x10, 0, 0, 0, 0x43, 0x52, 2, 0 }, PictureKind.Raw)]
     [DataRow(new byte[] { 0x49, 0x49, 0x2A, 0, 8, 0, 0, 0, 1, 0 }, PictureKind.Tiff)]
+    [DataRow(new byte[] { 0x67, 0x69, 0x6D, 0x70, 0x20, 0x78, 0x63, 0x66, 0x20, 0x76, 0x30, 0x31, 0x31, 0 }, PictureKind.Gimp)]
+    [DataRow(new byte[] { 0x67, 0x69, 0x6D, 0x70, 0x20, 0x78, 0x63, 0x66, 0x20, 0x66, 0x69, 0x6C, 0x65, 0 }, PictureKind.Gimp)]
+    [DataRow(new byte[] { 0x67, 0x69, 0x6D, 0x70, 0x20, 0x78, 0x63, 0x66 }, PictureKind.NotAPicture)]
+    [DataRow(new byte[] { 0x49, 0x49, 0xBC, 1, 0x20, 0, 0, 0 }, PictureKind.JpegXr)]
+    [DataRow(new byte[] { 0x4D, 0x4D, 0xBC, 1, 0, 0, 0, 0x20 }, PictureKind.NotAPicture)]
     public void The_kind_of_a_file_is_read_from_its_first_bytes(byte[] head, PictureKind kind)
     {
         Assert.AreEqual(kind, PlaceKinds.KindOf(head));
@@ -414,6 +419,134 @@ public sealed class PlaceRulesTests
         // An Olympus and a Panasonic raw picture begin almost as a TIFF does: neither is read as a TIFF.
         Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([0x49, 0x49, 0x52, 0x4F, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0], "P1010001.tif").Outcome);
         Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([0x49, 0x49, 0x55, 0, 0x18, 0, 0, 0, 0, 0, 0, 0, 0, 0], "P1010002.tif").Outcome);
+    }
+
+    // The first file of a ZIP archive, as its header is laid out: the name's length at byte 26, the length of what follows the name at byte
+    // 28, the name at byte 30, then the content, stored as it is.
+    private static byte[] Zip(byte[] first, byte[] content, int extra = 0) =>
+    [
+        .. "PK\u0003\u0004"u8.ToArray(), 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        (byte)content.Length, 0, 0, 0, (byte)content.Length, 0, 0, 0,
+        (byte)first.Length, 0, (byte)extra, 0,
+        .. first, .. new byte[extra], .. content,
+        .. "PK\u0003\u0004"u8.ToArray(), .. new byte[40],
+    ];
+
+    [TestMethod]
+    public void An_openraster_document_is_known_by_the_first_file_of_its_archive_and_no_other_archive_is_taken_for_one()
+    {
+        byte[] mimetype = "mimetype"u8.ToArray();
+        Assert.AreEqual(PictureKind.OpenRaster, PlaceKinds.KindOf(Zip(mimetype, "image/openraster"u8.ToArray())));
+
+        // Something may stand between the name and the content: the content is found past it.
+        Assert.AreEqual(PictureKind.OpenRaster, PlaceKinds.KindOf(Zip(mimetype, "image/openraster"u8.ToArray(), extra: 28)));
+
+        // A book and a spreadsheet begin the same way and say another type; a paper's archive begins with another file; each is no picture.
+        Assert.AreEqual(PictureKind.NotAPicture, PlaceKinds.KindOf(Zip(mimetype, "application/epub+zip"u8.ToArray())));
+        Assert.AreEqual(PictureKind.NotAPicture, PlaceKinds.KindOf(Zip(mimetype, "application/vnd.oasis.opendocument.spreadsheet"u8.ToArray())));
+        Assert.AreEqual(PictureKind.NotAPicture, PlaceKinds.KindOf(Zip("[Content_Types].xml"u8.ToArray(), "image/openraster"u8.ToArray())));
+        Assert.AreEqual(PictureKind.NotAPicture, PlaceKinds.KindOf(Zip("mimetypes"u8.ToArray(), "image/openraster"u8.ToArray())));
+
+        // An archive cut short anywhere in its first header is no picture, and reading it throws nothing.
+        byte[] whole = Zip(mimetype, "image/openraster"u8.ToArray(), extra: 4);
+        for (int length = 0; length < 58; length++)
+        {
+            Assert.AreEqual(PictureKind.NotAPicture, PlaceKinds.KindOf(whole.AsSpan(0, length)), length + " bytes of an archive are taken for a document");
+        }
+
+        // A length that points past the bytes read is no picture either.
+        byte[] far = Zip(mimetype, "image/openraster"u8.ToArray());
+        far[28] = 0xFF;
+        far[29] = 0xFF;
+        Assert.AreEqual(PictureKind.NotAPicture, PlaceKinds.KindOf(far));
+    }
+
+    [TestMethod]
+    public void A_gimp_or_openraster_document_and_a_jpeg_xr_picture_are_known_by_their_bytes_and_refused_with_words_under_any_name()
+    {
+        (byte[] block, _, _, _) = Exif(true);
+
+        // A GIMP document made from a phone photo, with the photo's EXIF block somewhere inside it.
+        byte[] gimp = [.. "gimp xcf v011"u8.ToArray(), 0, 0, 0, 0x0F, 0xA0, 0, 0, 0x0B, 0xB8, .. block];
+        foreach (string name in new[] { "Rock Garden.xcf", "Rock Garden", "Rock Garden.pdf", "Rock Garden.png" })
+        {
+            PlaceResult refused = PlaceRules.TakeOut([.. gimp], name);
+            Assert.AreEqual(PlaceOutcome.Refused, refused.Outcome, name + ": a GIMP document is sent as it is");
+            StringAssert.Contains(refused.Why, "a GIMP document");
+            StringAssert.Contains(refused.Why, "has to keep the place", name + ": the words do not say what a form that asks for the document must do");
+            Expect.That(PlaceRules.MustLook(gimp, name, FileRules.MediaTypeOf(name)), name + " is not looked into before it is sent");
+        }
+
+        // An OpenRaster document.
+        byte[] raster = [.. Zip("mimetype"u8.ToArray(), "image/openraster"u8.ToArray()), .. block];
+        foreach (string name in new[] { "Sukhna Lake.ora", "Sukhna Lake", "Sukhna Lake.zip" })
+        {
+            PlaceResult refused = PlaceRules.TakeOut([.. raster], name);
+            Assert.AreEqual(PlaceOutcome.Refused, refused.Outcome, name + ": an OpenRaster document is sent as it is");
+            StringAssert.Contains(refused.Why, "an OpenRaster document");
+            Expect.That(PlaceRules.MustLook(raster, name, FileRules.MediaTypeOf(name)), name + " is not looked into before it is sent");
+        }
+
+        // A JPEG XR picture begins as a TIFF does, with another number where a TIFF has 42: it is not read as a TIFF, and not sent.
+        byte[] xr = [0x49, 0x49, 0xBC, 1, 0x20, 0, 0, 0, .. new byte[24], .. block];
+        foreach (string name in new[] { "Jallianwala Bagh.jxr", "Jallianwala Bagh.wdp", "Jallianwala Bagh", "Jallianwala Bagh.tif", "Jallianwala Bagh.dat" })
+        {
+            PlaceResult refused = PlaceRules.TakeOut([.. xr], name);
+            Assert.AreEqual(PlaceOutcome.Refused, refused.Outcome, name + ": a JPEG XR picture is sent as it is");
+            StringAssert.Contains(refused.Why, "a JPEG XR picture");
+            Expect.That(PlaceRules.MustLook(xr, name, FileRules.MediaTypeOf(name)), name + " is not looked into before it is sent");
+        }
+
+        // The words for a Photoshop document say the same of the form.
+        PlaceResult photoshop = PlaceRules.TakeOut([.. "8BPS"u8.ToArray(), 0, 1, 0, 0, 0, 0, 0, 0, 0, 3], "Wagah border.psd");
+        StringAssert.Contains(photoshop.Why, "a Photoshop document");
+        StringAssert.Contains(photoshop.Why, "has to keep the place");
+    }
+
+    [TestMethod]
+    [DataRow("Qila Mubarak.psd")]
+    [DataRow("Qila Mubarak.PSB")]
+    [DataRow("Qila Mubarak.xcf")]
+    [DataRow("Qila Mubarak.ora")]
+    [DataRow("Qila Mubarak.kra")]
+    [DataRow("Qila Mubarak.pdn")]
+    [DataRow("Qila Mubarak.afphoto")]
+    [DataRow("Qila Mubarak.afdesign")]
+    public void A_file_named_as_a_picture_editors_document_whose_bytes_say_nothing_known_is_refused(string name)
+    {
+        // Bytes of no kind this code knows: nobody here can say what they hold.
+        byte[] unknown = [.. "KDocument-1"u8.ToArray(), .. new byte[64]];
+        Expect.That(PlaceRules.IsEditorName(name), name + " is not known as an editor's document");
+        Expect.That(PlaceRules.MustLook(unknown, name, FileRules.MediaTypeOf(name)), name + " is not looked into before it is sent");
+        PlaceResult refused = PlaceRules.TakeOut([.. unknown], name);
+        Assert.AreEqual(PlaceOutcome.Refused, refused.Outcome, name + " is sent as it is");
+        StringAssert.Contains(refused.Why, "a picture editor's document");
+        StringAssert.Contains(refused.Why, "has to keep the place");
+    }
+
+    [TestMethod]
+    public void A_name_only_adds_care_and_a_file_known_neither_by_its_bytes_nor_by_its_name_is_sent_as_it_is()
+    {
+        (byte[] block, _, _, _) = Exif(true);
+
+        // A JPEG named as an editor's document is a JPEG: it is cleaned, not refused.
+        Assert.AreEqual(PlaceOutcome.Removed, PlaceRules.TakeOut(Jpeg(block), "Anandpur Sahib.psd").Outcome);
+        Assert.AreEqual(PlaceOutcome.Removed, PlaceRules.TakeOut(Jpeg(block), "Anandpur Sahib.xcf").Outcome);
+
+        // A file named as a JPEG XR picture whose bytes are not one cannot be checked, so it is not sent.
+        Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([1, 2, 3, 4], "Anandpur Sahib.jxr").Outcome);
+        Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([1, 2, 3, 4], "Anandpur Sahib.wdp").Outcome);
+
+        // What is known neither way is not looked into and goes as it is, whatever it holds: a name with no extension, one that is no
+        // picture's, and one that only ends like an editor's.
+        byte[] unknown = [.. "KDocument-1"u8.ToArray(), .. block];
+        foreach (string name in new[] { "Anandpur Sahib", "Anandpur Sahib.dat", "Anandpur Sahib.bin", "notes on psd", ".psd", "Anandpur Sahib.psd.txt" })
+        {
+            Expect.That(!PlaceRules.MustLook(unknown, name, FileRules.MediaTypeOf(name)), name + " is looked into though nothing says it is a picture");
+            PlaceResult sent = PlaceRules.TakeOut([.. unknown], name);
+            Assert.AreEqual(PlaceOutcome.None, sent.Outcome, name);
+            CollectionAssert.AreEqual(unknown, sent.Bytes, name + " was changed");
+        }
     }
 
     [TestMethod]

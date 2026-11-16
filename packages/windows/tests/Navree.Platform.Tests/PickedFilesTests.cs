@@ -359,6 +359,43 @@ public sealed class PickedFilesTests
     }
 
     [TestMethod]
+    public async Task A_gimp_document_and_a_jpeg_xr_picture_are_not_sent_from_a_field_that_does_not_keep_the_place_and_a_file_nothing_knows_is()
+    {
+        PickedFiles files = new(copies);
+
+        // A GIMP document, by its first bytes, under its own name and under a paper's.
+        byte[] document = [.. "gimp xcf v011"u8.ToArray(), 0, .. PhotoWithPlace()];
+        string path = Write("Rock Garden.xcf", document);
+        Picked refused = await files.AddAsync(path, Rule(accept: null), 0, CancellationToken.None);
+        Assert.IsNull(refused.File, "a GIMP document went out of a field that does not keep the place");
+        StringAssert.Contains(refused.Refusal, "GIMP");
+        Picked renamed = await files.AddAsync(Write("Rock Garden.pdf", document), Rule(accept: null), 0, CancellationToken.None);
+        Assert.IsNull(renamed.File, "a GIMP document named as a paper went out of a field that does not keep the place");
+
+        // A JPEG XR picture.
+        byte[] xr = [0x49, 0x49, 0xBC, 1, 0x20, 0, 0, 0, .. PhotoWithPlace()];
+        Picked picture = await files.AddAsync(Write("Rock Garden.dat", xr), Rule(accept: null), 0, CancellationToken.None);
+        Assert.IsNull(picture.File, "a JPEG XR picture went out of a field that does not keep the place");
+        StringAssert.Contains(picture.Refusal, "JPEG XR");
+
+        // A document of an editor whose bytes this client does not know, by its name.
+        byte[] other = [.. "KDocument-1"u8.ToArray(), .. PhotoWithPlace()];
+        Picked named = await files.AddAsync(Write("Rock Garden.kra", other), Rule(accept: null), 0, CancellationToken.None);
+        Assert.IsNull(named.File, "a file named as an editor's document went out of a field that does not keep the place");
+        Assert.AreEqual(0, CopiesOnDisk());
+
+        // A field that keeps the place sends each as it is.
+        Picked kept = await files.AddAsync(path, Rule(accept: null, keep: true), 0, CancellationToken.None);
+        Assert.IsNotNull(kept.File);
+        CollectionAssert.AreEqual(document, await SentAsync(files, kept));
+
+        // The same bytes under a name that says nothing are known neither way: the file is sent as it is, and is not looked into.
+        Picked unknown = await files.AddAsync(Write("Rock Garden.bin", other), Rule(accept: null), 0, CancellationToken.None);
+        Assert.IsNotNull(unknown.File, "a file nothing says is a picture was refused");
+        CollectionAssert.AreEqual(other, await SentAsync(files, unknown));
+    }
+
+    [TestMethod]
     public async Task A_photo_chosen_in_a_session_that_has_ended_is_not_held_and_leaves_no_copy()
     {
         PickedFiles files = new(copies);

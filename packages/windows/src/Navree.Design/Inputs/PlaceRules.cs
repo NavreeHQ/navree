@@ -35,8 +35,10 @@ public sealed record PlaceResult(PlaceOutcome Outcome, string? Why = null)
 /// <item>XMP anywhere (PlaceXmp.cs): a packet that holds any property about a place goes whole.</item>
 /// <item>GIF, BMP and SVG: searched for a property about a place, and refused when one is found.</item>
 /// </list>
-/// Refused by their bytes: HEIC, HEIF, AVIF, JPEG XL, JPEG 2000, BigTIFF, a Photoshop document, and the raw pictures whose first bytes say what
-/// they are. Not looked into: words a person wrote (a caption, a comment), a video.
+/// Refused by their bytes: HEIC, HEIF, AVIF, JPEG XL, JPEG 2000, JPEG XR, BigTIFF, a Photoshop, GIMP or OpenRaster document, and the raw
+/// pictures whose first bytes say what they are. Refused by their name, when their bytes say nothing this code knows: a file named as a
+/// picture, as a camera's raw picture, or as a picture editor's document. A file that is none of these by its bytes or its name is not
+/// looked into and is sent as it is. Not looked into either: words a person wrote (a caption, a comment), a video.
 /// </summary>
 public static partial class PlaceRules
 {
@@ -53,18 +55,29 @@ public static partial class PlaceRules
         "raw", "pef", "iiq", "srw", "arw", "srf", "sr2",
     };
 
+    // The documents of picture editors, by extension: Photoshop, GIMP, OpenRaster, Krita, Paint.NET, Affinity. Such a document keeps what the
+    // photo it was made from held, in a form this code does not read, so a file named so is refused unless its bytes are a picture this code
+    // cleans. Three of them are also known by their bytes (PlaceKinds).
+    private static readonly HashSet<string> EditorExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "psd", "psb", "xcf", "ora", "kra", "pdn", "afphoto", "afdesign",
+    };
+
     /// <summary>Whether a media type is a picture.</summary>
     /// <param name="mediaType">The media type.</param>
     /// <returns>True for a picture.</returns>
     public static bool IsPicture(string mediaType) => mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Whether a file must be looked into before it is sent from a field that does not keep the place: a picture by its bytes, by its name, or a camera's raw picture by its name.</summary>
+    /// <summary>
+    /// Whether a file must be looked into before it is sent from a field that does not keep the place: a picture by its bytes or by its name, or
+    /// a camera's raw picture or a picture editor's document by its name. A file that is none of these is not looked into and is sent as it is.
+    /// </summary>
     /// <param name="head">The file's first bytes (<see cref="PlaceKinds.Head"/> of them, or all of a shorter file).</param>
     /// <param name="name">The file's name.</param>
     /// <param name="mediaType">The media type its name says.</param>
     /// <returns>True when it must be looked into.</returns>
     public static bool MustLook(ReadOnlySpan<byte> head, string name, string mediaType) =>
-        PlaceKinds.KindOf(head) != PictureKind.NotAPicture || IsPicture(mediaType) || IsRawName(name);
+        PlaceKinds.KindOf(head) != PictureKind.NotAPicture || IsPicture(mediaType) || IsRawName(name) || IsEditorName(name);
 
     /// <summary>Takes the place out of a picture.</summary>
     /// <param name="file">The whole file. It may be changed in place; when the outcome is a refusal it must not be sent.</param>
@@ -111,6 +124,11 @@ public static partial class PlaceRules
                         return Refused(Doubt.Raw);
                     }
 
+                    if (IsEditorName(name))
+                    {
+                        return RefuseDocument("a picture editor's");
+                    }
+
                     // Not a picture by its bytes: a file whose name says it is one may still hold a place nobody here can see.
                     if (IsPicture(FileRules.MediaTypeOf(name)))
                     {
@@ -123,6 +141,9 @@ public static partial class PlaceRules
                 case PictureKind.Raw:
                     // A raw picture by its bytes, whatever it is named.
                     return Refused(Doubt.Raw);
+                case PictureKind.Photoshop or PictureKind.Gimp or PictureKind.OpenRaster:
+                    // An editor's document by its bytes, whatever it is named.
+                    return RefuseDocument(kind == PictureKind.OpenRaster ? "an OpenRaster" : "a " + PlaceKinds.Named(kind));
                 default:
                     return Refuse(kind);
             }
@@ -150,6 +171,21 @@ public static partial class PlaceRules
         int dot = shown.LastIndexOf('.');
         return dot > 0 && RawExtensions.Contains(shown[(dot + 1)..]);
     }
+
+    /// <summary>Whether a name is that of a picture editor's own document.</summary>
+    /// <param name="name">The file's name.</param>
+    /// <returns>True when its extension is one of the editors' documents.</returns>
+    public static bool IsEditorName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        string shown = FileRules.DisplayName(name);
+        int dot = shown.LastIndexOf('.');
+        return dot > 0 && EditorExtensions.Contains(shown[(dot + 1)..]);
+    }
+
+    // An editor's document is asked for as such, so "save it as a JPEG" is only half an answer: the words also say what the form must do.
+    private static PlaceResult RefuseDocument(string whose) =>
+        new(PlaceOutcome.Refused, "The place a photo was taken cannot be taken out of " + whose + " document here, and this field does not keep the place, so it was not added. Save it as a JPEG or PNG picture and choose that; a form that asks for the document itself has to keep the place.");
 
     private static PlaceResult Refuse(PictureKind kind)
     {
