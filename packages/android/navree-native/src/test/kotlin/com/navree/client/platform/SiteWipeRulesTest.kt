@@ -6,6 +6,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 
 /** The rules of the client's own document that takes an origin's service workers and caches away when a session has ended. */
 class SiteWipeRulesTest {
@@ -21,6 +23,30 @@ class SiteWipeRulesTest {
         assertFalse("nor an address that only begins like it", WipeRules.own("$address&next=/orders", mainFrame = true, word = word))
         assertFalse(WipeRules.own("https://shop.example/", mainFrame = true, word = word))
         assertEquals("http://localhost:8097/?navree-wipe=$word", WipeRules.address("http://localhost:8097", word))
+    }
+
+    @Test
+    fun a_line_that_does_not_read_as_an_origin_is_dropped_from_the_list_and_the_others_stay() {
+        // A line cut short, one with no port after its colon, and two lines run together, among lines that read.
+        val text = "https://shop.example\nhttps:/\nhttp://localhost:\nhttps://amritsar.shhttps://patiala.shop.example\nhttps://patiala.shop.example\n\n" +
+            "https://shop.example\nhttp://localhost:8097/\nhttps://shop.example/orders\n"
+        assertEquals(listOf("https://shop.example", "https://patiala.shop.example", "http://localhost:8097"), WipeRules.listed(text))
+        assertEquals(emptyList<String>(), WipeRules.listed(""))
+    }
+
+    @Test
+    fun the_list_is_written_whole_and_put_in_its_place_in_one_step() {
+        val folder = Files.createTempDirectory("navree-origins").toFile()
+        try {
+            val file = File(folder, "origins")
+            WipeRules.put(file, "https://shop.example\n")
+            assertEquals("https://shop.example\n", file.readText())
+            WipeRules.put(file, "https://shop.example\nhttps://patiala.shop.example\n")
+            assertEquals(listOf("https://shop.example", "https://patiala.shop.example"), WipeRules.listed(file.readText()))
+            assertEquals("nothing is left beside the list", listOf("origins"), folder.list()?.toList())
+        } finally {
+            folder.deleteRecursively()
+        }
     }
 
     @Test

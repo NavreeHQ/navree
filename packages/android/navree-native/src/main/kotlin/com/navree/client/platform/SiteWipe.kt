@@ -18,6 +18,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.SecureRandom
 import kotlin.concurrent.thread
 
@@ -59,6 +62,33 @@ object WipeRules {
      * a host under a `*.` pattern is known).
      */
     fun origins(own: List<String>, hosts: List<String>, seen: Collection<String>): List<String> = (own + hosts + seen.sorted()).distinct()
+
+    /**
+     * The origins a file of them names: each line that reads as an origin, as
+     * a browser writes it, each once. A line that does not read (one cut
+     * short, or two run together, by a process that ended while it wrote) is
+     * dropped, so one such line never makes the whole list unusable.
+     */
+    fun listed(text: String): List<String> = text.lineSequence().mapNotNull { line -> Site.read(line.trim())?.takeIf { it.bare }?.origin() }.distinct().toList()
+
+    /**
+     * Writes [text] as the whole of [file], so that the file is at every
+     * moment the text it held before or the new one and never a part of
+     * either: under another name beside it, forced to the disk, then put in
+     * its place in one step.
+     */
+    fun put(file: File, text: String) {
+        val fresh = File(file.parentFile, file.name + ".new")
+        try {
+            FileOutputStream(fresh).use { out ->
+                out.write(text.encodeToByteArray())
+                out.fd.sync()
+            }
+            Files.move(fresh.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE)
+        } finally {
+            fresh.delete()
+        }
+    }
 
     /** Whether two origins, written as `scheme://host[:port]`, are the same one. */
     fun same(one: String, other: String): Boolean {
@@ -158,12 +188,13 @@ object SiteWipe {
         synchronized(lock) {
             val folder = app?.noBackupFilesDir ?: return
             val known = seen ?: load(folder).also { seen = it }
-            if (known.add(origin)) runCatching { File(folder, SEEN).appendText(origin + "\n") }
+            // The whole list is written again, in one step. One that could not be written is not known, so the next sighting writes it.
+            if (known.add(origin) && runCatching { WipeRules.put(File(folder, SEEN), known.joinToString("") { it + "\n" }) }.isFailure) known.remove(origin)
         }
     }
 
     private fun load(folder: File): MutableSet<String> =
-        runCatching { File(folder, SEEN).readLines().filterTo(LinkedHashSet()) { it.isNotBlank() } }.getOrElse { LinkedHashSet() }
+        runCatching { WipeRules.listed(File(folder, SEEN).readText()).toCollection(LinkedHashSet()) }.getOrElse { LinkedHashSet() }
 
     /** A session ended: what its pages stored is owed a deletion from now, and one is on its way. It blocks on a small file: not on the main thread. */
     fun owe() {
