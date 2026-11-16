@@ -75,7 +75,11 @@ public struct ShellConfiguration: Sendable {
         let loopback = loopbackHTTP
         let origin = origin
         self.transport = transport ?? {
-            HTTPTransport(jar: CookieJar(origin: origin, loopbackHTTP: loopback, persistent: keeps))
+            // Each window has a transport of its own for its core's requests;
+            // all of them carry the app's one session.
+            HTTPTransport(
+                jar: SessionKeeper.shared(origin: origin, loopbackHTTP: loopback, keepsSession: keeps).networkJar()
+            )
         }
         self.webContent = webContent
         self.launch = launch
@@ -201,8 +205,11 @@ public enum CoreConfiguration {
         return caps.sorted()
     }
 
-    /// The core's configuration for this app on this device.
-    public static func json(_ configuration: ShellConfiguration, device: DeviceTraits) -> Data {
+    /// The core's configuration for this app on this device. With `keeps`
+    /// false the core keeps nothing between launches: for a window beside
+    /// the app's main ones, whose core would otherwise write its own list of
+    /// pages over theirs in the one store they share.
+    public static func json(_ configuration: ShellConfiguration, device: DeviceTraits, keeps: Bool = true) -> Data {
         var signIn: [String: Any] = [
             "paths": configuration.signInPaths,
             // Apple's own sheet signs in with Apple; any other provider goes the web's way.
@@ -222,7 +229,7 @@ public enum CoreConfiguration {
             // Back on Apple's systems goes down the stack and never across to another destination.
             "back_to_first": false,
             "deep_links": configuration.openAnyLink ? "origin" : "routes",
-            "cache": ["pages": 24, "persist": true] as [String: Any],
+            "cache": ["pages": 24, "persist": keeps] as [String: Any],
             "undrawable": undrawable,
             "views": [String](),
             "sign_in": signIn,

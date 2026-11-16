@@ -16,14 +16,16 @@ import AppKit
 
 /// Carries out the runtime core's effects with the system's own means. What
 /// comes of each is a later event, sent to the client on the main actor.
+///
+/// Each window has one of these for its core. The session is not a window's:
+/// every one of them shares the app's ``SessionKeeper``, and writes for the
+/// person only while its core runs in the session as it is now.
 @MainActor
 public final class SystemEffects: EffectRunner {
     /// What answers the core's requests.
     public let transport: any Transport
-    /// The core's key-value cache, kept between launches.
-    private(set) var cache: KeptFiles
-    /// What is kept of a launch the system may end.
-    private(set) var snapshots: KeptFiles
+    /// The app's one session, for every window.
+    let keeper: SessionKeeper
     let signIn: SignInSession
     let devices: DeviceCalls
     /// The origin addresses are checked against.
@@ -32,50 +34,101 @@ public final class SystemEffects: EffectRunner {
     let pictureHosts: [String]
     /// What the build is signed with.
     let signedWith: Set<Entitlement>
-    /// The push token was given up when a session ended: it is asked for
-    /// again once somebody is signed in.
-    private(set) var pushAwaitsSignIn = false
+    /// The number of the session this window's core runs in: the session's
+    /// own, from the moment the core is told of each change of it.
+    private(set) var session: Int
+    /// The client whose effects these are, once it has asked for one.
+    private weak var client: NativeClient?
     private var timers: [Int: Task<Void, Never>] = [:]
 
     static let log = Logger(subsystem: "com.navree.native", category: "effects")
 
-    public init(
+    /// Effects for a window that is the app's only one: a session of its own
+    /// over the transport's jar, kept in `cache` and `snapshots`.
+    public convenience init(
         transport: any Transport, cache: KeptFiles = KeptFiles("navree-cache", in: .cachesDirectory),
         snapshots: KeptFiles = KeptFiles("navree-snapshot"), signedWith: Set<Entitlement> = [], origin: URL? = nil,
         site: Origin? = nil, pictureHosts: [String] = []
     ) {
+        self.init(
+            transport: transport, keeper: SessionKeeper(jar: transport.jar, cache: cache, snapshots: snapshots),
+            signedWith: signedWith, origin: origin, site: site, pictureHosts: pictureHosts
+        )
+    }
+
+    /// Effects for one window of the app, in the session `keeper` holds.
+    init(
+        transport: any Transport, keeper: SessionKeeper, signedWith: Set<Entitlement> = [], origin: URL? = nil,
+        site: Origin? = nil, pictureHosts: [String] = []
+    ) {
         self.transport = transport
-        self.cache = cache
-        self.snapshots = snapshots
+        self.keeper = keeper
+        session = keeper.number
         let site = site ?? transport.jar?.site
         self.site = site
         self.pictureHosts = pictureHosts
         self.signedWith = signedWith
         signIn = SignInSession(signedWith: signedWith, origin: origin)
         devices = DeviceCalls(signedWith: signedWith, origin: origin, site: site)
+        keeper.join(self)
     }
 
     /// The cookie store the web view shares.
     public var jar: CookieJar? { transport.jar }
 
-    /// Gives the core of one scene (a window, on iPad and the Mac) a cache
-    /// and a snapshot folder of its own inside the app's, before it starts:
-    /// the core serving another scene, perhaps for another person, never
-    /// reads or writes them, and they are emptied with this scene's session.
-    func keep(for scene: String) {
-        guard !scene.isEmpty else { return }
-        cache.clearLoose()
-        snapshots.clearLoose()
-        cache = cache.within(scene)
-        snapshots = snapshots.within(scene)
+    /// The core's key-value cache, kept between launches: the session's.
+    var cache: KeptFiles { keeper.cache }
+    /// What is kept of each window for a launch the system may end: the session's.
+    var snapshots: KeptFiles { keeper.snapshots }
+
+    /// The push token was given up when a session ended: it is asked for
+    /// again once somebody is signed in.
+    var pushAwaitsSignIn: Bool { keeper.pushAwaitsSignIn }
+
+    /// Whether this window's core runs in the session as it is now. While
+    /// it does not, nothing it asks is written for the person.
+    var isCurrent: Bool { session == keeper.number }
+
+    /// The window's core is about to start: it starts in the session as it
+    /// is now. `restoring` says whether the system brings a main window back
+    /// (`nil` for a window that is not one of the app's main ones).
+    func begins(restoring: Bool?) {
+        session = keeper.number
+        keeper.windowBegins(restoring: restoring)
+    }
+
+    /// Writes what is kept of the window under `key`, or deletes it; nothing
+    /// is written for a session that has ended.
+    func keep(snapshot: Data?, under key: String) {
+        guard snapshot == nil || isCurrent else { return }
+        snapshots.writeData(key, snapshot)
+    }
+
+    /// The session ended: the requests and streams under way are dropped,
+    /// and none of them is answered.
+    func stopWork() {
+        transport.stop()
+    }
+
+    /// The session ended in another window: this window's core is told the
+    /// client ended it, drops what it held of the person and starts again.
+    func sessionEnded() {
+        session = keeper.number
+        if let client, client.began { client.send(.signedOut) }
+    }
+
+    /// This window's own core ended the session, and goes on in the one that follows.
+    func caughtUp() {
+        session = keeper.number
     }
 
     /// What loads the pictures of a screen, with the session's cookies.
     public private(set) lazy var pictures = PictureLoader(jar: transport.jar, site: site, hosts: pictureHosts)
 
     public func run(_ effect: CoreEffect, for client: NativeClient) {
-        if pushAwaitsSignIn, client.app?.user != nil {
-            pushAwaitsSignIn = false
+        self.client = client
+        if keeper.pushAwaitsSignIn, client.app?.user != nil {
+            keeper.pushAwaitsSignIn = false
             AppEvents.registerForPush()
         }
         switch effect {
@@ -106,26 +159,21 @@ public final class SystemEffects: EffectRunner {
             }
             client.send(.random(request: request, bytes: bytes))
         case .forgetSession:
-            // The person signed out: what was kept of them goes with the
-            // session, here and now, before the next effect; the web view's
-            // store before it is used again. The count and every notification
-            // go with them.
-            devices.notifications.signedOut()
-            snapshots.clear()
-            cache.clear()
-            FileStore.shared.clear()
-            pictures.forget()
-            transport.jar?.forget(WKWebsiteDataStore.default())
+            // The person signed out: the session ends for every window, here
+            // and now, before the next effect.
+            keeper.end(by: self)
             // This install's token goes with the person; it is asked for again
             // once somebody signs in.
             if signedWith.contains(.pushNotifications) {
                 AppEvents.unregisterForPush()
-                pushAwaitsSignIn = true
+                keeper.pushAwaitsSignIn = true
             }
         case .cacheRead(let key):
-            client.send(.cache(key: key, value: cache.read(key)))
+            client.send(.cache(key: key, value: isCurrent ? cache.read(key) : nil))
         case .cacheWrite(let key, let value):
-            cache.write(key, value)
+            // Taking a key away is always done; a value is kept only for the
+            // session as it is now.
+            if value == nil || isCurrent { cache.write(key, value) }
         case .cacheClear:
             cache.clear()
         case .announce(let text, let notice, let count):

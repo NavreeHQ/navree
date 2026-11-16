@@ -21,7 +21,9 @@ public struct SettingsShell: View {
     public init(configuration: ShellConfiguration) {
         var configuration = configuration
         configuration.launch = Launch()
-        _session = State(initialValue: Session(configuration: configuration))
+        // Its core keeps nothing between launches: the one store of kept
+        // pages is the main windows'.
+        _session = State(initialValue: Session(configuration: configuration, keeps: false))
     }
 
     public var body: some View {
@@ -41,7 +43,7 @@ public struct SettingsShell: View {
         }
         .frame(minWidth: 480, idealWidth: 560, minHeight: 360, idealHeight: 520)
         .task {
-            session.begin(restoring: false, scene: "settings")
+            session.begin(restoring: false, scene: "settings", main: false)
             session.window(.medium)
         }
     }

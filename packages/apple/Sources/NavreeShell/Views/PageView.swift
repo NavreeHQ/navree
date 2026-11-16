@@ -317,6 +317,10 @@ struct ScreenPage: View {
                 ) {
                     webTitle = $0
                 }
+                // A web view belongs to the session it was made in, whose
+                // store it holds: when the session ends it goes, and a page
+                // of the next session is shown in a new one.
+                .id((client.effects as? SystemEffects)?.keeper.number ?? 0)
                 .ignoresSafeArea(.container, edges: .bottom)
                 .navigationTitle(webTitle ?? title ?? state.title ?? "")
                 .modifier(InlineTitle(mode: NavigationRules.webTitleMode(screenDepth)))

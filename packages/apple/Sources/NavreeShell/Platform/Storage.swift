@@ -7,7 +7,9 @@ import Foundation
 ///
 /// The core's key-value cache lives in one (keys are opaque, each a file named
 /// by its SHA-256); the core empties it when the person changes or signs out.
-/// The snapshot of a launch lives in another.
+/// What is kept of each window for a launch the system may end lives in
+/// another, a file for each window. Both are the session's, one place each for
+/// every window: a session that ends takes all of both with it.
 public final class KeptFiles: Sendable {
     public let folder: URL
 
@@ -20,16 +22,6 @@ public final class KeptFiles: Sendable {
 
     public init(folder: URL) {
         self.folder = folder
-    }
-
-    /// A folder of its own inside this one, named for `name` (its letters,
-    /// digits and `-` kept, anything else a `-`): what a scene keeps apart
-    /// from the others. Emptying it leaves the others as they are.
-    public func within(_ name: String) -> KeptFiles {
-        let safe = String(name.unicodeScalars.map { scalar -> Character in
-            scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || scalar == "-") ? Character(scalar) : "-"
-        })
-        return KeptFiles(folder: folder.appendingPathComponent("scene-" + safe, isDirectory: true))
     }
 
     public func read(_ key: String) -> String? {
@@ -60,18 +52,38 @@ public final class KeptFiles: Sendable {
         }
     }
 
-    /// Deletes the files kept in this folder itself, leaving the folders
-    /// within it: what a build that kept one store for every scene left.
-    public func clearLoose() {
-        let items = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
-        for item in items where (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory != true {
+    /// Deletes everything kept here. `false` when something of it is still
+    /// on the device afterwards.
+    @discardableResult
+    public func clear() -> Bool {
+        do {
+            try FileManager.default.removeItem(at: folder)
+            return true
+        } catch {
+            return !FileManager.default.fileExists(atPath: folder.path)
+        }
+    }
+
+    /// Deletes every folder that stands in this one. What is kept here is
+    /// files, each named by its key's digest: a folder among them is not this
+    /// store's, and nothing reads it.
+    public func clearFolders() {
+        for item in entries([.isDirectoryKey]) where (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
             try? FileManager.default.removeItem(at: item)
         }
     }
 
-    /// Deletes everything kept here.
-    public func clear() {
-        try? FileManager.default.removeItem(at: folder)
+    /// Deletes each file last written before `date`.
+    public func clear(writtenBefore date: Date) {
+        for item in entries([.contentModificationDateKey]) {
+            let written = (try? item.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let written, written < date { try? FileManager.default.removeItem(at: item) }
+        }
+    }
+
+    /// What stands in the folder now.
+    private func entries(_ keys: [URLResourceKey]) -> [URL] {
+        (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys)) ?? []
     }
 
     /// The file a key is kept in.

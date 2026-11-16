@@ -30,7 +30,9 @@ final class FakeTransport: Transport {
     var cancelled: [Int] = []
     var streams: [Int: String] = [:]
     var closed: [Int] = []
-    let jar: CookieJar? = CookieJar(origin: "https://shop.example", persistent: false)
+    /// How often it was told the session ended.
+    var stopped = 0
+    var jar: CookieJar? = CookieJar(origin: "https://shop.example", persistent: false)
 
     func fetch(_ request: FetchRequest, answer: @escaping @MainActor (Response) -> Void) {
         fetched.append(request)
@@ -55,6 +57,10 @@ final class FakeTransport: Transport {
 
     func close(stream: Int) {
         closed.append(stream)
+    }
+
+    func stop() {
+        stopped += 1
     }
 }
 

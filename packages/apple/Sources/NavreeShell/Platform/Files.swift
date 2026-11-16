@@ -37,10 +37,16 @@ public final class FileStore {
         kept[token].flatMap { try? Data(contentsOf: $0) }
     }
 
-    /// Lets every kept file go.
-    public func clear() {
+    /// Lets every kept file go. `false` when one is still on the device afterwards.
+    @discardableResult
+    public func clear() -> Bool {
         kept.removeAll()
-        try? FileManager.default.removeItem(at: folder)
+        do {
+            try FileManager.default.removeItem(at: folder)
+            return true
+        } catch {
+            return !FileManager.default.fileExists(atPath: folder.path)
+        }
     }
 
     /// A file's media type, from its name's extension.
