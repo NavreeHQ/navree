@@ -330,18 +330,20 @@ export function mount(el, props, ui) {
 }
 ```
 
-The script draws only inside the star `div`, which the server marked `data-ui-keep`. That `div` is the script's own body: a morph from the server leaves it as the script left it, and the runtime seals it before the script loads, so nothing a script or a library writes there can drive the runtime or join a form around the component. Everything else the script reaches goes through `ui`, the helpers `mount` is given. [The browser contract](/docs/ui/extension-contract/) says what each does.
+The script draws only inside the star `div`, which the server marked `data-ui-keep`. That `div` is the script's own body: a morph from the server leaves it as the script left it, and the runtime seals it before the script loads. Once the task that wrote it is over, what a script or a library writes there drives no hook of the runtime and joins no form around the component. The seal is no sanitizer, though: the browser acts on some markup as it is inserted, so escape data before a library writes it as HTML (see [what the seal does not stop](/docs/ui/extension-contract/#what-the-seal-does-not-stop)). Markup written anywhere else, a popup on `<body>` included, is not sealed. Everything else the script reaches goes through `ui`, the helpers `mount` is given. [The browser contract](/docs/ui/extension-contract/) says what each does.
+
+A part of the toolkit's own that keeps itself through a morph does not work inside your component's root: the list of countries of a `PhoneInput`, the months of a `Calendar` and the items of a `LazyList`. The runtime can't tell such a part from an owned body, so it seals it, and the part stops working. Draw these beside the root, not inside it (see [the toolkit's own kept parts](/docs/ui/extension-contract/#the-toolkits-own-kept-parts)).
 
 The extension says what the script may do:
 
 - `.contract(1)` is the browser contract the script is written for. A script with no contract stops the boot, and so does a contract the toolkit doesn't run.
-- `.routes(&["/ratings/"])` are the route prefixes the script may call: at most 8, each starting and ending with `/`, with at least one segment (`/ratings/`, never `/`), of lower-case letters, digits and `/ _ . -`, with no `.` or `..` segment, and never under `/_navree/`. A script reaches a path under one of them, and nothing else.
+- `.routes(&["/ratings/"])` are the route prefixes the script may call: at most 8, each starting and ending with `/`, with at least one segment (`/ratings/`, never `/`), of lower-case letters, digits and `/ _ . -`, with no `.` or `..` segment, and never under `/_navree/`. `ui.call` and `ui.get` reach a path under one of them, and nothing else. They hold the helpers only: a script's own `fetch` is not held to them (see [what a script may and may not do](/docs/ui/extension-contract/#what-a-script-may-and-may-not-do)).
 - `Element::extension_call` lets a script call one exact address, for a route only the server can name. `Rating::rate_at("/deliveries/42/rating")` writes it with `extension_call`: the route is outside `/ratings/`, and the script posts to it with `ui.call`. A query and a fragment are left out, and so is an address that isn't a path of this site or that holds white space. Call it after `extension`, which replaces the addresses an earlier call wrote.
 - `.keeps(&["data-busy"])` are attributes the script sets on its root that a morph from the server leaves as the script set them, beside `data-ui-mounted` and `data-ui-failed`: at most 8, each a lower-case letter followed by up to 63 lower-case letters, digits or `-`, never `data-ui-*`, `style`, `on*`, `id`, `name`, `form` or an attribute that holds an address.
 
 A name, a namespace, a kept attribute or a route prefix outside these rules fails the build with a message that says which.
 
-A page with a component that has a script loads the `core` and `extensions` modules (the `extensions` module is under 4 KB gzip) and the script, and nothing more. A page whose components have no script loads none. A region, a lazy list, an activity feed or a picker that receives a component only after the page is drawn can't tell the page it needs the `extensions` module, so put an element that carries `.uses(Uses::EXTENSIONS)` (`Element::uses`) in what the host draws first. A reply that morphs a component in brings the module with it.
+A page with a component that has a script loads the `core` and `extensions` modules (the `extensions` module is under 4 KB gzip) and the script, and nothing more. A page whose components have no script loads none. A region, a lazy list, an activity feed or a tree's branch that receives a component only after the page is drawn can't tell the page it needs the `extensions` module, so put an element that carries `.uses(Uses::EXTENSIONS)` (`Element::uses`) in what the host draws first. The component then mounts as it arrives, and leaves with its row when a feed drops it. A reply that morphs a component in brings the module with it. A picker's list can't hold a component: its answer is cleaned down to the parts of an option.
 
 ## Props, and the server telling it something
 
@@ -569,7 +571,7 @@ async fn edit_rating(Extension(ctx): Extension<AppContext>, edit: EditedValue<u8
 
 A value the control refuses is refused with the control's message. A value that is not a `T` is refused in the form's own words for a value that is not valid. `EditRefused::reply` answers 422 with the message as a danger toast, and the cell goes back to the value it had. With JavaScript off it answers 303 to the address you give, and the toast shows there. `EditedValue::read_built_in` reads a value with no check. It is for the four editors the toolkit draws (text, number, date and select), never for a cell drawn with `EditCell::control`, whose value would reach your code unchecked.
 
-In the browser, a cell posts when a field in it changes. Enter ends the edit, and Escape puts the cell's first `input` or `select` back to the value it had. A control's script stops the keys it handles itself and the `change` events of its inner parts from reaching the cell, with `event.stopPropagation()`: the rating's script does it for Enter. A control whose own part shows the value puts that part back when a refused edit goes back, on `ui:sent` with `ok: false`.
+In the browser, a cell posts when its field named `value` changes, and only then. A `change` of another element inside the control, such as a search box or a button of its own, is the control's, and so is every key in those parts. Enter and Escape are the cell's only in the field named `value`: Enter leaves the field, which posts it if it changed, and Escape puts the field back to the value it had and leaves it. A control whose own part stands in for a hidden field sets the field's value and sends it a `change`, as the rating's script does, and puts that part back when a refused edit goes back, on `ui:sent` with `ok: false`. In a table drawn as a grid, Escape anywhere in a cell also takes the focus back to the cell, so the arrow keys move between cells again. A control that uses Escape in a part of its own, to close a list it opened for instance, stops the event there with `event.stopPropagation()`.
 
 ## Testing it, and the stored twin
 
@@ -695,7 +697,7 @@ A component of your own is held to what the toolkit can check and the page's pol
 
 - A form field posts text. A control can't carry a file; a file field is an [upload](/docs/components/upload/).
 - A component can't be part of generated UI: the attributes that name an extension are dropped from generated markup, so it never mounts there (see [generative UI](/docs/ai/generative-ui/)).
-- An extension is one script and one stylesheet. A script bundles what it needs and can't import a second file.
+- An extension is one script and one stylesheet. The toolkit serves no other file of it, so a script bundles what it needs.
 - A morph that arrives while a person is dragging, drawing or typing in a component is applied at once: the next morph wins.
 - A script can't start a worker from a `blob:` address.
 

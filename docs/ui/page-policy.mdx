@@ -119,7 +119,7 @@ The mark acts in an app where plugin code can reach a page: the app contributes 
 
 - is entered and left by a full page load. A swap between a fresh page and a plain one, in either direction, loads the new page in full. Two fresh pages boost between each other.
 - keeps the toolkit's own policy (`PAGE_CSP`), whatever the app allowed.
-- links no extension file and loads no `extensions` module, so no component of your own mounts on it, and a plugin's island script isn't imported.
+- is served with no extension file and no `extensions` module linked. No component of your own mounts on it, and a plugin's island script isn't imported, even when a plain page's answer drawn into one of its regions brings a component's stylesheet or the `extensions` module into its head.
 - says so with `data-ui-fresh-page` on its `<html>` element and the header `x-navree-fresh: 1` on its answer. A view written outside a request writes neither.
 - is never drawn into a page that is not fresh, by any fetch of the runtime:
 
