@@ -1,7 +1,8 @@
 // Which addresses the islands module imports: a script of the app's own under the mount, named by
 // its content hash, with a plugin's namespace and a dot before the name when it is a plugin's.
 // A script cannot load here, so an address that is tried marks its island `data-ui-failed`, and
-// an address that is refused leaves its island untouched.
+// an address that is refused leaves its island untouched. A plugin's script is tried only once
+// its island's body is sealed, so the extensions module is on the page, as the server links it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { install, settle } from "./fake-dom.mjs";
@@ -27,7 +28,7 @@ const refused = {
 };
 
 const islands = Object.entries({ ...tried, ...refused })
-  .map(([id, src]) => `<div id="${id}" data-ui-island="${src}" data-ui-props="{}"></div>`)
+  .map(([id, src]) => `<div id="${id}" data-ui-island="${src}" data-ui-props="{}"><div id="${id}-body" data-slot="island-body" data-ui-keep></div></div>`)
   .join("\n");
 
 install({
@@ -35,6 +36,7 @@ install({
   html: `<!doctype html><html data-build="b1"><head></head><body>${islands}</body></html>`,
 });
 
+await import("../src/extensions.js");
 await import("../src/islands.js");
 await settle();
 
@@ -43,6 +45,8 @@ const $ = (/** @type {string} */ id) => /** @type {any} */ (document.getElementB
 for (const id of Object.keys(tried)) {
   test(`an island script address is imported: ${id}`, () => {
     assert.equal($(id).hasAttribute("data-ui-failed"), true);
+    // A plugin's island body was sealed before its script was asked for; an app's was not.
+    assert.equal($(`${id}-body`).hasAttribute("data-ui-stored"), id !== "plain");
   });
 }
 
@@ -50,5 +54,6 @@ for (const id of Object.keys(refused)) {
   test(`an island script address is refused: ${id}`, () => {
     assert.equal($(id).hasAttribute("data-ui-failed"), false);
     assert.equal($(id).hasAttribute("data-ui-mounted"), false);
+    assert.equal($(`${id}-body`).hasAttribute("data-ui-stored"), false);
   });
 }

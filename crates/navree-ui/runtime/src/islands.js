@@ -6,7 +6,10 @@
 //     <div data-slot="island-body" data-ui-keep>…</div>
 //   </div>
 //
-// A plugin's script is named under its namespace: `{namespace}.{name}-{hash}.js`.
+// A plugin's script is named under its namespace: `{namespace}.{name}-{hash}.js`. Its
+// island's body is sealed before the script is imported, as a plugin component's owned body
+// is: the extensions module, which the server loads ahead of this one on such a page, seals
+// it when asked. A body no one seals gets no plugin script: the island is marked failed.
 //
 // This imports the script, one of the app's own and nothing else, and calls its
 // `mount(body, props, island)` once. A morph never touches the body (it is kept), so
@@ -53,6 +56,22 @@ function propsOf(text) {
   }
 }
 
+/**
+ * Where the island `el` with the script at `src` is drawn: its body, or the island itself when it
+ * has none. A plugin's script (a namespace before its name) is drawn only in a body the extensions
+ * module sealed when asked: the ask is an event sent to the body, which that module cancels once
+ * the body is sealed. With no seal, the island is marked failed and let go of, so the next scan
+ * asks again; the extensions module has this module scan when it comes.
+ * @param {Element} el @param {string} src
+ */
+function body(el, src) {
+  const b = el.querySelector(":scope > [data-slot=island-body]");
+  if (!/\.[^/]+\.js$/.test(src) || (b && !b.dispatchEvent(new Event("ui:seal", { cancelable: true })))) return b || el;
+  islands.delete(el);
+  el.setAttribute("data-ui-failed", "");
+  throw 0;
+}
+
 /** Mounts the island `el` with the script at `src`. @param {Element} el @param {string} src @param {string} props */
 async function mount(el, src, props) {
   /** @type {Island} */
@@ -60,11 +79,13 @@ async function mount(el, src, props) {
   islands.set(el, state);
   el.removeAttribute("data-ui-failed");
   try {
+    // A plugin's island body is sealed before anything of its script runs.
+    body(el, src);
     const module = await import(src);
     // It left, or now names another script, while its script was on its way.
     if (islands.get(el) !== state) return;
     // Props that came while the script loaded are the ones it mounts with.
-    const given = await module.mount(el.querySelector(":scope > [data-slot=island-body]") || el, propsOf(state.props), el);
+    const given = await module.mount(body(el, src), propsOf(state.props), el);
     const leave = typeof given === "function" ? given : typeof given?.leave === "function" ? () => given.leave() : null;
     if (islands.get(el) !== state) {
       leave?.();
@@ -116,3 +137,5 @@ function scan() {
 
 scan();
 on(document, "ui:swap", scan);
+// The extensions module has come: a plugin's island that waited for its seal is mounted now.
+on(document, "ui:sealer", scan);

@@ -14,8 +14,9 @@
 // goes, the body is marked stored content (nothing inside drives the runtime, stands in for one of the
 // page's ids or mounts an extension), every form field inside joins no form, and an observer keeps it
 // so whatever the script or a library it bundles writes there later, and however. What the script is
-// given reaches only the routes the server wrote on its element, through core's own write path. On a
-// page that starts clean nothing here runs.
+// given reaches only the routes the server wrote on its element, through core's own write path. The
+// body of a plugin's island is sealed the same way, when the islands module asks before it imports the
+// island's script. On a page that starts clean nothing here runs.
 import { E, T, all, attr, body, byId, cookie, emit, every, fetchHere, fresh, has, head, holds, make, on, set, stored, unset } from "./dom.js";
 
 /** A UI extension's file: at the extension route, by namespace, name and content hash. */
@@ -393,6 +394,23 @@ if (!fresh()) {
   head().prepend(first);
   link();
   scan();
+  // The islands module asks for a plugin's island body to be sealed before it imports the island's
+  // script, with an event sent to the body: an island's body is sealed as an owned body is, and the
+  // ask is cancelled to say so. Nothing else is sealed this way.
+  on(
+    document,
+    "ui:seal",
+    (e) => {
+      const b = e.target;
+      if (b instanceof Element && E.matches.call(b, "[data-ui-island] > [data-slot=island-body]")) {
+        seal(b);
+        e.preventDefault();
+      }
+    },
+    true,
+  );
+  // A plugin's island that asked before this module came asks again now.
+  emit(new Event("ui:sealer"));
   on(document, "ui:before-swap", (e) => {
     const from = /** @type {CustomEvent} */ (e).detail;
     if (from === body()) paged = true;
