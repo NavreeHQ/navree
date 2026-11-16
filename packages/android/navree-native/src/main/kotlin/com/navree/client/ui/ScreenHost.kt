@@ -92,7 +92,6 @@ import com.navree.client.core.Events
 import com.navree.client.core.Failure
 import com.navree.client.core.FieldValue
 import com.navree.client.core.ScreenView
-import com.navree.client.design.FocusRules
 import com.navree.client.design.BarActionStyle
 import com.navree.client.design.BarKind
 import com.navree.client.design.BarScroll
@@ -303,7 +302,7 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
         CompositionLocalProvider(LocalShown provides shown, LocalFocusSink provides sink) {
         Scaffold(
             modifier = Modifier.weight(1f).nestedScroll(behaviour.nestedScrollConnection),
-            topBar = { Box(Modifier.orderedGroup(FocusRules.TOP)) { ScreenBar(view, arranged, plan, place, info, behaviour, searching) { searching = it } } },
+            topBar = { ScreenBar(view, arranged, plan, place, info, behaviour, searching) { searching = it } },
             floatingActionButton = {
                 if (fab != null && plan.fabPlace == FabPlace.BottomEnd) Fab(fab, place, plan.fabExtended, expanded = atTop)
             },
@@ -315,7 +314,6 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
             BoxWithConstraints(
                 Modifier
                     .fillMaxSize()
-                    .orderedGroup(FocusRules.CONTENT)
                     .padding(top = padding.calculateTopPadding())
                     .consumeWindowInsets(padding)
                     .imePadding()

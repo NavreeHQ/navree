@@ -4,15 +4,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.focusGroup
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
-import com.navree.client.design.FocusRules
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -191,80 +183,6 @@ internal fun Modifier.centredWhenShort(): Modifier = layout { measurable, constr
 
 /** Whether the part being drawn stands in a card: tabs there are one choice of a few over the card's content, not a second bar. */
 internal val LocalInCard = compositionLocalOf { false }
-
-/**
- * The order a keyboard's Tab goes through the parts of a window (see
- * [FocusRules]): each part is a focus group that registers itself here, and
- * where focus leaves one forwards or backwards it goes to the next part of the
- * ring, entering it at its first control (a group is entered, not searched
- * backwards: the last control of a part is not where Shift+Tab lands).
- */
-internal class FocusOrder(val sequence: List<Int>) {
-    val requesters = List(3) { FocusRequester() }
-    private val counts = mutableStateMapOf<Int, Int>()
-
-    /** The parts that are on the screen now. */
-    val present: Set<Int> get() = counts.filterValues { it > 0 }.keys
-
-    fun add(part: Int) {
-        counts[part] = (counts[part] ?: 0) + 1
-    }
-
-    fun remove(part: Int) {
-        counts[part] = ((counts[part] ?: 1) - 1).coerceAtLeast(0)
-    }
-}
-
-/** The order of the window, or none where the screen is one of two panes or a cover (it then has the system's own order). */
-internal val LocalFocusOrder = staticCompositionLocalOf<FocusOrder?> { null }
-
-/**
- * A part of the window (the top bar, the content, the navigation) as a focus
- * group in the window's order: Tab past its last control goes to the next part
- * and Shift+Tab past its first to the one before, wrapping round. The order
- * between the controls inside it is the system's.
- */
-@Composable
-internal fun Modifier.orderedGroup(part: Int): Modifier {
-    val order = LocalFocusOrder.current ?: return this
-    DisposableEffect(order, part) {
-        order.add(part)
-        onDispose { order.remove(part) }
-    }
-    return this
-        .focusRequester(order.requesters[part])
-        // The properties come before the group they are for: they are the ones of the first focus target after them.
-        .focusProperties {
-            onExit = {
-                val step = when (requestedFocusDirection) {
-                    FocusDirection.Next -> 1
-                    FocusDirection.Previous -> -1
-                    else -> 0
-                }
-                if (step != 0) {
-                    FocusRules.neighbour(order.sequence, order.present, part, step)?.let { target ->
-                        // A group is entered, which lands on its first control: asking it for a Tab direction is for a 2-D search only and throws.
-                        if (order.requesters[target].requestFocus()) cancelFocusChange()
-                    }
-                }
-            }
-        }
-        .focusGroup()
-}
-
-/** The window as one focus group that sends focus coming in with Tab to the first part, and with Shift+Tab to the last. */
-internal fun Modifier.orderedRoot(order: FocusOrder?): Modifier = if (order == null) this else this
-    .focusProperties {
-        onEnter = {
-            val target = when (requestedFocusDirection) {
-                FocusDirection.Next -> FocusRules.first(order.sequence, order.present)
-                FocusDirection.Previous -> FocusRules.last(order.sequence, order.present)
-                else -> null
-            }
-            target?.let { order.requesters[it].requestFocus() }
-        }
-    }
-    .focusGroup()
 
 /**
  * A place for the focus to go when a field is done with it, so that the
