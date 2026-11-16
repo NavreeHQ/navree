@@ -29,17 +29,22 @@ use cssparser::{
 /// The most a namespace may hold.
 const NAMESPACE_LENGTH: usize = 64;
 
-/// The CSS-wide keywords and the ones the properties that name things across the page take.
-const NAME_KEYWORDS: [&str; 8] = [
+/// The keywords the properties that name things across the page take besides a name. None of
+/// them gives an element a name another element has: `inherit` is not among them, since it
+/// would copy the name of the element around the component.
+const NAME_KEYWORDS: [&str; 7] = [
     "none",
     "auto",
     "match-element",
-    "inherit",
     "initial",
     "unset",
     "revert",
     "revert-layer",
 ];
+
+/// What the `all` shorthand may be set to: the keywords that give each property a value of its
+/// own, none taken from another element.
+const ALL_KEYWORDS: [&str; 3] = ["initial", "unset", "revert"];
 
 // ------------------------------------------------------------------------------------------ data
 
@@ -192,6 +197,11 @@ enum Fail {
     Url {
         line: u32,
     },
+    /// The `all` shorthand set to something other than `initial`, `unset` or `revert`.
+    All {
+        value: String,
+        line: u32,
+    },
 }
 
 impl Fail {
@@ -213,6 +223,9 @@ impl Fail {
             ),
             Fail::Url { line } => format!(
                 "extension_sheet!: {file}:{line}: url(..) in a plugin's sheet is a data: URL; ship pictures as AppImage and pass their address"
+            ),
+            Fail::All { value, line } => format!(
+                "extension_sheet!: {file}:{line}: `all: {value}` is not taken: a plugin's sheet sets all to initial, unset or revert, which bring in no name from outside the component"
             ),
         }
     }
@@ -945,13 +958,15 @@ impl Scoper<'_> {
             "timeline-scope" | "anchor-scope" => self.global_values(decl, true, false),
             // The shorthands that set a name and then more.
             "scroll-timeline" | "view-timeline" => self.global_values(decl, false, true),
+            // The shorthand that sets every property, the ones that name things among them.
+            "all" => all_shorthand(decl),
             _ => Ok(()),
         }
     }
 
-    /// Each item of the value is `none`, `auto`, `match-element`, a CSS-wide keyword (and `all`
-    /// when `all`) or a name under this namespace; with `first_only` it is the first token of the
-    /// item that is one of those.
+    /// Each item of the value is `none`, `auto`, `match-element`, `initial`, `unset`, `revert`,
+    /// `revert-layer` (and `all` when `all`) or a name under this namespace; with `first_only` it
+    /// is the first token of the item that is one of those.
     fn global_values(&self, decl: &Decl, all: bool, first_only: bool) -> Result<(), Fail> {
         let value = trimmed(&decl.value);
         if value.is_empty() {
@@ -1189,6 +1204,28 @@ impl Scoper<'_> {
         }
         Ok(())
     }
+}
+
+/// The `all` shorthand: `initial`, `unset` or `revert`, which give every property, the ones that
+/// name things across the page among them, a value of its own. Any other value (`inherit`,
+/// `revert-layer`, a `var()`) could copy a name from an element outside the component. A
+/// declaration with no value is dropped by the browser, as for the other properties.
+fn all_shorthand(decl: &Decl) -> Result<(), Fail> {
+    let value = trimmed(&decl.value);
+    let keyword = match value {
+        [token] => match &token.kind {
+            Kind::Ident(word) => Some(word.to_ascii_lowercase()),
+            _ => None,
+        },
+        _ => None,
+    };
+    if value.is_empty() || keyword.is_some_and(|word| ALL_KEYWORDS.contains(&word.as_str())) {
+        return Ok(());
+    }
+    Err(Fail::All {
+        value: written(value),
+        line: decl.meta.line,
+    })
 }
 
 /// `:where([data-slot^="namespace:"])`, the selector every rule of the sheet sits under.

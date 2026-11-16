@@ -84,8 +84,10 @@ pub fn extension_script(input: TokenStream) -> TokenStream {
 ///   and the rest (`geo--spin`); an `@property` name, and each value of `anchor-name`,
 ///   `position-anchor`, `view-transition-name`, `scroll-timeline-name`, `view-timeline-name`,
 ///   `timeline-scope` and `anchor-scope`, must be two dashes, the namespace, two dashes and the
-///   rest (`--geo--pin`). These properties also take `none`, `auto`, `match-element` and the
-///   CSS-wide keywords, and the last two take `all`;
+///   rest (`--geo--pin`). These properties also take `none`, `auto`, `match-element`, `initial`,
+///   `unset`, `revert` and `revert-layer`, and the last two take `all`. `inherit`, which would
+///   copy a name from the element around the component, is refused;
+/// - the `all` shorthand set to anything but `initial`, `unset` or `revert`;
 /// - an address that is not a `data:` URL, in `url()`, `src()`, `image()` and `image-set()`: ship a
 ///   picture as an `AppImage` and pass its address instead;
 /// - blocks that do not balance, and anything that would be read differently once it is served.
@@ -968,7 +970,9 @@ mod tests {
             ".a{anchor-name:REVERT-LAYER}",
             ".a{position-anchor:auto}",
             ".a{position-anchor:match-element}",
-            ".a{view-transition-name:inherit}",
+            ".a{view-transition-name:initial}",
+            ".a{anchor-name:unset}",
+            ".a{position-anchor:revert}",
             ".a{view-transition-name:--geo--hero}",
             ".a{scroll-timeline-name:--geo--t}",
             ".a{view-timeline-name:--geo--v, --geo--w}",
@@ -991,6 +995,11 @@ mod tests {
             (".a{anchor-scope:--t}", "--t", "--geo--"),
             (".a{anchor-name:all}", "all", "--geo--"),
             (".a{view-transition-name:all}", "all", "--geo--"),
+            // `inherit` would copy the name of the element around the component.
+            (".a{view-transition-name:inherit}", "inherit", "--geo--"),
+            ("&{anchor-name:INHERIT}", "INHERIT", "--geo--"),
+            (".a{timeline-scope:inherit}", "inherit", "--geo--"),
+            (".a{anchor-scope:--geo--a, inherit}", "inherit", "--geo--"),
             (".a{anchor-name:var(--n)}", "var(--n)", "--geo--"),
             (".a{anchor-name:\"--geo--x\"}", "\"--geo--x\"", "--geo--"),
             (
@@ -1018,6 +1027,43 @@ mod tests {
         assert_eq!(
             refused("\n\n@media print{.a{view-transition-name:hero}}"),
             global_refusal(3, "hero", "--geo--")
+        );
+    }
+
+    #[test]
+    fn the_all_shorthand_takes_only_the_keywords_that_bring_in_no_name() {
+        for source in [
+            "&{all:initial}",
+            ".a{all:unset}",
+            ".a{ALL:REVERT}",
+            ".a{all:revert !important}",
+            ".a{all:}",
+        ] {
+            assert!(scope(source).is_ok(), "{source}");
+        }
+        let all_refusal = |line: u32, value: &str| {
+            at(
+                line,
+                &format!(
+                    "`all: {value}` is not taken: a plugin's sheet sets all to initial, unset or revert, which bring in no name from outside the component"
+                ),
+            )
+        };
+        for (source, value) in [
+            ("&{all:inherit}", "inherit"),
+            (".a{all:INHERIT !important}", "INHERIT"),
+            (".a{all:revert-layer}", "revert-layer"),
+            (".a{all:var(--geo--all)}", "var(--geo--all)"),
+            (".a{all:initial unset}", "initial unset"),
+            (".a{.b{all:inherit}}", "inherit"),
+            ("@media print{.a{all:inherit}}", "inherit"),
+            ("@keyframes geo--fade{from{all:inherit}}", "inherit"),
+        ] {
+            assert_eq!(refused(source), all_refusal(1, value), "{source}");
+        }
+        assert_eq!(
+            refused(".a{\ncolor:red;\nall:inherit}"),
+            all_refusal(3, "inherit")
         );
     }
 
