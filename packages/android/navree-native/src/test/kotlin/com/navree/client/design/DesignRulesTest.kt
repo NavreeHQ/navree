@@ -453,11 +453,322 @@ class FormRulesTest {
         assertTrue(FilterRules.isFilter(status))
     }
 
+    private fun choice(name: String) = Navree.Field(
+        id = name,
+        name = name,
+        label = name,
+        input = Navree.ChoiceInput(options = listOf(Navree.ChoiceOption(label = "One", value = "1"))),
+    )
+
+    @Test
+    fun a_form_of_choices_that_asks_with_a_read_is_a_row_of_filters() {
+        val clear = Navree.Link(label = "Clear filters", action = Navree.Action.Navigate("/"))
+        val form = Navree.Form(
+            id = "filters",
+            children = listOf(
+                Navree.Grid(
+                    children = listOf(
+                        choice("assignee"),
+                        choice("label"),
+                        Navree.Stack(axis = Navree.Axis.HORIZONTAL, children = listOf(clear)),
+                    ),
+                ),
+            ),
+        )
+        val bar = FilterRules.bar(form)!!
+        assertEquals(listOf("assignee", "label"), bar.fields.map { it.name })
+        assertEquals(listOf<Navree.Node>(clear), bar.actions)
+    }
+
+    @Test
+    fun a_form_that_posts_or_holds_other_content_stays_a_form() {
+        val choices = listOf<Navree.Node>(choice("assignee"))
+        assertNull("a post is a form to fill in", FilterRules.bar(Navree.Form(id = "f", method = Navree.Method.POST, children = choices)))
+        assertNull("no id, nothing to tell the core", FilterRules.bar(Navree.Form(children = choices)))
+        assertNull("two boxes of words are a form", FilterRules.bar(Navree.Form(id = "f", children = choices + Navree.Field(name = "q", input = Navree.TextInput()) + Navree.Field(name = "r", input = Navree.TextInput()))))
+        assertNull("a password is not a search", FilterRules.bar(Navree.Form(id = "f", children = choices + Navree.Field(name = "q", input = Navree.TextInput(kind = Navree.TextKind.PASSWORD)))))
+        assertNull("words among them", FilterRules.bar(Navree.Form(id = "f", children = choices + Navree.Text(value = "Pick"))))
+        val switches = Navree.Form(id = "f", children = listOf(Navree.Field(name = "on", input = Navree.ToggleInput())))
+        assertNull("only switches are settings", FilterRules.bar(switches))
+    }
+
+    @Test
+    fun one_box_of_words_goes_over_the_chips_and_the_button_that_sends_goes() {
+        val words = Navree.Field(id = "q", name = "q", label = "Search conversations", input = Navree.TextInput())
+        val form = Navree.Form(
+            id = "f",
+            children = listOf(words, choice("channel"), choice("priority"), Navree.Button(label = "Filter", action = Navree.Action.Submit())),
+        )
+        val bar = FilterRules.bar(form)!!
+        assertEquals(words, bar.search)
+        assertEquals(listOf("channel", "priority"), bar.fields.map { it.name })
+        assertEquals(emptyList<Navree.Node>(), bar.actions)
+    }
+
+    @Test
+    fun a_button_that_sends_the_form_is_not_one_of_its_filters_actions() {
+        val send = Navree.Button(label = "Apply", action = Navree.Action.Submit())
+        val form = Navree.Form(id = "f", children = listOf(choice("sort"), send))
+        assertEquals(emptyList<Navree.Node>(), FilterRules.bar(form)!!.actions)
+    }
+
     @Test
     fun a_bottom_sheet_rests_half_open_only_where_there_is_room() {
         assertTrue(OverlayRules.sheet(Navree.SheetSize.MEDIUM, WindowInfo.Phone).partial)
         assertFalse(OverlayRules.sheet(Navree.SheetSize.MEDIUM, WindowInfo.PhoneLandscape).partial)
         assertTrue(OverlayRules.sheet(Navree.SheetSize.FULL, WindowInfo.Phone).fullHeight)
+    }
+}
+
+class SplitPanesTest {
+    private fun pane(role: Navree.PaneRole, current: Boolean = false, vararg inside: Navree.Node) = Navree.Pane(role = role, current = current, children = inside.toList())
+
+    @Test
+    fun a_conversation_is_the_pane_in_hand_even_when_it_is_deep_in_the_detail() {
+        val thread = pane(Navree.PaneRole.DETAIL, current = true)
+        val customer = pane(Navree.PaneRole.INSPECTOR)
+        val list = pane(Navree.PaneRole.LIST)
+        val inner = Navree.Split(primary = thread, detail = customer)
+        val outer = Navree.Split(primary = list, detail = inner)
+        assertEquals(listOf<Navree.Node>(inner), ScreenRules.splitPanes(outer))
+        assertEquals("the thread, the customer under it", listOf<Navree.Node>(thread, customer), ScreenRules.splitPanes(inner))
+    }
+
+    @Test
+    fun a_list_in_hand_is_drawn_alone_and_a_split_with_none_in_hand_draws_both() {
+        val list = pane(Navree.PaneRole.LIST, current = true)
+        val empty = pane(Navree.PaneRole.DETAIL)
+        assertEquals(listOf<Navree.Node>(list), ScreenRules.splitPanes(Navree.Split(primary = list, detail = empty)))
+        val plain = Navree.Split(primary = pane(Navree.PaneRole.LIST), detail = empty)
+        assertEquals(listOf(plain.primary, plain.detail), ScreenRules.splitPanes(plain))
+    }
+}
+
+class BoardRulesTest {
+    private fun section(title: String) = Navree.Section(title = title)
+
+    @Test
+    fun lanes_keep_a_width_a_card_reads_in_and_other_grids_keep_their_own() {
+        val lanes = listOf(section("Backlog"), section("Ready"), section("Review"))
+        assertEquals(240, ListRules.gridLeast(null, lanes))
+        assertNull("a grid of figures", ListRules.gridLeast(null, listOf(Navree.Text(value = "1"), Navree.Text(value = "2"))))
+        assertEquals("the page's own least width", 104, ListRules.gridLeast(104, lanes))
+        assertEquals("a phone shows one lane", 1, ListRules.gridColumns(380, 240, 8))
+        assertEquals("a tablet shows four", 4, ListRules.gridColumns(1100, 240, 8))
+    }
+
+    @Test
+    fun lanes_stand_in_one_row_each_as_wide_as_what_fits_them_all_between_a_cards_least_and_a_lanes_most() {
+        assertEquals("five lanes of a tablet's pane do not fit at the least: the row scrolls", 240f, ListRules.laneWidthDp(1100f, 5), 0.001f)
+        assertEquals("three lanes share what is there", (1100f - 32f) / 3, ListRules.laneWidthDp(1100f, 3), 0.001f)
+        assertEquals("two lanes in a very wide room stay together", 360f, ListRules.laneWidthDp(1400f, 2), 0.001f)
+        assertEquals("at the largest text a lane is twice as wide", 480f, ListRules.laneWidthDp(1100f, 5, fontScale = 2f), 0.001f)
+    }
+
+    @Test
+    fun a_grid_of_fields_gives_up_columns_a_grid_of_figures_does_not() {
+        assertEquals(2, ListRules.gridColumns(379, null, 8, most = 4, controls = true))
+        assertEquals(4, ListRules.gridColumns(379, null, 8, most = 4, controls = false))
+    }
+
+    @Test
+    fun a_button_that_says_the_rows_title_is_the_rows_own_tap() {
+        val button = Navree.Button(action = Navree.Action.Submit(), label = "Offline order sheets")
+        val form = Navree.Form(id = "peek", children = listOf(button))
+        val badge = Navree.Badge(text = "Feature")
+        val row = Navree.Row(title = "Offline order sheets", detail = listOf(Navree.Stack(children = listOf(badge, form))))
+        val found = ListRules.titleButton(row)
+        assertEquals(button, found?.button)
+        val pruned = ListRules.withoutTitleButton(row, found!!.form)
+        assertEquals(listOf<Navree.Node>(Navree.Stack(children = listOf(badge))), pruned.detail)
+        assertNull("a button that says something else", ListRules.titleButton(row.copy(title = "Another")))
+        // The same row in a newer answer holds an equal form that is another object: it is taken out too.
+        val again = Navree.Row(
+            title = "Offline order sheets",
+            detail = listOf(Navree.Stack(children = listOf(badge, Navree.Form(id = "peek", children = listOf(Navree.Button(action = Navree.Action.Submit(), label = "Offline order sheets")))))),
+        )
+        assertEquals(listOf<Navree.Node>(Navree.Stack(children = listOf(badge))), ListRules.withoutTitleButton(again, found.form).detail)
+    }
+
+    @Test
+    fun a_field_takes_what_is_left_of_a_line_beside_a_button() {
+        val field = Navree.Field(name = "quantity", input = Navree.TextInput())
+        val button = Navree.Button(action = Navree.Action.Submit(), label = "Restock")
+        assertTrue(CompositionRules.grows(field))
+        assertFalse(CompositionRules.grows(button))
+        // A line with a field in it is not turned (that would measure it twice before the room is known).
+        val line = Navree.Stack(axis = Navree.Axis.HORIZONTAL, children = listOf(field, button))
+        assertFalse(CompositionRules.turns(line))
+        assertEquals(380f - 8f, CompositionRules.roomLeftDp(380f, line.children, 8f, 1f), 0.001f)
+    }
+}
+
+class ColumnAlignTest {
+    @Test
+    fun a_stack_that_turns_places_its_parts_by_its_align_when_it_is_a_column() {
+        val card = Navree.Stack(align = Navree.Align.CENTER, wide = Navree.Axis.HORIZONTAL)
+        assertEquals(Navree.Align.CENTER, CompositionRules.columnAlign(card))
+        assertTrue(CompositionRules.fillsWidth(card, Navree.Axis.VERTICAL, inLine = false))
+        assertEquals(Navree.Align.END, CompositionRules.columnAlign(card.copy(align = Navree.Align.END)))
+        assertEquals(Navree.Align.START, CompositionRules.columnAlign(card.copy(align = Navree.Align.START)))
+        assertNull("no align: the start", CompositionRules.columnAlign(card.copy(align = null)))
+        val plain = Navree.Stack(align = Navree.Align.CENTER)
+        assertEquals(Navree.Align.CENTER, CompositionRules.columnAlign(plain))
+        assertTrue(CompositionRules.fillsWidth(plain, Navree.Axis.VERTICAL, inLine = false))
+    }
+}
+
+class FactColumnsTest {
+    @Test
+    fun facts_stand_in_two_columns_only_where_the_room_holds_two() {
+        assertEquals(2, ContentRules.factColumns(WindowInfo.Tablet, 0f))
+        assertEquals(2, ContentRules.factColumns(WindowInfo.Tablet, 900f))
+        assertEquals("a dialog of 512 dp", 1, ContentRules.factColumns(WindowInfo.Tablet, 512f))
+        assertEquals(1, ContentRules.factColumns(WindowInfo.Phone, 0f))
+        assertEquals(1, ContentRules.factColumns(WindowInfo.Tablet.copy(fontScale = 1.5f), 900f))
+    }
+}
+
+class ColumnShareTest {
+    private fun column(label: String, role: Navree.ColumnRole? = null) = Navree.Column(label = label, role = role)
+    private fun row(vararg cells: String) = Navree.TableRow(cells = cells.map { Navree.Text(value = it) })
+
+    @Test
+    fun a_column_of_long_places_takes_more_of_the_width_than_a_column_of_short_words() {
+        val columns = listOf(column("Order", Navree.ColumnRole.TITLE), column("Payment"), column("Ships to"))
+        val rows = listOf(row("CS-1", "Paid", "Mumbai, Maharashtra"), row("CS-2", "Paid", "Delhi"))
+        val weights = ListRules.columnWeights(columns, rows)
+        assertEquals(1.6f, weights[0], 0.001f)
+        assertEquals(1f, weights[1], 0.001f)
+        assertEquals(1.9f, weights[2], 0.001f)
+    }
+
+    @Test
+    fun a_column_with_a_box_to_type_in_takes_room_for_the_box_and_the_button() {
+        val columns = listOf(column("Product", Navree.ColumnRole.TITLE), column("Restock"))
+        val typing = Navree.TableRow(
+            cells = listOf(
+                Navree.Text(value = "Brass lota"),
+                Navree.Form(id = "r", children = listOf(Navree.Field(name = "units", input = Navree.TextInput()), Navree.Button(label = "Restock"))),
+            ),
+        )
+        assertEquals(ListRules.TYPING_COLUMN_WEIGHT, ListRules.columnWeights(columns, listOf(typing))[1], 0.001f)
+        assertEquals("a column of words keeps its share", 1f, ListRules.columnWeights(columns, listOf(row("Brass lota", "Open")))[1], 0.001f)
+    }
+
+    @Test
+    fun a_table_with_a_box_to_type_in_counts_that_column_twice_for_its_room() {
+        val columns = listOf(column("Order", Navree.ColumnRole.TITLE), column("Delivery note"))
+        val typing = Navree.TableRow(cells = listOf(Navree.Text(value = "CH-1"), Navree.Field(name = "note", input = Navree.TextInput())))
+        assertEquals(1, ListRules.typingColumns(columns, listOf(typing)))
+        assertEquals(0, ListRules.typingColumns(columns, listOf(row("CH-1", "Open"))))
+        // Six columns of 128 dp need 768 dp: an upright tablet's 740 dp holds them as a list, a wide one as a table.
+        assertTrue(ListRules.tableAsList(740, 5 + 1))
+        assertFalse(ListRules.tableAsList(1200, 5 + 1))
+    }
+
+    @Test
+    fun at_the_largest_text_a_table_with_seven_columns_is_a_list_even_in_a_wide_pane() {
+        assertFalse(ListRules.tableAsList(1000, 7, 1f))
+        assertTrue(ListRules.tableAsList(1000, 7, 2f))
+    }
+}
+
+class DetailRunsTest {
+    @Test
+    fun badges_that_follow_each_other_are_one_line_and_other_parts_keep_theirs() {
+        val high = Navree.Badge(text = "High")
+        val overdue = Navree.Badge(text = "Overdue 9 min")
+        val note = Navree.Text(value = "Ananya")
+        val runs = ListRules.detailRuns(listOf(high, overdue, note, high))
+        assertEquals(listOf(listOf<Navree.Node>(high, overdue), listOf<Navree.Node>(note), listOf<Navree.Node>(high)), runs)
+        assertEquals(emptyList<List<Navree.Node>>(), ListRules.detailRuns(emptyList()))
+    }
+}
+
+class NavigationLabelTest {
+    @Test
+    fun five_labels_on_a_phone_keep_to_the_size_their_longest_word_fits() {
+        val labels = listOf("All open", "Assigned to me", "Unassigned", "Snoozed", "Closed")
+        val scale = NavigationRules.labelScale(2.0f, 412, labels)
+        assertTrue("no word of five labels fits at twice the size: $scale", scale < 1.3f && scale >= 1f)
+    }
+
+    @Test
+    fun a_label_that_does_not_fit_one_line_wraps_between_its_words() {
+        val labels = listOf("All open", "Assigned to me", "Unassigned", "Snoozed", "Closed")
+        assertEquals(2, NavigationRules.labelLines(412, labels, 1))
+        assertEquals(1, NavigationRules.labelLines(412, listOf("Dashboard", "Orders", "Inventory"), 1))
+    }
+
+    @Test
+    fun a_collapsed_rails_labels_keep_to_the_size_their_longest_word_fits_in_80_dp() {
+        val labels = listOf("Dashboard", "Orders", "Inventory")
+        val scale = NavigationRules.labelScale(2.0f, NavigationRules.RAIL_ITEM_DP * labels.size, labels)
+        assertTrue("no word of these labels fits 80 dp at twice the size: $scale", scale < 1.3f && scale >= 1f)
+    }
+
+    @Test
+    fun three_short_labels_follow_the_setting_all_the_way() {
+        assertEquals(2.0f, NavigationRules.labelScale(2.0f, 412, listOf("Dashboard", "Orders", "Inventory")), 0.001f)
+    }
+
+    @Test
+    fun a_label_of_one_long_word_is_told_by_its_measure_and_not_by_a_count_of_letters() {
+        // Ten glyphs of 13 dp (wider than the 6.5 dp the estimate takes a glyph to be), with no space to break at.
+        val wide: (String) -> Float = { word -> word.length * 13f }
+        val labels = listOf("\u0a21\u0a48\u0a38\u0a3c\u0a2c\u0a4b\u0a30\u0a21\u0a21\u0a21", "Orders", "Inventory")
+        assertTrue("the estimate lets it grow almost to twice the size", NavigationRules.labelScale(2.0f, 412, labels) > 1.9f)
+        val measured = NavigationRules.labelScale(2.0f, 412, labels, wide)
+        assertTrue("measured, ten glyphs of 13 dp do not fit twice the size in a third of the bar: $measured", measured < 1.1f)
+        assertEquals(2, NavigationRules.labelLines(412, labels, 1, wide))
+    }
+
+    @Test
+    fun a_label_in_devanagari_follows_the_setting_as_far_as_its_measure_allows() {
+        val labels = listOf("\u0921\u0948\u0936\u092c\u094b\u0930\u094d\u0921", "\u0911\u0930\u094d\u0921\u0930", "\u0907\u0928\u094d\u0935\u0947\u0902\u091f\u0930\u0940")
+        val narrow: (String) -> Float = { 5f }
+        assertEquals("measured narrow: the setting is followed", 2.0f, NavigationRules.labelScale(2.0f, 412, labels, narrow), 0.001f)
+        val broad: (String) -> Float = { 100f }
+        assertTrue("measured broad: held to what fits", NavigationRules.labelScale(2.0f, 412, labels, broad) < 1.6f)
+    }
+
+    @Test
+    fun text_smaller_than_the_default_is_kept() {
+        assertEquals(0.85f, NavigationRules.labelScale(0.85f, 412, listOf("A", "B")), 0.001f)
+    }
+}
+
+class TaskActionsTest {
+    private fun action(label: String, role: Navree.Role) = Navree.Button(action = Navree.Action.Navigate("/x"), label = label, role = role)
+
+    @Test
+    fun a_task_with_many_actions_keeps_the_title_its_room_by_putting_them_at_the_foot() {
+        val resend = action("Resend confirmation", Navree.Role.SECONDARY)
+        val refund = action("Refund", Navree.Role.SECONDARY)
+        val cancel = action("Cancel order", Navree.Role.DESTRUCTIVE)
+        val open = action("Open as a page", Navree.Role.NAVIGATION)
+        val placed = OverlayRules.taskActions(listOf(resend, refund, cancel, open), hasSubmit = false)
+        assertNull("no action is the one that finishes the task", placed.bar)
+        assertEquals(listOf(resend, refund, open, cancel), placed.foot)
+    }
+
+    @Test
+    fun the_one_primary_action_finishes_the_task_from_the_bar() {
+        val save = action("Save", Navree.Role.PRIMARY)
+        val other = action("Discard changes", Navree.Role.SECONDARY)
+        val placed = OverlayRules.taskActions(listOf(other, save), hasSubmit = false)
+        assertEquals(save, placed.bar)
+        assertEquals(listOf(other), placed.foot)
+    }
+
+    @Test
+    fun a_forms_submit_takes_the_place_in_the_bar_and_a_way_out_is_not_an_action() {
+        val save = action("Save", Navree.Role.PRIMARY)
+        val cancel = action("Cancel", Navree.Role.CANCEL)
+        val placed = OverlayRules.taskActions(listOf(save, cancel), hasSubmit = true)
+        assertNull(placed.bar)
+        assertEquals(listOf(save), placed.foot)
     }
 }
 
@@ -520,5 +831,217 @@ class ContentRulesTest {
     @Test
     fun a_status_in_a_row_is_a_word_not_a_filled_label() {
         assertTrue(ContentRules.statusAsText(inRow = true))
+    }
+}
+
+class TooltipRulesTest {
+    @Test
+    fun a_tooltip_keeps_a_margin_from_both_edges_of_the_window() {
+        assertEquals("room on both sides: where it was", 120, TooltipRules.inset(120, 320, 800, 48))
+        assertEquals("against the left edge", 48, TooltipRules.inset(0, 320, 800, 48))
+        assertEquals("against the right edge", 800 - 320 - 48, TooltipRules.inset(500, 320, 800, 48))
+        assertEquals("wider than the room: at the margin", 48, TooltipRules.inset(10, 790, 800, 48))
+    }
+}
+
+class GridOfStacksTest {
+    private val stacks = listOf<Navree.Node>(Navree.Stack(), Navree.Stack())
+
+    @Test
+    fun the_stacks_of_a_grid_are_one_column_in_a_narrow_window_and_stay_columns_in_a_wide_one() {
+        assertTrue(ListRules.stacksAreOneColumn(stacks, null, 412))
+        assertTrue("a medium window puts the side column under the main one", ListRules.stacksAreOneColumn(stacks, null, 700))
+        assertFalse(ListRules.stacksAreOneColumn(stacks, null, 900))
+        assertFalse("a grid that says its own least width", ListRules.stacksAreOneColumn(stacks, 160, 412))
+        assertFalse("cards stay as many across as fit", ListRules.stacksAreOneColumn(listOf(Navree.Card(), Navree.Card()), null, 412))
+    }
+}
+
+class LanesTest {
+    private val lanes = listOf<Navree.Node>(Navree.Section(title = "Backlog"), Navree.Section(title = "Ready"), Navree.Section(title = "Done"))
+
+    @Test
+    fun lanes_are_one_a_tab_where_the_window_holds_one_column_of_them() {
+        assertTrue(ListRules.oneLaneAtATime(lanes, columns = 1))
+        assertFalse("room for two side by side", ListRules.oneLaneAtATime(lanes, columns = 2))
+    }
+
+    @Test
+    fun a_grid_that_is_not_all_sections_is_not_lanes() {
+        assertFalse(ListRules.areLanes(lanes + Navree.Text(value = "Note")))
+        assertFalse("one section is no set of lanes", ListRules.areLanes(lanes.take(1)))
+    }
+}
+
+class RepeatedTitleTest {
+    private val heading = Navree.Text(value = "All open", heading = 2, style = Navree.TextStyle.TITLE)
+
+    @Test
+    fun a_heading_that_says_the_bars_title_is_not_said_again() {
+        assertTrue(ScreenRules.repeatsTitle(heading, "All open", titleInBar = true))
+        assertTrue("case and spaces do not matter", ScreenRules.repeatsTitle(heading, " all open ", titleInBar = true))
+        assertFalse("another title", ScreenRules.repeatsTitle(heading, "Closed", titleInBar = true))
+        assertFalse("words that are no heading", ScreenRules.repeatsTitle(Navree.Text(value = "All open"), "All open", titleInBar = true))
+        assertFalse("a screen with no title", ScreenRules.repeatsTitle(heading, null, titleInBar = true))
+    }
+
+    @Test
+    fun a_heading_stays_where_the_bar_does_not_say_the_title() {
+        assertFalse(ScreenRules.repeatsTitle(heading, "All open", titleInBar = false))
+    }
+
+    @Test
+    fun the_plan_says_whether_the_bar_draws_the_title() {
+        val body = Navree.Text(value = "Sign in", heading = 1)
+        val plain = Navree.Screen(title = "Sign in", body = body)
+        assertTrue("a plain bar", ScreenRules.plan(plain, ScreenContext(root = true), WindowInfo.Phone).titleInBar)
+        assertFalse("a screen without the app's chrome has no bar", ScreenRules.plan(plain, ScreenContext(chrome = false), WindowInfo.Phone).titleInBar)
+        val searching = Navree.Screen(title = "Orders", body = body, search = Navree.Search(name = "q"))
+        assertFalse("the search bar shows the field", ScreenRules.plan(searching, ScreenContext(root = true), WindowInfo.Phone).titleInBar)
+        val days = Navree.Screen(title = "Sleep", body = body, pager = Navree.DayPager(date = "2026-11-13", day = "Friday"))
+        assertFalse("a bar that holds the day pager shows the day", ScreenRules.plan(days, ScreenContext(root = true), WindowInfo.Phone).titleInBar)
+    }
+}
+
+class OpenRowTest {
+    @Test
+    fun the_row_that_leads_to_the_page_shown_is_the_open_one() {
+        assertTrue(ListRules.shows("/inbox/11", "/inbox/11"))
+        assertTrue("a full address", ListRules.shows("http://10.0.2.2:8083/inbox/11?after=3", "/inbox/11"))
+        assertFalse("another page", ListRules.shows("/inbox/211", "/inbox/11"))
+        assertFalse("the list's own page", ListRules.shows("/inbox", "/inbox/11"))
+        assertFalse("nothing shown", ListRules.shows(null, "/inbox/11"))
+    }
+
+    @Test
+    fun a_path_matches_whole_segment_by_whole_segment() {
+        assertFalse(ListRules.shows("/x/inbox/11", "/inbox/11"))
+        assertTrue("a closing slash and a fragment count for nothing", ListRules.shows("/inbox/11/#top", "/inbox/11"))
+    }
+
+    @Test
+    fun rows_that_differ_only_by_their_query_do_not_all_match() {
+        val rows = listOf("/inbox?folder=sent", "/inbox?folder=drafts", "/inbox?folder=trash")
+        assertEquals("/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts", rows))
+        assertEquals("the cursor the shown page carries does not matter", "/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts&after=40", rows))
+        assertNull("none of them", ListRules.openAddress("/inbox?folder=spam", rows))
+    }
+
+    @Test
+    fun the_row_that_says_most_of_the_shown_page_is_the_open_one_and_the_first_of_equals() {
+        val rows = listOf("/inbox", "/inbox?folder=drafts&label=work", "/inbox?folder=drafts")
+        assertEquals("/inbox?folder=drafts&label=work", ListRules.openAddress("/inbox?folder=drafts&label=work&after=9", rows))
+        assertEquals("/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts", rows))
+        assertEquals("a row with no query beside one with a query: the one with the query", "/inbox?folder=drafts", ListRules.openAddress("/inbox?folder=drafts", listOf("/inbox", "/inbox?folder=drafts")))
+        assertEquals("equals: the first", "/inbox/7", ListRules.openAddress("/inbox/7", listOf("/inbox/7", "/inbox/7")))
+    }
+
+    @Test
+    fun the_addresses_of_a_screens_rows_are_those_of_its_rows_and_its_tables_rows() {
+        val list = Navree.List(children = listOf(Navree.Row(title = "A", action = Navree.Action.Navigate("/a")), Navree.Row(title = "B")))
+        val table = Navree.Table(columns = listOf(Navree.Column(label = "Order")), rows = listOf(Navree.TableRow(action = Navree.Action.Navigate("/orders/1"), cells = listOf(Navree.Text(value = "1")))))
+        assertEquals(listOf("/a", "/orders/1"), ListRules.rowAddresses(Navree.Stack(children = listOf(list, table))).map { it.href })
+        assertEquals(emptyList<ListRules.RowAddress>(), ListRules.rowAddresses(null))
+    }
+
+    @Test
+    fun of_two_rows_with_one_address_the_first_is_the_open_one() {
+        val rows = listOf(ListRules.RowAddress("a", "/inbox/7"), ListRules.RowAddress("b", "/inbox/7"), ListRules.RowAddress("c", "/inbox/8"))
+        assertEquals("a", ListRules.openRow("/inbox/7", rows)?.id)
+        assertEquals("c", ListRules.openRow("http://10.0.2.2:8083/inbox/8?after=3", rows)?.id)
+        assertNull(ListRules.openRow("/inbox/9", rows))
+        assertNull(ListRules.openRow(null, rows))
+    }
+}
+
+class OwnLinkTest {
+    @Test
+    fun a_row_that_is_a_link_does_not_hold_a_second_link_to_the_same_place() {
+        val runs = listOf(Navree.Run(text = "Ravneet packed "), Navree.Run(text = "CH-1042", href = "/orders/1042"), Navree.Run(text = " and sent ", href = "/other"))
+        val kept = ListRules.withoutOwnLink(runs, Navree.Action.Navigate("/orders/1042"))
+        assertNull(kept[1].href)
+        assertEquals("a link to another place stays", "/other", kept[2].href)
+        assertEquals("a row that goes nowhere keeps its links", runs, ListRules.withoutOwnLink(runs, null))
+    }
+}
+
+class WideListStatesTest {
+    private val columns = listOf(
+        Navree.Column(label = "Order", role = Navree.ColumnRole.TITLE),
+        Navree.Column(label = "Status", role = Navree.ColumnRole.STATUS),
+        Navree.Column(label = "Payment", secondary = true),
+        Navree.Column(label = "Ships to", secondary = true),
+    )
+    private val row = Navree.TableRow(cells = listOf(Navree.Text(value = "CS-1"), Navree.Badge(text = "Open"), Navree.Badge(text = "Paid"), Navree.Text(value = "Ludhiana")))
+
+    @Test
+    fun a_list_on_a_phone_leaves_out_the_columns_a_narrow_screen_may_leave_out() {
+        val folded = ListRules.asListRow(columns, row)
+        assertEquals(listOf<Navree.Node>(Navree.Badge(text = "Open")), folded.statuses)
+    }
+
+    @Test
+    fun a_wide_list_keeps_every_column_that_says_a_state_and_still_leaves_out_the_other_words() {
+        val folded = ListRules.asListRow(columns, row, wide = true)
+        assertEquals(listOf<Navree.Node>(Navree.Badge(text = "Open"), Navree.Badge(text = "Paid")), folded.statuses)
+        assertFalse(folded.lines.any { (it as? Navree.Text)?.value == "Ludhiana" })
+    }
+}
+
+class ShortLineTest {
+    @Test
+    fun a_line_with_a_dial_that_leaves_most_of_the_card_empty_is_put_in_the_middle() {
+        assertTrue(CompositionRules.holdsDial(listOf(Navree.Ring(max = 100.0, value = 83.0), Navree.Text(value = "words"))))
+        assertFalse(CompositionRules.holdsDial(listOf(Navree.Text(value = "words"))))
+        assertTrue(CompositionRules.centresShortLine(usedPx = 550, roomPx = 1265))
+        assertTrue("the health score: a ring and a line fill 1,140 of 1,912 px", CompositionRules.centresShortLine(usedPx = 1140, roomPx = 1912))
+        assertTrue("the Activity card: a dial and its legend fill 268 of 968 dp", CompositionRules.centresRings(groupPx = 268, roomPx = 968))
+        assertFalse("on a phone the width is taken up: 268 of 328 dp", CompositionRules.centresRings(groupPx = 268, roomPx = 328))
+        assertFalse("no room known", CompositionRules.centresRings(groupPx = 268, roomPx = 0))
+        assertFalse("a line that fills most of its card stays at the start", CompositionRules.centresShortLine(usedPx = 900, roomPx = 1265))
+        assertFalse("no room known", CompositionRules.centresShortLine(usedPx = 100, roomPx = 0))
+    }
+
+    @Test
+    fun the_cards_of_a_line_take_the_tallest_height_seen_and_never_less() {
+        assertEquals(300, CompositionRules.tallest(0, 300))
+        assertEquals(300, CompositionRules.tallest(300, 180))
+        assertEquals(420, CompositionRules.tallest(300, 420))
+    }
+
+    @Test
+    fun a_block_at_the_end_of_a_table_column_has_its_lines_end_where_the_widest_ends() {
+        val block = Navree.Stack(children = listOf(Navree.Text(value = "0"), Navree.Text(value = "Reorder at 14")))
+        assertEquals(Navree.Align.END, CompositionRules.columnAlignIn(block, endAligned = true))
+        assertNull(CompositionRules.columnAlignIn(block, endAligned = false))
+    }
+}
+
+class ActionsInALineTest {
+    @Test
+    fun a_form_of_only_buttons_is_a_group_of_actions_that_flows_with_the_line() {
+        val close = Navree.Form(id = "close", children = listOf(Navree.Button(action = Navree.Action.Submit(), label = "Close")))
+        assertTrue(FormRules.onlyButtons(close))
+        assertFalse(FormRules.onlyButtons(Navree.Form(children = listOf(Navree.Field(name = "note", input = Navree.TextInput()), Navree.Button(action = Navree.Action.Submit(), label = "Save")))))
+        assertFalse("an empty form", FormRules.onlyButtons(Navree.Form()))
+    }
+
+    @Test
+    fun a_menu_that_says_its_value_shows_it_beside_its_icon_and_a_more_icon_stays_alone() {
+        assertTrue(MenuRules.showsLabel("circle-dot", "Open"))
+        assertTrue(MenuRules.showsLabel("signal-high", "High"))
+        assertFalse(MenuRules.showsLabel("more-vertical", "More"))
+        assertFalse(MenuRules.showsLabel("ellipsis", "Actions"))
+        assertFalse("no icon: a labelled button already", MenuRules.showsLabel(null, "Sort"))
+        assertFalse(MenuRules.showsLabel("circle-dot", " "))
+    }
+}
+
+class LaneBleedTest {
+    @Test
+    fun a_row_of_lanes_runs_out_into_the_margins_and_never_overflows_where_it_has_no_limit() {
+        assertEquals(432, ListRules.bledWidthPx(400, 32))
+        assertEquals("no limit stays none", Int.MAX_VALUE, ListRules.bledWidthPx(Int.MAX_VALUE, 32))
+        assertTrue("near the limit it does not wrap round", ListRules.bledWidthPx(Int.MAX_VALUE - 10, 32) in 1 until Int.MAX_VALUE)
     }
 }
