@@ -1,0 +1,443 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
+using Navree.Protocol;
+
+namespace Navree.Design;
+
+/// <summary>A ring: one value against its goal, a second lap past it.</summary>
+public static class RingRules
+{
+    /// <summary>How far round a value goes: the whole laps past the goal and the part of the lap it is on.</summary>
+    /// <param name="Laps">The whole laps before the one being drawn.</param>
+    /// <param name="Part">How far round that lap, 0 to 1.</param>
+    public sealed record Sweep(int Laps, double Part)
+    {
+        /// <summary>Whether the value is past its goal: the arc goes round again.</summary>
+        public bool Past => Laps >= 1;
+    }
+
+    /// <summary>The ring's width before the person's text size: the hero ring, one of several, a small one beside words.</summary>
+    /// <param name="prominence">How much room the ring has.</param>
+    /// <returns>The width.</returns>
+    public static double Diameter(Models.Prominence prominence) =>
+        prominence switch
+        {
+            Models.Prominence.High => 188,
+            Models.Prominence.Low => 34,
+            _ => 96,
+        };
+
+    /// <summary>The arc's width for a ring that wide; a small ring keeps a thicker arc for its size so it still reads as a ring.</summary>
+    /// <param name="prominence">How much room the ring has.</param>
+    /// <param name="diameter">The ring's width.</param>
+    /// <returns>The arc's width.</returns>
+    public static double Stroke(Models.Prominence prominence, double diameter) =>
+        Guard.Length(diameter) * prominence switch
+        {
+            Models.Prominence.High => 0.115,
+            Models.Prominence.Low => 0.16,
+            _ => 0.12,
+        };
+
+    /// <summary>How much a ring grows with the person's text, at most: a small ring stands in a row of text and keeps its size.</summary>
+    /// <param name="prominence">How much room the ring has.</param>
+    /// <returns>The most the ring grows, as a multiple.</returns>
+    public static double Growth(Models.Prominence prominence) =>
+        prominence switch
+        {
+            Models.Prominence.High => 1.3,
+            Models.Prominence.Low => 1,
+            _ => 1.5,
+        };
+
+    /// <summary>Whether words go in the middle: a small ring says its value to a screen reader only.</summary>
+    /// <param name="prominence">How much room the ring has.</param>
+    /// <param name="centre">What the page puts in the middle.</param>
+    /// <returns>Whether the middle has words.</returns>
+    public static bool ShowsCentre(Models.Prominence prominence, Models.Centre centre) =>
+        prominence != Models.Prominence.Low && centre != Models.Centre.Nothing;
+
+    /// <summary>Whether the ring says its label, status and trend under it: a small ring has no room and its summary says them.</summary>
+    /// <param name="prominence">How much room the ring has.</param>
+    /// <returns>Whether the words stand under it.</returns>
+    public static bool SaysWords(Models.Prominence prominence) => prominence != Models.Prominence.Low;
+
+    /// <summary>The size of the number in a ring's middle: 0.3 of the ring.</summary>
+    /// <param name="diameter">The ring's width.</param>
+    /// <returns>The number's size.</returns>
+    public static double CentreSize(double diameter) => diameter * 0.3;
+
+    /// <summary>How far round a value goes; none for no value (an empty ring and a dash).</summary>
+    /// <param name="value">The value, or none.</param>
+    /// <param name="max">The goal.</param>
+    /// <returns>The sweep, or none.</returns>
+    public static Sweep? SweepOf(double? value, double max)
+    {
+        if (value is not double found || double.IsNaN(found))
+        {
+            return null;
+        }
+
+        if (!(max > 0) || !double.IsFinite(max))
+        {
+            return new Sweep(0, found > 0 ? 1 : 0);
+        }
+
+        // However far past its goal a value goes, the laps stay a number a drawing can hold.
+        double share = Math.Clamp(found / max, 0, MostLaps);
+        int laps = (int)Math.Floor(share);
+        double part = share - laps;
+
+        // Exactly at the goal is one whole lap, not a second one starting.
+        return laps >= 1 && part == 0 ? new Sweep(laps - 1, 1) : new Sweep(laps, part);
+    }
+
+    /// <summary>The most laps a ring is drawn as going round; a value further past its goal is drawn as this many.</summary>
+    public const int MostLaps = 1000;
+
+    /// <summary>Whether a value is past its goal.</summary>
+    /// <param name="value">The value, or none.</param>
+    /// <param name="max">The goal.</param>
+    /// <returns>Whether it is above the goal.</returns>
+    public static bool PastGoal(double? value, double max) =>
+        value is double found && max > 0 && found > max;
+
+    /// <summary>
+    /// What a screen reader is told of a ring's value against its range: from nothing to the goal, and the value held inside it (a value
+    /// past the goal is said in words, <see cref="PastGoal"/>, and the range value stays at the goal). None when the ring has no value or no goal.
+    /// </summary>
+    /// <param name="value">The value, or none.</param>
+    /// <param name="max">The goal.</param>
+    /// <returns>The least, the most and the value, or none.</returns>
+    public static (double Min, double Max, double Value)? Range(double? value, double max)
+    {
+        if (value is not double found || !double.IsFinite(found) || !(max > 0) || !double.IsFinite(max))
+        {
+            return null;
+        }
+
+        return (0, max, Math.Clamp(found, 0, max));
+    }
+
+    /// <summary>What a ring says to a screen reader: its words, and when its value is past its goal, that it is, in words (its range value stays inside its range).</summary>
+    /// <param name="words">The ring's words (the page's summary or its value).</param>
+    /// <param name="value">The value, or none.</param>
+    /// <param name="max">The goal.</param>
+    /// <returns>The words.</returns>
+    public static string Said(string words, double? value, double max) =>
+        PastGoal(value, max) ? words + ", " + KindStrings.PastGoal : words;
+
+    /// <summary>What the middle of a ring says: its value without the unit, or a dash when it has none.</summary>
+    /// <param name="ring">The ring.</param>
+    /// <param name="culture">The culture of the numbers.</param>
+    /// <returns>The words.</returns>
+    public static string Centre(Models.Ring ring, CultureInfo? culture = null) =>
+        ring.Value is double value ? ring.Shown ?? NumberWords.Amount(value, culture) : "\u2013";
+}
+
+/// <summary>Concentric rings, the first outside.</summary>
+public static class RingsRules
+{
+    /// <summary>At most six are drawn, as the protocol says.</summary>
+    public const int Most = 6;
+
+    /// <summary>The gap between two rings, as a share of the arc's width.</summary>
+    public const double GapShare = 0.12;
+
+    /// <summary>The width of the whole before the person's text size.</summary>
+    /// <param name="prominence">How much room the rings have.</param>
+    /// <param name="count">How many rings.</param>
+    /// <returns>The width.</returns>
+    public static double Diameter(Models.Prominence prominence, int count) =>
+        prominence switch
+        {
+            Models.Prominence.Low => 30,
+            Models.Prominence.High => 188,
+            _ => 150 + (10 * Math.Max(count - 3, 0)),
+        };
+
+    /// <summary>The width of each arc for a whole this wide: the rings and their gaps take a little under half the radius.</summary>
+    /// <param name="diameter">The whole's width.</param>
+    /// <param name="count">How many rings.</param>
+    /// <param name="prominence">How much room the rings have.</param>
+    /// <returns>The arc's width.</returns>
+    public static double Stroke(double diameter, int count, Models.Prominence prominence)
+    {
+        double n = Math.Min(Math.Max(count, 1), Most);
+        double share = prominence == Models.Prominence.Low ? 0.82 : 0.5;
+        return Guard.Length(diameter) * share / 2 / (n + ((n - 1) * GapShare));
+    }
+
+    /// <summary>The diameter of a ring (0 the outside one), at the middle of its arc.</summary>
+    /// <param name="diameter">The whole's width.</param>
+    /// <param name="index">Which ring.</param>
+    /// <param name="stroke">The arc's width.</param>
+    /// <returns>The diameter.</returns>
+    public static double RingDiameter(double diameter, int index, double stroke) =>
+        diameter - stroke - (index * 2 * stroke * (1 + GapShare));
+
+    /// <summary>The words a ring's key says of its value: the value over its goal with the unit ("441/500 kcal").</summary>
+    /// <param name="ring">The ring.</param>
+    /// <param name="culture">The culture of the numbers.</param>
+    /// <returns>The words.</returns>
+    public static string Value(Models.RingValue ring, CultureInfo? culture = null)
+    {
+        if (ring.Value is not double value)
+        {
+            return "\u2013";
+        }
+
+        string shown = ring.Shown ?? NumberWords.Amount(value, culture);
+        string goal = NumberWords.Amount(ring.Max, culture);
+        return ring.Unit is string unit ? shown + "/" + goal + " " + unit : shown + "/" + goal;
+    }
+
+    /// <summary>Whether the rings stand beside a key of their values.</summary>
+    /// <param name="rings">The rings.</param>
+    /// <returns>Whether there is a key.</returns>
+    public static bool HasKey(Models.Rings rings) =>
+        rings.Prominence != Models.Prominence.Low && (rings.Legend || rings.Centre == Models.RingsCentre.Values);
+}
+
+/// <summary>A gauge: a value on an open arc.</summary>
+public static class GaugeRules
+{
+    /// <summary>The arc runs through this many degrees, open at the foot.</summary>
+    public const double Sweep = 240;
+
+    /// <summary>The angle of the arc's start, in degrees from three o'clock going clockwise: the lower left.</summary>
+    public const double Start = 150;
+
+    /// <summary>The share of its square an open arc needs in height: the foot holds the scale's end labels.</summary>
+    public const double HeightShare = 0.84;
+
+    /// <summary>How far down the end labels of the scale reach, as a share of the diameter, before the label's own height: the arc's ends are at 30 degrees under the middle, and the arc is 0.085 of the diameter thick.</summary>
+    public const double FootShare = 0.77125;
+
+    /// <summary>The space between the arc's end and the label of the scale's end under it.</summary>
+    public const double FootGap = 10;
+
+    /// <summary>How high the surface of an open arc is: the share of its square the arc needs, and where that is not enough, the room for the labels of the scale's ends under the arc.</summary>
+    /// <param name="diameter">The arc's diameter.</param>
+    /// <param name="label">The height of an end label.</param>
+    /// <returns>The height.</returns>
+    public static double Height(double diameter, double label)
+    {
+        double d = Guard.Length(diameter);
+        return Math.Max(HeightShare * d, (FootShare * d) + FootGap + (Guard.Length(label) / 2) + 1);
+    }
+
+    /// <summary>The diameter an open arc is drawn at in a surface this big: the widest that fits across and down, the end labels included.</summary>
+    /// <param name="width">The surface's width.</param>
+    /// <param name="height">The surface's height.</param>
+    /// <param name="label">The height of an end label.</param>
+    /// <returns>The diameter.</returns>
+    public static double DiameterFor(double width, double height, double label) =>
+        Math.Max(Math.Min(Guard.Length(width), Math.Min(Guard.Length(height) / HeightShare, (Guard.Length(height) - FootGap - (Guard.Length(label) / 2) - 1) / FootShare)), 0);
+
+    /// <summary>The angle a place along the scale stands at.</summary>
+    /// <param name="position">0 to 1.</param>
+    /// <returns>The angle, in degrees.</returns>
+    public static double Angle(double position) => Start + (Sweep * position);
+
+    /// <summary>The base width of a gauge before the person's text size: one that leads its card, and one beside a figure's words.</summary>
+    /// <param name="aside">Whether it stands beside words.</param>
+    /// <returns>The width.</returns>
+    public static double Diameter(bool aside) => aside ? 52 : 184;
+
+    /// <summary>A gauge's words as the number to write large and what follows it; words that do not start with a number are written whole.</summary>
+    /// <param name="shown">The words.</param>
+    /// <returns>The number and the rest.</returns>
+    public static (string Number, string? Unit) Split(string shown)
+    {
+        int space = shown.IndexOf(' ', StringComparison.Ordinal);
+        if (space <= 0)
+        {
+            return (shown, null);
+        }
+
+        string head = shown[..space];
+        bool number = head.Any(char.IsDigit) && head.All(character => char.IsDigit(character) || ",.-\u2212+".Contains(character, StringComparison.Ordinal));
+        if (!number)
+        {
+            return (shown, null);
+        }
+
+        string rest = shown[(space + 1)..].Trim();
+        return (head, rest.Length == 0 ? null : rest);
+    }
+}
+
+/// <summary>The day clock: 24 hours round a dial, midnight at the top.</summary>
+public static class ClockRules
+{
+    /// <summary>The hours named round the dial: the four quarters, midnight at the top.</summary>
+    public static IReadOnlyList<int> Quarters { get; } = [0, 6, 12, 18];
+
+    /// <summary>The base width of a dial before the person's text size.</summary>
+    public const double Diameter = 300;
+
+    /// <summary>The radii of a dial from its middle to its edge.</summary>
+    /// <param name="Labels">The middle of the quarter labels, outside everything.</param>
+    /// <param name="Moments">The line the day's moments stand on.</param>
+    /// <param name="Outer">Where the hours' bars end at their longest.</param>
+    /// <param name="Inner">Where they start.</param>
+    /// <param name="Edge">From the middle to the edge of the surface the dial stands in.</param>
+    public sealed record Dial(double Labels, double Moments, double Outer, double Inner, double Edge = 0);
+
+    /// <summary>The angle in degrees (0 at three o'clock, clockwise) of a time of day in hours.</summary>
+    /// <param name="hours">The hours past midnight.</param>
+    /// <returns>The angle.</returns>
+    public static double Angle(double hours) => -90 + (hours * 15);
+
+    /// <summary>How far out an hour's mark reaches, 0 to 1: its level, else its value against the most, else nothing.</summary>
+    /// <param name="hour">The hour.</param>
+    /// <param name="most">The most an hour holds.</param>
+    /// <returns>The reach, or none for an hour with no reading.</returns>
+    public static double? Reach(Models.Hour hour, double? most)
+    {
+        if (hour.Level is double level)
+        {
+            return Math.Clamp(level, 0, 1);
+        }
+
+        if (hour.Value is not double value || most is not double top)
+        {
+            return null;
+        }
+
+        return top <= 0 ? 0 : Math.Clamp(value / top, 0, 1);
+    }
+
+    /// <summary>The most an hour holds: the clock's own maximum, else the busiest hour.</summary>
+    /// <param name="clock">The clock.</param>
+    /// <returns>The most, or none.</returns>
+    public static double? Most(Models.DayClock clock)
+    {
+        if (clock.Max is double max)
+        {
+            return max;
+        }
+
+        double[] values = [.. clock.Hours.Where(hour => hour.Value.HasValue).Select(hour => hour.Value!.Value)];
+        return values.Length == 0 ? null : values.Max();
+    }
+
+    /// <summary>Whether the culture writes the time on a 24 hour clock.</summary>
+    /// <param name="culture">The culture.</param>
+    /// <returns>Whether it does.</returns>
+    public static bool Uses24(CultureInfo culture) => culture.DateTimeFormat.ShortTimePattern.Contains('H', StringComparison.Ordinal);
+
+    /// <summary>An hour as the person's clock writes it round the dial: "12 am" and "6 pm" on a 12 hour clock, "00" and "18" on a 24 hour one.</summary>
+    /// <param name="hour">The hour.</param>
+    /// <param name="uses24">Whether the clock has 24 hours.</param>
+    /// <param name="culture">The culture.</param>
+    /// <returns>The words.</returns>
+    public static string QuarterLabel(int hour, bool uses24, CultureInfo culture)
+    {
+        DateTime time = new(2000, 1, 1, ((hour % 24) + 24) % 24, 0, 0, DateTimeKind.Unspecified);
+        return uses24 ? time.ToString("HH", culture) : time.ToString("h tt", culture);
+    }
+
+    /// <summary>A time of day in hours past midnight as the person's clock writes it: "7:07 am" on a 12 hour clock, "07:07" on a 24 hour one.</summary>
+    /// <param name="at">The hours past midnight.</param>
+    /// <param name="uses24">Whether the clock has 24 hours.</param>
+    /// <param name="culture">The culture.</param>
+    /// <returns>The words.</returns>
+    public static string TimeLabel(double at, bool uses24, CultureInfo culture)
+    {
+        double wrapped = double.IsFinite(at) ? ((at % 24) + 24) % 24 : 0;
+        int minutes = ((int)Math.Round(wrapped * 60, MidpointRounding.AwayFromZero)) % (24 * 60);
+        DateTime time = new(2000, 1, 1, minutes / 60, minutes % 60, 0, DateTimeKind.Unspecified);
+        return uses24 ? time.ToString("HH:mm", culture) : time.ToString("h:mm tt", culture);
+    }
+
+    /// <summary>
+    /// Where the day's moments stand on the dial: at their hour, but no two closer than <paramref name="gap"/> hours, so marks that
+    /// would sit on one another stand side by side. The order stays, and moments far apart do not move.
+    /// </summary>
+    /// <param name="ats">The moments' hours.</param>
+    /// <param name="gap">The least gap, in hours.</param>
+    /// <returns>Where each stands, in the order given.</returns>
+    public static IReadOnlyList<double> Spread(IReadOnlyList<double> ats, double gap)
+    {
+        int[] order = [.. Enumerable.Range(0, ats.Count).OrderBy(index => ats[index])];
+        double[] placed = [.. order.Select(index => ats[index])];
+        for (int round = 0; round < 40; round++)
+        {
+            for (int at = 1; at < placed.Length; at++)
+            {
+                if (placed[at] - placed[at - 1] < gap)
+                {
+                    double middle = (placed[at] + placed[at - 1]) / 2;
+                    placed[at - 1] = middle - (gap / 2);
+                    placed[at] = middle + (gap / 2);
+                }
+            }
+        }
+
+        double[] result = new double[ats.Count];
+        for (int rank = 0; rank < order.Length; rank++)
+        {
+            result[order[rank]] = placed[rank];
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// The radii of a dial: the quarters' names at the edge, the line of the moments inside them, the hours' bars inside that, and the hole
+    /// in the middle for the day's total. The names have a band of their own outside the line of the moments, as wide as the widest of them
+    /// is long (the names at the sides stand across the dial, so their width and not their height is what they take), so a mark on the line
+    /// never covers one.
+    /// </summary>
+    /// <param name="half">From the middle to the edge.</param>
+    /// <param name="label">The height of a quarter's name.</param>
+    /// <param name="mark">The width of a moment's mark.</param>
+    /// <param name="labelWidth">The width of the widest quarter name; none when it is no wider than it is high.</param>
+    /// <returns>The radii.</returns>
+    public static Dial DialOf(double half, double label, double mark, double labelWidth = 0)
+    {
+        double band = Math.Max(Guard.Length(label), Guard.Length(labelWidth));
+        double labels = Guard.Length(half - (label / 2));
+        double moments = Guard.Length(half - band - 2 - (mark / 2));
+        double outer = Guard.Length(moments - (mark / 2) - 3);
+        return new Dial(labels, moments, outer, outer * 0.46, Guard.Length(half));
+    }
+
+    /// <summary>
+    /// How far from the middle the middle of a quarter's name stands: the names at the top and the foot stand with their outer edge at the
+    /// dial's edge, and so do the names at the sides, whose outer edge is a half of their width further out.
+    /// </summary>
+    /// <param name="dial">The dial.</param>
+    /// <param name="quarter">The hour of the quarter (0, 6, 12 or 18).</param>
+    /// <param name="width">The name's width.</param>
+    /// <param name="height">The name's height.</param>
+    /// <returns>The distance from the middle.</returns>
+    public static double LabelRadius(Dial dial, int quarter, double width, double height) =>
+        Guard.Length(dial.Edge - (((quarter % 12) + 12) % 12 == 0 ? Guard.Length(height) : Guard.Length(width)) / 2);
+
+    /// <summary>Whether a dial has the room to be drawn: its hours' bars need a little length between the hole and the edge.</summary>
+    /// <param name="dial">The dial.</param>
+    /// <returns>Whether it is drawn.</returns>
+    public static bool Draws(Dial dial) => dial.Outer - dial.Inner >= 6;
+
+    /// <summary>The width of an hour's bar at the start of the bars: most of the room between neighbours.</summary>
+    /// <param name="inner">The inner radius.</param>
+    /// <returns>The width.</returns>
+    public static double BarWidth(double inner) => Guard.Length(2 * Math.PI * inner / 24 * 0.6);
+
+    /// <summary>Whether a moment's name already says its time (an older page wrote it in).</summary>
+    /// <param name="name">The name.</param>
+    /// <returns>Whether it holds a time.</returns>
+    public static bool HoldsTime(string name) => Regex.IsMatch(name, @"\d:\d\d");
+
+    /// <summary>What a moment says in the clock's key: its name and its time in the person's clock.</summary>
+    /// <param name="name">The name.</param>
+    /// <param name="at">The hour.</param>
+    /// <param name="uses24">Whether the clock has 24 hours.</param>
+    /// <param name="culture">The culture.</param>
+    /// <returns>The words.</returns>
+    public static string MomentEntry(string name, double at, bool uses24, CultureInfo culture) =>
+        HoldsTime(name) ? name : name + ", " + TimeLabel(at, uses24, culture);
+}

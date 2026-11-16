@@ -1,0 +1,281 @@
+using System.Globalization;
+using Navree.Protocol;
+
+namespace Navree.Design;
+
+/// <summary>The day a screen is about and the days a chart names, written <c>YYYY-MM-DD</c>.</summary>
+public static class PagerRules
+{
+    /// <summary>A day as the page writes it.</summary>
+    /// <param name="text">The text.</param>
+    /// <returns>The day, or none.</returns>
+    public static DateOnly? Day(string? text) =>
+        DateOnly.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly day) ? day : null;
+
+    /// <summary>The day as the core wants it in an event's text.</summary>
+    /// <param name="day">The day.</param>
+    /// <returns>The text.</returns>
+    public static string Text(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The value a calendar control is given for a person's day: the day's midnight in the person's own time zone, with that zone's offset
+    /// on that day, so the control shows the same day to a person at UTC-5 as to one at UTC+5:30.
+    /// </summary>
+    /// <param name="day">The day.</param>
+    /// <param name="zone">The person's time zone.</param>
+    /// <returns>The day's midnight.</returns>
+    public static DateTimeOffset Midnight(DateOnly day, TimeZoneInfo zone)
+    {
+        DateTime local = day.ToDateTime(TimeOnly.MinValue);
+        return new DateTimeOffset(local, zone.GetUtcOffset(local));
+    }
+
+    /// <summary>The person's day a calendar control's value stands for.</summary>
+    /// <param name="value">The control's value.</param>
+    /// <param name="zone">The person's time zone.</param>
+    /// <returns>The day.</returns>
+    public static DateOnly DayOf(DateTimeOffset value, TimeZoneInfo zone) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(value, zone).DateTime);
+
+    /// <summary>Whether a day may be chosen: inside the first and last days where they are given.</summary>
+    /// <param name="day">The day's text.</param>
+    /// <param name="first">The first day, or none.</param>
+    /// <param name="last">The last day, or none.</param>
+    /// <returns>Whether it may.</returns>
+    public static bool Choosable(string day, string? first, string? last)
+    {
+        if (Day(day) is not DateOnly chosen)
+        {
+            return false;
+        }
+
+        if (Day(first) is DateOnly low && chosen < low)
+        {
+            return false;
+        }
+
+        return !(Day(last) is DateOnly high && chosen > high);
+    }
+
+    /// <summary>The day as it is written for a person, in their culture: "Friday, 13 November 2026".</summary>
+    /// <param name="day">The day's text.</param>
+    /// <param name="culture">The culture.</param>
+    /// <returns>The words, or the text itself when it is not a day.</returns>
+    public static string Words(string day, CultureInfo? culture = null)
+    {
+        CultureInfo use = culture ?? ClientCulture.Current;
+        return Day(day) is DateOnly found ? found.ToString(LongPattern(use), use) : day;
+    }
+
+    /// <summary>
+    /// The culture's long date, except that a date written day first has no comma before its year ("Friday, 13 November 2026"; some
+    /// machines' data for English (India) put one there).
+    /// </summary>
+    /// <param name="culture">The culture.</param>
+    /// <returns>The pattern.</returns>
+    public static string LongPattern(CultureInfo culture)
+    {
+        string pattern = culture.DateTimeFormat.LongDatePattern;
+        string bare = pattern.Replace("dddd", string.Empty, StringComparison.Ordinal);
+        int dayAt = bare.IndexOf('d', StringComparison.Ordinal);
+        int monthAt = bare.IndexOf("MMMM", StringComparison.Ordinal);
+        return dayAt >= 0 && monthAt > dayAt
+            ? System.Text.RegularExpressions.Regex.Replace(pattern, @"MMMM,(\s*)y", "MMMM$1y")
+            : pattern;
+    }
+
+    /// <summary>What the pager says of its day to a screen reader: its name and its date.</summary>
+    /// <param name="pager">The pager.</param>
+    /// <param name="culture">The culture.</param>
+    /// <returns>The words.</returns>
+    public static string Say(Models.DayPager pager, CultureInfo? culture = null) => pager.Day + ", " + Words(pager.Date, culture);
+}
+
+/// <summary>The calendar of days: a week a column, a day a row.</summary>
+public static class HeatRules
+{
+    /// <summary>How strong each of the four shades is, as an opacity of the hue.</summary>
+    public static IReadOnlyList<double> Opacities { get; } = [0.22, 0.45, 0.7, 1.0];
+
+    /// <summary>The days of a calendar in date order, whatever order the page sent them in (the order the keys step through them); a day that is not a date is left out, and days of one date keep the order they came in.</summary>
+    /// <param name="days">The page's days: the date as written and the value.</param>
+    /// <returns>The days, earliest first.</returns>
+    public static IReadOnlyList<(DateOnly Date, double? Value)> InOrder(IEnumerable<(string Date, double? Value)> days) =>
+        [.. days
+            .Select(day => (Date: PagerRules.Day(day.Date), day.Value))
+            .Where(day => day.Date.HasValue)
+            .Select(day => (day.Date!.Value, day.Value))
+            .OrderBy(day => day.Item1)];
+
+    /// <summary>
+    /// The shade of a day, 0 to 3, or none for a day with no value (no data, not a day of none). The steps are where the second, third
+    /// and fourth shade begin; without them, four equal parts from 0 to the highest.
+    /// </summary>
+    /// <param name="value">The day's value, or none.</param>
+    /// <param name="steps">The page's steps.</param>
+    /// <param name="highest">The highest value.</param>
+    /// <returns>The shade, or none.</returns>
+    public static int? Shade(double? value, IReadOnlyList<double> steps, double highest)
+    {
+        if (value is not double found)
+        {
+            return null;
+        }
+
+        double[] bounds = Bounds(steps, highest);
+        return bounds.Count(bound => found >= bound);
+    }
+
+    /// <summary>Where the second, third and fourth shade begin.</summary>
+    /// <param name="steps">The page's steps.</param>
+    /// <param name="highest">The highest value.</param>
+    /// <returns>Three numbers.</returns>
+    public static double[] Bounds(IReadOnlyList<double> steps, double highest) =>
+        steps.Count >= 3 ? [steps[0], steps[1], steps[2]] : [highest / 4, highest / 2, highest * 3 / 4];
+
+    /// <summary>The first day shown: the start of the week the first day is in, by the person's first weekday.</summary>
+    /// <param name="first">The first day.</param>
+    /// <param name="firstWeekday">The first day of the week.</param>
+    /// <returns>The start of that week.</returns>
+    public static DateOnly Start(DateOnly first, DayOfWeek firstWeekday)
+    {
+        int back = ((int)first.DayOfWeek - (int)firstWeekday + 7) % 7;
+        return DateOnly.FromDayNumber(Math.Max(first.DayNumber - back, DateOnly.MinValue.DayNumber));
+    }
+
+    /// <summary>The column (week) and row (day of the week) of a date.</summary>
+    /// <param name="date">The date.</param>
+    /// <param name="start">The calendar's first day.</param>
+    /// <returns>The week and the day.</returns>
+    public static (int Week, int Day) Cell(DateOnly date, DateOnly start)
+    {
+        int days = date.DayNumber - start.DayNumber;
+        int week = days >= 0 ? days / 7 : (days - 6) / 7;
+        return (week, ((days % 7) + 7) % 7);
+    }
+
+    /// <summary>How many weeks the calendar spans.</summary>
+    /// <param name="first">The first day.</param>
+    /// <param name="last">The last day.</param>
+    /// <param name="firstWeekday">The first day of the week.</param>
+    /// <returns>The count, at least one.</returns>
+    public static int Weeks(DateOnly first, DateOnly last, DayOfWeek firstWeekday) =>
+        Math.Max(Cell(last, Start(first, firstWeekday)).Week + 1, 1);
+
+    /// <summary>The most weeks a calendar draws: five years. A longer run shows its latest weeks.</summary>
+    public const int MostWeeks = 260;
+
+    /// <summary>The weeks a calendar draws: where the first one starts and how many there are, never more than <see cref="MostWeeks"/>; a run longer than that shows its last weeks.</summary>
+    /// <param name="first">The first day.</param>
+    /// <param name="last">The last day.</param>
+    /// <param name="firstWeekday">The first day of the week.</param>
+    /// <returns>The start of the first week and the number of weeks.</returns>
+    public static (DateOnly Start, int Weeks) Window(DateOnly first, DateOnly last, DayOfWeek firstWeekday)
+    {
+        DateOnly start = Start(first, firstWeekday);
+        int weeks = Weeks(first, last, firstWeekday);
+        if (weeks <= MostWeeks)
+        {
+            return (start, weeks);
+        }
+
+        return (DateOnly.FromDayNumber(Start(last, firstWeekday).DayNumber - (7 * (MostWeeks - 1))), MostWeeks);
+    }
+
+    /// <summary>The width of a week's column: the room divided among the weeks, at most 20 and at least one, so a calendar in a narrow place is small, never past its edge.</summary>
+    /// <param name="width">The surface's width.</param>
+    /// <param name="gutter">The room taken by the weekday names.</param>
+    /// <param name="weeks">How many weeks.</param>
+    /// <returns>The step.</returns>
+    public static double Step(double width, double gutter, int weeks) =>
+        Math.Clamp((Guard.Length(width) - Guard.Length(gutter)) / Math.Max(weeks, 1), 1, 20);
+
+    /// <summary>The side of a day's square for a step: two less than the step where the step is wide enough, else half of it.</summary>
+    /// <param name="step">The step.</param>
+    /// <returns>The side.</returns>
+    public static double Square(double step) => step >= 4 ? Math.Max(step - 2, 2) : Math.Max(step / 2, 0.5);
+
+    /// <summary>The week each month's name stands over: the first week whose first day starts that month, where the name would not crowd the one before.</summary>
+    /// <param name="first">The first day.</param>
+    /// <param name="weeks">How many weeks.</param>
+    /// <param name="firstWeekday">The first day of the week.</param>
+    /// <param name="room">The least number of weeks between two names.</param>
+    /// <returns>The week and the month (1 to 12).</returns>
+    public static IReadOnlyList<(int Week, int Month)> Months(DateOnly first, int weeks, DayOfWeek firstWeekday, int room = 3)
+    {
+        DateOnly start = Start(first, firstWeekday);
+        List<(int Week, int Month)> found = [];
+        int last = -1;
+        for (int week = 0; week < weeks; week++)
+        {
+            DateOnly day = DateOnly.FromDayNumber((int)Math.Min((long)start.DayNumber + (week * 7L), DateOnly.MaxValue.DayNumber));
+            bool starts = week == 0 || day.Day <= 7;
+            if (day.Month != last && starts)
+            {
+                if (found.Count > 0 && week - found[^1].Week < room)
+                {
+                    found.RemoveAt(found.Count - 1);
+                }
+
+                found.Add((week, day.Month));
+                last = day.Month;
+            }
+        }
+
+        return found;
+    }
+}
+
+/// <summary>Every measure against every other.</summary>
+public static class MatrixRules
+{
+    /// <summary>The relation of two measures, either way round.</summary>
+    /// <param name="relations">The relations.</param>
+    /// <param name="a">One measure.</param>
+    /// <param name="b">The other.</param>
+    /// <returns>The relation, or none.</returns>
+    public static Models.Relation? Relation(IReadOnlyList<Models.Relation> relations, int a, int b) =>
+        relations.FirstOrDefault(relation => (relation.A == a && relation.B == b) || (relation.A == b && relation.B == a));
+
+    /// <summary>Whether a cell is drawn: with the lower half only, those under the diagonal.</summary>
+    /// <param name="row">The row.</param>
+    /// <param name="column">The column.</param>
+    /// <param name="lower">Whether only the lower half is drawn.</param>
+    /// <returns>Whether it is drawn.</returns>
+    public static bool Drawn(int row, int column, bool lower) => lower ? column < row : row != column;
+
+    /// <summary>The room the measures' names take at the left: their widest, but never more than half of the surface.</summary>
+    /// <param name="widest">The widest name.</param>
+    /// <param name="width">The surface's width.</param>
+    /// <returns>The width of the left side.</returns>
+    public static double Left(double widest, double width) => Math.Min(Guard.Length(widest) + 8, Guard.Length(width) / 2);
+
+    /// <summary>The side of a cell: the room divided among the columns, at most <paramref name="most"/>, and at least six so a cell can still be pointed at.</summary>
+    /// <param name="width">The surface's width.</param>
+    /// <param name="left">The room at the left.</param>
+    /// <param name="columns">How many columns.</param>
+    /// <param name="most">The largest side.</param>
+    /// <returns>The side.</returns>
+    public static double Cell(double width, double left, int columns, double most) =>
+        Math.Clamp(((Guard.Length(width) - Guard.Length(left)) / Math.Max(columns, 1)) - 3, 6, Math.Max(Guard.Finite(most, 44), 6));
+
+    /// <summary>Whether a cell is big enough to hold its number.</summary>
+    /// <param name="cell">The cell's side.</param>
+    /// <returns>Whether the number is written in it.</returns>
+    public static bool HoldsNumber(double cell) => cell >= 20;
+
+    /// <summary>How strong a relation is, 0 to 1 against the peak (1 when none is given); one that is not significant, or never tested, is none.</summary>
+    /// <param name="relation">The relation, or none.</param>
+    /// <param name="peak">The peak, or none.</param>
+    /// <returns>The strength.</returns>
+    public static double Strength(Models.Relation? relation, double? peak)
+    {
+        if (relation is null || relation.Value is not double value || !relation.Significant)
+        {
+            return 0;
+        }
+
+        double top = (peak ?? 1) > 0 ? peak ?? 1 : 1;
+        return Math.Min(Math.Abs(value) / top, 1);
+    }
+}
