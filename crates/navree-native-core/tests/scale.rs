@@ -611,9 +611,10 @@ fn full_screen(more: Option<&str>) -> (Core, u64) {
             &json!({"navree": 1, "build": "b1", "vocab": 1, "screen": {"title": "Orders", "body": {
                 "t": "stack", "children": [
                     {"t": "field", "id": "note", "name": "note", "input": {"t": "text"}},
-                    {"t": "list", "id": "orders", "more": more, "children": (0..99_990)
+                    {"t": "list", "id": "orders", "more": more, "before": "/orders?before=1", "children": (0..99_990)
                         .map(|number| json!({"t": "row", "id": format!("order-{number}"), "title": "CS"}))
-                        .collect::<Vec<Value>>()}]}}}),
+                        .collect::<Vec<Value>>()},
+                    {"t": "region", "id": "totals", "src": "/orders/totals", "children": []}]}}}),
         );
     }
     for round in 0..3 {
@@ -731,6 +732,94 @@ fn a_page_the_screen_has_no_room_for_leaves_the_list_failed_and_not_finished() {
         "the list keeps where its rows are"
     );
     assert_eq!(list_rows(&core, screen).len(), 4 * 99_990);
+}
+
+/// A refused answer to a part of the screen (the rows after a list's last,
+/// the rows before its first, a region) does not make the screen out of
+/// date: fetching the page again would put the first page of rows in place of
+/// the ones the person loaded. The list keeps its rows and the part shows its
+/// failure, with its retry.
+#[test]
+fn a_refused_answer_to_a_part_leaves_the_rows_the_person_loaded() {
+    let page = json!({"navree": 1, "build": "b1", "vocab": 1, "screen": {"title": "Orders", "body": {
+        "t": "stack", "children": [
+            {"t": "field", "id": "note", "name": "note", "input": {"t": "text"}},
+            {"t": "list", "id": "orders", "more": "/orders?cursor=1", "before": "/orders?before=1",
+             "children": [{"t": "row", "id": "order-0", "title": "CS"}]},
+            {"t": "region", "id": "totals", "src": "/orders/totals", "children": []}]}}});
+    let too_many: Vec<Value> = (0..99_999)
+        .map(|number| json!({"t": "row", "id": format!("next-{number}"), "title": "CS"}))
+        .collect();
+    let asks: [(&str, Event, Value); 3] = [
+        (
+            "more rows",
+            Event::More {
+                screen: 0,
+                id: "orders".to_owned(),
+                before: false,
+            },
+            json!([{"op": "append", "target": "orders", "nodes": too_many, "more": "/orders?cursor=2"}]),
+        ),
+        (
+            "earlier rows",
+            Event::More {
+                screen: 0,
+                id: "orders".to_owned(),
+                before: true,
+            },
+            json!([{"op": "prepend", "target": "orders", "nodes": too_many, "before": "/orders?before=2"}]),
+        ),
+        (
+            "a region",
+            Event::RegionRetry {
+                screen: 0,
+                region: "totals".to_owned(),
+            },
+            json!([{"op": "append", "target": "orders", "nodes": too_many}]),
+        ),
+    ];
+    for (what, ask, ops) in asks {
+        let (mut core, screen) = full_screen(Some("/orders?cursor=1"));
+        let ask = match ask {
+            Event::More { id, before, .. } => Event::More { screen, id, before },
+            Event::RegionRetry { region, .. } => Event::RegionRetry { screen, region },
+            other => other,
+        };
+        let sent = core.send(ask);
+        let asked = sent
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(request) => Some(request.request),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("{what}: nothing was asked: {:?}", sent.effects));
+        let update = answer(
+            &mut core,
+            asked,
+            &json!({"navree": 1, "build": "b1", "vocab": 1, "ops": ops}),
+        );
+        // Whatever was asked of the page meanwhile is answered with its first page.
+        for effect in &update.effects {
+            if let Effect::Fetch(request) = effect
+                && request.url == "https://shop.example/"
+            {
+                answer(&mut core, request.request, &page);
+            }
+        }
+        assert_eq!(
+            list_rows(&core, screen).len(),
+            4 * 99_990,
+            "{what}: the list keeps the rows the person loaded"
+        );
+        let view = core.view();
+        let failed = match what {
+            "more rows" => view.screens[&screen].lists["orders"].failed,
+            "earlier rows" => view.screens[&screen].lists["orders"].failed_before,
+            _ => view.screens[&screen].regions["totals"].failure.is_some(),
+        };
+        assert!(failed, "{what}: the part shows its failure");
+    }
 }
 
 /// What one visit to a node costs an op that looks through the screen, for

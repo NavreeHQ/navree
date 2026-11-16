@@ -120,6 +120,19 @@ impl Core {
     /// Applies ops to a screen, in order. `after_send`: they answer something
     /// the person just sent from it. True when they lead away from the screen.
     pub(crate) fn apply_ops(&mut self, id: ScreenId, ops: Vec<Op>, after_send: bool) -> bool {
+        self.apply_ops_for(id, ops, after_send, false)
+    }
+
+    /// As [`Core::apply_ops`], for the answer to a part of the screen: the
+    /// rows after a list's last or before its first, or a region. One that is
+    /// refused leaves the screen as it is and not out of date: fetching the
+    /// page again would put its first rows in place of the ones the person
+    /// loaded. The part shows its failure, with its retry.
+    pub(crate) fn apply_part_ops(&mut self, id: ScreenId, ops: Vec<Op>) -> bool {
+        self.apply_ops_for(id, ops, false, true)
+    }
+
+    fn apply_ops_for(&mut self, id: ScreenId, ops: Vec<Op>, after_send: bool, part: bool) -> bool {
         // An answer's changes are applied whole or not at all. What its ops
         // bring is bounded by the screen's largest size, and the work of its
         // ops by `MAX_WORK`, counted as it will be done: an op that looks
@@ -129,7 +142,7 @@ impl Core {
         let brought: Vec<usize> = ops.iter().map(crate::weight::of_op).collect();
         let any = ops.iter().any(looks_through) || brought.iter().any(|brought| *brought > 0);
         if any && !self.screen_fits(id, |held| crate::weight::fit(held, &ops, &brought)) {
-            return self.answer_refused(id, ops, after_send);
+            return self.answer_refused(id, ops, after_send, part);
         }
         // An answer of ops that is applied sets the refusals back.
         if !ops.is_empty()
@@ -339,13 +352,16 @@ impl Core {
     /// to be fetched again): a save that worked still says so and goes where
     /// it meant to. The person is told the screen is loading while it will be
     /// fetched again, and that it did not work when it will not. True when
-    /// what was carried out leads away from the screen.
-    fn answer_refused(&mut self, id: ScreenId, ops: Vec<Op>, after_send: bool) -> bool {
-        let again = self.inner.screens.get_mut(&id).is_some_and(|inner| {
-            inner.refused = inner.refused.saturating_add(1);
-            inner.stale = inner.refused < 2;
-            inner.stale
-        });
+    /// what was carried out leads away from the screen. The answer to a part
+    /// of the screen (`part`) does not make it out of date and is not counted
+    /// against it: the part shows its own failure.
+    fn answer_refused(&mut self, id: ScreenId, ops: Vec<Op>, after_send: bool, part: bool) -> bool {
+        let again = !part
+            && self.inner.screens.get_mut(&id).is_some_and(|inner| {
+                inner.refused = inner.refused.saturating_add(1);
+                inner.stale = inner.refused < 2;
+                inner.stale
+            });
         // A reload is the fetch the screen is owed, and is not asked for more
         // than once on the answer's account.
         let carried: Vec<Op> = ops
