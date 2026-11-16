@@ -76,6 +76,9 @@ pub enum Notice {
     /// Signing in needs one more step, which this app can't take the person
     /// through: they finish it another way.
     SecondStep,
+    /// It was saved, but the screen could not be brought up to date: the
+    /// server's answer was larger than an answer may be.
+    SavedNotRefreshed,
 }
 
 /// The width of the window, by class. Navigation and layout follow it, never

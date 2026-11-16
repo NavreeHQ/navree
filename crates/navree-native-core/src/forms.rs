@@ -1302,7 +1302,7 @@ impl Core {
         id: ScreenId,
         visit: u64,
         key: &str,
-        write: bool,
+        (write, saved_unread): (bool, bool),
         in_place: bool,
         asked: &str,
         answer: Answer,
@@ -1354,7 +1354,14 @@ impl Core {
                 if write && !self.inner.never_left {
                     self.wrote(id);
                 }
-                self.failed(failure, Some(id));
+                // A write the server took is saved, even when what it
+                // answered with is too large to read: only the screen could
+                // not be brought up to date.
+                if write && saved_unread {
+                    self.notice(Notice::SavedNotRefreshed, Some(id));
+                } else {
+                    self.failed(failure, Some(id));
+                }
                 told = true;
             }
             Answer::Left(url) => self.open_outside(&url, false, By::Answer("redirect")),

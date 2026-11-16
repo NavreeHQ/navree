@@ -405,7 +405,8 @@
                 "copied",
                 "fields_need_attention",
                 "loaded",
-                "second_step"
+                "second_step",
+                "saved_not_refreshed"
               ],
               "type": "string"
             },
@@ -575,7 +576,8 @@
                 "copied",
                 "fields_need_attention",
                 "loaded",
-                "second_step"
+                "second_step",
+                "saved_not_refreshed"
               ],
               "type": "string"
             },
@@ -1769,7 +1771,8 @@
             "copied",
             "fields_need_attention",
             "loaded",
-            "second_step"
+            "second_step",
+            "saved_not_refreshed"
           ],
           "type": "string"
         },

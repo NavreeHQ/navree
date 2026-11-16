@@ -92,6 +92,7 @@ fn notice() -> Value {
         "fields_need_attention",
         "loaded",
         "second_step",
+        "saved_not_refreshed",
     ])
 }
 
