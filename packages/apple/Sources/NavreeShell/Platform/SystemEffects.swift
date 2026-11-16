@@ -355,7 +355,12 @@ public enum AppEvents {
 /// The client's own words: the core names a notice or a failure, and the app
 /// says it in the person's language.
 public enum Words {
-    public static func notice(_ notice: CoreNotice?) -> String {
+    /// The words of a notice. One this build has no words for (a newer
+    /// core's), and a message that names none, is said by the message's
+    /// `tone` alone: that something failed, or only that something happened.
+    /// It never says to try again: the notice may be about a payment or an
+    /// order the server took.
+    public static func notice(_ notice: CoreNotice?, tone: Navree.Tone = .neutral) -> String {
         switch notice {
         case .offline?: String(localized: "You're offline. Check your connection and try again.")
         case .timeout?: String(localized: "The server took too long to answer. Try again.")
@@ -365,7 +370,12 @@ public enum Words {
         case .secondStep?: String(localized: "One more step is needed to sign in. Sign in another way to finish.")
         case .fieldsNeedAttention?: String(localized: "Some fields need attention.")
         case .loaded?: String(localized: "More loaded.")
-        case .failed?, nil: String(localized: "That didn't work. Try again.")
+        case .savedNotRefreshed?: String(localized: "Saved. The screen couldn't be brought up to date.")
+        case .failed?: String(localized: "That didn't work. Try again.")
+        case .unknown?, nil:
+            tone == .danger
+                ? String(localized: "That didn't work.")
+                : String(localized: "Something happened that this version of the app can't describe.")
         }
     }
 
@@ -382,7 +392,8 @@ public enum Words {
             return count == 1 ? String(localized: "1 more row loaded") : String(localized: "\(count) more rows loaded")
         case .copied?:
             return String(localized: "Copied")
-        case nil:
+        case .unknown?, nil:
+            // Nothing this build can put into words is said aloud.
             return nil
         default:
             return Words.notice(notice)

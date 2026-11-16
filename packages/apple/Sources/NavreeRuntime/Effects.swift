@@ -242,7 +242,7 @@ extension CoreEffect {
         case "cache_read": return .cacheRead(key: try need(s("key")))
         case "cache_write": return .cacheWrite(key: try need(s("key")), value: s("value"))
         case "cache_clear": return .cacheClear
-        case "announce": return .announce(text: s("text"), notice: s("notice").flatMap(CoreNotice.init), count: i("count"))
+        case "announce": return .announce(text: s("text"), notice: s("notice").map(CoreNotice.read), count: i("count"))
         case "copy": return .copy(text: try need(s("text")), sensitive: b("sensitive"))
         case "timer": return .timer(try need(i("timer")), ms: i("ms") ?? 0)
         case "cancel_timer": return .cancelTimer(try need(i("timer")))

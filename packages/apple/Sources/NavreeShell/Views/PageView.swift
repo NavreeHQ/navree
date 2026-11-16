@@ -446,7 +446,7 @@ struct MessageAlert: ViewModifier {
 
     func body(content: Content) -> some View {
         content.alert(
-            message?.title ?? message?.text ?? Words.notice(message?.notice),
+            message?.title ?? message?.text ?? Words.notice(message?.notice, tone: message?.tone ?? .neutral),
             // The alert's buttons are its only ways out: each says what became of the message.
             isPresented: Binding(get: { message != nil }, set: { _ in }),
             presenting: message
@@ -456,7 +456,7 @@ struct MessageAlert: ViewModifier {
             }
             Button("OK", role: .cancel) { client.send(.messageShown(id: message.id)) }
         } message: { message in
-            if message.title != nil { Text(message.text ?? Words.notice(message.notice)) }
+            if message.title != nil { Text(message.text ?? Words.notice(message.notice, tone: message.tone)) }
         }
     }
 }

@@ -31,6 +31,18 @@ public enum CoreNotice: String, Sendable {
     case fieldsNeedAttention = "fields_need_attention"
     case loaded
     case secondStep = "second_step"
+    /// The change was saved, and the screen could not be brought up to date
+    /// (the server's answer was larger than an answer may be). Never a failure.
+    case savedNotRefreshed = "saved_not_refreshed"
+    /// A notice this build has no words for: one a newer core said. It is
+    /// still a notice, and is said in words that claim nothing.
+    case unknown
+
+    /// The notice the core's word stands for; ``unknown`` for a word this
+    /// build does not know.
+    public static func read(_ word: String) -> CoreNotice {
+        CoreNotice(rawValue: word) ?? .unknown
+    }
 }
 
 /// The window's width class, as the client said it.
@@ -501,7 +513,9 @@ extension Message: Decodable {
         tone = c.word("tone") ?? .neutral
         text = c.optional("text")
         title = c.optional("title")
-        notice = c.word("notice")
+        // A notice this build does not know is still one: it is never read as none.
+        let word: String? = c.optional("notice")
+        notice = word.map(CoreNotice.read)
         action = c.optional("action")
     }
 }
