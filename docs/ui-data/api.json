@@ -6572,19 +6572,19 @@
         "name": "value",
         "generics": "",
         "args": "step: &str, field: &str",
-        "doc": "The value posted for `field` in `step`: the first, when there are several."
+        "doc": "The value posted for `field` in `step`: the first, when there are several. It is the text as it was posted, never checked: a wizard keeps what was typed on Save, Back and a move by the stepper without running the step's rules or a control's check. Read a step that must hold to them with `read_for`."
       },
       {
         "name": "read",
         "generics": "<T>",
         "args": "step: &str",
-        "doc": "A step read into the struct that is its form, with its rules run."
+        "doc": "A step read into the struct that is its form, with its rules run. It reads with no app, as `decode` does: a control's check is given neither the app nor its configuration, and one that needs them refuses. A step with such a control is read with `read_for`."
       },
       {
         "name": "read_for",
         "generics": "<T>",
         "args": "step: &str, language: &crate::form::Language",
-        "doc": "`read` in the reader's language: the app's validation messages and the reader's date, time and slider words."
+        "doc": "`read` in the reader's language: the app's validation messages and the reader's date, time and slider words. Given a `Language` made by `Language::of`, a control's check is given the app and its configuration too."
       },
       {
         "name": "bytes",
