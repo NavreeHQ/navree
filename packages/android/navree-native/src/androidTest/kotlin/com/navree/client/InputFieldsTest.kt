@@ -385,8 +385,11 @@ class InputFieldsTest {
         startOnTheClaimsForm()
         var seen = ""
         fun focusedName(): String? {
-            val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
-            seen = "${focused.size} nodes had the focus"
+            fun said(node: androidx.compose.ui.semantics.SemanticsNode) = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", ").orEmpty()
+            val all = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
+            // The screen under an open dialog keeps the focus it had (the colour field) in its own window; the dialog's is the one a keyboard moves.
+            val focused = if (all.size > 1) all.filterNot { said(it).startsWith("Label colour") } else all
+            seen = "${all.size} nodes had the focus: ${all.map { said(it) }}"
             if (focused.size != 1) return null
             val config = focused.single().config
             return listOfNotNull(
