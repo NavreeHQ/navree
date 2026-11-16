@@ -181,10 +181,25 @@ struct HTTPTests {
     }
 
     @Test func noAnswerIsSaidInTheCoresWords() {
-        #expect(HTTPTransport.failure(URLError(.notConnectedToInternet)) == .offline)
-        #expect(HTTPTransport.failure(URLError(.cannotFindHost)) == .offline)
+        // Offline is said only when no connection was made, so nothing of the request was sent.
+        let unsent: [URLError.Code] = [
+            .notConnectedToInternet, .cannotFindHost, .dnsLookupFailed, .cannotConnectToHost, .dataNotAllowed,
+            .internationalRoamingOff, .callIsActive,
+        ]
+        for code in unsent {
+            #expect(HTTPTransport.failure(URLError(code)) == .offline, "code \(code.rawValue)")
+        }
         #expect(HTTPTransport.failure(URLError(.timedOut)) == .timeout)
-        #expect(HTTPTransport.failure(URLError(.badServerResponse)) == .other)
+        // A connection lost in the middle of a load may have carried the
+        // request: a payment sent and never answered is not one never made.
+        let perhapsSent: [URLError.Code] = [
+            .networkConnectionLost, .secureConnectionFailed, .badServerResponse, .cannotParseResponse,
+            .serverCertificateUntrusted, .appTransportSecurityRequiresSecureConnection, .unknown,
+        ]
+        for code in perhapsSent {
+            #expect(HTTPTransport.failure(URLError(code)) == .other, "code \(code.rawValue)")
+        }
+        #expect(HTTPTransport.failure(CocoaError(.fileNoSuchFile)) == .other)
         #expect(String(decoding: CoreEvent.response(.failed(3, .offline)).json, as: UTF8.self) == #"{"error":"offline","request":3,"t":"response"}"#)
     }
 

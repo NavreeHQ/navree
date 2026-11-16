@@ -196,11 +196,29 @@ public final class HTTPTransport: Transport {
         )
     }
 
-    /// No answer, in the core's words.
+    /// No answer, in the core's words. `offline` says one thing only: nothing
+    /// of the request was sent, so a write it carried was never made, and the
+    /// core counts it so. It is said only for the codes whose own meaning is
+    /// that no connection was made:
+    ///
+    /// - `notConnectedToInternet`: no internet connection is up, and none can be brought up.
+    /// - `cannotFindHost`, and `dnsLookupFailed` (which the system no longer
+    ///   uses, and means the same): the host's name was not resolved.
+    /// - `cannotConnectToHost`: the attempt to connect failed.
+    /// - `dataNotAllowed`: the cellular network disallowed a connection.
+    /// - `internationalRoamingOff`: the connection needed roaming, which is off.
+    /// - `callIsActive`: a connection was tried during a call on a network
+    ///   that carries no data beside one.
+    ///
+    /// `timedOut` is `timeout`. Everything else is `other`, and so may have
+    /// been sent: above all `networkConnectionLost`, a connection severed in
+    /// the middle of a load, after the request may have gone out; and a
+    /// secure connection that failed, which the system does not say failed
+    /// before anything was sent.
     nonisolated static func failure(_ error: any Error) -> Response.TransportError {
         switch (error as? URLError)?.code {
-        case .notConnectedToInternet?, .networkConnectionLost?, .cannotFindHost?, .cannotConnectToHost?,
-            .dnsLookupFailed?, .dataNotAllowed?, .internationalRoamingOff?:
+        case .notConnectedToInternet?, .cannotFindHost?, .dnsLookupFailed?, .cannotConnectToHost?, .dataNotAllowed?,
+            .internationalRoamingOff?, .callIsActive?:
             .offline
         case .timedOut?:
             .timeout
