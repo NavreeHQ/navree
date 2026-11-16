@@ -107,15 +107,29 @@ class WebRulesTest {
     }
 
     @Test
-    fun the_real_constructor_gets_the_string_that_was_checked_and_never_the_pages_own_object() {
+    fun the_real_constructor_gets_the_absolute_address_that_was_checked_and_never_the_pages_own_object() {
         val script = WebRules.documentScript(Origins("https://shop.example").documentOrigins())
         assertTrue("the page's object is made a string once: $script", script.contains("var x=S(u)"))
-        assertTrue("and the string, resolved against the document's real base, is what is checked", script.contains("K(U,[x,A(B,D,[])])"))
-        assertTrue("and what the constructor gets", script.contains("K(C,[x])") && script.contains("K(C,[x,cp(q,s)])"))
+        assertTrue("and the string, resolved against the document's real base, is what is checked", script.contains("a=A(H,K(U,[x,A(B,D,[])]),[]);if(!at(a))throw"))
+        assertTrue("and what the constructor gets", script.contains("K(C,[a])") && script.contains("K(C,[a,o])"))
         assertFalse("the object itself never goes to the constructor", script.contains("K(C,[u"))
-        assertFalse("nor do the options as the page made them", script.contains("K(C,[x,q])"))
-        assertTrue("options are copied field by field", script.contains("{name:q.name,type:q.type,credentials:q.credentials}"))
+        assertFalse("nor the string as it was before it was resolved", script.contains("K(C,[x"))
+        assertFalse("nor do the options as the page made them", script.contains("K(C,[a,q])"))
+        assertTrue("a worker's options are copied field by field, each into a string", script.contains("{name:T(q.name),type:T(q.type),credentials:T(q.credentials)}"))
         assertTrue("and protocols into an array of strings", script.contains("A(F,Y,[q,S])"))
+    }
+
+    @Test
+    fun what_a_page_hands_over_is_read_once_before_the_check() {
+        val script = WebRules.documentScript(Origins("https://shop.example").documentOrigins())
+        val from = script.indexOf("var N=function(u,q){")
+        val wrapper = script.substring(from, script.indexOf("};", from) + 2)
+        val read = wrapper.indexOf("cp(q,s)")
+        val resolved = wrapper.indexOf("a=A(H,")
+        val checked = wrapper.indexOf("at(a)")
+        assertTrue("the options are read, then the address is resolved, then it is checked: $wrapper", read in 0 until resolved && resolved < checked)
+        assertEquals("the options are read once: $wrapper", read, wrapper.lastIndexOf("cp("))
+        assertTrue("nothing is read after the check but the copies: $wrapper", wrapper.endsWith("return o===undefined?K(C,[a]):K(C,[a,o])};"))
     }
 
     @Test
@@ -127,7 +141,7 @@ class WebRulesTest {
             assertTrue("$getter is taken at the start", script.contains(getter))
         }
         // What runs when a page's script calls a wrapper: the check, the copy of the options and the wrapper itself.
-        val called = listOf("var at=function(a){", "var cp=function(q,s){", "var N=function(u,q){").map { start ->
+        val called = listOf("var at=function(a){", "var T=function(v){", "var cp=function(q,s){", "var N=function(u,q){").map { start ->
             val from = script.indexOf(start)
             assertTrue("$start is in the script", from >= 0)
             script.substring(from, script.indexOf("};", from) + 2)

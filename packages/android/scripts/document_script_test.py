@@ -1,6 +1,7 @@
 """Runs the script that is put at the start of every document of the web view, as the Kotlin source builds it, in node
 against stand-ins for the page's `WebSocket` and `Worker`, and tries what a page's own script could try after it: an
-address that converts differently the second time, and every global and prototype method the page can replace.
+address that converts differently the second time, a base put into the document while a socket or a worker is being
+made, and every global and prototype method the page can replace.
 
     python3 -I packages/android/scripts/document_script_test.py
 
@@ -33,6 +34,7 @@ CHANGES = [
     "arrays",
     "domexception",
     "regexp",
+    "array iterator",
 ]
 
 
@@ -94,6 +96,35 @@ class DocumentScriptTest(unittest.TestCase):
             self.assertTrue(o["plain"], "the options are the script's own object, not the page's")
             self.assertEqual(["name", "type", "credentials"], o["keys"], "and only the fields a worker is made with")
         self.assertEqual("n0", self.seen["optionName"], "a field is read once")
+
+    def test_a_base_the_pages_code_puts_in_while_a_socket_or_a_worker_is_made_changes_nothing(self):
+        # A page's own code runs when its address, its options and its list of protocols are read, and can move the
+        # document's base then. All of it is read before the check, so the address is checked where the base then
+        # points; what the engine reads after the check finds the address already absolute.
+        results = self.seen["results"]
+        for name in (
+            "base moved while the protocols are read",
+            "base moved while a worker's options are read",
+            "base moved while a worker's option is turned into a string",
+            "a blob base set while a worker's options are read",
+        ):
+            self.assertEqual("refused SecurityError", results[name], name)
+        self.assertEqual("made", results["base moved while the engine reads the list it is handed"])
+        self.assertIn("http://localhost:8080/x2", self.seen["sockets"])
+        for change, seen in self.runs.items():
+            with self.subTest(change=change):
+                reached = [a for a in seen["sockets"] + seen["workers"] if "other.example" in a or a.startswith(("blob:", "data:"))]
+                self.assertEqual([], reached, f"what the real constructors were given after the page changed {change}")
+
+    def test_the_real_constructor_is_handed_the_absolute_address_that_was_checked_and_copies_that_run_nothing(self):
+        for change, seen in self.runs.items():
+            with self.subTest(change=change):
+                self.assertTrue(seen["given"], change)
+                for given in seen["given"]:
+                    self.assertRegex(given, r"^(ws|wss|http|https)://", f"an absolute address after the page changed {change}")
+                for o in seen["options"]:
+                    if isinstance(o, dict):
+                        self.assertTrue(all(kind in ("string", "undefined") for kind in o["kinds"]), f"a worker's options are strings: {o}")
 
     def test_nothing_is_emptied_for_a_document_of_the_app(self):
         self.assertFalse(self.seen["emptied"])

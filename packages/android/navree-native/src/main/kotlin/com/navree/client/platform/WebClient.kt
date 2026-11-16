@@ -145,12 +145,17 @@ object WebRules {
      * `WebSocketStream`, `Worker` and `SharedWorker`, which are not requests the
      * web view's client is asked about: one is made only for an address on the
      * [origins], the app's own and its web hosts' (so never from a `blob:` or
-     * `data:` address). What the page hands
-     * over is turned into a string once; that string, resolved against the
-     * document's real base, is what is checked, and it is what the real
-     * constructor gets, so an object whose conversion answers differently the
-     * second time gets nowhere. Everything the check calls is taken when the
-     * script starts, before any script of the page, and is called only through
+     * `data:` address). What the page hands over is read once, before the
+     * check, into copies of the script's own: the address turned into a
+     * string, a list of protocols into an array of strings, a worker's options
+     * into strings. The address is then resolved against the document's base
+     * as it is at that moment, that absolute address is what is checked, and
+     * the real constructor gets that same absolute address and the copies. So
+     * an object whose conversion answers differently the second time gets
+     * nowhere, and neither does a base element the page's code puts into the
+     * document while its options are read or after. Everything the check
+     * calls is taken when the script starts, before any script of the page,
+     * and is called only through
      * the saved `Reflect.apply` and `Reflect.construct`: a global, a method or a
      * getter the page replaces afterwards is never used. It holds for the scripts
      * of the document and of its frames that are given a document, not the empty
@@ -194,13 +199,17 @@ object WebRules {
             // Neither a socket nor a worker is a request the web view's client is asked about, and a
             // document-start script does not run inside a worker: the page's own scripts may open a
             // socket or start a worker only where its loads may go (never from a `blob:` or `data:`
-            // address). What the page hands over is turned into a string once, that string is resolved against
-            // the document's real base and checked, and it is what the real constructor gets; the options are
-            // copied into objects of the script's own.
+            // address). Everything of the page's that can run while one is made is read once, first: the address
+            // turned into a string, a list of protocols and the fields of the options copied into strings and
+            // objects of the script's own. Then the address is resolved against the document's base as it is at
+            // that moment, that absolute address is checked, and the real constructor gets it and the copies:
+            // nothing the page's code does afterwards (a base element it puts in, a list's iterator it replaced)
+            // changes where the socket or the worker goes.
+            "var T=function(v){return v===undefined?v:S(v)};" +
             "var cp=function(q,s){if(q===null||typeof q!=='object'&&typeof q!=='function')return s===1?S(q):q;if(s===1)return A(F,Y,[q,S]);" +
-            "if(s===2){var v=q.protocols;return{protocols:v===undefined?v:A(F,Y,[v,S]),signal:q.signal}}return{name:q.name,type:q.type,credentials:q.credentials}};" +
-            "var wrap=function(k,s){var C=W[k];if(!C)return;var N=function(u,q){var x=S(u),a=A(H,K(U,[x,A(B,D,[])]),[]);" +
-            "if(!at(a))throw K(E,['Not allowed','SecurityError']);return q===undefined?K(C,[x]):K(C,[x,cp(q,s)])};" +
+            "if(s===2){var v=q.protocols;return{protocols:v===undefined?v:A(F,Y,[v,S]),signal:q.signal}}return{name:T(q.name),type:T(q.type),credentials:T(q.credentials)}};" +
+            "var wrap=function(k,s){var C=W[k];if(!C)return;var N=function(u,q){var x=S(u),o=q===undefined?q:cp(q,s),a=A(H,K(U,[x,A(B,D,[])]),[]);" +
+            "if(!at(a))throw K(E,['Not allowed','SecurityError']);return o===undefined?K(C,[a]):K(C,[a,o])};" +
             "N.prototype=C.prototype;C.prototype.constructor=N;var c=['CONNECTING','OPEN','CLOSING','CLOSED'];for(var j=0;j<c.length;j++)if(c[j] in C)N[c[j]]=C[c[j]];W[k]=N};" +
             "wrap('WebSocket',1);wrap('WebSocketStream',2);wrap('Worker');wrap('SharedWorker');" +
             "var o=W.origin;if(o!=='null'){if(!at(o))stop();return}" +

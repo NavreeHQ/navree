@@ -417,6 +417,12 @@ class WebWorkersTest {
             madeOrRefused("constructor", "new (new Worker('/own.js').constructor)(URL.createObjectURL(new Blob([\"${socketOfTheWorker()}\"], {type: 'text/javascript'})))") +
             // An address that answers one thing the first time it is turned into a string and a blob address the second.
             madeOrRefused("toString", "var n = 0, b = URL.createObjectURL(new Blob([\"${socketOfTheWorker()}\"], {type: 'text/javascript'})); new Worker({toString: function(){ return n++ ? b : '/own.js' }})") +
+            // A base element put into the document while the worker's options are read, which makes "#" a blob address.
+            madeOrRefused(
+                "base",
+                "var wb = document.createElement('base'); wb.href = URL.createObjectURL(new Blob([\"${socketOfTheWorker()}\"], {type: 'text/javascript'})); " +
+                    "try { new Worker('#', {get name(){ document.head.appendChild(wb); return '' }}) } finally { wb.remove() }",
+            ) +
             "</script>"
 
     @Test
@@ -424,11 +430,12 @@ class WebWorkersTest {
         documentChecks()
         serve({ workersOfTheirOwnAddress() }, { mapOf("/own.js" to "1;") })
         openedBy(Origins(base, loopbackHttp = true))
-        waitForSaid(5)
+        waitForSaid(6)
         settle("workers-from-addresses.txt", "with the check at the start of every document")
         assertEquals(
-            "a blob, a data and one made through another worker's constructor are refused; one of the app's own is made, and so is the one whose address is turned into a string once",
-            listOf("blob-refused", "data-refused", "own-made", "constructor-refused", "toString-made").sorted(),
+            "a blob, a data, one made through another worker's constructor and one whose address a base put in while its options were read makes a blob's are refused; " +
+                "one of the app's own is made, and so is the one whose address is turned into a string once",
+            listOf("blob-refused", "data-refused", "own-made", "constructor-refused", "toString-made", "base-refused").sorted(),
             said.sorted(),
         )
         assertEquals("nothing reached the other origin: $otherAsked", emptyList<String>(), otherAsked.toList())
@@ -438,7 +445,7 @@ class WebWorkersTest {
     fun aWorkerMadeFromABlobAddressRunsAndReachesAnotherOriginWhereNothingChecksTheDocument() {
         serve({ workersOfTheirOwnAddress() }, { mapOf("/own.js" to "1;") })
         openedBy(Origins(base, loopbackHttp = true), documents = false)
-        waitForSaid(5)
+        waitForSaid(6)
         assertTrue("the worker's socket reached the other origin: $otherAsked", waitFor(15) { otherAsked.any { it.startsWith("UPGRADE") } })
         settle("workers-from-addresses-control.txt", "without the check at the start of every document")
         assertTrue("a blob worker was made: $said", said.contains("blob-made"))
@@ -453,6 +460,12 @@ class WebWorkersTest {
             madeOrRefused("own", "var t = new WebSocket('ws://localhost:${app.port}/own-socket')") +
             // An object that answers the app's own socket the first time it is turned into a string and the other server the second.
             madeOrRefused("toString", "var n = 0; new WebSocket({toString: function(){ return n++ ? 'ws://localhost:${other.port}/socket' : 'ws://localhost:${app.port}/own-socket' }})") +
+            // A base element put into the document while the list of protocols is read, which sends a relative address to the other server.
+            madeOrRefused(
+                "base",
+                "var sb = document.createElement('base'); sb.href = 'http://localhost:${other.port}/'; " +
+                    "try { new WebSocket('socket', {[Symbol.iterator]: function*(){ document.head.appendChild(sb) }}) } finally { sb.remove() }",
+            ) +
             "</script>"
 
     @Test
@@ -460,9 +473,9 @@ class WebWorkersTest {
         documentChecks()
         serve({ socketsOfThePage() })
         openedBy(Origins(base, loopbackHttp = true))
-        waitForSaid(4)
+        waitForSaid(5)
         settle("socket-asked.txt", "with the check at the start of every document")
-        assertEquals("what the page was told", listOf("direct-refused", "constructor-refused", "own-made", "toString-made").sorted(), said.sorted())
+        assertEquals("what the page was told", listOf("direct-refused", "constructor-refused", "own-made", "toString-made", "base-refused").sorted(), said.sorted())
         assertEquals("a socket reached another origin: $otherAsked", emptyList<String>(), otherAsked.toList())
         assertTrue("the page's own socket opens: $ownSockets", waitFor(5) { ownSockets.isNotEmpty() })
     }
@@ -551,7 +564,7 @@ class WebWorkersTest {
     fun aSocketReachesAnotherOriginWhereNothingChecksTheDocument() {
         serve({ socketsOfThePage() })
         openedBy(Origins(base, loopbackHttp = true), documents = false)
-        waitForSaid(4)
+        waitForSaid(5)
         assertTrue("the socket reached the other origin: $otherAsked", waitFor(10) { otherAsked.any { it.startsWith("UPGRADE") } })
         settle("socket-control.txt", "without the check at the start of every document")
     }

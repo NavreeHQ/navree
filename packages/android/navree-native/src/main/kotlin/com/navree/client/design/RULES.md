@@ -453,8 +453,11 @@ With nothing opened, the list has the window.
   a socket or start a worker only for an address on the app's origins or a
   host the app names for the web view (`webHosts`), checked
   by the script at the start of every document with what it took before any
-  script of the page ran; so it holds against a page's scripts that run after
-  it, in the documents it runs in. Two ways round it remain: the first, empty
+  script of the page ran. What the page hands over is read once, before the
+  check, and the real constructor gets the absolute address that was checked;
+  so it holds against a page's scripts that run after it, in the documents it
+  runs in, whatever they put into the document while a socket or a worker is
+  made. Two ways round it remain: the first, empty
   document of a frame the page creates, where the script does not run, which
   gives an unchecked socket and worker; and what a script does inside a
   worker. What holds in every case is the policy the app's server sends

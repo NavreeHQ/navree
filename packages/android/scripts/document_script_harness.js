@@ -1,5 +1,6 @@
 // document_script_harness.js <script.js> [change]: runs the document script in a stand-in page, lets the page change
-// what it likes after the script ran (the [change] named), then tries to open sockets and start workers.
+// what it likes after the script ran (the [change] named), then tries to open sockets and start workers, some of them
+// with code of the page's own that runs while one is being made.
 const fs = require("fs");
 const source = fs.readFileSync(process.argv[2], "utf8");
 const change = process.argv[3] || "none";
@@ -25,13 +26,23 @@ const sockets = [];
 const workers = [];
 const protocols = [];
 const options = [];
-// The engine's own constructors: an address is turned into a string and resolved against the document's real base.
+const given = [];
+// The engine's own constructors. Every argument is converted first, as the engine does it: the address is turned into
+// a string, a list of protocols is read through its iterator and each one turned into a string, and each field of a
+// worker's options is read and turned into a string. Only then is the address resolved against the document's real
+// base, as it is at that moment.
+const readList = (p) => { if (p === null || typeof p !== "object") return; for (const v of p) Str(v); };
+const readFields = (o) => {
+  if (o === null || typeof o !== "object") return;
+  const names = ["credentials", "name", "type"];
+  for (let i = 0; i < names.length; i++) { const v = o[names[i]]; if (v !== undefined) Str(v); }
+};
 class FakeWebSocket {
-  constructor(u, p) { push(sockets, resolve(u)); push(protocols, p); }
+  constructor(u, p) { const address = Str(u); readList(p); push(given, u); push(sockets, resolve(address)); push(protocols, p); }
 }
 FakeWebSocket.CONNECTING = 0; FakeWebSocket.OPEN = 1; FakeWebSocket.CLOSING = 2; FakeWebSocket.CLOSED = 3;
 class FakeWorker {
-  constructor(u, o) { push(workers, resolve(u)); push(options, o); }
+  constructor(u, o) { const address = Str(u); readFields(o); push(given, u); push(workers, resolve(address)); push(options, o); }
 }
 class FakeNode {
   get baseURI() { return page.base; }
@@ -107,6 +118,12 @@ const changes = {
     RegExp.prototype.test = function () { return true; };
     RegExp.prototype.exec = function () { return [own]; };
   },
+  "array iterator"() {
+    // What every list is read with, the engine's reading of the list it is handed too: here it also sends a relative
+    // address elsewhere from then on.
+    const real = Array.prototype[Symbol.iterator];
+    Array.prototype[Symbol.iterator] = function () { page.base = "ws://other.example:8080/"; return apply(real, this, []); };
+  },
 };
 changes[change]();
 
@@ -139,7 +156,30 @@ attempt("constructor", () => new (new WebSocket("ws://localhost:8080/own").const
 let m = 0;
 attempt("protocols", () => new WebSocket("ws://localhost:8080/p", { [Symbol.iterator]: function* () { yield "a"; yield "b"; } }));
 attempt("options", () => new Worker("/o.js", { get name() { return "n" + m++; }, type: "module", credentials: "omit", extra: 1 }));
-
-const plain = (o) => o !== undefined && o !== null && typeof o === "object" && !isArray(o) ? { plain: protoOf(o) === Object.prototype, keys: keysOf(o) } : o;
 const last = options.length ? options[options.length - 1] : null;
-write(stringify({ change, results, sockets, workers, emptied, protocols: each(protocols, (q) => (isArray(q) ? q : plain(q))), options: each(options, plain), optionName: last && last.name }) + "\n");
+
+// What the page's own code can do while a socket or a worker is being made: put another base into the document. The
+// base is put back after each, so the next starts where this one did.
+function moving(name, fn) {
+  const before = page.base;
+  attempt(name, fn);
+  page.base = before;
+}
+const elsewhere = "http://other.example:8080/";
+moving("base moved while the protocols are read", () => new WebSocket("x1", { [Symbol.iterator]: function* () { page.base = elsewhere; yield "a"; } }));
+moving("base moved while a worker's options are read", () => new Worker("moved.js", { get name() { page.base = elsewhere; return "w"; } }));
+moving("base moved while a worker's option is turned into a string", () => new Worker("late.js", { name: { toString() { page.base = elsewhere; return "w"; } } }));
+moving("a blob base set while a worker's options are read", () => new Worker("#", { get type() { page.base = "blob:http://localhost:8080/abc"; return "classic"; } }));
+// The list the real constructor is handed is read by the engine through the arrays' own iterator, which the page
+// replaced: the first reading is the document script's copy, and from the second the base is moved.
+moving("base moved while the engine reads the list it is handed", () => {
+  const real = Array.prototype[Symbol.iterator];
+  let reads = 0;
+  Array.prototype[Symbol.iterator] = function () { if (reads++) page.base = elsewhere; return apply(real, this, []); };
+  try { return new WebSocket("x2", ["a"]); } finally { Array.prototype[Symbol.iterator] = real; }
+});
+
+const kindsOf = (o) => each(keysOf(o), (k) => typeof o[k]);
+const plain = (o) => o !== undefined && o !== null && typeof o === "object" && !isArray(o) ? { plain: protoOf(o) === Object.prototype, keys: keysOf(o), kinds: kindsOf(o) } : o;
+const handed = each(given, (g) => (typeof g === "string" ? g : "not a string"));
+write(stringify({ change, results, sockets, workers, emptied, given: handed, protocols: each(protocols, (q) => (isArray(q) ? q : plain(q))), options: each(options, plain), optionName: last && last.name }) + "\n");
