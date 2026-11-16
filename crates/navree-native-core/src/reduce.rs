@@ -3434,6 +3434,24 @@ mod tests {
     /// 413 that names nobody, on the first hop) is the row simply put back.
     #[test]
     fn a_move_whose_answer_does_not_say_counts_as_a_write() {
+        // The framework answers a native client's error in the native format.
+        let native = |status: u16, names_her: bool| {
+            Response {
+            status,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            headers: if names_her {
+                vec![(
+                    "x-navree-person".to_owned(),
+                    "0193a4b2-0000-7000-8000-00000000ra01".to_owned(),
+                )]
+            } else {
+                Vec::new()
+            },
+            body: r#"{"navree":1,"build":"b1","vocab":0,"ops":[{"op":"toast","text":"That didn't work"}]}"#
+                .to_owned(),
+            ..Response::default()
+        }
+        };
         let json = |status: u16| Response {
             status,
             content_type: Some("application/json".to_owned()),
@@ -3452,6 +3470,13 @@ mod tests {
             ("a 503", json(503), true),
             ("a 429", json(429), true),
             ("a 413 that names nobody", json(413), false),
+            ("a 503 in the native format", native(503, false), true),
+            ("a 429 in the native format", native(429, false), true),
+            (
+                "a 422 that names her, in the native format",
+                native(422, true),
+                false,
+            ),
         ];
         for (what, answer, counts) in cases {
             let mut core = started();
