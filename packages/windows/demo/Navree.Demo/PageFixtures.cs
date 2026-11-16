@@ -35,8 +35,21 @@ internal sealed class PageFetcher(string corpus) : IFetcher
           {"t":"button","label":"New customer","action":{"t":"navigate","href":"/customers/new"}},
           {"t":"button","label":"A slow order","action":{"t":"navigate","href":"/orders/slow","present":"sheet"}},
           {"t":"button","label":"An order beside","action":{"t":"navigate","href":"/orders/beside"}},
-          {"t":"button","label":"A ledger","action":{"t":"navigate","href":"/ledger"}}]}}}
+          {"t":"button","label":"A ledger","action":{"t":"navigate","href":"/ledger"}},
+          {"t":"button","label":"Preferences","action":{"t":"navigate","href":"/preferences"}}]}}}
         """;
+
+    // A form whose fields are not boxes of words: ticks, a time, a day and a number. The first answer holds what a person saved; every later
+    // one is the same form, fresh, as a server answers it to add another: no tick, another time, no day, another number.
+    private const string Preferences = """
+        {"navree":1,"build":"3f9a1c07b2de","vocab":0,"screen":{"title":"Preferences","body":{"t":"stack","gap":3,"children":[{"t":"form","id":"preferences","action":"/preferences","children":[
+          {"t":"field","name":"contact","id":"contact","label":"How to reach Harpreet Kaur","input":{"t":"choices","options":[{"value":"email","label":"Email me"},{"value":"sms","label":"SMS me"},{"value":"post","label":"Write to me"}],"values":TICKS}},
+          {"t":"field","name":"call_at","id":"call-at","label":"Call at","input":{"t":"date","kind":"time","value":"TIME"}},
+          {"t":"field","name":"visit_on","id":"visit-on","label":"Visit on","input":{"t":"date","value":"DAY"}},
+          {"t":"field","name":"discount","id":"discount","label":"Discount","input":{"t":"slider","min":"0","max":"100","value":"NUMBER"}}]}]}}}
+        """;
+
+    private int preferencesAsked;
 
     // A table whose query form has no id, so it is known by its address; the first answer puts it at /ledger with an empty search, every later one
     // at /ledger/paid (a filter carried in the address) with the search the server says it holds.
@@ -113,6 +126,15 @@ internal sealed class PageFetcher(string corpus) : IFetcher
             string page = ledgerAsked == 1
                 ? Ledger.Replace("ACTION", "/ledger", StringComparison.Ordinal).Replace("VALUE", string.Empty, StringComparison.Ordinal)
                 : Ledger.Replace("ACTION", "/ledger/paid", StringComparison.Ordinal).Replace("VALUE", LedgerSearch, StringComparison.Ordinal);
+            return new FetchResult(200, "application/vnd.navree.native+json", null, [], page, null);
+        }
+
+        if (path == "/preferences")
+        {
+            preferencesAsked++;
+            string page = preferencesAsked == 1
+                ? Preferences.Replace("TICKS", "[\"email\",\"sms\"]", StringComparison.Ordinal).Replace("TIME", "09:00", StringComparison.Ordinal).Replace("DAY", "2026-11-20", StringComparison.Ordinal).Replace("NUMBER", "40", StringComparison.Ordinal)
+                : Preferences.Replace("TICKS", "[]", StringComparison.Ordinal).Replace("TIME", "10:30", StringComparison.Ordinal).Replace("DAY", string.Empty, StringComparison.Ordinal).Replace("NUMBER", "10", StringComparison.Ordinal);
             return new FetchResult(200, "application/vnd.navree.native+json", null, [], page, null);
         }
 
