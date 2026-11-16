@@ -24,7 +24,8 @@ public static class FileRules
     // Extension (no dot) to media type: the kinds a person is likely to attach. A kind not here is sent as application/octet-stream.
     private static readonly Dictionary<string, string> Types = new(StringComparer.Ordinal)
     {
-        ["jpg"] = "image/jpeg", ["jpeg"] = "image/jpeg", ["jpe"] = "image/jpeg", ["png"] = "image/png", ["gif"] = "image/gif",
+        ["jpg"] = "image/jpeg", ["jpeg"] = "image/jpeg", ["jpe"] = "image/jpeg", ["jfif"] = "image/jpeg", ["jfi"] = "image/jpeg", ["jif"] = "image/jpeg",
+        ["png"] = "image/png", ["gif"] = "image/gif",
         ["webp"] = "image/webp", ["bmp"] = "image/bmp", ["tif"] = "image/tiff", ["tiff"] = "image/tiff", ["heic"] = "image/heic",
         ["heif"] = "image/heif", ["avif"] = "image/avif", ["svg"] = "image/svg+xml", ["ico"] = "image/vnd.microsoft.icon",
         ["jxl"] = "image/jxl", ["dng"] = "image/x-adobe-dng",

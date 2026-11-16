@@ -53,13 +53,20 @@ public sealed class PickedFiles
         ArgumentException.ThrowIfNullOrEmpty(path);
         ArgumentNullException.ThrowIfNull(rule);
         string name = FileRules.DisplayName(path);
-        string type = FileRules.MediaTypeOf(name);
         try
         {
             FileInfo info = new(path);
             if (!info.Exists)
             {
                 return new Picked(null, name + " could not be read, so it was not added.");
+            }
+
+            // What the file is comes from its first bytes, whatever its name says: a photo saved as .jfif, or with no extension at all, is a photo.
+            byte[] head = await HeadAsync(path, cancel).ConfigureAwait(false);
+            string type = FileRules.MediaTypeOf(name);
+            if (type == FileRules.Unknown && PlaceKinds.MediaTypeOf(PlaceKinds.KindOf(head)) is { } read)
+            {
+                type = read;
             }
 
             if (FileRules.Refuse(name, type, info.Length, heldBytes, rule.Accept, rule.MostBytes) is { } refusal)
@@ -71,7 +78,7 @@ public sealed class PickedFiles
             string at = path;
             bool copy = false;
             long size = info.Length;
-            if (PlaceRules.IsPicture(type) && !rule.KeepLocation)
+            if (!rule.KeepLocation && PlaceRules.MustLook(head, type))
             {
                 byte[] bytes = await File.ReadAllBytesAsync(path, cancel).ConfigureAwait(false);
                 PlaceResult result = PlaceRules.TakeOut(bytes, name);
@@ -86,11 +93,6 @@ public sealed class PickedFiles
                 copy = true;
                 size = bytes.Length;
             }
-            else
-            {
-                // A file is opened once to know it can be read at all; what is sent is read when the request is written.
-                await using FileStream probe = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1, FileOptions.Asynchronous);
-            }
 
             held[token] = new Entry(at, copy);
             return new Picked(new FileRef(token, name, type, size), null);
@@ -99,6 +101,26 @@ public sealed class PickedFiles
         {
             return new Picked(null, name + " could not be read, so it was not added.");
         }
+    }
+
+    // The first bytes of a file, as many as say what kind of file it is; reading them also shows that the file can be read at all.
+    private static async Task<byte[]> HeadAsync(string path, CancellationToken cancel)
+    {
+        await using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1, FileOptions.Asynchronous);
+        byte[] head = new byte[PlaceKinds.Head];
+        int read = 0;
+        while (read < head.Length)
+        {
+            int got = await stream.ReadAsync(head.AsMemory(read), cancel).ConfigureAwait(false);
+            if (got == 0)
+            {
+                break;
+            }
+
+            read += got;
+        }
+
+        return head[..read];
     }
 
     /// <summary>Opens the file held under a token, to be read from its start; null when it is not held or can no longer be read.</summary>

@@ -185,6 +185,92 @@ public sealed class PickedFilesTests
         Assert.AreEqual("image/heic", FileRules.MediaTypeOf("iPhone-photo.heic"));
     }
 
+    private static async Task<byte[]> SentAsync(PickedFiles files, Picked picked)
+    {
+        await using Stream stream = files.Open(picked.File!.Token)!;
+        using MemoryStream sent = new();
+        await stream.CopyToAsync(sent);
+        return sent.ToArray();
+    }
+
+    private static readonly byte[] Latitude = [30, 0, 0, 0, 1, 0, 0, 0, 54];
+
+    [TestMethod]
+    [DataRow("Golden Temple, Amritsar.jfif")]
+    [DataRow("Golden Temple, Amritsar.JFIF")]
+    [DataRow("IMG_20261116_101500")]
+    [DataRow("Golden Temple, Amritsar.txt")]
+    [DataRow("Golden Temple, Amritsar.pdf")]
+    public async Task A_photo_is_known_by_its_bytes_whatever_its_name_says_and_its_place_is_taken_out(string name)
+    {
+        PickedFiles files = new(copies);
+        byte[] photo = PhotoWithPlace();
+
+        Picked picked = await files.AddAsync(Write(name, photo), Rule(accept: null), 0, CancellationToken.None);
+
+        Assert.IsNull(picked.Refusal, picked.Refusal);
+        byte[] sent = await SentAsync(files, picked);
+        Assert.AreEqual(photo.Length, sent.Length);
+        Assert.IsTrue(sent.AsSpan().IndexOf(Latitude) < 0, "the latitude is not in what is sent");
+        Assert.IsTrue(photo.AsSpan().IndexOf(Latitude) >= 0);
+    }
+
+    [TestMethod]
+    public async Task A_photo_named_jfif_or_with_no_name_of_its_kind_is_sent_as_a_jpeg_picture()
+    {
+        PickedFiles files = new(copies);
+
+        Picked jfif = await files.AddAsync(Write("Patiala fort.jfif", PhotoWithPlace()), Rule(accept: "image/*"), 0, CancellationToken.None);
+        Picked bare = await files.AddAsync(Write("IMG_20261116_101500", PhotoWithPlace()), Rule(accept: null), 0, CancellationToken.None);
+
+        Assert.AreEqual("image/jpeg", jfif.File?.MediaType, jfif.Refusal);
+        Assert.AreEqual("image/jpeg", bare.File?.MediaType, bare.Refusal);
+    }
+
+    [TestMethod]
+    [DataRow("heic", "IMG_4410")]
+    [DataRow("avif", "IMG_4410.bin")]
+    [DataRow("mif1", "IMG_4410.jpg")]
+    public async Task A_picture_of_the_heif_family_is_known_by_its_brand_and_refused_whatever_its_name_says(string brand, string name)
+    {
+        PickedFiles files = new(copies);
+        byte[] heif = [0, 0, 0, 24, .. "ftyp"u8.ToArray(), .. Encoding.ASCII.GetBytes(brand), 0, 0, 0, 0, .. "mif1"u8.ToArray(), .. Encoding.ASCII.GetBytes(brand), 0, 0, 0, 8, .. "free"u8.ToArray()];
+
+        Picked picked = await files.AddAsync(Write(name, heif), Rule(accept: null), 0, CancellationToken.None);
+
+        Assert.IsNull(picked.File, "a picture whose place cannot be taken out is not held");
+        StringAssert.StartsWith(picked.Refusal, name + ": The place it was taken cannot be taken out of ");
+    }
+
+    [TestMethod]
+    [DataRow(new byte[] { 0xFF, 0x0A, 0xFA, 0x7F, 0x01, 0x90 }, "JPEG XL")]
+    [DataRow(new byte[] { 0, 0, 0, 0x0C, 0x4A, 0x58, 0x4C, 0x20, 0x0D, 0x0A, 0x87, 0x0A, 0, 0, 0, 0 }, "JPEG XL")]
+    [DataRow(new byte[] { 0, 0, 0, 0x0C, 0x6A, 0x50, 0x20, 0x20, 0x0D, 0x0A, 0x87, 0x0A, 0, 0, 0, 0 }, "JPEG 2000")]
+    [DataRow(new byte[] { 0x49, 0x49, 0x2B, 0x00, 0x08, 0x00, 0x00, 0x00 }, "BigTIFF")]
+    public async Task A_picture_of_a_kind_the_place_cannot_be_taken_out_of_is_refused_by_its_bytes_even_with_no_name_of_its_kind(byte[] bytes, string kind)
+    {
+        PickedFiles files = new(copies);
+
+        Picked picked = await files.AddAsync(Write("from-the-phone", bytes), Rule(accept: null), 0, CancellationToken.None);
+
+        Assert.IsNull(picked.File);
+        StringAssert.Contains(picked.Refusal, kind);
+    }
+
+    [TestMethod]
+    public async Task A_video_and_a_paper_are_not_pictures_and_are_sent_as_they_are()
+    {
+        PickedFiles files = new(copies);
+        byte[] video = [0, 0, 0, 20, .. "ftyp"u8.ToArray(), .. "isom"u8.ToArray(), 0, 0, 2, 0, .. "mp41"u8.ToArray(), 0, 0, 0, 8, .. "free"u8.ToArray()];
+        byte[] paper = [.. "%PDF-1.7\n"u8.ToArray(), .. Bytes(500, 9)];
+
+        Picked clip = await files.AddAsync(Write("Lohri at Jalandhar", video), Rule(accept: null), 0, CancellationToken.None);
+        Picked bill = await files.AddAsync(Write("bill", paper), Rule(accept: null), 0, CancellationToken.None);
+
+        CollectionAssert.AreEqual(video, await SentAsync(files, clip));
+        CollectionAssert.AreEqual(paper, await SentAsync(files, bill));
+    }
+
     [TestMethod]
     public async Task Clearing_lets_go_of_every_file_deletes_the_copies_and_a_copy_left_by_an_earlier_run_goes_when_the_registry_is_made()
     {

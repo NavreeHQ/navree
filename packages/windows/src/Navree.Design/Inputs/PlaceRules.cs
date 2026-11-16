@@ -45,50 +45,53 @@ public static class PlaceRules
     public static PlaceResult TakeOut(byte[] file, string name)
     {
         ArgumentNullException.ThrowIfNull(file);
-        string type = FileRules.MediaTypeOf(name);
+        PictureKind kind = PlaceKinds.KindOf(file.AsSpan(0, Math.Min(file.Length, PlaceKinds.Head)));
         try
         {
-            if (Is(file, [0xFF, 0xD8, 0xFF]))
+            switch (kind)
             {
-                return Done(Jpeg(file));
-            }
-
-            if (Is(file, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
-            {
-                return Done(Png(file));
-            }
-
-            if (Is(file, "RIFF"u8) && file.Length >= 12 && Is(file.AsSpan(8), "WEBP"u8))
-            {
-                return Done(Webp(file));
-            }
-
-            if (Is(file, "II*\0"u8) || Is(file, "MM\0*"u8))
-            {
-                return Done(Exif(file, 0, file.Length));
-            }
-
-            if (Is(file, "GIF8"u8) || Is(file, "BM"u8) || type == "image/svg+xml")
-            {
-                return Contains(file, "GPSLatitude"u8) || Contains(file, "GPSLongitude"u8) ? Refuse(type) : new PlaceResult(PlaceOutcome.None);
+                case PictureKind.Jpeg:
+                    return Done(Jpeg(file));
+                case PictureKind.Png:
+                    return Done(Png(file));
+                case PictureKind.Webp:
+                    return Done(Webp(file));
+                case PictureKind.Tiff:
+                    return Done(Exif(file, 0, file.Length));
+                case PictureKind.Gif or PictureKind.Bmp or PictureKind.Svg:
+                    return Contains(file, "GPSLatitude"u8) || Contains(file, "GPSLongitude"u8) ? Refuse(kind) : new PlaceResult(PlaceOutcome.None);
+                case PictureKind.NotAPicture:
+                    // Not a picture by its bytes: a file whose name says it is one may still hold a place nobody here can see.
+                    return IsPicture(FileRules.MediaTypeOf(name)) ? Unknown() : new PlaceResult(PlaceOutcome.None);
+                case PictureKind.OtherMedia:
+                    return Unknown();
+                default:
+                    return Refuse(kind);
             }
         }
         catch (FormatException)
         {
-            return Refuse(type);
+            return Refuse(kind);
         }
-
-        // Not one of the kinds above: a picture of another kind (or one whose bytes are not what its name says) may hold a place nobody here can see.
-        return IsPicture(type) ? Refuse(type) : new PlaceResult(PlaceOutcome.None);
     }
+
+    /// <summary>Whether a file must be looked into before it is sent from a field that does not keep the place: a picture by its bytes, or by its name.</summary>
+    /// <param name="head">The file's first bytes (<see cref="PlaceKinds.Head"/> of them, or all of a shorter file).</param>
+    /// <param name="mediaType">The media type its name says.</param>
+    /// <returns>True when it must be looked into.</returns>
+    public static bool MustLook(ReadOnlySpan<byte> head, string mediaType) => PlaceKinds.KindOf(head) != PictureKind.NotAPicture || IsPicture(mediaType);
 
     private static PlaceResult Done(bool removed) => new(removed ? PlaceOutcome.Removed : PlaceOutcome.None);
 
-    private static PlaceResult Refuse(string type)
+    private static PlaceResult Refuse(PictureKind kind)
     {
-        string kind = type.StartsWith("image/", StringComparison.Ordinal) ? type["image/".Length..].ToUpperInvariant() : "this kind of";
-        return new PlaceResult(PlaceOutcome.Refused, "The place it was taken cannot be taken out of a " + kind + " picture here, so it was not added. Save it as a JPEG or PNG picture and choose that.");
+        string named = PlaceKinds.Named(kind);
+        string article = named[0] is 'A' or 'E' or 'I' or 'O' or 'U' ? "an " : "a ";
+        return new PlaceResult(PlaceOutcome.Refused, "The place it was taken cannot be taken out of " + article + named + " picture here, so it was not added. Save it as a JPEG or PNG picture and choose that.");
     }
+
+    private static PlaceResult Unknown() =>
+        new(PlaceOutcome.Refused, "The place it was taken cannot be looked for in this file here, because its bytes are not those of a picture this client reads, so it was not added. Save it as a JPEG or PNG picture and choose that.");
 
     // ---- JPEG -------------------------------------------------------------------------------------------------
 

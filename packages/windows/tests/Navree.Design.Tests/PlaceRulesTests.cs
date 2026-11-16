@@ -288,6 +288,36 @@ public sealed class PlaceRulesTests
     }
 
     [TestMethod]
+    [DataRow(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 }, PictureKind.Jpeg)]
+    [DataRow(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, PictureKind.Png)]
+    [DataRow(new byte[] { 0x52, 0x49, 0x46, 0x46, 4, 0, 0, 0, 0x57, 0x45, 0x42, 0x50 }, PictureKind.Webp)]
+    [DataRow(new byte[] { 0x4D, 0x4D, 0, 0x2A, 0, 0, 0, 8 }, PictureKind.Tiff)]
+    [DataRow(new byte[] { 0x49, 0x49, 0x2B, 0, 8, 0, 0, 0 }, PictureKind.BigTiff)]
+    [DataRow(new byte[] { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61 }, PictureKind.Gif)]
+    [DataRow(new byte[] { 0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66, 0, 0, 0, 0 }, PictureKind.Avif)]
+    [DataRow(new byte[] { 0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70, 0x6D, 0x69, 0x66, 0x31, 0, 0, 0, 0, 0x68, 0x65, 0x69, 0x63 }, PictureKind.Heic)]
+    [DataRow(new byte[] { 0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20, 0, 0, 0, 0, 0x71, 0x74, 0x20, 0x20 }, PictureKind.NotAPicture)]
+    [DataRow(new byte[] { 0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70, 0x63, 0x72, 0x78, 0x20, 0, 0, 0, 0, 0x69, 0x73, 0x6F, 0x6D }, PictureKind.OtherMedia)]
+    [DataRow(new byte[] { 0xFF, 0x0A, 0xFA, 0x7F }, PictureKind.JpegXl)]
+    [DataRow(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D }, PictureKind.NotAPicture)]
+    [DataRow(new byte[] { 0xEF, 0xBB, 0xBF, 0x0A, 0x3C, 0x3F, 0x78, 0x6D, 0x6C, 0x3F, 0x3E, 0x3C, 0x53, 0x56, 0x47 }, PictureKind.Svg)]
+    public void The_kind_of_a_file_is_read_from_its_first_bytes(byte[] head, PictureKind kind)
+    {
+        Assert.AreEqual(kind, PlaceKinds.KindOf(head));
+    }
+
+    [TestMethod]
+    [DataRow("Golden Temple.jfif")]
+    [DataRow("Golden Temple")]
+    [DataRow("Golden Temple.txt")]
+    public void A_jpeg_is_cleaned_whatever_its_name_says(string name)
+    {
+        (byte[] block, _, _, _) = Exif(true);
+        byte[] file = Jpeg(block);
+        Assert.AreEqual(PlaceOutcome.Removed, PlaceRules.TakeOut(file, name).Outcome);
+    }
+
+    [TestMethod]
     public void A_jpeg_whose_place_runs_past_its_end_is_refused_not_sent()
     {
         (byte[] block, _, _, _) = Exif(true);
