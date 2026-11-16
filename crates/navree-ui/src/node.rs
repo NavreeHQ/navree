@@ -1325,9 +1325,10 @@ mod tests {
             IslandScript::new("clock", b"export function mount() {}", 1024).namespace("geo");
         static PLAIN_CLOCK: IslandScript =
             IslandScript::new("clock", b"export function mount() {}", 1024);
-        let element = |island: Island| match Node::from(island) {
-            Node::Element(element) => element,
-            other => panic!("an island is one element: {other:?}"),
+        let element = |island: Island| {
+            Node::from(island)
+                .into_element()
+                .expect("an island is one element")
         };
 
         let plugins = element(Island::new("clock", &CLOCK));
