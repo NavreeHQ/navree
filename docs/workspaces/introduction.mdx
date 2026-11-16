@@ -301,6 +301,22 @@ async fn index(
 
 `WorkspaceSwitcher::new("Agra").workspace("agra", "Agra", true).csrf(token)` builds one by hand, for a sidebar or a page of its own.
 
+**A card in the sidebar.** `.variant(SwitcherVariant::Card)` draws the button as a card as wide as its place, made for the sidebar's [header slot](/docs/ui/app-shell/#the-sidebar): the workspace's picture (`.media(..)`, such as its [initials](/docs/components/avatar/#initials)), its name over a second line (`.description(..)`) and a chevron at the end. It is filled with the theme's `card` colour, takes the `field` corner, draws its second line and chevron in the shell's muted text and its name as the sidebar's user name (see [themes](/docs/ui/themes/)). The picture is decorative: a screen reader hears the name. `.workspace_with(value, name, current, media)` puts a picture before a workspace's name in the menu too. The card changes how the button is drawn, never what the menu posts.
+
+```rust title="src/ui/shell.rs"
+use navree::prelude::*;
+use navree::ui::{AppPage, AppShell, Avatar};
+use navree::workspace::{SwitcherVariant, WorkspaceSwitcher};
+
+async fn deals(shell: AppShell, ws: CurrentWorkspace, switcher: WorkspaceSwitcher) -> AppPage {
+    let switcher = switcher
+        .variant(SwitcherVariant::Card)
+        .media(Avatar::initials(ws.name.clone()).solid())
+        .description("Ludhiana · Admin");
+    shell.header_slot(switcher).page("Deals")
+}
+```
+
 **Tables and pickers stay in the workspace.** A [DataTable](/docs/ui/data-table/), its CSV export, its bulk actions and a searched picker all start from the query you give them. Make it the workspace's: a `#[model(workspace)]` model scopes its own queries to the request's workspace (see [Workspaces and access](/docs/orm/workspaces-and-access/)), and `WorkspaceRepo::<M>::query(ws.id())` or `ws.scope(M::query())` does the same for other models. Add `.accessible(&ability, Read)` to keep only the rows the user may read.
 
 **Live streams stay in the workspace.** A [live region](/docs/ui/regions/) opens its stream with an ordinary request, so the stream's handler resolves the workspace like any page and takes `CurrentWorkspace`: send it only that workspace's events. Switching loads the next page in full, so every region and stream on it opens again inside the new workspace.

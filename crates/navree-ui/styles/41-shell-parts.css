@@ -1,0 +1,20 @@
+/*
+ * navree-ui's stylesheet: what the application shell draws only when an app asks for it, a sheet
+ * of its own that a page links when it draws one of these (`Uses::SHELL_PARTS`): a workspace
+ * switcher drawn as a card. The shell itself is drawn by the sheet every page loads.
+ */
+
+/* A workspace switcher as a card: the workspace's picture, its name over a second line and a
+ * chevron, as wide as its place. In the sidebar's header it lines up with the links' rows. */
+[data-slot=sidebar-header-slot]:has([data-slot=switcher-card]){padding-inline:0}
+[data-slot=switcher-card]{display:flex;align-items:center;gap:.625rem;width:100%;min-width:0;padding:.5rem;border:1px solid var(--line);border-radius:var(--radius-field,var(--radius));background:var(--card,var(--ink-1));color:var(--fg);text-align:start;cursor:pointer;
+  &:hover{background:var(--ink-2)}
+  & > [data-slot=icon]{flex:none;color:var(--shell-muted,var(--fg-3))}
+}
+[data-slot=switcher-media]{display:flex;flex:none}
+[data-slot=switcher-text]{display:flex;flex:1;flex-direction:column;min-width:0;line-height:1.25}
+[data-slot=switcher-name],[data-slot=switcher-description]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-slot=switcher-name]{font-size:var(--text-sidebar-user-size);font-weight:var(--text-sidebar-user-weight,500);line-height:var(--text-sidebar-user-line);letter-spacing:var(--text-sidebar-user-tracking);font-family:var(--text-sidebar-user-face)}
+[data-slot=switcher-description]{color:var(--shell-muted,var(--fg-3));font-size:12px}
+/* A workspace's picture in the menu, with the current one's tick at the end of its row. */
+[data-slot=menu-link] > [data-slot=switcher-media] ~ [data-slot=icon]{margin-inline-start:auto}

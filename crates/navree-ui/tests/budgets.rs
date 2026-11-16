@@ -683,6 +683,33 @@ fn the_table_styles_are_at_most_4_kb_gzip() {
     assert!(size("table-styles") <= 4 * 1024, "{}", size("table-styles"));
 }
 
+/// What a shell draws only when an app asks for it (a switcher drawn as a card, a bare mark,
+/// a slot at the sidebar's foot, the top bar's actions, a page heading with badges) is in a
+/// sheet of its own, linked by a page that draws one of them and by no other, so the sheet
+/// every page loads stays where it was.
+#[test]
+fn the_shell_parts_are_at_most_3_kb_gzip_and_come_only_with_what_draws_them() {
+    use navree_ui::el;
+
+    assert!(size("shell-parts") <= 3 * 1024, "{}", size("shell-parts"));
+    let text = |name: &str| {
+        std::str::from_utf8(get(name).unwrap_or_else(|| panic!("no asset {name}")).bytes)
+            .expect("a stylesheet is text")
+    };
+    assert!(text("shell-parts").contains("[data-slot=switcher-card]"));
+    assert!(!text("navree-ui").contains("[data-slot=switcher-card]"));
+    let shell = Shell::new("Agra")
+        .group(NavGroup::new("Sales").item(NavItem::new("Deals", "/deals").icon(icons::HANDSHAKE)));
+    let plain = shell.page("Deals", "/deals").to_view().to_html();
+    assert_eq!(linked(&plain).1, ["navree-ui"]);
+    let card = shell
+        .header_slot(el("button").slot("switcher-card").uses(Uses::SHELL_PARTS))
+        .page("Deals", "/deals")
+        .to_view()
+        .to_html();
+    assert_eq!(linked(&card).1, ["navree-ui", "shell-parts"]);
+}
+
 /// The asset names of the scripts and of the stylesheets `html` links, in the toolkit's order.
 fn linked(html: &str) -> (Vec<&'static str>, Vec<&'static str>) {
     let mut scripts = Vec::new();

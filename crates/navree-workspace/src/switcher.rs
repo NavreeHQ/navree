@@ -21,7 +21,7 @@ use crate::{DemoWorkspaces, WorkspaceConfig, WorkspaceRole, Workspaces};
 const DEFAULT_ID: &str = "ui-workspace-switcher";
 
 /// One workspace in the menu.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 struct Choice {
     /// What the form posts as `workspace`: a slug or an id.
     value: String,
@@ -29,6 +29,25 @@ struct Choice {
     name: String,
     /// Whether it is the workspace the page is in.
     current: bool,
+    /// Its picture before its name, when the app gives one.
+    media: Option<Node>,
+}
+
+/// How a [`WorkspaceSwitcher`]'s button is drawn. What it opens and what the
+/// menu posts are the same in each.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SwitcherVariant {
+    /// An outline button with the workspace's name and a chevron: the
+    /// default.
+    #[default]
+    Button,
+    /// A card as wide as its place: the workspace's picture
+    /// ([`media`](WorkspaceSwitcher::media)), its name over a second line
+    /// ([`description`](WorkspaceSwitcher::description)) and a chevron at
+    /// the end, in the theme's `card` colour and `field` corner. Made for
+    /// the sidebar's header slot, whose rows it lines up with.
+    Card,
 }
 
 /// A button showing the current workspace, and a menu of the user's
@@ -77,6 +96,9 @@ pub struct WorkspaceSwitcher {
     action: String,
     csrf: Option<String>,
     next: Option<String>,
+    variant: SwitcherVariant,
+    media: Option<Node>,
+    description: Option<Cow<'static, str>>,
 }
 
 impl WorkspaceSwitcher {
@@ -91,6 +113,9 @@ impl WorkspaceSwitcher {
             action: "/workspace/switch".to_owned(),
             csrf: None,
             next: None,
+            variant: SwitcherVariant::Button,
+            media: None,
+            description: None,
         }
     }
 
@@ -106,7 +131,52 @@ impl WorkspaceSwitcher {
             value: value.into(),
             name: name.into(),
             current,
+            media: None,
         });
+        self
+    }
+
+    /// Adds a workspace with its picture before its name in the menu, such
+    /// as its initials (`Avatar::initials(name).size(Size::Sm)`, which fits
+    /// the menu's rows). The picture is decorative: the name says which
+    /// workspace it is. The current one's tick moves to the end of its row.
+    pub fn workspace_with(
+        mut self,
+        value: impl Into<String>,
+        name: impl Into<String>,
+        current: bool,
+        media: impl Into<Node>,
+    ) -> Self {
+        self.choices.push(Choice {
+            value: value.into(),
+            name: name.into(),
+            current,
+            media: Some(media.into()),
+        });
+        self
+    }
+
+    /// Sets how the button is drawn: [`SwitcherVariant::Button`] by default,
+    /// or [`SwitcherVariant::Card`].
+    pub fn variant(mut self, variant: SwitcherVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
+    /// Sets the current workspace's picture, which the card draws before its
+    /// name: its initials (`Avatar::initials(name).solid()`) or its logo. It
+    /// is decorative, as the name beside it says which workspace it is. The
+    /// outline button draws no picture.
+    pub fn media(mut self, media: impl Into<Node>) -> Self {
+        self.media = Some(media.into());
+        self
+    }
+
+    /// Sets the card's second line, under the workspace's name: a place, a
+    /// role (`Ludhiana · Admin`). The outline button draws no second
+    /// line.
+    pub fn description(mut self, description: impl Into<Cow<'static, str>>) -> Self {
+        self.description = Some(description.into());
         self
     }
 
@@ -146,6 +216,12 @@ impl WorkspaceSwitcher {
     /// back to and the button.
     fn form(&self, choice: &Choice) -> Node {
         let mark = choice.current.then(|| icon(icons::CHECK));
+        let label = el("span").child(choice.name.clone());
+        let row = match &choice.media {
+            // With a picture, the tick goes to the end so the pictures line up.
+            Some(media) => Node::list((decorative(media.clone()), label, mark)),
+            None => Node::list((mark, label)),
+        };
         el("form")
             .attr("method", "post")
             .attr("action", Href::from(self.action.as_str()))
@@ -166,26 +242,65 @@ impl WorkspaceSwitcher {
                     .attr("type", "submit")
                     .flag("data-active", choice.current)
                     .attr_opt("aria-current", choice.current.then_some("true"))
-                    .children((mark, el("span").child(choice.name.clone()))),
+                    .uses(if choice.media.is_some() {
+                        Uses::SHELL_PARTS
+                    } else {
+                        Uses::NONE
+                    })
+                    .child(row),
             ))
             .into()
     }
+
+    /// The button that opens the menu, as the variant draws it.
+    fn trigger(&self) -> Node {
+        let button = el("button");
+        let button = match self.variant {
+            SwitcherVariant::Button => button.slot("button").attr("data-variant", "outline"),
+            SwitcherVariant::Card => button.slot("switcher-card").uses(Uses::SHELL_PARTS),
+        };
+        let button = button
+            .attr("type", "button")
+            .attr("id", format!("{}-trigger", self.id))
+            .attr("popovertarget", self.id.clone())
+            .attr("aria-haspopup", "dialog")
+            .attr("title", self.current.clone());
+        match self.variant {
+            SwitcherVariant::Card => button
+                .children((
+                    self.media.clone().map(decorative),
+                    el("span").slot("switcher-text").children((
+                        el("span").slot("switcher-name").child(self.current.clone()),
+                        self.description.clone().map(|description| {
+                            el("span").slot("switcher-description").child(description)
+                        }),
+                    )),
+                    icon(icons::CHEVRONS_UP_DOWN),
+                ))
+                .into(),
+            SwitcherVariant::Button => button
+                .children((
+                    el("span").child(self.current.clone()),
+                    icon(icons::CHEVRONS_UP_DOWN),
+                ))
+                .into(),
+        }
+    }
+}
+
+/// A workspace's picture, which assistive technology passes over: the name
+/// beside it says which workspace it is.
+fn decorative(media: Node) -> Node {
+    el("span")
+        .slot("switcher-media")
+        .attr("aria-hidden", "true")
+        .child(media)
+        .into()
 }
 
 impl From<WorkspaceSwitcher> for Node {
     fn from(switcher: WorkspaceSwitcher) -> Self {
-        let trigger = el("button")
-            .slot("button")
-            .attr("data-variant", "outline")
-            .attr("type", "button")
-            .attr("id", format!("{}-trigger", switcher.id))
-            .attr("popovertarget", switcher.id.clone())
-            .attr("aria-haspopup", "dialog")
-            .attr("title", switcher.current.clone())
-            .children((
-                el("span").child(switcher.current.clone()),
-                icon(icons::CHEVRONS_UP_DOWN),
-            ));
+        let trigger = switcher.trigger();
         let items: Vec<Node> = if switcher.choices.is_empty() {
             vec![
                 el("span")
@@ -353,6 +468,112 @@ mod tests {
                 r#"<div data-slot="menu-links"><span data-slot="menu-link" aria-disabled="true">No workspaces yet</span></div></div>"#,
             )
         );
+    }
+
+    fn agra() -> WorkspaceSwitcher {
+        WorkspaceSwitcher::new("Agra Traders")
+            .workspace("agra", "Agra Traders", true)
+            .workspace("gulati", "Gulati", false)
+            .csrf("tok")
+            .next("/deals")
+    }
+
+    /// The trigger and the menu of a rendered switcher.
+    fn halves(html: &str) -> (&str, &str) {
+        html.split_at(html.find(r#"<div data-slot="popover-content""#).unwrap())
+    }
+
+    // The card is a button as wide as its place: the picture (hidden from
+    // assistive technology, which hears the name), the name over a second
+    // line and the chevron, with the outline button's own attributes.
+    #[test]
+    fn the_card_draws_a_picture_two_lines_and_the_chevron() {
+        let switcher = agra()
+            .variant(SwitcherVariant::Card)
+            .media(el("img").attr("src", "/agra.svg").attr("alt", ""))
+            .description("Ludhiana · Admin <desk>");
+        let node = Node::from(switcher);
+        assert!(navree_ui::measure(&node).uses.has(Uses::SHELL_PARTS));
+        let html = render(&node);
+        let (trigger, _) = halves(&html);
+        assert_eq!(
+            trigger,
+            concat!(
+                r#"<button data-slot="switcher-card" type="button" id="ui-workspace-switcher-trigger" popovertarget="ui-workspace-switcher" aria-haspopup="dialog" title="Agra Traders">"#,
+                r#"<span data-slot="switcher-media" aria-hidden="true"><img src="/agra.svg" alt=""></span>"#,
+                r#"<span data-slot="switcher-text"><span data-slot="switcher-name">Agra Traders</span>"#,
+                r#"<span data-slot="switcher-description">Ludhiana · Admin &lt;desk&gt;</span></span>"#,
+                r#"<svg data-slot="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg></button>"#,
+            )
+        );
+        // With neither a picture nor a second line, the card draws neither.
+        let bare = render(&Node::from(agra().variant(SwitcherVariant::Card)));
+        assert!(!bare.contains("switcher-media"), "{bare}");
+        assert!(!bare.contains("switcher-description"), "{bare}");
+        assert!(bare.contains(r#"<span data-slot="switcher-name">Agra Traders</span>"#));
+        // The outline button draws no picture and no second line.
+        let button = render(&Node::from(
+            agra()
+                .media(el("img").attr("src", "/agra.svg"))
+                .description("Ludhiana"),
+        ));
+        assert_eq!(button, render(&Node::from(agra())));
+    }
+
+    // The card changes how the button is drawn, never what the menu posts:
+    // the forms, their route, token, workspace and page to come back to.
+    #[test]
+    fn the_card_posts_what_the_button_posts() {
+        let button = render(&Node::from(agra()));
+        let card = render(&Node::from(
+            agra()
+                .variant(SwitcherVariant::Card)
+                .media(el("span").child("AT"))
+                .description("Ludhiana"),
+        ));
+        assert_eq!(halves(&button).1, halves(&card).1);
+        assert!(!card.contains("data-ui-form"), "{card}");
+    }
+
+    // A workspace's picture in the menu: decorative, before the name, the
+    // tick at the end; the form posts what it posted.
+    #[test]
+    fn a_workspace_can_have_its_picture_in_the_menu() {
+        let html = render(&Node::from(
+            WorkspaceSwitcher::new("Agra")
+                .workspace_with("agra", "Agra", true, el("i").child("A"))
+                .workspace_with("gulati", "Gulati", false, el("i").child("G"))
+                .csrf("tok")
+                .next("/deals"),
+        ));
+        let (_, menu) = halves(&html);
+        assert!(
+            menu.contains(concat!(
+                r#"<button data-slot="menu-link" type="submit" data-active aria-current="true">"#,
+                r#"<span data-slot="switcher-media" aria-hidden="true"><i>A</i></span><span>Agra</span>"#,
+                r#"<svg data-slot="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>"#,
+            )),
+            "{menu}"
+        );
+        assert!(
+            menu.contains(r#"<button data-slot="menu-link" type="submit"><span data-slot="switcher-media" aria-hidden="true"><i>G</i></span><span>Gulati</span></button>"#),
+            "{menu}"
+        );
+        assert_eq!(
+            menu.matches(r#"<input type="hidden" name="_csrf" value="tok"><input type="hidden" name="workspace" value="#)
+                .count(),
+            2,
+            "{menu}"
+        );
+        let plain = render(&Node::from(
+            WorkspaceSwitcher::new("Agra").workspace("agra", "Agra", true),
+        ));
+        assert!(
+            !navree_ui::measure(&Node::from(WorkspaceSwitcher::new("Agra")))
+                .uses
+                .has(Uses::SHELL_PARTS)
+        );
+        assert!(!plain.contains("switcher-media"), "{plain}");
     }
 
     // No token, no field (an app on bearer tokens), and an empty

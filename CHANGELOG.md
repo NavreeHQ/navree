@@ -87,6 +87,19 @@ every `@navree/*` package carries the same version.
   none of them is drawn as before. `Avatar::initials`, `tone`, `solid` and `shape` are new
   inherent methods: an app whose own extension trait gives `Avatar` a method of one of these
   names calls it through the trait.
+- `WorkspaceSwitcher::variant(SwitcherVariant::Card)` draws the switcher's button as a card as
+  wide as its place, for the sidebar's header slot: the workspace's picture
+  (`WorkspaceSwitcher::media`), its name over a second line (`WorkspaceSwitcher::description`)
+  and a chevron at the end, in the theme's `card` colour and `field` corner, with its second
+  line and chevron in the shell's muted text. `WorkspaceSwitcher::workspace_with` puts a
+  picture before a workspace's name in the menu. The picture is hidden from assistive
+  technology, which hears the name. The card changes how the button is drawn, never what the
+  menu posts: the forms, the route, the token and the page to come back to are the same. Its
+  styles are in a sheet of their own, `shell-parts` (`Uses::SHELL_PARTS`), linked by a page that
+  draws it. `SwitcherVariant::Button`, the default, is drawn as before.
+- The sidebar's header slot stands one gap between the sidebar's blocks under the brand
+  (`--sidebar-gap`, 8 px as before when a theme's shape doesn't set it), and a switcher drawn as
+  a card lines up with the links' rows.
 
 ## [1.7.0] - 2026-11-27
 

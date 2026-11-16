@@ -573,8 +573,8 @@ impl SidebarSizes {
         self
     }
 
-    /// The space between its blocks (the brand, each group of links, the footer), from 0 to
-    /// 64 px.
+    /// The space between its blocks (the brand, a slot under it, each group of links, the
+    /// footer), from 0 to 64 px.
     pub const fn gap(mut self, px: u16) -> Self {
         self.0[3] = Some(px as i32);
         self

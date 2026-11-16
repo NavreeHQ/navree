@@ -44,6 +44,7 @@ async function js(entry, define = {}) {
 /**
  * The sources in `styles` that only one module's parts use. Each is a sheet of its own, named after the
  * module's script with `-styles` and linked by the same bit, and is left out of the sheet every page loads.
+ * The shell's parts have no script: their sheet has a bit of its own (`Uses::SHELL_PARTS`).
  * A page links them after that sheet, in this order, which is the order of their names.
  */
 const MODULE_STYLES = {
@@ -58,6 +59,7 @@ const MODULE_STYLES = {
   "toolbar-styles": ["35-toolbar.css"],
   "dates-styles": ["36-dates.css"],
   "time-styles": ["36-time.css"],
+  "shell-parts": ["41-shell-parts.css"],
 };
 const OWNED = new Set(Object.values(MODULE_STYLES).flat());
 

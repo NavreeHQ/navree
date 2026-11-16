@@ -216,7 +216,7 @@ pub use scoped::{OrgRepo, PartitionRepo, PartitionScoped};
 #[cfg(feature = "session")]
 pub use switch::SWITCH_ROUTE;
 #[cfg(feature = "ui")]
-pub use switcher::WorkspaceSwitcher;
+pub use switcher::{SwitcherVariant, WorkspaceSwitcher};
 pub use tenant::WorkspaceDatabases;
 pub use workspaces::{
     GrantedBy, MAX_NAME_LEN, MAX_SLUG_LEN, Membership, NewWorkspace, Workspaces, slugify,

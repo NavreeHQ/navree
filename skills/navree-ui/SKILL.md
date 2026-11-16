@@ -745,10 +745,11 @@ Workspaces: add `WorkspaceModule::from_config()` and set
 `workspace.session_default = true` (a browser that has chosen none is in the
 first workspace its account belongs to). `WorkspaceSwitcher` is an
 extractor and a component: put it in the sidebar's header with
-`AppShell::header_slot(switcher)`, or beside the page heading
-(`AppPage::actions(switcher)`); `CurrentWorkspace` gives the workspace, the
-role and `has_permission`; read and write a workspace's rows through
-`WorkspaceRepo::<Model>`.
+`AppShell::header_slot(switcher)`, as a two-line card with the workspace's
+picture if you like (`.variant(SwitcherVariant::Card).media(..).description(..)`),
+or beside the page heading (`AppPage::actions(switcher)`); `CurrentWorkspace`
+gives the workspace, the role and `has_permission`; read and write a
+workspace's rows through `WorkspaceRepo::<Model>`.
 
 The shell is registered once and static, so draw the person and the
 workspace per request: take the `AppShell` extractor and set

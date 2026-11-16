@@ -25,7 +25,7 @@ is dropped.
 | Product name, environment tag | `Shell::new(name)`, `.context("Production")` | the context is text, not a pill |
 | Search in the top bar | `Shell::search(node)` | a form with `Input::search`, or a command palette: `Node::list((Command::trigger(id, label), palette))` |
 | User at the foot of the sidebar | `UserMenu::new(name, email).link(..).action(..)`; `AppShell::user_menu(menu)` for one request | `action` posts; the avatar is an icon, never initials |
-| A workspace switcher under the app's name | `Shell::header_slot(node)`; `AppShell::header_slot(node)` for one request | `navree_workspace::WorkspaceSwitcher` is the node |
+| A workspace switcher under the app's name | `Shell::header_slot(node)`; `AppShell::header_slot(node)` for one request | `navree_workspace::WorkspaceSwitcher` is the node; a two-line card with the organisation's tile is `.variant(SwitcherVariant::Card).media(Avatar::initials(name).solid()).description("City · Role")`, in the theme's `card` colour and `field` corner, lined up with the sidebar's rows |
 | Breadcrumbs | `AppPage::crumb(label, href)`; on a plain page `Breadcrumb::new().link(..).current(..)` | |
 | Page title and page buttons | `shell.page(title)`, `.actions(..)` | one primary action per page |
 | A page outside the shell (sign-in, receipt) | `View::new(title).body(..)` | |

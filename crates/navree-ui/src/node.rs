@@ -342,6 +342,11 @@ impl Uses {
     pub const EXTENSIONS: Self = Self(1 << 43);
     /// No script: the head links the stylesheets the page's elements name.
     pub const EXTENSION_SHEETS: Self = Self(1 << 44);
+    /// The shell parts stylesheet: no script, only the styles of what a shell draws when an
+    /// app asks for it: a workspace switcher drawn as a card, a bare or dark mark and a badge
+    /// in the brand row, a slot at the sidebar's foot, actions in the top bar and a page
+    /// heading with badges or a subtitle, linked on a page that draws one.
+    pub const SHELL_PARTS: Self = Self(1 << 45);
 
     /// Both sets together.
     #[must_use]
