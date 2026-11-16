@@ -1031,11 +1031,9 @@ pub(crate) struct Inner {
     pub event_start: u64,
     /// An answer the core makes itself (a request never sent) is being read.
     pub synthetic: bool,
-    /// The answer being read says its request was never acted on: no
-    /// network, one the core failed itself, or an answer that says it could
-    /// not be handled (408, 413, 414, 429, 431). A write answered so did not
-    /// happen.
-    pub never_left: bool,
+    /// The answer being read may follow a write the server ran (see
+    /// `Heard::write_may_have_run`).
+    pub write_may_have_run: bool,
     /// An address an answer gave did not read, and that was said, in this event.
     pub refusal_said: bool,
     /// Something an answer brought was refused for its size, and that was

@@ -55,8 +55,8 @@ fn the_readme_settles_what_an_app_will_run_into() {
         "are drawn before the server names anybody",
         // An unknown kind of text.
         "an unknown kind of text is drawn as plain text",
-        // A write that never left the device.
-        "a write that never left the device is not a write",
+        // When a write counts as never made.
+        "a write counts as never made only when the server cannot have run it",
     ] {
         assert!(readme.contains(words), "the README does not say: {words}");
     }
