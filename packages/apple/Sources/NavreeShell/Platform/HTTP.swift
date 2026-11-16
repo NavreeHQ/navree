@@ -70,7 +70,8 @@ public final class HTTPTransport: Transport {
     }
 
     /// The request as it goes over the wire, or `nil` for an address that is
-    /// not the origin's own or a header that cannot be sent as it is.
+    /// not the origin's own, a header that cannot be sent as it is, or a file
+    /// whose bytes the app no longer holds.
     public func urlRequest(for request: FetchRequest) -> URLRequest? {
         guard let url = cookies.site?.inside(request.url) else { return nil }
         let cookie = cookies.header(for: url)
@@ -91,8 +92,11 @@ public final class HTTPTransport: Transport {
             urlRequest.httpBody = Data(text.utf8)
         case .multipart(let parts)?:
             let boundary = "navree-" + UUID().uuidString
+            // A file whose bytes are gone is not sent empty under its name,
+            // for the server to store and call saved: the request does not go.
+            guard let body = Multipart.body(parts, boundary: boundary, files: files.data) else { return nil }
             urlRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-            urlRequest.httpBody = Multipart.body(parts, boundary: boundary, files: files.data)
+            urlRequest.httpBody = body
         case nil:
             if request.method.lowercased() != "get" { urlRequest.httpBody = Data() }
         }
@@ -302,9 +306,11 @@ struct EventStreamReader {
 }
 
 /// `multipart/form-data`, the parts in order. A file's bytes are the ones the
-/// client keeps under its token; a token it no longer holds sends none.
+/// client keeps under its token. With a token it no longer holds (the person
+/// signed out in another window, the system emptied the folder) there is no
+/// body at all: `nil`, never a part with the file's name and no bytes.
 enum Multipart {
-    static func body(_ parts: [FetchRequest.Part], boundary: String, files: (String) -> Data? = { _ in nil }) -> Data {
+    static func body(_ parts: [FetchRequest.Part], boundary: String, files: (String) -> Data? = { _ in nil }) -> Data? {
         var body = Data()
         func line(_ text: String) { body.append(Data((text + "\r\n").utf8)) }
         for part in parts {
@@ -315,10 +321,11 @@ enum Multipart {
                 line("")
                 line(value)
             case .file(let name, let token, let filename, let type):
+                guard let bytes = files(token) else { return nil }
                 line("Content-Disposition: form-data; name=\"\(escape(name))\"; filename=\"\(escape(filename))\"")
                 line("Content-Type: \(type.isEmpty ? "application/octet-stream" : type)")
                 line("")
-                body.append(files(token) ?? Data())
+                body.append(bytes)
                 line("")
             }
         }

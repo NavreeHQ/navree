@@ -203,14 +203,48 @@ struct HTTPTests {
         #expect(String(decoding: CoreEvent.response(.failed(3, .offline)).json, as: UTF8.self) == #"{"error":"offline","request":3,"t":"response"}"#)
     }
 
-    @Test func multipartPartsGoInOrder() {
-        let body = String(decoding: Multipart.body(
-            [.text(name: "note", value: "Wrap the dupattas"), .file(name: "photo", token: "pick-1", filename: "corner.jpg", type: "image/jpeg")],
-            boundary: "b"
-        ), as: UTF8.self)
+    @Test func multipartPartsGoInOrder() throws {
+        let parts: [FetchRequest.Part] = [
+            .text(name: "note", value: "Wrap the dupattas"),
+            .file(name: "photo", token: "pick-1", filename: "corner.jpg", type: "image/jpeg"),
+        ]
+        let made = try #require(Multipart.body(parts, boundary: "b", files: { $0 == "pick-1" ? Data("jpeg-bytes".utf8) : nil }))
+        let body = String(decoding: made, as: UTF8.self)
         #expect(body.hasPrefix("--b\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\nWrap the dupattas\r\n--b\r\n"))
-        #expect(body.contains("filename=\"corner.jpg\"\r\nContent-Type: image/jpeg"))
+        #expect(body.contains("filename=\"corner.jpg\"\r\nContent-Type: image/jpeg\r\n\r\njpeg-bytes\r\n"))
         #expect(body.hasSuffix("--b--\r\n"))
+        // Parts with no file need none.
+        #expect(Multipart.body([parts[0]], boundary: "b") != nil)
+    }
+
+    @Test func aFileWhoseBytesAreGoneIsNeverSentEmptyUnderItsName() async throws {
+        let host = "files-gone.shop.example"
+        StubOrigin.answer(host, .init(status: 200, headers: [:], body: "{}"))
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("navree-files-gone-\(UUID().uuidString)")
+        let store = FileStore(folder: folder.appendingPathComponent("kept"))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let picked = folder.appendingPathComponent("contract.pdf")
+        try Data("%PDF-1.7 signed by Harleen Sandhu, Ludhiana".utf8).write(to: picked)
+        let file = try #require(store.keep(picked))
+        let parts: [FetchRequest.Part] = [
+            .text(name: "note", value: "Signed copy"),
+            .file(name: "contract", token: file.token, filename: file.name, type: file.type),
+        ]
+        let jar = CookieJar(origin: "https://\(host)", persistent: false)
+        let transport = HTTPTransport(jar: jar, configuration: StubOrigin.configuration, files: store)
+        let request = FetchRequest(
+            request: 12, method: "post", url: "https://\(host)/orders/1/documents", body: .multipart(parts)
+        )
+        // While the bytes are held, the request is one that goes.
+        #expect(transport.urlRequest(for: request)?.httpBody?.isEmpty == false)
+
+        // The files were let go (the person signed out in another window).
+        store.clear()
+        #expect(Multipart.body(parts, boundary: "b", files: store.data) == nil)
+        #expect(transport.urlRequest(for: request) == nil)
+        #expect(await fetched(transport, request) == .failed(12, .other))
+        #expect(StubOrigin.seen(host).isEmpty)
     }
 
     @Test func aPictureIsAskedForWithTheSessionsCookiesFromTheOneJar() async throws {
@@ -237,9 +271,10 @@ struct HTTPTests {
         #expect(file.name == "packing-list.csv")
         #expect(file.type == "text/csv")
         #expect(file.size == 22)
-        let body = String(decoding: Multipart.body(
+        let made = try #require(Multipart.body(
             [.file(name: "list", token: file.token, filename: file.name, type: file.type)], boundary: "b", files: store.data
-        ), as: UTF8.self)
+        ))
+        let body = String(decoding: made, as: UTF8.self)
         #expect(body.contains("Content-Type: text/csv\r\n\r\nsku,qty\nKIT-307-000,5\n\r\n--b--"))
         store.clear()
         #expect(store.data(file.token) == nil)
