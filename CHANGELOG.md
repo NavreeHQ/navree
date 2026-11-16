@@ -160,6 +160,9 @@ every `@navree/*` package carries the same version.
   that sends a password field outside one.
 - `Page::assert_no_policy_violations` (navree-browser) fails when a page reported a content security
   policy violation.
+- Navree Native: the Apple client for iPhone, iPad and Mac is in the repository (`packages/apple`,
+  a Swift package), in preview. It runs the example apps on simulators and on a Mac. No package is
+  published, and nothing has run on a real device.
 
 ### Changed
 
@@ -334,6 +337,18 @@ every `@navree/*` package carries the same version.
   toast, and a read is ended. `ui.call` takes `null` for its options. The browser contract now says
   what the seal does not stop, the refresh a written `meta` schedules or a request to a host the
   policy allows among it, and asks authors to escape data before a library writes it as HTML.
+- Navree Native: what an app keeps for a person is no longer emptied by an answer that never
+  reached the app (a proxy's or the server's own 5xx, 408, 413, 414, 429 or 431 that names nobody).
+- Navree Native: an app decides in one place whether a write happened. A write counts as never
+  made only when nothing was sent, when it was refused for its size before any handler ran, or
+  when the app's own handler refused it; after anything else the app asks again instead of
+  guessing, so a moved row or a sent form is never shown in a state the server does not have.
+- Navree Native: a live part of a screen catches up when its stream spoke while the page was on
+  its way or while the screen was under another.
+- Navree Native: a runtime core that has stopped after a failure inside it says so with
+  `"stopped": true`, so a client can offer a restart.
+- Navree Native: a link on an app's scheme is a sign-in's return only for the sign-in that is
+  open; any other link opens as a link.
 
 ### Security
 
