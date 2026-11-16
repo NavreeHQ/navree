@@ -1292,6 +1292,42 @@ fn the_reserved_namespaces_match_the_framework_sections_and_permission_prefixes(
     }
 }
 
+/// The kernel's list of the providers a plugin's module may not register holds the type names of
+/// exactly those types, and a model hook's provider key is the kernel's prefix followed by the
+/// model's type path.
+#[test]
+fn the_app_only_providers_match_their_types() {
+    use std::any::type_name;
+    let listed: BTreeSet<&str> = navree::kernel::__private::APP_ONLY_PROVIDERS
+        .iter()
+        .copied()
+        .collect();
+    let types: BTreeSet<&str> = [
+        type_name::<dyn navree::contracts::PermissionCheck>(),
+        type_name::<dyn navree::http::RouteAuthorizer>(),
+        type_name::<dyn navree::http::Authenticator>(),
+        type_name::<dyn navree::auth::Strategy>(),
+        type_name::<dyn navree::access::WorkspaceGate>(),
+        type_name::<navree::access::AccessOptions>(),
+        type_name::<navree::access::AbilityFactory>(),
+        type_name::<navree::workspace::WorkspaceConfig>(),
+        type_name::<navree::auth::AuthOptions>(),
+        type_name::<navree::helm::HelmOptions>(),
+        type_name::<navree::ui::Shell>(),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(listed, types);
+    assert_eq!(
+        type_name::<dyn navree::orm::hooks::ModelHook<navree::workspace::Member>>(),
+        format!(
+            "{}{}>",
+            navree::kernel::__private::MODEL_HOOK_KEY,
+            type_name::<navree::workspace::Member>()
+        )
+    );
+}
+
 /// Every permission prefix declared in `crates/navree-*/src/**/*.rs`, but for navree-cli,
 /// navree-macros and navree-orm-macros, with its file: the text after
 /// `PERMISSION_PREFIX: &'static str = "` or after `permission_prefix = "`, up to the next `"`,
@@ -1365,6 +1401,8 @@ fn is_plugin_error(error: &KernelError) -> bool {
             | KernelError::PluginOfAnotherCrate { .. }
             | KernelError::PluginInfoDiffers { .. }
             | KernelError::PluginConfiguresModule { .. }
+            | KernelError::PluginProvidesAppOnly { .. }
+            | KernelError::PluginHooksModel { .. }
     )
 }
 

@@ -76,7 +76,8 @@ pub use resolver::Resolver;
 pub mod __private {
     pub use crate::collide::{acts_for, imports, is_app_module, is_community_plugin};
     pub use crate::plugin::{
-        FIRST_PARTY, RESERVED_NAMESPACES, default_namespace, is_namespace, namespace_text,
+        APP_ONLY_PROVIDERS, FIRST_PARTY, MODEL_HOOK_KEY, RESERVED_NAMESPACES, default_namespace,
+        is_namespace, namespace_text,
     };
     pub use crate::publish::is_safe_relative_path;
     pub use crate::publish::{PublishRefused, Published, publish_files};

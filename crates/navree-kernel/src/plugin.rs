@@ -523,6 +523,29 @@ pub const RESERVED_NAMESPACES: &[&str] = &[
     "workspace",
 ];
 
+/// The providers that decide who may do what in the app, and the app's
+/// shell, by type name: a module of a plugin that is not first-party may not
+/// register one (value, factory or multi-binding, exported or not). Not
+/// public API; Navree's own crates and tests use it.
+pub const APP_ONLY_PROVIDERS: &[&str] = &[
+    "dyn navree_access::workspace_gate::WorkspaceGate",
+    "dyn navree_auth::strategy::Strategy",
+    "dyn navree_contracts::permissions::PermissionCheck",
+    "dyn navree_http::auth::Authenticator",
+    "dyn navree_http::auth::RouteAuthorizer",
+    "navree_access::factory::AbilityFactory",
+    "navree_access::options::AccessOptions",
+    "navree_auth::options::AuthOptions",
+    "navree_helm::options::HelmOptions",
+    "navree_ui::shell::Shell",
+    "navree_workspace::config::WorkspaceConfig",
+];
+
+/// The start of the type name of a model hook's provider key,
+/// `dyn ModelHook<M>` of navree-orm, the model's type path following it.
+/// Not public API; Navree's own crates and tests use it.
+pub const MODEL_HOOK_KEY: &str = "dyn navree_orm::hooks::ModelHook<";
+
 /// Whether `type_name` names a path of the crate `crate_name`: `<crate_name>::`
 /// at its start or right after `<`, `,`, a space, `(`, `[`, `&` or `*`, so the
 /// type itself and its generic arguments count, and `x_navree_plugin_a::T`
@@ -708,6 +731,10 @@ mod tests {
         assert_eq!(RESERVED_NAMESPACES.len(), 86);
         assert!(RESERVED_NAMESPACES.windows(2).all(|w| w[0] < w[1]));
         assert!(RESERVED_NAMESPACES.iter().all(|ns| is_namespace(ns)));
+        // Sorted, each name once, each a type path.
+        assert!(APP_ONLY_PROVIDERS.windows(2).all(|w| w[0] < w[1]));
+        assert!(APP_ONLY_PROVIDERS.iter().all(|name| name.contains("::")));
+        assert!(MODEL_HOOK_KEY.starts_with("dyn ") && MODEL_HOOK_KEY.ends_with('<'));
     }
 
     /// A namespace is a folder name (`resources/views/<namespace>/`): every word the path

@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use crate::KernelError;
 use crate::graph::{Graph, ModuleNode, ROOT};
 use crate::plugin::{
-    FIRST_PARTY, PluginInfo, PublishTag, Publishable, RESERVED_NAMESPACES, destination,
-    is_first_party, is_namespace, names_crate,
+    APP_ONLY_PROVIDERS, FIRST_PARTY, MODEL_HOOK_KEY, PluginInfo, PublishTag, Publishable,
+    RESERVED_NAMESPACES, destination, is_first_party, is_namespace, names_crate,
 };
 use crate::publish::{
     first_case_collision, first_file_and_folder, is_locale_path, is_safe_relative_path,
@@ -77,7 +77,14 @@ impl Graph {
     ///     module that acts for a plugin that is not first-party, of a module
     ///     whose type does not name the plugin's crate:
     ///     `PluginConfiguresModule` (a second configured instance of a module
-    ///     reads the same way, see `configured_twice`).
+    ///     reads the same way, see `configured_twice`);
+    /// 11. a module that acts for a plugin that is not first-party and
+    ///     registers a provider (value, factory or multi-binding) whose key is
+    ///     on [`APP_ONLY_PROVIDERS`]: one `PluginProvidesAppOnly` per module and
+    ///     type name;
+    /// 12. such a module registering a provider keyed `dyn ModelHook<M>` of
+    ///     navree-orm ([`MODEL_HOOK_KEY`]) whose model `M` is not a type of the
+    ///     plugin's crate: one `PluginHooksModel` per module and model.
     pub(crate) fn check_plugins(&mut self, errors: &mut Vec<KernelError>) {
         let version = env!("CARGO_PKG_VERSION");
         // Each plugin's modules, plugins in first-seen order.
@@ -275,6 +282,57 @@ impl Graph {
                     module: module.name,
                     importer: self.modules[importer].name,
                 });
+            }
+        }
+
+        // Step 11.
+        for m in self.import_order() {
+            let Some(info) = self.community_plugin(m) else {
+                continue;
+            };
+            let module = &self.modules[m];
+            let mut refused: Vec<&'static str> = Vec::new();
+            for &p in &module.providers {
+                let provider = self.providers[p].def.key.type_name();
+                if APP_ONLY_PROVIDERS.contains(&provider) && !refused.contains(&provider) {
+                    refused.push(provider);
+                    errors.push(KernelError::PluginProvidesAppOnly {
+                        plugin: info.name,
+                        provider,
+                        module: module.name,
+                    });
+                }
+            }
+        }
+
+        // Step 12.
+        for m in self.import_order() {
+            let Some(info) = self.community_plugin(m) else {
+                continue;
+            };
+            let module = &self.modules[m];
+            let mut refused: Vec<&'static str> = Vec::new();
+            for &p in &module.providers {
+                let Some(model) = self.providers[p]
+                    .def
+                    .key
+                    .type_name()
+                    .strip_prefix(MODEL_HOOK_KEY)
+                    .and_then(|rest| rest.strip_suffix('>'))
+                else {
+                    continue;
+                };
+                let own = model
+                    .strip_prefix(info.crate_name)
+                    .is_some_and(|rest| rest.starts_with("::"));
+                if !own && !refused.contains(&model) {
+                    refused.push(model);
+                    errors.push(KernelError::PluginHooksModel {
+                        plugin: info.name,
+                        model,
+                        module: module.name,
+                    });
+                }
             }
         }
     }

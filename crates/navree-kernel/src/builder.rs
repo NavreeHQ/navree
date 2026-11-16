@@ -108,6 +108,14 @@ impl ModuleBuilder {
     /// command) and checks its name, crate, version and namespace at boot.
     /// Naming a plugin grants nothing.
     ///
+    /// A module that acts for a plugin which is not one of the framework's own
+    /// packages may not configure a module of another crate, nor provide a
+    /// permission check, the route authorizer, the authenticator, a sign-in
+    /// strategy, the workspace gate, the options of access, workspaces,
+    /// authentication or the admin panel, or the app's shell, nor hook a model
+    /// of another crate: the boot fails, and the app registers the plugin's from
+    /// a module of its own.
+    ///
     /// ```no_run
     /// use navree_kernel::{Module, ModuleBuilder, Navree};
     ///

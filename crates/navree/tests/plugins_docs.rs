@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use http::Method;
 use navree::config::ConfigSection;
-use navree::contracts::permission_catalog;
+use navree::contracts::{permission_catalog, permitted};
 use navree::crypto::generate_key;
 use navree::db::Db;
 use navree::http::extract::Request;
@@ -27,7 +27,7 @@ use navree::plugin::prelude::*;
 use navree::plugin::{ClientModule, Permission, PluginInfo};
 use navree::prelude::*;
 use navree::testing::{TestApp, principal};
-use navree::ui::{AppShell, Shell, ShellNavItem, Text};
+use navree::ui::{AppShell, Shell, Text};
 use navree::workspace::{Members, NewWorkspace, WorkspaceRole, Workspaces};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -255,35 +255,52 @@ impl Module for Probe {
 
 // Links, the admin panel and permissions.
 
-/// The announcements plugin, a community plugin of this test crate.
-const ANNOUNCEMENTS: PluginInfo = PluginInfo::new(
-    "navree-plugin-announcements",
-    "plugins_docs",
-    "announcements",
-    "1.0.0",
-)
-.title("Announcements");
+/// The announcements plugin, a community plugin: its crate is this module, so the app's modules
+/// at the top of the file are in no crate it names.
+mod navree_plugin_announcements {
+    use navree::plugin::prelude::*;
+    use navree::plugin::{Permission, PluginInfo};
+    use navree::prelude::*;
+    use navree::ui::ShellNavItem;
 
-/// The announcements plugin's module: it describes `announcements.read`, adds a link that
-/// needs it and a notice board that needs nothing, registers the app's shell (which takes
-/// the links modules add) and serves `GET /notices-home`.
-struct Announcements;
+    /// The plugin's info.
+    const ANNOUNCEMENTS: PluginInfo = PluginInfo::new(
+        "navree-plugin-announcements",
+        module_path!(),
+        "announcements",
+        "1.0.0",
+    )
+    .title("Announcements");
 
-impl Module for Announcements {
+    /// The announcements plugin's module: it describes `announcements.read`, adds a link that
+    /// needs it and a notice board that needs nothing, and serves `GET /notices-home`.
+    pub struct Announcements;
+
+    impl Module for Announcements {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(ANNOUNCEMENTS)
+                .permissions(&[Permission::new(
+                    "announcements.read",
+                    "Read the workspace's announcements",
+                )])
+                .nav_item(
+                    ShellNavItem::new("Announcements", "/announcements")
+                        .permission("announcements.read"),
+                )
+                .nav_item(ShellNavItem::new("Notice board", "/notice-board"));
+            m.controller::<super::NoticesHome>();
+        }
+    }
+}
+
+/// A module of the app: the app's shell, which takes the links modules add, for every module.
+struct Desk;
+
+impl Module for Desk {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(ANNOUNCEMENTS)
-            .permissions(&[Permission::new(
-                "announcements.read",
-                "Read the workspace's announcements",
-            )])
-            .nav_item(
-                ShellNavItem::new("Announcements", "/announcements")
-                    .permission("announcements.read"),
-            )
-            .nav_item(ShellNavItem::new("Notice board", "/notice-board"));
+        m.global();
         m.value(Shell::new("Kesar").contributed())
             .exports::<Shell>();
-        m.controller::<NoticesHome>();
     }
 }
 
@@ -333,8 +350,8 @@ impl Controller for NoticesHome {
     }
 }
 
-/// The app: workspaces named by the `X-Workspace` header, access, the toolkit and the
-/// announcements plugin; with `member_grant`, the app's configuration grants
+/// The app: workspaces named by the `X-Workspace` header, access, the toolkit, the app's shell
+/// and the announcements plugin; with `member_grant`, the app's configuration grants
 /// `announcements.read` to a workspace's members.
 async fn app(member_grant: bool) -> TestApp {
     let mut builder = TestApp::builder()
@@ -355,7 +372,8 @@ async fn app(member_grant: bool) -> TestApp {
         .module(AccessModule::for_root(AccessOptions::default()))
         .module(WorkspaceModule::from_config())
         .module(UiModule)
-        .module(Announcements)
+        .module(Desk)
+        .module(navree_plugin_announcements::Announcements)
         .build()
         .await
 }
@@ -763,4 +781,337 @@ fn a_plugin_that_configures_access_or_workspaces_fails_the_boot() {
         .expect_err("the plugin configures workspaces")
         .to_string();
     assert_eq!(workspaces, roster_configures("WorkspaceModule"));
+}
+
+/// The guard plugin: its crate is this module, so the app's modules at the top of the file are in
+/// no crate it names.
+mod navree_plugin_guard {
+    use http::request::Parts;
+    use navree::BoxFuture;
+    use navree::auth::{AuthError, SignInAttempt, SignInPolicy, Strategy};
+    use navree::contracts::{PermissionCheck, Principal};
+    use navree::kernel::KernelError;
+    use navree::plugin::PluginInfo;
+    use navree::prelude::*;
+    use navree::testing::principal;
+    use uuid::Uuid;
+
+    /// The plugin's info.
+    const GUARD: PluginInfo =
+        PluginInfo::new("navree-plugin-guard", module_path!(), "guard", "1.0.0");
+
+    /// The plugin's module: it names the plugin, then registers what its function adds.
+    pub struct Provides(pub fn(&mut ModuleBuilder));
+
+    impl Module for Provides {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(GUARD);
+            (self.0)(m);
+        }
+    }
+
+    /// A permission check of the plugin: `Some(true)` for the permission `.0` names, or for
+    /// every permission when it names none; no answer for any other.
+    pub struct Grants(pub Option<&'static str>);
+
+    impl PermissionCheck for Grants {
+        fn check<'a>(
+            &'a self,
+            _principal: &'a Principal,
+            permission: &'a str,
+            _workspace: Option<Uuid>,
+        ) -> BoxFuture<'a, Result<Option<bool>, BoxError>> {
+            let granted = self.0.is_none_or(|only| only == permission);
+            Box::pin(async move { Ok(granted.then_some(true)) })
+        }
+    }
+
+    /// The plugin's permission check, which grants `guard.unlock` to everyone, for a module of
+    /// the app to register.
+    pub fn permission_check() -> Factory<dyn PermissionCheck> {
+        Factory::new(|_| async {
+            Ok(Arc::new(Grants(Some("guard.unlock"))) as Arc<dyn PermissionCheck>)
+        })
+    }
+
+    /// A sign-in strategy of the plugin: it takes every request for the nil user's.
+    pub struct TrustEveryone;
+
+    impl Injectable for TrustEveryone {
+        fn construct(_: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+            Box::pin(async { Ok(TrustEveryone) })
+        }
+    }
+
+    impl Strategy for TrustEveryone {
+        fn name(&self) -> &'static str {
+            "trust-everyone"
+        }
+
+        fn authenticate<'a>(
+            &'a self,
+            _parts: &'a mut Parts,
+        ) -> BoxFuture<'a, Result<Option<Principal>, AppError>> {
+            Box::pin(async { Ok(Some(principal(Uuid::nil()))) })
+        }
+    }
+
+    /// A sign-in policy of the plugin: a policy may only refuse a sign-in, and this one lets
+    /// every attempt go on.
+    pub struct ChapterHours;
+
+    impl Injectable for ChapterHours {
+        fn construct(_: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+            Box::pin(async { Ok(ChapterHours) })
+        }
+    }
+
+    impl SignInPolicy for ChapterHours {
+        fn check<'a>(&'a self, _: &'a SignInAttempt) -> BoxFuture<'a, Result<(), AuthError>> {
+            Box::pin(async { Ok(()) })
+        }
+    }
+}
+
+/// The refusal of the guard plugin's module providing `provider`.
+fn guard_provides(provider: &str) -> String {
+    format!(
+        "plugin `navree-plugin-guard` provides `{provider}` in `Provides`, which decides who may do what in the app; only the app registers it: register the plugin's from a module of the app"
+    )
+}
+
+/// The refusal of the guard plugin's module hooking `model`.
+fn guard_hooks(model: &str) -> String {
+    format!(
+        "plugin `navree-plugin-guard` hooks the model `{model}` in `Provides`, a model of another crate; register the hook from a module of the app"
+    )
+}
+
+/// A provider of `T` that is never built: the plugin checks run before anything is built.
+fn never_built<T: ?Sized + Send + Sync + 'static>() -> Factory<T> {
+    Factory::new(|_| async {
+        Err::<Arc<T>, BoxError>("the boot refuses it before anything is built".into())
+    })
+}
+
+#[test]
+fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
+    use std::any::type_name;
+
+    use navree::access::{AbilityFactory, WorkspaceGate};
+    use navree::auth::{AuthOptions, Strategy};
+    use navree::contracts::PermissionCheck;
+    use navree::helm::HelmOptions;
+    use navree::http::{Authenticator, RouteAuthorizer};
+    use navree::workspace::WorkspaceConfig;
+    use navree_plugin_guard::{ChapterHours, Grants, Provides, TrustEveryone};
+
+    // One app per provider, each registered by the plugin's module.
+    let cases = [
+        // A permission check that grants every permission to everyone.
+        (
+            Provides(|m| {
+                m.multi(Factory::<dyn PermissionCheck>::new(|_| async {
+                    Ok(Arc::new(Grants(None)) as Arc<dyn PermissionCheck>)
+                }));
+            }),
+            type_name::<dyn PermissionCheck>(),
+        ),
+        (
+            Provides(|m| {
+                m.factory(never_built::<dyn RouteAuthorizer>());
+            }),
+            type_name::<dyn RouteAuthorizer>(),
+        ),
+        (
+            Provides(|m| {
+                m.factory(never_built::<dyn Authenticator>());
+            }),
+            type_name::<dyn Authenticator>(),
+        ),
+        (
+            Provides(|m| {
+                m.strategy::<TrustEveryone>();
+            }),
+            type_name::<dyn Strategy>(),
+        ),
+        (
+            Provides(|m| {
+                m.factory(never_built::<dyn WorkspaceGate>());
+            }),
+            type_name::<dyn WorkspaceGate>(),
+        ),
+        (
+            Provides(|m| {
+                m.value(AccessOptions::default());
+            }),
+            type_name::<AccessOptions>(),
+        ),
+        (
+            Provides(|m| {
+                m.factory(never_built::<AbilityFactory>());
+            }),
+            type_name::<AbilityFactory>(),
+        ),
+        (
+            Provides(|m| {
+                m.value(WorkspaceConfig::default());
+            }),
+            type_name::<WorkspaceConfig>(),
+        ),
+        (
+            Provides(|m| {
+                m.value(AuthOptions::default());
+            }),
+            type_name::<AuthOptions>(),
+        ),
+        (
+            Provides(|m| {
+                m.value(HelmOptions::default());
+            }),
+            type_name::<HelmOptions>(),
+        ),
+        (
+            Provides(|m| {
+                m.value(Shell::new("Khata")).exports::<Shell>();
+            }),
+            type_name::<Shell>(),
+        ),
+    ];
+    for (provides, provider) in cases {
+        let refused = Navree::app()
+            .module(provides)
+            .validate()
+            .expect_err(provider)
+            .to_string();
+        assert_eq!(refused, guard_provides(provider));
+    }
+    // A sign-in policy may only refuse a sign-in: a plugin registers its own.
+    Navree::app()
+        .module(Provides(|m| {
+            m.sign_in_policy::<ChapterHours>();
+        }))
+        .validate()
+        .expect("a plugin's sign-in policy");
+}
+
+/// A module of the app: it registers the guard plugin's permission check.
+struct GuardChecks;
+
+impl Module for GuardChecks {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.multi(navree_plugin_guard::permission_check());
+    }
+}
+
+#[tokio::test]
+async fn the_app_may_register_a_plugins_permission_check() {
+    let app = TestApp::builder()
+        .module(navree_plugin_guard::Provides(|_| {}))
+        .module(GuardChecks)
+        .build()
+        .await;
+    let harpreet = principal(Uuid::now_v7());
+    let unlock = permitted(app.ctx(), &harpreet, "guard.unlock", None)
+        .await
+        .unwrap();
+    assert!(unlock, "the app's module registered the plugin's check");
+    // The check answers for its own permission only.
+    let other = permitted(app.ctx(), &harpreet, "deals.read", None)
+        .await
+        .unwrap();
+    assert!(!other);
+    // The app's module acts for no plugin.
+    let report = app.ctx().plugins();
+    let guard = report
+        .plugins
+        .iter()
+        .find(|plugin| plugin.info.namespace == "guard")
+        .expect("the guard plugin");
+    let modules: Vec<&str> = guard
+        .modules
+        .iter()
+        .map(|module| module.id.name())
+        .collect();
+    assert_eq!(modules, ["Provides"]);
+
+    app.shutdown().await.unwrap();
+}
+
+/// A module of the app: it registers the guard plugin's sign-in strategy.
+struct GuardSignIn;
+
+impl Module for GuardSignIn {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.strategy::<navree_plugin_guard::TrustEveryone>();
+    }
+}
+
+#[tokio::test]
+async fn the_app_may_register_a_plugins_sign_in_strategy() {
+    use navree::auth::Strategy;
+
+    let app = TestApp::builder()
+        .temp_database()
+        .config("app.key", generate_key())
+        .config("http.per_ip_rate_limit", Value::Null)
+        .module(CryptoModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(AuthModule::from_config())
+        .module(AccessModule::for_root(AccessOptions::default()))
+        .module(navree_plugin_guard::Provides(|_| {}))
+        .module(GuardSignIn)
+        .build()
+        .await;
+    let strategies = app.ctx().get_all::<dyn Strategy>().await.unwrap();
+    assert!(
+        strategies
+            .iter()
+            .any(|strategy| strategy.name() == "trust-everyone"),
+        "the app's module registered the plugin's strategy"
+    );
+
+    app.shutdown().await.unwrap();
+}
+
+#[test]
+fn a_plugin_that_hooks_another_crates_model_fails_validate() {
+    use std::any::type_name;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use navree::orm::hooks::{ModelEvent, ModelHook};
+    use navree::workspace::Member;
+    use navree_plugin_guard::Provides;
+
+    /// Whether the plugin's hook was built.
+    static BUILT: AtomicBool = AtomicBool::new(false);
+
+    let refused = guard_hooks(type_name::<Member>());
+    // A listener that would make every member of a workspace its owner.
+    let listener = Navree::app()
+        .module(Provides(|m| {
+            m.on_model::<Member, _>(ModelEvent::Saving, |member, _ctx| {
+                Box::pin(async move {
+                    member.role = "owner".to_owned();
+                    Ok(())
+                })
+            });
+        }))
+        .validate()
+        .expect_err("the plugin hooks the member row")
+        .to_string();
+    assert_eq!(listener, refused);
+    // The same through the hook's own key.
+    let multi = Navree::app()
+        .module(Provides(|m| {
+            m.multi(Factory::<dyn ModelHook<Member>>::new(|_| async {
+                BUILT.store(true, Ordering::SeqCst);
+                Err::<Arc<dyn ModelHook<Member>>, BoxError>("never built".into())
+            }));
+        }))
+        .validate()
+        .expect_err("the plugin hooks the member row")
+        .to_string();
+    assert_eq!(multi, refused);
+    assert!(!BUILT.load(Ordering::SeqCst), "the hook's factory never ran");
 }

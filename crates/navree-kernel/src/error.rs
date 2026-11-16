@@ -253,6 +253,32 @@ pub enum KernelError {
         /// The module that imports the configured instance.
         importer: &'static str,
     },
+    /// A module that acts for a plugin that is not first-party registers a
+    /// provider that decides who may do what in the app.
+    #[error(
+        "plugin `{plugin}` provides `{provider}` in `{module}`, which decides who may do what in the app; only the app registers it: register the plugin's from a module of the app"
+    )]
+    PluginProvidesAppOnly {
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The provider's type name.
+        provider: &'static str,
+        /// The module that registers it.
+        module: &'static str,
+    },
+    /// A module that acts for a plugin that is not first-party hooks a model of
+    /// another crate.
+    #[error(
+        "plugin `{plugin}` hooks the model `{model}` in `{module}`, a model of another crate; register the hook from a module of the app"
+    )]
+    PluginHooksModel {
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The model's type path.
+        model: &'static str,
+        /// The module that registers the hook.
+        module: &'static str,
+    },
 }
 
 /// Every error found while booting or validating an app.

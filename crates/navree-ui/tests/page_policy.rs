@@ -9,9 +9,9 @@ use http::header::CONTENT_SECURITY_POLICY;
 use navree_config::{Config, ConfigSection, ConfigSources, FRAMEWORK_SECTIONS};
 use navree_http::{AppError, Controller, HttpModule, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{
-    BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, PluginInfo, ProviderKey,
-    Resolver,
+    BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };
+use navree_plugin_geo::{Geo, GeoAskingForAnything, GeoWithClock, GeoWithMap, GeoWithScanner};
 use navree_testing::{TestApp, TestAppBuilder, TestResponse};
 use navree_ui::app_files::IMAGE_CSP;
 use navree_ui::pages::region_answer;
@@ -123,16 +123,6 @@ fn with_tiles() -> TestAppBuilder {
     )
 }
 
-/// The plugin that ships the map: its namespace is `geo`.
-fn geo() -> PluginInfo {
-    PluginInfo::new(
-        "navree-plugin-geo",
-        env!("CARGO_CRATE_NAME"),
-        "geo",
-        "1.0.0",
-    )
-}
-
 /// What the plugin `geo` asks for: the host of its map tiles.
 fn tiles() -> PageSources {
     PageSources::new().ask(
@@ -142,51 +132,65 @@ fn tiles() -> PageSources {
     )
 }
 
-/// The plugin `geo`, asking for its tile host.
-struct Geo;
+/// The plugin `geo`: its crate is this module, so the app's modules at the top of the file
+/// (`PagesModule`, `AppClock`, `LogoModule`) are in no crate it names.
+mod navree_plugin_geo {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+    use navree_ui::{Directive, PageSources};
 
-impl Module for Geo {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(geo()).contribute(tiles());
+    use super::{CLOCK, MAP, tiles};
+
+    /// The plugin that ships the map: its namespace is `geo`.
+    fn geo() -> PluginInfo {
+        PluginInfo::new("navree-plugin-geo", module_path!(), "geo", "1.0.0")
     }
-}
 
-/// The plugin `geo`, asking for its tile host and for WebAssembly.
-struct GeoWithScanner;
+    /// The plugin `geo`, asking for its tile host.
+    pub struct Geo;
 
-impl Module for GeoWithScanner {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(geo()).contribute(tiles().wasm("barcode decoder"));
+    impl Module for Geo {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(geo()).contribute(tiles());
+        }
     }
-}
 
-/// The plugin `geo`, asking for a source outside the rules.
-struct GeoAskingForAnything;
+    /// The plugin `geo`, asking for its tile host and for WebAssembly.
+    pub struct GeoWithScanner;
 
-impl Module for GeoAskingForAnything {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(geo())
-            .contribute(PageSources::new().ask(Directive::ImgSrc, "*", "map tiles"));
+    impl Module for GeoWithScanner {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(geo()).contribute(tiles().wasm("barcode decoder"));
+        }
     }
-}
 
-/// The plugin `geo` with its map component: an app with a UI extension.
-struct GeoWithMap;
+    /// The plugin `geo`, asking for a source outside the rules.
+    pub struct GeoAskingForAnything;
 
-impl Module for GeoWithMap {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(geo());
-        m.contribute(MAP);
+    impl Module for GeoAskingForAnything {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(geo())
+                .contribute(PageSources::new().ask(Directive::ImgSrc, "*", "map tiles"));
+        }
     }
-}
 
-/// The plugin `geo` with an island script of its own, under its namespace.
-struct GeoWithClock;
+    /// The plugin `geo` with its map component: an app with a UI extension.
+    pub struct GeoWithMap;
 
-impl Module for GeoWithClock {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(geo());
-        m.contribute(CLOCK);
+    impl Module for GeoWithMap {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(geo());
+            m.contribute(MAP);
+        }
+    }
+
+    /// The plugin `geo` with an island script of its own, under its namespace.
+    pub struct GeoWithClock;
+
+    impl Module for GeoWithClock {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(geo());
+            m.contribute(CLOCK);
+        }
     }
 }
 
