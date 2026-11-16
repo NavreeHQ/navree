@@ -76,12 +76,14 @@ fn refusal(pattern: &str) -> String {
 #[tokio::test]
 async fn a_plugin_channel_outside_its_namespace_fails_the_boot() {
     // `{scope}.{id}` would match `private-users.{someone}`, the channel of each of the app's
-    // users; `notice_board_extra.` and a namespace after a parameter are not under it either.
+    // users; `notice_board_extra.`, a namespace after a parameter and the namespace alone are not
+    // under it either.
     for pattern in [
         "{scope}.{id}",
         "users.{id}",
         "notice_board_extra.{id}",
         "{board}.notice_board",
+        "notice_board",
     ] {
         let error = support::app(support::options())
             .module(BoardModule(pattern))

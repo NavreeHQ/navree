@@ -351,11 +351,12 @@ pub trait ModuleBuilderRealtimeExt {
     ///
     /// A module of a plugin that is not one of the framework's own packages
     /// authorizes channels under the plugin's namespace only
-    /// (`announcements.{id}`): another pattern fails the boot. The app
-    /// authorizes any channel with the plugin's function from a module of
-    /// its own, but none whose first segment is such a plugin's namespace
-    /// (`announcements.board` beside that plugin fails the boot): the
-    /// channels named under it are the plugin's.
+    /// (`announcements.{id}`): another pattern fails the boot, the namespace
+    /// alone (`announcements`) included. The app authorizes any channel with
+    /// the plugin's function from a module of its own, but none whose first
+    /// segment is such a plugin's namespace (`announcements.board` beside
+    /// that plugin fails the boot): the channels named under it are the
+    /// plugin's.
     ///
     /// The module does not need to import `RealtimeModule`.
     ///
