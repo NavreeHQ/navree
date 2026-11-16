@@ -1,0 +1,14 @@
+<Project>
+  <!-- Every package version of the solution is set here and nowhere else. The
+       product depends on the Windows App SDK and on what .NET ships; the test
+       projects add MSTest. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="4.5.3" />
+    <PackageVersion Include="MSTest.TestFramework" Version="4.5.3" />
+  </ItemGroup>
+</Project>
