@@ -785,13 +785,39 @@ internal sealed partial class NodeRenderer
                         finder.ItemsSource = offered;
                     }
 
-                    Offer(options, held?.More ?? choice.More is not null, finder.Text);
+                    // What the person last typed to search: what more of the list, and a new one, are asked for by.
+                    string typed = string.Empty;
+                    Offer(options, held?.More ?? choice.More is not null, typed);
                     string? searchOverlay = currentOverlay;
                     finder.TextChanged += (box, e) =>
                     {
-                        if (e.Reason == AutoSuggestionBoxTextChangeReason.UserInput && box.Text.Length >= search.Min)
+                        if (e.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
                         {
-                            context.Send(Events.Options(context.Screen.Id, currentFormOf(), id, box.Text));
+                            return;
+                        }
+
+                        typed = box.Text;
+                        if (ChoiceRules.ClearsOnEmptying(typed, choiceShown.Now))
+                        {
+                            // The person emptied the box: the field holds nothing now, and that is what the form sends.
+                            choiceShown.Chose(string.Empty, DateTime.UtcNow);
+                            send(new TextValue(string.Empty));
+                        }
+
+                        if (typed.Length >= search.Min)
+                        {
+                            context.Send(Events.Options(context.Screen.Id, currentFormOf(), id, typed));
+                        }
+                    };
+
+                    // Words typed to search that chose nothing are not left looking like a choice: when the person leaves the box it says the
+                    // option the field holds, or nothing, which is what the form sends.
+                    finder.LostFocus += (_, _) =>
+                    {
+                        string? heldWords = choiceShown.Now.Length > 0 && words.TryGetValue(choiceShown.Now, out string? known) ? known : null;
+                        if (ChoiceRules.WordsOnLeaving(finder.Text, heldWords) is string back)
+                        {
+                            finder.Text = back;
                         }
                     };
                     finder.QuerySubmitted += (box, e) =>
@@ -805,7 +831,7 @@ internal sealed partial class NodeRenderer
                                 send(new TextValue(value));
                                 break;
                             case ChoiceAct.More:
-                                context.Send(Events.Options(context.Screen.Id, currentFormOf(), id, box.Text, more: true));
+                                context.Send(Events.Options(context.Screen.Id, currentFormOf(), id, typed, more: true));
                                 break;
                             case ChoiceAct.Create when choice.Create?.Href is string href:
                                 Act(new Models.ActionNavigate { Href = href }, null, id, currentFormOf(), searchOverlay);
@@ -820,7 +846,7 @@ internal sealed partial class NodeRenderer
                         finder.IsEnabled = !(field.Disabled || context.Screen.Has(id, Models.State.Disabled));
                         if (view?.Options is { } latest)
                         {
-                            Offer(latest, view.More, finder.Text);
+                            Offer(latest, view.More, typed);
                             if (finder.FocusState != FocusState.Unfocused && latest.Count > 0)
                             {
                                 finder.IsSuggestionListOpen = true;

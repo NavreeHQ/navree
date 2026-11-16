@@ -54,6 +54,27 @@ public sealed class ChoiceRulesTests
     }
 
     [TestMethod]
+    public void The_box_of_a_searched_choice_says_only_what_the_form_will_send()
+    {
+        // Amit Kumar of Ludhiana is chosen. The person types "Sim" to look for someone else, chooses nobody, and leaves the box.
+        Assert.AreEqual("Amit Kumar (Ludhiana)", ChoiceRules.WordsOnLeaving("Sim", "Amit Kumar (Ludhiana)"), "the box is left saying words the form will not send");
+
+        // Nobody is chosen: words typed and not chosen are taken out of the box.
+        Assert.AreEqual(string.Empty, ChoiceRules.WordsOnLeaving("Sim", null), "words that chose nobody are left looking like a choice");
+
+        // The box already says what the field holds: it is left as it is.
+        Assert.IsNull(ChoiceRules.WordsOnLeaving("Amit Kumar (Ludhiana)", "Amit Kumar (Ludhiana)"));
+        Assert.IsNull(ChoiceRules.WordsOnLeaving(string.Empty, null));
+        Assert.IsNull(ChoiceRules.WordsOnLeaving(null, string.Empty));
+
+        // The person empties the box to mean nobody: the field is cleared, once.
+        Assert.IsTrue(ChoiceRules.ClearsOnEmptying(string.Empty, "customer-17"), "emptying the box left the last choice in the form");
+        Assert.IsFalse(ChoiceRules.ClearsOnEmptying(string.Empty, string.Empty), "an empty field is cleared again");
+        Assert.IsFalse(ChoiceRules.ClearsOnEmptying(string.Empty, null));
+        Assert.IsFalse(ChoiceRules.ClearsOnEmptying("S", "customer-17"), "typing to search cleared the choice");
+    }
+
+    [TestMethod]
     public void A_thing_that_only_reads_like_a_line_of_the_list_is_not_chosen()
     {
         IReadOnlyList<Suggestion> offered = ChoiceRules.Offer([Option("Amit Kumar", "customer-17"), Option("Amit Kumar", "customer-42")], more: true, createWords: "Add a customer", typed: "amit");

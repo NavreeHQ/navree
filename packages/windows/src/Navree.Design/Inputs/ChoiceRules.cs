@@ -177,6 +177,29 @@ public static class ChoiceRules
     public static string Words(string label, string? detail) =>
         string.IsNullOrWhiteSpace(detail) ? label : label + " (" + detail.Trim() + ")";
 
+    /// <summary>
+    /// What the box of a searched choice is to say when the person leaves it, so that it says only what the form will send. Words typed to
+    /// search are not a choice: when the box holds anything but the words of the option the field holds, those words are put back (none, when
+    /// the field holds nothing).
+    /// </summary>
+    /// <param name="box">What the box holds.</param>
+    /// <param name="heldWords">The words of the option the field holds, or null when it holds none.</param>
+    /// <returns>The words to put in the box, or null when it already says what the field holds.</returns>
+    public static string? WordsOnLeaving(string? box, string? heldWords)
+    {
+        string held = heldWords ?? string.Empty;
+        return string.Equals(box ?? string.Empty, held, StringComparison.Ordinal) ? null : held;
+    }
+
+    /// <summary>
+    /// Whether the person emptying the box of a searched choice clears the field: the box is empty and the field holds a value. The field then
+    /// holds nothing, and that is what the form sends.
+    /// </summary>
+    /// <param name="box">What the box holds after what the person did.</param>
+    /// <param name="heldValue">The value the field holds, or null or empty when it holds none.</param>
+    /// <returns>Whether the field's value is to be cleared.</returns>
+    public static bool ClearsOnEmptying(string? box, string? heldValue) => string.IsNullOrEmpty(box) && !string.IsNullOrEmpty(heldValue);
+
     /// <summary>The place of a value in a list of options: the first option that holds it.</summary>
     /// <param name="options">The options.</param>
     /// <param name="value">The value.</param>
