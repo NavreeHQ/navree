@@ -1,0 +1,45 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "screen": {
+  "title": "Board",
+  "body": {
+   "t": "stack",
+   "children": [
+    {
+     "t": "region",
+     "id": "totals",
+     "src": "/fragments/totals",
+     "live": {
+      "src": "/broadcasting/stream?topics=board",
+      "event": "board"
+     },
+     "children": [
+      {
+       "t": "text",
+       "value": "₹1,00,000 today"
+      }
+     ]
+    },
+    {
+     "t": "list",
+     "id": "cards",
+     "since": "0000502",
+     "changes": "/board/changes",
+     "live": {
+      "src": "/broadcasting/stream?topics=board",
+      "event": "board"
+     },
+     "children": [
+      {
+       "t": "row",
+       "id": "card-1",
+       "title": "Pack 2 phulkari dupattas"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

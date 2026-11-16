@@ -1,0 +1,20 @@
+{
+ "navree": 1,
+ "build": "152bd84abf4d",
+ "vocab": 0,
+ "ops": [
+  {
+   "op": "merge",
+   "target": "cards",
+   "since": "0000503",
+   "gone": [],
+   "nodes": [
+    {
+     "t": "row",
+     "id": "card-2",
+     "title": "Ship to Ludhiana"
+    }
+   ]
+  }
+ ]
+}

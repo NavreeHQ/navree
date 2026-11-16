@@ -324,7 +324,10 @@ impl Core {
 
     /// Asks what changed in a list since its revision, or, if an ask is still
     /// out, once more when it lands.
+    /// While the screen's page is on its way the ask is owed, and made of the
+    /// page that comes.
     pub(crate) fn ask_changes(&mut self, id: ScreenId, list: &str) {
+        let waits = self.page_on_its_way(id);
         let (Some(view), Some(inner)) =
             (self.view.screens.get(&id), self.inner.screens.get_mut(&id))
         else {
@@ -334,7 +337,7 @@ impl Core {
             return;
         };
         sub.timer = None;
-        if sub.busy {
+        if sub.busy || waits {
             sub.dirty = true;
             return;
         }
@@ -371,9 +374,10 @@ impl Core {
         if let Some(sub) = inner.live_lists.get_mut(list) {
             sub.busy = false;
         }
-        // The screen was asked for again: what it shows now is newer than this.
+        // The screen was asked for again: what it shows now is newer than
+        // this. What the list heard meanwhile is asked of it.
         if inner.visit != visit {
-            return;
+            return self.live_owed(id);
         }
         if let Answer::Tree {
             status,
