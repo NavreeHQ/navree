@@ -49,6 +49,10 @@ A build without the DLL stops with an error that says where it was looked for. T
 
 The client tells the core which kinds it has no drawing for (`ShellOptions.Undrawable`, from the one list in `Navree.Design/Undrawable.cs`), and the core shows a page that holds one in the web view, whole, never with a hole: a web region and the range field. A test reads the renderer's sources against the list, so a kind gains a drawing and leaves the list in the same change, and a kind that loses its drawing cannot be forgotten.
 
+## The web view
+
+A page of the app's own origins can be shown in the system's web view (WebView2). Every request it makes, from the page, its frames and its workers (service workers and shared workers too), is asked of the client first, and one that is not for the app's own origins is refused; a web view runtime too old to ask about the requests of workers shows no page, and says that updating the WebView2 Runtime lets it be shown. A WebSocket is not such a request, so the client cannot refuse one: the server's Content-Security-Policy `connect-src` is what keeps a page's WebSockets to the app's own origins. A download a page starts is refused, and the person is told it was not saved.
+
 ## The colour field and the file field
 
 A colour field is a field-shaped button: a swatch, the value in words (`#16a34a`), and for a screen reader its label, the colour's name and the value one character at a time. It opens a flyout with the system's own `ColorPicker` and OK and Cancel; only OK sends the colour, as `#rrggbb`.

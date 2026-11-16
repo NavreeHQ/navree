@@ -235,12 +235,44 @@ internal sealed class WebPage : Grid
 
             view.CoreWebView2!.Navigate(web.Url);
         }
+        catch (WebViewTooOldException)
+        {
+            // A web view that cannot be held to the app's own addresses shows nothing: it is closed, and the person is told why.
+            CloseNow();
+            Children.Clear();
+            Children.Add(Look.Label("This page cannot be shown: the web view on this device is too old to be kept to the app's own addresses. Updating the Microsoft Edge WebView2 Runtime lets it be shown.", muted: true));
+            host.ReportProblem("a web page was not shown: the web view runtime has no request filter for workers");
+        }
         catch (Exception problem)
         {
             Children.Clear();
             Children.Add(Look.Label("The web view is not available on this device (" + problem.GetType().Name + ").", muted: true));
         }
     }
+
+    // Says over the page that a download it started was not saved.
+    private void ShowRefusedDownload()
+    {
+        if (Children.OfType<InfoBar>().FirstOrDefault() is InfoBar shown)
+        {
+            shown.IsOpen = true;
+            return;
+        }
+
+        InfoBar bar = new()
+        {
+            IsOpen = true,
+            IsClosable = true,
+            Severity = InfoBarSeverity.Informational,
+            Title = "Download not saved",
+            Message = "The app does not save files from its web pages.",
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        Children.Add(bar);
+    }
+
+    // The runtime has no way to ask the app about the requests of a page's workers, so the page is not shown.
+    private sealed class WebViewTooOldException(Exception inner) : Exception("the web view runtime has no request filter for workers", inner);
 
     private async Task StartAsync()
     {
@@ -308,6 +340,15 @@ internal sealed class WebPage : Grid
         };
         web.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
 
+        // A download a page starts is refused, and the person is told: never saved to the Downloads folder by itself, which is what the web view
+        // does with one nobody handles.
+        web.DownloadStarting += (_, args) =>
+        {
+            args.Cancel = true;
+            ShowRefusedDownload();
+            host.ReportProblem("a download a web page started was refused");
+        };
+
         // The layer that sees what a callback does not: a document that is not the app's own is emptied before anything in it runs.
         string allowed = JsonSerializer.Serialize(host.Origins.Documents);
         _ = web.AddScriptToExecuteOnDocumentCreatedAsync(
@@ -315,21 +356,31 @@ internal sealed class WebPage : Grid
             "var ok=allowed.some(function(a){var star=a.indexOf('://*.');if(star<0){return a===o;}var scheme=a.slice(0,star+3);var rest=a.slice(star+4);return o.indexOf(scheme)===0&&o.slice(scheme.length).endsWith(rest)&&o.slice(scheme.length).length>rest.length;});" +
             "if(!ok){window.stop();document.documentElement.innerHTML='';}}catch(e){}})();");
 
-        // Every request is asked of the app first: what is not the app's own is blocked, and in the demo what is recorded is answered.
-        web.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+        // Every request is asked of the app first, whichever part of the page made it: the page, its frames, and its workers of every kind (a
+        // service worker or a shared worker is raised only through this overload, with all its source kinds). A runtime without the overload shows
+        // no page (WebViewTooOld). What is not the app's own is refused, nothing goes out while a sign-out runs, and in the demo what is recorded is
+        // answered. A WebSocket is not a request the web view asks about: the server's connect-src is what holds it.
+        try
+        {
+            web.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
+        }
+        catch (Exception problem) when (problem is not OutOfMemoryException)
+        {
+            throw new WebViewTooOldException(problem);
+        }
+
         web.WebResourceRequested += (sender, args) =>
         {
             string uri = args.Request.Uri;
-            if (WebData.IsOwnRequest(uri))
+            switch (WebData.Answer(uri, host.Origins.Ours, host.Wiping))
             {
-                return;
-            }
-
-            // While a sign-out's steps run, nothing is asked of the network: no answer can put a cookie into what is being cleared.
-            if (!host.Origins.Ours(uri) || host.Wiping)
-            {
-                args.Response = web.Environment.CreateWebResourceResponse(null, 403, "Blocked", string.Empty);
-                return;
+                case WebAnswer.AsItIs:
+                    return;
+                case WebAnswer.Refused:
+                    args.Response = web.Environment.CreateWebResourceResponse(null, 403, "Blocked", string.Empty);
+                    return;
+                default:
+                    break;
             }
 
             if (recorded is not null && Uri.TryCreate(uri, UriKind.Absolute, out Uri? address) && recorded(address) is (byte[] body, string type))

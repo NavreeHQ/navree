@@ -65,4 +65,16 @@ public sealed class WebDataTests
         Assert.IsTrue(WebData.IsOwnRequest("data:image/png;base64,AAAA"));
         Assert.IsFalse(WebData.IsOwnRequest("https://evil.example/"));
     }
+
+    [TestMethod]
+    public void A_request_of_the_web_view_goes_only_to_the_apps_origin_and_none_goes_to_the_network_while_signing_out()
+    {
+        Navree.Design.Origins shop = new("https://shop.example");
+        Assert.AreEqual(WebAnswer.Ours, WebData.Answer("https://shop.example/orders", shop.Ours, wiping: false));
+        Assert.AreEqual(WebAnswer.Refused, WebData.Answer("https://other.example/collect", shop.Ours, wiping: false));
+        Assert.AreEqual(WebAnswer.Refused, WebData.Answer("http://shop.example/orders", shop.Ours, wiping: false));
+        Assert.AreEqual(WebAnswer.Refused, WebData.Answer("https://shop.example/orders", shop.Ours, wiping: true));
+        Assert.AreEqual(WebAnswer.AsItIs, WebData.Answer("about:blank", shop.Ours, wiping: true));
+        Assert.AreEqual(WebAnswer.AsItIs, WebData.Answer("blob:https://shop.example/1f2e", shop.Ours, wiping: false));
+    }
 }
