@@ -29,11 +29,11 @@ public sealed class BrowserSignInTests
     {
         string[] arriving =
         [
-            "charkha://signed-in?code=PLANTED000&state=ISIjJCUmJygpKissLS4vMA",
-            "charkha://signed-in?code=PLANTED000",
+            "charkha://signed-in?code=OTHER00000&state=ISIjJCUmJygpKissLS4vMA",
+            "charkha://signed-in?code=OTHER00000",
             "charkha://orders/7",
             "charkha:/signed-in",
-            "http://127.0.0.1:5123/cb?code=PLANTED000",
+            "http://127.0.0.1:5123/cb?code=OTHER00000",
         ];
         foreach (string address in arriving)
         {
@@ -46,9 +46,9 @@ public sealed class BrowserSignInTests
     public void Once_offered_every_arrival_goes_to_the_core_as_it_came_which_decides()
     {
         // The core takes a return only while the sign-in it opened is open, on the way back it named and with its state; anything else it refuses.
-        const string planted = "charkha://signed-in?code=PLANTED000&state=not-the-state";
-        Assert.AreEqual(Arrival.SignInDone, BrowserSignIn.Route(offered: true, signInOpen: true, planted));
-        Assert.AreEqual(Arrival.OpenLink, BrowserSignIn.Route(offered: true, signInOpen: false, planted));
+        const string other = "charkha://signed-in?code=OTHER00000&state=not-the-state";
+        Assert.AreEqual(Arrival.SignInDone, BrowserSignIn.Route(offered: true, signInOpen: true, other));
+        Assert.AreEqual(Arrival.OpenLink, BrowserSignIn.Route(offered: true, signInOpen: false, other));
         Assert.AreEqual(Arrival.Dropped, BrowserSignIn.Route(offered: true, signInOpen: true, string.Empty));
     }
 
