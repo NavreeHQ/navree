@@ -1,5 +1,6 @@
 import Foundation
 import NavreeCoreBridge
+import NavreeDesign
 import NavreeProtocol
 import NavreeRuntime
 import Testing
@@ -131,5 +132,28 @@ struct EffectTests {
         #expect(Words.announcement(.fieldsNeedAttention, count: 1) == "1 field needs attention")
         #expect(Words.announcement(.loaded, count: 25) == "25 more rows loaded")
         #expect(Words.announcement(nil, count: nil) == nil)
+    }
+
+    @Test func aSaveTheServerTookIsNeverWordedAsAFailure() {
+        let saved = Words.notice(.savedNotRefreshed, tone: .warning)
+        #expect(saved == "Saved. The screen couldn't be brought up to date.")
+        #expect(Words.announcement(.savedNotRefreshed, count: nil) == saved)
+        // A notice this build has no words for says what its tone says, and
+        // never to do it again: it may be about a payment the server took.
+        let unknown = [
+            Words.notice(.unknown, tone: .danger), Words.notice(.unknown, tone: .warning), Words.notice(.unknown),
+            Words.notice(nil, tone: .danger), Words.notice(nil),
+        ]
+        #expect(unknown[0] == "That didn't work.")
+        #expect(unknown[1] == "Something happened that this version of the app can't describe.")
+        for words in unknown + [saved] {
+            #expect(!words.localizedCaseInsensitiveContains("again"), "\(words)")
+        }
+        #expect(Words.announcement(.unknown, count: nil) == nil)
+        // The message a screen shows for such a notice carries those words.
+        let message = try? JSONDecoder().decode(
+            Message.self, from: Data(#"{"id":7,"tone":"warning","notice":"said_by_a_newer_core"}"#.utf8)
+        )
+        #expect(Drawable.notice(message).notice?.text == unknown[1])
     }
 }

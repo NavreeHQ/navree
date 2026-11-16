@@ -165,7 +165,7 @@ enum Drawable {
         guard let message else { return (nil, nil) }
         let notice = Notice(
             id: String(message.id), tone: message.tone, title: message.title,
-            text: message.text ?? Words.notice(message.notice),
+            text: message.text ?? Words.notice(message.notice, tone: message.tone),
             action: message.action == nil ? nil : MessageButton.action, actionLabel: message.action
         )
         return PresentationRules.message(message.tone) == .alert ? (nil, notice) : (notice, nil)

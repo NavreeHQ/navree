@@ -101,7 +101,8 @@ import Testing
     #expect(nav.width == .compact)
     let message = try JSONDecoder().decode(Message.self, from: Data(#"{"id":3,"tone":"glitter","notice":"tired"}"#.utf8))
     #expect(message.tone == .neutral)
-    #expect(message.notice == nil)
+    // A notice this build does not know is still a notice, never none.
+    #expect(message.notice == .unknown)
 }
 
 /// The observed model is never compared value by value: a screen's tree may
@@ -113,4 +114,22 @@ import Testing
     #expect(!equatable(ScreenContent.self))
     #expect(!equatable(NavPart.self))
     #expect(!equatable(AppPart.self))
+}
+
+/// The core's notices are read by its words for them.
+@Test func aNoticeANewerCoreSaysIsStillANotice() throws {
+    let messages = try JSONDecoder().decode([Message].self, from: Data("""
+        [{"id":1,"tone":"warning","notice":"saved_not_refreshed"},
+         {"id":2,"tone":"danger","notice":"said_by_a_newer_core"},
+         {"id":3,"tone":"neutral","text":"Packed"},
+         {"id":4,"tone":"danger","notice":"failed"}]
+        """.utf8))
+    #expect(messages.map(\.notice) == [.savedNotRefreshed, .unknown, nil, .failed])
+    #expect(CoreNotice.read("saved_not_refreshed") == .savedNotRefreshed)
+    #expect(CoreNotice.read("said_by_a_newer_core") == .unknown)
+    guard case .announce(_, let notice, _) = try CoreEffect.read(["t": "announce", "notice": "said_by_a_newer_core"]) else {
+        Issue.record("not an announcement")
+        return
+    }
+    #expect(notice == .unknown)
 }
