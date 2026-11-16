@@ -75,15 +75,21 @@ fn is_zero(value: &u16) -> bool {
     *value == 0
 }
 
-/// Why a request got no answer.
+/// Why a request got no answer. The core reads `offline` as "nothing of
+/// this request was sent", and counts a write that failed so on the request
+/// that carried it as never made; a client reports it only then.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TransportError {
-    /// The server could not be reached.
+    /// Nothing of the request was sent: there was no route, the server's
+    /// name was not found, or the connection was refused or never made. A
+    /// request that was sent, even in part, and whose answer was lost is
+    /// never `Offline`: it is a `Timeout` or `Other`.
     Offline,
     /// No answer came in the time the request allowed.
     Timeout,
-    /// The connection was refused as unsafe, or failed in some other way.
+    /// The connection was refused as unsafe, broke after the request was
+    /// sent, or failed in some other way.
     Other,
 }
 
@@ -93,7 +99,9 @@ pub enum TransportError {
 /// A redirect is best handed to the core as it came, with its `status` and
 /// `location`: the core checks where it leads and asks again. A transport that
 /// follows redirects itself must stop at the first that leaves the app's
-/// origins and say so with `left`, and gives the last address as `url`.
+/// origins and say so with `left`, and gives the last address as `url`, with
+/// an `error` too: the core tells the answer to the request it sent from one
+/// after a redirect by it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Response {
     /// The number of the request this answers.
