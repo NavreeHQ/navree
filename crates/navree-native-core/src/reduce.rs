@@ -3118,6 +3118,82 @@ mod tests {
         }
     }
 
+    /// The one decision, status by status: whether an answer is the app's
+    /// word on who is signed in, and whether the write it answers can have
+    /// run, by whether it names a person and which hop it answers.
+    #[test]
+    fn what_an_answer_says_of_the_session_and_of_a_write_status_by_status() {
+        let heard = |status: u16, names_someone: bool, first_hop: bool| Heard {
+            error: None,
+            status,
+            names_someone,
+            first_hop,
+            carried_write: true,
+            made_here: false,
+        };
+        // (status, the app's word when it names nobody, a write ran when its own answer names nobody)
+        let table = [
+            (200, true, true),
+            (303, true, true),
+            (400, true, true),
+            (401, true, true),
+            (403, true, true),
+            (404, true, true),
+            (408, false, true),
+            (413, false, false),
+            (414, false, false),
+            (419, true, true),
+            (422, true, true),
+            (429, false, true),
+            (431, false, false),
+            (500, false, true),
+            (502, false, true),
+            (503, false, true),
+        ];
+        for (status, speaks, ran) in table {
+            assert_eq!(
+                heard(status, false, true).speaks_for_the_session(),
+                speaks,
+                "{status}"
+            );
+            assert!(
+                heard(status, true, true).speaks_for_the_session(),
+                "{status} naming a person"
+            );
+            assert_eq!(
+                heard(status, false, true).write_may_have_run(),
+                ran,
+                "{status}"
+            );
+            assert!(
+                heard(status, true, true).write_may_have_run(),
+                "{status} naming a person"
+            );
+            assert!(
+                heard(status, false, false).write_may_have_run(),
+                "{status} after a redirect"
+            );
+            let read = Heard {
+                carried_write: false,
+                ..heard(status, false, true)
+            };
+            assert!(!read.write_may_have_run(), "{status} answering a read");
+        }
+        let lost = |error, first_hop| Heard {
+            error: Some(error),
+            ..heard(0, false, first_hop)
+        };
+        assert!(!lost(TransportError::Offline, true).write_may_have_run());
+        assert!(lost(TransportError::Offline, false).write_may_have_run());
+        assert!(lost(TransportError::Timeout, true).write_may_have_run());
+        assert!(lost(TransportError::Other, true).write_may_have_run());
+        let never_sent = Heard {
+            made_here: true,
+            ..heard(502, false, true)
+        };
+        assert!(!never_sent.write_may_have_run());
+    }
+
     /// A write counts as never made only when the server cannot have run it:
     /// the answer to the request that carried it, with no redirect followed,
     /// names nobody and refuses it for its size before any handler runs (413,
