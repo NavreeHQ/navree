@@ -20,14 +20,20 @@ public static class QueryBarRules
         return search is null ? [.. query.Children] : [search, .. query.Children.Where(child => !ReferenceEquals(child, search))];
     }
 
-    /// <summary>Whether the bar drawn for one query form stands for the next: the same form, and the same fields but for what they hold.</summary>
-    /// <param name="before">The query form the bar was drawn for.</param>
-    /// <param name="after">The query form the answer brings.</param>
+    /// <summary>
+    /// Whether the bar drawn for one query form stands for the next: the same form, and the same fields but for what they hold. A table that
+    /// gains a query form, or loses the one it had, has another bar: it does not stand.
+    /// </summary>
+    /// <param name="before">The query form the bar was drawn for, or none.</param>
+    /// <param name="after">The query form the answer brings, or none.</param>
     /// <returns>True when the bar stands.</returns>
-    public static bool Stands(Models.Form before, Models.Form after)
+    public static bool Stands(Models.Form? before, Models.Form? after)
     {
-        ArgumentNullException.ThrowIfNull(before);
-        ArgumentNullException.ThrowIfNull(after);
+        if (before is null || after is null)
+        {
+            return false;
+        }
+
         if (Tree.FormId(before) != Tree.FormId(after))
         {
             return false;

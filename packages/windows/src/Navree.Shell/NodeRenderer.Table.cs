@@ -182,7 +182,7 @@ internal sealed partial class NodeRenderer
                 return false;
             }
 
-            if (!PageRules.SameButFieldValues(QueryNode(previous), QueryNode(next)) && !UpdateToolbar(toolbarRecords, previous.Query!, next.Query!))
+            if (!PageRules.SameButFieldValues(QueryNode(previous), QueryNode(next)) && (previous.Query is null || next.Query is null || !UpdateToolbar(toolbarRecords, previous.Query, next.Query)))
             {
                 PageReports.Note("a table's bar of fields sends to another form now, or changed beyond what the fields hold");
                 return false;

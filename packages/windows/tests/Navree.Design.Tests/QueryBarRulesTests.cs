@@ -26,6 +26,14 @@ public sealed class QueryBarRulesTests
     }
 
     [TestMethod]
+    public void A_table_that_gains_or_loses_its_query_form_has_another_bar_and_nothing_is_thrown()
+    {
+        Assert.IsFalse(QueryBarRules.Stands(null, Query("/ledger")));
+        Assert.IsFalse(QueryBarRules.Stands(Query("/ledger"), null));
+        Assert.IsFalse(QueryBarRules.Stands(null, null));
+    }
+
+    [TestMethod]
     public void The_bar_is_drawn_again_when_the_form_it_sends_to_is_another()
     {
         Assert.IsFalse(QueryBarRules.Stands(Query("/ledger"), Query("/ledger?sort=amount")), "a form with no id is known by its address");
