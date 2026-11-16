@@ -3,9 +3,9 @@
 //! list filters in step.
 
 use std::any::Any;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use navree_db::{Record, Uow};
 use navree_kernel::{AppContext, BoxError, BoxFuture, PluginInfo};
@@ -146,6 +146,10 @@ pub(crate) struct PluginPolicy {
     pub(crate) module: &'static str,
     /// The subjects its rules may name.
     pub(crate) own: OwnSubjects,
+    /// The `reason` of each rule it adds: the policy and its plugin.
+    reason: String,
+    /// The subjects of the rules left out so far, each logged once.
+    logged: Mutex<BTreeSet<String>>,
 }
 
 impl PluginPolicy {
@@ -159,6 +163,51 @@ impl PluginPolicy {
             own: OwnSubjects {
                 namespace: plugin.namespace,
             },
+            reason: format!("policy `{policy}` of plugin `{}`", plugin.name),
+            logged: Mutex::default(),
+        }
+    }
+
+    /// Calls `define` into rules of its own and adds to `rules`, in order,
+    /// each rule whose every subject is one of the plugin's own, with
+    /// `reason` naming this policy and its plugin. Any other rule is left
+    /// out, and each subject of it that is not the plugin's own is logged
+    /// once, at target `navree::security`.
+    pub(crate) fn copy_own_rules(
+        &self,
+        define: fn(&crate::AbilityCtx, &mut crate::Rules),
+        ctx: &crate::AbilityCtx,
+        rules: &mut crate::Rules,
+    ) {
+        let mut written = crate::Rules::new();
+        define(ctx, &mut written);
+        for mut rule in written.into_rules() {
+            if self.outside(&rule).is_none() {
+                rule.reason = Some(self.reason.clone());
+                rules.push(rule);
+                continue;
+            }
+            for subject in &rule.subject {
+                if !self.own.contains(subject) {
+                    self.log_left_out(subject);
+                }
+            }
+        }
+    }
+
+    /// Logs that a rule on `subject` was left out, the first time only.
+    fn log_left_out(&self, subject: &str) {
+        let first = {
+            let mut seen = self.logged.lock().unwrap_or_else(PoisonError::into_inner);
+            !seen.contains(subject) && seen.insert(subject.to_owned())
+        };
+        if first {
+            tracing::warn!(
+                target: "navree::security",
+                "left out a rule of plugin `{}`'s policy `{}` on `{subject}`, not one of its own subjects",
+                self.plugin,
+                self.policy
+            );
         }
     }
 

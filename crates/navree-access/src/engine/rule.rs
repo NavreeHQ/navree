@@ -205,6 +205,11 @@ impl Rules {
         &self.rules
     }
 
+    /// The rules, in order, taken out of the set.
+    pub(crate) fn into_rules(self) -> Vec<Rule> {
+        self.rules
+    }
+
     /// Validates the rules into an [`Ability`], or returns the first
     /// problem found.
     pub fn try_build(self) -> Result<Ability, RuleError> {

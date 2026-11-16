@@ -1,6 +1,6 @@
-//! A plugin's permissions at boot: what it may name, what it may not, and
-//! that naming grants nothing. A test binary of its own, because it reads the
-//! warnings the boot logs.
+//! A plugin's permissions, subjects and policies: what it may name and write,
+//! what it may not, and that naming grants nothing. A test binary of its own,
+//! because it reads the warnings the boot and the ability builds log.
 
 #[path = "module/database.rs"]
 mod database;
@@ -10,27 +10,47 @@ mod support;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
-use navree_access::{AbilityFactory, AccessModule, Policy, Subject};
+use navree_access::{
+    AbilityCtx, AbilityFactory, AccessModule, AccessService, Policy, READ, Rule, Rules, Subject,
+    UPDATE,
+};
 use navree_contracts::{ModuleBuilderPermissionsExt, Permission, permission_catalog, permitted};
 use navree_kernel::{Module, ModuleBuilder, ModuleId, PluginInfo};
 use navree_testing::{TestApp, TestAppBuilder, TestResponse, principal};
-use serde_json::json;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::support::{RecordingAudit, SUPER_ADMIN, give_role, insert_post};
 
-/// The warnings logged on this thread while the guard lives (the tests run on a
-/// current-thread runtime, so the boot logs on this thread).
+/// The warnings logged on this thread while the guard lives, each with its target (the
+/// tests run on a current-thread runtime, so the boot and the requests log on this thread).
 #[derive(Clone, Default)]
-struct Warnings(Arc<Mutex<Vec<String>>>);
+struct Warnings(Arc<Mutex<Vec<(String, String)>>>);
 
 impl Warnings {
     fn install(&self) -> tracing::subscriber::DefaultGuard {
         tracing::subscriber::set_default(self.clone())
     }
 
+    /// Every warning's message, in order.
     fn all(&self) -> Vec<String> {
-        self.0.lock().unwrap().clone()
+        self.0
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, message)| message.clone())
+            .collect()
+    }
+
+    /// The messages of the warnings at `target`, in order.
+    fn at(&self, target: &str) -> Vec<String> {
+        self.0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(at, _)| at == target)
+            .map(|(_, message)| message.clone())
+            .collect()
     }
 }
 
@@ -61,7 +81,8 @@ impl tracing::Subscriber for Warnings {
         if *event.metadata().level() == tracing::Level::WARN {
             let mut message = Message(String::new());
             event.record(&mut message);
-            self.0.lock().unwrap().push(message.0);
+            let target = event.metadata().target().to_owned();
+            self.0.lock().unwrap().push((target, message.0));
         }
     }
 
@@ -260,11 +281,38 @@ mod navree_plugin_announcements {
             }
         }
     }
+
+    /// Lets holders of `night-shift`, a role the app creates in its database, update the
+    /// app's posts and read the plugin's announcements.
+    pub struct NightShift;
+
+    impl Policy for NightShift {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.has_role("night-shift") {
+                rules.can(UPDATE, "Post");
+                rules.can(READ, "announcements.Announcement");
+            }
+        }
+    }
+
+    /// Lets every user inside a workspace update the app's posts and read the plugin's
+    /// announcements.
+    pub struct InWorkspaces;
+
+    impl Policy for InWorkspaces {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.team_id.is_some() {
+                rules.can(UPDATE, "Post");
+                rules.can(READ, "announcements.Announcement");
+            }
+        }
+    }
 }
 
 use navree_plugin_announcements::{
     Announcement, Bulletin, Everyone, Everything, Extras, ForBilling, ForGuests, ForReaders,
-    ForSuperAdmins, ForViewers, NoticePolicy, NoticeSubjects, Open, Plugin, PolicyModule, Unnamed,
+    ForSuperAdmins, ForViewers, InWorkspaces, NightShift, NoticePolicy, NoticeSubjects, Open,
+    Plugin, PolicyModule, Unnamed,
 };
 
 /// A module of the app, named `name`, that describes `permissions`.
@@ -852,6 +900,31 @@ async fn a_plugin_policy_on_its_own_subject_applies_and_names_its_plugin() {
         policy.contributions,
         [("navree_access::records::PolicyRegistration", 1)]
     );
+
+    // `access:explain` and the abilities endpoint name the policy and its plugin.
+    let meera = Uuid::now_v7();
+    let reason = "policy `plugins::navree_plugin_announcements::NoticePolicy` of plugin `navree-plugin-announcements`";
+    let explanation = app
+        .get::<AccessService>()
+        .await
+        .explain(meera, READ, "announcements.Announcement", None)
+        .await
+        .expect("an explanation");
+    let decided = format!("Decided by rule #1: can read announcements.Announcement ({reason})");
+    assert!(explanation.to_string().contains(&decided), "{explanation}");
+    let abilities = app
+        .acting_as(principal(meera))
+        .get("/api/me/abilities")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    let kept = json!({
+        "action": "read",
+        "subject": "announcements.Announcement",
+        "reason": reason,
+    });
+    assert_eq!(abilities[0], kept, "{abilities}");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -898,5 +971,115 @@ async fn the_app_may_register_a_plugin_policy() {
     assert!(
         !listed.iter().any(|name| name.starts_with("AccessPolicy<")),
         "the policy's module is the app's: {listed:?}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_policy_rule_the_boot_did_not_see_is_left_out() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    // `night-shift` is a role the app creates in its database: no principal the boot asks
+    // holds it.
+    let app = builder()
+        .module(plugin_policy::<NightShift>())
+        .try_build()
+        .await
+        .expect("the boot does not see the policy's rule on posts");
+    let (harpreet, kuldeep, gurpreet) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+    give_role(&app, kuldeep, "night-shift", &[]).await;
+    give_role(&app, gurpreet, "night-shift", &[]).await;
+    let post = insert_post(&app, "Jalandhar roster", Some(harpreet), "draft", false).await;
+
+    // Neither Kuldeep Gill nor Gurpreet Singh may rename Harpreet Sandhu's post.
+    rename(&app, kuldeep, post.id).await.assert_status(403);
+    rename(&app, gurpreet, post.id).await.assert_status(403);
+
+    // The rule left out is logged once for the policy and the subject.
+    let security = warnings.at("navree::security");
+    let left_out: Vec<&String> = security
+        .iter()
+        .filter(|message| message.starts_with("left out a rule"))
+        .collect();
+    assert_eq!(
+        left_out,
+        [
+            "left out a rule of plugin `navree-plugin-announcements`'s policy `plugins::navree_plugin_announcements::NightShift` on `Post`, not one of its own subjects"
+        ],
+        "{security:?}"
+    );
+
+    // The policy's rule on the plugin's own subject is kept, naming where it came from.
+    let abilities = app
+        .acting_as(principal(kuldeep))
+        .get("/api/me/abilities")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    let rules = abilities.as_array().expect("a list of rules");
+    let reason = "policy `plugins::navree_plugin_announcements::NightShift` of plugin `navree-plugin-announcements`";
+    let from_the_policy: Vec<&Value> = rules
+        .iter()
+        .filter(|rule| rule["reason"] == reason)
+        .collect();
+    let kept = json!({
+        "action": "read",
+        "subject": "announcements.Announcement",
+        "reason": reason,
+    });
+    assert_eq!(from_the_policy, [&kept], "{abilities}");
+    let on_posts = json!({ "action": "update", "subject": "Post" });
+    assert!(!rules.contains(&on_posts), "{abilities}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_policy_inside_a_workspace_keeps_its_own_rules_only() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    // No principal the boot asks is inside a workspace.
+    let app = builder()
+        .module(plugin_policy::<InWorkspaces>())
+        .try_build()
+        .await
+        .expect("the boot does not see the policy's rules");
+
+    // A member's abilities inside a workspace, as navree-workspace builds them.
+    let factory = app.get::<AbilityFactory>().await;
+    let member = AbilityCtx {
+        team_id: Some(Uuid::now_v7()),
+        ..AbilityCtx::for_user(Uuid::now_v7(), vec!["member".to_owned()], Vec::new())
+    };
+    let reason = "policy `plugins::navree_plugin_announcements::InWorkspaces` of plugin `navree-plugin-announcements`";
+    let kept = Rule {
+        reason: Some(reason.to_owned()),
+        ..Rule::allow(READ, "announcements.Announcement")
+    };
+    for _ in 0..2 {
+        let mut rules = Rules::new();
+        factory.define_rules(&member, &mut rules);
+        let from_the_policy: Vec<&Rule> = rules
+            .rules()
+            .iter()
+            .filter(|rule| rule.reason.as_deref() == Some(reason))
+            .collect();
+        assert_eq!(from_the_policy, [&kept]);
+        assert!(
+            !rules.rules().contains(&Rule::allow(UPDATE, "Post")),
+            "{:?}",
+            rules.rules()
+        );
+    }
+    // Two builds, one line.
+    let security = warnings.at("navree::security");
+    let left_out: Vec<&String> = security
+        .iter()
+        .filter(|message| message.starts_with("left out a rule"))
+        .collect();
+    assert_eq!(
+        left_out,
+        [
+            "left out a rule of plugin `navree-plugin-announcements`'s policy `plugins::navree_plugin_announcements::InWorkspaces` on `Post`, not one of its own subjects"
+        ],
+        "{security:?}"
     );
 }

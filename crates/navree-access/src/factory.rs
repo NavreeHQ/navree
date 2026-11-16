@@ -240,9 +240,18 @@ impl AbilityFactory {
     /// app's abilities function (which can override them). Code building
     /// abilities for another scope (navree-workspace's workspace roles) calls
     /// this, so policies apply there too.
+    ///
+    /// A policy of a plugin that is not one of the framework's own packages
+    /// adds only its rules on the plugin's own subjects, each with a `reason`
+    /// naming the policy and the plugin; any other rule is left out and
+    /// logged once.
     pub fn define_rules(&self, ctx: &AbilityCtx, rules: &mut Rules) {
         for policy in &self.subjects.policies {
-            (policy.define)(ctx, rules);
+            match &policy.plugin {
+                // A policy of the app, as before.
+                None => (policy.define)(ctx, rules),
+                Some(plugin) => plugin.copy_own_rules(policy.define, ctx, rules),
+            }
         }
         (self.options.abilities)(ctx, rules);
     }
