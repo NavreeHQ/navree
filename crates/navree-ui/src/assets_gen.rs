@@ -3,10 +3,10 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "04a3e9d915e3";
+pub const BUILD: &str = "2348f9ab74db";
 
 /// The URL of `core.js`.
-pub const CORE_URL: &str = "/_navree/ui/core-4e1f371102da.js";
+pub const CORE_URL: &str = "/_navree/ui/core-0fa0a3105862.js";
 
 /// The URL of `sidebar.js`.
 pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-555764e6416c.js";
@@ -39,7 +39,7 @@ pub const MENUS_URL: &str = "/_navree/ui/menus-b6bf70e3054f.js";
 pub const SLIDER_URL: &str = "/_navree/ui/slider-5a68ba907d0b.js";
 
 /// The URL of `tree.js`.
-pub const TREE_URL: &str = "/_navree/ui/tree-baef56b95987.js";
+pub const TREE_URL: &str = "/_navree/ui/tree-99d195e7a796.js";
 
 /// The URL of `toolbar.js`.
 pub const TOOLBAR_URL: &str = "/_navree/ui/toolbar-27d5a6e17919.js";
@@ -87,7 +87,7 @@ pub const PARTS_URL: &str = "/_navree/ui/parts-12dc2c8376c5.js";
 pub const GENUI_URL: &str = "/_navree/ui/genui-0564c8ee102c.js";
 
 /// The URL of `extensions.js`.
-pub const EXTENSIONS_URL: &str = "/_navree/ui/extensions-02ad7296fc9f.js";
+pub const EXTENSIONS_URL: &str = "/_navree/ui/extensions-159c72338f16.js";
 
 /// The URL of `phone.js`.
 #[cfg(feature = "phone")]
@@ -196,7 +196,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "core",
         ext: "js",
-        hash: "4e1f371102da",
+        hash: "0fa0a3105862",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/core.js"),
         gzip: Some(include_bytes!("../dist/core.js.gz")),
@@ -295,7 +295,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "tree",
         ext: "js",
-        hash: "baef56b95987",
+        hash: "99d195e7a796",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/tree.js"),
         gzip: Some(include_bytes!("../dist/tree.js.gz")),
@@ -439,7 +439,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "extensions",
         ext: "js",
-        hash: "02ad7296fc9f",
+        hash: "159c72338f16",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/extensions.js"),
         gzip: Some(include_bytes!("../dist/extensions.js.gz")),
