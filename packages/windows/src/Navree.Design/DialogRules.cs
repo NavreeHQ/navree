@@ -9,7 +9,9 @@ public sealed record DialogDecision(bool TellTheCore, bool ReportProblem, bool S
 /// <summary>
 /// A question is answered by a person. A dialog that could not be shown (another is open on the window, the window is not laid out yet) has had no person
 /// to answer it, so it must never be reported as closed with nothing chosen: that is an answer of no. It is reported as a problem and left open, and tried
-/// again a few times, since what stopped it is usually over in a moment.
+/// again a few times, since what stopped it is usually over in a moment. One thing ends that: the window the dialog belongs to has been closed.
+/// The person closed it with the question in it, which is the answer of someone who closes a question without choosing, and no window is left
+/// to show it again: the core is told nothing was chosen, once, and the dialog is not tried again.
 /// </summary>
 public static class DialogRules
 {
@@ -20,9 +22,16 @@ public static class DialogRules
     /// <param name="couldNotBeShown">Whether showing it failed (it threw), as against being closed by a person or taken away by the client.</param>
     /// <param name="takenAwayByUs">Whether the client closed it itself (what is wanted over the window changed).</param>
     /// <param name="timesFailed">How many times in a row showing this dialog has failed, counting this one.</param>
+    /// <param name="windowClosed">Whether the window the dialog belongs to has been closed by the person.</param>
     /// <returns>What to do.</returns>
-    public static DialogDecision AfterShow(bool couldNotBeShown, bool takenAwayByUs, int timesFailed)
+    public static DialogDecision AfterShow(bool couldNotBeShown, bool takenAwayByUs, int timesFailed, bool windowClosed = false)
     {
+        if (couldNotBeShown && windowClosed)
+        {
+            // No window is left to show it on: the question is closed with nothing chosen, and never left open with nobody to answer it.
+            return new DialogDecision(TellTheCore: true, ReportProblem: true, ShowAgain: false);
+        }
+
         if (couldNotBeShown)
         {
             return new DialogDecision(TellTheCore: false, ReportProblem: true, ShowAgain: timesFailed < MostTries);

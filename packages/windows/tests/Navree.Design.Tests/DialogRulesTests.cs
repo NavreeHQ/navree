@@ -37,6 +37,26 @@ public sealed class DialogRulesTests
     }
 
     [TestMethod]
+    public void A_question_whose_window_was_closed_is_closed_with_nothing_chosen_and_is_not_tried_again()
+    {
+        // The person closed the window of one screen while its question was up, and showing it ended in an error.
+        DialogDecision closed = DialogRules.AfterShow(couldNotBeShown: true, takenAwayByUs: false, timesFailed: 1, windowClosed: true);
+        Assert.IsTrue(closed.TellTheCore, "the question stays open with no window to answer it in");
+        Assert.IsFalse(closed.ShowAgain, "a dialog is tried again on a window that is gone");
+        Assert.IsTrue(closed.ReportProblem);
+
+        // The same failure on a window that is still there is no answer, and is tried again.
+        DialogDecision open = DialogRules.AfterShow(couldNotBeShown: true, takenAwayByUs: false, timesFailed: 1, windowClosed: false);
+        Assert.IsFalse(open.TellTheCore);
+        Assert.IsTrue(open.ShowAgain);
+
+        // A dialog the person answered before the window closed is told as it was answered.
+        DialogDecision answered = DialogRules.AfterShow(couldNotBeShown: false, takenAwayByUs: false, timesFailed: 0, windowClosed: true);
+        Assert.IsTrue(answered.TellTheCore);
+        Assert.IsFalse(answered.ReportProblem);
+    }
+
+    [TestMethod]
     public void A_failure_that_came_while_the_client_was_taking_the_dialog_away_is_still_a_failure_and_still_not_an_answer()
     {
         DialogDecision decision = DialogRules.AfterShow(true, true, 1);

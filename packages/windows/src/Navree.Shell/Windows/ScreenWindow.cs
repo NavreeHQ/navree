@@ -62,7 +62,11 @@ internal sealed class ScreenWindow : Window
         WindowVisibility.Follow(this, host);
         frontWas = host.State.Nav.Front;
         host.StateChanged += Show;
-        Closed += (_, _) => host.StateChanged -= Show;
+        Closed += (_, _) =>
+        {
+            host.StateChanged -= Show;
+            dialogs.WindowClosed();
+        };
         Show(host.State);
     }
 

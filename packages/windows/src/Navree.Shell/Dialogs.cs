@@ -26,6 +26,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
     private TaskCompletionSource closing = new();
     private bool closedByUs;
     private bool pumping;
+    private bool windowClosed;
     private bool hooked;
     private readonly Dictionary<string, int> failedShows = [];
 
@@ -464,6 +465,12 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
         }
     }
 
+    /// <summary>
+    /// The window these dialogs belong to has been closed by the person. A question that was up in it and could not be shown to its end is
+    /// answered as closed with nothing chosen, and is not tried again: no window is left to show it on.
+    /// </summary>
+    internal void WindowClosed() => windowClosed = true;
+
     private async Task ShowAsync(ContentDialog shown, Wanted want)
     {
         ContentDialogResult result = ContentDialogResult.None;
@@ -495,7 +502,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
             _ = failedShows.Remove(want.Key);
         }
 
-        DialogDecision decision = DialogRules.AfterShow(couldNotBeShown, byUs, failed);
+        DialogDecision decision = DialogRules.AfterShow(couldNotBeShown, byUs, failed, windowClosed);
         if (decision.TellTheCore)
         {
             want.OnClosed(result);
