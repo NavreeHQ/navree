@@ -27,10 +27,9 @@ object Shots {
     val device: String get() = arguments.getString("device") ?: "device"
 
     /**
-     * The look's layout direction. Setting right to left as the developer
-     * option does (`debug.force_rtl`) did not reach the test's process on the
-     * emulator image, so in the rtl look the composition is laid out right to
-     * left here; the system bars stay as the system draws them.
+     * The look's layout direction: in the rtl look the composition is laid
+     * out right to left here, whatever the device's own setting is; the
+     * system bars stay as the system draws them.
      */
     @Composable
     fun Looked(content: @Composable () -> Unit) {
