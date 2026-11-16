@@ -79,7 +79,11 @@ pub fn derive_table_row(input: TokenStream) -> TokenStream {
 
 /// Implements `FilterBar` for a struct: each field is a control of the table's
 /// toolbar, and a parameter in the URL. `#[filter(search)]` is a search box;
-/// an `Option` of an enum with `Options` is a select.
+/// an `Option` of an enum with `Options` is a select; `#[filter(multi)]` on an
+/// `Option<Many<T>>` is chips; `#[filter(boolean)]` on an `Option<bool>` is a
+/// checkbox; `options = LIST` or `options = page` (the page's
+/// `DataTable::options`) give a select's or chips' choices; and
+/// `default = "..."` is the value a select holds when the URL names none.
 #[proc_macro_derive(FilterBar, attributes(filter))]
 pub fn derive_filter_bar(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
