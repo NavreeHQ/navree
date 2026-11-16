@@ -28,7 +28,8 @@ private struct SmallGauge: View {
 
     var body: some View {
         let side = GaugeRules.diameter(aside: true) * scale.capped(1.3)
-        Gauge(value: min(max(gauge.value, gauge.min), gauge.max), in: gauge.min...max(gauge.max, gauge.min + 1)) {
+        let range = SafeNumbers.range(gauge.min, gauge.max)
+        Gauge(value: SafeNumbers.clamped(gauge.value, to: range), in: range) {
             Text(gauge.label ?? "")
         } currentValueLabel: {
             Text(gauge.shown ?? NumberWords.amount(gauge.value)).fontDesign(.rounded)

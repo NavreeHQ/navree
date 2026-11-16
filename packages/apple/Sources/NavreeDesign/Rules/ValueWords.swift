@@ -72,14 +72,16 @@ public enum ValueWords {
     /// A value on the axis, in the style: whole numbers grouped, a fraction
     /// to one place.
     public static func text(_ value: Double, _ style: ValueStyle) -> String {
+        guard value.isFinite else { return style.prefix + "–" + style.suffix }
         let negative = value < 0
         let magnitude = abs(value)
         let whole = magnitude.rounded(.towardZero)
         let fraction = magnitude - whole
-        var digits = String(Int(whole))
+        // Past what a whole number holds, the digits are written from the number itself.
+        var digits = whole < SafeNumbers.most ? String(SafeNumbers.int(whole)) : String(format: "%.0f", whole)
         digits = style.indian ? indianGroups(digits) : westernGroups(digits)
         if fraction >= 0.05 {
-            digits += "." + String(Int((fraction * 10).rounded()) % 10)
+            digits += "." + String(SafeNumbers.int((fraction * 10).rounded()) % 10)
         }
         return (negative ? "−" : "") + style.prefix + digits + style.suffix
     }

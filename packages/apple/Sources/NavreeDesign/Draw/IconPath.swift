@@ -103,7 +103,7 @@ public enum SVGPath {
     ) {
         var rx = abs(radii.width)
         var ry = abs(radii.height)
-        guard rx > 0, ry > 0, p0 != p1 else {
+        guard rx > 0, ry > 0, rx.isFinite, ry.isFinite, rotation.isFinite, p0 != p1 else {
             path.addLine(to: p1)
             return
         }
@@ -136,8 +136,15 @@ public enum SVGPath {
         var delta = angle((x1 - cx1) / rx, (y1 - cy1) / ry, (-x1 - cx1) / rx, (-y1 - cy1) / ry)
         if !sweep && delta > 0 { delta -= 2 * .pi }
         if sweep && delta < 0 { delta += 2 * .pi }
+        // Radii or ends too large to work an angle out of give no arc: a
+        // line to where it would have ended, as for an arc with no radius.
+        guard delta.isFinite, theta1.isFinite, cx.isFinite, cy.isFinite, rx.isFinite, ry.isFinite else {
+            path.addLine(to: p1)
+            return
+        }
 
-        let segments = max(1, Int(ceil(abs(delta) / (.pi / 2))))
+        // An arc turns through at most a whole circle: four quarter curves.
+        let segments = min(max(1, SafeNumbers.int(ceil(abs(delta) / (.pi / 2)))), 4)
         let step = delta / Double(segments)
         let k = 4.0 / 3.0 * tan(step / 4)
         var theta = theta1
@@ -212,7 +219,9 @@ public enum SVGPath {
             guard index > begin else { return nil }
             var text = ""
             text.unicodeScalars.append(contentsOf: scalars[begin..<index])
-            return Double(text)
+            // A number too large to hold (`1e400`) reads as infinity: no number of a path.
+            guard let value = Double(text), value.isFinite else { return nil }
+            return value
         }
 
         /// An arc flag: one digit, which may stand right against the next number.
@@ -287,7 +296,9 @@ public struct IconShapeView: View {
 
     static func box(_ text: String?) -> CGRect {
         let numbers = (text ?? "").split(whereSeparator: { $0 == " " || $0 == "," }).compactMap { Double($0) }
-        guard numbers.count == 4, numbers[2] > 0, numbers[3] > 0 else { return CGRect(x: 0, y: 0, width: 24, height: 24) }
+        guard numbers.count == 4, numbers.allSatisfy(\.isFinite), numbers[2] > 0, numbers[3] > 0 else {
+            return CGRect(x: 0, y: 0, width: 24, height: 24)
+        }
         return CGRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3])
     }
 }

@@ -305,7 +305,7 @@ public enum CompositionRules {
         guard part + gap > 0 else { return Int.max }
         let count = ((width + gap) / (part + gap)).rounded(.down)
         guard count.isFinite else { return Int.max }
-        return Swift.max(1, count >= Double(Int.max) ? Int.max : Int(count))
+        return Swift.max(1, SafeNumbers.int(count))
     }
 
     /// The text sizes a row of tiles may be set in: the person's own, at
@@ -426,8 +426,12 @@ public enum CompositionRules {
 
     /// Points from a number of the system's spacing steps.
     public static func points(steps: Int) -> Double {
-        Double(steps) * 4
+        // A page's steps are a few; a count below nothing or in the millions is held to what a screen has room for.
+        Double(Swift.min(Swift.max(steps, 0), mostSteps)) * 4
     }
+
+    /// The most steps of room a page may ask for: 256 points.
+    public static let mostSteps = 64
 
     /// Whether a text is kept on one line, shrinking a little rather than
     /// breaking: one short word or one figure (`1,994`, `Movement`,

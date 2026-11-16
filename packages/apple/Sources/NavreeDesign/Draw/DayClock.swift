@@ -107,7 +107,7 @@ struct DayClockPart: View {
                 band.addEllipse(in: CGRect(x: centre.x - middle, y: centre.y - middle, width: 2 * middle, height: 2 * middle))
                 context.stroke(band, with: .color(.secondary.opacity(scheme == .dark ? 0.14 : 0.08)), lineWidth: rim - dial.inner)
                 for (index, hour) in clock.hours.prefix(24).enumerated() {
-                    let colour = hour.category.flatMap { $0 < clock.key.count ? clock.key[$0].colour : nil }
+                    let colour = hour.category.flatMap { clock.key.indices.contains($0) ? clock.key[$0].colour : nil }
                     let base = Hues.color(colour ?? clock.colour, fallback: .accentColor, scheme: scheme)
                     let reach = ClockRules.reach(hour, most: most)
                     let start = dial.inner + width / 2

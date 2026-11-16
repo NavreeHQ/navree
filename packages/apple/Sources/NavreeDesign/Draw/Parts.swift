@@ -256,7 +256,7 @@ struct TextPart: View {
             .font(font)
             .fontWeight(text.weight.map(Typography.weight))
             .foregroundStyle(colour)
-            .lineLimit(whole ? 1 : text.lines)
+            .lineLimit(whole ? 1 : text.lines.map { max($0, 1) })
             // Alone, a figure too wide for its place shrinks rather than being
             // cut; among tiles it keeps its size and the grid gives it room.
             .minimumScaleFactor(CompositionRules.shrinkLimit(whole: whole, display: text.style == .display, inTiles: inTiles))
@@ -333,10 +333,18 @@ struct ImagePart: View {
         } placeholder: {
             Rectangle().fill(.quaternary)
         }
-        .frame(width: image.width.map { CGFloat($0) }, height: image.height.map { CGFloat($0) })
+        .frame(width: Self.side(image.width), height: Self.side(image.height))
         .clipped()
         .accessibilityLabel(image.alt)
         .accessibilityHidden(image.alt.isEmpty)
+    }
+
+    /// A side the page gives, in points, when it is one a picture can have:
+    /// above nothing, and no longer than 4096 points. Any other leaves the
+    /// side to the picture and its place.
+    static func side(_ points: Int?) -> CGFloat? {
+        guard let points, points > 0 else { return nil }
+        return CGFloat(min(points, 4096))
     }
 }
 
@@ -455,12 +463,12 @@ struct ProgressPart: View {
         if let value = progress.value, let row {
             // In a row that has said its name and state: what is left of the
             // bar's words, and no percentage beside them.
-            ProgressView(value: Double(value), total: 1000)
+            ProgressView(value: Self.fraction(value))
                 .tint(tint)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text(SpeechRules.barInRow(progress.label, title: row.title, state: row.state) ?? ""))
         } else if let value = progress.value {
-            ProgressView(value: Double(value), total: 1000) {
+            ProgressView(value: Self.fraction(value)) {
                 if let label = progress.label, !inRow { Text(label).font(.footnote).foregroundStyle(.secondary) }
             }
             .tint(tint)
@@ -468,6 +476,12 @@ struct ProgressPart: View {
         } else {
             ProgressView { if let label = progress.label { Text(label) } }
         }
+    }
+
+    /// How far along the bar is, 0 to 1: the protocol counts in thousandths,
+    /// and a count outside them is held to the nearer end.
+    static func fraction(_ thousandths: Int) -> Double {
+        min(max(Double(thousandths) / 1000, 0), 1)
     }
 
     /// The measure's colour, else the colour of what it means, else the app's tint.
