@@ -32,11 +32,229 @@ object ListRules {
     /** The least width, in dp, at which a table is drawn as a table. */
     const val TABLE_FROM_DP = 600
 
-    /** The least a column gets, in dp. A table with more columns than fit is a list at any width. */
-    const val COLUMN_LEAST_DP = 112
+    /**
+     * The width, in dp, from which parts that are columns of a page's own
+     * layout (a main column and a column beside it) stand side by side. The
+     * guidance for a supporting pane gives equal halves on a medium window,
+     * which leaves the shorter column's half empty below it; below this width
+     * the side column goes under the main one, as it does on a compact window.
+     */
+    const val EXPANDED_FROM_DP = 840
 
-    fun tableAsList(contentWidthDp: Int, columns: Int): Boolean =
-        contentWidthDp < TABLE_FROM_DP || columns * COLUMN_LEAST_DP > contentWidthDp
+    /** The least a column gets, in dp. A table with more columns than fit is a list at any width. */
+    const val COLUMN_LEAST_DP = 128
+
+    /** The least a lane of a board stands in, in dp: a card's title and its choices read in it. */
+    const val LANE_LEAST_DP = 240
+
+    /**
+     * The least width of a grid's columns when the page gives none: lanes (every
+     * part a section) keep a width a card can be read in, so a phone shows one
+     * at a time and a wide window as many as fit; other grids keep their own.
+     */
+    fun gridLeast(least: Int?, parts: List<Navree.Node>): Int? =
+        least ?: if (parts.size > 1 && parts.all { it is Navree.Section }) LANE_LEAST_DP else null
+
+    /**
+     * Whether a grid whose parts are stacks (a main column and an aside, say)
+     * is one column where the window is narrow: such parts are columns of words
+     * and fields, which two or three across squeeze to a few letters a line.
+     * A grid with a least width of its own keeps what it says.
+     */
+    fun stacksAreOneColumn(parts: List<Navree.Node>, least: Int?, widthDp: Int): Boolean =
+        least == null && parts.size > 1 && parts.all { it is Navree.Stack } && widthDp < EXPANDED_FROM_DP
+
+    /** The most the row of lanes may measure to: the room it has and the margins it runs out into; no limit stays none (the room of a part that scrolls along). */
+    fun bledWidthPx(roomPx: Int, bleedPx: Int, noLimit: Int = Int.MAX_VALUE): Int =
+        if (roomPx >= noLimit) noLimit else (roomPx.toLong() + bleedPx).coerceAtMost((noLimit - 1).toLong()).toInt()
+
+    /** Whether a grid's parts are lanes: several sections side by side, each a group of its own. */
+    fun areLanes(parts: List<Navree.Node>): Boolean = parts.size > 1 && parts.all { it is Navree.Section }
+
+    /**
+     * Whether lanes are shown one at a time, the others a tab away: where the
+     * window holds a single column of them, they would stand one under another,
+     * and the second lane would start where the first one's cards end.
+     */
+    fun oneLaneAtATime(parts: List<Navree.Node>, columns: Int): Boolean = columns == 1 && areLanes(parts)
+
+    /**
+     * The runs of a row that is itself a link, without the link a run makes to
+     * the same place: the row is one stop that goes there, and a second stop
+     * inside it, with no name of its own, is read by a screen reader as a
+     * control with no label.
+     */
+    fun withoutOwnLink(runs: List<Navree.Run>, action: Navree.Action?): List<Navree.Run> {
+        val own = (action as? Navree.Action.Navigate)?.href ?: return runs
+        return runs.map { if (it.href == own) it.copy(href = null) else it }
+    }
+
+    /** The path of an address, whole: no scheme and host, no query, no fragment, no closing slash. Found by looking for the characters, not by a pattern per call. */
+    private fun pathOf(address: String): String {
+        val noQuery = address.substringBefore('#').substringBefore('?')
+        val scheme = noQuery.indexOf("://")
+        val path = if (scheme > 0 && noQuery.substring(0, scheme).all { it.isLetterOrDigit() || it == '+' || it == '.' || it == '-' }) {
+            val slash = noQuery.indexOf('/', scheme + 3)
+            if (slash < 0) "" else noQuery.substring(slash)
+        } else {
+            noQuery
+        }.trimEnd('/')
+        return path.ifEmpty { "/" }
+    }
+
+    private fun decoded(text: String): String = try {
+        java.net.URLDecoder.decode(text, "UTF-8")
+    } catch (_: IllegalArgumentException) {
+        text
+    }
+
+    /** The pairs of an address's query, in the order they stand. */
+    private fun pairsOf(address: String): List<Pair<String, String>> =
+        address.substringBefore('#').substringAfter('?', "").split('&').filter { it.isNotEmpty() }
+            .map { decoded(it.substringBefore('=')) to decoded(it.substringAfter('=', "")) }
+
+    /** An address as it is compared: its path and its query pairs, made once. */
+    private class Parsed(val path: String, val pairs: List<Pair<String, String>>)
+
+    private fun parsed(address: String) = Parsed(pathOf(address), pairsOf(address))
+
+    private fun matches(shown: Parsed, row: Parsed): Boolean = shown.path == row.path && row.pairs.all { it in shown.pairs }
+
+    /**
+     * Whether the page at `shown` is the one a row leading to `href` opens: the
+     * paths are equal, segment by segment (`/x/inbox/11` is not `/inbox/11`),
+     * and every pair of the row's query is among the shown page's (the shown
+     * page may carry more, such as a cursor). A fragment counts for nothing.
+     */
+    fun shows(shown: String?, href: String): Boolean {
+        if (shown.isNullOrEmpty() || href.isEmpty()) return false
+        return matches(parsed(shown), parsed(href))
+    }
+
+    /** A row of a screen that leads to a page: its id (when it has one) and the address. */
+    data class RowAddress(val id: String?, val href: String)
+
+    /**
+     * The row, among the rows of a screen that lead to pages, that is the open
+     * one: of those that match the shown page the one that says most of it (most
+     * query pairs), the first of equals. The shown address is read once, and each
+     * row's once. Null when none matches.
+     */
+    fun openRow(shown: String?, rows: List<RowAddress>): RowAddress? {
+        if (shown.isNullOrEmpty() || rows.isEmpty()) return null
+        val have = parsed(shown)
+        var best: RowAddress? = null
+        var most = -1
+        for (row in rows) {
+            if (row.href.isEmpty()) continue
+            val there = parsed(row.href)
+            if (matches(have, there) && there.pairs.size > most) {
+                best = row
+                most = there.pairs.size
+            }
+        }
+        return best
+    }
+
+    /** The same for addresses alone. */
+    fun openAddress(shown: String?, addresses: List<String>): String? = openRow(shown, addresses.map { RowAddress(null, it) })?.href
+
+    /** The rows of a screen that lead to a page, each row's tap that goes to a page, in the order they stand. */
+    fun rowAddresses(body: Navree.Node?): List<RowAddress> {
+        if (body == null) return emptyList()
+        val out = ArrayList<RowAddress>()
+        for (node in body.walk()) {
+            when (node) {
+                is Navree.Row -> (node.action as? Navree.Action.Navigate)?.href?.let { out += RowAddress(node.id, it) }
+                is Navree.Table -> node.rows.forEach { row -> (row.action as? Navree.Action.Navigate)?.href?.let { out += RowAddress(row.id, it) } }
+                else -> Unit
+            }
+        }
+        return out
+    }
+
+    /** The most a lane of a board stands wide, in dp: lanes stay together in a wide window and do not stretch. */
+    const val LANE_MOST_DP = 360
+
+    /** The space between lanes, in dp: the cards of one lane do not touch those of the next. */
+    const val LANE_GAP_DP = 16
+
+    /**
+     * The width of each of `count` lanes in a room this wide: what fits them
+     * all, held between the least a card reads in and the most a lane stretches
+     * to, both grown with the text size. Where even the least does not fit them all, the row of lanes scrolls
+     * along and the next lane shows at the edge, so none waits under the others.
+     */
+    fun laneWidthDp(roomDp: Float, count: Int, gapDp: Int = LANE_GAP_DP, fontScale: Float = 1f): Float {
+        val fit = (roomDp - gapDp * (count - 1).coerceAtLeast(0)) / count.coerceAtLeast(1)
+        // The words in a card grow with the text size, so does the lane they stand in.
+        val scale = fontScale.coerceAtLeast(1f)
+        return fit.coerceIn(LANE_LEAST_DP * scale, LANE_MOST_DP * scale)
+    }
+
+    /** A button, and the form of its own it sends. */
+    data class TitleButton(val form: Navree.Form, val button: Navree.Button)
+
+    /**
+     * The button of a row that only says the row's title: a form of one button,
+     * in the row's detail, whose label is the title. A row with no action of its
+     * own takes the button's: the whole row is the touch target, and the title
+     * is not said a second time under itself.
+     */
+    fun titleButton(row: Navree.Row): TitleButton? {
+        fun find(node: Navree.Node): TitleButton? {
+            if (node is Navree.Form) {
+                val only = node.children.singleOrNull() as? Navree.Button
+                return if (only != null && only.action is Navree.Action.Submit && only.label == row.title) TitleButton(node, only) else null
+            }
+            return if (node is Navree.Stack) node.children.firstNotNullOfOrNull(::find) else null
+        }
+        return row.detail.firstNotNullOfOrNull(::find)
+    }
+
+    /** What a row that is its title button can do now: tapped (`enabled`), or waiting for its request's answer (`busy`). */
+    data class TitleUse(val enabled: Boolean, val busy: Boolean)
+
+    /**
+     * A row that is its title button is as usable as the button is: not while the
+     * button is disabled, or pending, or its form's request is on its way; and it
+     * shows that it waits when the button is pending or its request is on its way.
+     */
+    fun titleUse(button: Navree.Button, formPending: Boolean): TitleUse {
+        val busy = button.pending || formPending
+        return TitleUse(enabled = !button.disabled && !busy, busy = busy)
+    }
+
+    /**
+     * The row with the form of its title button taken out of its detail. The
+     * form is found by what it holds, not by being the same object: a row
+     * drawn from a newer answer holds an equal form that is another object.
+     */
+    fun withoutTitleButton(row: Navree.Row, form: Navree.Form): Navree.Row {
+        fun prune(node: Navree.Node): Navree.Node? = when {
+            node == form -> null
+            node is Navree.Stack -> node.children.mapNotNull(::prune).let { kept -> if (kept.isEmpty()) null else node.copy(children = kept) }
+            else -> node
+        }
+        return row.copy(detail = row.detail.mapNotNull(::prune))
+    }
+
+    /**
+     * The lines under a row's title, with runs of badges (a status, a priority,
+     * who has it) gathered into one line that wraps, as a table's statuses are:
+     * four badges one under the other would make a row four lines taller.
+     */
+    fun detailRuns(detail: List<Navree.Node>): List<List<Navree.Node>> {
+        val runs = ArrayList<MutableList<Navree.Node>>()
+        for (part in detail) {
+            val last = runs.lastOrNull()
+            if (part is Navree.Badge && last != null && last.all { it is Navree.Badge }) last += part else runs += mutableListOf(part)
+        }
+        return runs
+    }
+
+    fun tableAsList(contentWidthDp: Int, columns: Int, fontScale: Float = 1f): Boolean =
+        contentWidthDp < TABLE_FROM_DP || columns * COLUMN_LEAST_DP * fontScale.coerceAtLeast(1f) > contentWidthDp
 
     /**
      * Whether the last line of a grid, when it has fewer parts than the
@@ -59,13 +277,16 @@ object ListRules {
      *   `status` goes on a line of its own (and so does a badge whose column
      *   says nothing); `trailing` (or else the first numeric column) goes to
      *   the row's end; `actions` and the row's own actions are its menu.
-     * - A column a narrow screen may leave out (`secondary`) is left out.
+     * - A column a narrow screen may leave out (`secondary`) is left out, except, in a wide list, one that says a state.
      */
-    fun asListRow(columns: List<Navree.Column>, row: Navree.TableRow): TableRowAsListRow {
+    fun asListRow(columns: List<Navree.Column>, row: Navree.TableRow, wide: Boolean = false): TableRowAsListRow {
         val cells = row.cells
         fun role(index: Int) = columns.getOrNull(index)?.role
         val titleAt = columns.indexOfFirst { it.role == Navree.ColumnRole.TITLE }.takeIf { it >= 0 && it < cells.size } ?: 0
-        val kept = cells.indices.filter { it != titleAt && columns.getOrNull(it)?.secondary != true }
+        // A column a narrow screen may leave out is left out there; where the list has the room (a table that became a list
+        // for its many columns, not for a narrow window) the columns that say a state are kept: a row says all of its states.
+        fun state(index: Int) = role(index) == Navree.ColumnRole.STATUS || (role(index) == null && cells[index] is Navree.Badge)
+        val kept = cells.indices.filter { it != titleAt && (columns.getOrNull(it)?.secondary != true || (wide && state(it))) }
         val leadingAt = kept.firstOrNull { role(it) == Navree.ColumnRole.LEADING }
         val actionsAt = kept.filter { role(it) == Navree.ColumnRole.ACTIONS }
         val trailingAt = kept.firstOrNull { role(it) == Navree.ColumnRole.TRAILING }
@@ -131,9 +352,10 @@ object ListRules {
      * at least one. The least width grows with the person's text size, so a
      * number is never broken across lines to keep a column.
      */
-    fun gridColumns(contentWidthDp: Int, minColumnDp: Int?, gapDp: Int, most: Int? = null, fontScale: Float = 1f, count: Int = Int.MAX_VALUE): Int {
-        // A grid that gives a count and no least width is that many columns: nothing makes it give one up.
-        if (minColumnDp == null && most != null && most > 0) return minOf(most, count.coerceAtLeast(1))
+    fun gridColumns(contentWidthDp: Int, minColumnDp: Int?, gapDp: Int, most: Int? = null, fontScale: Float = 1f, count: Int = Int.MAX_VALUE, controls: Boolean = false): Int {
+        // A grid that gives a count and no least width is that many columns: nothing makes it give one up,
+        // unless its parts are controls (fields), which are not squeezed to a few letters.
+        if (minColumnDp == null && most != null && most > 0 && !controls) return minOf(most, count.coerceAtLeast(1))
         val least = ((minColumnDp ?: 160) * fontScale.coerceAtLeast(1f)).toInt().coerceAtLeast(48)
         val fit = ((contentWidthDp + gapDp) / (least + gapDp)).coerceAtLeast(1)
         return if (most != null && most > 0) minOf(fit, most) else fit
@@ -152,6 +374,35 @@ object ListRules {
         column.role == Navree.ColumnRole.TRAILING || column.numeric -> 0.9f
         else -> 1f
     }
+
+    /**
+     * The share of a wide table's width each column takes. A column of words
+     * takes what its longest cell needs, between a short status and a long
+     * place, so a place such as "Maharashtra" is not broken in the middle;
+     * the title, the numbers, the actions and the subtitle keep their shares.
+     */
+    /** The share of a column with a box to type in: a box and a button side by side. */
+    const val TYPING_COLUMN_WEIGHT = 2.4f
+
+    /** How many of a table's columns hold a box to type in: each takes the room of two columns, so a table that holds one has more to fit. */
+    fun typingColumns(columns: List<Navree.Column>, rows: List<Navree.TableRow>): Int = columnWeights(columns, rows).count { it == TYPING_COLUMN_WEIGHT }
+
+    fun columnWeights(columns: List<Navree.Column>, rows: List<Navree.TableRow>): List<Float> =
+        columns.mapIndexed { index, column ->
+            val base = columnWeight(column)
+            val fixed = base == 0f || column.role == Navree.ColumnRole.TITLE || column.role == Navree.ColumnRole.ACTIONS ||
+                column.role == Navree.ColumnRole.TRAILING || column.numeric
+            // A column that holds a box to type in (a restock: units and a button) needs room for both.
+            val typesIn = column.role != Navree.ColumnRole.TITLE && rows.any { row -> row.cells.getOrNull(index)?.walk()?.any { it is Navree.Field } == true }
+            if (typesIn) {
+                TYPING_COLUMN_WEIGHT
+            } else if (fixed) {
+                base
+            } else {
+                val longest = rows.maxOfOrNull { row -> row.cells.getOrNull(index)?.walk()?.filterIsInstance<Navree.Text>()?.sumOf { it.value.length } ?: 0 } ?: 0
+                (longest / 10f).coerceIn(1f, 2f)
+            }
+        }
 
     /**
      * Whether a row's trailing value moves under its text. At large text sizes
@@ -231,6 +482,9 @@ data class KeyboardPlan(
 object FormRules {
     const val FORM_MOST_DP = 560
 
+    /** Whether a form holds nothing but buttons: it is a group of actions, and among the parts of a line its buttons flow with the others. */
+    fun onlyButtons(form: Navree.Form): Boolean = form.children.isNotEmpty() && form.children.all { it is Navree.Button }
+
     fun choice(kind: Navree.ChoiceKind, options: Int, window: WindowInfo): ChoiceWidget = when (kind) {
         Navree.ChoiceKind.SEGMENTED -> {
             val most = if (window.width == WidthClass.Compact) 4 else 5
@@ -298,6 +552,9 @@ object FormRules {
     }
 }
 
+/** Where a task sheet's actions are drawn: at most one in the bar, the rest at the end of the content. */
+data class TaskActions(val bar: Navree.Button?, val foot: List<Navree.Button>)
+
 /** How a sheet of the tree sits in its bottom sheet. */
 data class SheetPlan(
     /** Whether the sheet may rest half open before it is dragged up. */
@@ -316,6 +573,24 @@ object OverlayRules {
         Navree.SheetSize.MEDIUM -> SheetPlan(partial = window.height != HeightClass.Compact, fullHeight = false)
         Navree.SheetSize.LARGE -> SheetPlan(partial = false, fullHeight = false)
         Navree.SheetSize.FULL -> SheetPlan(partial = false, fullHeight = true)
+    }
+
+    /**
+     * Where the actions of a task sheet go. The bar of a full-screen dialog
+     * holds an X, the title and at most one affirming action (the form's own
+     * submit, or else the one primary action); every other action stands at
+     * the end of the content, the destructive ones last. Actions that took
+     * the whole bar would leave the title no room.
+     */
+    fun taskActions(buttons: List<Navree.Button>, hasSubmit: Boolean): TaskActions {
+        val affirming = buttons.filter { it.role != Navree.Role.CANCEL && it.standard != Navree.Standard.CANCEL }
+        val inBar = if (hasSubmit) {
+            null
+        } else {
+            affirming.firstOrNull { (it.role == Navree.Role.PRIMARY || it.role == Navree.Role.CONFIRM) && !ScreenRules.destructive(it) }
+        }
+        val rest = affirming.filter { it !== inBar }
+        return TaskActions(inBar, rest.filterNot(ScreenRules::destructive) + rest.filter(ScreenRules::destructive))
     }
 
     /** Dialog buttons sit side by side while there are two short ones; more, or long ones, stack. */
@@ -353,6 +628,17 @@ object ContentRules {
         Navree.Tone.DANGER -> ToneRole.Error
         Navree.Tone.INFO -> ToneRole.Info
     }
+
+    /** The least a column of facts has, in dp: a fact holds an address or a phone number on one line. */
+    const val FACT_COLUMN_DP = 300
+
+    /**
+     * How many columns facts stand in: two where the window is wide, the text
+     * is not large and the room they are drawn in (0 when it is not known)
+     * holds two columns of the least width; else one.
+     */
+    fun factColumns(window: WindowInfo, roomDp: Float): Int =
+        if (window.width >= WidthClass.Expanded && !window.largeText && (roomDp <= 0f || roomDp >= 2 * FACT_COLUMN_DP)) 2 else 1
 
     /** A gap of the tree in dp: a step of the spacing scale is 4 dp, Material's grid. */
     fun gap(steps: Int): Int = steps.coerceIn(0, 16) * 4
@@ -444,4 +730,18 @@ object ContentRules {
      * chip's label.
      */
     fun statusAsText(inRow: Boolean): Boolean = inRow
+}
+
+/** How a menu in the content is drawn. */
+object MenuRules {
+    private val overflow = listOf("more", "ellipsis", "kebab", "menu")
+
+    /**
+     * Whether a menu with an icon says its label beside the icon. A menu whose
+     * label is what it is set to (a status, a priority) says it, as a picker
+     * does; the icon that stands for "more" (three dots) stays alone, with its
+     * name as a tooltip and for a screen reader.
+     */
+    fun showsLabel(icon: String?, label: String): Boolean =
+        label.isNotBlank() && icon != null && overflow.none { icon.lowercase().contains(it) }
 }
