@@ -202,6 +202,7 @@ class AndroidEffects(
                 driver.send(Events.random(effect.request, bytes.joinToString("") { "%02x".format(it) }))
                 bytes.fill(0)
             }
+            Effect.SessionEnding -> ending()
             Effect.ForgetSession -> forget()
             is Effect.Unknown -> if (BuildConfig.DEBUG) Log.w(TAG, "an effect this build does not know: ${effect.t}")
         }
@@ -219,11 +220,11 @@ class AndroidEffects(
     }
 
     /**
-     * The session ended on this device. At once, before anything is waited
-     * for, that is written down and forced to the disk ([SiteWipe.owe]): from
-     * that moment the whole of what follows is owed, and a run of the app that
-     * ends anywhere after it leaves the next start to do it. Then, in the
-     * store's turn, after whatever
+     * The session is ending on this device. At once, before anything is
+     * waited for, that is written down and forced to the disk
+     * ([SiteWipe.owe]): from that moment the whole of what follows is owed,
+     * and a run of the app that ends anywhere after it leaves the next start
+     * to do it. Then, in the store's turn, after whatever
      * was asked before: the sealed page cache and the snapshot go; then, on
      * the main thread, the web view's cache, history, form data and saved
      * sign-ins for sites, and what sites stored ([clearWebViews]); once the
@@ -242,10 +243,9 @@ class AndroidEffects(
      * the pages of the others are shown again. Until the cookies are gone and
      * on the disk the mark owes the whole of this, and a start of the app that
      * finds it so does all of it again, the push token's deletion with it,
-     * before anything of that run is kept (the `init` above). The
-     * push service's token for this install is deleted and a new one asked for.
+     * before anything of that run is kept (the `init` above).
      */
-    private fun forget() {
+    private fun end() {
         // Owed from this moment and written down, whatever the store is still busy with: a page of the next session is not
         // shown over what this one's pages left, and a start of the app after a run that ended here does all of it.
         SiteWipe.owe()
@@ -253,10 +253,37 @@ class AndroidEffects(
             // The time limit is armed before anything it guards: whatever happens below, the queue goes on.
             endWithLimit(finished, arm = { release -> main.postDelayed({ release() }, WIPE_WAIT_MS) }) { done -> wipe(done) }
         }
+    }
+
+    /** The core said the session is ending and has not yet said it is forgotten: the end of the session is begun ([ending]). */
+    private var begun = false
+
+    /**
+     * The core says the session is ending (`session_ending`), in the update
+     * in which it asks the server to forget this device's push token: the end
+     * of the session begins now ([end]) and does not wait for that answer.
+     * The request for the removal stands before this in the same update, so
+     * the store has given it its cookies before the turn of the end of the
+     * session comes.
+     */
+    private fun ending() {
+        begun = true
+        end()
+    }
+
+    /**
+     * The core says the session is forgotten (`forget_session`). Where it
+     * said before that the session was ending, the end of the session is
+     * begun or done and nothing of it is done twice; where it did not (no
+     * push token to remove), it begins here. The push service's token for
+     * this install is deleted and a new one asked for.
+     */
+    private fun forget() {
+        if (begun) begun = false else end()
         push?.forget { askToken() }
     }
 
-    /** The steps of [forget], in order; [done] when the cookie store says its cookies are gone and the web view that nothing of its pages is left. */
+    /** The steps of [end], in order; [done] when the cookie store says its cookies are gone and the web view that nothing of its pages is left. */
     private fun wipe(done: () -> Unit) {
         try {
             cache.clear()

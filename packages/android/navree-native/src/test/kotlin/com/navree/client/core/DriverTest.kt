@@ -362,6 +362,7 @@ class EffectTest {
         assertEquals("c1", device.options!!["publicKey"]!!.jsonObject["challenge"]!!.jsonPrimitive.content)
         assertTrue(device.posts)
         assertEquals(Effect.Random(1, 48), read("""{"t":"random","request":1,"bytes":48}"""))
+        assertEquals(Effect.SessionEnding, read("""{"t":"session_ending"}"""))
         assertEquals(Effect.ForgetSession, read("""{"t":"forget_session"}"""))
         assertEquals(Effect.Unknown("hologram"), read("""{"t":"hologram"}"""))
     }

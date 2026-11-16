@@ -1,5 +1,6 @@
 package com.navree.client
 
+import android.webkit.CookieManager
 import android.webkit.ServiceWorkerClient
 import android.webkit.ServiceWorkerController
 import android.webkit.WebResourceRequest
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.webkit.WebViewFeature
+import com.navree.client.core.Body
 import com.navree.client.core.Driver
 import com.navree.client.core.Effect
 import com.navree.client.core.Engine
@@ -39,6 +41,7 @@ import mockwebserver3.RecordedRequest
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -78,6 +81,14 @@ class WebSignOutTest {
 
     /** Whether the server sends a request for a path it does not know to its sign-in page; else it answers such a request with nothing. */
     private var visitor = false
+
+    /** Where the push token of this device is removed, and what holds the server's answer to it back: a test that has it asked lets go at its end. */
+    private val removal = "/api/notifications/push-devices"
+    private val unanswered = CountDownLatch(1)
+
+    /** The `Cookie` header the removal came with. */
+    @Volatile
+    private var removalCookie: String? = null
 
     @After
     fun stop() {
@@ -155,6 +166,11 @@ class WebSignOutTest {
                 "/look" -> page(looks)
                 "/sw.js" -> MockResponse.Builder().code(200).addHeader("Content-Type", "text/javascript").body(worker).build()
                 "/sign-in" -> page("")
+                removal -> {
+                    removalCookie = request.headers["Cookie"]
+                    unanswered.await(30, TimeUnit.SECONDS)
+                    MockResponse.Builder().code(204).build()
+                }
                 else -> if (visitor) MockResponse.Builder().code(302).addHeader("Location", "/sign-in").build() else MockResponse.Builder().code(204).build()
             }
         }
@@ -270,9 +286,10 @@ class WebSignOutTest {
 
     /**
      * A client of the app made now, as at a start of the app, and [then] with
-     * it; waits until whatever it owes of the end of a session is done.
+     * it; waits until whatever it owes of the end of a session is done, and
+     * then [after] with it.
      */
-    private fun client(then: (AndroidEffects) -> Unit) {
+    private fun client(after: (AndroidEffects) -> Unit = {}, then: (AndroidEffects) -> Unit) {
         val driver = Driver(object : Engine {
             override fun send(event: ByteArray): ByteArray = "{}".encodeToByteArray()
 
@@ -288,7 +305,10 @@ class WebSignOutTest {
         effects.state.always { wiped.set(true) }
         assertTrue("the end of the session finished", waitFor(30) { wiped.get() })
         assertTrue("the web view said that what its pages stored is gone, so nothing is owed any more", waitFor(60) { !SiteWipe.owes })
-        compose.runOnUiThread { effects.close() }
+        compose.runOnUiThread {
+            after(effects)
+            effects.close()
+        }
     }
 
     /** Nothing of the five is left, whichever way this web view deletes: the call that deletes every kind, or the older call and the client's own document. */
@@ -402,5 +422,45 @@ class WebSignOutTest {
         }
         assertEquals("the mark was on the disk when the effect returned", WipeRules.EVERYTHING + "\n", written)
         assertTrue("and it owed the whole of the end of the session", whole)
+    }
+
+    /**
+     * The update in which the core says the session is ending: the request
+     * that removes the push token first, then the word. The server here does
+     * not answer the removal. The mark is on the disk when the word's effect
+     * returns; the removal was sent with the session's cookie, since its turn
+     * in the store came first; and the whole of the end of the session is
+     * done, the cookie gone and nothing owed, while the removal is still
+     * unanswered. When the core then says the session is forgotten, nothing
+     * is begun a second time.
+     */
+    @Test
+    fun theEndOfASessionBeginsWhenTheCoreSaysItIsEndingAndDoesNotWaitForThePushTokensRemoval() {
+        serve()
+        val cookies = CookieManager.getInstance()
+        cookies.setCookie(base, "session=Gurdaspur; path=/")
+        val mark = File(compose.activity.noBackupFilesDir, "navree-web-wipe")
+        var written: String? = null
+        var owedAgain = true
+        try {
+            client(
+                then = {
+                    it.run(Effect.Fetch(1, "delete", "$base$removal", listOf("content-type" to "application/json"), Body.Json("{}"), 5_000, false))
+                    it.run(Effect.SessionEnding)
+                    written = runCatching { mark.readText() }.getOrNull()
+                },
+                after = {
+                    it.run(Effect.ForgetSession)
+                    owedAgain = SiteWipe.owes
+                },
+            )
+            assertEquals("the mark was on the disk when the effect returned", WipeRules.EVERYTHING + "\n", written)
+            assertEquals("the removal is still unanswered", 1L, unanswered.count)
+            assertEquals("the removal was sent with the session's cookie", "session=Gurdaspur", removalCookie)
+            assertTrue("no cookie is left: ${cookies.getCookie(base)}", cookies.getCookie(base).isNullOrEmpty())
+            assertFalse("the session forgotten after it was ending begins nothing again", owedAgain)
+        } finally {
+            unanswered.countDown()
+        }
     }
 }

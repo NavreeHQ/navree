@@ -85,6 +85,14 @@ sealed interface Effect {
     /** Secret bytes from the system's secure generator, answered at once and never logged. */
     data class Random(val request: Long, val bytes: Int) : Effect
 
+    /**
+     * The session is ending: the core has just asked the server to forget
+     * this device's push token, and says [ForgetSession] when that is
+     * answered. What the end of a session deletes on the device is owed from
+     * this moment and begins now.
+     */
+    data object SessionEnding : Effect
+
     /** The person signed out: every cookie and all web storage of the app go, and the stored snapshot. */
     data object ForgetSession : Effect
 
@@ -128,6 +136,7 @@ sealed interface Effect {
                 "exit" -> Exit
                 "report" -> Report(s("what") ?: "", s("detail") ?: "")
                 "random" -> Random(l("request") ?: 0, (l("bytes") ?: 48).toInt())
+                "session_ending" -> SessionEnding
                 "forget_session" -> ForgetSession
                 else -> Unknown(t ?: "")
             }
