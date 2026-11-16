@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,7 +42,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalWideNavigationRail
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.NavigationItemIconPosition
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarArrangement
 import androidx.compose.material3.ShortNavigationBarItem
@@ -262,22 +260,20 @@ private fun Frame(nav: NavPart, name: String, user: Navree.User?) {
                 }
                 when (kind) {
                     NavigationKind.None -> stack()
-                    NavigationKind.Bar -> Scaffold(
+                    NavigationKind.Bar -> BottomNavigationWindow(
                         bottomBar = { BottomBar(nav.destinations, plan, nav.selected) { ui.send(Events.select(it)) } },
-                        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                    ) { padding ->
-                        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) { stack() }
-                    }
-                    NavigationKind.Rail, NavigationKind.ExpandedRail -> Row(Modifier.fillMaxSize()) {
-                        SideRail(
-                            destinations = nav.destinations,
-                            plan = plan,
-                            selected = nav.selected,
-                            expanded = kind == NavigationKind.ExpandedRail,
-                            fab = if (railFab && root != null && rootPlan != null) ({ RailFab(root, rootPlan) }) else null,
-                        ) { ui.send(Events.select(it)) }
-                        Box(Modifier.weight(1f).fillMaxHeight().consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))) { stack() }
-                    }
+                    ) { stack() }
+                    NavigationKind.Rail, NavigationKind.ExpandedRail -> SideNavigationWindow(
+                        rail = {
+                            SideRail(
+                                destinations = nav.destinations,
+                                plan = plan,
+                                selected = nav.selected,
+                                expanded = kind == NavigationKind.ExpandedRail,
+                                fab = if (railFab && root != null && rootPlan != null) ({ RailFab(root, rootPlan) }) else null,
+                            ) { ui.send(Events.select(it)) }
+                        },
+                    ) { stack() }
                 }
             }
             Covers(nav, user, name, plan, covers, holder)

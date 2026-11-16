@@ -41,7 +41,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.SnackbarHost
@@ -180,7 +179,8 @@ private fun Snackbars(info: HostInfo) {
 @Composable
 private fun BlankScreen(screen: ScreenView, info: HostInfo) {
     val ui = LocalUi.current
-    Scaffold(
+    ScreenFrame(
+        topBarShown = info.context.chrome,
         topBar = {
             // A screen brought back after the system ended the app has its title before its page.
             if (info.context.chrome) {
@@ -238,7 +238,8 @@ internal fun FailureState(failure: Failure, retry: () -> Unit) {
 private fun WebScreen(screen: ScreenView, content: Content.Web, info: HostInfo) {
     val ui = LocalUi.current
     var title by rememberSaveable(screen.id) { mutableStateOf(content.title ?: "") }
-    Scaffold(
+    ScreenFrame(
+        topBarShown = info.context.chrome,
         topBar = {
             if (info.context.chrome) {
                 TopAppBar(
@@ -282,6 +283,9 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     val hoisted = if (plan.searchInQuery) query?.form else null
     val atTop by remember { derivedStateOf { list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset < 24 } }
     val fab = plan.fab?.let { arranged.actions.getOrNull(it) as? Navree.Button }
+    // The app bar draws nothing for a plan with no bar, unless rows are being chosen: it is then about them.
+    val chosen = chosenRows(view, remember(arranged) { SelectionRules.selectable(arranged.body) })
+    val barShown = chosen != null || plan.bar != BarKind.None
     // A glance the page opened stands beside the content on a wide window.
     val side = if (ScreenRules.sheet(task = false, window = window) == Presentation.SideSheet) openGlance(place) else null
 
@@ -300,12 +304,11 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
     }
     Row(Modifier.fillMaxSize()) {
         CompositionLocalProvider(LocalShown provides shown, LocalFocusSink provides sink) {
-        Scaffold(
+        ScreenFrame(
             modifier = Modifier.weight(1f).nestedScroll(behaviour.nestedScrollConnection),
-            topBar = { ScreenBar(view, arranged, plan, place, info, behaviour, searching) { searching = it } },
-            floatingActionButton = {
-                if (fab != null && plan.fabPlace == FabPlace.BottomEnd) Fab(fab, place, plan.fabExtended, expanded = atTop)
-            },
+            topBarShown = barShown,
+            topBar = { ScreenBar(view, arranged, plan, place, info, behaviour, searching, chosen) { searching = it } },
+            floatingActionButton = if (fab != null && plan.fabPlace == FabPlace.BottomEnd) ({ Fab(fab, place, plan.fabExtended, expanded = atTop) }) else null,
             snackbarHost = { Snackbars(info) },
         ) { padding ->
             val dayPager = remember(screen) { PagerRules.inBar(screen) }
@@ -576,6 +579,17 @@ private fun ToolbarView(bar: Navree.Toolbar, place: Place) {
     }
 }
 
+/** A table whose rows are being chosen: how many are, and whether every row is. */
+internal class ChosenRows(val table: Navree.Table, val count: Int, val across: Boolean)
+
+/** The rows being chosen in the table the screen's rows are chosen in, or null when none are and the offer is not made. */
+internal fun chosenRows(view: ScreenView, table: Navree.Table?): ChosenRows? {
+    if (table == null) return null
+    val across = table.id?.let { view.lists[it]?.across } == true
+    val count = SelectionRules.chosen(table, across).size
+    return if (count > 0 || across) ChosenRows(table, count, across) else null
+}
+
 @Composable
 private fun ScreenBar(
     view: ScreenView,
@@ -585,19 +599,15 @@ private fun ScreenBar(
     info: HostInfo,
     behaviour: TopAppBarScrollBehavior,
     searching: Boolean,
+    chosen: ChosenRows?,
     setSearching: (Boolean) -> Unit,
 ) {
     val navigationIcon: @Composable () -> Unit = { NavigationIconView(plan.navigationIcon, view, screen.back) }
     val actions: @Composable RowScope.() -> Unit = { BarActions(screen, plan, place, info, setSearching) }
     // While rows are chosen the app bar is about them.
-    val table = remember(screen) { SelectionRules.selectable(screen.body) }
-    if (table != null) {
-        val across = table.id?.let { view.lists[it]?.across } == true
-        val count = SelectionRules.chosen(table, across).size
-        if (count > 0 || across) {
-            ContextualBar(screen, table, count, across, place)
-            return
-        }
+    if (chosen != null) {
+        ContextualBar(screen, chosen.table, chosen.count, chosen.across, place)
+        return
     }
     val pager = remember(screen) { PagerRules.inBar(screen) }
     when {
