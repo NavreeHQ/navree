@@ -124,6 +124,14 @@ public final class SystemEffects: EffectRunner {
         named = nil
     }
 
+    /// This install's push token goes with the person, once for a sign-out;
+    /// it is asked for again when somebody signs in.
+    private func giveUpPushToken() {
+        guard signedWith.contains(.pushNotifications), !keeper.pushAwaitsSignIn else { return }
+        AppEvents.unregisterForPush()
+        keeper.pushAwaitsSignIn = true
+    }
+
     /// The person this window's core last said is signed in.
     private var named: SessionKeeper.Person?
 
@@ -175,16 +183,18 @@ public final class SystemEffects: EffectRunner {
                 return client.send(.random(request: request, bytes: ""))
             }
             client.send(.random(request: request, bytes: bytes))
+        case .sessionEnding:
+            // The person signed out, and the core is still asking the server
+            // to forget the push token: everything on the device goes now,
+            // for every window, without waiting for that answer.
+            keeper.ending(by: self)
+            giveUpPushToken()
         case .forgetSession:
             // The person signed out: the session ends for every window, here
-            // and now, before the next effect.
+            // and now, before the next effect; or it already has, when the
+            // core said before that it was ending.
             keeper.end(by: self)
-            // This install's token goes with the person; it is asked for again
-            // once somebody signs in.
-            if signedWith.contains(.pushNotifications) {
-                AppEvents.unregisterForPush()
-                keeper.pushAwaitsSignIn = true
-            }
+            giveUpPushToken()
         case .cacheRead(let key):
             client.send(.cache(key: key, value: isCurrent ? cache.read(key) : nil))
         case .cacheWrite(let key, let value):

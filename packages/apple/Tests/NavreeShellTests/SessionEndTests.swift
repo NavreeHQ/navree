@@ -65,6 +65,47 @@ final class RemovedStores {
     var succeeds = true
 }
 
+/// The network's transport, with every answer it gave and how often it was
+/// told the session ended kept for the test to see.
+@MainActor
+final class WatchedTransport: Transport {
+    let inner: HTTPTransport
+    var answered: [Response] = []
+    var stops = 0
+
+    init(_ inner: HTTPTransport) {
+        self.inner = inner
+    }
+
+    var jar: CookieJar? { inner.jar }
+
+    func fetch(_ request: FetchRequest, answer: @escaping @MainActor (Response) -> Void) {
+        inner.fetch(request) { response in
+            self.answered.append(response)
+            answer(response)
+        }
+    }
+
+    func cancel(_ request: Int) {
+        inner.cancel(request)
+    }
+
+    func open(
+        stream: Int, url: String, headers: [(String, String)], report: @escaping @MainActor (CoreEvent.StreamState) -> Void
+    ) {
+        inner.open(stream: stream, url: url, headers: headers, report: report)
+    }
+
+    func close(stream: Int) {
+        inner.close(stream: stream)
+    }
+
+    func stop() {
+        stops += 1
+        inner.stop()
+    }
+}
+
 /// Two windows of one app: a core, a client and effects each, over the app's one session.
 @MainActor
 struct TwoWindows {
@@ -228,6 +269,140 @@ struct SessionEndTests {
         pictures.forget()
         #expect(await pictures.load(url) != nil)
         #expect(StubOrigin.seen(host).count == 2, "nothing was kept after the session ended")
+    }
+
+    // MARK: - A sign-out whose core is still asking the server
+
+    @Test func theSessionEndsOnTheDeviceBeforeTheTokensRemovalIsAnsweredAndTheRemovalStillGoesOutWithItsCookie() async throws {
+        let host = "ending.shop.example"
+        StubOrigin.answer(host, .init(status: 204, headers: ["Set-Cookie": "session=back-again; Path=/; Secure"], body: ""))
+        let places = Places()
+        defer { places.remove() }
+        let slot = MemorySlot()
+        let keeper = SessionKeeper.open(
+            origin: "https://\(host)", slot: slot, cache: places.cache, snapshots: places.snapshots, files: places.files,
+            record: places.record, removes: { _ in true }
+        )
+        let jar = keeper.networkJar()
+        jar.merge([CookieRecord(name: "session", value: "gurpreet", domain: host)])
+        places.cache.write("page:https://\(host)/orders", "Gurpreet's orders")
+        places.snapshots.write("snapshot-first", "what Gurpreet typed")
+        // The window Gurpreet signs out in, and a second window of the app.
+        let transport = WatchedTransport(HTTPTransport(jar: jar, configuration: StubOrigin.configuration))
+        let window = SystemEffects(transport: transport, keeper: keeper)
+        let other = FakeTransport()
+        other.jar = jar
+        let second = SystemEffects(transport: other, keeper: keeper)
+        let configuration = ShellConfiguration(origin: "https://\(host)", appID: "com.navree.demo", appVersion: "1.0")
+        let client = NativeClient(
+            core: try #require(Core(config: CoreConfiguration.json(configuration, device: DeviceTraits()))), effects: window
+        )
+        let push = try #require(URL(string: "https://\(host)/_navree/native/push"))
+
+        // The core's update, carried out in its order: the request that takes
+        // the push token back, then the word that the session is ending.
+        let removal = FetchRequest(
+            request: 9, method: "delete", url: push.absoluteString, headers: [("content-type", "application/json")],
+            body: .json(#"{"token":"ab12"}"#)
+        )
+        window.run(.fetch(removal), for: client)
+        window.run(.sessionEnding, for: client)
+
+        // At once, with the removal still out: the mark is written, and
+        // everything of Gurpreet's on the device is gone, for every window.
+        #expect(transport.answered.isEmpty)
+        #expect(places.record.owesWipe)
+        #expect(keeper.number == 1)
+        #expect(slot.read() == nil)
+        #expect(jar.header(for: push) == nil)
+        #expect(places.cache.read("page:https://\(host)/orders") == nil)
+        #expect(places.snapshots.read("snapshot-first") == nil)
+        #expect(other.stopped == 1)
+        #expect(second.session == 1)
+        // The window that is signing out keeps its requests: the removal is one of them.
+        #expect(transport.stops == 0)
+
+        // The removal left with the cookie it was made with, and is answered.
+        for _ in 0..<200 where transport.answered.isEmpty {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(transport.answered.map(\.status) == [204])
+        #expect(StubOrigin.seen(host).last?.value(forHTTPHeaderField: "Cookie") == "session=gurpreet")
+        // What its answer sets is an ended session's: refused.
+        #expect(jar.header(for: push) == nil)
+        #expect(slot.read() == nil)
+
+        // The core then says the session is forgotten: nothing is done twice, and the mark goes.
+        window.run(.forgetSession, for: client)
+        #expect(keeper.number == 1)
+        #expect(other.stopped == 1)
+        #expect(transport.stops == 0)
+        #expect(!places.record.owesWipe)
+    }
+
+    @Test func anAppEndedWhileTheTokensRemovalIsOutFinishesTheSignOutAtTheNextStart() throws {
+        let places = Places()
+        defer { places.remove() }
+        let slot = MemorySlot()
+        let keeper = SessionKeeper.open(
+            origin: "https://shop.example", slot: slot, cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        keeper.networkJar().merge([Self.cookie("session", "gurpreet")])
+        let transport = FakeTransport()
+        transport.jar = keeper.networkJar()
+        let window = SystemEffects(transport: transport, keeper: keeper)
+        keeper.ending(by: window)
+        #expect(places.record.owesWipe)
+        #expect(slot.read() == nil)
+        // The app is ended here: its core never says the session is forgotten.
+        // Whatever a last moment of that run left behind, the next start takes away before it reads anything.
+        slot.write(try JSONEncoder().encode([Self.cookie("session", "left-behind")]))
+        places.cache.write("page:https://shop.example/orders", "left behind")
+        let next = SessionKeeper.open(
+            origin: "https://shop.example", slot: slot, cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        #expect(next.finishedAtStart)
+        #expect(slot.read() == nil)
+        #expect(next.networkJar().header(for: Self.address) == nil)
+        #expect(places.cache.read("page:https://shop.example/orders") == nil)
+        #expect(!places.record.owesWipe)
+    }
+
+    @Test func aSignOutSaidInOneWordStillEndsTheSessionAndAnotherWindowsWordEndsItAgain() throws {
+        let places = Places()
+        defer { places.remove() }
+        let keeper = SessionKeeper.open(
+            origin: "https://shop.example", slot: MemorySlot(), cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        let first = SystemEffects(transport: FakeTransport(), keeper: keeper)
+        let second = SystemEffects(transport: FakeTransport(), keeper: keeper)
+        // No push token: the core says only that the session is forgotten.
+        keeper.end(by: first)
+        #expect(keeper.number == 1)
+        #expect(!places.record.owesWipe)
+        // One window's core says the session is ending, and the other's says it is forgotten.
+        keeper.ending(by: first)
+        #expect(keeper.number == 2)
+        keeper.end(by: second)
+        #expect(keeper.number == 3)
+        #expect(!places.record.owesWipe)
+        // The first one's word, when it comes, ends nothing more.
+        keeper.end(by: first)
+        #expect(keeper.number == 4)
+    }
+
+    @Test func anEffectThisBuildDoesNotKnowChangesNothing() throws {
+        let shell = try Shell()
+        shell.transport.jar?.merge([Self.cookie("session", "a")])
+        shell.effects.cache.write("page:https://shop.example/orders", "kept")
+        shell.effects.run(.unknown("from_a_newer_core"), for: shell.client)
+        #expect(shell.effects.keeper.number == 0)
+        #expect(shell.transport.jar?.header(for: Self.address) == "session=a")
+        #expect(shell.effects.cache.read("page:https://shop.example/orders") == "kept")
+        #expect(shell.transport.stopped == 0)
     }
 
     // MARK: - Another person, with no sign-out between
