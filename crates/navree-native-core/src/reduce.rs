@@ -1021,20 +1021,23 @@ impl Core {
             self.install(shell, true);
             // This launch's shell request may have failed before the kept
             // shell was read (with no network it fails in milliseconds, the
-            // file takes longer): the end is the same as in the other order,
-            // the kept bars and the shell asked for again.
+            // file takes longer): the end is the same as in the other order.
+            // One that did not get through leaves the kept bars and asks for
+            // the shell again; one that answered with no shell it can use
+            // (another major, a redirect to another site) gives the blank one.
             let asking = self
                 .inner
                 .pending
                 .values()
                 .any(|asked| asked.purpose == Pending::Shell);
-            if !asking
-                && matches!(
-                    self.inner.shell_failure,
-                    Some(Failure::Offline | Failure::Timeout | Failure::Server)
-                )
-            {
-                self.shell_unreached();
+            if !asking {
+                match self.inner.shell_failure {
+                    Some(Failure::Offline | Failure::Timeout | Failure::Server) => {
+                        self.shell_unreached();
+                    }
+                    Some(_) => self.no_shell(),
+                    None => {}
+                }
             }
             return true;
         }
@@ -3554,6 +3557,69 @@ mod tests {
                 )),
                 "{what}: {again:?}"
             );
+        }
+    }
+
+    /// Whichever comes first, a shell answer that is no shell or the kept
+    /// shell being read, the end is the same: the blank shell. A shell of
+    /// another major, or one that redirects to another site, before the kept
+    /// shell is read leaves the kept shell undrawn.
+    #[test]
+    fn a_shell_that_is_not_one_before_the_kept_shell_is_read_gives_the_blank_shell() {
+        let kept = include_str!("../transcripts/fixtures/made/kept-boot-workspace.json");
+        let answers = [
+            (
+                "a shell of another major",
+                Response {
+                    status: 200,
+                    content_type: Some(CONTENT_TYPE.to_owned()),
+                    body: r#"{"navree":9,"build":"b","name":"x","home":"/"}"#.to_owned(),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a redirect to another site",
+                Response {
+                    status: 302,
+                    location: Some("https://elsewhere.example/shell".to_owned()),
+                    ..Response::default()
+                },
+            ),
+            (
+                "a 404",
+                Response {
+                    status: 404,
+                    content_type: Some("text/html".to_owned()),
+                    body: "<p>".to_owned(),
+                    ..Response::default()
+                },
+            ),
+        ];
+        for (what, answer) in answers {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.cache.persist = true;
+            let mut core = Core::new(config);
+            core.send(Event::Start);
+            core.send(Event::Response(Response {
+                request: 1,
+                ..answer
+            }));
+            core.send(Event::Cache {
+                key: "boot".to_owned(),
+                value: Some(kept.to_owned()),
+            });
+            let view = core.view();
+            assert_eq!(view.stage, crate::Stage::Ready, "{what}");
+            let app = view
+                .app
+                .as_ref()
+                .unwrap_or_else(|| panic!("{what}: no app"));
+            assert_eq!(app.name, "", "{what}: the kept shell is not drawn");
+            assert_eq!(view.destinations.len(), 1, "{what}");
+            assert!(view.destinations[0].label.is_empty(), "{what}");
         }
     }
 
