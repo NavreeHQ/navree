@@ -1,12 +1,15 @@
 //! Passwordless sign-in on [`AuthService`]: magic links
 //! (`POST /auth/magic-link`) and emailed sign-in codes (`POST /auth/otp`).
 //!
-//! - Both are kept in `login_tokens` as digests (a magic link token is
-//!   `<id>.<48 base62>`, stored as its SHA-256; a code is stored as an
-//!   HMAC-SHA-256 keyed by a key derived from the application key), work
-//!   once, expire (`auth.magic_link.ttl_secs`, `auth.otp.ttl_secs`), and a
-//!   new one replaces the user's previous one. Changing the account's
-//!   address removes the ones not used yet.
+//! - Both are kept in `login_tokens` as digests that cover the address they
+//!   are mailed to (a magic link token is `<id>.<48 base62>`, stored as the
+//!   SHA-256 of its SHA-256 and the address; a code is stored as an
+//!   HMAC-SHA-256 of its id, the code and the address, keyed by a key
+//!   derived from the application key), so one works only while the
+//!   account holds that address. They work once, expire
+//!   (`auth.magic_link.ttl_secs`, `auth.otp.ttl_secs`), and a new one
+//!   replaces the user's previous one. Changing the account's address
+//!   removes the ones not used yet.
 //! - Requests always answer the same (202), whether the address is
 //!   registered or not; a second request within `throttle_secs` sends
 //!   nothing.
@@ -19,9 +22,9 @@
 //!   sign-on gets 403 `sso_required` and no mail, and a link mailed before
 //!   the domain came to enforce it no longer signs in.
 //! - A verified link or code proves the address: an unverified one becomes
-//!   verified. The sign-in then continues like a password login: a
-//!   two-factor challenge when the user has two-factor authentication on,
-//!   a session otherwise.
+//!   verified, if the account still holds it when the mark is written. The
+//!   sign-in then continues like a password login: a two-factor challenge
+//!   when the user has two-factor authentication on, a session otherwise.
 
 use chrono::{DateTime, Utc};
 use navree_contracts::AuditKind;
@@ -79,7 +82,7 @@ impl AuthService {
             &user,
             MAGIC_LINK,
             secret.id(),
-            secret.hash().to_owned(),
+            link_digest(secret.hash(), &user.email),
             options.ttl_secs,
             mail,
             entry(AuditKind::Auth, "auth.magic_link_sent", meta).actor(user.id),
@@ -102,8 +105,9 @@ impl AuthService {
             .await
     }
 
-    /// Checks a magic link token and uses it up: the user it names and the
-    /// time it was used. The first half of
+    /// Checks a magic link token and uses it up: the user it names (as read
+    /// before the link was used, holding the address it was mailed to) and
+    /// the time it was used. The first half of
     /// [`login_with_magic_link`](AuthService::login_with_magic_link), shared
     /// with the browser's sign-in.
     pub(crate) async fn claim_magic_link(
@@ -116,17 +120,10 @@ impl AuthService {
         }
         let now = self.clock.now();
         let found = match RefreshSecret::parse(token) {
-            Some(presented) => LoginToken::find(&self.db, presented.id())
-                .await?
-                .filter(|row| {
-                    row.kind == MAGIC_LINK
-                        && row.used_at.is_none()
-                        && row.expires_at > now
-                        && constant_time_eq(row.token_hash.as_bytes(), presented.hash().as_bytes())
-                }),
+            Some(presented) => self.pending_link(&presented, now).await?,
             None => None,
         };
-        let Some(row) = found else {
+        let Some((id, user)) = found else {
             self.audit(
                 entry(AuditKind::Security, "auth.login_failed", meta)
                     .metadata(json!({ "method": MAGIC_LINK })),
@@ -134,13 +131,9 @@ impl AuthService {
             .await;
             return Err(AuthError::InvalidLoginToken);
         };
-        if !self.claim_login_token(row.id, now).await? {
+        if !self.claim_login_token(id, now).await? {
             return Err(AuthError::InvalidLoginToken);
         }
-        let user = self
-            .find_user(row.user_id)
-            .await?
-            .ok_or(AuthError::InvalidLoginToken)?;
         Ok((user, now))
     }
 
@@ -165,7 +158,7 @@ impl AuthService {
         };
         let id = Uuid::now_v7();
         let code = random_digits(options.length)?;
-        let digest = self.code_digest(id, &code)?;
+        let digest = self.code_digest(id, &code, &user.email)?;
         let mail = self
             .mailer()
             .await
@@ -238,12 +231,14 @@ impl AuthService {
                 .map(Record::into_inner),
             None => None,
         };
-        let valid = match &pending {
-            Some(row) => {
-                let digest = self.code_digest(row.id, &code)?;
+        // The code was made for the address it was mailed to: it works
+        // while the account holds that address.
+        let valid = match (&user, &pending) {
+            (Some(user), Some(row)) => {
+                let digest = self.code_digest(row.id, &code, &user.email)?;
                 constant_time_eq(row.token_hash.as_bytes(), digest.as_bytes())
             }
-            None => false,
+            _ => false,
         };
         let (Some(user), Some(row), true) = (user.clone(), pending.clone(), valid) else {
             if let Some(row) = &pending {
@@ -293,6 +288,28 @@ impl AuthService {
             return Ok(None);
         }
         Ok(Some(user))
+    }
+
+    /// The id of the magic link `presented` names and the user it signs in,
+    /// when the link is unused, current and made for the address the user
+    /// holds now.
+    async fn pending_link(
+        &self,
+        presented: &RefreshSecret,
+        now: DateTime<Utc>,
+    ) -> Result<Option<(Uuid, User)>, AuthError> {
+        let Some(row) = LoginToken::find(&self.db, presented.id()).await? else {
+            return Ok(None);
+        };
+        if row.kind != MAGIC_LINK || row.used_at.is_some() || row.expires_at <= now {
+            return Ok(None);
+        }
+        let Some(user) = self.find_user(row.user_id).await? else {
+            return Ok(None);
+        };
+        let digest = link_digest(presented.hash(), &user.email);
+        let valid = constant_time_eq(row.token_hash.as_bytes(), digest.as_bytes());
+        Ok(valid.then_some((row.id, user)))
     }
 
     /// Replaces the user's `kind` tokens with a new one and mails it after
@@ -425,9 +442,10 @@ impl AuthService {
 
     /// The step after a link or code is accepted, for tokens and for the
     /// session cookie alike: the sign-in policies, the address verified when
-    /// it is not yet, and, for an account with two-factor authentication,
-    /// a challenge (audited as `auth.two_factor_challenge`). Nothing is
-    /// issued yet.
+    /// it is not yet (`user` as the link or code was checked against: the
+    /// address it was mailed to is marked, if the account still holds it),
+    /// and, for an account with two-factor authentication, a challenge
+    /// (audited as `auth.two_factor_challenge`). Nothing is issued yet.
     pub(crate) async fn passwordless_step(
         &self,
         mut user: User,
@@ -438,12 +456,16 @@ impl AuthService {
         self.check_sign_in(&SignInAttempt::of(&user, method.clone()), meta)
             .await?;
         if user.email_verified_at.is_none() {
-            let id = user.id;
+            let (id, mailed_to) = (user.id, user.email.clone());
             user = self
                 .write(Some(id), |uow| async move {
+                    // The write reads the row again (locked where the
+                    // database can): a new address is not marked.
                     user::update(&uow, id, |user| {
-                        user.email_verified_at = Some(now);
-                        user.updated_at = now;
+                        if user.email == mailed_to {
+                            user.email_verified_at = Some(now);
+                            user.updated_at = now;
+                        }
                     })
                     .await
                 })
@@ -465,12 +487,18 @@ impl AuthService {
         Ok(PasswordStep::Done(user))
     }
 
-    /// The stored digest of code `code` of token `id`.
-    fn code_digest(&self, id: Uuid, code: &str) -> Result<String, AuthError> {
+    /// The stored digest of code `code` of token `id`, mailed to `email`.
+    fn code_digest(&self, id: Uuid, code: &str, email: &str) -> Result<String, AuthError> {
         let key = self.encrypter.derive_key(OTP_KEY_PURPOSE)?;
-        let mac = hmac_sha256(&key, format!("{id}:{code}").as_bytes());
+        let mac = hmac_sha256(&key, format!("{id}:{code}:{email}").as_bytes());
         Ok(sha256_hex(&mac))
     }
+}
+
+/// The stored digest of a magic link whose token's SHA-256 is `token_hash`,
+/// mailed to `email`.
+fn link_digest(token_hash: &str, email: &str) -> String {
+    sha256_hex(format!("{token_hash}:{email}").as_bytes())
 }
 
 /// `len` random decimal digits (the operating system's CSPRNG).
