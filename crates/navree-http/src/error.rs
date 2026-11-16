@@ -9,7 +9,8 @@ use std::time::Duration;
 
 use http::header::{CONTENT_TYPE, HeaderName, HeaderValue, RETRY_AFTER, X_CONTENT_TYPE_OPTIONS};
 use http::{HeaderMap, StatusCode};
-use navree_kernel::BoxError;
+use navree_kernel::__private::is_app_module;
+use navree_kernel::{AppContext, BoxError};
 use serde::Serialize;
 
 use crate::body::Body;
@@ -544,6 +545,45 @@ impl fmt::Debug for ErrorMapper {
             .field("error_type", &self.type_name)
             .finish()
     }
+}
+
+/// The refusal of each [`ErrorMapper`] that a module acting for a plugin the kernel does not
+/// find first-party contributes for an error type of another crate, in module order: such a
+/// mapper answers that error wherever the app's own code raises it, with the plugin's status
+/// and text, and before the app's mapper of the same type when the app imports the plugin. So
+/// only a module of the app maps another crate's errors; a plugin maps the error types of its
+/// own crate. An app whose mappers all come from modules that act for no plugin reads nothing
+/// more.
+pub(crate) fn mappers_of_plugins(ctx: &AppContext) -> Vec<String> {
+    let contributed = ctx.contributions::<ErrorMapper>();
+    if contributed
+        .iter()
+        .all(|mapper| is_app_module(ctx, mapper.module.id))
+    {
+        return Vec::new();
+    }
+    let plugins = ctx.plugins().plugins;
+    contributed
+        .iter()
+        .filter_map(|mapper| {
+            let module = mapper.module.id;
+            let plugin = plugins.iter().find(|plugin| {
+                !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
+            })?;
+            let error = mapper.value.type_name;
+            let outer = error.split_once('<').map_or(error, |(outer, _)| outer);
+            let own = outer
+                .strip_prefix(plugin.info.crate_name)
+                .is_some_and(|rest| rest.starts_with("::"));
+            if own {
+                return None;
+            }
+            Some(format!(
+                "plugin `{}` answers the app's errors of type `{error}` (m.map_error in `{}`), a type of another crate; only a module of the app maps another crate's errors: remove the plugin or update it to a version that maps only its own errors, and to use the plugin's mapping, register it from a module of the app (m.map_error)",
+                plugin.info.name, mapper.module.name
+            ))
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -7,7 +7,7 @@ mod support;
 use http::{Method, StatusCode};
 use navree_http::body::Body;
 use navree_http::{
-    CurrentPrincipal, LayerSlot, ModuleBuilderHttpExt, ModuleBuilderMountExt, RouteDef,
+    AppError, CurrentPrincipal, LayerSlot, ModuleBuilderHttpExt, ModuleBuilderMountExt, RouteDef,
 };
 
 use navree_plugin_khata::LedgerModule;
@@ -19,6 +19,7 @@ const HARPREET: &str = "0192f0c1-0000-7000-8000-0000000000a1";
 /// The khata plugin, a community plugin whose crate is this module: the test app's own
 /// modules are in no crate it names.
 mod navree_plugin_khata {
+    use std::fmt;
     use std::sync::Arc;
 
     use http::{HeaderValue, Method};
@@ -26,7 +27,7 @@ mod navree_plugin_khata {
     use navree_http::handler::Endpoint;
     use navree_http::middleware::{self, Next};
     use navree_http::response::Response;
-    use navree_http::{AppRouter, Controller, GlobalLayer, LayerSlot, Mount, RouteDef};
+    use navree_http::{AppError, AppRouter, Controller, GlobalLayer, LayerSlot, Mount, RouteDef};
     use navree_kernel::{
         BoxFuture, Injectable, KernelError, Module, ModuleBuilder, PluginInfo, Resolver,
     };
@@ -99,6 +100,23 @@ mod navree_plugin_khata {
     pub fn ledger_mount() -> Mount {
         let ledger = AppRouter::from_handler(|| async { "entries" });
         Mount::new("/khata", ledger.layer(middleware::from_fn(stamp_answer))).public()
+    }
+
+    /// The plugin's own error: the khata is closed for the day.
+    #[derive(Debug)]
+    pub struct LedgerClosed;
+
+    impl fmt::Display for LedgerClosed {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("the khata is closed for the day")
+        }
+    }
+
+    impl std::error::Error for LedgerClosed {}
+
+    /// The plugin's answer to its own error: 409.
+    pub fn closed(_: &LedgerClosed) -> Option<AppError> {
+        Some(AppError::conflict("The khata of Ludhiana is closed for the day."))
     }
 
     /// The plugin's module: it names the plugin, then registers what `.0` adds.
@@ -249,4 +267,50 @@ async fn the_app_may_add_a_plugins_layer() {
         .map(|module| module.id.name())
         .collect();
     assert_eq!(modules, ["LedgerModule"]);
+}
+
+/// An answer to every input or output error: 503, the khata is busy.
+fn busy(_: &std::io::Error) -> Option<AppError> {
+    Some(AppError::service_unavailable("The khata of Amritsar is busy."))
+}
+
+/// The refusal of the khata plugin's `LedgerModule` mapping the errors of type `error`.
+fn maps(error: &str) -> String {
+    format!(
+        "plugin `navree-plugin-khata` answers the app's errors of type `{error}` (m.map_error in `LedgerModule`), a type of another crate; only a module of the app maps another crate's errors: remove the plugin or update it to a version that maps only its own errors, and to use the plugin's mapping, register it from a module of the app (m.map_error)"
+    )
+}
+
+#[tokio::test]
+async fn a_plugin_mapping_of_another_crates_errors_fails_the_boot() {
+    // Every input or output error the app's own code raises would answer 503, with the
+    // plugin's text.
+    let error = Setup::new(routes())
+        .authenticated()
+        .module(LedgerModule::new(|m| {
+            m.map_error::<std::io::Error>(busy);
+        }))
+        .boot_error()
+        .await;
+    let expected = maps(std::any::type_name::<std::io::Error>());
+    assert!(error.contains(&expected), "{error}");
+
+    // Its own error type is the plugin's to map.
+    Setup::new(routes())
+        .authenticated()
+        .module(LedgerModule::new(|m| {
+            m.map_error::<navree_plugin_khata::LedgerClosed>(navree_plugin_khata::closed);
+        }))
+        .boot()
+        .await;
+
+    // The app maps another crate's errors from a module of its own, beside the plugin.
+    Setup::new(routes())
+        .authenticated()
+        .register(|m| {
+            m.map_error::<std::io::Error>(busy);
+        })
+        .module(LedgerModule::new(|_| {}))
+        .boot()
+        .await;
 }

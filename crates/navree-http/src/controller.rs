@@ -197,6 +197,11 @@ pub trait ModuleBuilderHttpExt {
 
     /// Maps errors of type `E` found in a 500 [`AppError`]'s source chain to
     /// a specific error (e.g. a database "record not found" to 404).
+    ///
+    /// The mapping answers every such error of the app. A module of a plugin
+    /// that is not one of the framework's own packages maps only the error
+    /// types of the plugin's crate: another crate's stops the boot, and the
+    /// app registers such a mapping from a module of its own.
     fn map_error<E: StdError + 'static>(&mut self, f: fn(&E) -> Option<AppError>) -> &mut Self;
 
     /// Lets `pages` answer errors in another form than JSON: a page for a

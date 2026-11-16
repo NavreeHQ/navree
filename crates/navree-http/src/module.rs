@@ -16,7 +16,8 @@ use crate::extract::rejection;
 use crate::maintenance::{MaintenanceInfo, MaintenanceMode};
 use crate::mount::mount_table;
 use crate::{
-    AppError, HttpOptions, ModuleBuilderHttpExt, RouteMeta, UrlSigner, build_router, route_table,
+    AppError, HttpOptions, ModuleBuilderHttpExt, RouteErrors, RouteMeta, UrlSigner, build_router,
+    route_table,
 };
 
 /// The HTTP module: the server, default layer stack, JSON errors,
@@ -211,10 +212,17 @@ impl Injectable for HttpServer {
     }
 }
 
-/// Builds the router once at boot, so route mistakes fail the boot.
+/// Builds the router once at boot, so route mistakes fail the boot. Before that, a plugin's
+/// mapping of another crate's errors stops the boot too: only the app answers its errors.
 impl Lifecycle for HttpServer {
     fn on_bootstrap(&self, ctx: AppContext) -> BoxFuture<'_, Result<(), BoxError>> {
-        Box::pin(async move { build_router(&ctx).await.map(drop) })
+        Box::pin(async move {
+            let refused = crate::error::mappers_of_plugins(&ctx);
+            if !refused.is_empty() {
+                return Err(RouteErrors(refused).into());
+            }
+            build_router(&ctx).await.map(drop)
+        })
     }
 }
 
