@@ -14,8 +14,9 @@ public final class PictureLoader {
     private let kept = NSCache<NSURL, NSData>()
     /// The system's cache of the answers, in memory only.
     private let answers: URLCache
-    /// Moves on when the session ends: a picture asked for before is not kept.
-    private var era = 0
+    /// Moves on when the session ends or the person changes: a picture asked
+    /// for before is not kept.
+    private(set) var era = 0
     /// The origin a picture's address is read against.
     public let site: Origin?
     /// Other hosts pictures may come from, with no cookie.

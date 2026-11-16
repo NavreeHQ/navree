@@ -237,6 +237,24 @@ final class SessionKeeper {
         removeRetired(emptying: old)
     }
 
+    /// Who a window's core says is signed in, as far as a client can tell
+    /// two people apart: by name and address.
+    struct Person: Equatable {
+        var name: String
+        var email: String?
+    }
+
+    /// A window's core now names another person than it did, and nobody
+    /// signed out between: a session ran out, and somebody else signed in.
+    /// What a core keeps it empties itself. What is the person's and not a
+    /// core's goes here, for every window: the pictures loaded, the files
+    /// picked for forms, the notifications and the count on the app's icon.
+    func personChanged(by window: SystemEffects) {
+        for window in live() { window.pictures.forget() }
+        files.clear()
+        window.devices.notifications.signedOut()
+    }
+
     /// Deletes the pages, what was kept of each window, and the picked files.
     private func clearKept() -> Bool {
         let pages = cache.clear()

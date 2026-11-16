@@ -230,6 +230,27 @@ struct SessionEndTests {
         #expect(StubOrigin.seen(host).count == 2, "nothing was kept after the session ended")
     }
 
+    // MARK: - Another person, with no sign-out between
+
+    @Test func anotherPersonSigningInWithNoSignOutTakesAwayWhatWasTheLastPersons() throws {
+        let shell = try Shell()
+        let played = PlayedNotifications()
+        shell.effects.devices.notifications = played
+        shell.client.begin()
+        #expect(shell.client.app?.user?.name == "Ravneet Kaur")
+        let loaded = shell.effects.pictures.era
+        // Her session runs out while the app is away and Harpreet signs in on
+        // the same device: the server's shell names him now.
+        shell.transport.answers["/_navree/native/shell"] = (200, "made/shell-other.json")
+        shell.client.send(.foreground)
+        #expect(shell.client.app?.user?.name == "Harpreet Singh")
+        #expect(played.signOuts == 1, "her notifications and the count go")
+        #expect(shell.effects.pictures.era == loaded + 1, "a picture loaded for her is asked for again")
+        // The same person named again takes nothing away.
+        shell.client.send(.foreground)
+        #expect(played.signOuts == 1)
+    }
+
     // MARK: - The web view's store
 
     @Test func theWebViewsStoreOfASessionThatEndedGivesTheNextOneNothing() async throws {
