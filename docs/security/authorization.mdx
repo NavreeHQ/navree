@@ -272,6 +272,12 @@ The roles that already hold every permission hold a plugin's too, from the momen
 
 A role granted one action on `all` holds that action of every plugin: `all.read` holds `announcements.read`. So a plugin does not guard a staff-only action with a permission that a workspace owner (in a SaaS app, a customer) holds.
 
+#### What the plugin rules are, and are not
+
+The rules a plugin is held to, these and the others the boot checks, hold it to what it declares: what its modules register and what they name. They are not a sandbox. A crate linked into the app runs with the app's rights: its code can read the app's configuration, query its database and call other services as the app's own code can, whatever it registers. Add a plugin as you would add any other dependency, from a source you trust.
+
+Whether a plugin is one of the framework's own packages, which these rules leave alone, is decided by the plugin's name, its version and the type paths of its modules. A package that names its library like one of Navree's crates would meet all three, so the package's name and source matter as they do for any dependency.
+
 ### Managing roles in code
 
 `AccessService` manages roles. Writes take the unit of work to run in: a request's `Uow`, or one from `db.uow(..)` in jobs, seeders and commands.

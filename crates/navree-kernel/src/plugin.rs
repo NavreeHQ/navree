@@ -389,9 +389,11 @@ pub const fn namespace_text(bytes: &'static [u8], len: usize) -> &'static str {
 }
 
 /// The framework's own plugin packages, as (package, crate), sorted by
-/// package: a plugin is first-party when its name is here, its version is the
-/// kernel's, and every module of it is a type of the listed crate. Not public
-/// API; Navree's own crates and tests use it.
+/// package: a plugin is first-party when its name is here, it names the listed
+/// crate as its own, its version is the kernel's, and every module of it is a
+/// type of the listed crate. These are names, which a package can take: one
+/// whose library is named like a listed crate meets them. Not public API;
+/// Navree's own crates and tests use it.
 pub const FIRST_PARTY: &[(&str, &str)] = &[
     ("navree-ai", "navree_ai"),
     ("navree-audit", "navree_audit"),
@@ -608,6 +610,11 @@ pub(crate) fn names_crate(type_name: &str, crate_name: &str) -> bool {
 /// first-party: `listed` pairs its name with a crate, it names that crate as
 /// its own, its version is `kernel_version`, and every module type, up to its
 /// first `<`, is a path of that crate (generic arguments do not count).
+///
+/// It reads names: a package whose library is named like a listed crate meets
+/// it, as `std::any::type_name` prints the library's name. The plugin rules
+/// hold a plugin to what it declares and are not a sandbox: a crate linked
+/// into the app runs with the app's rights.
 pub(crate) fn is_first_party(
     info: &PluginInfo,
     type_names: &[&str],
