@@ -88,12 +88,38 @@ class SiteWipeScriptTest(unittest.TestCase):
         _, messages = self.said("a cache that stays")
         self.assertEqual([{"n": WORD, "workers": 0, "caches": 1, "left": 1}], messages)
 
+    def test_a_database_and_local_storage_go_as_a_worker_and_a_cache_do(self):
+        seen, messages = self.said("everything a page stores")
+        self.assertEqual(1, seen["unregistered"])
+        self.assertEqual(["pages"], seen["deleted"])
+        self.assertEqual(["orders", "drafts"], seen["dropped"])
+        self.assertEqual(1, seen["emptiedStorage"])
+        self.assertEqual(([], [], 0), (seen["left"], seen["databases"], seen["stored"]))
+        self.assertEqual([{"n": WORD, "workers": 1, "caches": 1, "left": 0}], messages)
+
+    def test_what_is_still_there_or_there_again_a_moment_later_is_counted_as_left(self):
+        # A database that could not be deleted, a worker a page registered again, and a cache a worker that was
+        # still running put back after the deletion: each is found by the second count, and the document does
+        # not say the origin is clean.
+        for case in ("a database that stays", "a worker registered again", "a cache put back while the script waits"):
+            _, messages = self.said(case)
+            self.assertEqual(1, len(messages), case)
+            self.assertNotIn("error", messages[0], case)
+            self.assertEqual(1, messages[0]["left"], case)
+
+    def test_local_storage_that_cannot_be_reached_does_not_stop_the_rest(self):
+        seen, messages = self.said("local storage that cannot be reached")
+        self.assertEqual(["pages"], seen["deleted"])
+        self.assertEqual([{"n": WORD, "workers": 0, "caches": 1, "left": 0}], messages)
+
     def test_a_frame_and_a_document_without_the_listener_say_nothing_and_touch_nothing(self):
         for case in ("a frame", "no listener"):
             seen, messages = self.said(case)
             self.assertEqual([], messages, case)
             self.assertEqual(0, seen["unregistered"], case)
             self.assertEqual([], seen["deleted"], case)
+            self.assertEqual([], seen["dropped"], case)
+            self.assertEqual(0, seen["emptiedStorage"], case)
 
 
 if __name__ == "__main__":

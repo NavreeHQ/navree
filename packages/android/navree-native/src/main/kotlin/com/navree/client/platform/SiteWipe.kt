@@ -174,9 +174,12 @@ object WipeRules {
      * document, as the check on a document of another origin does, so nothing of
      * a page the origin's worker may have answered with is drawn or run; then,
      * in the main frame only, it unregisters every service worker registration
-     * of the origin, deletes every cache, counts the caches again, and says what
-     * it did through [LISTENER]: `{"n": the go's word, "workers", "caches",
-     * "left", "error"?}`. [word] is in the script and nowhere in the address,
+     * of the origin, deletes every cache and every IndexedDB database, empties
+     * local storage, waits a quarter of a second, and counts all four again:
+     * what something of the session that was still running put back in that
+     * time is counted as left. It says what it did through [LISTENER]: `{"n":
+     * the go's word, "workers", "caches", "left", "error"?}`, where `left` is
+     * everything the second count found. [word] is in the script and nowhere in the address,
      * so a page that reads its own address does not learn it. It is hex
      * digits only: it is written into the script.
      */
@@ -191,12 +194,18 @@ object WipeRules {
             "var o={n:'$word',workers:0,caches:0,left:0};" +
             "var say=function(){try{L.postMessage(JSON.stringify(o))}catch(e){}};" +
             "var fail=function(e){o.error=String(e);say()};" +
-            "try{var p=Promise.resolve();" +
-            "if(self.navigator&&navigator.serviceWorker)p=p.then(function(){return navigator.serviceWorker.getRegistrations()})" +
-            ".then(function(r){o.workers=r.length;var u=[];for(var i=0;i<r.length;i++)u.push(r[i].unregister());return Promise.all(u)});" +
-            "if(self.caches)p=p.then(function(){return caches.keys()})" +
-            ".then(function(k){o.caches=k.length;var u=[];for(var i=0;i<k.length;i++)u.push(caches.delete(k[i]));return Promise.all(u)})" +
-            ".then(function(){return caches.keys()}).then(function(k){o.left=k.length});" +
+            // What the origin holds, asked for anew each time it is counted: registrations, caches, databases, local storage.
+            "var W=function(){return self.navigator&&navigator.serviceWorker?navigator.serviceWorker.getRegistrations():Promise.resolve([])};" +
+            "var C=function(){return self.caches?caches.keys():Promise.resolve([])};" +
+            "var B=function(){return self.indexedDB&&indexedDB.databases?indexedDB.databases():Promise.resolve([])};" +
+            "var S=function(){try{return self.localStorage||null}catch(e){return null}};" +
+            "var G=function(n){return new Promise(function(y){try{var q=indexedDB.deleteDatabase(n);q.onsuccess=q.onerror=q.onblocked=function(){y()}}catch(e){y()}})};" +
+            "try{var p=W().then(function(r){o.workers=r.length;var u=[];for(var i=0;i<r.length;i++)u.push(r[i].unregister());return Promise.all(u)})" +
+            ".then(C).then(function(k){o.caches=k.length;var u=[];for(var i=0;i<k.length;i++)u.push(caches.delete(k[i]));return Promise.all(u)})" +
+            ".then(B).then(function(b){var u=[];for(var i=0;i<b.length;i++)u.push(G(b[i].name));return Promise.all(u)})" +
+            ".then(function(){var s=S();if(s)s.clear();return new Promise(function(y){setTimeout(y,250)})})" +
+            ".then(function(){return Promise.all([W(),C(),B()])})" +
+            ".then(function(a){var s=S();o.left=a[0].length+a[1].length+a[2].length+(s?s.length:0)});" +
             "p.then(say,fail)}catch(e){fail(e)}})();"
     }
 
