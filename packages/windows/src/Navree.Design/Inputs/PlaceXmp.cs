@@ -87,23 +87,21 @@ public static partial class PlaceRules
     internal static bool IsPlace(string name) =>
         name.StartsWith("gps", StringComparison.Ordinal) || PlaceNames.Contains(name) || PlaceEndings.Any(ending => name.EndsWith(ending, StringComparison.Ordinal));
 
-    // Empties the XMP packet at file[from .. end] when it holds a place; true when it did. A packet holding a NUL byte is not UTF-8 (XMP Part 3 asks
-    // for UTF-8 in every format this reads), so it cannot be read here.
-    private static bool Xmp(byte[] file, int from, int end)
+    // Empties the XMP packet at file[from .. end] when it holds a place. A packet holding a NUL byte is not UTF-8 (XMP Part 3 asks for UTF-8 in
+    // every format this reads), so it cannot be read here.
+    private static void Xmp(Cleaning work, int from, int end)
     {
-        Span<byte> packet = file.AsSpan(from, end - from);
+        Span<byte> packet = work.Bytes.AsSpan(from, end - from);
         if (packet.Contains((byte)0))
         {
-            throw new FormatException("an XMP packet that is not UTF-8 cannot be read");
+            throw Doubted();
         }
 
-        if (!HoldsPlace(packet))
+        if (HoldsPlace(packet))
         {
-            return false;
+            EmptyPacket(packet, true);
+            work.Changed = true;
         }
-
-        EmptyPacket(packet, true);
-        return true;
     }
 
     // Writes an empty packet over bytes: the empty xmpmeta element when it fits and the caller wants it, then spaces.

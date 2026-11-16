@@ -78,20 +78,20 @@ public sealed class PickedFiles
             string at = path;
             bool copy = false;
             long size = info.Length;
-            if (!rule.KeepLocation && PlaceRules.MustLook(head, type))
+            if (!rule.KeepLocation && PlaceRules.MustLook(head, name, type))
             {
                 byte[] bytes = await File.ReadAllBytesAsync(path, cancel).ConfigureAwait(false);
                 PlaceResult result = PlaceRules.TakeOut(bytes, name);
-                if (result.Outcome == PlaceOutcome.Refused)
+                if (result.Outcome == PlaceOutcome.Refused || result.Bytes is not { } clean)
                 {
                     return new Picked(null, name + ": " + result.Why);
                 }
 
                 _ = Directory.CreateDirectory(folder);
                 at = Path.Combine(folder, token);
-                await File.WriteAllBytesAsync(at, bytes, cancel).ConfigureAwait(false);
+                await File.WriteAllBytesAsync(at, clean, cancel).ConfigureAwait(false);
                 copy = true;
-                size = bytes.Length;
+                size = clean.Length;
             }
 
             held[token] = new Entry(at, copy);

@@ -258,6 +258,35 @@ public sealed class PickedFilesTests
     }
 
     [TestMethod]
+    public async Task A_motion_photo_is_refused_with_words_and_a_png_whose_place_went_is_sent_at_its_new_size()
+    {
+        PickedFiles files = new(copies);
+        byte[] video = [0, 0, 0, 20, .. "ftyp"u8.ToArray(), .. "isom"u8.ToArray(), 0, 0, 2, 0, .. "mp41"u8.ToArray()];
+        byte[] packet = Encoding.UTF8.GetBytes("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:Description photoshop:City=\"Chandigarh\"/></x:xmpmeta>");
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, .. Chunk("IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]), .. Chunk("tEXt", [.. "XML:com.adobe.xmp"u8.ToArray(), 0, .. packet]), .. Chunk("IDAT", [1, 2, 3]), .. Chunk("IEND", [])];
+
+        Picked motion = await files.AddAsync(Write("PXL_20261116_101500.MP.jpg", [.. PhotoWithPlace(), .. video]), Rule(accept: null), 0, CancellationToken.None);
+        Picked picture = await files.AddAsync(Write("Sukhna Lake.png", png), Rule(accept: null), 0, CancellationToken.None);
+
+        Assert.IsNull(motion.File);
+        StringAssert.Contains(motion.Refusal, "video");
+        byte[] sent = await SentAsync(files, picture);
+        Assert.AreEqual(sent.Length, picture.File!.Size);
+        Assert.AreEqual(png.Length - 12 - 18 - packet.Length, sent.Length);
+        Assert.IsFalse(Encoding.UTF8.GetString(sent).Contains("Chandigarh", StringComparison.Ordinal));
+    }
+
+    private static byte[] Chunk(string kind, byte[] data)
+    {
+        byte[] whole = new byte[12 + data.Length];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(whole, (uint)data.Length);
+        Encoding.ASCII.GetBytes(kind).CopyTo(whole, 4);
+        data.CopyTo(whole, 8);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(whole.AsSpan(8 + data.Length), PlaceRules.Crc32(whole.AsSpan(4, 4 + data.Length)));
+        return whole;
+    }
+
+    [TestMethod]
     public async Task A_video_and_a_paper_are_not_pictures_and_are_sent_as_they_are()
     {
         PickedFiles files = new(copies);

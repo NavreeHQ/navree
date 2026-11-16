@@ -237,12 +237,14 @@ public sealed class PlaceRulesTests
         byte[] inner = [.. "WEBP"u8.ToArray(), .. "VP8 "u8.ToArray(), 4, 0, 0, 0, 9, 8, 7, 6, .. chunk];
         byte[] webp = [.. "RIFF"u8.ToArray(), .. BitConverter.GetBytes((uint)inner.Length), .. inner];
 
-        Assert.AreEqual(PlaceOutcome.Removed, PlaceRules.TakeOut(png, "Chandigarh.png").Outcome);
-        Assert.AreEqual(PlaceOutcome.Removed, PlaceRules.TakeOut(webp, "Chandigarh.webp").Outcome);
-        Assert.IsFalse(Encoding.UTF8.GetString(png).Contains("30.7333", StringComparison.Ordinal));
-        Assert.IsFalse(Encoding.UTF8.GetString(webp).Contains("30.7333", StringComparison.Ordinal));
-        int itxtAt = Find(png, "iTXt"u8.ToArray());
-        Assert.AreEqual(PlaceRules.Crc32(png.AsSpan(itxtAt, 4 + itxt.Length)), BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(itxtAt + 4 + itxt.Length)), "the chunk's check value matches what it now holds");
+        PlaceResult fromPng = PlaceRules.TakeOut(png, "Chandigarh.png");
+        PlaceResult fromWebp = PlaceRules.TakeOut(webp, "Chandigarh.webp");
+
+        Assert.AreEqual(PlaceOutcome.Removed, fromPng.Outcome);
+        Assert.AreEqual(PlaceOutcome.Removed, fromWebp.Outcome);
+        CollectionAssert.AreEqual(png[..(8 + 25)].Concat(png[^(15 + 12)..]).ToArray(), fromPng.Bytes, "the PNG's chunk that held the packet goes, and nothing else changes");
+        Assert.IsFalse(Encoding.UTF8.GetString(fromWebp.Bytes!).Contains("30.7333", StringComparison.Ordinal));
+        Assert.AreEqual(webp.Length, fromWebp.Bytes!.Length, "the WebP's packet is emptied where it is");
     }
 
     [TestMethod]
@@ -294,7 +296,7 @@ public sealed class PlaceRulesTests
     }
 
     [TestMethod]
-    public void A_png_with_its_xmp_compressed_is_refused_because_the_place_cannot_be_looked_for()
+    public void A_png_whose_compressed_xmp_cannot_be_expanded_is_refused()
     {
         byte[] keyword = [.. "XML:com.adobe.xmp"u8.ToArray(), 0, 1, 0, 0, 0, 9, 9];
         byte[] file = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, .. Chunk("iTXt", keyword), .. Chunk("IEND", [])];
