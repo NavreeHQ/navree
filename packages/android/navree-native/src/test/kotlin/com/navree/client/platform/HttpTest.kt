@@ -48,7 +48,7 @@ class HttpTest {
             assertEquals("$given: one file part, under the field's name, with the name written as $written: $text", 1, lines.count { it == "Content-Disposition: form-data; name=\"papers\"; filename=\"$written\"" })
             assertEquals("$given: nothing else starts a part: $text", 3, lines.count { it.startsWith("Content-Disposition:") })
             assertEquals("$given: no header of the name's own: $text", 0, lines.count { it.startsWith("X-Moga") })
-            assertTrue("$given: the other parts are as they were: $text", text.contains("name=\"label\"\r\nContent-Length: 7\r\n\r\n#16a34a") && text.contains("name=\"city\"\r\nContent-Length: 8\r\n\r\nBathinda"))
+            assertTrue("$given: the other parts are as they were: $text", text.contains("name=\"label\"\r\n\r\n#16a34a\r\n") && text.contains("name=\"city\"\r\n\r\nBathinda\r\n"))
             assertTrue("$given: the file's bytes follow its headers: $text", text.contains("\r\n\r\n%PDF\r\n"))
         }
     }
