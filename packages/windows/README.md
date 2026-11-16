@@ -53,6 +53,8 @@ The client tells the core which kinds it has no drawing for (`ShellOptions.Undra
 
 A page of the app's own origins can be shown in the system's web view (WebView2). Every request it makes, from the page, its frames and its workers (service workers and shared workers too), is asked of the client first, and one that is not for the app's own origins is refused; a web view runtime too old to ask about the requests of workers shows no page, and says that updating the WebView2 Runtime lets it be shown. A WebSocket is not such a request, so the client cannot refuse one: the server's Content-Security-Policy `connect-src` is what keeps a page's WebSockets to the app's own origins. A download a page starts is refused, and the person is told it was not saved.
 
+A file reaches a page in the web view only through the page's own file input, which opens the system's file picker: nothing dragged from outside is handed to a web page, and a page is never sent to a file of this computer (the file's path is told to nobody). A file a page takes through its own file input is sent by the page as it is: the client does not look into it, so the place a photo was taken is not taken out there. The promise about the place holds for the fields the client draws. An app that takes photos from people has the client draw that form (a file field in a form of the page, which the client now draws), and does not put it in a page that is shown in the web view.
+
 ## The colour field and the file field
 
 A colour field is a field-shaped button: a swatch, the value in words (`#16a34a`), and for a screen reader its label, the colour's name and the value one character at a time. It opens a flyout with the system's own `ColorPicker` and OK and Cancel; only OK sends the colour, as `#rrggbb`.

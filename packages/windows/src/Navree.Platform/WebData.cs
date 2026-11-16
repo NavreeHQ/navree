@@ -88,6 +88,30 @@ public static class WebData
         return !wiping && ours(address) ? WebAnswer.Ours : WebAnswer.Refused;
     }
 
+    /// <summary>
+    /// Whether an address a web page was sent to is a file of this computer: what the web view makes of a file dropped on a page that does not
+    /// take drops. Such an address holds a path of the person's own (their Windows user name, a folder's name), so it is cancelled where it
+    /// arrives and told to nobody: not to the core, and not to a log.
+    /// </summary>
+    /// <param name="address">The address.</param>
+    /// <returns>True for an address on the <c>file</c> scheme, and for a path written without one.</returns>
+    public static bool IsLocalFile(string? address)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            return false;
+        }
+
+        string text = address.TrimStart();
+        if (text.StartsWith("file:", StringComparison.OrdinalIgnoreCase) || text.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        // A drive's path: a letter, a colon, a slash.
+        return text.Length >= 3 && char.IsAsciiLetter(text[0]) && text[1] == ':' && text[2] is '\\' or '/';
+    }
+
     /// <summary>Whether a request is one the web view answers without the network: a document of its own, or inline data of a page.</summary>
     /// <param name="address">The address.</param>
     /// <returns>True for a blank page, a blob and inline data.</returns>

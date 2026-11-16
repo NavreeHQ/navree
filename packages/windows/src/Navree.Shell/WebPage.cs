@@ -55,6 +55,11 @@ internal sealed class WebPage : Grid
         this.host = host;
         this.screen = screen;
         this.recorded = recorded;
+
+        // Nothing dragged from outside is handed to a web page: a page's own drop handler would send a photo as it is, with the place it
+        // was taken, and a page with none would be sent to the file's own path. A file reaches a web page only through the page's own file
+        // input (the system's picker).
+        view.AllowDrop = false;
         Children.Add(view);
     }
 
@@ -353,6 +358,14 @@ internal sealed class WebPage : Grid
         // A page of the app's own, in this window; any other address goes to the core, which decides, and the web view stays.
         web.NavigationStarting += (_, args) =>
         {
+            // A file of this computer (what a dropped file would be opened as) is not opened, and its path is told to nobody.
+            if (WebData.IsLocalFile(args.Uri))
+            {
+                args.Cancel = true;
+                host.ReportProblem("a web page was not sent to a file of this computer");
+                return;
+            }
+
             if (!host.Origins.Ours(args.Uri) && !WebData.IsOwnDocument(args.Uri))
             {
                 args.Cancel = true;

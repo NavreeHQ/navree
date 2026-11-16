@@ -67,6 +67,27 @@ public sealed class WebDataTests
     }
 
     [TestMethod]
+    public void A_file_of_this_computer_is_known_by_its_address_so_its_path_is_told_to_nobody()
+    {
+        // What the web view makes of a file dropped on a page that does not take drops.
+        Assert.IsTrue(WebData.IsLocalFile("file:///C:/Users/harpreet/Pictures/Golden%20Temple.jpg"));
+        Assert.IsTrue(WebData.IsLocalFile("FILE:///C:/Users/harpreet/Pictures/a.jpg"));
+        Assert.IsTrue(WebData.IsLocalFile("  file://office/papers/Shop%20lease.pdf"));
+        Assert.IsTrue(WebData.IsLocalFile(@"C:\Users\harpreet\Pictures\a.jpg"));
+        Assert.IsTrue(WebData.IsLocalFile("D:/Pictures/a.jpg"));
+        Assert.IsTrue(WebData.IsLocalFile(@"\\office\papers\Shop lease.pdf"));
+
+        // A page of the app, a link elsewhere, and what the web view makes itself are not files of this computer.
+        Assert.IsFalse(WebData.IsLocalFile("https://shop.example/files/a.jpg"));
+        Assert.IsFalse(WebData.IsLocalFile("https://other.example/"));
+        Assert.IsFalse(WebData.IsLocalFile("mailto:care@shop.example"));
+        Assert.IsFalse(WebData.IsLocalFile("about:blank"));
+        Assert.IsFalse(WebData.IsLocalFile("blob:https://shop.example/1f2e"));
+        Assert.IsFalse(WebData.IsLocalFile(string.Empty));
+        Assert.IsFalse(WebData.IsLocalFile(null));
+    }
+
+    [TestMethod]
     public void A_request_of_the_web_view_goes_only_to_the_apps_origin_and_none_goes_to_the_network_while_signing_out()
     {
         Navree.Design.Origins shop = new("https://shop.example");
