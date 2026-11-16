@@ -455,6 +455,9 @@ public sealed partial class ShellHost : IDisposable
                     // The sign-out began when the core said the session was ending: it is done or under way, and none begins here. It is
                     // told that the core has let go.
                     coreLetsGo = null;
+
+                    // What the person's screens drew while the core had not let go is not handed to a screen of whoever comes next.
+                    PictureCache.Clear();
                     _ = begun.TrySetResult();
                 }
                 else
@@ -621,7 +624,14 @@ public sealed partial class ShellHost : IDisposable
         Task TellCore()
         {
             Volatile.Write(ref told, 1);
-            return client.SendAsync(Events.SignedOut, asked.CoreIsToldTheSessionEnded);
+            return client.SendAsync(Events.SignedOut, () =>
+            {
+                asked.CoreIsToldTheSessionEnded();
+
+                // The pictures the person's screens drew since the sign-out began go on the window's thread before the core's answer is
+                // shown there: a screen of whoever comes next is never handed a picture that was drawn for the person who left.
+                _ = dispatcher.TryEnqueue(PictureCache.Clear);
+            });
         }
 
         WipeReport report;
@@ -735,6 +745,9 @@ public sealed partial class ShellHost : IDisposable
             }
         }
 
+        // The pictures drawn for the person are let go of now, and again when the core lets go and in the windows' own step: they are held
+        // by their address alone, and an address may be the same for whoever comes next (a person's own picture at one address for everyone).
+        PictureCache.Clear();
         Place?.HoldSnapshots(true);
     }
 
