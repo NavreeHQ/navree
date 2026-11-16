@@ -102,11 +102,15 @@ struct Harness {
         )))
     }
 
-    /// The app started, its shell arrived, and its first page.
+    /// The app started, its shell arrived, and its first page. A first page
+    /// shown in the web view shares the session's cookies, so the core asks
+    /// for the shell again, as request 3: that one is answered too, and the
+    /// next request is 4. After a first page drawn natively the next is 3.
     func started(shell: String = "store/shell.json", first: String = "store/dashboard.json") throws {
         client.begin()
         try answer(1, with: shell)
         try answer(2, with: first)
+        if case .web(_, _, _, _)? = client.screen(1)?.content { try answer(3, with: shell) }
     }
 }
 
