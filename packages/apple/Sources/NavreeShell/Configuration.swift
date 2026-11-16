@@ -42,6 +42,10 @@ public struct ShellConfiguration: Sendable {
     /// payment frame or a captcha names the same host here once more. Never
     /// name a host anyone can publish on (`*.cloudfront.net`).
     public var webHosts: [String]
+    /// Whether the app's content is covered while its scene is not active on
+    /// iPhone and iPad, so the app switcher's picture of it shows nothing of
+    /// the person's. Off by default.
+    public var coversWhenInactive: Bool
     /// What answers the core's requests: the network, or (for a demo or a
     /// test) answers the app has with it.
     public var transport: @MainActor @Sendable () -> any Transport
@@ -64,7 +68,7 @@ public struct ShellConfiguration: Sendable {
         origin: String, loopbackHTTP: Bool = false, appID: String = Bundle.main.bundleIdentifier ?? "",
         appVersion: String, signInScheme: String? = nil, signInPaths: [String] = ["/auth/*/redirect"],
         signedWith: Set<Entitlement>? = nil, openAnyLink: Bool = false, keepsSession: Bool = true,
-        pictureHosts: [String] = [], webHosts: [String] = [],
+        pictureHosts: [String] = [], webHosts: [String] = [], coversWhenInactive: Bool = false,
         transport: (@MainActor @Sendable () -> any Transport)? = nil, webContent: WebContent = .network,
         launch: Launch = Launch(), presence: Presence = Presence(), windows: WindowLook = WindowLook(),
         icons: [AppIcon] = []
@@ -81,6 +85,7 @@ public struct ShellConfiguration: Sendable {
         self.keepsSession = keepsSession
         self.pictureHosts = pictureHosts
         self.webHosts = webHosts
+        self.coversWhenInactive = coversWhenInactive
         let keeps = keepsSession
         let loopback = loopbackHTTP
         let origin = origin
