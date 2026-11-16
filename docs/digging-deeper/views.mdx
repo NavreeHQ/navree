@@ -95,7 +95,7 @@ Every template is read and compiled when the app boots, off the async workers. A
 
 ## Templates a plugin ships
 
-A plugin embeds its own templates in its binary, under its namespace, with `m.plugin_templates(navree::embed_templates!("views"))` from `navree::plugin::prelude`. The macro embeds every file in the plugin crate's `views/` folder, at any depth and without hidden entries. A symbolic link in the folder, or a file name that is not safe to publish (a backslash or a Windows device name such as `con`, say), fails the build.
+A plugin embeds its own templates in its binary, under its namespace, with `m.plugin_templates(navree::embed_templates!("views"))` from `navree::plugin::prelude`. The macro embeds every file in the plugin crate's `views/` folder, at any depth and without hidden entries. A symbolic link in the folder, or a file name that is not safe to publish (a backslash or a Windows device name such as `con`, say), fails the build. [Plugins](/docs/plugins/overview/) says what a plugin is and how an app adds one.
 
 ```rust title="crates/announcements/src/lib.rs"
 use navree::plugin::prelude::*;

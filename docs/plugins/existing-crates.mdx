@@ -3,7 +3,7 @@ title: "Connecting an existing crate"
 description: "Make a client crate a module with ClientModule, put a tower layer whose service can fail on the app with FallibleLayer, serve any tower service under a path with Mount, and serve a tonic server built elsewhere with TonicService, all behind the app's access checks."
 ---
 
-A plugin often brings a crate that already exists: a client of a service, a tower middleware, a whole service written with tower, a tonic server generated from a `.proto`. Navree connects each one in a few lines, and keeps it inside the app: its configuration section, its readiness check, the request pipeline and the access check of every request or call.
+A plugin often brings a crate that already exists: a client of a service, a tower middleware, a whole service written with tower, a tonic server generated from a `.proto`. Navree connects each one in a few lines, and keeps it inside the app: its configuration section, its readiness check, the request pipeline and the access check of every request or call. [Plugins](/docs/plugins/overview/) says what a plugin is, how to write one and how an app adds it.
 
 The examples on this page are a ledger plugin. Its crate wraps a `KhataClient` from another crate, ships a timeout that the app adds to every request, and serves the ledger under `/khata` for signed-in users.
 
