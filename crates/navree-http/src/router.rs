@@ -224,8 +224,9 @@ fn error_pages_of_plugins(
 /// included: such a layer runs on every request before the route's access check, so only
 /// the app adds one, from a module of its own. A plugin's own routes and mounts carry
 /// layers of their own, which are not refused. A module of the app, a module that acts for
-/// no plugin and a first-party plugin's module are not refused.
-fn layers_of_plugins(ctx: &AppContext) -> Vec<String> {
+/// no plugin and a first-party plugin's module are not refused. navree-micro, which applies
+/// the same layers around message handlers, refuses them with this before it applies one.
+pub fn layers_of_plugins(ctx: &AppContext) -> Vec<String> {
     let contributed = ctx.contributions::<GlobalLayer>();
     if contributed.is_empty() {
         return Vec::new();

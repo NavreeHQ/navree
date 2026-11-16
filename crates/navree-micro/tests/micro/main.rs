@@ -4,6 +4,7 @@
 mod databases;
 mod events;
 mod listening;
+mod plugins;
 mod request_response;
 mod services;
 mod support;

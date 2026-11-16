@@ -166,3 +166,9 @@ pub use routing::PathParams;
 pub use serve::serve;
 pub use signed::{UrlSigner, ValidSignature};
 pub use workspace::RequestWorkspace;
+
+/// Items Navree's own crates use; not public API.
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::router::layers_of_plugins;
+}
