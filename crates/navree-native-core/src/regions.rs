@@ -26,7 +26,7 @@ use crate::Core;
 use crate::decode::Answer;
 use crate::effect::{Change, Effect};
 use crate::origin::Target;
-use crate::state::{Content, Notice, Pending, ScreenId, ScreenView, Stream, TimerFor};
+use crate::state::{Content, Failure, Notice, Pending, ScreenId, ScreenView, Stream, TimerFor};
 use crate::tree::{Names, Survey, find_in, find_in_mut, has_id, rewrite_in};
 
 /// How long a region may take, in milliseconds.
@@ -345,7 +345,12 @@ impl Core {
                 if let Some(screen) = read.envelope.screen.take() {
                     self.fill_region(id, region, screen, go.then_some(url));
                 }
-                self.apply_ops(id, std::mem::take(&mut read.envelope.ops), false);
+                self.apply_part_ops(id, std::mem::take(&mut read.envelope.ops));
+                // What the screen had no room for leaves the region failed,
+                // with its retry, and the rest of the screen as it was.
+                if self.inner.size_said {
+                    fail(self, Failure::Protocol);
+                }
             }
         }
     }
@@ -398,13 +403,12 @@ impl Core {
                 state.across = false;
             }
         }
-        self.apply_ops(
+        self.apply_part_ops(
             id,
             vec![navree_native::Op::Morph {
                 target: region.to_owned(),
                 node: Node::Region(new),
             }],
-            false,
         );
         // A table that is its page's content takes the page's address with it.
         if let Some(went) = went
@@ -521,7 +525,7 @@ impl Core {
                 }
                 let ops = std::mem::take(&mut read.envelope.ops);
                 if !ops.is_empty() {
-                    self.apply_ops(id, ops, false);
+                    self.apply_part_ops(id, ops);
                 } else if let Some(mut page) = read
                     .envelope
                     .screen

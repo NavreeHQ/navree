@@ -563,7 +563,7 @@ impl Core {
             if let Some(way_in) = Self::way_in(status, &read.envelope.ops) {
                 return self.session_ended(id, &way_in);
             }
-            self.apply_ops(id, std::mem::take(&mut read.envelope.ops), false);
+            self.apply_part_ops(id, std::mem::take(&mut read.envelope.ops));
         } else {
             return;
         }
