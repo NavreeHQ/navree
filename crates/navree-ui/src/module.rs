@@ -399,15 +399,22 @@ pub(crate) async fn render_json(
 }
 
 /// Whether a plugin's island script is in the app: one built with a namespace, which is how a
-/// plugin's script is named, or one a module of a plugin that is not one of the framework's own
-/// contributes. Such an app has pages that start clean, as one with a UI extension has.
+/// plugin's script is named, or one a module that acts for a plugin that is not one of the
+/// framework's own contributes (one that names it, or another module of its crate). Such an
+/// app has pages that start clean, as one with a UI extension has.
 fn plugin_islands(ctx: &AppContext) -> bool {
-    ctx.contributions::<crate::island::IslandScript>()
-        .iter()
-        .any(|script| {
-            script.value.namespace.is_some()
-                || navree_kernel::__private::is_community_plugin(ctx, script.module.id)
-        })
+    let scripts = ctx.contributions::<crate::island::IslandScript>();
+    if scripts.is_empty() {
+        return false;
+    }
+    if scripts.iter().any(|script| script.value.namespace.is_some()) {
+        return true;
+    }
+    let plugins = ctx.plugins().plugins;
+    scripts.iter().any(|script| {
+        crate::extension::plugin_of(&plugins, script.module.id)
+            .is_some_and(|plugin| !plugin.first_party)
+    })
 }
 
 /// Swaps a reply's fallback for its ops when the request came from the runtime,

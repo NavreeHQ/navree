@@ -9,7 +9,11 @@
 use std::sync::{Arc, Mutex};
 
 use navree_http::HttpModule;
-use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+use navree_kernel::{Module, ModuleBuilder};
+use navree_plugin_announcements::{
+    AnnouncementsModule, LooseClockModule, LooseModule, NoticeClockModule, ScriptHelper,
+    SheetHelper,
+};
 use navree_testing::{TestApp, TestAppBuilder};
 use navree_ui::{AppSheet, IslandScript, UiModule};
 
@@ -61,13 +65,72 @@ fn builder() -> TestAppBuilder {
         .module(HttpModule::for_root(Default::default()))
 }
 
-fn announcements() -> PluginInfo {
-    PluginInfo::new(
-        "navree-plugin-announcements",
-        env!("CARGO_CRATE_NAME"),
-        "announcements",
-        "1.0.0",
-    )
+/// The announcements plugin. A test binary is one crate, so the plugin's crate is this module,
+/// and the app's modules at the top of the file are in no crate it names.
+mod navree_plugin_announcements {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+    use navree_ui::{AppSheet, IslandScript};
+
+    use super::{LOOSE_BANNER, LOOSE_CLOCK, NOTICE_BANNER, NOTICE_CLOCK};
+
+    /// The plugin's info: its namespace is `announcements`.
+    fn announcements() -> PluginInfo {
+        PluginInfo::new(
+            "navree-plugin-announcements",
+            module_path!(),
+            "announcements",
+            "1.0.0",
+        )
+    }
+
+    /// The plugin, with a sheet under its namespace.
+    pub struct AnnouncementsModule;
+    impl Module for AnnouncementsModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements()).contribute(NOTICE_BANNER);
+        }
+    }
+
+    /// A plugin with a sheet outside its namespace.
+    pub struct LooseModule;
+    impl Module for LooseModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements()).contribute(LOOSE_BANNER);
+        }
+    }
+
+    /// The plugin, with a script under its namespace.
+    pub struct NoticeClockModule;
+    impl Module for NoticeClockModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements()).contribute(NOTICE_CLOCK);
+        }
+    }
+
+    /// A plugin with a script outside its namespace.
+    pub struct LooseClockModule;
+    impl Module for LooseClockModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(announcements()).contribute(LOOSE_CLOCK);
+        }
+    }
+
+    /// A module of the plugin's crate that names no plugin: it contributes the sheet it holds,
+    /// and acts for the plugin all the same when the plugin is in the app.
+    pub struct SheetHelper(pub AppSheet);
+    impl Module for SheetHelper {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.contribute(self.0);
+        }
+    }
+
+    /// A module of the plugin's crate that names no plugin: it contributes the script it holds.
+    pub struct ScriptHelper(pub IslandScript);
+    impl Module for ScriptHelper {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.contribute(self.0);
+        }
+    }
 }
 
 /// Two sheets of one name and different text.
@@ -115,22 +178,6 @@ struct OtherShellModule;
 impl Module for OtherShellModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.contribute(OTHER_SHELL_BANNER);
-    }
-}
-
-/// The plugin, with a sheet under its namespace.
-struct AnnouncementsModule;
-impl Module for AnnouncementsModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements()).contribute(NOTICE_BANNER);
-    }
-}
-
-/// A plugin with a sheet outside its namespace.
-struct LooseModule;
-impl Module for LooseModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements()).contribute(LOOSE_BANNER);
     }
 }
 
@@ -275,27 +322,11 @@ impl Module for OtherClockModule {
     }
 }
 
-/// The plugin, with a script under its namespace.
-struct NoticeClockModule;
-impl Module for NoticeClockModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements()).contribute(NOTICE_CLOCK);
-    }
-}
-
 /// An app module that puts a script under the namespace `announcements`.
 struct ShellClockModule;
 impl Module for ShellClockModule {
     fn register(&self, m: &mut ModuleBuilder) {
         m.contribute(SHELL_CLOCK);
-    }
-}
-
-/// A plugin with a script outside its namespace.
-struct LooseClockModule;
-impl Module for LooseClockModule {
-    fn register(&self, m: &mut ModuleBuilder) {
-        m.plugin(announcements()).contribute(LOOSE_CLOCK);
     }
 }
 
@@ -373,4 +404,73 @@ async fn a_duplicate_island_script_warns_between_modules_and_fails_with_a_plugin
         ),
         "{error}"
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_module_of_a_plugins_crate_contributes_files_under_the_plugins_namespace_only() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+
+    // A module of the plugin's crate that names no plugin acts for the plugin: its sheet and its
+    // script with no namespace fail the boot, as the plugin's own would.
+    let Err(error) = builder()
+        .module(UiModule)
+        .module(AnnouncementsModule)
+        .module(SheetHelper(LOOSE_BANNER))
+        .try_build()
+        .await
+    else {
+        panic!("fails")
+    };
+    assert!(
+        error.to_string().contains(
+            "plugin `navree-plugin-announcements` contributes the static file `banner.css`, which is not under its namespace: build it with .namespace(\"announcements\")"
+        ),
+        "{error}"
+    );
+    // Beside the app's `clock.js`, its script is an error, never the warning between two of the
+    // app's modules after which the first module's file is served.
+    let Err(error) = builder()
+        .module(UiModule)
+        .module(AnnouncementsModule)
+        .module(ScriptHelper(LOOSE_CLOCK))
+        .module(ClockModule)
+        .try_build()
+        .await
+    else {
+        panic!("fails")
+    };
+    let error = error.to_string();
+    assert!(
+        error.contains(
+            "plugin `navree-plugin-announcements` contributes the static file `clock.js`, which is not under its namespace: build it with .namespace(\"announcements\")"
+        ),
+        "{error}"
+    );
+    assert!(
+        error.contains(
+            "static file `clock.js` is contributed by both `ScriptHelper` and `ClockModule`; name one under its plugin's namespace"
+        ),
+        "{error}"
+    );
+
+    // Under the plugin's namespace its files boot.
+    builder()
+        .module(UiModule)
+        .module(AnnouncementsModule)
+        .module(ScriptHelper(NOTICE_CLOCK))
+        .build()
+        .await
+        .shutdown()
+        .await
+        .unwrap();
+    // Without the plugin in the app, the module acts for no plugin, and its files are the app's.
+    builder()
+        .module(UiModule)
+        .module(SheetHelper(LOOSE_BANNER))
+        .build()
+        .await
+        .shutdown()
+        .await
+        .unwrap();
 }

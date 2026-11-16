@@ -68,17 +68,19 @@
 //! `/_navree/ui/app/announcements.banner-{hash}.css`, apart from a file of the app's own
 //! called `banner`. A plugin's file without its namespace, and two modules that give one file
 //! name to two different files, are said at boot: a warning between the app's own modules,
-//! and a boot error when a plugin is one of them.
+//! and a boot error when a plugin is one of them. A plugin's file is one that a module acting
+//! for the plugin contributes: one that names it, or another module of its crate.
 
 use std::collections::HashMap;
 
 use bytes::Bytes;
 use http::HeaderMap;
 use navree_http::response::{IntoResponse, Response};
-use navree_kernel::__private::{is_community_plugin, is_namespace};
-use navree_kernel::{AppContext, ModuleId, ModuleInfo};
+use navree_kernel::__private::is_namespace;
+use navree_kernel::{AppContext, ModuleId, ModuleInfo, PluginReport};
 
 use crate::assets;
+use crate::extension::plugin_of;
 use crate::island::IslandScript;
 
 /// Where the app's files are served, under the toolkit's mount.
@@ -910,38 +912,44 @@ impl Entry {
     }
 }
 
-/// Whether `module` names itself one of the framework's own plugins.
-fn is_first_party_plugin(ctx: &AppContext, module: ModuleId) -> bool {
-    ctx.plugin(module).is_some() && !is_community_plugin(ctx, module)
+/// The plugin `module` acts for (`plugins` lists it under it), when the kernel does not find
+/// that plugin first-party.
+fn community_plugin(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
+    plugin_of(plugins, module).filter(|plugin| !plugin.first_party)
+}
+
+/// Whether `module` acts for one of the framework's own plugins.
+fn acts_for_first_party(plugins: &[PluginReport], module: ModuleId) -> bool {
+    plugin_of(plugins, module).is_some_and(|plugin| plugin.first_party)
 }
 
 /// Whether one name given to two different files by two modules is an error: either module
-/// belongs to a plugin the kernel does not find first-party, or either file is namespaced and
-/// its module is not a first-party plugin's. Between two of an app's own modules it is a
-/// warning.
-fn is_error(ctx: &AppContext, first: &Entry, later: &Entry) -> bool {
+/// acts for a plugin the kernel does not find first-party, or either file is namespaced and
+/// its module does not act for a first-party plugin. Between two of an app's own modules it is
+/// a warning.
+fn is_error(plugins: &[PluginReport], first: &Entry, later: &Entry) -> bool {
     [first, later].into_iter().any(|entry| {
-        is_community_plugin(ctx, entry.module.id)
-            || (entry.namespace.is_some() && !is_first_party_plugin(ctx, entry.module.id))
+        community_plugin(plugins, entry.module.id).is_some()
+            || (entry.namespace.is_some() && !acts_for_first_party(plugins, entry.module.id))
     })
 }
 
 /// Checks one set of files, modules in dependency order, and adds the errors to `errors`:
-/// a file of a plugin that is not under the plugin's namespace, and a name that two modules
-/// give to two different files when that is an error. When it is not, it is a warning: the
-/// first module's file is the one served, as it always was. Two modules that give one name
-/// the same file, and one module that gives it twice, say nothing.
-fn check(ctx: &AppContext, entries: &[Entry], errors: &mut Vec<String>) {
+/// a file of a module that acts for a plugin (the module names it, or is of its crate) that
+/// is not under the plugin's namespace, and a name that two modules give to two different
+/// files when that is an error. When it is not, it is a warning: the first module's file is
+/// the one served, as it always was. Two modules that give one name the same file, and one
+/// module that gives it twice, say nothing.
+fn check(plugins: &[PluginReport], entries: &[Entry], errors: &mut Vec<String>) {
     let mut owners: HashMap<String, &Entry> = HashMap::new();
     for later in entries {
         let name = later.name();
-        if is_community_plugin(ctx, later.module.id)
-            && let Some(plugin) = ctx.plugin(later.module.id)
-            && later.namespace != Some(plugin.namespace)
+        if let Some(plugin) = community_plugin(plugins, later.module.id)
+            && later.namespace != Some(plugin.info.namespace)
         {
             errors.push(format!(
                 "plugin `{}` contributes the static file `{name}`, which is not under its namespace: build it with .namespace(\"{}\")",
-                plugin.name, plugin.namespace
+                plugin.info.name, plugin.info.namespace
             ));
         }
         let Some(first) = owners.get(&name).copied() else {
@@ -952,7 +960,7 @@ fn check(ctx: &AppContext, entries: &[Entry], errors: &mut Vec<String>) {
             continue;
         }
         let (one, other) = (first.module.name, later.module.name);
-        if is_error(ctx, first, later) {
+        if is_error(plugins, first, later) {
             errors.push(format!(
                 "static file `{name}` is contributed by both `{one}` and `{other}`; name one under its plugin's namespace"
             ));
@@ -967,9 +975,9 @@ fn check(ctx: &AppContext, entries: &[Entry], errors: &mut Vec<String>) {
 
 /// The files the app's modules contributed, ready to serve: the island scripts and the
 /// app's sheets, fonts and pictures, each name once, the first module's file kept. Fails
-/// with every problem when a plugin contributes a file outside its namespace or when two
-/// modules give one name to two different files and a plugin is one of them (see
-/// [`check`]); between the app's own modules that is a warning.
+/// with every problem when a module acting for a plugin contributes a file outside its
+/// namespace or when two modules give one name to two different files and a plugin is one of
+/// them (see [`check`]); between the app's own modules that is a warning.
 pub(crate) fn checked_files(
     ctx: &AppContext,
 ) -> Result<(Vec<crate::island::Served>, Vec<Served>), String> {
@@ -1021,9 +1029,15 @@ pub(crate) fn checked_files(
         });
     }
 
+    // The plugins listing, read only when a module contributes a file.
+    let plugins = if app_files.is_empty() && island_files.is_empty() {
+        Vec::new()
+    } else {
+        ctx.plugins().plugins
+    };
     let mut errors = Vec::new();
-    check(ctx, &app_files, &mut errors);
-    check(ctx, &island_files, &mut errors);
+    check(&plugins, &app_files, &mut errors);
+    check(&plugins, &island_files, &mut errors);
     if !errors.is_empty() {
         return Err(errors.join("\n"));
     }

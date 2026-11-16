@@ -738,8 +738,8 @@ struct First {
 
 /// The plugin `module` acts for, first-party or not, as the `plugins` listing lists it: the
 /// plugin it names, the plugin whose crate it is in, or the plugin whose modules alone import
-/// it.
-fn plugin_of(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
+/// it. The static files and island scripts are checked by it too.
+pub(crate) fn plugin_of(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
     plugins
         .iter()
         .find(|plugin| plugin.modules.iter().any(|member| member.id == module))
