@@ -118,14 +118,22 @@ impl Heard {
     }
 
     /// Whether the server can have run the write this request carried. It
-    /// cannot only when the request that carried it never left the device
-    /// (no network, or never sent), or when the answer to that request, with
-    /// no redirect followed, names nobody and refuses it for its size before
-    /// any handler runs (413, 414, 431). Anything else may follow a write
-    /// that ran: a 408 or a 429 (a layer may answer in place of an answer
-    /// that was lost), an answer that names a person (a handler made it), a
-    /// 5xx, a timeout, an answer too large to read, and every answer after a
-    /// redirect (the write was taken; the page it led to failed).
+    /// cannot only on the first hop (the answer to the request that carried
+    /// it, no redirect followed), and only when:
+    /// 1. nothing of the request was sent (no network, or never sent);
+    /// 2. the answer names nobody (a layer in front of the handlers made it)
+    ///    and refuses the request for its size before any handler ran: 413,
+    ///    414, 431;
+    /// 3. the answer names the person (the app's own handler made it) with a
+    ///    status by which a handler says it refused this request and did
+    ///    nothing: 400, 403, 404, 405, 406, 409, 410, 412, 415, 422, 428.
+    ///
+    /// Anything else may follow a write that ran: 408, 413, 429 and 431 that
+    /// name a person (a handler can reach them after it has begun), 401 and
+    /// 419 (the session rule deals with them), every 5xx, a timeout or a
+    /// broken connection, an answer too large to read, any 2xx or 3xx, any
+    /// other status, and every answer after a redirect (the write was taken;
+    /// the page it led to failed).
     pub(crate) fn write_may_have_run(&self) -> bool {
         if !self.carried_write {
             return false;
@@ -136,7 +144,16 @@ impl Heard {
         if self.made_here || self.error == Some(TransportError::Offline) {
             return false;
         }
-        self.error.is_some() || self.names_someone || !matches!(self.status, 413 | 414 | 431)
+        if self.error.is_some() {
+            return true;
+        }
+        let refused_for_its_size = !self.names_someone && matches!(self.status, 413 | 414 | 431);
+        let refused_by_the_handler = self.names_someone
+            && matches!(
+                self.status,
+                400 | 403 | 404 | 405 | 406 | 409 | 410 | 412 | 415 | 422 | 428
+            );
+        !(refused_for_its_size || refused_by_the_handler)
     }
 }
 
@@ -3134,26 +3151,39 @@ mod tests {
             carried_write: true,
             made_here: false,
         };
-        // (status, the app's word when it names nobody, a write ran when its own answer names nobody)
+        // (status, the app's word when it names nobody, a write ran when its
+        // own answer names nobody, a write ran when its own answer names her)
         let table = [
-            (200, true, true),
-            (303, true, true),
-            (400, true, true),
-            (401, true, true),
-            (403, true, true),
-            (404, true, true),
-            (408, false, true),
-            (413, false, false),
-            (414, false, false),
-            (419, true, true),
-            (422, true, true),
-            (429, false, true),
-            (431, false, false),
-            (500, false, true),
-            (502, false, true),
-            (503, false, true),
+            (200, true, true, true),
+            (204, true, true, true),
+            (303, true, true, true),
+            (400, true, true, false),
+            (401, true, true, true),
+            (402, true, true, true),
+            (403, true, true, false),
+            (404, true, true, false),
+            (405, true, true, false),
+            (406, true, true, false),
+            (408, false, true, true),
+            (409, true, true, false),
+            (410, true, true, false),
+            (411, true, true, true),
+            (412, true, true, false),
+            (413, false, false, true),
+            (414, false, false, true),
+            (415, true, true, false),
+            (418, true, true, true),
+            (419, true, true, true),
+            (422, true, true, false),
+            (428, true, true, false),
+            (429, false, true, true),
+            (431, false, false, true),
+            (500, false, true, true),
+            (502, false, true, true),
+            (503, false, true, true),
+            (504, false, true, true),
         ];
-        for (status, speaks, ran) in table {
+        for (status, speaks, ran_nobody, ran_her) in table {
             assert_eq!(
                 heard(status, false, true).speaks_for_the_session(),
                 speaks,
@@ -3165,22 +3195,25 @@ mod tests {
             );
             assert_eq!(
                 heard(status, false, true).write_may_have_run(),
-                ran,
-                "{status}"
+                ran_nobody,
+                "{status} naming nobody"
             );
-            assert!(
+            assert_eq!(
                 heard(status, true, true).write_may_have_run(),
+                ran_her,
                 "{status} naming a person"
             );
-            assert!(
-                heard(status, false, false).write_may_have_run(),
-                "{status} after a redirect"
-            );
-            let read = Heard {
-                carried_write: false,
-                ..heard(status, false, true)
-            };
-            assert!(!read.write_may_have_run(), "{status} answering a read");
+            for names in [false, true] {
+                assert!(
+                    heard(status, names, false).write_may_have_run(),
+                    "{status} after a redirect"
+                );
+                let read = Heard {
+                    carried_write: false,
+                    ..heard(status, names, true)
+                };
+                assert!(!read.write_may_have_run(), "{status} answering a read");
+            }
         }
         let lost = |error, first_hop| Heard {
             error: Some(error),
@@ -3198,11 +3231,12 @@ mod tests {
     }
 
     /// A write counts as never made only when the server cannot have run it:
-    /// the answer to the request that carried it, with no redirect followed,
-    /// names nobody and refuses it for its size before any handler runs (413,
-    /// 414, 431), whatever its body. Any other answer may follow a write that
-    /// ran: a 408 or a 429, an answer that names the person, the page a
-    /// redirect led to, and no network once a redirect was taken.
+    /// on the answer to the request that carried it, with no redirect
+    /// followed, one that names nobody and refuses it for its size (413, 414,
+    /// 431), or one that names the person and refuses it as a handler does
+    /// (a 422, a 409, ...), whatever its body. Any other answer may follow a
+    /// write that ran: a 408 or a 429, a 413 that names the person, a 401,
+    /// the page a redirect led to, and no network once a redirect was taken.
     #[test]
     fn a_write_counts_as_never_made_only_when_the_server_cannot_have_run_it() {
         let page = r#"{"navree":1,"build":"b1","vocab":0,"screen":{"title":"Order","body":{"t":"form","id":"note","method":"post","action":"/orders/1/note","children":[{"t":"field","id":"text","name":"text","input":{"t":"text"}},{"t":"button","label":"Save","action":{"t":"submit"}}]}}}"#;
@@ -3260,6 +3294,21 @@ mod tests {
             (
                 "a 422 that names her, in the native format",
                 vec![native(422, true)],
+                false,
+            ),
+            (
+                "a 422 that names nobody, in the native format",
+                vec![native(422, false)],
+                true,
+            ),
+            (
+                "a 409 that names her, in the native format",
+                vec![native(409, true)],
+                false,
+            ),
+            (
+                "a 401 that names her, in the native format",
+                vec![native(401, true)],
                 true,
             ),
             (
@@ -3455,6 +3504,109 @@ mod tests {
                 "{what}: where the row stands"
             );
         }
+    }
+
+    /// A form sent with a wrong value and refused by the app's own handler
+    /// (a 422 in the native format, naming the person, with the form's
+    /// errors) is no write: what is kept and the other screens stay as they
+    /// were, the errors are shown, and nothing fetched before it is thrown
+    /// away.
+    #[test]
+    fn a_form_the_handler_refused_is_no_write() {
+        let her = || {
+            vec![(
+                "x-navree-person".to_owned(),
+                "0193a4b2-0000-7000-8000-00000000ra01".to_owned(),
+            )]
+        };
+        let named = |request: u64, status: u16, body: &str| {
+            Event::Response(Response {
+                request,
+                status,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                headers: her(),
+                body: body.to_owned(),
+                ..Response::default()
+            })
+        };
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.cache.persist = true;
+        let mut core = Core::new(config);
+        core.send(Event::Start);
+        core.send(Event::Cache {
+            key: "boot".to_owned(),
+            value: None,
+        });
+        core.send(named(
+            1,
+            200,
+            include_str!("../transcripts/fixtures/store/shell.json"),
+        ));
+        core.send(named(
+            2,
+            200,
+            include_str!("../transcripts/fixtures/made/proof-upload.json"),
+        ));
+        core.send(Event::Select { destination: 1 });
+        let orders = core.inner.next.request;
+        core.send(named(
+            orders,
+            200,
+            include_str!("../transcripts/fixtures/store/orders.json"),
+        ));
+        core.send(Event::Select { destination: 0 });
+        let epoch = core.inner.epoch;
+        let sent = core.send(Event::Act {
+            screen: Some(1),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("an action"),
+            form: Some("proof".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let request = sent
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(request) if request.method == Verb::Post => Some(request.request),
+                _ => None,
+            })
+            .expect("the form is sent");
+        let update = core.send(named(
+            request,
+            422,
+            r#"{"navree":1,"build":"152bd84abf4d","vocab":0,"ops":[{"op":"errors","form":"proof","fields":{"note":["Write at least ten letters"]}}]}"#,
+        ));
+        assert_eq!(core.inner.epoch, epoch, "no write: {update:?}");
+        assert!(
+            !update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::CacheClear)),
+            "what is kept stays: {update:?}"
+        );
+        let other = core
+            .view
+            .screens
+            .keys()
+            .copied()
+            .find(|id| *id != 1)
+            .expect("the orders screen");
+        assert!(
+            !core.inner.screens[&other].stale,
+            "the other screen stays as it was"
+        );
+        let errors = &core.view.screens[&1].forms["proof"].fields["note"].errors;
+        assert_eq!(
+            errors,
+            &["Write at least ten letters"],
+            "the errors are shown"
+        );
     }
 
     /// A write that worked and is answered with a page too large to read is
