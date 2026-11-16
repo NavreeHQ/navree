@@ -158,8 +158,22 @@ public sealed class SessionKeeper : IDisposable
         disk.Run(() => then(kept.Read(key)));
     }
 
-    /// <summary>Throws away everything kept, in order with the writes (the core asked for it).</summary>
-    public void ClearKept() => disk.Run(kept.Clear);
+    /// <summary>
+    /// Throws away everything kept, in order with the writes (the core asked for it). The cookies' file goes with the rest, and the person has
+    /// not signed out: the cookies the store holds are written again after the clear, so the next launch starts with the session this one has.
+    /// Nothing is written again while a sign-out is under way.
+    /// </summary>
+    public void ClearKept()
+    {
+        disk.Run(kept.Clear);
+        lock (gate)
+        {
+            // What was last written went with the clear.
+            lastCookies = string.Empty;
+        }
+
+        KeepCookies();
+    }
 
     /// <summary>Keeps the cookies the store holds when they changed, for the next launch; nothing while a sign-out is under way.</summary>
     public void KeepCookies()

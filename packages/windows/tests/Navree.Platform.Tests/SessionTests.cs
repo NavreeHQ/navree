@@ -369,4 +369,43 @@ public sealed class SessionTests
             Delete(folder);
         }
     }
+
+    [TestMethod]
+    public async Task What_the_core_asks_to_be_thrown_away_goes_and_the_person_is_still_signed_in_at_the_next_start()
+    {
+        string folder = Folder();
+        try
+        {
+            (SessionKeeper keeper, CookieStore cookies, KeptStore kept, _) = Start(folder);
+            using (keeper)
+            {
+                cookies.Store("https://shop.example/", ["session=harpreet; Path=/; Max-Age=3600"], DateTimeOffset.UtcNow);
+                keeper.KeepCookies();
+                keeper.Write("page:https://shop.example/orders", "{\"name\":\"Harpreet Kaur, Ludhiana\"}");
+                await keeper.DrainAsync().WaitAsync(Short);
+                Expect.That(kept.Read(SessionKeeper.CookiesKey) is not null, "the cookie was on disk before the clear");
+
+                // The app was updated, so the core asks for everything it kept to be thrown away. Nobody signed out, and no cookie changes afterwards.
+                keeper.ClearKept();
+                keeper.KeepCookies();
+                await keeper.DrainAsync().WaitAsync(Short);
+
+                Assert.IsNull(kept.Read("page:https://shop.example/orders"), "a page kept before the clear is still on disk");
+                Expect.That(
+                    kept.Read(SessionKeeper.CookiesKey)?.Contains("harpreet", StringComparison.Ordinal) == true,
+                    "the cookies of the person who is still signed in are not on disk after the clear");
+            }
+
+            (SessionKeeper next, CookieStore nextCookies, _, bool finished) = Start(folder);
+            using (next)
+            {
+                Expect.That(!finished, "a clear the core asked for was taken for a sign-out");
+                Assert.AreEqual("session=harpreet", nextCookies.Header("https://shop.example/", DateTimeOffset.UtcNow), "the next start came up signed out though nobody signed out");
+            }
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
 }
