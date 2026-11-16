@@ -1,7 +1,7 @@
 /* Phone input: a country picker and the number, in one box. Without the phone
    module the picker is the browser's select; with it, a button opening a
    searchable list. The number is always written left to right. */
-[data-slot=phone-input]{position:relative;display:flex;align-items:stretch;height:2rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-1);
+[data-slot=phone-input]{position:relative;display:flex;align-items:stretch;height:2rem;border:1px solid var(--line-2);border-radius:var(--radius-field,var(--radius));background:var(--ink-1);
   &:hover{border-color:var(--line-3)}
   &:focus-within{outline:2px solid var(--ring);outline-offset:-1px;border-color:transparent}
   &:has([aria-invalid=true]){border-color:var(--danger)}
@@ -11,8 +11,8 @@
   &[data-enhanced] > [data-slot=phone-country]{display:none}
   &:not([data-enhanced]) > [data-slot=phone-country-trigger]{display:none}
 }
-[data-slot=phone-country]{flex:none;width:10.5rem;max-width:50%;height:100%;padding:0 1.5rem 0 .5rem;border:0;border-inline-end:1px solid var(--line-2);border-radius:var(--radius) 0 0 var(--radius);background:transparent;color:var(--fg);font-size:13px;text-overflow:ellipsis;
-  &:dir(rtl){border-radius:0 var(--radius) var(--radius) 0}
+[data-slot=phone-country]{flex:none;width:10.5rem;max-width:50%;height:100%;padding:0 1.5rem 0 .5rem;border:0;border-inline-end:1px solid var(--line-2);border-radius:var(--radius-field,var(--radius)) 0 0 var(--radius-field,var(--radius));background:transparent;color:var(--fg);font-size:13px;text-overflow:ellipsis;
+  &:dir(rtl){border-radius:0 var(--radius-field,var(--radius)) var(--radius-field,var(--radius)) 0}
   &:focus-visible{outline:2px solid var(--ring);outline-offset:-2px}
   & option,& optgroup{background:var(--ink-1);color:var(--fg)}
 }
@@ -26,7 +26,7 @@
 [data-slot=phone-dial]{color:var(--fg-1);direction:ltr;unicode-bidi:isolate}
 [data-slot=phone-dial]:empty,[data-slot=phone-flag]:empty{display:none}
 [data-slot=phone-status]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-[data-slot=phone-countries]{position:fixed;inset:auto;display:none;flex-direction:column;align-items:stretch;margin:0;padding:0;width:min(20rem,calc(100vw - 1rem));max-height:min(22rem,calc(100vh - 2rem));overflow:hidden;border:1px solid var(--line-2);border-radius:var(--radius-lg);background:var(--ink-1);color:var(--fg-1);
+[data-slot=phone-countries]{position:fixed;inset:auto;display:none;flex-direction:column;align-items:stretch;margin:0;padding:0;width:min(20rem,calc(100vw - 1rem));max-height:min(22rem,calc(100vh - 2rem));overflow:hidden;border:1px solid var(--line-2);border-radius:var(--radius-overlay,var(--radius-lg));background:var(--ink-1);color:var(--fg-1);
   &:popover-open{display:flex;animation:ui-in .1s ease-out}
   &:not([style]){margin:auto;inset:0;height:fit-content}
 }
@@ -39,7 +39,7 @@
   &::-webkit-search-cancel-button{display:none}
 }
 [data-slot=phone-options]{flex:1;width:100%;min-height:0;margin:0;padding:.25rem;overflow-y:auto;overscroll-behavior:contain;list-style:none}
-[data-slot=phone-options] [role=option]{display:flex;align-items:center;gap:.5rem;height:2rem;padding:0 .5rem;border-radius:var(--radius);color:var(--fg-1);font-size:14px;cursor:pointer;
+[data-slot=phone-options] [role=option]{display:flex;align-items:center;gap:.5rem;height:2rem;padding:0 .5rem;border-radius:var(--radius-nav,var(--radius));color:var(--fg-1);font-size:14px;cursor:pointer;
   &[data-active]{background:var(--ink-3);color:var(--fg)}
   &[aria-selected=true]{color:var(--fg);font-weight:500}
   &[aria-selected=true] [data-slot=phone-option-code]::after{content:"";width:.875rem;height:.875rem;margin-inline-start:auto;background:var(--accent);mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center/contain no-repeat}

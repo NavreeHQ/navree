@@ -8,7 +8,7 @@
 [data-slot=sidebar-wrapper]{display:flex;min-height:100dvh}
 [data-slot=sidebar]{position:sticky;top:0;display:flex;flex:none;flex-direction:column;width:var(--sidebar-w);height:100dvh;border-inline-end:1px solid var(--line);background:var(--ink-1);overflow:hidden;transition:width .1s}
 [data-slot=sidebar-header]{padding:.5rem}
-[data-slot=sidebar-brand]{display:flex;align-items:center;gap:.5rem;padding:.25rem;border-radius:var(--radius);color:inherit;text-decoration:none;&:hover{background:var(--ink-2)}}
+[data-slot=sidebar-brand]{display:flex;align-items:center;gap:.5rem;padding:.25rem;border-radius:var(--radius-nav,var(--radius));color:inherit;text-decoration:none;&:hover{background:var(--ink-2)}}
 [data-slot=sidebar-logo]{display:flex;align-items:center;justify-content:center;flex:none;width:2rem;height:2rem;border-radius:var(--radius);background:var(--ink-3);color:var(--fg);& svg,& img{width:1.25rem;height:1.25rem}& img{object-fit:contain}}
 [data-slot=sidebar-header-slot]{padding:.5rem .25rem 0}
 [data-slot=sidebar-brand-text],[data-slot=sidebar-user-text]{display:flex;flex:1;flex-direction:column;min-width:0;line-height:1.25;text-align:start}
@@ -18,7 +18,7 @@
 [data-slot=sidebar-group]{padding:.25rem .5rem}
 [data-slot=sidebar-group-label]{display:flex;align-items:center;height:2rem;padding:0 .5rem;color:var(--fg-3);font-size:12px;white-space:nowrap}
 [data-slot=sidebar-menu]{display:flex;flex-direction:column;gap:.125rem}
-[data-slot=sidebar-item],[data-slot=sidebar-sub-item]{display:flex;align-items:center;gap:.5rem;height:2rem;padding:0 .5rem;border-radius:var(--radius);color:var(--fg-2);text-decoration:none;white-space:nowrap;
+[data-slot=sidebar-item],[data-slot=sidebar-sub-item]{display:flex;align-items:center;gap:.5rem;height:2rem;padding:0 .5rem;border-radius:var(--radius-nav,var(--radius));color:var(--fg-2);text-decoration:none;white-space:nowrap;
   &:hover{background:var(--ink-2);color:var(--fg)}
   &[aria-current=page]{background:var(--ink-3);color:var(--fg);font-weight:500}
 }
@@ -26,7 +26,7 @@
 [data-slot=sidebar-count]{color:var(--fg-3);font:400 12px var(--font-mono)}
 [data-slot=sidebar-sub]{display:flex;flex-direction:column;gap:.125rem;margin:.125rem 0 0 1rem;padding-inline-start:.5rem;border-inline-start:1px solid var(--line)}
 [data-slot=sidebar-footer]{padding:.5rem}
-[data-slot=sidebar-user]{display:flex;align-items:center;gap:.5rem;width:100%;padding:.25rem;border:0;border-radius:var(--radius);background:transparent;cursor:pointer;&:hover{background:var(--ink-2)}& > [data-slot=icon]{color:var(--fg-3)}}
+[data-slot=sidebar-user]{display:flex;align-items:center;gap:.5rem;width:100%;padding:.25rem;border:0;border-radius:var(--radius-nav,var(--radius));background:transparent;cursor:pointer;&:hover{background:var(--ink-2)}& > [data-slot=icon]{color:var(--fg-3)}}
 [data-slot=sidebar-inset]{display:flex;flex:1;flex-direction:column;min-width:0}
 [data-slot=sidebar-overlay]{display:none}
 [data-slot=topbar]{position:sticky;top:0;z-index:10;display:flex;flex:none;align-items:center;gap:.5rem;height:var(--topbar-h);padding:0 .75rem;border-bottom:1px solid var(--line);background:var(--ink-0)}
@@ -64,7 +64,7 @@
 /* With the links in the top bar, the app's mark stays on phones too, beside the menu button. */
 [data-layout=header] [data-slot=topbar-brand]{display:flex;flex:0 1 auto;min-width:0;& [data-slot=sidebar-brand-context]{display:none}}
 [data-slot=topnav-menu]{display:flex;align-items:center;gap:.125rem}
-[data-slot=topnav-item]{display:inline-flex;align-items:center;gap:.375rem;height:2rem;padding:0 .625rem;border:0;border-radius:var(--radius);background:none;color:var(--fg-2);font:inherit;font-weight:500;text-decoration:none;white-space:nowrap;cursor:pointer;
+[data-slot=topnav-item]{display:inline-flex;align-items:center;gap:.375rem;height:2rem;padding:0 .625rem;border:0;border-radius:var(--radius-nav,var(--radius));background:none;color:var(--fg-2);font:inherit;font-weight:500;text-decoration:none;white-space:nowrap;cursor:pointer;
   &:hover{background:var(--ink-2);color:var(--fg)}
   &[aria-current=page],&[data-active]{background:var(--ink-3);color:var(--fg)}
   & > [data-slot=icon]:last-child:not(:first-child){width:14px;height:14px;color:var(--fg-3)}

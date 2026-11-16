@@ -53,7 +53,7 @@ is dropped.
 | Headings | `Heading::h1..h4(text)`: the level is the document's |
 | Paragraph, secondary text, lead, code | `Text::new`, `Text::muted`, `.variant(TextVariant::Lead)`, `Text::code`; `.inline()` |
 | Panel, card, tile | `Card::new()` / `Card::titled(..)`, `.description(..)`, `.action(..)`, `.body(..)`, `.footer(..)` |
-| Status label, tag, chip | `Badge::new(text).variant(BadgeVariant::Neutral \| Outline \| Success \| Warning \| Danger).icon(..)`: 4 px corners, not a pill |
+| Status label, tag, chip | `Badge::new(text).variant(BadgeVariant::Neutral \| Outline \| Success \| Warning \| Danger).icon(..)`: the theme's corners, a pill when its shape says `Corners::badge(Corner::Pill)` |
 | Inline message, banner | `Alert::new(AlertTone::Neutral \| Success \| Warning \| Danger).title(..).body(..)` |
 | Figure with label and change | `Stat::new(label, value).trend(text, good)` |
 | Small bar chart | `Bars::new(description, &[values])`: SVG on the server |
@@ -82,7 +82,7 @@ is dropped.
 | A link or key with a Copy button | `CopyField::new(id, label, value)` |
 | A paced breathing circle | `BreathingGuide::new(id, title)` |
 | A responsive image, light and dark screenshots | `Picture::new(src, alt, width, height).srcset(..).webp(..).dark(..)` |
-| Person picture | `Avatar::image(src, alt)`, `Avatar::placeholder(label)`: no initials, no letter tile |
+| Person picture | `Avatar::image(src, alt)`, `Avatar::placeholder(label)`: no initials, no letter tile; round when the theme's shape says `Corners::avatar(Corner::Pill)` |
 | People side by side, the rest as `+N` | `AvatarGroup::new(label).max(3).total(count).children((Avatar::placeholder(..), ..))` |
 | List row with media and actions | `Item::new(title).media(..).description(..).actions(..).href(..)`, `ItemVariant` |
 | File tile | `Attachment::new(name).meta(..).icon(..).href(..).action(..)` |

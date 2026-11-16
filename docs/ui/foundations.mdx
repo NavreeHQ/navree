@@ -31,7 +31,26 @@ Every token has a light value and a dark one, and a page shows one or the other 
 
 ## Corners
 
-Controls (buttons, inputs, badges, menu items, avatars) have 4 px corners, `--radius`. Surfaces (cards, popovers, dialogs) have 6 px, `--radius-lg`. Nothing is a pill.
+Controls (buttons, inputs, badges, menu items, avatars) have 4 px corners, `--radius`. Surfaces (cards, popovers, dialogs) have 6 px, `--radius-lg`. A theme's `Radius` sets both, from square to 8 and 12 px. A theme of your own can also give each kind of part a corner of its own, from 0 to 32 px or a pill, with the `Corners` of its [shape](/docs/ui/themes/#a-themes-shape): pill buttons and badges, 12 px inputs and 16 px cards, say. A part it doesn't set keeps `--radius` or `--radius-lg`.
+
+```rust
+use navree::ui::theme::{Corner, Corners, Shape, Theme, ThemeId};
+
+/// Pill buttons and badges, 12 px fields and 16 px cards, on Ocean's colours.
+pub fn rounded_theme() -> Theme {
+    let shape = Shape::new().corners(
+        Corners::new()
+            .button(Corner::Pill)
+            .badge(Corner::Pill)
+            .field(Corner::Px(12))
+            .card(Corner::Px(16)),
+    );
+    Theme::OCEAN
+        .renamed(ThemeId::parse("rounded").expect("a theme id"), "Rounded")
+        .with_shape(shape)
+        .expect("every value of the shape in range")
+}
+```
 
 <UiPreview example="foundations/radius" />
 

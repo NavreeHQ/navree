@@ -1,6 +1,8 @@
 //! Themes, modes, the theme menu, the shell's layouts and the theme builder.
 
-use navree::ui::theme::{Appearance, BuilderDraft, Mode, Theme, ThemeBuilder, ThemeMenu};
+use navree::ui::theme::{
+    Appearance, BuilderDraft, Corner, Corners, Mode, Shape, Theme, ThemeBuilder, ThemeId, ThemeMenu,
+};
 use navree::ui::*;
 
 use crate::catalog::{Example, gallery, page, single};
@@ -44,6 +46,15 @@ pub fn all() -> Vec<Example> {
             .fill()
             .width(1100)
             .height(620),
+        page!(
+            "themes",
+            "shape",
+            "A theme with a shape of its own",
+            shell_shaped
+        )
+        .fill()
+        .width(1100)
+        .height(620),
         // Drawn at the column's own width, as the app draws it on a screen that wide, and
         // whole: a page scaled down to fit would be too small to read.
         page!(
@@ -164,6 +175,42 @@ fn shell_floating() -> AppPage {
 fn shell_header() -> AppPage {
     let shell = crm().layout(ShellLayout::Header);
     deals(shell.page("Deals", "/deals"))
+}
+
+/// Ocean with a shape of its own: pill buttons, badges, toggles and avatars, 12 px fields,
+/// panels and popups, 10 px rows and 16 px cards.
+fn shaped_theme() -> Theme {
+    let shape = Shape::new().corners(
+        Corners::new()
+            .button(Corner::Pill)
+            .badge(Corner::Pill)
+            .toggle(Corner::Pill)
+            .avatar(Corner::Pill)
+            .field(Corner::Px(12))
+            .nav(Corner::Px(10))
+            .card(Corner::Px(16))
+            .panel(Corner::Px(12))
+            .overlay(Corner::Px(12)),
+    );
+    Theme::OCEAN
+        .renamed(ThemeId::parse("rounded").unwrap(), "Rounded")
+        .with_shape(shape)
+        .unwrap()
+}
+
+fn shell_shaped() -> AppPage {
+    let shell = crm().appearance(Appearance::new(shaped_theme(), Mode::Light));
+    deals(shell.page("Deals", "/deals")).body(Card::titled("Pipeline").body(
+        Stack::gap(3).children((
+            Row::gap(2).wrap().children((
+                Input::search("q").placeholder("Search deals"),
+                Button::new("Filter").variant(ButtonVariant::Outline),
+                Badge::new("Won").variant(BadgeVariant::Success),
+                Badge::new("Open"),
+            )),
+            Alert::new(AlertTone::Warning).title("Three deals close this week."),
+        )),
+    ))
 }
 
 fn builder_default() -> AppPage {

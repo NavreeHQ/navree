@@ -78,6 +78,7 @@ pub const FILES: &[&str] = &[
     "cmd.rs",
     "op.rs",
     "theme/mod.rs",
+    "theme/shape.rs",
     "theme/colour.rs",
     "theme/appearance.rs",
     "theme/menu.rs",

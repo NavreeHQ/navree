@@ -41,6 +41,32 @@ pub fn themed_shell() -> Shell {
 - A theme of your own: build it in the theme builder
   (https://navree.com/docs/ui/theme-builder/) and paste its Rust export, or
   call `Theme::custom`, which refuses text that fails WCAG AA.
+- What a theme says beyond its spec is its `Shape`, given with
+  `theme.with_shape(shape)`, which refuses a value out of range (and a
+  built-in theme: `renamed` makes it yours). `Corners` sets the corner of
+  each kind of part, `Corner::Px(0..=32)` or `Corner::Pill`: `button`,
+  `badge`, `toggle`, `avatar`, `field`, `nav`, `card`, `panel` and
+  `overlay`. A part it doesn't set keeps the spec's `Radius`. Never write a
+  stylesheet that restyles a component: a value the design needs goes in
+  the theme.
+
+```rust
+use navree::ui::theme::{Corner, Corners, Shape, Theme, ThemeId};
+
+pub fn rounded_theme() -> Theme {
+    let shape = Shape::new().corners(
+        Corners::new()
+            .button(Corner::Pill)
+            .badge(Corner::Pill)
+            .field(Corner::Px(12))
+            .card(Corner::Px(16)),
+    );
+    Theme::OCEAN
+        .renamed(ThemeId::parse("rounded").expect("a theme id"), "Rounded")
+        .with_shape(shape)
+        .expect("every value of the shape in range")
+}
+```
 - Store a choice with `Appearance::to_value()` and read it back with
   `Appearance::parse`. Charts and status read the tokens `--chart-1` to
   `--chart-8`, `--success`, `--amber`, `--danger` and `--info`; see

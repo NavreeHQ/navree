@@ -38,8 +38,11 @@ around them.
 4. **A page route starts with `!`** (`#[get("!/contacts")]`), so it sits at
    the site's root. A route without `!` sits under `http.api_prefix`
    (`/api`), where errors are JSON.
-5. **Corners are 4 px on controls and 6 px on surfaces. No pills, no letter
-   tiles, no glow.** The components already follow this. Do not override it.
+5. **Corners are the theme's.** 4 px on controls and 6 px on surfaces by
+   default; a theme of the app's own gives each kind of part its own corner,
+   pills included, with its shape (`Theme::with_shape`,
+   `references/themes.md`). No letter tiles, no glow, and no stylesheet that
+   restyles a component: a value the design needs goes in the theme.
 6. **Every page has its other states**: empty, loading, failed, read-only and
    forbidden. Build them with the components below.
 7. **Test each page** with `TestView` (no browser), and look at it at 1440

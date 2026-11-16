@@ -4,7 +4,9 @@
 //! colour [`Token`]s, a [`Radius`], a [`Density`] and a [`Font`] from a safe
 //! list. The built-in themes are written into the toolkit's stylesheet; a
 //! theme of your own is served as a small stylesheet of its own, at a URL that
-//! is the theme itself, so it costs no storage and is cached for good.
+//! is the theme itself, so it costs no storage and is cached for good. A theme
+//! of your own can say more than its spec with a [`Shape`]: the corners of each
+//! kind of part.
 //!
 //! An [`Appearance`] is a theme and a [`Mode`] (light, dark or the device's
 //! choice). The server writes it on `<html>` and links the theme's stylesheet
@@ -33,6 +35,7 @@ mod colour;
 mod css;
 mod menu;
 mod pairs;
+mod shape;
 
 use std::sync::{Arc, LazyLock};
 
@@ -45,6 +48,7 @@ pub use colour::{ColourError, Rgb};
 pub use css::{builder_layer, token_layer};
 pub use menu::ThemeMenu;
 pub use pairs::{Paint, Pair, PairKind, SURFACES, TONES, pairs};
+pub use shape::{Corner, Corners, Shape};
 
 pub(crate) use appearance::{read_setting, respond_setting};
 pub(crate) use css::respond as respond_sheet;
@@ -728,7 +732,8 @@ pub struct Shortfall {
 }
 
 /// A theme: an id, a name and a [`ThemeSpec`]. The built-in ones are
-/// associated constants; [`Theme::custom`] makes your own.
+/// associated constants; [`Theme::custom`] makes your own, and
+/// [`with_shape`](Self::with_shape) gives it a [`Shape`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Theme(Repr);
 
@@ -743,10 +748,27 @@ struct Custom {
     id: ThemeId,
     name: String,
     spec: ThemeSpec,
+    /// What it says beyond its spec.
+    extras: Extras,
     /// The canonical short form: the stylesheet's URL and the cookie's value.
     form: String,
     /// `c` and the short form's hash: the `data-theme` value.
     key: String,
+}
+
+/// What a theme of your own says beyond its spec. The default says nothing, and a theme
+/// with it is written exactly as a theme was before there was more to say.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) struct Extras {
+    /// The corners of each kind of part.
+    pub(crate) shape: Shape,
+}
+
+impl Extras {
+    /// What every built-in theme says: nothing.
+    pub(crate) const NONE: Self = Self {
+        shape: Shape::new(),
+    };
 }
 
 impl Theme {
@@ -791,16 +813,74 @@ impl Theme {
 
     /// A theme whose contrast isn't checked: the builder's draft.
     pub(crate) fn unchecked(id: ThemeId, name: String, spec: ThemeSpec) -> Self {
-        let form = codec::to_form(&spec);
+        Self::unchecked_with(id, name, spec, Extras::NONE)
+    }
+
+    /// A theme whose contrast and extras aren't checked.
+    pub(crate) fn unchecked_with(
+        id: ThemeId,
+        name: String,
+        spec: ThemeSpec,
+        extras: Extras,
+    ) -> Self {
+        let form = codec::to_form_with(&spec, &extras);
         let key = key_of(&form);
         let name = codec::clean_text(&name, 64);
         Self(Repr::Custom(Arc::new(Custom {
             id,
             name,
             spec,
+            extras,
             form,
             key,
         })))
+    }
+
+    /// This theme with `shape`: the corners of each kind of part. Refused for a built-in
+    /// theme, which ships as it is (make it yours first with [`renamed`](Self::renamed)), and
+    /// for a value out of range, each named with why, as [`ImportError::Fields`].
+    ///
+    /// The theme's stylesheet writes what the shape sets, and its short form, stored form
+    /// and Rust carry it. A theme with the default shape is written as it was without one.
+    pub fn with_shape(self, shape: Shape) -> Result<Self, ImportError> {
+        let errors = shape.errors();
+        if !errors.is_empty() {
+            return Err(ImportError::Fields(errors));
+        }
+        let custom = self.mine()?;
+        let extras = Extras { shape };
+        Ok(Self::unchecked_with(
+            custom.id.clone(),
+            custom.name.clone(),
+            custom.spec,
+            extras,
+        ))
+    }
+
+    /// The theme of your own this is, or why a built-in can't take more than it ships with.
+    fn mine(&self) -> Result<&Custom, ImportError> {
+        match &self.0 {
+            Repr::Custom(custom) => Ok(custom),
+            Repr::Builtin(_) => Err(ImportError::Fields(vec![(
+                "theme".to_owned(),
+                "A built-in theme ships as it is: make it yours with Theme::renamed first."
+                    .to_owned(),
+            )])),
+        }
+    }
+
+    /// What it says beyond its spec: nothing, for a built-in theme.
+    pub(crate) fn extras(&self) -> &Extras {
+        match &self.0 {
+            Repr::Builtin(_) => &Extras::NONE,
+            Repr::Custom(custom) => &custom.extras,
+        }
+    }
+
+    /// Its [`Shape`]: the default, which sets nothing, unless
+    /// [`with_shape`](Self::with_shape) gave it one.
+    pub fn shape(&self) -> &Shape {
+        &self.extras().shape
     }
 
     /// The built-in theme with the id `id`.
@@ -890,13 +970,21 @@ impl Theme {
         if let Some(theme) = Self::builtin(form) {
             return Some(theme);
         }
-        let spec = codec::from_form(form)?;
-        Self::custom(ThemeId::custom(), "Custom", spec).ok()
+        let (spec, extras) = codec::from_form_with(form)?;
+        Self::custom(ThemeId::custom(), "Custom", spec)
+            .ok()?
+            .with_extras(extras)
+            .ok()
     }
 
-    /// The same look under another id and name.
+    /// This theme with `extras`, each part checked as its own method checks it.
+    pub(crate) fn with_extras(self, extras: Extras) -> Result<Self, ImportError> {
+        self.with_shape(extras.shape)
+    }
+
+    /// The same look under another id and name: its spec, and what it says beyond.
     pub fn renamed(&self, id: ThemeId, name: impl Into<String>) -> Self {
-        Self::unchecked(id, name.into(), *self.spec())
+        Self::unchecked_with(id, name.into(), *self.spec(), *self.extras())
     }
 
     /// The family of greys a built-in theme is made of; `None` for one with a

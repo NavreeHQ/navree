@@ -5,7 +5,7 @@ description: "Seven built-in themes in light, dark or the device's mode, themes 
 
 <UiPreview example="themes/built-in" />
 
-A theme is a typed Rust value: a palette of colour tokens for light and one for dark, the corners, the density and a font from a safe list. The server writes the reader's theme and mode on `<html>` and links what the page needs in the head, so the first paint is already right. No script decides how a page looks, and a page with nothing set renders exactly as it always did: dark Navree.
+A theme is a typed Rust value: a palette of colour tokens for light and one for dark, the corners, the density and a font from a safe list. A theme of your own can say more with a [shape](#a-themes-shape): the corners of each kind of part. The server writes the reader's theme and mode on `<html>` and links what the page needs in the head, so the first paint is already right. No script decides how a page looks, and a page with nothing set renders exactly as it always did: dark Navree.
 
 ## Built-in themes
 
@@ -87,9 +87,56 @@ Build one in the [theme builder](/docs/ui/theme-builder/) and paste its Rust exp
 let theme = Theme::custom(ThemeId::parse("agra")?, "Agra", spec)?;
 ```
 
-`Theme::custom` refuses a theme whose text fails WCAG AA in either palette. A theme of your own is served as a small stylesheet of its own at `/_navree/ui/theme/<theme>-<build>.css`, where the file's name is the theme's values in a short form, then the toolkit's build. The server reads that name with a strict parser and writes the stylesheet itself, so the URL can carry nothing but colours, corners, a density and a font from the list. It is cached for good, and two readers of one theme share one file; when you upgrade the toolkit, the build in the name changes, so no reader keeps an old sheet. A name from another build is still answered, as this build writes the sheet, and checked again each time.
+`Theme::custom` refuses a theme whose text fails WCAG AA in either palette. A theme of your own is served as a small stylesheet of its own at `/_navree/ui/theme/<theme>-<build>.css`, where the file's name is the theme's values in a short form, then the toolkit's build. The server reads that name with a strict parser and writes the stylesheet itself, so the URL can carry nothing but colours, corners, a density, a font from the list and the values of a [shape](#a-themes-shape), each in range. It is cached for good, and two readers of one theme share one file; when you upgrade the toolkit, the build in the name changes, so no reader keeps an old sheet. A name from another build is still answered, as this build writes the sheet, and checked again each time.
 
 A stored theme is JSON: `theme.to_json()` writes it, and `Theme::from_json` reads it back, checking every field and naming each one that is wrong.
+
+## A theme's shape
+
+A theme of your own can say more than its spec. `ThemeSpec` is a struct that apps and the Rust export build field by field, so it can't gain a field in a minor release. What a theme says beyond it is a `Shape`, a value of its own that the theme carries beside its spec, given with `Theme::with_shape`. Every value a theme can say beyond its spec is a part of the shape.
+
+```rust title="src/theme.rs"
+use navree::ui::theme::{Corner, Corners, Shape, Theme, ThemeId};
+
+pub fn agra_theme() -> Theme {
+    let shape = Shape::new().corners(
+        Corners::new()
+            .button(Corner::Pill)
+            .badge(Corner::Pill)
+            .field(Corner::Px(12))
+            .card(Corner::Px(16)),
+    );
+    Theme::OCEAN
+        .renamed(ThemeId::parse("agra").expect("a theme id"), "Agra")
+        .with_shape(shape)
+        .expect("every value of the shape in range")
+}
+```
+
+Each value is a CSS custom property, set through a typed Rust value and never through text. The stylesheet reads it with what the toolkit drew before behind it, as in `var(--radius-button,var(--radius))`, and the theme's stylesheet writes it only when the shape sets it. So a theme with the default shape, and every built-in theme, is written exactly as it was: the same stylesheet, short form, key, stored theme and Rust export, and a page draws the same pixels. A test holds all of them to what Navree 1.7.0 wrote.
+
+- `with_shape` checks every value and refuses one out of range, naming it and saying why (`ImportError::Fields`). A built-in theme ships as it is: make it yours first with `renamed`.
+- The short form keeps the spec's part and adds a segment for what the shape sets, so the theme's stylesheet and the cookie carry it, read back by the same strict parser. The stored theme gains a `shape` object, each value by its token's name, and the Rust export a `.with_shape(..)` call. None of them change for a theme with the default shape.
+- A part of the page drawn in another theme, such as a card of the theme menu, is drawn without the shape.
+- `Theme::shape()` returns a theme's shape: the default, which sets nothing, for a built-in theme.
+
+### Corners
+
+The spec's `Radius` sets two corners: one for controls, one for surfaces. `Corners` gives a kind of part a corner of its own: `Corner::Px(n)` from 0 to 32, or `Corner::Pill`, round ends whatever the part's height. A part you don't set keeps the spec's corner.
+
+| Method | Parts | Token | Without it |
+|---|---|---|---|
+| `button` | Buttons, the outer corners of a button group | `--radius-button` | `--radius` |
+| `badge` | Badges, the count on a tab | `--radius-badge` | `--radius` |
+| `toggle` | Toggles, toggle group items, segmented tabs and their track, the switch and its thumb | `--radius-toggle` | `--radius`; the track `--radius-lg` |
+| `avatar` | Avatars | `--radius-avatar` | `--radius` |
+| `field` | Inputs, text areas, selects, input groups, the select and combobox controls, the phone input | `--radius-field` | `--radius` |
+| `nav` | The sidebar's items, brand and user rows, the top bar's links, the rows of menus and lists | `--radius-nav` | `--radius` |
+| `card` | Cards, stats, fact cards, items, tables | `--radius-card` | `--radius-lg` |
+| `panel` | Alerts, a tab's alert, code blocks | `--radius-panel` | `--radius-lg`; a code block `--radius` |
+| `overlay` | Popovers, hover cards, menus, the select's list, dialogs, drawers | `--radius-overlay` | `--radius-lg` |
+
+A checkbox keeps `--radius`: a round box reads as a radio.
 
 ## Layouts
 
@@ -143,6 +190,18 @@ Charts read `--chart-1` to `--chart-8` and `--bar`; status reads `--success`, `-
 ### Theme
 
 <UiProps type="Theme" />
+
+### Shape
+
+<UiProps type="Shape" />
+
+### Corners
+
+<UiProps type="Corners" />
+
+### Corner
+
+<UiProps type="Corner" />
 
 ### Appearance
 

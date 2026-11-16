@@ -5,6 +5,29 @@ Every change to Navree is listed here, newest first. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Every crate and
 every `@navree/*` package carries the same version.
 
+## [Unreleased]
+
+### Added
+
+- A theme of your own can say more than its spec: a `Shape`, given with `Theme::with_shape` and
+  read back with `Theme::shape`. `ThemeSpec` is built field by field by apps and by the Rust
+  export, so it can't gain a field in a minor release; a shape is a value of its own that the
+  theme carries beside its spec, and every value a theme can say beyond its spec is part of it.
+  Its first part is `Corners`: a corner of its own for each kind of part, `Corner::Px(n)` from 0
+  to 32 or `Corner::Pill`, for buttons, badges, toggles (with segmented tabs and the switch),
+  avatars, fields, the rows of the sidebar and of menus, cards, panels and popups. Each is a
+  custom property (`--radius-button` to `--radius-overlay`) that the stylesheet reads with the
+  spec's corner behind it, so a part a shape doesn't set keeps `--radius` or `--radius-lg`, and
+  a checkbox always does. `with_shape` refuses a value out of range, naming it, and a built-in
+  theme, which ships as it is. The theme's stylesheet writes what the shape sets, its short form
+  gains a segment for it, the stored theme a `shape` object and the Rust export a
+  `.with_shape(..)` call; a part of the page drawn in another theme, such as a card of the theme
+  menu, is drawn without it. A theme with the default shape, and every built-in theme, is
+  written as before: the same stylesheet, short form, key, stored theme and Rust, held by a
+  test. `Theme::with_shape` and `Theme::shape` are new inherent methods: an app whose own
+  extension trait gives `Theme` a method of either name calls it through the trait
+  (`MyExt::shape(&theme)`).
+
 ## [1.7.0] - 2026-11-27
 
 ### Upgrading

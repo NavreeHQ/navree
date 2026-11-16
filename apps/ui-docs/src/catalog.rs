@@ -1003,6 +1003,9 @@ pub const COMPONENTS: &[Component] = &[
         "Themes",
         &[
             "Theme",
+            "Shape",
+            "Corners",
+            "Corner",
             "Appearance",
             "Mode",
             "ThemeSetting",
