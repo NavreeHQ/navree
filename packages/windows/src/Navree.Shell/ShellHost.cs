@@ -582,7 +582,7 @@ public sealed partial class ShellHost : IDisposable
         bool finished = false;
         try
         {
-            taken = await WebPage.ClearAllAsync(ended, what => ReportProblem("web wipe " + what));
+            taken = await WebPage.ClearAllAsync(ended, webProfiles.Folder, what => ReportProblem("web wipe " + what));
         }
         finally
         {

@@ -125,6 +125,10 @@ public sealed partial class ShellWindow : Window
             host.MessageRequested -= ShowMessage;
             host.Announcement -= Announce;
             host.CoreStopped -= OfferRestart;
+
+            // The web pages this window showed are closed with it.
+            front.ReleaseWebs();
+            back.ReleaseWebs();
         };
         InitializeSystem();
     }

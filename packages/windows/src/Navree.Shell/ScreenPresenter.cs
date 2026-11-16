@@ -293,6 +293,20 @@ internal sealed class ScreenPresenter : Grid
         previous is not null && previous.Id == screen.Id
         && previous.Lists.Any(pair => pair.Value.LoadingBefore && screen.Lists.TryGetValue(pair.Key, out ListState? now) && !now.LoadingBefore && !now.FailedBefore);
 
+    /// <summary>
+    /// Lets go of every web view this presenter made: what it was shown in (a window, a sheet) is gone. A web view that is not closed stays
+    /// alive with nothing to show it in, for as long as the app runs.
+    /// </summary>
+    internal void ReleaseWebs()
+    {
+        foreach (WebPage page in webs.Values)
+        {
+            page.Release();
+        }
+
+        webs.Clear();
+    }
+
     // The screen is drawn from its tree, all of it, the scroll position kept.
     private void DrawWhole(ScreenView screen, WidthClass width, PageKeeper.Held? held)
     {

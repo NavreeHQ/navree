@@ -66,6 +66,9 @@ internal sealed class ScreenWindow : Window
         {
             host.StateChanged -= Show;
             dialogs.WindowClosed();
+
+            // A web page that was shown in this window is closed with it.
+            presenter.ReleaseWebs();
         };
         Show(host.State);
     }

@@ -46,7 +46,11 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
     {
         foreach ((long Screen, bool Pane) gone in modals.Keys.Where(key => !state.Screens.ContainsKey(key.Screen)).ToList())
         {
-            _ = modals.Remove(gone);
+            // A web page that was shown over the window is closed when its screen has left.
+            if (modals.Remove(gone, out ScreenPresenter? left))
+            {
+                left.ReleaseWebs();
+            }
         }
 
         if (!hooked)
@@ -469,7 +473,14 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
     /// The window these dialogs belong to has been closed by the person. A question that was up in it and could not be shown to its end is
     /// answered as closed with nothing chosen, and is not tried again: no window is left to show it on.
     /// </summary>
-    internal void WindowClosed() => windowClosed = true;
+    internal void WindowClosed()
+    {
+        windowClosed = true;
+        foreach (ScreenPresenter over in modals.Values)
+        {
+            over.ReleaseWebs();
+        }
+    }
 
     private async Task ShowAsync(ContentDialog shown, Wanted want)
     {

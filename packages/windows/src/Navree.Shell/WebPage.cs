@@ -22,21 +22,21 @@ namespace Navree.Shell;
 /// that the web view does not report as a navigation of its own is caught by the document-start script, not by a
 /// callback; and each request is paused while the app decides, which costs speed on a page with many parts.
 /// </remarks>
-internal sealed class WebPage : Grid
+internal sealed class WebPage : Grid, ILiveWebView
 {
     // One environment for each folder the app's web views keep their data in; a page that is made while another is being started waits for the same one.
     private static readonly Dictionary<string, Task<CoreWebView2Environment>> Environments = [];
 
-    // Every page whose web view has been started and not closed, on screen or not: the wipe at sign-out reaches them all, and
-    // a page that was shown, left and shown again is one of them.
-    private static readonly List<WebPage> Live = [];
+    // Every page whose web view has begun to start and is not closed, on screen or not, in the main window or in a window of its own, each with
+    // the folder of the session it was made for: the end of a session reaches them all.
+    private static readonly List<WebPage> Known = [];
 
     // Pages whose screens left while a wipe was running: they are closed when it is done.
     private static readonly List<WebPage> Deferred = [];
     private static int wiping;
 
-    // The browser processes the web views of this app started, by id: the folder cannot be deleted until they have ended.
-    private static readonly HashSet<int> BrowserProcesses = [];
+    // The browser processes the web views of this app started, by the folder they serve: a folder cannot be deleted until its own have ended.
+    private static readonly Dictionary<string, HashSet<int>> BrowserProcesses = [];
 
     private readonly ShellHost host;
     private readonly long screen;
@@ -64,28 +64,32 @@ internal sealed class WebPage : Grid
     }
 
     /// <summary>
-    /// Empties what the web views of the app keep: their cookies, storage, cache and history. While a web view is running its
-    /// profile is cleared (the web view's own way; its folder is not deleted under it). With none running, which is the case
-    /// when the person signs out from a screen that is not a web page, or in a launch that never showed one, the folder the last
-    /// launch left is deleted.
+    /// Ends a session for the web views (<see cref="WebWipe"/>): every web view that was made for the session is emptied and closed, in the
+    /// main window or in a window of its own, and what they kept (cookies, storage, cache, history) is cleared through one of them or, when
+    /// none can clear it, deleted with the session's folder once the browser behind it has ended. A web view left alive from an older session
+    /// is closed too and never answers for this one; a web view of whoever comes next is left as it is.
     /// </summary>
-    /// <param name="folder">The folder the web views of the session keep their data in.</param>
+    /// <param name="ended">The folder the web views of the session that ends keep their data in.</param>
+    /// <param name="now">The folder of the session that follows, or null when no web page may be shown.</param>
     /// <param name="trace">Told, in words, each step of the wipe and how long it took; when the wipe is slow this says which call it was.</param>
     /// <returns>
-    /// Whether what was kept is gone: the profile was cleared through a web view, or the folder was deleted. False when neither could be done:
-    /// every web view is closed by then, and the caller sees to it that the folder is never used again.
+    /// Whether what was kept is gone: the profile was cleared through a web view of that session, or the folder was deleted. Every web view
+    /// of the session is closed either way.
     /// </returns>
-    internal static async Task<bool> ClearAllAsync(string folder, Action<string>? trace = null)
+    internal static async Task<bool> ClearAllAsync(string ended, string? now, Action<string>? trace = null)
     {
         System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
         void Note(string what) => trace?.Invoke(clock.ElapsedMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + " ms: " + what);
 
-        // While the wipe runs no web view is closed: a clear that is on its way to the profile never answers when the web view it was asked of
-        // is closed under it, which is what happens when the screens go at the same moment (the core starts the app again). The closing waits.
+        // While the wipe runs no web view is closed from outside it: a clear that is on its way to the profile never answers when the web view it
+        // was asked of is closed under it, which is what happens when the screens go at the same moment (the core starts the app again). A web
+        // view released meanwhile waits, and is closed when the wipe is done.
         wiping++;
         try
         {
-            return await WipeAsync(folder, Note);
+            WebPage[] known = [.. Known];
+            Note(known.Length + " web view(s) are alive: " + string.Join(", ", known.Select(page => "screen " + page.screen + (page.released ? " released" : string.Empty) + (page.view.CoreWebView2 is null ? " not started" : string.Empty))));
+            return await WebWipe.RunAsync(ended, now, known, () => DeleteAsync(ended, Note), note: Note);
         }
         finally
         {
@@ -102,91 +106,67 @@ internal sealed class WebPage : Grid
         }
     }
 
-    private static async Task<bool> WipeAsync(string folder, Action<string> note)
+    // The folder of a session that ended is deleted once the browser behind it has ended: its processes are waited for, each for a short while.
+    private static async Task<bool> DeleteAsync(string folder, Action<string> note)
     {
-        WebPage[] kept = [.. Live, .. Deferred];
-        note(kept.Length + " web page(s) are kept for the wipe: " + string.Join(", ", kept.Select(page => "screen " + page.screen + (page.released ? " released" : string.Empty) + (page.view.CoreWebView2 is null ? " not started" : string.Empty))));
-
-        // A web view that is still being started is waited for, for a short while: one that was closed in the middle of it never answers.
-        foreach (WebPage page in kept)
+        if (BrowserProcesses.Remove(folder, out HashSet<int>? browsers))
         {
-            if (page.starting is Task starting && !starting.IsCompleted)
+            foreach (int id in browsers)
             {
-                Task first = await Task.WhenAny(starting, Task.Delay(TimeSpan.FromSeconds(2)));
-                note("screen " + page.screen + " was still starting; " + (first == starting ? "it came up" : "it did not in 2 s"));
-            }
-        }
-
-        WebPage[] started = [.. kept.Where(page => !page.closed && page.view.CoreWebView2 is not null)];
-
-        // A page that still runs could write again into what is about to be cleared: each is stopped and emptied first, and stays empty (the
-        // screens it stood for go when the core lets go of the person; a page of whoever comes next is a new one).
-        foreach (WebPage page in started)
-        {
-            try
-            {
-                page.view.CoreWebView2!.Stop();
-                page.view.CoreWebView2.Navigate("about:blank");
-            }
-            catch (Exception problem)
-            {
-                note("screen " + page.screen + ": the page could not be emptied: " + problem.GetType().Name);
-            }
-        }
-
-        foreach (WebPage page in started)
-        {
-            try
-            {
-                Task clearing = page.ClearAsync();
-                Task first = await Task.WhenAny(clearing, Task.Delay(TimeSpan.FromSeconds(3)));
-                if (first != clearing)
+                try
                 {
-                    note("screen " + page.screen + ": the profile's clear did not answer in 3 s");
-                    continue;
+                    using System.Diagnostics.Process browser = System.Diagnostics.Process.GetProcessById(id);
+                    using CancellationTokenSource limit = new(TimeSpan.FromSeconds(3));
+                    await browser.WaitForExitAsync(limit.Token);
+                    note("browser process " + id + " ended");
                 }
-
-                await clearing;
-                note("screen " + page.screen + ": the profile was cleared");
-                return true;
-            }
-            catch (Exception problem)
-            {
-                note("screen " + page.screen + ": the clear failed: " + problem.GetType().Name);
-            }
-        }
-
-        // The profile could not be cleared through a web view: every web view is closed, the browser's processes are waited for, and the
-        // folder is deleted.
-        foreach (WebPage page in kept)
-        {
-            page.CloseNow();
-        }
-
-        foreach (int id in BrowserProcesses.ToArray())
-        {
-            try
-            {
-                using System.Diagnostics.Process browser = System.Diagnostics.Process.GetProcessById(id);
-                using CancellationTokenSource limit = new(TimeSpan.FromSeconds(3));
-                await browser.WaitForExitAsync(limit.Token);
-                note("browser process " + id + " ended");
-            }
-            catch (OperationCanceledException)
-            {
-                note("browser process " + id + " was still there after 3 s");
-            }
-            catch (Exception)
-            {
-                // Not there.
+                catch (OperationCanceledException)
+                {
+                    note("browser process " + id + " was still there after 3 s");
+                }
+                catch (Exception)
+                {
+                    // Not there.
+                }
             }
         }
 
         Environments.Remove(folder);
-        bool gone = await WebData.DeleteAsync(folder, TimeSpan.FromSeconds(2));
-        note("the folder " + (gone ? "was deleted" : "could not be deleted"));
-        return gone;
+        return await WebData.DeleteAsync(folder, TimeSpan.FromSeconds(2));
     }
+
+    /// <inheritdoc />
+    string? ILiveWebView.Folder => startedIn;
+
+    /// <inheritdoc />
+    void ILiveWebView.Empty()
+    {
+        if (!closed && view.CoreWebView2 is { } web)
+        {
+            web.Stop();
+            web.Navigate("about:blank");
+        }
+    }
+
+    /// <inheritdoc />
+    async Task ILiveWebView.ClearProfileAsync()
+    {
+        // A web view that is still being started is waited for, for a short while: one that was closed in the middle of it never answers.
+        if (starting is { IsCompleted: false } coming)
+        {
+            _ = await Task.WhenAny(coming, Task.Delay(TimeSpan.FromSeconds(2)));
+        }
+
+        if (closed || view.CoreWebView2 is not { } web)
+        {
+            throw new InvalidOperationException("the web view was not started");
+        }
+
+        await web.Profile.ClearBrowsingDataAsync();
+    }
+
+    /// <inheritdoc />
+    void ILiveWebView.Close() => CloseNow();
 
     /// <summary>
     /// Whether the page's web view was started for a session that has ended: it keeps its data in a folder that is not the one of the session
@@ -203,7 +183,6 @@ internal sealed class WebPage : Grid
     internal void Release()
     {
         released = true;
-        Live.Remove(this);
 
         // A wipe that is running may be asking this web view to clear the profile: it is closed when the wipe is done.
         if (wiping > 0)
@@ -218,7 +197,7 @@ internal sealed class WebPage : Grid
     private void CloseNow()
     {
         closed = true;
-        Live.Remove(this);
+        Known.Remove(this);
         try
         {
             view.Close();
@@ -318,6 +297,10 @@ internal sealed class WebPage : Grid
         // away what the web view kept.
         string folder = host.WebFolder ?? throw new WebViewNotEmptiedException();
         startedIn = folder;
+        if (!closed)
+        {
+            Known.Add(this);
+        }
         if (!Environments.TryGetValue(folder, out Task<CoreWebView2Environment>? made))
         {
             made = CoreWebView2Environment.CreateWithOptionsAsync(null, folder, new CoreWebView2EnvironmentOptions()).AsTask();
@@ -335,12 +318,18 @@ internal sealed class WebPage : Grid
         }
 
         await HoldAsync(view.CoreWebView2!);
-        BrowserProcesses.Add((int)view.CoreWebView2!.BrowserProcessId);
-
-        // A page whose screen left while it was being started is not kept: its web view is closed.
-        if (!released)
+        if (!BrowserProcesses.TryGetValue(folder, out HashSet<int>? browsers))
         {
-            Live.Add(this);
+            BrowserProcesses[folder] = browsers = [];
+        }
+
+        _ = browsers.Add((int)view.CoreWebView2!.BrowserProcessId);
+
+        // A web view whose session ended while it was being started is closed at once: it is never shown a page, and nothing of whoever
+        // comes next is ever in it.
+        if (OfAnEndedSession)
+        {
+            CloseNow();
         }
     }
 
@@ -449,12 +438,4 @@ internal sealed class WebPage : Grid
         };
     }
 
-    /// <summary>Empties what the web view keeps of the app: its cookies, storage, cache and history.</summary>
-    internal async Task ClearAsync()
-    {
-        if (view.CoreWebView2 is not null)
-        {
-            await view.CoreWebView2.Profile.ClearBrowsingDataAsync();
-        }
-    }
 }
