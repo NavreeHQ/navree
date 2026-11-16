@@ -562,9 +562,9 @@ pub(crate) fn names_crate(type_name: &str, crate_name: &str) -> bool {
 }
 
 /// Whether the plugin `info`, whose modules have the types `type_names`, is
-/// first-party: `listed` pairs its name with a crate, its version is
-/// `kernel_version`, and every module type, up to its first `<`, is a path of
-/// that crate (generic arguments do not count).
+/// first-party: `listed` pairs its name with a crate, it names that crate as
+/// its own, its version is `kernel_version`, and every module type, up to its
+/// first `<`, is a path of that crate (generic arguments do not count).
 pub(crate) fn is_first_party(
     info: &PluginInfo,
     type_names: &[&str],
@@ -575,7 +575,8 @@ pub(crate) fn is_first_party(
         return false;
     };
     let path = format!("{krate}::");
-    info.version == kernel_version
+    info.crate_name == krate
+        && info.version == kernel_version
         && type_names.iter().all(|type_name| {
             let outer = type_name
                 .split_once('<')
@@ -681,7 +682,7 @@ mod tests {
     }
 
     #[test]
-    fn first_party_needs_a_listed_name_the_kernels_version_and_a_type_of_the_listed_crate() {
+    fn first_party_needs_a_listed_name_its_crate_the_kernels_version_and_a_type_of_that_crate() {
         let listed = [("navree-flags", "navree_flags")];
         let flags = PluginInfo::new("navree-flags", "navree_flags", "flags", "1.3.0");
         let module = ["navree_flags::module::FlagsModule"];
@@ -689,6 +690,11 @@ mod tests {
         assert!(
             !is_first_party(&flags, &module, &listed, "1.3.1"),
             "another version"
+        );
+        let elsewhere = PluginInfo::new("navree-flags", "acme_flags", "flags", "1.3.0");
+        assert!(
+            !is_first_party(&elsewhere, &module, &listed, "1.3.0"),
+            "another crate named as the plugin's"
         );
         let unlisted = PluginInfo::new("navree-plugin-flags", "navree_flags", "flags", "1.3.0");
         assert!(

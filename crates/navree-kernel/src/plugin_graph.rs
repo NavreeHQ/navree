@@ -49,15 +49,17 @@ impl Graph {
     /// 1. a module that calls `m.plugin(..)` twice: `PluginTwice`;
     /// 2. a namespace outside the grammar: `InvalidNamespace`, and the module
     ///    is left out below;
-    /// 3. a module whose type names no path of the plugin's crate:
-    ///    `PluginOfAnotherCrate`, and the module is left out below;
+    /// 3. a module whose type names no path of the plugin's crate (neither its
+    ///    own type nor the type its id names): `PluginOfAnotherCrate`, and the
+    ///    module is left out below;
     /// 4. modules grouped by plugin name, the first module giving the plugin's
     ///    info: a later module with another crate is `PluginOfAnotherCrate`;
     ///    else a later one at another version is one `PluginVersions`; else a
     ///    later one with any other field is one `PluginInfoDiffers`;
-    /// 5. first-party plugins (the kernel's list, its version, every module a
-    ///    type of the listed crate: the module's own type, which its id need
-    ///    not name) go into `first_party`;
+    /// 5. first-party plugins (the kernel's list, the listed crate named as
+    ///    the plugin's, its version, every module a type of the listed crate:
+    ///    the module's own type, which its id need not name) go into
+    ///    `first_party`;
     /// 6. a plugin that is not first-party in a reserved namespace:
     ///    `NamespaceReserved`;
     /// 7. a second plugin on a namespace already used: `NamespaceTaken`;
@@ -107,7 +109,9 @@ impl Graph {
                 });
                 continue;
             }
-            if !names_crate(module.id.type_name(), info.crate_name) {
+            if !names_crate(module.type_name, info.crate_name)
+                && !names_crate(module.id.type_name(), info.crate_name)
+            {
                 errors.push(KernelError::PluginOfAnotherCrate {
                     module: module.name,
                     plugin: info.name,
@@ -589,8 +593,21 @@ mod tests {
         }
     }
 
+    /// Whether the plugin checks of `graph` refuse only navree-flags' use of its namespace.
+    fn only_the_namespace_refused(graph: &mut Graph) -> bool {
+        let mut errors = Vec::new();
+        graph.check_plugins(&mut errors);
+        matches!(
+            errors.as_slice(),
+            [KernelError::NamespaceReserved {
+                plugin: "navree-flags",
+                namespace: "flags"
+            }]
+        )
+    }
+
     #[test]
-    fn a_plugin_is_first_party_by_its_modules_own_types_and_keeps_its_reserved_namespace() {
+    fn a_plugin_is_first_party_by_its_crate_and_its_modules_own_types_and_keeps_its_namespace() {
         let version = env!("CARGO_PKG_VERSION");
         let notes = PluginInfo::new(
             "navree-plugin-flags",
@@ -603,28 +620,29 @@ mod tests {
         let m = graph
             .module_of(ModuleId::of::<Names>())
             .expect("in the graph");
-        // The module names navree-flags, in its reserved namespace. Its own type is not of
-        // navree-flags' crate, whatever crate its id is in: not first-party, and refused.
+        // The module names navree-flags, in its reserved namespace, with this crate as the
+        // plugin's. Its own type is not of navree-flags' crate, whatever crate its id is in:
+        // not first-party, and refused.
         graph.modules[m].plugin = Some(PluginInfo::new(
             "navree-flags",
             "navree_kernel",
             "flags",
             version,
         ));
-        let mut errors = Vec::new();
-        graph.check_plugins(&mut errors);
-        assert!(
-            matches!(
-                errors.as_slice(),
-                [KernelError::NamespaceReserved {
-                    plugin: "navree-flags",
-                    namespace: "flags"
-                }]
-            ),
-            "{errors:?}"
-        );
-        // Read as a module of navree-flags' own crate: first-party, and the namespace is its.
+        assert!(only_the_namespace_refused(&mut graph));
+        // Its own type is of navree-flags' crate, but the crate it names as the plugin's is
+        // another: not first-party either.
         graph.modules[m].type_name = "navree_flags::module::FlagsModule";
+        assert!(only_the_namespace_refused(&mut graph));
+        assert!(!graph.first_party.contains("navree-flags"));
+        // It names navree-flags' crate, and its own type is of that crate (its id need not
+        // be): first-party, and the namespace is its.
+        graph.modules[m].plugin = Some(PluginInfo::new(
+            "navree-flags",
+            "navree_flags",
+            "flags",
+            version,
+        ));
         let mut errors = Vec::new();
         graph.check_plugins(&mut errors);
         assert!(errors.is_empty(), "{errors:?}");
