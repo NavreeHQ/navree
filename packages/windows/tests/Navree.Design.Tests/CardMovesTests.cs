@@ -55,4 +55,25 @@ public sealed class CardMovesTests
         Assert.IsNull(CardMoves.DropBefore(Lane, middles, 400), "below every card: at the end");
         Assert.IsNull(CardMoves.DropBefore([], [], 10));
     }
+
+    [TestMethod]
+    public void A_lane_moves_a_card_only_for_the_drag_of_a_card_that_is_still_on_the_screen()
+    {
+        // A card is picked up and dragged over a lane: it is the card that moves, whether or not the drag says which card it is.
+        Assert.AreEqual(("card-7", "todo"), CardMoves.Dragged("card-7", "todo", sourceShown: true, carriesMark: true, carriedRow: "card-7"));
+        Assert.AreEqual(("card-7", "todo"), CardMoves.Dragged("card-7", "todo", sourceShown: true, carriesMark: false, carriedRow: null));
+
+        // The card was replaced by an answer while it was dragged, and never heard the drag end. Words dragged in later from another app
+        // move nothing: the card that was picked up is no longer on the screen.
+        Assert.IsNull(CardMoves.Dragged("card-7", "todo", sourceShown: false, carriesMark: false, carriedRow: null), "a drag whose card has left the screen moved a card");
+        Assert.IsNull(CardMoves.Dragged("card-7", "todo", sourceShown: false, carriesMark: true, carriedRow: "card-7"));
+
+        // What is dragged says it is another card than the one held.
+        Assert.IsNull(CardMoves.Dragged("card-7", "todo", sourceShown: true, carriesMark: true, carriedRow: "card-9"), "a drag of another card moved the card held");
+        Assert.IsNull(CardMoves.Dragged("card-7", "todo", sourceShown: true, carriesMark: true, carriedRow: null));
+
+        // No card is being dragged.
+        Assert.IsNull(CardMoves.Dragged(null, null, sourceShown: true, carriesMark: false, carriedRow: null));
+        Assert.IsNull(CardMoves.Dragged("card-7", null, sourceShown: true, carriesMark: false, carriedRow: null));
+    }
 }

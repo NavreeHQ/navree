@@ -61,7 +61,7 @@ internal sealed partial class NodeRenderer
 
         lane.DragOver += (_, e) =>
         {
-            if (CardDrag.Row is null)
+            if (CardDragged(e) is null)
             {
                 return;
             }
@@ -75,7 +75,7 @@ internal sealed partial class NodeRenderer
         lane.Drop += (_, e) =>
         {
             lane.Children.Remove(indicator);
-            if (CardDrag.Row is string itemId && CardDrag.From is string fromId)
+            if (CardDragged(e) is (string itemId, string fromId))
             {
                 string? before = Before(e.GetPosition(lane).Y);
                 if (before != itemId)
@@ -85,9 +85,31 @@ internal sealed partial class NodeRenderer
                 }
             }
 
+            // The drag is over, whatever was dropped and whether or not the card that was picked up is still there to hear of it.
+            CardDrag.Clear();
             e.Handled = true;
         };
         return lane;
+    }
+
+    // The card a drag over a lane moves (CardMoves.Dragged): the one this app holds as picked up, while that card is still on the screen and
+    // what is dragged is not another card's. A drag of anything else moves nothing.
+    private static (string Row, string From)? CardDragged(DragEventArgs e)
+    {
+        bool shown = CardDrag.Source is { } source && source.TryGetTarget(out FrameworkElement? card) && card.IsLoaded;
+        bool carries = false;
+        string? carried = null;
+        try
+        {
+            carries = e.DataView.Properties.TryGetValue(RowKey, out object? mark);
+            carried = mark as string;
+        }
+        catch (Exception problem) when (problem is System.Runtime.InteropServices.COMException or InvalidOperationException)
+        {
+            // What is dragged does not say: it carries no mark.
+        }
+
+        return CardMoves.Dragged(CardDrag.Row, CardDrag.From, shown, carries, carried);
     }
 
     // A card is drawn for a row of a list of cards. What a press on it asks (the lanes, the places of the cards) is read from the screen as it is when
@@ -155,12 +177,9 @@ internal sealed partial class NodeRenderer
             // The drag is inside this app, so what is dragged is held here as well: the data package carries a card between windows only as text.
             CardDrag.Row = rowId;
             CardDrag.From = listId;
+            CardDrag.Source = new WeakReference<FrameworkElement>(card);
         };
-        card.DropCompleted += (_, _) =>
-        {
-            CardDrag.Row = null;
-            CardDrag.From = null;
-        };
+        card.DropCompleted += (_, _) => CardDrag.Clear();
         return card;
     }
 
@@ -370,6 +389,17 @@ internal static class CardDrag
 
     /// <summary>The id of the list the card is in, or none.</summary>
     internal static string? From { get; set; }
+
+    /// <summary>The card that was picked up: a drag whose card has left the screen moves nothing.</summary>
+    internal static WeakReference<FrameworkElement>? Source { get; set; }
+
+    /// <summary>The drag is over.</summary>
+    internal static void Clear()
+    {
+        Row = null;
+        From = null;
+        Source = null;
+    }
 }
 
 /// <summary>The card that was just moved, so the screen drawn again for the move gives its handle the focus back.</summary>
