@@ -4,8 +4,13 @@ using System.Text;
 namespace Navree.Platform;
 
 /// <summary>
-/// What the core asks the client to keep between launches (the shell, the pages it may keep, the snapshot), under
-/// the keys it names. Each value is protected with Windows' data protection for the Windows user the app runs as
+/// What is kept between launches, in two parts that are emptied apart. One part is the core's cache: what the core asks the client to keep
+/// under the keys it names (the shell, the pages it may keep), which the core also asks to be emptied, after every write the server may have
+/// run. The other part is the client's own, for the person: the cookies, the snapshot the app starts again from, the widths a person gave a
+/// table's columns, the notifications that wait. Emptying the cache (<see cref="ClearCache"/>) touches the first part only; the end of a
+/// session (<see cref="Clear"/>, <see cref="ClearOrSetAside"/>) takes both. The part a value is in is said by who keeps it (the method
+/// called), never by what its key looks like, and shows in its file's extension: no key the core names can reach the client's own part.
+/// Each value is protected with Windows' data protection for the Windows user the app runs as
 /// (<see cref="Dpapi"/>): other people who sign in to the computer cannot read it, and any program that runs as the same
 /// Windows user can. It is written in the app's own folder under the local application data (not the roaming one, which
 /// is copied to other computers), and kept out of content indexing. A file that cannot be opened here is not an error: it is nothing.
@@ -16,6 +21,8 @@ public sealed class KeptStore
 {
     private const string WipeMarkName = "signing-out.mark";
     private const string AsideName = "set-aside.list";
+    private const string OwnEnding = ".kept";
+    private const string CacheEnding = ".page";
     private readonly string folder;
     private readonly byte[] entropy;
     private readonly object gate = new();
@@ -38,14 +45,77 @@ public sealed class KeptStore
     public static string DefaultFolder(string appName) =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Navree", appName, "kept");
 
-    /// <summary>Reads what is kept under a key.</summary>
+    /// <summary>Reads what the client keeps for the person under a key.</summary>
     /// <param name="key">The key.</param>
     /// <returns>The value, or null when nothing is kept or it cannot be opened here.</returns>
-    public string? Read(string key)
+    public string? Read(string key) => ReadFrom(PathOf(key, OwnEnding));
+
+    /// <summary>Reads what the core's cache holds under a key.</summary>
+    /// <param name="key">The key the core named.</param>
+    /// <returns>The value, or null when nothing is kept or it cannot be opened here.</returns>
+    public string? ReadCached(string key) => ReadFrom(PathOf(key, CacheEnding));
+
+    /// <summary>Keeps a value for the person under a key, or takes the key away when there is no value. It stays until the session ends.</summary>
+    /// <param name="key">The key.</param>
+    /// <param name="value">The value.</param>
+    public void Write(string key, string? value) => WriteTo(PathOf(key, OwnEnding), value);
+
+    /// <summary>Keeps a value in the core's cache under a key, or takes the key away when there is no value. It goes when the cache is emptied.</summary>
+    /// <param name="key">The key the core named.</param>
+    /// <param name="value">The value.</param>
+    public void WriteCached(string key, string? value) => WriteTo(PathOf(key, CacheEnding), value);
+
+    /// <summary>
+    /// Empties the core's cache, and nothing else: what the client keeps for the person stays. A file of the cache that cannot be deleted
+    /// (another program holds it) is set aside: never read again, and deleted when it can be.
+    /// </summary>
+    public void ClearCache()
     {
         lock (gate)
         {
-            string file = PathOf(key);
+            if (!Directory.Exists(folder))
+            {
+                return;
+            }
+
+            bool changed = false;
+            foreach (string file in Directory.GetFiles(folder))
+            {
+                string name = Path.GetFileName(file);
+                if (!name.EndsWith(CacheEnding, StringComparison.OrdinalIgnoreCase) && !name.EndsWith(CacheEnding + ".part", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    File.Delete(file);
+                    changed |= Aside().Remove(name);
+                }
+                catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+                {
+                    changed |= Aside().Add(name);
+                }
+            }
+
+            if (changed)
+            {
+                try
+                {
+                    SaveAside();
+                }
+                catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+                {
+                    // The names are held for this run; the list is written again at the next change.
+                }
+            }
+        }
+    }
+
+    private string? ReadFrom(string file)
+    {
+        lock (gate)
+        {
             if (!File.Exists(file) || Aside().Contains(Path.GetFileName(file)))
             {
                 // Nothing kept, or a file of a session that ended, which is never read again.
@@ -63,14 +133,10 @@ public sealed class KeptStore
         }
     }
 
-    /// <summary>Keeps a value under a key, or takes the key away when there is no value.</summary>
-    /// <param name="key">The key.</param>
-    /// <param name="value">The value.</param>
-    public void Write(string key, string? value)
+    private void WriteTo(string file, string? value)
     {
         lock (gate)
         {
-            string file = PathOf(key);
             if (value is null)
             {
                 if (File.Exists(file))
@@ -96,8 +162,9 @@ public sealed class KeptStore
     }
 
     /// <summary>
-    /// Throws away everything kept. The mark of a sign-out under way stays (<see cref="MarkWipe"/>). Every file that can be deleted is
-    /// deleted, whatever happens to another; when one could not be, this throws after the rest have gone.
+    /// Throws away everything kept, the core's cache and what the client keeps for the person: the end of a session. The mark of a sign-out
+    /// under way stays (<see cref="MarkWipe"/>). Every file that can be deleted is deleted, whatever happens to another; when one could not
+    /// be, this throws after the rest have gone.
     /// </summary>
     /// <exception cref="IOException">A file is still there: another program holds it.</exception>
     public void Clear()
@@ -312,12 +379,14 @@ public sealed class KeptStore
         {
             lock (gate)
             {
-                return Directory.Exists(folder) ? Directory.GetFiles(folder, "*.kept").Count(file => !Aside().Contains(Path.GetFileName(file))) : 0;
+                return Directory.Exists(folder)
+                    ? Directory.GetFiles(folder).Count(file => (file.EndsWith(OwnEnding, StringComparison.OrdinalIgnoreCase) || file.EndsWith(CacheEnding, StringComparison.OrdinalIgnoreCase)) && !Aside().Contains(Path.GetFileName(file)))
+                    : 0;
             }
         }
     }
 
-    // A key is any text, so the file is named by what the key hashes to.
-    private string PathOf(string key) =>
-        Path.Combine(folder, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))) + ".kept");
+    // A key is any text, so the file is named by what the key hashes to; its ending says which part it is in.
+    private string PathOf(string key, string ending) =>
+        Path.Combine(folder, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))) + ending);
 }

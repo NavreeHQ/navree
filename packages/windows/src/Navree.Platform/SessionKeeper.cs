@@ -177,31 +177,48 @@ public sealed class SessionKeeper : IDisposable
         });
     }
 
-    /// <summary>Reads what is kept under a key, in order with the writes, and hands it on from the queue's thread.</summary>
-    /// <param name="key">The key.</param>
+    /// <summary>
+    /// Keeps a value in the core's cache under a key, when the session it was asked in is still the one now; a value of none takes the key
+    /// away whenever it was asked. It is in order with the rest.
+    /// </summary>
+    /// <param name="key">The key the core named.</param>
+    /// <param name="value">The value.</param>
+    public void WriteCached(string key, string? value)
+    {
+        if (value is null)
+        {
+            disk.Run(() => kept.WriteCached(key, null));
+            return;
+        }
+
+        if (Stamp() is not long stamp)
+        {
+            return;
+        }
+
+        disk.Run(() =>
+        {
+            if (Current(stamp))
+            {
+                kept.WriteCached(key, value);
+            }
+        });
+    }
+
+    /// <summary>Reads what the core's cache holds under a key, in order with the writes, and hands it on from the queue's thread.</summary>
+    /// <param name="key">The key the core named.</param>
     /// <param name="then">Given the value, or null.</param>
-    public void Read(string key, Action<string?> then)
+    public void ReadCached(string key, Action<string?> then)
     {
         ArgumentNullException.ThrowIfNull(then);
-        disk.Run(() => then(kept.Read(key)));
+        disk.Run(() => then(kept.ReadCached(key)));
     }
 
     /// <summary>
-    /// Throws away everything kept, in order with the writes (the core asked for it). The cookies' file goes with the rest, and the person has
-    /// not signed out: the cookies the store holds are written again after the clear, so the next launch starts with the session this one has.
-    /// Nothing is written again while a sign-out is under way.
+    /// Empties the core's cache, in order with the writes (the core asks for it after every write the server may have run). What the client
+    /// keeps for the person is not the cache and stays: the cookies, the snapshot, a table's widths, the notifications that wait.
     /// </summary>
-    public void ClearKept()
-    {
-        disk.Run(kept.Clear);
-        lock (gate)
-        {
-            // What was last written went with the clear.
-            lastCookies = string.Empty;
-        }
-
-        KeepCookies();
-    }
+    public void ClearCache() => disk.Run(kept.ClearCache);
 
     /// <summary>Keeps the cookies the store holds when they changed, for the next launch; nothing while a sign-out is under way.</summary>
     public void KeepCookies()

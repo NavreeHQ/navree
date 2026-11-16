@@ -79,7 +79,7 @@ What the web view keeps is in a folder of the session's own, inside the app's we
 
 ## What is kept on the device
 
-What the app keeps between launches (the cookies, the pages the core may keep, the snapshot it starts again from, the widths of a table's columns, the notifications that wait) is in its own folder under the local application data, each value protected with Windows' data protection (`CryptProtectData`) for the Windows user the app runs as. That keeps it from other people who sign in to the same computer. It does not keep it from other programs: any program that runs as the same Windows user can read it, and a user with a roaming profile can open it on another computer.
+What the app keeps between launches (the cookies, the pages the core may keep, the snapshot it starts again from, the widths of a table's columns, the notifications that wait) is in its own folder under the local application data, each value protected with Windows' data protection (`CryptProtectData`) for the Windows user the app runs as. It is kept in two parts. The pages the core may keep are a cache: the core has it emptied after every change a person sends, and emptying it touches nothing else. The cookies, the snapshot, the widths a person gave a table's columns and the notifications that wait are the person's, and stay until the person signs out, which takes both parts. That protection keeps what is kept from other people who sign in to the same computer. It does not keep it from other programs: any program that runs as the same Windows user can read it, and a user with a roaming profile can open it on another computer.
 
 ## The data table's columns
 

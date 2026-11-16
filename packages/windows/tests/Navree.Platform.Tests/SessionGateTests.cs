@@ -47,19 +47,19 @@ public sealed class SessionGateTests
             // Only now does the window get round to the update: what it asks is carried out as the host does it.
             if (gate.MayRun(late, marks[0]))
             {
-                keeper.Write(late.Key, late.Value);
+                keeper.WriteCached(late.Key, late.Value);
             }
 
             await keeper.DrainAsync().WaitAsync(Short);
-            Assert.IsNull(kept.Read(late.Key), "a page of the person who left was kept after they signed out");
+            Assert.IsNull(kept.ReadCached(late.Key), "a page of the person who left was kept after they signed out");
 
             // What the core asks for whoever comes next is kept.
             CacheWriteEffect fresh = Keep("shell", "{\"app\":\"Charkha Supply Co.\"}");
             long[] next = gate.Asked([fresh]);
             Expect.That(gate.MayRun(fresh, next[0]), "a value asked to be kept for whoever comes next is refused");
-            keeper.Write(fresh.Key, fresh.Value);
+            keeper.WriteCached(fresh.Key, fresh.Value);
             await keeper.DrainAsync().WaitAsync(Short);
-            Assert.AreEqual(fresh.Value, kept.Read(fresh.Key));
+            Assert.AreEqual(fresh.Value, kept.ReadCached(fresh.Key));
         }
         finally
         {

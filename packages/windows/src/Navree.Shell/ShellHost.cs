@@ -336,13 +336,13 @@ public sealed partial class ShellHost : IDisposable
                 RunDevice(device);
                 break;
             case CacheReadEffect read:
-                session.Read(read.Key, value => client.Send(Events.Cache(read.Key, value)));
+                session.ReadCached(read.Key, value => client.Send(Events.Cache(read.Key, value)));
                 break;
             case CacheWriteEffect write:
-                session.Write(write.Key, write.Value);
+                session.WriteCached(write.Key, write.Value);
                 break;
             case CacheClearEffect:
-                session.ClearKept();
+                session.ClearCache();
                 break;
             case AnnounceEffect announce:
                 string? said = announce.Text ?? (announce.Notice is Notice notice ? Words.Notice(ViewReading.NoticeWord(notice)) : null);

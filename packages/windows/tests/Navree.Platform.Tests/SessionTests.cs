@@ -124,8 +124,8 @@ public sealed class SessionTests
             {
                 // The disk is busy (a read the core asked for is being answered) when a page of the person is given to it, and then they sign out.
                 ManualResetEventSlim busy = new(false);
-                keeper.Read("page:https://shop.example/", _ => busy.Wait(Short));
-                keeper.Write("page:https://shop.example/orders", "{\"name\":\"Gurpreet Singh, Amritsar\"}");
+                keeper.ReadCached("page:https://shop.example/", _ => busy.Wait(Short));
+                keeper.WriteCached("page:https://shop.example/orders", "{\"name\":\"Gurpreet Singh, Amritsar\"}");
 
                 Task<WipeReport> ending = keeper.EndAsync(() => { }, null, [], []);
                 await Task.Delay(100);
@@ -133,7 +133,7 @@ public sealed class SessionTests
                 _ = await ending.WaitAsync(Short);
                 await keeper.DrainAsync().WaitAsync(Short);
 
-                Assert.IsNull(kept.Read("page:https://shop.example/orders"), "a page of the person who left is on disk after sign-out");
+                Assert.IsNull(kept.ReadCached("page:https://shop.example/orders"), "a page of the person who left is on disk after sign-out");
             }
         }
         finally
@@ -466,7 +466,7 @@ public sealed class SessionTests
     }
 
     [TestMethod]
-    public async Task What_the_core_asks_to_be_thrown_away_goes_and_the_person_is_still_signed_in_at_the_next_start()
+    public async Task Emptying_the_page_cache_after_a_write_takes_the_pages_and_leaves_what_the_client_keeps_for_the_person()
     {
         string folder = Folder();
         try
@@ -474,28 +474,55 @@ public sealed class SessionTests
             (SessionKeeper keeper, CookieStore cookies, KeptStore kept, _) = Start(folder);
             using (keeper)
             {
+                // A person is signed in, has widened two columns of Orders, and a reminder waits for nine tomorrow. The core keeps a page.
                 cookies.Store("https://shop.example/", ["session=harpreet; Path=/; Max-Age=3600"], DateTimeOffset.UtcNow);
                 keeper.KeepCookies();
-                keeper.Write("page:https://shop.example/orders", "{\"name\":\"Harpreet Kaur, Ludhiana\"}");
+                keeper.Write("table-layout:orders", "{\"widths\":[240,180]}");
+                keeper.Write("pending-notifications", "[{\"id\":\"call-gurpreet\",\"at\":\"2026-11-17T09:00:00+05:30\"}]");
+                keeper.Write("snapshot", "{\"screens\":[\"/orders\"]}");
+                keeper.WriteCached("page:https://shop.example/orders", "{\"name\":\"Harpreet Kaur, Ludhiana\"}");
+                keeper.WriteCached("boot", "{\"app\":\"Charkha Supply Co.\"}");
                 await keeper.DrainAsync().WaitAsync(Short);
-                Expect.That(kept.Read(SessionKeeper.CookiesKey) is not null, "the cookie was on disk before the clear");
+                Expect.That(kept.ReadCached("page:https://shop.example/orders") is not null, "the page was in the cache before it was emptied");
 
-                // The app was updated, so the core asks for everything it kept to be thrown away. Nobody signed out, and no cookie changes afterwards.
-                keeper.ClearKept();
-                keeper.KeepCookies();
+                // The person saves an order: the core asks for its page cache to be emptied, as it does after every write.
+                keeper.ClearCache();
                 await keeper.DrainAsync().WaitAsync(Short);
 
-                Assert.IsNull(kept.Read("page:https://shop.example/orders"), "a page kept before the clear is still on disk");
-                Expect.That(
-                    kept.Read(SessionKeeper.CookiesKey)?.Contains("harpreet", StringComparison.Ordinal) == true,
-                    "the cookies of the person who is still signed in are not on disk after the clear");
+                Assert.IsNull(kept.ReadCached("page:https://shop.example/orders"), "a page is still in the cache after it was emptied");
+                Assert.IsNull(kept.ReadCached("boot"), "the shell is still in the cache after it was emptied");
+                Assert.AreEqual("{\"widths\":[240,180]}", kept.Read("table-layout:orders"), "the widths a person gave a table's columns went with the page cache");
+                Expect.That(kept.Read("pending-notifications")?.Contains("call-gurpreet", StringComparison.Ordinal) == true, "a reminder that waits went with the page cache");
+                Assert.AreEqual("{\"screens\":[\"/orders\"]}", kept.Read("snapshot"), "the snapshot went with the page cache");
+                Expect.That(kept.Read(SessionKeeper.CookiesKey)?.Contains("harpreet", StringComparison.Ordinal) == true, "the cookies went with the page cache");
+
+                // A key of the cache and a key of the client's own are two things, whatever they are called.
+                keeper.WriteCached("table-layout:orders", "what the core kept under the same words");
+                keeper.WriteCached(SessionKeeper.CookiesKey, "what the core kept under the cookies' key");
+                await keeper.DrainAsync().WaitAsync(Short);
+                Assert.AreEqual("{\"widths\":[240,180]}", kept.Read("table-layout:orders"), "a value of the cache took the place of the client's own");
+                Expect.That(kept.Read(SessionKeeper.CookiesKey)?.Contains("harpreet", StringComparison.Ordinal) == true, "a value of the cache took the place of the cookies");
+                Assert.AreEqual("what the core kept under the cookies' key", kept.ReadCached(SessionKeeper.CookiesKey));
             }
 
-            (SessionKeeper next, CookieStore nextCookies, _, bool finished) = Start(folder);
+            // The next start is signed in as before, and finds the widths and the reminder.
+            (SessionKeeper next, CookieStore nextCookies, KeptStore nextKept, bool finished) = Start(folder);
             using (next)
             {
-                Expect.That(!finished, "a clear the core asked for was taken for a sign-out");
+                Expect.That(!finished, "emptying the page cache was taken for a sign-out");
                 Assert.AreEqual("session=harpreet", nextCookies.Header("https://shop.example/", DateTimeOffset.UtcNow), "the next start came up signed out though nobody signed out");
+                Assert.AreEqual("{\"widths\":[240,180]}", nextKept.Read("table-layout:orders"));
+
+                // Signing out takes everything, the cache and what was kept for the person alike.
+                WipeReport report = await next.EndAsync(() => { }, () => Task.CompletedTask, [], []).WaitAsync(Short);
+                Expect.That(report.Complete, "the wipe finished");
+                foreach (string key in new[] { "table-layout:orders", "pending-notifications", "snapshot", SessionKeeper.CookiesKey })
+                {
+                    Assert.IsNull(nextKept.Read(key), key + " is still kept after signing out");
+                    Assert.IsNull(nextKept.ReadCached(key), key + " is still in the cache after signing out");
+                }
+
+                Assert.AreEqual(0, Directory.GetFiles(folder).Length, "files are left in the kept folder after signing out: " + string.Join(", ", Directory.GetFiles(folder).Select(Path.GetFileName)));
             }
         }
         finally
