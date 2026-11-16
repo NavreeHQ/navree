@@ -331,12 +331,13 @@ A name that two modules use is a warning between two modules of your app: an emb
 
 The names under a plugin's namespace are the plugin's, so the rule runs the other way too. Beside a plugin whose namespace is `chat`, the boot stops when a module of your app:
 
-- describes a permission under `chat` (`chat.export`), or has a route that requires one or checks a subject named there;
+- describes a permission under `chat` (`chat.export`);
+- has a route, or another handler (a mount, a message handler, a gRPC method, an MCP tool, resource or prompt, a GraphQL field), that requires a permission under `chat` that the plugin does not describe, or checks a subject under `chat` that is not registered as the plugin's;
 - registers a subject whose permission prefix starts with the word `chat`, or a subject of another crate named under `chat`;
 - authorizes a realtime channel whose first segment is `chat` (`chat.support`);
 - contributes a UI extension under `chat`.
 
-The plugin's policies and its channel authorizer decide the names under its namespace, so they would decide yours. Rename it in your app, or remove the plugin. [A namespace the app already uses](/docs/security/authorization/#a-namespace-the-app-already-uses) has the messages. Names under words no plugin holds, such as `crm.deals`, boot beside a plugin as before.
+The plugin's policies and its channel authorizer decide the names under its namespace, so they would decide yours. Name yours under another word in your app, or remove the plugin; each message says the ways out. [A namespace the app already uses](/docs/security/authorization/#a-namespace-the-app-already-uses) has the messages. Names under words no plugin holds, such as `crm.deals`, boot beside a plugin as before.
 
 Your app still decides what happens under a plugin's namespace in these ways:
 
@@ -344,7 +345,8 @@ Your app still decides what happens under a plugin's namespace in these ways:
 - a message of your own with a plugin's id wins over the plugin's;
 - your configuration sets the plugin's sections, and allows the sources its pages ask for;
 - your abilities function runs after a plugin's policies, so a `cannot` there overrides them;
-- a handler of yours may check a plugin's permission with `permitted`.
+- a route or another handler of yours may require a permission the plugin describes, and check a subject registered as the plugin's: you use the plugin's own name on purpose, and you grant it to your roles;
+- a handler of yours may check a plugin's permission in code, with `permitted`.
 
 ## The commands
 

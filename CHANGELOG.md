@@ -194,7 +194,8 @@ look at when you update:
 - A plugin that is not one of the framework's own packages grants nothing through the framework's
   registration APIs. A module that acts for it (one that names it, a module of its crate, or a
   generic module that only plugin modules import, such as the one `AccessModule::for_policy` makes;
-  a module passed as a reference or in a `Box` or a `Pin` is read as the type inside) stops the boot
+  a module passed as a reference or in a `Box` or a `Pin` is read as the type inside, and a trait
+  object as its trait) stops the boot
   when it registers a policy with a rule on a subject that is not the plugin's or on `all` (a rule
   that only a real user brings out is left out at every ability build and logged at
   `navree::security`); registers a subject named outside the plugin's namespace
@@ -206,16 +207,24 @@ look at when you update:
   authentication or Helm, or the app's shell; adds a layer for every request (a service with
   `MicroModule` and no `HttpModule` refuses it the same way, before the layer wraps a message
   handler); decides who works as staff in Helm; answers the app's errors with pages, an error shell
-  or an `m.map_error` of an error type of another crate; authorizes a realtime channel outside its
+  or an `m.map_error` of an error type of another crate (a service with `MicroModule` and no
+  `HttpModule` refuses that mapping too); authorizes a realtime channel outside its
   namespace, the namespace alone included; scopes a subject that is not its own to workspaces;
   registers a global scope or a model hook on a model of another crate; or registers a command
   named like one of the framework's own (`check`, `help`, `list`, `introspect`, `plugins`,
   `plugin:publish`, `--help` and `-h`). The app registers the plugin's piece from a module of its
-  own, and that line is the grant. The plugin's namespace is its own too: a plugin whose namespace
-  is the first word of a permission that a module of the app describes, of a permission or a
-  subject that a route of the app declares, or of the permission prefix of another module's
-  subject stops the boot, and so does a channel pattern of the app whose first segment is a
-  plugin's namespace, since the plugin's policies or authorizer would decide it. `automations` is a
+  own, and that line is the grant. The refusal of a plugin's audit sink says an app has one sink: a
+  plugin's is for an app that has no other, and cannot be used beside navree-audit's `AuditModule`.
+  The plugin's namespace is its own too. A plugin whose namespace is the first word of a permission
+  that a module of the app describes, or of the permission prefix of another module's subject,
+  stops the boot. Under a plugin's namespace a handler of the app (a route, a mount, a message
+  handler, a gRPC method, an MCP tool, resource or prompt, a GraphQL field) may require a
+  permission the plugin describes and check a subject registered as the plugin's; any other name
+  there stops the boot, in a service with `MicroModule` and no `HttpModule` too, and the text says
+  both ways out. What the app's routes require is read with the server's own options, so a second
+  provider of `HttpOptions` in the app does not leave them unread. A channel pattern of the app
+  whose first segment is a plugin's namespace stops the boot as well: the app names the channel
+  outside the namespace, or leaves it to the plugin's own pattern. `automations` is a
   reserved namespace. A module that acts for a plugin keeps its UI extensions, static files and
   island scripts under the plugin's namespace, and a module of the app takes `app` or a namespace
   that no plugin and no part of the framework keeps. Each refusal names the plugin, most name the
@@ -396,8 +405,10 @@ look at when you update:
   error mappings, realtime channels, workspace scopes, global scopes, model hooks and commands work
   for every module as before. An app that adds a plugin keeps its own registrations too, but one
   that uses the plugin's namespace as its first word stops the boot: a channel pattern, a
-  permission, a route's permission or subject, or a subject's permission prefix, such as
-  `chat.support` beside a plugin named `chat`. Rename it in the app, or remove the plugin.
+  permission the app describes, a subject's permission prefix, or a permission or subject of a
+  handler that the plugin does not describe or register, such as `chat.support` beside a plugin
+  named `chat`. Name it under another word in the app, use a name the plugin describes, or remove
+  the plugin.
 - `plugins` (and the `plugins` of `introspect --json`) lists, under a plugin, every module that
   acts for it: a module that names it, a module of its crate, and a generic module that only
   plugin modules import, such as the one `AccessModule::for_policy` makes for its policy.
