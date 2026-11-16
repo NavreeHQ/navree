@@ -112,20 +112,29 @@ function seal(b) {
 }
 
 /**
- * The bodies of `el`: the elements in it the morph keeps, where no other extension, island or kept
- * element lies between.
- * @param {Element} el @returns {Element[]}
+ * Whether the kept element `b` is a body of `el`: no other extension, island or kept element lies between.
+ * @param {Element} b @param {Element} el
  */
-const bodiesOf = (el) => [...all(el, "[data-ui-keep]")].filter((b) => E.closest.call(/** @type {Element} */ (up.call(b)), "[data-ui-ext],[data-ui-island],[data-ui-keep]") === el);
+const bodyOf = (b, el) => {
+  const parent = up.call(b);
+  return !!parent && has(b, "data-ui-keep") && E.closest.call(parent, "[data-ui-ext],[data-ui-island],[data-ui-keep]") === el;
+};
+
+/** The bodies of `el`, as it is now. @param {Element} el @returns {Element[]} */
+const bodiesOf = (el) => [...all(el, "[data-ui-keep]")].filter((b) => bodyOf(b, el));
 
 /**
  * What a script is given: helpers bound to its element, that end when it leaves.
- * @param {Element} el @param {string} src @param {AbortSignal} signal @param {Element[]} bodies
+ * @param {Element} el @param {string} src @param {AbortSignal} signal
  */
-function helpers(el, src, signal, bodies) {
+function helpers(el, src, signal) {
   const namespace = /** @type {string} */ (src.split("/").pop()).split(".")[0];
-  /** Whether the script may reach `node`: not stored content, or in one of its own bodies. @param {Element} node */
-  const ours = (node) => !stored(node) || bodies.includes(/** @type {Element} */ (E.closest.call(node, "[data-ui-stored],[data-ui-own]")));
+  /**
+   * Whether the script may reach `node`: not stored content, or in one of the bodies its element has now (a
+   * morph may have added one, or put one in place of another, since it mounted).
+   * @param {Element} node
+   */
+  const ours = (node) => !stored(node) || bodyOf(/** @type {Element} */ (E.closest.call(node, "[data-ui-stored],[data-ui-own]")), el);
   /**
    * The address `url` names, when this element's script may reach it: this origin, no user name or
    * password, and a path, as parsed, under one of the route prefixes the server wrote on the element, or
@@ -153,8 +162,11 @@ function helpers(el, src, signal, bodies) {
       for (let at = node instanceof Node && holds(el, node) ? node : null; at; at = at === el ? null : up.call(at)) if (at instanceof Element && E.matches.call(at, selector) && ours(at)) return at;
       return null;
     },
-    /** @param {Node} node */
-    stored: (node) => !ours(/** @type {Element} */ (node instanceof Element ? node : up.call(node))),
+    /** A text node is judged by its parent; what is no node, or a node in none, is no stored content. @param {Node} node */
+    stored(node) {
+      const at = node instanceof Element ? node : node instanceof Node ? up.call(node) : null;
+      return !!at && !ours(at);
+    },
     /** @param {EventTarget} target @param {string} type @param {(event: Event) => void} listener @param {AddEventListenerOptions | boolean} [options] */
     on(target, type, listener, options) {
       const given = { ...(typeof options === "object" ? options : { capture: !!options }) };
@@ -263,12 +275,12 @@ function renew(el, m, changed) {
 async function mount(el, at, props) {
   const src = address(at, "js");
   if (!src) return;
-  const stop = new AbortController(), bodies = bodiesOf(el);
+  const stop = new AbortController();
   /** @type {Mounted} */
   const m = { at, props, ready: false, stop, update: null, done: null };
   mounted.set(el, m);
   // Before anything of the script's runs, and for good: a script that fails leaves its bodies sealed.
-  bodies.forEach(seal);
+  bodiesOf(el).forEach(seal);
   unset(el, "data-ui-failed");
   let why = "could not be loaded";
   try {
@@ -279,7 +291,7 @@ async function mount(el, at, props) {
     if (why) throw why;
     why = "failed to mount";
     const given = m.props;
-    const back = await module.mount(el, parse(given), helpers(el, src, stop.signal, bodies));
+    const back = await module.mount(el, parse(given), helpers(el, src, stop.signal));
     const done = typeof back === "function" ? back : typeof back?.leave === "function" ? () => back.leave() : null;
     if (mounted.get(el) !== m) return done?.();
     m.done = done;
@@ -310,14 +322,19 @@ function leave(el) {
 /**
  * Mounts what is new, gives props to what has new ones or was morphed, and lets go of what left the page,
  * went into stored content, or names another script. Stored content and sealed bodies are never mounted:
- * `every` leaves them out.
+ * `every` leaves them out. A body a morph added to an element mounted or mounting, or put in place of
+ * another, is sealed here, before its script is given anything more.
  */
 function scan() {
   for (const [el, m] of mounted) if (!holds(document, el) || stored(el) || attr(el, "data-ui-ext") !== m.at) leave(el);
   for (const el of every("[data-ui-ext]:not([data-ui-island])")) {
     const m = mounted.get(el), props = attr(el, "data-ui-props") || "";
-    if (!m) mount(el, attr(el, "data-ui-ext"), props);
-    else if (m.props !== props || touched.has(el)) {
+    if (!m) {
+      mount(el, attr(el, "data-ui-ext"), props);
+      continue;
+    }
+    bodiesOf(el).forEach(seal);
+    if (m.props !== props || touched.has(el)) {
       const changed = m.props !== props;
       m.props = props;
       renew(el, m, changed);
