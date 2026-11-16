@@ -207,6 +207,19 @@ test("a field written into an owned body does not post with the surrounding form
   assert.deepEqual([...new FormData($("new-delivery"))], [["charge", "40"]]);
 });
 
+test("a form written into a body with the id the sealed fields name owns none of them", () => {
+  const written = $("vendor-body").querySelector("form[id=ui-sealed]");
+  assert.ok(written, "the library did not write its form");
+  // The page's first element with that id is the runtime's own, and it is no form.
+  assert.notEqual(document.getElementById("ui-sealed"), written);
+  assert.equal(document.getElementById("ui-sealed").nodeName === "FORM", false);
+  for (const id of ["vendor-search", "vendor-charge", "late-button"]) assert.equal($(id).form, null, id);
+  assert.deepEqual([...new FormData(written)], []);
+  page.submitted.length = 0;
+  $("vendor-search").click();
+  assert.deepEqual(page.submitted, [], "a written form sent the sealed fields");
+});
+
 test("a sealed body gets its mark back", async () => {
   // The library took it away on its timer.
   assert.ok($("vendor-late"), "the library's timer did not run");
