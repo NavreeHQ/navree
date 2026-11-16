@@ -316,7 +316,7 @@ pub(crate) fn trace_policy(
 }
 
 /// Every route of the app with its mounted path and metadata, modules in
-/// dependency order. Used by the `routes` command, navree-api and navree-access.
+/// dependency order. Used by the `routes` command and navree-api.
 pub async fn route_table(ctx: &AppContext) -> Result<Vec<RouteMeta>, BoxError> {
     let options = ctx
         .get::<HttpOptions>()

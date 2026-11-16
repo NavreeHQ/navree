@@ -814,7 +814,7 @@ async fn an_app_route_may_require_a_permission_the_plugin_describes() {
         .await
         .expect("a route of the app may require a permission the plugin describes");
     let (harpreet, meera) = (Uuid::now_v7(), Uuid::now_v7());
-    give_role(&app, harpreet, "notice-reader", &["announcements.read"]).await;
+    give_role(&app, harpreet, "munshi", &["announcements.read"]).await;
     board(&app, harpreet).await.assert_status(200);
     board(&app, meera).await.assert_status(403);
 
@@ -831,9 +831,8 @@ async fn an_app_route_may_require_a_permission_the_plugin_describes() {
     assert!(error.contains(&expected), "{error}");
 
     // A permission of the plugin beside one it does not describe: the second is still refused.
-    let both = BoardModule(|route| {
-        route.permissions(&["announcements.read", "announcements.archive"])
-    });
+    let both =
+        BoardModule(|route| route.permissions(&["announcements.read", "announcements.archive"]));
     let error = boot_error(builder().module(ANNOUNCEMENTS).module(both)).await;
     assert!(error.contains(&expected), "{error}");
 }
