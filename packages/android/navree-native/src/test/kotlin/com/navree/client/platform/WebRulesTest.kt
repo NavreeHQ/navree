@@ -93,7 +93,101 @@ class WebRulesTest {
         assertTrue("and takes out what the parser puts in after", script.contains("new MutationObserver") && script.contains("removeChild"))
         assertTrue("a failure of the check empties the document too", script.endsWith("catch(e){stop()}})();"))
         assertTrue("a document with no origin of its own is judged by its address", script.contains("o!=='null'") && script.contains("location.href"))
-        assertTrue("only a web address can pass", script.contains("if(s!=='http'&&s!=='https')return false"))
-        assertTrue("it is short: it holds up every load", script.length < 1_500)
+        assertTrue("only a web address can pass", script.contains("if(s!=='http:'&&s!=='https:')return false"))
+        assertTrue("it is short: it holds up every load", script.length < 2_400)
+    }
+
+    @Test
+    fun a_page_opens_a_socket_or_starts_a_worker_only_where_its_loads_may_go() {
+        val script = WebRules.documentScript(Origins("https://shop.example").documentOrigins())
+        for (kind in listOf("WebSocket", "WebSocketStream", "Worker", "SharedWorker")) assertTrue("$kind is checked", script.contains("wrap('$kind'"))
+        assertTrue("a refusal says what it is", script.contains("SecurityError"))
+        assertTrue("an address is judged as the page's loads are, so a blob: or data: address is refused", script.contains("if(!at(a))throw"))
+        assertTrue("the original is not reached through the instance's constructor", script.contains("C.prototype.constructor=N"))
+    }
+
+    @Test
+    fun the_real_constructor_gets_the_string_that_was_checked_and_never_the_pages_own_object() {
+        val script = WebRules.documentScript(Origins("https://shop.example").documentOrigins())
+        assertTrue("the page's object is made a string once: $script", script.contains("var x=S(u)"))
+        assertTrue("and the string, resolved against the document's real base, is what is checked", script.contains("K(U,[x,A(B,D,[])])"))
+        assertTrue("and what the constructor gets", script.contains("K(C,[x])") && script.contains("K(C,[x,cp(q,s)])"))
+        assertFalse("the object itself never goes to the constructor", script.contains("K(C,[u"))
+        assertFalse("nor do the options as the page made them", script.contains("K(C,[x,q])"))
+        assertTrue("options are copied field by field", script.contains("{name:q.name,type:q.type,credentials:q.credentials}"))
+        assertTrue("and protocols into an array of strings", script.contains("A(F,Y,[q,S])"))
+    }
+
+    @Test
+    fun what_the_check_calls_is_taken_before_any_script_of_the_page_runs() {
+        val script = WebRules.documentScript(Origins("https://shop.example").documentOrigins())
+        val taken = "var A=Reflect.apply,K=Reflect.construct,S=String,U=URL,E=DOMException,D=document,W=self,F=Array.from,Y=Array,"
+        assertTrue("the functions are taken once, at the start: $script", script.contains(taken))
+        for (getter in listOf("G(U.prototype,'href')", "G(U.prototype,'protocol')", "G(U.prototype,'hostname')", "G(U.prototype,'port')", "G(Node.prototype,'baseURI')")) {
+            assertTrue("$getter is taken at the start", script.contains(getter))
+        }
+        // What runs when a page's script calls a wrapper: the check, the copy of the options and the wrapper itself.
+        val called = listOf("var at=function(a){", "var cp=function(q,s){", "var N=function(u,q){").map { start ->
+            val from = script.indexOf(start)
+            assertTrue("$start is in the script", from >= 0)
+            script.substring(from, script.indexOf("};", from) + 2)
+        }
+        for (body in called) {
+            for (looked in listOf("String(", "new ", "URL(", ".replace(", ".slice(", ".indexOf(", ".endsWith(", ".startsWith(", "document.", "self.", "window.", "Reflect.", "Array.", ".call(", ".apply(", "DOMException")) {
+                assertFalse("\"$looked\" is looked up when a wrapper is called: $body", body.contains(looked))
+            }
+            assertFalse("a getter of the page's URL is read when a wrapper is called: $body", Regex("\\.(href|hostname|protocol|port)\\b").containsMatchIn(body))
+        }
+    }
+
+    @Test
+    fun a_failure_to_put_the_checks_in_empties_the_document() {
+        val script = WebRules.documentScript(Origins("https://shop.example").documentOrigins())
+        val wrappers = script.indexOf("wrap('WebSocket'")
+        val guarded = script.lastIndexOf("try{", wrappers)
+        val origin = script.indexOf("var o=W.origin")
+        val handler = script.indexOf("catch(e){stop()}")
+        assertTrue("the wrappers are made inside a try: $guarded $wrappers", wrappers > 0 && guarded in 0 until wrappers)
+        assertTrue("and before the origin is checked: $wrappers $origin", wrappers in 0 until origin)
+        assertTrue("whose handler empties the document, after both: $origin $handler", origin in 0 until handler)
+        assertFalse("one try holds the wrappers and the check", script.substring(guarded + 4, handler).contains("try{"))
+    }
+
+    @Test
+    fun a_service_workers_request_goes_only_where_a_pages_loads_do() {
+        assertEquals(WebRequest.Send, WebRules.workerRequest(ours = true, webHost = false))
+        assertEquals(WebRequest.Send, WebRules.workerRequest(ours = false, webHost = true))
+        assertEquals(WebRequest.Refuse, WebRules.workerRequest(ours = false, webHost = false))
+    }
+
+    @Test
+    fun a_web_page_is_shown_only_with_both_guards_in_force() {
+        assertTrue(WebRules.guardsInForce(workers = true, documents = true))
+        assertFalse("no rules for a service worker's requests", WebRules.guardsInForce(workers = false, documents = true))
+        assertFalse("no script at the start of a document", WebRules.guardsInForce(workers = true, documents = false))
+        assertFalse("neither", WebRules.guardsInForce(workers = false, documents = false))
+    }
+
+    @Test
+    fun what_is_missing_is_named_for_the_log() {
+        assertEquals(emptyList<String>(), WebRules.missingGuards(workers = true, documents = true))
+        val workers = WebRules.missingGuards(workers = false, documents = true)
+        assertEquals(1, workers.size)
+        assertTrue(workers.single(), workers.single().contains("service worker"))
+        val documents = WebRules.missingGuards(workers = true, documents = false)
+        assertEquals(1, documents.size)
+        assertTrue(documents.single(), documents.single().contains("start of every document"))
+        assertEquals("both are named, in one answer", 2, WebRules.missingGuards(workers = false, documents = false).size)
+        // A web view that still holds what an ended session's pages stored shows no page either, and says why.
+        assertFalse(WebRules.guardsInForce(workers = true, documents = true, clean = false))
+        val left = WebRules.missingGuards(workers = true, documents = true, clean = false)
+        assertEquals(1, left.size)
+        assertTrue(left.single(), "session that ended" in left.single())
+        assertEquals("all three are named, in one answer", 3, WebRules.missingGuards(workers = false, documents = false, clean = false).size)
+        // The page itself and what a frame is filled with are documents; a script, a picture and a fetch are not.
+        assertTrue(WebRules.document(mainFrame = true, accept = null))
+        assertTrue(WebRules.document(mainFrame = false, accept = "text/html,application/xhtml+xml,*/*;q=0.8"))
+        assertFalse(WebRules.document(mainFrame = false, accept = "image/avif,image/webp,*/*"))
+        assertFalse(WebRules.document(mainFrame = false, accept = null))
     }
 }

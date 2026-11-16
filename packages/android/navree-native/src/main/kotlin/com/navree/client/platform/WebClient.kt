@@ -1,6 +1,8 @@
 package com.navree.client.platform
 
 import android.graphics.Bitmap
+import android.webkit.ServiceWorkerClient
+import android.webkit.ServiceWorkerController
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -84,6 +86,30 @@ object WebRules {
         else -> WebRequest.Refuse
     }
 
+    /** Whether a service worker's own request is sent: only to the app's origins and the hosts it names for the web view. */
+    fun workerRequest(ours: Boolean, webHost: Boolean): WebRequest = if (ours || webHost) WebRequest.Send else WebRequest.Refuse
+
+    /**
+     * What a web page is missing before it may be shown: the rules for a service
+     * worker's requests, the script at the start of every document, and a web
+     * view that holds nothing of a session that ended ([clean]: [SiteWipe]). A
+     * page is shown only when nothing is missing ([guardsInForce]); where the
+     * system's web view is too old to take either guard, a web region is not
+     * shown at all and the rest of the app works. Each name says what is not
+     * there, for the log.
+     */
+    fun missingGuards(workers: Boolean, documents: Boolean, clean: Boolean = true): List<String> = buildList {
+        if (!workers) add("the rules for a service worker's requests are not in force")
+        if (!documents) add("the script at the start of every document is not in place")
+        if (!clean) add("what the pages of a session that ended stored in the web view is not gone yet")
+    }
+
+    /** Whether a web page may be shown: both guards are in force and nothing of an ended session is left to take away. */
+    fun guardsInForce(workers: Boolean, documents: Boolean, clean: Boolean = true): Boolean = missingGuards(workers, documents, clean).isEmpty()
+
+    /** Whether a request asks for a document: the page itself, or what a frame is filled with. */
+    fun document(mainFrame: Boolean, accept: String?): Boolean = mainFrame || asksForDocument(accept)
+
     /** Whether a page that has started loading in the main frame may be shown: only one of the app's origins. */
     fun shown(ours: Boolean, url: String?): Boolean = ours || url == null || url == "about:blank"
 
@@ -114,6 +140,24 @@ object WebRules {
      * just put in is prepared, so such a script is no longer in the document
      * and never runs; and the root element taken out if it is there already.
      * A failure of the check itself empties the document too.
+     *
+     * The same script puts a check in front of the page's own `WebSocket`,
+     * `WebSocketStream`, `Worker` and `SharedWorker`, which are not requests the
+     * web view's client is asked about: one is made only for an address on the
+     * [origins], the app's own and its web hosts' (so never from a `blob:` or
+     * `data:` address). What the page hands
+     * over is turned into a string once; that string, resolved against the
+     * document's real base, is what is checked, and it is what the real
+     * constructor gets, so an object whose conversion answers differently the
+     * second time gets nowhere. Everything the check calls is taken when the
+     * script starts, before any script of the page, and is called only through
+     * the saved `Reflect.apply` and `Reflect.construct`: a global, a method or a
+     * getter the page replaces afterwards is never used. It holds for the scripts
+     * of the document and of its frames that are given a document, not the empty
+     * first document of a frame the page makes and has not navigated, whose
+     * window the script never ran in. It does not reach into a worker: a script
+     * that already runs in a worker from one of the app's addresses opens what
+     * it likes, and so does a service worker.
      */
     fun documentScript(origins: List<Triple<String, String, Int>>): String {
         val rules = buildJsonArray {
@@ -133,11 +177,33 @@ object WebRules {
             ".observe(document,{childList:true,subtree:true})}catch(e){}" +
             "var d=document.documentElement;if(d)d.remove()}" +
             "var r=$rules;" +
-            "function at(a){var u=new URL(a),s=u.protocol.slice(0,-1);if(s!=='http'&&s!=='https')return false;" +
-            "var h=u.hostname,p=u.port?+u.port:(s==='http'?80:443);" +
-            "for(var i=0;i<r.length;i++){var x=r[i],n=x[1];if(x[0]===s&&x[2]===p&&(n===h||(n.indexOf('*.')===0&&h.length>n.length-1&&h.slice(1-n.length)===n.slice(1))))return true}" +
-            "return false}" +
-            "try{var o=self.origin;if(o!=='null'){if(!at(o))stop();return}" +
+            // Everything the check calls is taken here, before any script of the page runs, and kept in this
+            // closure; from then on it is called only through the saved Reflect.apply and Reflect.construct.
+            // Nothing is looked up when a page's script calls a wrapper, so a global, a prototype's method or a
+            // getter the page replaces afterwards is never what the check uses. The check and the wrappers are
+            // one `try`: a failure of either empties the document.
+            "try{var A=Reflect.apply,K=Reflect.construct,S=String,U=URL,E=DOMException,D=document,W=self,F=Array.from,Y=Array," +
+            "G=function(o,p){return Object.getOwnPropertyDescriptor(o,p).get}," +
+            "H=G(U.prototype,'href'),P=G(U.prototype,'protocol'),M=G(U.prototype,'hostname'),O=G(U.prototype,'port'),B=G(Node.prototype,'baseURI'),Z=S.prototype.endsWith;" +
+            "if(!H||!P||!M||!O||!B||!Z)throw 0;" +
+            "for(var i=0;i<r.length;i++){var n=r[i][1];r[i][3]=n.indexOf('*.')===0?n.slice(1):''}" +
+            "var at=function(a){var u=K(U,[a]),s=A(P,u,[]);if(s==='ws:')s='http:';else if(s==='wss:')s='https:';if(s!=='http:'&&s!=='https:')return false;" +
+            "var h=A(M,u,[]),p=A(O,u,[]);p=p===''?(s==='http:'?80:443):+p;" +
+            "for(var i=0;i<r.length;i++){var x=r[i];if(x[0]+':'===s&&x[2]===p&&(x[3]===''?x[1]===h:h.length>x[3].length&&A(Z,h,[x[3]])))return true}" +
+            "return false};" +
+            // Neither a socket nor a worker is a request the web view's client is asked about, and a
+            // document-start script does not run inside a worker: the page's own scripts may open a
+            // socket or start a worker only where its loads may go (never from a `blob:` or `data:`
+            // address). What the page hands over is turned into a string once, that string is resolved against
+            // the document's real base and checked, and it is what the real constructor gets; the options are
+            // copied into objects of the script's own.
+            "var cp=function(q,s){if(q===null||typeof q!=='object'&&typeof q!=='function')return s===1?S(q):q;if(s===1)return A(F,Y,[q,S]);" +
+            "if(s===2){var v=q.protocols;return{protocols:v===undefined?v:A(F,Y,[v,S]),signal:q.signal}}return{name:q.name,type:q.type,credentials:q.credentials}};" +
+            "var wrap=function(k,s){var C=W[k];if(!C)return;var N=function(u,q){var x=S(u),a=A(H,K(U,[x,A(B,D,[])]),[]);" +
+            "if(!at(a))throw K(E,['Not allowed','SecurityError']);return q===undefined?K(C,[x]):K(C,[x,cp(q,s)])};" +
+            "N.prototype=C.prototype;C.prototype.constructor=N;var c=['CONNECTING','OPEN','CLOSING','CLOSED'];for(var j=0;j<c.length;j++)if(c[j] in C)N[c[j]]=C[c[j]];W[k]=N};" +
+            "wrap('WebSocket',1);wrap('WebSocketStream',2);wrap('Worker');wrap('SharedWorker');" +
+            "var o=W.origin;if(o!=='null'){if(!at(o))stop();return}" +
             "var l=location.href;if(l.indexOf('about:')===0)return;if(!at(l))stop()}catch(e){stop()}})();"
     }
 
@@ -151,17 +217,154 @@ object WebRules {
  * by a redirect the web view's callbacks are never told of (a frame's, a
  * posted form's). Call before the first load. Where the system's web view
  * lacks the feature (`WebViewFeature.DOCUMENT_START_SCRIPT`), nothing is
- * added and the request checks of [OriginWebClient] are what holds. Answers
+ * added, and a web page is not shown without it ([WebRules.guardsInForce]).
+ * That is said once here in the log, and every time by the page. Answers
  * whether the script was added.
  */
-fun guardDocuments(view: WebView, origins: Origins): Boolean {
-    if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return false
+fun guardDocuments(view: WebView, origins: Origins): Boolean = guardDocuments(view, origins, ClientLog.told)
+
+internal fun guardDocuments(view: WebView, origins: Origins, told: Told): Boolean {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+        told.once(
+            "documents",
+            "this system's web view cannot run a script at the start of a document: a web page is not shown",
+        )
+        return false
+    }
     return try {
         WebViewCompat.addDocumentStartJavaScript(view, WebRules.documentScript(origins.documentOrigins()), setOf("*"))
         true
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        told.once("documents", "the script at the start of a document could not be added ($e): a web page is not shown")
         false
     }
+}
+
+/**
+ * Puts the origin rules on the requests of service workers too: a page of the
+ * app may register one, and its requests do not pass through the web view's
+ * client. A worker's request to any origin but the app's (and its named web
+ * hosts) is answered 403. The setting is the process's: other code that sets
+ * a client of its own replaces this one, and nothing tells. Throws when the
+ * system's web view cannot take it.
+ */
+internal fun setServiceWorkerRules(origins: Origins) {
+    ServiceWorkerController.getInstance().setServiceWorkerClient(
+        object : ServiceWorkerClient() {
+            override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
+                val url = request.url.toString()
+                return when (WebRules.workerRequest(origins.ours(url), origins.webHost(url))) {
+                    WebRequest.Send -> null
+                    else -> WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                }
+            }
+        },
+    )
+}
+
+/** [setServiceWorkerRules], answering whether it was made. */
+fun guardWorkers(origins: Origins): Boolean = try {
+    setServiceWorkerRules(origins)
+    true
+} catch (_: Throwable) {
+    false
+}
+
+/** What the client could not do, said once for each thing in the log: a web page made again does not say it again. */
+internal class Told(private val log: (String) -> Unit) {
+    private val said = HashSet<String>()
+
+    fun once(what: String, why: String) {
+        val first = synchronized(said) { said.add(what) }
+        if (first) log(why)
+    }
+
+    /** Forgets that [what] was said, so that a failure of it is told again. */
+    fun again(what: String) {
+        synchronized(said) { said.remove(what) }
+    }
+}
+
+internal object ClientLog {
+    val told = Told { say(it) }
+
+    /** A line in the log, every time it is asked for. */
+    fun say(text: String) {
+        android.util.Log.w("Navree", text)
+    }
+}
+
+/**
+ * The guard on service workers, as a state that can be tested: [make] sets the
+ * rules, and the guard counts as made only when it did. Every call of [ensure]
+ * until then tries again; a failure is told once, and so is a call before the
+ * guard was armed. A web page is not shown while it is not in force.
+ */
+internal class WorkerRules(private val make: (Origins) -> Unit, private val told: Told) {
+    private var origins: Origins? = null
+    private var made = false
+
+    /** Says which origins the guard is for; a guard made before is made again for them. */
+    fun arm(origins: Origins) {
+        this.origins = origins
+        made = false
+        told.again("workers")
+    }
+
+    /**
+     * Makes the guard when the main thread has nothing to do: [register] is the
+     * way to ask for that (a handler the main thread's queue calls when idle); the
+     * handler answers false, so it is not called again.
+     */
+    fun whenIdle(register: (() -> Boolean) -> Unit) {
+        register {
+            ensure()
+            false
+        }
+    }
+
+    /** Whether the rules are in force: made now if they are not yet. False when nothing was armed or the system's web view cannot take them. */
+    fun ensure(): Boolean {
+        val wanted = origins
+        if (wanted == null) {
+            told.once("workers-unarmed", "the guard on service workers was asked for before it was told which origins it is for: it is not in force")
+            return false
+        }
+        if (made) return true
+        try {
+            make(wanted)
+            made = true
+        } catch (e: Throwable) {
+            told.once("workers", "the rules for a service worker's requests could not be set ($e): a web page is not shown; every web page made tries again")
+        }
+        return made
+    }
+}
+
+/**
+ * The guard on service workers. Setting the service worker controller's
+ * client is a call into the web view's engine, and it is not made while the
+ * app starts: it is made on the main thread when the main thread is idle after
+ * the first screen is drawn, and in any case before a web view is made (a page
+ * cannot register a worker before it is in a web view). That moves this call
+ * only. The engine itself is started by the first native request, when the
+ * cookie jar ([WebViewCookies]) asks the web view's cookie store. Where the
+ * guard could not be made, each web page made tries again, and the first
+ * failure is in the log.
+ */
+object WorkerGuard {
+    private val rules = WorkerRules(::setServiceWorkerRules, ClientLog.told)
+
+    /** Says which origins the guard is for. Call on the main thread. */
+    fun arm(origins: Origins) = rules.arm(origins)
+
+    /** Makes the guard the next time the main thread has nothing to do. Call on the main thread. */
+    fun whenIdle() {
+        rules.whenIdle { handler -> android.os.Looper.myQueue().addIdleHandler { handler() } }
+    }
+
+    /** Makes the guard now if it is not made yet, and says whether it is in force. Call on the main thread. */
+    fun ensure(): Boolean = rules.ensure()
 }
 
 /**
@@ -200,7 +403,11 @@ open class OriginWebClient(
         val url = request.url.toString()
         val accept = request.requestHeaders?.entries?.firstOrNull { it.key.equals("accept", ignoreCase = true) }?.value
         return when (WebRules.request(origins.ours(url), origins.webHost(url), request.isForMainFrame, request.url.scheme?.lowercase(), accept)) {
-            WebRequest.Send -> null
+            WebRequest.Send -> {
+                // An origin a document is loaded from is one whose workers and caches go when the session ends.
+                if (WebRules.document(request.isForMainFrame, accept)) SiteWipe.saw(url)
+                null
+            }
             WebRequest.KeepPage -> empty(204, "No Content")
             WebRequest.Refuse -> empty(403, "Forbidden")
         }
