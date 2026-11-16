@@ -69,7 +69,7 @@ fn page() -> View {
 }
 ```
 
-A file of a plugin that is not under that plugin's namespace fails the boot. Two modules that give one name to two files with different bytes log a warning, and the first module's file is served. The boot fails instead when one of the two modules belongs to a plugin that is not one of the framework's own, or when a file under a namespace comes from a module that is not one of the framework's own plugins.
+A file of a plugin that is not under that plugin's namespace fails the boot, whether the module that contributes it names the plugin or is another module of the plugin's crate. Two modules that give one name to two files with different bytes log a warning, and the first module's file is served. The boot fails instead when one of the two modules acts for a plugin that is not one of the framework's own (it names the plugin, or is of its crate), or when a file under a namespace comes from a module that does not act for one of the framework's own plugins.
 
 ## Pictures
 

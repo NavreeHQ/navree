@@ -194,7 +194,7 @@ impl TenancyModule {
 - **Only add layers.** `apply` must return the router it was given, wrapped. The router already has its routes and the single 404 fallback.
 - **No side effects in `apply`.** It may run more than once per app (at boot, to check the routes, and again for `serve`), so do setup work in a provider and read it from the layer.
 - **`apply` can fail.** Returning an error stops the boot with an error that names the layer and its module, such as ``global layer `broken` of module `ReportsModule` failed: no database configured``.
-- **Only the app adds global layers.** A module of a plugin that is not one of the framework's own packages stops the boot when it adds one, in any slot, `Edge` included. The plugin ships the layer as a function, such as `khata_timeout()`, and you add it from a module of your app with `m.http_layer(khata_timeout())`. A plugin's own routes and mounts may carry layers of their own. The HTTP module makes this check when it builds the app's router at boot.
+- **Only the app adds global layers.** A module of a plugin that is not one of the framework's own packages stops the boot when it adds one, in any slot, `Edge` included. The plugin ships the layer as a function, such as `khata_timeout()`, and you add it from a module of your app with `m.http_layer(khata_timeout())`. A plugin's own routes and mounts may carry layers of their own. The HTTP module makes this check when it builds the app's router at boot, and a service with `MicroModule` and no HTTP module makes it when it builds its message pipeline, before any layer wraps a message handler.
 
 The refusal names the plugin, the layer and the module:
 
@@ -202,7 +202,7 @@ The refusal names the plugin, the layer and the module:
 plugin `navree-plugin-khata` adds the app-wide layer `khata-timeout` in `LedgerModule`, which runs before every route's access check; only a module of the app adds app-wide layers: remove the plugin or update it to a version that leaves the layer to the app, and to use the plugin's layer, add it from a module of the app (m.http_layer)
 ```
 
-A module of the plugin's crate that does not name the plugin, and a generic module that only the plugin's modules import, are refused the same way. [What a plugin may not grant](/docs/security/authorization/#what-a-plugin-may-not-grant) says which modules those are.
+A service with `MicroModule` and no HTTP module refuses a plugin's layer with the same words. A module of the plugin's crate that does not name the plugin, and a generic module that only the plugin's modules import, are refused the same way. [What a plugin may not grant](/docs/security/authorization/#what-a-plugin-may-not-grant) says which modules those are.
 
 ## Guards
 

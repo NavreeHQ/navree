@@ -257,6 +257,8 @@ fake.assert_not_fired::<Deal>(ModelEvent::Deleted);
 
 `fired()` lists every recorded event with its model and key, `keys::<M>(event)` the keys an event fired for, `assert_nothing_fired()` checks silence, and `clear()` starts over.
 
+The fake takes the place of the listeners of every model of the app, so a module of a plugin that is not one of the framework's own packages may not provide one: the boot stops with the refusal under [what only the app provides](/docs/security/authorization/#what-only-the-app-provides).
+
 <LinkCards>
   <LinkCard href="/docs/database/unit-of-work/" title="The unit of work">
     Transactions, after-commit hooks and change events.

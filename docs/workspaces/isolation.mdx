@@ -90,6 +90,12 @@ A plugin's model may not take the name of a subject that another module scopes e
 plugin `navree-plugin-notices` scopes the subject `Deal` to workspaces in `NoticesModule`, and `DealsModule` scopes another model under that name; a plugin scopes only a subject no other module scopes: remove the plugin or update it to a version that names its subject under its namespace, such as `notices.Deal`
 ```
 
+When the name is under the plugin's namespace (`notices.Notice`), it is the plugin's, and the module to change is the app's, so the text ends with that advice:
+
+```text wrap
+plugin `navree-plugin-notices` scopes the subject `notices.Notice` to workspaces in `NoticesModule`, and `AppNotices` scopes another model under that name; a plugin scopes only a subject no other module scopes: the names under `notices` are the plugin's, so name the subject of the model `AppNotices` scopes outside `notices.`, or remove the plugin
+```
+
 Your app scopes any model from a module of its own: `m.workspace_scoped::<notices::Notice>()` scopes a plugin's model. Between two modules of your app that scope one subject the first still decides, as before, and a model that both you and the plugin scope decides the same way in either order.
 
 ### Row-level security on PostgreSQL

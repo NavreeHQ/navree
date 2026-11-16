@@ -255,7 +255,7 @@ for (module, permission) in navree::contracts::permission_catalog(&ctx) {
 }
 ```
 
-A name is two or more lower-case words joined by `.`, each a letter followed by up to 63 letters, digits or `_` (`announcements.publish`, `announcements.notice_board.publish`). A plugin that is not one of the framework's own packages describes only permissions that start with its namespace and `.`, its own subjects (types of its crate) take permission prefixes inside its namespace (the namespace itself, or starting with it and `.`), and its namespace may not be the first word of the permission prefix of a subject from another crate (a plugin in the namespace `deals` next to the app's subject with the prefix `deals` stops the boot). A subject its modules register is named under its namespace too, as [Subjects a plugin registers](#subjects-a-plugin-registers) says. A name two modules describe is a warning, or a boot error when one of the two is such a plugin.
+A name is two or more lower-case words joined by `.`, each a letter followed by up to 63 letters, digits or `_` (`announcements.publish`, `announcements.notice_board.publish`). A plugin that is not one of the framework's own packages describes only permissions that start with its namespace and `.`. Every subject its modules register takes a permission prefix inside its namespace (the namespace itself, or starting with it and `.`), whatever crate the subject's type is in, and so does a subject whose type is of its crate, whichever module registers it. Its namespace may not be the first word of a permission or a subject that another module describes or declares (a plugin in the namespace `deals` next to the app's subject with the prefix `deals`, or next to the app's permission `deals.export`, stops the boot). A subject its modules register is named under its namespace too. [Subjects a plugin registers](#subjects-a-plugin-registers) and [A namespace the app already uses](#a-namespace-the-app-already-uses) have the texts. A name two modules describe is a warning, or a boot error when one of the two is such a plugin.
 
 The name, namespace and prefix checks and the check of a name two modules describe run in `AccessModule` at boot. Without `AccessModule`, nothing checks them and nothing reads the descriptions, but roles still hold what `workspace.roles.{role}.permissions` lists, and no route can require a permission.
 
@@ -283,8 +283,9 @@ A plugin may still describe its permissions, name its subjects and write rules o
 | Write a policy rule on a subject that is not the plugin's, or on `all` ([policies](#policies-a-plugin-registers)) | `m.import(AccessModule::for_policy::<khata::InvoicePolicy>())` |
 | Register a subject named outside its namespace ([subjects](#subjects-a-plugin-registers)) | `m.import(AccessModule::for_subject::<khata::Ledger>())` |
 | Configure a module of another crate, as `for_root(..)` or `from_config()` does ([configured modules](#modules-a-plugin-configures)) | `AccessModule::for_root(..)` in your app's root, with the plugin importing `AccessModule` |
-| Provide a permission check, the route authorizer, the authenticator, a sign-in strategy, or another provider that decides who may do what ([what only the app provides](#what-only-the-app-provides)) | `m.multi(khata::permission_check())`, `m.strategy::<khata::LedgerStrategy>()` |
+| Provide a permission check, the route authorizer, the authenticator, a sign-in strategy, the audit sink, a commit observer, the realtime backplane, or another provider that stands for the whole app ([what only the app provides](#what-only-the-app-provides)) | `m.multi(khata::permission_check())`, `m.strategy::<khata::LedgerStrategy>()` |
 | Add a layer that runs on every request ([rules for global layers](/docs/basics/middleware/#rules-for-global-layers)) | `m.http_layer(khata_timeout())` |
+| Answer the app's errors: error pages or an error shell, or the mapping of an error type of another crate ([mapping your own errors](/docs/basics/errors/#mapping-your-own-errors)) | `m.error_pages(khata::pages())`, `m.map_error::<tower::timeout::error::Elapsed>(khata::timed_out)` |
 | Decide who works as staff in the admin panel ([Helm](/docs/tools/helm/#workspaces)) | `m.helm_staff_workspaces(khata::may_enter)` |
 | Authorize a realtime channel outside its namespace ([channels](/docs/digging-deeper/broadcasting/#authorizing-channels)) | `m.channel("orders.{id}", notices::authorize)` |
 | Scope a subject that is not its own to workspaces ([data isolation](/docs/workspaces/isolation/#records-checked-by-route)) | `m.workspace_scoped::<notices::Notice>()` |
@@ -292,14 +293,14 @@ A plugin may still describe its permissions, name its subjects and write rules o
 | Hook a model of another crate ([observers](/docs/orm/events-and-observers/#observers)) | `m.on_model::<Deal, _>(ModelEvent::Saving, khata::stamp::<Deal>)` |
 | Register a command with the name of one of the framework's own ([built-in commands](/docs/digging-deeper/cli/#the-built-in-commands)) | Nothing: a module of your app may take the name |
 
-Each refusal names the plugin and the module. Most say what to do: register the piece from a module of your app, or remove the plugin or update it. The plugin's namespace has rules of its own too. Its permissions and the subjects its modules register are named under it, and every module of its crate keeps the UI extensions it contributes under it. A module of your app may contribute a UI extension under `app`, or under a namespace no plugin and no part of the framework keeps: under `ui`, `navree` or another word the framework keeps, the boot stops. [Shipping a component in a plugin](/docs/ui/your-own-components/#shipping-it-in-a-plugin-ui-extension-files) has the texts.
+Each refusal names the plugin, most name the module, and most say what to do: register the piece from a module of your app, or remove the plugin or update it. The plugin's namespace has rules of its own too. Its permissions and the subjects its modules register are named under it, and every module that acts for the plugin keeps the UI extensions, the static files and the island scripts it contributes under it. A module of your app may contribute a UI extension under `app`, or under a namespace no plugin and no part of the framework keeps: under `ui`, `navree` or another word the framework keeps, the boot stops. [Shipping a component in a plugin](/docs/ui/your-own-components/#shipping-it-in-a-plugin-ui-extension-files) has the texts. A plugin cannot take a word the framework keeps either, the first word of every permission the framework declares (`automations`, say) among them, and it cannot take a word your app already uses: see [a namespace the app already uses](#a-namespace-the-app-already-uses).
 
 #### Which modules act for a plugin
 
 The rules apply to a module that acts for a plugin that is not one of the framework's own packages. A module does when:
 
 - it names the plugin with `m.plugin(..)`;
-- it is in the crate the plugin names, whether or not it names the plugin: the framework reads the type of the module that the app or an importing module passed, and the type the module's id names. When the crates of two plugins both hold the type, the plugin with the longer crate name is the one, and between two plugins of one crate it is the one whose module your app lists first;
+- it is in the crate the plugin names, whether or not it names the plugin: the framework reads the type of the module that the app or an importing module passed, and the type the module's id names, and it reads a module passed as a reference or in a `Box` or a `Pin` as the type inside (`&'static Helper` is `Helper`). When the crates of two plugins both hold the type, the plugin with the longer crate name is the one, and between two plugins of one crate it is the one whose module your app lists first;
 - it is a generic module that only modules acting for plugins import, such as the module `AccessModule::for_policy::<P>()` makes for a plugin's policy. When a module of your app imports it too, it is yours.
 
 Every other module is a module of your app. `navree plugins` lists, under each plugin, every module that acts for it, which is the place to look when a refusal names a module you did not expect. The refusal of a configured module, a provider, a hook or a command says why a module that does not name the plugin acts for it, in brackets after the module:
@@ -317,10 +318,10 @@ A plugin's policy writes rules only on the plugin's own subjects: the names unde
 At boot, the framework calls the policy as each kind of user it knows of: a guest, a signed-in user with no role, one user for each role of the app (the built-in workspace roles `owner`, `admin`, `member` and `viewer`, each role named under `workspace.roles` or `workspace.organizations.roles` in the configuration, and the super-admin role), and a user with no role who holds every permission the plugin describes. A rule on another subject in any of those answers stops the boot, naming the policy, the module and the subject:
 
 ```text wrap
-plugin `navree-plugin-announcements` registers the policy `navree_plugin_announcements::Everyone` in `AccessPolicy<navree_plugin_announcements::Everyone>`, which writes a rule on `Post`; a plugin's policy writes rules on its own subjects only (register it from a module of the app to apply it to `Post`)
+plugin `navree-plugin-announcements` registers the policy `navree_plugin_announcements::Everyone` in `AccessPolicy<navree_plugin_announcements::Everyone>`, which writes a rule on `Post`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them, and to apply the policy to `Post`, register it from a module of the app (AccessModule::for_policy)
 ```
 
-A rule on `all` gets the same text without the part in brackets, since no subject is left to apply it to.
+A rule on `all` gets the same text without its last clause, the one about applying the policy, since no subject is left to apply it to.
 
 The boot cannot ask as every user. A role you create only in your database (`night-shift`, made with `access:role`) is one it does not know, and a policy can write a rule for it. So every ability build keeps only the rules of a plugin's policy on its own subjects, a guest's and a member's inside a workspace among them. The first rule left out for each policy and subject is logged at the target `navree::security`:
 
@@ -341,16 +342,24 @@ Each rule the policy keeps names the policy and the plugin as its `reason`, what
 A plugin names its subjects under its namespace, as it names its permissions: `announcements.Announcement` with the permission prefix `announcements`, for the namespace `announcements`. The namespace alone is a name too, and any other name is outside it. A subject named `Announcement`, or `all`, stops the boot:
 
 ```text wrap
-plugin `navree-plugin-announcements` registers the subject `Announcement` in `AccessSubject<navree_plugin_announcements::Announcement>`, a name outside its namespace; name it `announcements.Announcement`
+plugin `navree-plugin-announcements` registers the subject `Announcement` in `AccessSubject<navree_plugin_announcements::Announcement>`, a name outside its namespace `announcements`; a plugin's subjects are named under its namespace: remove the plugin or update it to a version that names them under `announcements.`, and to register `Announcement`, register it from a module of the app
 ```
 
-So no subject of a plugin shares a name with one of yours, or stands for everything. The rule runs the other way too: a module that is not the plugin's may not register a subject of another crate under the plugin's namespace.
+So no subject of a plugin shares a name with one of yours, or stands for everything.
+
+Every subject a plugin's module registers also takes a permission prefix under the namespace (the namespace itself, or the namespace, `.` and more), whatever crate its type is in: a type of a `-core` crate beside the plugin, or a `Box` of its own type, included. So does a subject whose type is of the plugin's crate, whichever module registers it. A prefix outside the namespace would make the permissions your app grants under that prefix check the plugin's subject:
 
 ```text wrap
-plugin `navree-plugin-announcements` uses the namespace `announcements`, under which `AccessSubject<crm::Ledger>` registers the subject `announcements.Ledger`; set another with plugin_info!(namespace = "..")
+plugin `navree-plugin-crm` registers the subject `crm.Pipeline` with the permission prefix `deals`, outside its namespace `crm`; the app's permissions under `deals` would check the plugin's subject: remove the plugin or update it to a version that keeps its permission prefixes under `crm`
 ```
 
-A subject of a plugin that keeps a name outside its namespace is one only your app registers, from a module of its own: `m.import(AccessModule::for_subject::<navree_plugin_announcements::Reports>())`.
+The rule runs the other way too: a module that is not the plugin's may not register a subject of another crate under the plugin's namespace.
+
+```text wrap
+plugin `navree-plugin-announcements` uses the namespace `announcements`, under which `AccessSubject<crm::Ledger>` registers the subject `announcements.Ledger`; the names under a plugin's namespace are its subjects: remove the plugin, or name the app's subject outside `announcements.`
+```
+
+A subject of a plugin that keeps a name outside its namespace is one only your app registers, from a module of its own, and its permission prefix stays under the namespace: `m.import(AccessModule::for_subject::<navree_plugin_announcements::Reports>())`.
 
 #### Modules a plugin configures
 
@@ -364,7 +373,7 @@ When your app configures the module too, in either order, this is the only refus
 
 #### What only the app provides
 
-A plugin's module may not register a provider that decides who may do what in the app, or sets the options of a module that does, whether as a value, a factory or a multi-binding, exported or not. Each refusal names the provider, the module and what the provider does:
+A plugin's module may not register a provider that decides who may do what in the app, that sets the options of a module that does, or that stands for the whole app in another way: its audit trail, its commits, its broadcasts, its clock. It may not register one as a value, a factory or a multi-binding, named or not, exported or not. Each refusal names the provider, the module and what the provider does:
 
 ```text wrap
 plugin `navree-plugin-guard` provides `dyn navree_contracts::permissions::PermissionCheck` in `Provides`, which answers the app's permission checks; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and to use the plugin's, register it from a module of the app
@@ -377,6 +386,7 @@ plugin `navree-plugin-guard` provides `dyn navree_contracts::permissions::Permis
 | `dyn Authenticator` | decides who a request is signed in as |
 | `dyn Strategy` | signs requests in |
 | `dyn WorkspaceGate` | decides who enters the app's workspaces |
+| `dyn AuditSink` | receives the app's audit records |
 | `AbilityFactory` | builds every user's abilities |
 | `AccessOptions` | sets the options of the app's access rules |
 | `AuthOptions` | sets the options of the app's sign-in |
@@ -386,20 +396,52 @@ plugin `navree-plugin-guard` provides `dyn navree_contracts::permissions::Permis
 | `dyn NativeShellPart` | says where the app's native clients sign in |
 | `dyn Clock` | sets the time the app's sessions, signed links and invitations expire by |
 | `dyn ChangeObserver` | sees, and can change, every write the app commits |
+| `dyn MongoChangeObserver` | sees, and can change, every MongoDB write the app commits |
+| `dyn Backplane` | carries every broadcast of the app's channels between its processes |
+| `ModelEventFake` | silences the listeners of every model of the app |
 
-A plugin ships the provider as a function, and your app registers it: `m.multi(khata::permission_check())` for a permission check, `m.strategy::<khata::LedgerStrategy>()` for a strategy. A plugin can still register a sign-in policy with `m.sign_in_policy::<P>()`, because a policy can only refuse a sign-in.
+A plugin ships the provider as a function, and your app registers it: `m.multi(khata::permission_check())` for a permission check, `m.strategy::<khata::LedgerStrategy>()` for a strategy. A plugin can still register a sign-in policy with `m.sign_in_policy::<P>()`, because a policy can only refuse a sign-in, and a backplane as a driver with `m.backplane(..)`, which selects it by name with `realtime.backplane` and is not a provider.
+
+#### A namespace the app already uses
+
+A plugin's policies write the rules on every name under its namespace, so they would decide who may use anything of your app that is named there. The boot refuses a plugin whose namespace is the first word of a name your app uses:
+
+- a permission that a module of your app describes;
+- a permission that a route of your app requires, or a subject that a route of your app checks (a permission prefix no subject registers stands for itself);
+- the permission prefix of a subject that a module of your app registers, and `all`.
+
+Each refusal names the plugin, the namespace and what it meets:
+
+```text wrap
+plugin `navree-plugin-khata` uses the namespace `khata`, the first word of the permission `khata.export` that `Khata` describes; a plugin's policies decide the names under its namespace, so they would decide who may use it: remove the plugin, or name it under another word in the app
+```
+
+```text wrap
+plugin `navree-plugin-reports` uses the namespace `reports`, the first word of the permission `reports.view` that the route `GET /reports/sales` of `PostsModule` requires; a plugin's policies decide the names under its namespace, so they would decide who may use it: remove the plugin, or name it under another word in the app
+```
+
+```text wrap
+plugin `navree-plugin-ledger` uses the namespace `ledger`, the first word of the subject `ledger` that the route `GET /ledger/summary` of `LedgerModule` checks; a plugin's policies decide the names under its namespace, so they would decide who may use it: remove the plugin, or name it under another word in the app
+```
+
+```text wrap
+plugin `navree-plugin-deals` uses the namespace `deals`, which is the permission prefix of `Deal` (`AccessSubject<crm::Deal>`); a plugin's policies decide the names under its namespace: remove the plugin, or give the app's subject a permission prefix under another word
+```
+
+The routes of your app are read once every controller is built, at the end of the boot, in an app that has the HTTP module. A route of a module that acts for the plugin is the plugin's own and is not refused, and a plugin may describe and require what it likes under its own namespace. To use a plugin's permission in a route of your own, check it in the handler with `permitted`, which no boot check reads. The same rule holds for realtime channels: see [Authorizing channels](/docs/digging-deeper/broadcasting/#authorizing-channels).
 
 #### What the plugin rules are, and are not
 
 The rules a plugin is held to, these and the others the boot checks, hold it to what it declares: what its modules register and what they name. They are not a sandbox. A crate linked into the app runs with the app's rights: its code can read the app's configuration, query its database and call other services as the app's own code can, whatever it registers. Add a plugin as you would add any other dependency, from a source you trust.
 
-Whether a plugin is one of the framework's own packages, which these rules leave alone, is decided by names. The plugin's name is that of one of the framework's own packages, the crate it names is that package's crate, its version is the framework's, and the type of every one of its modules is in that crate. The framework reads each module's type from the module itself when your app or an importing module passes it, so a crate cannot give a module another type. These are names, and a package can take them: one whose library is named like one of Navree's crates, at the framework's version, meets them all. The package's name and source matter as they do for any dependency.
+Whether a plugin is one of the framework's own packages, which these rules leave alone, is decided by names. The plugin's name is that of one of the framework's own packages, the crate it names is that package's crate, its version is the framework's, and the type of every one of its modules, read through a reference, a `Box` or a `Pin`, is in that crate. The framework reads each module's type from the module itself when your app or an importing module passes it, so a crate cannot give a module another type. These are names, and a package can take them: one whose library is named like one of Navree's crates, at the framework's version, meets them all. The package's name and source matter as they do for any dependency.
 
 What the rules leave alone:
 
 - A plugin's rules on its own subjects are its decision. Your abilities function can override them.
 - Code a plugin runs, its handlers, jobs and migrations, can call `AccessService` and the database as any code can, and what it writes, such as roles and grants, stays in your database when you take the plugin out. Its own routes declare their own access, and may be public.
 - A module of a third crate that names no plugin and is in no plugin's crate is a module of your app wherever it is imported, with what it registers. A generic module is yours only when a module of your app imports it.
+- The boot reads the permissions that modules describe and the permissions and subjects that your app's routes declare, against a plugin's namespace. It does not read a permission checked in code (`permitted`, a handler's own check), nor the permissions of mounts, MCP tools, gRPC methods and message handlers.
 - A plugin that goes around the registration APIs on purpose, with code of its own, is not stopped by a boot check.
 
 ### Managing roles in code

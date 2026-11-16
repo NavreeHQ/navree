@@ -143,7 +143,15 @@ A plugin that is not one of the framework's own packages authorizes only the cha
 channel pattern `users.{id}` of module `BoardModule`: plugin `navree-plugin-notice-board` authorizes channels under `notice_board.` only, and only a module of the app authorizes the app's other channels: remove the plugin or update it to a version that names its channels under `notice_board.`, and to use the plugin's authorizer for `users.{id}`, register it from a module of the app (m.channel)
 ```
 
-A pattern made only of parameters (`{scope}.{id}`), one that starts with the namespace and more letters (`notice_board_extra.{id}`) and one with the namespace after a parameter (`{board}.notice_board`) are all outside the namespace. To use a plugin's authoriser for one of your own channels, register it from a module of your app: `m.channel("orders.{id}", notices::authorize)`. The check reads where a plugin's pattern starts and does not look at your own patterns, so the first matching pattern still decides when two overlap. [What a plugin may not grant](/docs/security/authorization/#what-a-plugin-may-not-grant) says which modules count as a plugin's.
+A pattern made only of parameters (`{scope}.{id}`), one that starts with the namespace and more letters (`notice_board_extra.{id}`), one with the namespace after a parameter (`{board}.notice_board`) and the namespace alone (`notice_board`) are all outside the namespace. To use a plugin's authoriser for one of your own channels, register it from a module of your app: `m.channel("orders.{id}", notices::authorize)`.
+
+The channels under a plugin's namespace are the plugin's, so the rule runs the other way too. A pattern of a module that does not act for the plugin stops the boot when its first segment is the plugin's namespace, whatever the order of the modules, so the plugin's authoriser never decides a channel you named and yours never decides the plugin's (`chat.support` beside a plugin whose namespace is `chat`, or `chat` alone):
+
+```text wrap
+channel pattern `chat.support` of module `SupportDesk`: `chat` is the namespace of plugin `navree-plugin-chat`, whose authorizer would decide the channels named under it, and only the plugin's modules authorize channels there: name the app's channel under another word, or remove the plugin
+```
+
+Your own channels under words no plugin holds (`crm.deals`, `users.{id}`) boot beside a plugin as before. The check reads a first segment that is literal text, so a pattern that starts with a parameter is not read, and the first matching pattern still decides when two overlap. [What a plugin may not grant](/docs/security/authorization/#what-a-plugin-may-not-grant) says which modules count as a plugin's.
 
 It returns a `ChannelDecision`:
 
@@ -398,6 +406,8 @@ A backplane's name is a lower-case letter followed by up to 63 lower-case letter
 These fail the boot, naming `m.backplane` and the module that registered the name: a name that is not such a word, a built-in name (`none`, `redis`), a name equal to a key of `[realtime]` (`app_id`, `key`, `secret`, `allowed_origins`, `activity_timeout_secs`, `relay_url`, `backplane`, `streams`), and one name registered by two modules, even when another backplane is selected. So does `realtime.backplane` naming a backplane no module registers (the message lists the backplanes that are known), and a factory that returns an error. A factory's error is shown in the boot error as written, so it must not contain a secret from the driver's settings.
 
 `config:check` reports the same problems, in the same words, without booting the app, and `config:schema` lists the registered backplanes beside the built-in ones. An unnamed `dyn Backplane` an app provides with `override_value` still serves `realtime.backplane = "none"`, as before.
+
+A module of a plugin that is not one of the framework's own packages registers a backplane with `m.backplane`, as above, and the app selects it by name. It may not provide a `dyn Backplane` itself, named or not: with `realtime.backplane` set to `none` the app takes the backplane a module provides, so the plugin's would carry every broadcast of the app. The boot stops with the refusal under [what only the app provides](/docs/security/authorization/#what-only-the-app-provides), and the app registers the plugin's backplane from a module of its own.
 
 ## Client setup
 
