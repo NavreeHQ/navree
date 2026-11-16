@@ -48,6 +48,14 @@ public static class CardMoves
     }
 
     /// <summary>
+    /// Whether a move is offered for a row: only for a row that has an id, as the protocol says. A row with none cannot be named to the server
+    /// (two cards may read the same), so it is shown and stays where it is: no handle, no drag, no keys.
+    /// </summary>
+    /// <param name="rowId">The row's id, or null.</param>
+    /// <returns>Whether the row can be moved.</returns>
+    public static bool Offered(string? rowId) => !string.IsNullOrEmpty(rowId);
+
+    /// <summary>
     /// The card a drag over a lane moves, or none. A lane moves a card only for the drag of a card this app is showing: the card that was
     /// picked up is still on the screen, and when what is dragged carries a card's mark, it is that card's. Anything else dragged over a lane
     /// (words from another app, a file, a drag whose card has since left the screen) moves nothing.

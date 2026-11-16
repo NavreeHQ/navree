@@ -147,13 +147,20 @@ internal sealed partial class NodeRenderer
             }
         }
 
-        Button handle = HandleOf(row, rowId, listId);
+        // A move is offered only for a row that has an id (the protocol's rule): a card with none is shown, and has no handle and no drag,
+        // because it could not be told from another card that reads the same.
+        bool moves = CardMoves.Offered(row.Id);
         Grid grid = new() { ColumnSpacing = 4 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.Children.Add(content);
-        Grid.SetColumn(handle, 1);
-        grid.Children.Add(handle);
+        if (moves)
+        {
+            Button handle = HandleOf(row, rowId, listId);
+            ToolTipService.SetToolTip(handle, "Move this card: drag it, press Alt, Shift and an arrow key, or open the menu");
+            Grid.SetColumn(handle, 1);
+            grid.Children.Add(handle);
+        }
 
         Border card = new()
         {
@@ -163,10 +170,14 @@ internal sealed partial class NodeRenderer
             BorderThickness = new Thickness(1),
             Background = Look.Resource("CardBackgroundFillColorDefaultBrush"),
             BorderBrush = Look.Resource("CardStrokeColorDefaultBrush"),
-            CanDrag = true,
+            CanDrag = moves,
             Tag = rowId,
         };
-        ToolTipService.SetToolTip(handle, "Move this card: drag it, press Alt, Shift and an arrow key, or open the menu");
+        if (!moves)
+        {
+            return card;
+        }
+
         card.DragStarting += (_, e) =>
         {
             e.Data.RequestedOperation = DataPackageOperation.Move;

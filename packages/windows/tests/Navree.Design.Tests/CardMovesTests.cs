@@ -57,6 +57,16 @@ public sealed class CardMovesTests
     }
 
     [TestMethod]
+    public void A_move_is_offered_only_for_a_card_that_has_an_id()
+    {
+        Assert.IsTrue(CardMoves.Offered("card-7"));
+
+        // Two cards that read "Call client" and have no id cannot be told apart: neither is offered a move.
+        Assert.IsFalse(CardMoves.Offered(null));
+        Assert.IsFalse(CardMoves.Offered(string.Empty));
+    }
+
+    [TestMethod]
     public void A_lane_moves_a_card_only_for_the_drag_of_a_card_that_is_still_on_the_screen()
     {
         // A card is picked up and dragged over a lane: it is the card that moves, whether or not the drag says which card it is.
