@@ -96,11 +96,21 @@ public sealed class CoreClient : IDisposable
     /// <summary>Tells the core one thing that happened, and completes when it has been handled.</summary>
     /// <param name="eventJson">The event, as <see cref="Events"/> writes it.</param>
     /// <returns>What it came to.</returns>
-    public Task<Update> SendAsync(string eventJson)
+    public Task<Update> SendAsync(string eventJson) => SendAsync(eventJson, null);
+
+    /// <summary>
+    /// Tells the core one thing that happened, and completes when it has been handled. <paramref name="justBefore"/> runs on the core's own
+    /// thread at the moment the core is about to be told: after every update of what was told before has been handed on, and before the
+    /// update of this event is. So a caller can mark, in the core's own order, the point from which what the core says follows this event.
+    /// </summary>
+    /// <param name="eventJson">The event, as <see cref="Events"/> writes it.</param>
+    /// <param name="justBefore">Runs on the core's thread just before the core is told; not run when the client has ended.</param>
+    /// <returns>What it came to.</returns>
+    public Task<Update> SendAsync(string eventJson, Action? justBefore)
     {
         ArgumentNullException.ThrowIfNull(eventJson);
         TaskCompletionSource<Update> done = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        Queue(new SendWork(eventJson, done));
+        Queue(new SendWork(eventJson, done, justBefore));
         return done.Task;
     }
 
@@ -124,7 +134,7 @@ public sealed class CoreClient : IDisposable
 
     /// <summary>
     /// Ends the core after the work given before this call has been handled. What is asked after it, or arrives while the core is ending,
-    /// is never left waiting: <see cref="Send"/> is dropped, and <see cref="SendAsync"/>, <see cref="ReadAllAsync"/> and
+    /// is never left waiting: <see cref="Send"/> is dropped, and <see cref="SendAsync(string)"/>, <see cref="ReadAllAsync"/> and
     /// <see cref="SnapshotAsync"/> complete with <see cref="ObjectDisposedException"/>.
     /// </summary>
     public void Dispose()
@@ -430,7 +440,7 @@ public sealed class CoreClient : IDisposable
         }
     }
 
-    private sealed class SendWork(string eventJson, TaskCompletionSource<Update>? done) : Work
+    private sealed class SendWork(string eventJson, TaskCompletionSource<Update>? done, Action? justBefore = null) : Work
     {
         internal override void Abandon() => done?.TrySetException(new ObjectDisposedException(nameof(CoreClient)));
 
@@ -438,6 +448,7 @@ public sealed class CoreClient : IDisposable
         {
             try
             {
+                justBefore?.Invoke();
                 Update update = client.Handle(eventJson);
                 client.CarryOut(update);
                 done?.SetResult(update);

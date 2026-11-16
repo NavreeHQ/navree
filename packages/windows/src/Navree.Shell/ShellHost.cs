@@ -24,6 +24,7 @@ public sealed partial class ShellHost : IDisposable
     private readonly Dictionary<long, CancellationTokenSource> timers = [];
     private readonly Dictionary<long, CancellationTokenSource> streams = [];
     private readonly SessionKeeper session;
+    private readonly SessionGate asked = new();
     private readonly WebProfiles webProfiles;
     private readonly CancellationTokenSource stopped = new();
     private readonly EnvironmentWatcher environment;
@@ -231,14 +232,22 @@ public sealed partial class ShellHost : IDisposable
     private void OnProblem(string what) => dispatcher.TryEnqueue(() => Problem?.Invoke(what));
 
     // On the core's thread: the state is handed to the UI thread, and then each effect, in order.
-    // A window that cannot show the state, or an effect that fails, does not cost the rest of the update.
+    // A window that cannot show the state, or an effect that fails, does not cost the rest of the update. Each effect is marked here, as it is
+    // taken off the core, with the session it was asked in: what was asked for a person who has signed out by the time the UI thread gets
+    // round to it is not started and not kept (SessionGate).
     private void OnUpdate(Update update)
     {
+        long[] marks = asked.Asked(update.Effects);
+        int at = 0;
         dispatcher.TryEnqueue(() =>
             Delivery.Deliver(
                 update,
                 state => StateChanged?.Invoke(state),
-                effect => Run(effect, update.State),
+                effect =>
+                {
+                    long mark = marks[at++];
+                    Run(effect, update.State, mark);
+                },
                 what => Problem?.Invoke(what)));
     }
 
@@ -258,12 +267,18 @@ public sealed partial class ShellHost : IDisposable
         public bool GetResult() => queue.HasThreadAccess;
     }
 
-    private void Run(Effect effect, ViewState state)
+    private void Run(Effect effect, ViewState state, long mark)
     {
+        // What the core asked for a person who has signed out since, or asks for one who is signing out, is not started and not kept.
+        if (!asked.MayRun(effect, mark))
+        {
+            return;
+        }
+
         switch (effect)
         {
             case FetchEffect fetch:
-                _ = FetchAsync(fetch);
+                _ = FetchAsync(fetch, mark);
                 break;
             case CancelEffect cancel:
                 if (running.Remove(cancel.Request, out CancellationTokenSource? work))
@@ -311,7 +326,7 @@ public sealed partial class ShellHost : IDisposable
                 SystemClipboard.Put(copy.Text, copy.Sensitive);
                 break;
             case TimerEffect timer:
-                _ = TimerAsync(timer);
+                _ = TimerAsync(timer, mark);
                 break;
             case CancelTimerEffect cancelTimer:
                 if (timers.Remove(cancelTimer.Timer, out CancellationTokenSource? waiting))
@@ -324,7 +339,7 @@ public sealed partial class ShellHost : IDisposable
                 // With recorded answers there is no server to stream from: the stream stays opening, as one does that nobody answers.
                 if (network is not null)
                 {
-                    _ = StreamAsync(open);
+                    _ = StreamAsync(open, mark);
                 }
 
                 break;
@@ -353,7 +368,7 @@ public sealed partial class ShellHost : IDisposable
         }
     }
 
-    private async Task FetchAsync(FetchEffect fetch)
+    private async Task FetchAsync(FetchEffect fetch, long mark)
     {
         CancellationTokenSource work = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
         running[fetch.Request] = work;
@@ -374,7 +389,9 @@ public sealed partial class ShellHost : IDisposable
 
         running.Remove(fetch.Request);
         work.Dispose();
-        if (result is null || stopped.IsCancellationRequested)
+
+        // An answer to a request of a person who signed out meanwhile is told to nobody, and nothing of it is kept.
+        if (result is null || stopped.IsCancellationRequested || !asked.Live(mark))
         {
             return;
         }
@@ -388,7 +405,7 @@ public sealed partial class ShellHost : IDisposable
         session.KeepCookies();
     }
 
-    private async Task StreamAsync(StreamOpenEffect open)
+    private async Task StreamAsync(StreamOpenEffect open, long mark)
     {
         CancellationTokenSource work = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
         streams[open.Stream] = work;
@@ -426,8 +443,8 @@ public sealed partial class ShellHost : IDisposable
 
         work.Dispose();
 
-        // The core closed it itself (it is no longer listed) or the app is ending: nobody is told it ended.
-        if (streams.Remove(open.Stream) && !stopped.IsCancellationRequested)
+        // The core closed it itself (it is no longer listed), the person it was opened for signed out, or the app is ending: nobody is told it ended.
+        if (streams.Remove(open.Stream) && !stopped.IsCancellationRequested && asked.Live(mark))
         {
             client.Send(Events.StreamClosed(open.Stream, status));
         }
@@ -444,7 +461,7 @@ public sealed partial class ShellHost : IDisposable
         _ = await Windows.System.Launcher.LaunchUriAsync(address);
     }
 
-    private async Task TimerAsync(TimerEffect timer)
+    private async Task TimerAsync(TimerEffect timer, long mark)
     {
         CancellationTokenSource wait = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
         timers[timer.Timer] = wait;
@@ -465,7 +482,7 @@ public sealed partial class ShellHost : IDisposable
         }
 
         wait.Dispose();
-        if (ran)
+        if (ran && asked.Live(mark))
         {
             timers.Remove(timer.Timer);
             client.Send(Events.Timer(timer.Timer));
@@ -483,12 +500,15 @@ public sealed partial class ShellHost : IDisposable
             return;
         }
 
+        // From here on only what the core asks for whoever comes next is started or kept. When the client ends the session, the core is the
+        // leaving person's until it is told: the point is marked on the core's own thread, just before it is told.
+        asked.SessionIsEnding();
         WipeReport report;
         try
         {
             report = await session.EndAsync(
                 StopWork,
-                coreEnded ? null : () => client.SendAsync(Events.SignedOut),
+                coreEnded ? null : () => client.SendAsync(Events.SignedOut, asked.CoreIsToldTheSessionEnded),
                 [new WipeStep("what the web view keeps", EndWebAsync, OnUi)],
                 [.. new[]
                 {

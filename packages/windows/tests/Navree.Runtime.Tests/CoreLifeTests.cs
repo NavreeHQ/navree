@@ -116,4 +116,44 @@ public sealed class CoreLifeTests
             Expect.That(all.Where(work => work.IsFaulted).All(work => work.Exception!.InnerException is ObjectDisposedException), "work failed otherwise than as ended");
         }
     }
+
+    [TestMethod]
+    public async Task What_is_to_run_just_before_the_core_is_told_runs_on_the_cores_thread_after_the_updates_before_it_and_before_its_own()
+    {
+        List<string> order = [];
+        int updatesOn = 0;
+        using CoreClient client = new(
+            Config,
+            _ =>
+            {
+                lock (order)
+                {
+                    order.Add("update");
+                    updatesOn = Environment.CurrentManagedThreadId;
+                }
+            });
+
+        // The app starts; then the core is told one more thing, with a mark to be made just before it is told.
+        client.Send(Events.Start);
+        int markedOn = 0;
+        _ = await client.SendAsync(
+            Events.Background,
+            () =>
+            {
+                lock (order)
+                {
+                    order.Add("just before");
+                    markedOn = Environment.CurrentManagedThreadId;
+                }
+            }).WaitAsync(Short);
+
+        string[] seen;
+        lock (order)
+        {
+            seen = [.. order];
+        }
+
+        CollectionAssert.AreEqual(new[] { "update", "just before", "update" }, seen, "the mark was not made between the update before it and its own: " + string.Join(", ", seen));
+        Assert.AreEqual(updatesOn, markedOn, "the mark was made on another thread than the one the core's updates are handed on from");
+    }
 }
