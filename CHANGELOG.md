@@ -7,6 +7,12 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Fixed
+
+- A lazy region whose fetch failed stayed marked busy (`aria-busy="true"`), so a screen reader was
+  told to wait for content that was not coming. A region that fails now drops the mark as it shows
+  the failure.
+
 ## [1.2.4] - 2026-11-15
 
 ### Fixed
