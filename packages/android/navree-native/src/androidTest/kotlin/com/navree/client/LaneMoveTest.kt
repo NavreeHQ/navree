@@ -272,6 +272,8 @@ class LaneMoveTest {
         Shots.take("lane-dropped")
     }
 
+    private val NL = System.lineSeparator()
+
     /** What the window says of the focus and of the input mode, in words: the activity, the view that has the focus, the view that holds the composition. */
     private fun windowSays(): String {
         val activity = compose.activity
@@ -313,9 +315,7 @@ class LaneMoveTest {
             said += "after asking the handle for the focus (${asked ?: "no error"}): has it: ${focused(0)}, ${windowSays()}"
         }
         val node = handle(0).fetchSemanticsNode()
-        Shots.put("${Shots.device}-${Shots.look}-lane-keyboard-trace.txt", (said + trace).joinToString("
-") + "
-")
+        Shots.put("${Shots.device}-${Shots.look}-lane-keyboard-trace.txt", (said + trace).joinToString(NL) + NL)
         assertTrue(
             "the first card's handle has the focus by Tab alone (reached by Tab: $tabbed; the stops of Tab: $stops; now: ${stopNow()}; " +
                 "the handle says focused=${node.config.getOrNull(SemanticsProperties.Focused)} and can be asked for the focus: ${node.config.contains(SemanticsActions.RequestFocus)}; " +
