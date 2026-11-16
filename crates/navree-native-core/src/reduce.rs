@@ -73,6 +73,15 @@ pub(crate) fn header_safe(value: &str) -> String {
     out
 }
 
+/// Whether an answer got through to the app: one came, and it is not a 5xx
+/// or a 429, which are what a proxy or a gateway in front of the app answers
+/// while the app restarts or sheds load. The shell is asked for again after
+/// one that did not, and one that did not and names nobody says nothing of
+/// who is signed in.
+pub(crate) fn got_through(response: &Response) -> bool {
+    response.error.is_none() && response.status < 500 && response.status != 429
+}
+
 /// What an answer that asks for a newer app gives: its address only when it
 /// is a whole `https` address that reads. Any other is dropped, as if none had
 /// been given, and the app offers nothing to open.
@@ -2254,8 +2263,7 @@ impl Core {
         // A request of the app that got through, once it is dealt with, asks
         // for a shell that could not be fetched again (unless it was asked
         // for already).
-        let got_through =
-            response.error.is_none() && response.status < 500 && response.status != 429;
+        let got_through = got_through(&response);
         let not_the_shell = self
             .inner
             .pending
