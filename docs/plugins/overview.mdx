@@ -1,0 +1,492 @@
+---
+title: "Plugins"
+description: "What a plugin is, how to write one and add it to an app, what a plugin can ship, what the boot checks and refuses, and the commands that list a plugin and publish its files."
+---
+
+A plugin is a crate that adds a feature to a Navree app: routes, templates, translations, a driver, pages of the admin panel. Its code is one or more [modules](/docs/architecture/modules/), and a module names itself a plugin with one line, `m.plugin(navree::plugin_info!())`. The line gives the plugin a name, a version and a **namespace**: the word that what it adds to the app starts with. An app adds the crate as a dependency and the module to its modules.
+
+Naming a plugin grants nothing. It does two things. The `plugins` command lists the plugin and what each of its modules adds, and the boot checks what the plugin registers: a plugin keeps to its namespace and its own crate, and the pieces that stand for the whole app are yours to register.
+
+The examples on this page are an announcements plugin, `navree-plugin-announcements`, for the notices of an office in Ludhiana.
+
+## What a plugin says about itself
+
+`navree::plugin_info!()` reads the `Cargo.toml` of the crate that calls it:
+
+| It gives | From | Example |
+|---|---|---|
+| The name | `name` | `navree-plugin-announcements` |
+| The version | `version` | `1.0.0` |
+| The namespace | The name without a leading `navree-plugin-`, else without a leading `navree-`, with every `-` turned into `_` | `announcements` |
+| The description, homepage, repository and license | The keys of those names; an empty one is left out | `MIT OR Apache-2.0` |
+
+The macro takes two optional keys, in any order. `namespace = ".."` sets another namespace, and `title = ".."` sets a display name:
+
+```rust
+m.plugin(navree::plugin_info!(namespace = "notice_board", title = "Notice board"));
+```
+
+A namespace is a lower-case letter followed by up to 63 lower-case letters, digits or `_`. Any other namespace does not compile, and neither does a package whose name gives none: `acme-crm` gives `acme_crm`, but `navree-plugin-2fa` gives `2fa`, so that crate sets one with `namespace = ".."`.
+
+The namespace is what the plugin's names start with. For `announcements`:
+
+| What | Its name |
+|---|---|
+| A template | `announcements/list.html` |
+| A translated message | `announcements-title` |
+| A permission | `announcements.publish` |
+| A subject of the access rules | `announcements.Announcement` |
+| A configuration section | `[announcements]` |
+| A stylesheet, font, picture or island script | served as `announcements.banner` |
+| A realtime channel | `announcements.{id}` |
+| A template filter, test, function or global | `announcements_badge` |
+
+[What the boot checks](#what-the-boot-checks) has the rule for each.
+
+## Writing a plugin
+
+A plugin is a library crate that depends on `navree`. Create one:
+
+```sh
+cargo new --lib navree-plugin-announcements
+```
+
+Its `Cargo.toml` names the package and turns on the features of the modules the plugin uses. This one serves a route, so it needs `http`:
+
+```toml title="Cargo.toml"
+[package]
+name = "navree-plugin-announcements"
+version = "1.0.0"
+edition = "2024"
+description = "Notices for every member of a workspace, by Simran Kaur's team in Ludhiana."
+repository = "https://code.ludhiana.example/navree-plugin-announcements"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+navree = { version = "1.3", default-features = false, features = ["http"] }
+```
+
+The crate holds a controller and a module. The module names itself a plugin and registers the controller:
+
+```rust title="src/lib.rs"
+use navree::prelude::*;
+
+/// The notices of the office.
+#[injectable]
+pub struct NoticesController;
+
+#[controller("/announcements")]
+impl NoticesController {
+    /// `GET /api/announcements`
+    #[get("/")]
+    #[public]
+    async fn index(&self) -> Json<Vec<&'static str>> {
+        Json(vec![
+            "The Ludhiana office is closed on Friday.",
+            "Simran Kaur joins the Amritsar team on Monday.",
+        ])
+    }
+}
+
+/// The plugin's module: an app adds it to its modules.
+pub struct AnnouncementsModule;
+
+impl Module for AnnouncementsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(navree::plugin_info!(title = "Announcements"))
+            .controller::<NoticesController>();
+    }
+}
+```
+
+That is a whole plugin. Three things to know about it:
+
+- **The name comes from the crate.** `plugin_info!` reads the `Cargo.toml` above, so this plugin is `navree-plugin-announcements` 1.0.0 with the namespace `announcements`.
+- **Write the line in the plugin's own crate.** Call `m.plugin(..)` once in a module's `register`. Several modules of one crate may each call it with the same `plugin_info!(..)`, and are then one plugin. Every module of the crate acts for the plugin, also one that does not name it, so don't write the line in an app's own crate.
+- **A route says who may call it.** This one is `#[public]`. A plugin's routes declare their access as an app's do: see [access control](/docs/basics/access-control/).
+
+## Adding a plugin to an app
+
+An app adds a plugin in two steps. First the dependency:
+
+```sh
+cargo add navree-plugin-announcements
+```
+
+A plugin in your own repository is added by its path instead: `navree-plugin-announcements = { path = "../navree-plugin-announcements" }`.
+
+Then the module, where the app lists its modules:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+use navree_plugin_announcements::AnnouncementsModule;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(HttpModule::from_config())
+        .module(AnnouncementsModule)
+}
+```
+
+A module of your app that uses what the plugin exports imports it as it imports any module: `imports = [AnnouncementsModule]`.
+
+The app now answers `GET /api/announcements`, and `navree plugins` lists the plugin:
+
+```text
+announcements  navree-plugin-announcements 1.0.0  Announcements
+  AnnouncementsModule  navree_plugin_announcements::AnnouncementsModule
+    adds      1 ControllerRegistration
+```
+
+What a plugin brings beyond its code is yours to decide:
+
+- **Its settings.** A plugin reads its sections from your configuration, under its namespace. `navree config:publish --plugin announcements` writes a file for each section, with every key commented out beside its default.
+- **Its permissions.** A plugin describes its permissions, and describing one grants it to nobody. You grant them to roles, in `workspace.roles` or with `access:grant`. The roles that already hold every permission hold a plugin's too: see [who holds the permissions plugins describe](/docs/security/authorization/#who-holds-the-permissions-plugins-describe).
+- **The sources its pages load.** A plugin's component may ask for a host beyond your own origin, such as a map's tiles. Asking allows nothing: you allow it under `ui.policy.allow` and the plugin's namespace. See [the page policy](/docs/ui/page-policy/).
+- **The pieces only your app registers.** A layer for every request, a permission check, error pages and the like are shipped by the plugin and registered by a module of yours: see [what only your app registers](#what-only-your-app-registers).
+- **Its templates and translations.** To change them, copy them into your app with [`plugin:publish`](#publishing-a-plugins-files) and edit the copies.
+
+To take a plugin out, remove the module and the dependency. What the plugin wrote to your database stays, and so do the files you published.
+
+## What a plugin can ship
+
+A plugin's module is a module, so it registers what any module does: providers, controllers, migrations, jobs and event listeners, as [modules](/docs/architecture/modules/) describes. The methods a plugin uses most come with one more import, beside the prelude:
+
+```rust
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+```
+
+- **Templates.** `m.plugin_templates(navree::embed_templates!("views"))` embeds the crate's `views/` folder in the binary, under the namespace: `views/list.html` is the template `announcements/list.html`. A file of that name in the app's template folder wins. Needs the `view` feature. See [templates a plugin ships](/docs/digging-deeper/views/#templates-a-plugin-ships).
+- **Translations.** `m.locales(navree::embed_locales!("locales"))` adds the crate's Fluent files after the app's own. Each message id starts with the namespace (`announcements-title`), the app's own message of the same id wins, and the plugin needs no `i18n` feature. See [translations a plugin ships](/docs/packages/localization/#translations-a-plugin-ships).
+- **Static files.** An `AppSheet`, an `AppFont`, an `AppImage` or an island script built with `.namespace("announcements")` is served as `{namespace}.{name}`, so it never meets a file of the app's with the same name. See [files of a plugin](/docs/ui/app-styles/#files-of-a-plugin).
+- **Files for the app to keep.** A `Publishable` (in `navree::plugin`) holds other files (styles, images, scripts) under the tag `files`. A module contributes it with `m.contribute(..)`, and `plugin:publish` copies the files to `resources/<namespace>/`. See [publishing a plugin's files](#publishing-a-plugins-files).
+- **Configuration sections.** `m.config::<T>()` reads a typed section, keyed by the namespace (`announcements`) or below it (`announcements.digest`). Derive `ConfigSection`, so the configuration's commands know its keys. See [your own section](/docs/configuration/environments-and-files/#your-own-section).
+- **Permissions.** `m.permissions(&[Permission::new("announcements.publish", "Publish an announcement to the workspace")])` describes what the plugin's routes and links ask for. Each name starts with the namespace and a dot. See [describing permissions](/docs/security/authorization/#describing-permissions).
+- **Commands.** `m.command(CommandSpec::new(..))` adds a console command. A command name is one in the whole app, so start yours with the namespace (`announcements:prune`). See [writing commands](/docs/digging-deeper/cli/#writing-commands).
+- **Pages and resources of the admin panel.** `m.resource::<R>()` and `m.helm_page(..)` add a resource and a page to Helm, and `m.helm_nav(..)` and `m.helm_widget(..)` a link in its menu and a card on its dashboard. A plugin's page and card render an HTML template. See [Helm](/docs/tools/helm/#links-and-cards-from-other-modules).
+- **Sidebar links.** `m.nav_item(ShellNavItem::new("Announcements", "/announcements").permission("announcements.read"))` adds a link to the app's sidebar. A shell built with `Shell::contributed()` draws it, only for people who hold its permission. See [links other modules add](/docs/ui/app-shell/#links-other-modules-add).
+- **UI components of its own.** A `UiExtension` names a component's script and stylesheet under the namespace, a `FieldControl` is a form field with a server check of its own, and an island script built with `.namespace(..)` is a plugin's island. See [build your own component](/docs/ui/your-own-components/), [the browser contract](/docs/ui/extension-contract/) and [a plugin's island](/docs/ui/islands/#a-plugins-island).
+- **Access rules, channels and events.** A plugin registers subjects and policies named under its namespace, authorizes the realtime channels under `announcements.`, and emits telemetry events of its own. See [what a plugin may not grant](/docs/security/authorization/#what-a-plugin-may-not-grant), [authorizing channels](/docs/digging-deeper/broadcasting/#authorizing-channels) and [a custom event](/docs/digging-deeper/telemetry/#a-custom-event).
+- **Existing crates.** `ClientModule` makes a client crate a module, `FallibleLayer` wraps a tower layer whose service can fail, `m.mount(..)` serves a tower service under a path and `m.tonic_service(..)` serves a tonic server, behind the app's access checks. See [connecting an existing crate](/docs/plugins/existing-crates/).
+
+### Drivers
+
+A plugin registers a driver under a name of its own, and the app selects it by that name in its configuration, as it selects a built-in one. Each page says where the driver reads its own settings.
+
+| Driver | The plugin calls | The app sets | Read more |
+|---|---|---|---|
+| Cache store | `m.cache_store` | `cache.store` | [Cache](/docs/digging-deeper/cache/#a-store-a-module-registers) |
+| Queue store | `m.queue_store` | `queue.driver` | [Queues](/docs/digging-deeper/queues/#a-store-a-module-registers) |
+| Session store | `m.session_store` | `session.store` | [Sessions](/docs/basics/sessions-and-csrf/#a-store-a-module-registers) |
+| Realtime backplane | `m.backplane` | `realtime.backplane` | [Broadcasting](/docs/digging-deeper/broadcasting/#a-backplane-a-module-registers) |
+| Mail transport | `m.mail_transport` | `mail.transport` | [Mail](/docs/digging-deeper/mail/#a-transport-a-module-registers) |
+| Storage disk | `m.disk_driver` | `storage.disks.{disk}.driver` | [Storage](/docs/digging-deeper/storage/#a-driver-a-module-registers) |
+| SMS driver | `m.sms_driver` | `notify.sms.driver` | [Notification channels](/docs/digging-deeper/notification-channels/#a-driver-a-module-registers) |
+| WhatsApp driver | `m.whatsapp_driver` | `notify.whatsapp.driver` | [Notification channels](/docs/digging-deeper/notification-channels/#a-driver-a-module-registers) |
+| Search engine | `m.search_engine` | `search.engine` | [Search](/docs/packages/search/#an-engine-a-module-registers) |
+| AI provider | `m.ai_provider` | `ai.providers.{name}.driver` | [AI SDK](/docs/ai/ai-sdk/#a-provider-a-module-registers) |
+
+A notification channel is added with `m.notification_channel`, and a notification lists it with `Channel::named("..")`: see [a channel a module adds](/docs/digging-deeper/notification-channels/#a-channel-a-module-adds). A name that is not a lower-case letter followed by up to 63 lower-case letters, digits or `_`, a built-in name, and one name registered by two modules each fail the boot.
+
+### An example with files
+
+The announcements plugin grows a section, a template, a translation and a permission:
+
+<FileTree title="navree-plugin-announcements">{`
+Cargo.toml
+src/
+  lib.rs
+views/
+  list.html                # the template announcements/list.html
+locales/
+  en/
+    announcements.ftl      # announcements-title = Notices for Ludhiana
+`}</FileTree>
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1.3", default-features = false, features = ["http", "view"] }
+serde = { version = "1", features = ["derive"] }
+```
+
+```rust title="src/lib.rs"
+use navree::config::ConfigSection;
+use navree::plugin::Permission;
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use serde::Deserialize;
+
+/// The `announcements` section.
+#[derive(Clone, Debug, Default, Deserialize, ConfigSection)]
+#[config(key = "announcements")]
+#[serde(default)]
+pub struct AnnouncementsOptions {
+    /// Days a notice stays on the board; 0 keeps it for good.
+    pub keep_days: u32,
+}
+
+/// The plugin's module. `NoticesController` is the controller above.
+pub struct AnnouncementsModule;
+
+impl Module for AnnouncementsModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(navree::plugin_info!(title = "Announcements"))
+            .config::<AnnouncementsOptions>()
+            .plugin_templates(navree::embed_templates!("views"))
+            .locales(navree::embed_locales!("locales"))
+            .permissions(&[Permission::new(
+                "announcements.publish",
+                "Publish an announcement to the workspace",
+            )])
+            .controller::<NoticesController>();
+    }
+}
+```
+
+## What the boot checks
+
+The boot checks what every plugin registers, and stops with a message when a check fails. Each message names the plugin, most name the module, and most say what to do.
+
+The rules below hold for a plugin that is not one of the framework's own packages. A plugin of your own is not one of them. The boot decides by itself which plugins are the framework's own: there is no setting for it, and `plugins --json` shows the answer as `first_party`.
+
+A rule holds for every module that acts for the plugin: a module that names it, a module of its crate that does not, and a generic module that only the plugin's modules import. `plugins` lists them under the plugin. See [which modules act for a plugin](/docs/security/authorization/#which-modules-act-for-a-plugin).
+
+### The plugin itself
+
+- **One call.** A module that calls `m.plugin(..)` twice stops the boot.
+- **Its own crate.** A module names only the plugin of the crate it is written in. A module of another crate that names the plugin stops the boot. A [`ClientModule`](/docs/plugins/existing-crates/#a-client-crate-with-clientmodule) belongs to the crate of its options type.
+- **One version.** Two modules that give one plugin at two versions stop the boot, with the advice to depend on one version. Two modules that describe one plugin differently stop it too: give every module of a plugin the same `plugin_info!(..)`.
+- **A namespace the framework does not keep.** The framework keeps the first words of its own configuration sections and permissions, such as `app`, `auth`, `cache`, `http`, `mail`, `queue` and `ui`, a few words of its own, such as `navree` and `plugins`, two folders it reads, `layouts` and `fonts`, and the names no folder may have on Windows, such as `con` and `nul`.
+- **A namespace of its own.** Two plugins on one namespace stop the boot, and the message names both.
+- **Files a plugin may publish.** Only a module that names itself a plugin ships files to publish. Each file's path must be a safe relative path inside its folder: no `..`, no leading `/`, no `\`, no `:`, no name of a Windows device, no two paths that differ only in case, and no file that another path needs as its folder.
+
+A plugin whose package is `navree-plugin-mail` gets the namespace `mail`, which the framework keeps:
+
+```text wrap
+plugin `navree-plugin-mail` uses the namespace `mail`, which the framework keeps for itself; set another with plugin_info!(namespace = "..")
+```
+
+The kernel makes these checks from the module graph, so `check` and `plugins` report them without starting the app. It makes four of the checks below the same way: a configured module, a provider that stands for the whole app, a hook on a model and a command's name. The other checks run as the app boots, each in the module it belongs to. Without `AccessModule`, for one, nothing checks the permissions and subjects that modules describe.
+
+### What stays inside the namespace
+
+What a plugin's module registers by name is named under the plugin's namespace. For the namespace `announcements`:
+
+| A plugin's | Must be | Read more |
+|---|---|---|
+| Template (`m.plugin_templates`, `m.templates`) | `announcements/..`, or exactly the name of a template that a module it imports registers | [Views](/docs/digging-deeper/views/#templates-a-plugin-ships) |
+| Message id | `announcements-..`; a term is `-announcements-..` | [Localization](/docs/packages/localization/#translations-a-plugin-ships) |
+| Stylesheet, font, picture and island script | built with `.namespace("announcements")` | [App styles](/docs/ui/app-styles/#files-of-a-plugin) |
+| UI extension | `UiExtension::new("announcements", ..)` | [Your own components](/docs/ui/your-own-components/#shipping-it-in-a-plugin-ui-extension-files) |
+| Permission | `announcements.` and one or more words | [Authorization](/docs/security/authorization/#describing-permissions) |
+| Subject and its permission prefix | `announcements` or `announcements.` and a name, for both | [Authorization](/docs/security/authorization/#subjects-a-plugin-registers) |
+| Policy | rules on the plugin's own subjects only | [Authorization](/docs/security/authorization/#policies-a-plugin-registers) |
+| Realtime channel pattern | `announcements.` and more; the namespace alone is outside it | [Broadcasting](/docs/digging-deeper/broadcasting/#authorizing-channels) |
+| Template filter, test, function and global (`m.view_environment`) | `announcements_..`, and it changes nothing else of the environment | [Views](/docs/digging-deeper/views/#your-own-filters-and-functions) |
+| Document file (`m.document_files`) | `announcements/..`, or exactly the path of a file that a module it imports embeds | [Documents](/docs/packages/documents/#templates-in-modules) |
+| Page and card of the admin panel | an HTML template | [Helm](/docs/tools/helm/#custom-pages) |
+| Configuration section | `announcements`, or `announcements.` and more | [Configuration](/docs/getting-started/configuration/#typed-configuration-sections) |
+
+Each row but the last stops the boot. A configuration section a plugin reads outside its namespace is a warning at boot, and the section is still read.
+
+A policy is held to its own subjects in a second place too. The boot asks a policy what it writes for each kind of user it knows of. A rule on another subject that only some other user brings out, such as a rule for a role that exists only in your database, is left out when that user's abilities are built, and logged at `navree::security`.
+
+### What only your app registers
+
+Some registrations stand for the whole app. A plugin's module that makes one stops the boot. The plugin ships the piece as a function or a type instead, and a module of your app registers it. That line is the grant. Here an app adds the timeout that the ledger plugin of [connecting an existing crate](/docs/plugins/existing-crates/#tower-middleware) ships:
+
+```rust title="src/app.rs"
+use navree::prelude::*;
+
+/// A module of the app: it adds the ledger plugin's timeout to every request.
+pub struct AppModule;
+
+impl Module for AppModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.http_layer(navree_plugin_khata::khata_timeout());
+    }
+}
+```
+
+| A plugin's module may not | Read more |
+|---|---|
+| Configure a module of another crate (`for_root(..)`, `from_config()`). It imports the module plainly, and your app configures it | [Modules a plugin configures](/docs/security/authorization/#modules-a-plugin-configures) |
+| Provide what decides for the whole app: a permission check, the route authorizer, the authenticator, a sign-in strategy, the workspace gate, where native clients sign in, the clock, an observer of every commit, the audit sink, the realtime backplane as a provider, the fake that silences model listeners, the options of access, workspaces, sign-in or the admin panel, and the app's shell | [What only the app provides](/docs/security/authorization/#what-only-the-app-provides) |
+| Add a layer that runs on every request (`m.http_layer`) | [Rules for global layers](/docs/basics/middleware/#rules-for-global-layers) |
+| Answer the app's errors: error pages (`m.error_pages`), an `ErrorShell`, or `m.map_error` for an error type of another crate | [Mapping your own errors](/docs/basics/errors/#mapping-your-own-errors), [errors and states](/docs/ui/errors-and-states/#in-the-shell-or-on-its-own) |
+| Decide who works as staff in the admin panel (`m.helm_staff_workspaces`, `m.helm_staff_organizations`) | [Helm](/docs/tools/helm/#workspaces) |
+| Write a policy rule on a subject that is not its own, or on `all` | [Policies a plugin registers](/docs/security/authorization/#policies-a-plugin-registers) |
+| Scope a model of another crate to workspaces (`m.workspace_scoped`) | [Data isolation](/docs/workspaces/isolation/#records-checked-by-route) |
+| Register a global scope, an observer or a listener on a model of another crate | [Global scopes](/docs/orm/scopes-and-soft-deletes/#global-scopes), [observers](/docs/orm/events-and-observers/#observers) |
+| Replace a template or a document file of the app or of the framework | [Where templates live](/docs/digging-deeper/views/#where-templates-live), [documents](/docs/packages/documents/#templates-in-modules) |
+| Register a command named `check`, `help`, `list`, `introspect`, `plugins`, `plugin:publish`, `--help` or `-h` | [The built-in commands](/docs/digging-deeper/cli/#the-built-in-commands) |
+
+A plugin still serves its own routes and mounts, with layers of their own, maps the error types of its own crate, registers scopes and hooks on its own models, registers a backplane as a driver with `m.backplane`, and registers a sign-in policy, which can only refuse a sign-in.
+
+A name that two modules use is a warning between two modules of your app: an embedded template or a static file with different content, a job name, a configuration section read by two types, a permission described twice. When one of the two modules is a plugin's, the boot fails instead.
+
+### Your app and a plugin's namespace
+
+The names under a plugin's namespace are the plugin's, so the rule runs the other way too. Beside a plugin whose namespace is `chat`, the boot stops when a module of your app:
+
+- describes a permission under `chat` (`chat.export`), or has a route that requires one or checks a subject named there;
+- registers a subject whose permission prefix starts with the word `chat`, or a subject of another crate named under `chat`;
+- authorizes a realtime channel whose first segment is `chat` (`chat.support`);
+- contributes a UI extension under `chat`.
+
+The plugin's policies and its channel authorizer decide the names under its namespace, so they would decide yours. Rename it in your app, or remove the plugin. [A namespace the app already uses](/docs/security/authorization/#a-namespace-the-app-already-uses) has the messages. Names under words no plugin holds, such as `crm.deals`, boot beside a plugin as before.
+
+Your app still decides what happens under a plugin's namespace in these ways:
+
+- a file of a template's name in your template folder (`resources/views/chat/list.html`) wins over the plugin's template;
+- a message of your own with a plugin's id wins over the plugin's;
+- your configuration sets the plugin's sections, and allows the sources its pages ask for;
+- your abilities function runs after a plugin's policies, so a `cannot` there overrides them;
+- a handler of yours may check a plugin's permission with `permitted`.
+
+## The commands
+
+Two built-in commands work with plugins. Neither starts the app. Through the CLI they are `navree plugins` and `navree plugin:publish`; without it, `cargo run -- plugins`. When a module of your app registers a command of one of these names, that command runs instead.
+
+### Listing plugins
+
+`plugins` prints every plugin of the app and what each of its modules adds. For the example with files:
+
+```sh
+navree plugins
+```
+
+```text
+announcements  navree-plugin-announcements 1.0.0  Announcements
+  AnnouncementsModule  navree_plugin_announcements::AnnouncementsModule
+    adds      1 ControllerRegistration, 1 EmbeddedLocales, 1 EmbeddedTemplates, 1 Permissions, 2 Publishable, 1 SectionRegistration
+    publishes 1 views, 1 locales
+```
+
+A plugin's first line is its namespace, its name and version, and its title when it has one. Then each module that acts for it follows, with its type. `commands` lists the commands the module registers, `adds` counts what it contributes by type, and `publishes` counts the files it ships for `plugin:publish`; a line with nothing to say is left out. With no plugin, the command prints `No plugins: no module of this app calls m.plugin(..).`
+
+`plugins --json` prints the same as one line of JSON, for tools. Here it is on several lines:
+
+```json
+{
+  "navree": "1.3.0",
+  "plugins": [
+    {
+      "name": "navree-plugin-announcements",
+      "namespace": "announcements",
+      "version": "1.0.0",
+      "title": "Announcements",
+      "description": "Notices for every member of a workspace, by Simran Kaur's team in Ludhiana.",
+      "homepage": null,
+      "repository": "https://code.ludhiana.example/navree-plugin-announcements",
+      "license": "MIT OR Apache-2.0",
+      "first_party": false,
+      "modules": [
+        {
+          "name": "AnnouncementsModule",
+          "type": "navree_plugin_announcements::AnnouncementsModule",
+          "commands": [],
+          "contributions": {
+            "navree_config::registry::SectionRegistration": 1,
+            "navree_contracts::locales::EmbeddedLocales": 1,
+            "navree_contracts::permissions::Permissions": 1,
+            "navree_http::controller::ControllerRegistration": 1,
+            "navree_kernel::plugin::Publishable": 2,
+            "navree_view::module::EmbeddedTemplates": 1
+          },
+          "publishable": { "views": 1, "locales": 1 }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Read the keys by name. `type` and the keys of `contributions` are Rust type names: read them, don't match on them. `introspect --json` carries the same list under `plugins`.
+
+When the checks refuse the app, `plugins` prints the listing first and then the refusals, so you can see which module acts for which plugin. In code, `Navree::app().module(..).plugin_report()` returns the same report without booting, and `ctx.plugins()` returns it in a running app.
+
+### Publishing a plugin's files
+
+`plugin:publish <plugin>` copies what a plugin ships into your app's folders, so you can edit the copies. `<plugin>` is the plugin's namespace or its name. Run it from the app's folder:
+
+```sh
+navree plugin:publish announcements
+```
+
+```text
+wrote config/announcements.toml
+locales/en/announcements/announcements.ftl: written
+resources/views/announcements/list.html: written
+```
+
+| Tag | What is copied | Where |
+|---|---|---|
+| `views` | The plugin's templates | `resources/views/<namespace>/` |
+| `locales` | Its translations | `locales/<locale>/<namespace>/` |
+| `files` | Its other files | `resources/<namespace>/` |
+| `config` | Its configuration sections, every key commented out beside its default | `config/<section>.toml` |
+
+| Option | What it does |
+|---|---|
+| `--tag <tag>` | Publishes one tag: `views`, `locales`, `files` or `config`. Without it, all four. |
+| `--dry-run` | Writes nothing and says what a run would do with each file. |
+| `--force` | Replaces a file that exists. Without it, an existing file is kept, and the line says so. |
+
+A dry run of the same plugin, before anything is published:
+
+```sh
+navree plugin:publish announcements --dry-run
+```
+
+```text
+locales/en/announcements/announcements.ftl: would be written
+resources/views/announcements/list.html: would be written
+config: would run config:publish --plugin announcements
+Nothing was written (--dry-run).
+```
+
+The `config` tag runs the app's `config:publish --plugin <namespace>`, so it needs `ConfigModule`; without it the command says that no section is published. A section is published when it describes its keys, as a derived `ConfigSection` does.
+
+The command checks every file before it writes one, so a refusal leaves nothing written. It refuses, also with `--force`:
+
+- a path that is not a safe relative path;
+- two paths that are one file on a disk that ignores case, and a path that another needs as its folder;
+- a folder on the way to a file that is a file, a symbolic link or inside one;
+- a place for a file that holds a symbolic link or a folder.
+
+A file is written beside its place and renamed over it, so an existing file is never written through. An unknown plugin, an unknown tag and an argument the command does not know are errors too, and the first lists the plugins of the app.
+
+A published template or translation is a file of your app, so it wins over the plugin's. The files go below the app's folder whatever `view.dirs` and `i18n.dir` say. With `view.dirs` moved, copy the templates into your first template folder yourself. With `i18n.dir` moved, use `i18n:publish`, below.
+
+### Configuration and translations alone
+
+Two commands of the framework's modules publish one kind each:
+
+| Command | Module | What it does |
+|---|---|---|
+| `config:publish --plugin <namespace> [--force]` | `ConfigModule` | Writes `config/<section>.toml` for every section the plugin's modules register. It takes the namespace, not the plugin's name. See [a file per section](/docs/configuration/environments-and-files/#a-file-per-section). |
+| `i18n:publish <plugin> [--force]` | `I18nModule` | Copies the plugin's translations into `i18n.dir`, as `<locale>/<namespace>/`, for each locale of `i18n.locales`. See [translations a plugin ships](/docs/packages/localization/#translations-a-plugin-ships). |
+
+Both write through the same checked writer as `plugin:publish`, and keep a file that exists unless you pass `--force`.
+
+## Plugins and trust
+
+The rules on this page are checks at boot. They keep an honest plugin inside its namespace, and they tell you what each plugin adds to your app: in the `plugins` listing, in the boot's refusals and in its log. They are not a sandbox. A plugin is Rust code compiled into your app, and it runs in the app's process with the app's rights: it can read the configuration, query the database and call other services as your own code can, whatever it registers. So add a plugin as you add any dependency, from a source you trust, and read what `plugins` lists before you ship it.
+
+<LinkCards>
+  <LinkCard href="/docs/plugins/existing-crates/" title="Connecting an existing crate">
+    A client crate, a tower layer, a tower service and a tonic server inside an app.
+  </LinkCard>
+  <LinkCard href="/docs/security/authorization/#what-a-plugin-may-not-grant" title="What a plugin may not grant">
+    The texts of the refusals, and which modules act for a plugin.
+  </LinkCard>
+  <LinkCard href="/docs/ui/your-own-components/" title="Build your own component">
+    A component, a form field and an inline editor a plugin ships.
+  </LinkCard>
+  <LinkCard href="/docs/architecture/modules/" title="Modules">
+    Imports, exports, providers and the module graph.
+  </LinkCard>
+</LinkCards>
