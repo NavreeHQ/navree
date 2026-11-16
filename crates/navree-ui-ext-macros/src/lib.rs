@@ -89,7 +89,9 @@ pub fn extension_script(input: TokenStream) -> TokenStream {
 ///   copy a name from the element around the component, is refused;
 /// - the `all` shorthand set to anything but `initial`, `unset` or `revert`;
 /// - an address that is not a `data:` URL, in `url()`, `src()`, `image()` and `image-set()`: ship a
-///   picture as an `AppImage` and pass its address instead;
+///   picture as an `AppImage` and pass its address instead. A `url()` may name an element of the
+///   page by an id under the namespace, `url(#geo--glow)`, as a filter or a clip path names an
+///   SVG element the component draws; a `url(#..)` that names any other id is refused;
 /// - blocks that do not balance, and anything that would be read differently once it is served.
 ///
 /// A selector whose whole first compound is `:root`, that writes no `&` and is not inside another
@@ -1147,6 +1149,50 @@ mod tests {
             "@font-face{src:url(https://a.example/f.woff2)}",
             "@font-face{src:local(Arial),url(f.woff2) format(\"woff2\")}",
             ".a{b:c(d(e(url(x.png))))}",
+        ] {
+            assert_eq!(refused(source), at(1, URL_TEXT), "{source}");
+        }
+    }
+
+    #[test]
+    fn a_url_names_an_element_of_the_page_only_by_an_id_under_the_namespace() {
+        for source in [
+            ".a{filter:url(#geo--glow)}",
+            ".a{clip-path:url(\"#geo--clip\")}",
+            ".a{mask:url( '#geo--mask_2' )}",
+            ".a{fill:url(#geo--Shade) red}",
+            ".a{--paint:url(#geo--paint)}",
+            "@supports (filter:url(#geo--glow)){.a{filter:url(#geo--glow)}}",
+        ] {
+            assert!(scope(source).is_ok(), "{source}");
+        }
+        let fragment_refusal = |fragment: &str| {
+            at(
+                1,
+                &format!(
+                    "url(#{fragment}) names an id outside the namespace: a plugin's sheet names an element of its own as url(#geo--\u{2026})"
+                ),
+            )
+        };
+        for (source, fragment) in [
+            (".a{filter:url(#f)}", "f"),
+            (".a{filter:url(\"#f\")}", "f"),
+            (".a{filter:url(#)}", ""),
+            (".a{filter:url(#geo--)}", "geo--"),
+            (".a{filter:url(#geo-glow)}", "geo-glow"),
+            (".a{filter:url(#other--glow)}", "other--glow"),
+            (".a{filter:url(#GEO--glow)}", "GEO--glow"),
+            (".a{filter:url(\"#geo--a b\")}", "geo--a b"),
+            (".a{behavior:url(#default#VML)}", "default#VML"),
+            (".a{--paint:url(#app--paint)}", "app--paint"),
+        ] {
+            assert_eq!(refused(source), fragment_refusal(fragment), "{source}");
+        }
+        // Only `url()` names an element: anywhere else an address is a data: URL.
+        for source in [
+            ".a{background:src(\"#geo--glow\")}",
+            ".a{background:image-set(\"#geo--glow\" 1x)}",
+            ".a{filter:url(geo--glow)}",
         ] {
             assert_eq!(refused(source), at(1, URL_TEXT), "{source}");
         }

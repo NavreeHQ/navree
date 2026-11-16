@@ -220,7 +220,7 @@ The build holds the sheet to these rules:
   - A selector that can style outside the component. A selector that writes no `&` is read as if the rule's own `&` and a descendant combinator stood in front of it. `&` must then appear exactly once, never inside `:is()`, `:where()`, `:not()`, `:has()`, `:nth-child(… of …)` or any other function, and the compound that holds it may not be followed by `+` or `~`. What comes before `&` is allowed (`.dark &`, `body.ltr & .x`, `:root:not([data-ui-js]) &`).
   - A global name outside the namespace: the name of a hoisted rule or of a layer, and the values of `anchor-name`, `position-anchor`, `view-transition-name`, `scroll-timeline-name`, `view-timeline-name`, `timeline-scope` and `anchor-scope`. These properties also take `none`, `auto`, `match-element`, `initial`, `unset`, `revert` and `revert-layer`, and the last two take `all`. They don't take `inherit`, which would copy a name from the element around the component.
   - The `all` shorthand set to anything but `initial`, `unset` or `revert`, since it sets those properties too.
-  - An address that is not a `data:` address, in `url()`, `src()`, `image()` and `image-set()`. A relative address would resolve under the extension route, where no picture is served. Remove a vendor sheet's relative pictures or inline them as `data:` addresses, and ship the app's pictures as an `AppImage`.
+  - An address that is not a `data:` address, in `url()`, `src()`, `image()` and `image-set()`. A relative address would resolve under the extension route, where no picture is served. Remove a vendor sheet's relative pictures or inline them as `data:` addresses, and ship the app's pictures as an `AppImage`. A `url()` may name an element of the page by its id when the id is under the namespace, `url(#app--glow)`, as a filter or a clip path names an SVG element the component draws; a `url(#..)` that names any other id is refused.
   - Blocks that don't balance, and anything that would be read differently once it is served.
 - **Kept inside the scope:** `@media`, `@supports`, `@container`, `@starting-style` and `@layer` blocks.
 - **Hoisted to the top level, in source order:** `@keyframes`, `@property`, `@font-face`, `@counter-style` and `@layer` statements, each named under the namespace as the table above says. An at-rule of these kinds inside a block is refused.
@@ -236,6 +236,7 @@ extension_sheet!: assets/rating.css:12: the selector `:is(.a, &)` can style outs
 extension_sheet!: assets/rating.css:12: `pulse` is a global name and must be app--…
 extension_sheet!: assets/rating.css:12: `all: inherit` is not taken: a plugin's sheet sets all to initial, unset or revert, which bring in no name from outside the component
 extension_sheet!: assets/rating.css:12: url(..) in a plugin's sheet is a data: URL; ship pictures as AppImage and pass their address
+extension_sheet!: assets/rating.css:12: url(#glow) names an id outside the namespace: a plugin's sheet names an element of its own as url(#app--…)
 extension_sheet!: assets/rating.css: the blocks do not balance
 extension_sheet!: assets/rating.css: the sheet does not parse the same once served; write it in plain CSS
 extension_sheet!: assets/rating.css is 9000 bytes once scoped, over its ceiling of 8 * 1024

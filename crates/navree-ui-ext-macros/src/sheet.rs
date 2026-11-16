@@ -197,6 +197,12 @@ enum Fail {
     Url {
         line: u32,
     },
+    /// A `url()` that names an element of the page by an id outside the namespace.
+    Fragment {
+        fragment: String,
+        namespace: String,
+        line: u32,
+    },
     /// The `all` shorthand set to something other than `initial`, `unset` or `revert`.
     All {
         value: String,
@@ -223,6 +229,13 @@ impl Fail {
             ),
             Fail::Url { line } => format!(
                 "extension_sheet!: {file}:{line}: url(..) in a plugin's sheet is a data: URL; ship pictures as AppImage and pass their address"
+            ),
+            Fail::Fragment {
+                fragment,
+                namespace,
+                line,
+            } => format!(
+                "extension_sheet!: {file}:{line}: url(#{fragment}) names an id outside the namespace: a plugin's sheet names an element of its own as url(#{namespace}--\u{2026})"
             ),
             Fail::All { value, line } => format!(
                 "extension_sheet!: {file}:{line}: `all: {value}` is not taken: a plugin's sheet sets all to initial, unset or revert, which bring in no name from outside the component"
@@ -816,7 +829,7 @@ impl Scoper<'_> {
             prelude,
             body,
         } = style;
-        walk(&prelude, false)?;
+        walk(&prelude, false, self.namespace)?;
         let prelude = self.selectors(&prelude, meta.line, rooted)?;
         let body = self.members(body)?;
         Ok(Style {
@@ -848,7 +861,7 @@ impl Scoper<'_> {
             prelude,
             body,
         } = at;
-        walk(&prelude, false)?;
+        walk(&prelude, false, self.namespace)?;
         if name.eq_ignore_ascii_case("layer") {
             self.layer_block_name(&prelude, meta.line)?;
         }
@@ -948,7 +961,7 @@ impl Scoper<'_> {
     /// A declaration: its addresses, and the names it defines when it is one of the properties that
     /// name things across the page.
     fn decl(&self, decl: &Decl) -> Result<(), Fail> {
-        walk(&decl.value, false)?;
+        walk(&decl.value, false, self.namespace)?;
         match decl.name.to_ascii_lowercase().as_str() {
             "anchor-name"
             | "position-anchor"
@@ -1019,7 +1032,7 @@ impl Scoper<'_> {
 
     /// The name of a `@keyframes` rule and its frames.
     fn keyframes(&self, at: &At) -> Result<(), Fail> {
-        walk(&at.prelude, false)?;
+        walk(&at.prelude, false, self.namespace)?;
         match trimmed(&at.prelude) {
             [
                 Tok {
@@ -1050,7 +1063,7 @@ impl Scoper<'_> {
 
     /// The name of a `@property` rule, and its descriptors.
     fn property(&self, at: &At) -> Result<(), Fail> {
-        walk(&at.prelude, false)?;
+        walk(&at.prelude, false, self.namespace)?;
         match trimmed(&at.prelude) {
             [
                 Tok {
@@ -1067,7 +1080,7 @@ impl Scoper<'_> {
 
     /// The name of a `@counter-style` rule, and its descriptors.
     fn counter_style(&self, at: &At) -> Result<(), Fail> {
-        walk(&at.prelude, false)?;
+        walk(&at.prelude, false, self.namespace)?;
         match trimmed(&at.prelude) {
             [
                 Tok {
@@ -1160,7 +1173,7 @@ impl Scoper<'_> {
     /// The names of a `@layer` statement: each a name under this namespace, with sub-layers after
     /// dots.
     fn layer_names(&self, at: &At, statement: bool) -> Result<(), Fail> {
-        walk(&at.prelude, false)?;
+        walk(&at.prelude, false, self.namespace)?;
         let tokens = trimmed(&at.prelude);
         let names = split_commas(tokens);
         if tokens.is_empty() || (!statement && names.len() > 1) {
@@ -1363,37 +1376,65 @@ fn reads_an_address(tokens: &[Tok]) -> bool {
     })
 }
 
+/// What a `url()` may hold besides a `data:` URL: a reference to an element of the page by its id,
+/// `#`, the namespace, two dashes and a name of letters, digits, `-` and `_` (`#geo--glow`), as
+/// the other names a sheet puts on the page are. Another reference to an element is refused with
+/// how to write one, and any other address as an address.
+fn own_fragment(address: &str, namespace: &str, line: u32) -> Result<(), Fail> {
+    let Some(fragment) = address.strip_prefix('#') else {
+        return Err(Fail::Url { line });
+    };
+    let name = fragment
+        .strip_prefix(namespace)
+        .and_then(|rest| rest.strip_prefix("--"))
+        .unwrap_or_default();
+    let named = !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'));
+    if named {
+        return Ok(());
+    }
+    Err(Fail::Fragment {
+        fragment: fragment.to_owned(),
+        namespace: namespace.to_owned(),
+        line,
+    })
+}
+
 /// Every address in the tokens must be a `data:` URL: `url()` and `src()` with one, every string
-/// inside `image-set()`, `-webkit-image-set()` and `image()`. A value that is only known when the
+/// inside `image-set()`, `-webkit-image-set()` and `image()`. A `url()` may also name an element of
+/// the page by an id under `namespace` (`url(#geo--glow)`). A value that is only known when the
 /// page is drawn (`var()`) cannot stand where an address does, and `attr()` cannot ask for one.
 /// The tokens that only a sheet's top level may hold between its rules are refused anywhere else.
-fn walk(tokens: &[Tok], in_address_function: bool) -> Result<(), Fail> {
+fn walk(tokens: &[Tok], in_address_function: bool, namespace: &str) -> Result<(), Fail> {
     for token in tokens {
         let line = token.meta.line;
         match &token.kind {
-            Kind::Url(address) if !is_data(address) => return Err(Fail::Url { line }),
+            Kind::Url(address) if !is_data(address) => own_fragment(address, namespace, line)?,
             Kind::Str(address) if in_address_function && !is_data(address) => {
                 return Err(Fail::Url { line });
             }
             Kind::Function(name, inner) => match name.to_ascii_lowercase().as_str() {
                 "url" | "src" => {
                     let address = inner.iter().find(|inside| !is_space(inside));
-                    let data = matches!(
-                        address.map(|inside| &inside.kind),
-                        Some(Kind::Str(text)) if is_data(text)
-                    );
-                    if !data {
-                        return Err(Fail::Url { line });
+                    match address.map(|inside| &inside.kind) {
+                        Some(Kind::Str(text)) if is_data(text) => {}
+                        // A reference to an element of the page, in `url()` only.
+                        Some(Kind::Str(text)) if name.eq_ignore_ascii_case("url") => {
+                            own_fragment(text, namespace, line)?;
+                        }
+                        _ => return Err(Fail::Url { line }),
                     }
-                    walk(inner, false)?;
+                    walk(inner, false, namespace)?;
                 }
-                "image-set" | "-webkit-image-set" | "image" => walk(inner, true)?,
+                "image-set" | "-webkit-image-set" | "image" => walk(inner, true, namespace)?,
                 "var" if in_address_function => return Err(Fail::Url { line }),
                 "attr" if reads_an_address(inner) => return Err(Fail::Url { line }),
-                _ => walk(inner, in_address_function)?,
+                _ => walk(inner, in_address_function, namespace)?,
             },
             Kind::Paren(inner) | Kind::Square(inner) | Kind::Curly(inner) => {
-                walk(inner, in_address_function)?;
+                walk(inner, in_address_function, namespace)?;
             }
             // Only the top of a sheet, between rules, may hold these.
             Kind::Cdo | Kind::Cdc => return Err(Fail::NotPlain { line }),
