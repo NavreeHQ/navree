@@ -63,7 +63,9 @@ pub fn scripts(uses: Uses) -> impl Iterator<Item = &'static str> {
         .map(|(_, url)| url)
 }
 
-/// Every module script, with the bit of [`Uses`] that loads it.
+/// Every module script, with the bit of [`Uses`] that loads it, in the order a page loads
+/// them: the `extensions` module runs before the `islands` module, which asks it to seal the
+/// body of a plugin's island.
 fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
     [
         (Uses::CORE, CORE_URL),
@@ -89,11 +91,11 @@ fn modules() -> impl Iterator<Item = (Uses, &'static str)> {
         (Uses::OTP, OTP_URL),
         (Uses::CAROUSEL, CAROUSEL_URL),
         (Uses::MENUBAR, MENUBAR_URL),
-        (Uses::ISLAND, ISLANDS_URL),
         (Uses::PARTS, PARTS_URL),
         (Uses::GENUI, GENUI_URL),
         (Uses::COUNT_UP, COUNT_UP_URL),
         (Uses::EXTENSIONS, EXTENSIONS_URL),
+        (Uses::ISLAND, ISLANDS_URL),
         #[cfg(feature = "phone")]
         (Uses::PHONE, PHONE_URL),
     ]

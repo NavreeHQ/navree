@@ -851,13 +851,14 @@ impl Element {
             "data-ui-ext-routes",
             "data-ui-props",
         ];
-        self.uses = self.uses.without_extensions();
-        // An island's script, props and kept attributes are its own: only the sheet is named.
+        // An island's script, props and kept attributes are its own: only the sheet is named. A
+        // plugin's island keeps the extensions module, which seals its body.
         if self.attrs.iter().any(|attr| attr.name == "data-ui-island") {
             debug_assert!(
                 extension.script_file().is_none(),
                 "an element is an island or carries an extension script, not both"
             );
+            self.uses = Uses(self.uses.0 & !Uses::EXTENSION_SHEETS.0);
             self.attrs.retain(|attr| attr.name != "data-ui-ext-sheet");
             if let Some(sheet) = extension.sheet_url() {
                 self.put("data-ui-ext-sheet", sheet.to_owned());
@@ -865,6 +866,7 @@ impl Element {
             }
             return self;
         }
+        self.uses = self.uses.without_extensions();
         self.attrs.retain(|attr| !OWN.contains(&attr.name));
         if let Some(script) = extension.script_url() {
             self.put("data-ui-ext", script.to_owned());
@@ -1311,6 +1313,46 @@ mod tests {
         assert!(styled.uses.has(Uses::ISLAND));
         assert!(styled.uses.has(Uses::EXTENSION_SHEETS));
         assert!(!styled.uses.has(Uses::EXTENSIONS));
+    }
+
+    /// A plugin's island has the page load the extensions module, which seals its body, and a
+    /// sheet named on it does not take that away. An app's island loads no extensions module.
+    #[test]
+    fn a_plugins_island_keeps_the_extensions_module_when_it_names_a_sheet() {
+        use crate::island::{Island, IslandScript};
+
+        static CLOCK: IslandScript =
+            IslandScript::new("clock", b"export function mount() {}", 1024).namespace("geo");
+        static PLAIN_CLOCK: IslandScript =
+            IslandScript::new("clock", b"export function mount() {}", 1024);
+        let element = |island: Island| match Node::from(island) {
+            Node::Element(element) => element,
+            other => panic!("an island is one element: {other:?}"),
+        };
+
+        let plugins = element(Island::new("clock", &CLOCK));
+        assert_eq!(plugins.uses, Uses::ISLAND.with(Uses::EXTENSIONS));
+        let styled = plugins.extension(&BADGE);
+        assert_eq!(
+            styled.uses,
+            Uses::ISLAND
+                .with(Uses::EXTENSIONS)
+                .with(Uses::EXTENSION_SHEETS)
+        );
+        // A second sheet replaces the first and keeps the module.
+        assert_eq!(
+            styled.extension(&BADGE).uses,
+            Uses::ISLAND
+                .with(Uses::EXTENSIONS)
+                .with(Uses::EXTENSION_SHEETS)
+        );
+
+        let apps = element(Island::new("clock", &PLAIN_CLOCK));
+        assert_eq!(apps.uses, Uses::ISLAND);
+        assert_eq!(
+            apps.extension(&BADGE).uses,
+            Uses::ISLAND.with(Uses::EXTENSION_SHEETS)
+        );
     }
 
     /// An island and an extension script on one element is a mistake that a debug build reports.

@@ -542,6 +542,44 @@ fn a_page_with_an_island_loads_the_islands_module_alone() {
     );
 }
 
+/// A plugin's island loads the extensions module too, linked ahead of the islands module: the
+/// islands module asks it to seal the island's body before it imports the island's script. It
+/// needs no core runtime for that.
+#[test]
+fn a_page_with_a_plugins_island_loads_the_extensions_module_before_the_islands_module() {
+    use navree_ui::{Island, IslandScript};
+
+    static CLOCK: IslandScript =
+        IslandScript::new("clock", b"export function mount() {}", 1024).namespace("notices");
+    let page = View::new("x").body(Island::new("clock", &CLOCK).props(&["Ludhiana", "IST"]));
+    assert_eq!(page.uses(), Uses::ISLAND.with(Uses::EXTENSIONS));
+    let html = page.to_html();
+    assert_eq!(linked(&html).0, ["islands", "extensions"], "{html}");
+    let at = |url: &str| {
+        html.find(&format!("<script type=\"module\" src=\"{url}\""))
+            .unwrap_or_else(|| panic!("{url} is not loaded: {html}"))
+    };
+    assert!(
+        at(assets::EXTENSIONS_URL) < at(assets::ISLANDS_URL),
+        "{html}"
+    );
+    assert!(
+        !html.contains(&format!("<script type=\"module\" src=\"{}\"", CLOCK.url())),
+        "the island's own script is the islands module's to import: {html}"
+    );
+
+    // Beside an app's own island, the same: one islands module, after the extensions module.
+    static DEPOTS: IslandScript = IslandScript::new("depots", b"export function mount() {}", 1024);
+    let both = View::new("x").body((Island::new("depots", &DEPOTS), Island::new("clock", &CLOCK)));
+    let html = both.to_html();
+    assert_eq!(linked(&html).0, ["islands", "extensions"], "{html}");
+    assert_eq!(html.matches(assets::ISLANDS_URL).count(), 1, "{html}");
+    assert!(
+        html.find(assets::EXTENSIONS_URL) < html.find(assets::ISLANDS_URL),
+        "{html}"
+    );
+}
+
 /// What mounts a plugin's components, seals what they draw and lets them call only the routes
 /// the server named. Each component's own script has the ceiling its plugin gives it, checked
 /// when the plugin compiles.

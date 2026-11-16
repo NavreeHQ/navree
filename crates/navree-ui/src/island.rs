@@ -37,6 +37,12 @@
 //! security policy (`script-src 'self'`): no inline code and nothing from another site.
 //! Its size is checked when the app compiles: [`IslandScript::new`] takes a ceiling.
 //!
+//! A plugin's island, whose script is built with [`IslandScript::namespace`], has its body
+//! sealed before its script is imported, as a plugin component's owned body is: the page
+//! loads the `extensions` module ahead of the `islands` module, and the islands module asks
+//! it to seal the body. With no seal the script is not imported, and the island carries
+//! `data-ui-failed`. An app's own island, with no namespace, is not sealed.
+//!
 //! ```
 //! use navree_ui::{Island, IslandScript, View, el};
 //!
@@ -179,7 +185,8 @@ impl IslandScript {
 
 /// A part of a page that an [`IslandScript`] draws in the browser: see [the module](self)
 /// for the contract. A page with one loads the `islands` module and no other script for
-/// it; the island's own script comes when the page has loaded.
+/// it, and the `extensions` module ahead of it for a plugin's island; the island's own
+/// script comes when the page has loaded.
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct Island {
@@ -188,8 +195,15 @@ pub struct Island {
 }
 
 impl Island {
-    /// An island named `id`, drawn by `script`.
+    /// An island named `id`, drawn by `script`. A plugin's script (one built with
+    /// [`namespace`](IslandScript::namespace)) has the page load the `extensions` module
+    /// too, which seals the island's body before the islands module imports the script.
     pub fn new(id: impl Into<AttrValue>, script: &IslandScript) -> Self {
+        let uses = if script.namespace.is_some() {
+            Uses::ISLAND.with(Uses::EXTENSIONS)
+        } else {
+            Uses::ISLAND
+        };
         Self {
             el: el("div")
                 .slot("island")
@@ -197,7 +211,7 @@ impl Island {
                 .attr("data-ui-island", script.url())
                 // What the browser says of the island stays through a morph from the server.
                 .attr("data-ui-keep-attrs", "data-ui-mounted data-ui-failed")
-                .uses(Uses::ISLAND),
+                .uses(uses),
             fallback: Node::Empty,
         }
     }
