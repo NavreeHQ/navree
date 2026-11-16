@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,7 +42,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalWideNavigationRail
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.NavigationItemIconPosition
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarArrangement
 import androidx.compose.material3.ShortNavigationBarItem
@@ -120,9 +118,13 @@ private const val BASELINE_SEED = 0xFF6750A4.toInt()
  * The palette grows from the brand's accent (the shell's, or the app's own
  * seed). The person's wallpaper colours are used when the app sets no accent
  * at all, or when it opts in.
+ *
+ * Once the core says it has stopped ([Driver.stopped]) nothing it held is
+ * drawn any more: the app says it must be started again, and offers
+ * [startAgain] where the host gave one.
  */
 @Composable
-fun NavreeApp(driver: Driver, config: NavreeConfig, image: suspend (String) -> ByteArray? = { null }) {
+fun NavreeApp(driver: Driver, config: NavreeConfig, image: suspend (String) -> ByteArray? = { null }, startAgain: (() -> Unit)? = null) {
     val app = driver.app
     val nav = driver.nav
     val dark = isSystemInDarkTheme()
@@ -131,23 +133,30 @@ fun NavreeApp(driver: Driver, config: NavreeConfig, image: suspend (String) -> B
     val dynamic = config.dynamicColour || brand == null
     NavreeTheme(seed = brand ?: BASELINE_SEED, dynamic = dynamic) {
         SystemBars(dark)
+        KeyboardEntry()
         val window = rememberWindow()
         val snackbars = remember { SnackbarHostState() }
         val origins = remember(config) { com.navree.client.platform.Origins(config.origin, config.also, config.loopbackHttp, config.pictureHosts, config.webHosts) }
         val ui = remember(driver, window, origins) { Ui(driver, window, image, snackbars, origins) }
         CompositionLocalProvider(LocalUi provides ui) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-                when (nav.stage) {
-                    Stage.Ready -> Frame(nav, app?.name?.ifEmpty { null } ?: config.name, app?.user)
-                    Stage.Upgrade -> UpgradeScreen()
-                    Stage.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        FailureState(nav.failure ?: com.navree.client.core.Failure.Server) { ui.send(Events.start) }
+                if (driver.stopped) {
+                    StoppedScreen(startAgain)
+                } else {
+                    when (nav.stage) {
+                        Stage.Ready -> Frame(nav, app?.name?.ifEmpty { null } ?: config.name, app?.user)
+                        Stage.Upgrade -> UpgradeScreen()
+                        Stage.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            FailureState(nav.failure ?: com.navree.client.core.Failure.Server) { ui.send(Events.start) }
+                        }
+                        Stage.Starting -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { PatientProgress() }
                     }
-                    Stage.Starting -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { PatientProgress() }
                 }
             }
-            Messages(driver, snackbars)
-            ConfirmDialog()
+            if (!driver.stopped) {
+                Messages(driver, snackbars)
+                ConfirmDialog()
+            }
         }
     }
 }
@@ -174,7 +183,7 @@ private fun SystemBars(dark: Boolean) {
 private fun Messages(driver: Driver, host: SnackbarHostState) {
     val ui = LocalUi.current
     val message = driver.messages.firstOrNull() ?: return
-    val notice = message.notice?.let { noticeText(it) }
+    val notice = message.notice?.let { noticeText(it, message.tone) }
     val text = listOfNotNull(message.title, message.text ?: notice).joinToString("\n")
     LaunchedEffect(message.id) {
         val result = host.showSnackbar(
@@ -203,6 +212,30 @@ private fun UpgradeScreen() {
             modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
         Button(onClick = { ui.send(Events.openUpgrade) }) { Text(stringResource(R.string.navree_upgrade_action)) }
+    }
+}
+
+/**
+ * The core stopped for good after a failure inside it: nothing it held can be
+ * shown or changed, so the app says it must be started again and, where the
+ * host can do it, offers to.
+ */
+@Composable
+private fun StoppedScreen(startAgain: (() -> Unit)?) {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(stringResource(R.string.navree_stopped_title), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
+        Text(
+            stringResource(R.string.navree_stopped_text),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+        )
+        if (startAgain != null) Button(onClick = startAgain) { Text(stringResource(R.string.navree_stopped_action)) }
     }
 }
 
@@ -262,22 +295,20 @@ private fun Frame(nav: NavPart, name: String, user: Navree.User?) {
                 }
                 when (kind) {
                     NavigationKind.None -> stack()
-                    NavigationKind.Bar -> Scaffold(
+                    NavigationKind.Bar -> BottomNavigationWindow(
                         bottomBar = { BottomBar(nav.destinations, plan, nav.selected) { ui.send(Events.select(it)) } },
-                        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                    ) { padding ->
-                        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) { stack() }
-                    }
-                    NavigationKind.Rail, NavigationKind.ExpandedRail -> Row(Modifier.fillMaxSize()) {
-                        SideRail(
-                            destinations = nav.destinations,
-                            plan = plan,
-                            selected = nav.selected,
-                            expanded = kind == NavigationKind.ExpandedRail,
-                            fab = if (railFab && root != null && rootPlan != null) ({ RailFab(root, rootPlan) }) else null,
-                        ) { ui.send(Events.select(it)) }
-                        Box(Modifier.weight(1f).fillMaxHeight().consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))) { stack() }
-                    }
+                    ) { stack() }
+                    NavigationKind.Rail, NavigationKind.ExpandedRail -> SideNavigationWindow(
+                        rail = {
+                            SideRail(
+                                destinations = nav.destinations,
+                                plan = plan,
+                                selected = nav.selected,
+                                expanded = kind == NavigationKind.ExpandedRail,
+                                fab = if (railFab && root != null && rootPlan != null) ({ RailFab(root, rootPlan) }) else null,
+                            ) { ui.send(Events.select(it)) }
+                        },
+                    ) { stack() }
                 }
             }
             Covers(nav, user, name, plan, covers, holder)
@@ -315,20 +346,46 @@ private fun context(plan: NavigationPlan, user: Navree.User?, screen: ScreenView
 
 /** A destination's icon: the system's symbol when its name maps to one, filled when selected; a count beside it. */
 @Composable
-private fun NavIcon(destination: Destination, selected: Boolean) {
+private fun NavIcon(destination: Destination, selected: Boolean, badged: Boolean = true) {
     // A destination the page gave no icon still takes one: Material's navigation always shows an icon.
     val vector = rememberIcon(destination.icon, selected = selected)
         ?: androidx.compose.runtime.remember(destination.label, selected) { symbolVector(Symbols.forLabel(destination.label), selected) }
-    val badge = destination.badge
+    val badge = destination.badge?.takeIf { badged }
     BadgedBox(badge = { if (!badge.isNullOrEmpty()) Badge { Text(badge) } }) {
         if (vector != null) Icon(vector, contentDescription = null) else Spacer(Modifier.size(24.dp))
     }
 }
 
+/** The content drawn with the text size held at most to `scale` times the default; the person's setting is the one it is held to. */
 @Composable
-private fun NavLabel(text: String, plan: NavigationPlan) {
+private fun WithTextScale(scale: Float, content: @Composable () -> Unit) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val held = androidx.compose.ui.unit.Density(density.density, minOf(density.fontScale, scale))
+    CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides held, content = content)
+}
+
+@Composable
+private fun NavLabel(text: String, plan: NavigationPlan, badge: String? = null) {
     // A label is never cut: at the largest text it takes a second line.
-    Text(text, maxLines = plan.labelLines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+    if (badge.isNullOrEmpty()) {
+        Text(text, maxLines = plan.labelLines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+    } else {
+        // Beside its label, in an item that has the label at the icon's side: on the icon it would cover the label's first letters.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(text, maxLines = plan.labelLines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Start, modifier = Modifier.weight(1f, fill = false))
+            Badge { Text(badge) }
+        }
+    }
+}
+
+/** The width of a word of a navigation label at the default text size, in dp, as the label's own style lays it out. */
+@Composable
+private fun labelWidths(): (String) -> Float {
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val style = MaterialTheme.typography.labelMedium
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val plain = remember(density.density) { androidx.compose.ui.unit.Density(density.density, fontScale = 1f) }
+    return { word -> measurer.measure(word, style, density = plain).size.width / plain.density }
 }
 
 @Composable
@@ -336,14 +393,19 @@ private fun BottomBar(destinations: List<Destination>, plan: NavigationPlan, sel
     val window = LocalUi.current.window
     // In a wider window the bar's items sit side by side with their icons, in the middle.
     val beside = window.width >= WidthClass.Medium
+    // Equal items share the width: the labels grow with the text setting only as far as their longest word fits.
+    val labels = plan.shown.mapNotNull { destinations.getOrNull(it)?.label }
+    val measured = labelWidths()
+    val scale = if (beside) window.fontScale else NavigationRules.labelScale(window.fontScale, window.widthDp, labels, measured)
+    val lines = if (beside) plan.labelLines else NavigationRules.labelLines(window.widthDp, labels, plan.labelLines, measured)
     ShortNavigationBar(arrangement = if (beside) ShortNavigationBarArrangement.Centered else ShortNavigationBarArrangement.EqualWeight) {
         for (index in plan.shown) {
             val destination = destinations.getOrNull(index) ?: continue
             ShortNavigationBarItem(
                 selected = index == selected,
                 onClick = { choose(index) },
-                icon = { NavIcon(destination, index == selected) },
-                label = { NavLabel(destination.label, plan) },
+                icon = { WithTextScale(scale) { NavIcon(destination, index == selected) } },
+                label = { WithTextScale(scale) { NavLabel(destination.label, plan.copy(labelLines = lines)) } },
                 iconPosition = if (beside) NavigationItemIconPosition.Start else NavigationItemIconPosition.Top,
             )
         }
@@ -362,6 +424,10 @@ private fun SideRail(
     val state = rememberWideNavigationRailState(if (expanded) WideNavigationRailValue.Expanded else WideNavigationRailValue.Collapsed)
     val scope = rememberCoroutineScope()
     val open = state.targetValue == WideNavigationRailValue.Expanded
+    // A collapsed rail's label stands under its icon in 80 dp: it grows with the text setting only as far as its longest word fits.
+    val window = LocalUi.current.window
+    val labels = destinations.map { it.label }
+    val railScale = if (open) window.fontScale else NavigationRules.labelScale(window.fontScale, NavigationRules.RAIL_ITEM_DP * labels.size.coerceAtLeast(1), labels, labelWidths())
     WideNavigationRail(
         state = state,
         header = {
@@ -387,8 +453,8 @@ private fun SideRail(
                 WideNavigationRailItem(
                     selected = index == selected,
                     onClick = { choose(index) },
-                    icon = { NavIcon(destination, index == selected) },
-                    label = { NavLabel(destination.label, plan) },
+                    icon = { WithTextScale(railScale) { NavIcon(destination, index == selected, badged = !open) } },
+                    label = { WithTextScale(railScale) { NavLabel(destination.label, plan, badge = if (open) destination.badge else null) } },
                     railExpanded = open,
                 )
             }
@@ -415,8 +481,13 @@ private fun AllDestinations(destinations: List<Destination>, selected: Int, stat
             WideNavigationRailItem(
                 selected = index == selected,
                 onClick = { choose(index) },
-                icon = { NavIcon(destination, index == selected) },
-                label = { Text(destination.label, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                icon = { NavIcon(destination, index == selected, badged = false) },
+                label = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(destination.label, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        destination.badge?.takeIf { it.isNotEmpty() }?.let { Badge { Text(it) } }
+                    }
+                },
                 railExpanded = true,
             )
         }

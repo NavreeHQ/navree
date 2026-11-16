@@ -16,16 +16,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import com.navree.client.core.CoreJson
 import com.navree.client.core.Driver
 import com.navree.client.core.Engine
 import com.navree.client.core.Events
+import com.navree.client.core.Content
+import com.navree.client.core.Stage
 import com.navree.client.core.Width
 import com.navree.client.platform.AndroidEffects
 import com.navree.client.platform.MOST_PICTURE_BYTES
@@ -36,6 +41,7 @@ import com.navree.client.ui.NavreeApp
 import com.navree.client.ui.rememberWindow
 import com.navree.core.Core
 import okhttp3.HttpUrl
+import kotlinx.coroutines.flow.first
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
@@ -67,8 +73,10 @@ class NavreeSession(
 
     init {
         driver.effects = effects
+        effects.picked.mostBytes = config.mostFileBytes
         // Said once, at start: an entry of the configuration that does not read is left out.
         for (entry in effects.origins.refused) android.util.Log.w("Navree", "left out of the configuration, it does not read: $entry")
+        com.navree.client.platform.WorkerGuard.arm(effects.origins)
         val device = Device.of(application)
         environment = Triple(device.dark, device.textPercent, device.locale)
         engine.core = Core(coreConfig(config, device, effects.caps, application.packageName).toString().encodeToByteArray())
@@ -85,6 +93,11 @@ class NavreeSession(
      * session it belongs to is still the one on the device.
      */
     fun keep() {
+        // What a core that stopped last kept may be what stopped it: the next launch starts plainly.
+        if (driver.stopped) {
+            effects.state.always { effects.snapshots.clear() }
+            return
+        }
         val snapshot = driver.snapshot() ?: return
         effects.state.write { effects.snapshots.write(SNAPSHOT, snapshot) }
     }
@@ -152,9 +165,15 @@ open class NavreeActivity : ComponentActivity() {
     protected open fun config(): NavreeConfig = NavreeConfig.fromResources(this)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        StartMarks.enabled = StartMarks.loggedWith(applicationInfo.flags)
+        StartMarks.mark("the activity is made")
         // The app draws behind the system bars; each screen pads itself by the insets.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // A window of its own (a dialog, a menu, a picker) lays itself out right to left only for an app that says it supports it.
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_SUPPORTS_RTL == 0) {
+            android.util.Log.w("Navree", "the app does not declare android:supportsRtl=\"true\": its dialogs and menus stay left to right in a right to left language")
+        }
         val config = config()
         guard(config)
         val origin = config.origin.toHttpUrlOrNull()?.takeIf { Origins(config.origin, loopbackHttp = config.loopbackHttp).usable }
@@ -165,8 +184,48 @@ open class NavreeActivity : ComponentActivity() {
         val session = ViewModelProvider(this, NavreeSession.Factory(application, config, origin, restoring = savedInstanceState != null))[NavreeSession::class.java]
         this.session = session
         session.effects.activity = this
+        StartMarks.mark("the session is ready")
         if (savedInstanceState == null) opened(intent)
-        setContent { Host(session) }
+        window.decorView.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                window.decorView.viewTreeObserver.removeOnPreDrawListener(this)
+                StartMarks.mark("the first frame is drawn")
+                return true
+            }
+        })
+        show(session, config, origin)
+    }
+
+    /** Draws a session. One started again is drawn from nothing: what the screens of the one before remembered is not kept. */
+    private fun show(session: NavreeSession, config: NavreeConfig, origin: HttpUrl) {
+        setContent {
+            key(session) {
+                Host(session, startAgain = { startAgain(config, origin) }, onShell = { StartMarks.mark("the shell is answered") }) {
+                    // The system measures the start to here; what waited for a quiet moment is done now.
+                    StartMarks.mark("the first page is drawn")
+                    reportFullyDrawn()
+                    com.navree.client.platform.WorkerGuard.whenIdle()
+                }
+            }
+        }
+    }
+
+    /**
+     * Starts the app again in this process, after its core said it has stopped
+     * for good. The session whose core stopped goes with everything it held, as
+     * when the app's task ends (its effects are closed and its core is freed),
+     * and a new session with a new core starts plainly, with no snapshot. The
+     * person stays signed in: the cookies and the pages kept are not the core's.
+     */
+    private fun startAgain(config: NavreeConfig, origin: HttpUrl) {
+        session = null
+        viewModelStore.clear()
+        val again = ViewModelProvider(this, NavreeSession.Factory(application, config, origin, restoring = false))[NavreeSession::class.java]
+        session = again
+        again.effects.activity = this
+        show(again, config, origin)
+        // The activity is in front already: the new core is told what a start would have told it next.
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) again.driver.send(Events.foreground)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -244,8 +303,28 @@ open class NavreeActivity : ComponentActivity() {
     }
 }
 
+/** When the parts of a start happened, in the log, counted from the start of the process: where the time of a start goes. */
+internal object StartMarks {
+    /** Whether the marks are logged: in a build that can be debugged, and not in one a person has (where they are a line of log nobody reads). */
+    @Volatile
+    var enabled = true
+
+    /** Whether an app with these `ApplicationInfo` flags logs its start marks. */
+    fun loggedWith(flags: Int): Boolean = flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+
+    fun mark(what: String) {
+        if (!enabled) return
+        android.util.Log.i("NavreeStart", "$what at ${android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime()} ms")
+    }
+}
+
+/**
+ * The app. `onShell` is called once the core has the app's shell (its
+ * navigation); `onPage` once the first screen has something to show;
+ * `startAgain` is what the app offers when its core has stopped.
+ */
 @Composable
-private fun Host(session: NavreeSession) {
+internal fun Host(session: NavreeSession, startAgain: (() -> Unit)? = null, onShell: () -> Unit = {}, onPage: () -> Unit = {}) {
     val window = rememberWindow()
     val configuration = LocalConfiguration.current
     val driver = session.driver
@@ -269,7 +348,13 @@ private fun Host(session: NavreeSession) {
             driver.send(Events.environment(dark = now.first, textPercent = now.second, locale = now.third))
         }
     }
-    NavreeApp(driver, session.config, image = session::image)
+    LaunchedEffect(driver) {
+        snapshotFlow { driver.nav.stage == Stage.Ready }.first { it }
+        onShell()
+        snapshotFlow { driver.nav.front?.let { driver.screens[it] }?.let { it.content !is Content.Blank } == true }.first { it }
+        onPage()
+    }
+    NavreeApp(driver, session.config, image = session::image, startAgain = startAgain)
 }
 
 @Composable
