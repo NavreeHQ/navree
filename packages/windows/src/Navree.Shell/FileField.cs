@@ -222,6 +222,9 @@ internal sealed class FileFieldView
         long bytes = list.Sum(file => file.Size);
         List<string> words = [.. said ?? []];
         List<FileRef> added = [];
+
+        // The session the person chose them in: a file still being looked at when that session ends is not held for whoever comes next.
+        long chosenIn = host.Files.Session;
         foreach (string path in paths)
         {
             FieldRule rule = Rule;
@@ -229,7 +232,7 @@ internal sealed class FileFieldView
             Picked result;
             try
             {
-                result = await Task.Run(() => host.Files.AddAsync(path, rule, total, CancellationToken.None));
+                result = await Task.Run(() => host.Files.AddAsync(path, rule, total, chosenIn, CancellationToken.None));
             }
             catch (Exception)
             {

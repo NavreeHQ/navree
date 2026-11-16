@@ -331,4 +331,61 @@ public sealed class PickedFilesTests
         _ = new PickedFiles(copies);
         Assert.AreEqual(0, Directory.GetFiles(copies).Length);
     }
+
+    private int CopiesOnDisk() => Directory.Exists(copies) ? Directory.GetFiles(copies).Length : 0;
+
+    [TestMethod]
+    public async Task A_photo_chosen_in_a_session_that_has_ended_is_not_held_and_leaves_no_copy()
+    {
+        PickedFiles files = new(copies);
+        string path = Write("Moga.jpg", PhotoWithPlace());
+        long chosenIn = files.Session;
+
+        // The person signs out while the photo they chose is still waiting to be looked at.
+        files.Clear();
+        Picked late = await files.AddAsync(path, Rule(), 0, chosenIn, CancellationToken.None);
+
+        Assert.IsNull(late.File, "a file chosen in a session that has ended is held");
+        StringAssert.Contains(late.Refusal, "Moga.jpg");
+        Assert.AreEqual(0, CopiesOnDisk(), "a copy of a photo of the person who left is on disk");
+        Assert.AreNotEqual(chosenIn, files.Session);
+
+        // A file with no copy (its field keeps the place) is not held for the session that ended either.
+        Picked kept = await files.AddAsync(path, Rule(keep: true), 0, chosenIn, CancellationToken.None);
+        Assert.IsNull(kept.File, "a file chosen in a session that has ended is held");
+
+        // What the next person chooses is held as before.
+        Picked next = await files.AddAsync(path, Rule(), 0, CancellationToken.None);
+        Assert.IsNotNull(next.File);
+        Assert.AreEqual(1, CopiesOnDisk());
+        Expect.That(files.Available(next.File.Token), "the next person's file is not there to be sent");
+    }
+
+    [TestMethod]
+    public async Task A_copy_still_being_made_when_the_session_ends_is_gone_when_the_clear_is_done_and_does_not_come_back()
+    {
+        PickedFiles files = new(copies);
+        string path = Write("Anandpur Sahib.jpg", PhotoWithPlace());
+        for (int round = 0; round < 60; round++)
+        {
+            // The photo is being read on another thread when the session ends: the two cross at a different moment in each round.
+            long chosenIn = files.Session;
+            Task<Picked> adding = Task.Run(() => files.AddAsync(path, Rule(), 0, chosenIn, CancellationToken.None));
+            if (round % 3 == 1)
+            {
+                await Task.Yield();
+            }
+            else if (round % 3 == 2)
+            {
+                await Task.Delay(1);
+            }
+
+            await files.ClearAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.AreEqual(0, CopiesOnDisk(), "round " + round + ": a copy is on disk when the clear is done");
+
+            Picked picked = await adding.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.AreEqual(0, CopiesOnDisk(), "round " + round + ": a copy of the session that ended was written after the clear");
+            Expect.That(picked.File is null || !files.Available(picked.File.Token), "round " + round + ": a file of the session that ended is still held");
+        }
+    }
 }

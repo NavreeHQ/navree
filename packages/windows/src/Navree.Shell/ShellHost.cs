@@ -480,11 +480,8 @@ public sealed partial class ShellHost : IDisposable
                 [new WipeStep("what the web view keeps", () => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName), what => ReportProblem("web wipe " + what)), OnUi)],
                 [.. new[]
                 {
-                    new WipeStep("the files chosen for forms", () =>
-                    {
-                        Files.Clear();
-                        return Task.CompletedTask;
-                    }),
+                    // A photograph still being read when the person signed out is waited for: it is refused, and its copy is gone, when this is done.
+                    new WipeStep("the files chosen for forms", Files.ClearAsync),
 
                     // What the system shows or holds for the person (notifications waiting and shown, the count, the jump list), before the windows' own.
                     new WipeStep("the notifications, the count and the jump list", () => Place?.EndSessionAsync() ?? Task.CompletedTask, OnUi),

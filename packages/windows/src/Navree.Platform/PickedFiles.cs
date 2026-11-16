@@ -22,6 +22,8 @@ public sealed record Picked(FileRef? File, string? Refusal);
 /// to be sent and one that can no longer be read is left out (never sent as an empty file) and reported through <see cref="WentMissing"/>.
 /// A photograph whose field does not keep the place it was taken is read once, has the place taken out, and is kept as a copy in the client's own
 /// folder: what is sent is exactly what was checked, and it is the copy that is read at send time.
+/// The files are held for one session: <see cref="Session"/> moves on at every clear, and a file chosen in a session that has ended by the time it
+/// would be held (a photograph still being read when the person signed out) is not held, and its copy is not left on disk.
 /// </summary>
 public sealed class PickedFiles
 {
@@ -29,6 +31,10 @@ public sealed class PickedFiles
 
     private readonly ConcurrentDictionary<string, Entry> held = new(StringComparer.Ordinal);
     private readonly string folder;
+    private readonly object gate = new();
+    private long session;
+    private int adding;
+    private TaskCompletionSource? noneAdding;
 
     /// <summary>Makes the registry; copies a previous run left in its folder are deleted.</summary>
     /// <param name="copiesFolder">Where the copies of photographs are kept.</param>
@@ -42,15 +48,63 @@ public sealed class PickedFiles
     /// <summary>Raised, on whatever thread was reading, with the tokens of files that could not be opened when a request was written.</summary>
     public event Action<IReadOnlyList<string>>? WentMissing;
 
-    /// <summary>Offers one file to a field: checks its kind and size, takes the place out of a photograph, and holds it.</summary>
+    /// <summary>The session the files are held for. It moves on at every <see cref="Clear"/> and <see cref="ClearAsync"/>.</summary>
+    public long Session
+    {
+        get
+        {
+            lock (gate)
+            {
+                return session;
+            }
+        }
+    }
+
+    /// <summary>Offers one file to a field, chosen in the session of now: checks its kind and size, takes the place out of a photograph, and holds it.</summary>
     /// <param name="path">Where the file is.</param>
     /// <param name="rule">What the field takes.</param>
     /// <param name="heldBytes">The bytes of the files the field keeps when this one is added.</param>
     /// <param name="cancel">Cancelled when the answer is not wanted.</param>
     /// <returns>The file held, or the words it was refused with.</returns>
-    public async Task<Picked> AddAsync(string path, FieldRule rule, long heldBytes, CancellationToken cancel)
+    public Task<Picked> AddAsync(string path, FieldRule rule, long heldBytes, CancellationToken cancel) => AddAsync(path, rule, heldBytes, Session, cancel);
+
+    /// <summary>
+    /// Offers one file to a field: checks its kind and size, takes the place out of a photograph, and holds it, when the session it was chosen in
+    /// is still the one now. A file whose session ended meanwhile is not held, and a copy made for it is deleted before this returns.
+    /// </summary>
+    /// <param name="path">Where the file is.</param>
+    /// <param name="rule">What the field takes.</param>
+    /// <param name="heldBytes">The bytes of the files the field keeps when this one is added.</param>
+    /// <param name="chosenIn">What <see cref="Session"/> said when the person chose the file.</param>
+    /// <param name="cancel">Cancelled when the answer is not wanted.</param>
+    /// <returns>The file held, or the words it was refused with.</returns>
+    public async Task<Picked> AddAsync(string path, FieldRule rule, long heldBytes, long chosenIn, CancellationToken cancel)
     {
         ArgumentNullException.ThrowIfNull(rule);
+        lock (gate)
+        {
+            adding++;
+        }
+
+        try
+        {
+            return await AddOneAsync(path, rule, heldBytes, chosenIn, cancel).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (gate)
+            {
+                if (--adding == 0)
+                {
+                    noneAdding?.TrySetResult();
+                    noneAdding = null;
+                }
+            }
+        }
+    }
+
+    private async Task<Picked> AddOneAsync(string path, FieldRule rule, long heldBytes, long chosenIn, CancellationToken cancel)
+    {
         if (!FileRules.IsOnThisComputer(path))
         {
             // A thing with no path here (dropped from a phone, a link from a browser) is refused with words, never an error.
@@ -58,6 +112,8 @@ public sealed class PickedFiles
         }
 
         string name = FileRules.DisplayName(path);
+        string? written = null;
+        bool holds = false;
         try
         {
             FileInfo info = new(path);
@@ -92,21 +148,47 @@ public sealed class PickedFiles
                     return new Picked(null, name + ": " + result.Why);
                 }
 
+                // The session may have ended while the picture was read: nothing of it is written then.
+                if (Session != chosenIn)
+                {
+                    return new Picked(null, SessionEnded(name));
+                }
+
                 _ = Directory.CreateDirectory(folder);
                 at = Path.Combine(folder, token);
+                written = at;
                 await File.WriteAllBytesAsync(at, clean, cancel).ConfigureAwait(false);
                 copy = true;
                 size = clean.Length;
             }
 
-            held[token] = new Entry(at, copy);
-            return new Picked(new FileRef(token, name, type, size), null);
+            // Held only for the session it was chosen in: the clear that ends a session moves the number under this same lock.
+            lock (gate)
+            {
+                if (session == chosenIn)
+                {
+                    held[token] = new Entry(at, copy);
+                    holds = true;
+                }
+            }
+
+            return holds ? new Picked(new FileRef(token, name, type, size), null) : new Picked(null, SessionEnded(name));
         }
         catch (Exception problem) when (problem is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
         {
             return new Picked(null, name + " could not be read, so it was not added.");
         }
+        finally
+        {
+            // A copy that is not held is not left: one whose session ended while it was made, or whose writing was cut short.
+            if (!holds && written is not null)
+            {
+                DeleteQuietly(written);
+            }
+        }
     }
+
+    private static string SessionEnded(string name) => name + " was not added, because the session it was chosen in has ended.";
 
     // The first bytes of a file, as many as say what kind of file it is; reading them also shows that the file can be read at all.
     private static async Task<byte[]> HeadAsync(string path, CancellationToken cancel)
@@ -164,11 +246,33 @@ public sealed class PickedFiles
         }
     }
 
-    /// <summary>Lets go of every file and deletes every copy: the end of a session.</summary>
-    public void Clear()
+    /// <summary>
+    /// Lets go of every file and deletes every copy: the end of a session. A file still being added is not held when it is done, and deletes
+    /// its own copy then; <see cref="ClearAsync"/> also waits for that.
+    /// </summary>
+    public void Clear() => _ = End();
+
+    /// <summary>
+    /// Lets go of every file and deletes every copy, and completes when no file is still being added: a photograph that was being read when
+    /// the session ended has by then been refused and its copy deleted, so nothing of the session is on disk.
+    /// </summary>
+    /// <returns>When it is so.</returns>
+    public Task ClearAsync() => End();
+
+    private Task End()
     {
-        held.Clear();
+        Task none;
+        lock (gate)
+        {
+            session++;
+            held.Clear();
+            none = adding == 0
+                ? Task.CompletedTask
+                : (noneAdding ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+        }
+
         Purge();
+        return none;
     }
 
     private void Purge()
