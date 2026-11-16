@@ -1,0 +1,31 @@
+{
+ "destinations": [
+  {
+   "href": "/",
+   "stack": [
+    {
+     "fields": {
+      "note.memo": {
+       "t": "text",
+       "text": "Call the courier"
+      },
+      "order-form-for-the-workshop-at-ludhiana-and-amri~bb325f42.city": {
+       "t": "text",
+       "text": "Ludhiana"
+      }
+     },
+     "title": "Dashboard",
+     "url": "/"
+    },
+    {
+     "title": "CS-20481",
+     "url": "/orders/1"
+    }
+   ]
+  }
+ ],
+ "origin": "https://shop.example",
+ "person": "1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e",
+ "selected": "/",
+ "version": 1
+}
