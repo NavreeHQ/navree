@@ -133,3 +133,20 @@ import Testing
     }
     #expect(notice == .unknown)
 }
+
+/// An effect a newer core says is passed over, and the effects beside it are read.
+@Test func anEffectThisBuildDoesNotKnowIsPassedOverAndTheRestAreRead() throws {
+    let update = try Update.read(Data(#"""
+        {"changed":[],"effects":[{"t":"from_a_newer_core","with":[1,2]},{"t":"session_ending"},{"t":"forget_session"},{"t":"cancel"}]}
+        """#.utf8)).get()
+    #expect(update.effects.count == 3)
+    guard case .unknown(let tag) = update.effects[0], case .sessionEnding = update.effects[1],
+        case .forgetSession = update.effects[2]
+    else {
+        Issue.record("not read as an unknown effect, the session ending and the session forgotten")
+        return
+    }
+    #expect(tag == "from_a_newer_core")
+    // An effect this build knows that does not read (a cancel that names no request) is said, never carried out.
+    #expect(update.unread == ["cancel"])
+}

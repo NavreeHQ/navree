@@ -20,6 +20,12 @@ public enum CoreEffect: Sendable {
     case device(call: Int, device: DeviceRequest, posts: Bool, options: Navree.JSONValue?)
     /// That many secret bytes from the system's generator, answered at once.
     case random(request: Int, bytes: Int)
+    /// The person signed out, and the core is still asking the server to
+    /// forget this install's push token, in the request that came just before
+    /// this effect in the same update. Everything a sign-out takes away on
+    /// the device goes now; ``forgetSession`` follows when that request is
+    /// answered, and finds it done.
+    case sessionEnding
     /// The person signed out: every cookie and all web storage of the app go.
     case forgetSession
     case cacheRead(key: String)
@@ -268,6 +274,7 @@ extension CoreEffect {
             let options = try o["options"].flatMap { $0 is NSNull ? nil : try decode(Navree.JSONValue.self, $0) }
             return .device(call: try need(i("call")), device: device, posts: b("posts"), options: options)
         case "random": return .random(request: try need(i("request")), bytes: i("bytes") ?? 48)
+        case "session_ending": return .sessionEnding
         case "forget_session": return .forgetSession
         case "cache_read": return .cacheRead(key: try need(s("key")))
         case "cache_write": return .cacheWrite(key: try need(s("key")), value: s("value"))

@@ -11,22 +11,38 @@ import os
 ///
 /// Each window runs a core of its own, and every one of them is signed in as
 /// the same person or as nobody. So the end of a session is the app's, not a
-/// window's: whichever window's core says the person signed out, ``end(by:)``
-/// ends it for all of them, at once and in this order.
+/// window's: whichever window's core says the person signed out, the session
+/// ends for all of them, at once and in this order.
 ///
 /// 1. The number goes up. Whatever was begun for the person who is leaving
 ///    carries the older number and is refused from here on: an answer's
 ///    cookies, a page to keep, a snapshot, what a web page set, a picture.
 /// 2. A mark is written to disk: a sign-out has begun.
-/// 3. Every window's requests and streams under way are dropped.
+/// 3. The requests and streams under way are dropped.
 /// 4. What could bring the session back goes: the cookies, from memory and
 ///    from the Keychain; then the web view's store, which is never used
 ///    again (the next session's is a new one).
 /// 5. Everything else kept of the person goes, for every window: the pages,
 ///    what was kept of each window, the files picked for forms, the pictures,
 ///    the notifications and the count on the app's icon.
-/// 6. The mark is taken away, only when everything before it finished.
-/// 7. Every other window's core is told, and starts again as nobody's.
+/// 6. Every other window's core is told, and starts again as nobody's.
+/// 7. The mark is taken away, only when everything before it finished and
+///    the core has said the session is forgotten.
+///
+/// A core says a sign-out in one effect or in two. With no push token to
+/// take back it says `forget_session` at once (``end(by:)``). With one, it
+/// first asks the server to forget the token, which may take seconds, and
+/// says `session_ending` in the same update, after that request
+/// (``ending(by:)``); `forget_session` follows when the request is answered.
+/// All of the above is done at `session_ending`, so an app ended while the
+/// request is out has already taken everything away, and the mark, which
+/// stays until `forget_session`, makes the next start do it once more. One
+/// thing is spared at `session_ending`: the requests of the window whose core
+/// is signing out, since the token's removal is one of them. It was made
+/// before the effect, so it left with the cookies it needed; the cookies its
+/// answer sets are refused like any other answer's of the ended session, and
+/// the core itself has cancelled every other request it had out. The
+/// `forget_session` that follows finds the work done and does none of it again.
 ///
 /// A start that finds the mark does the same again before the Keychain
 /// is read or anything kept is opened (``open(origin:loopbackHTTP:slot:cache:snapshots:files:record:removes:)``),
@@ -69,6 +85,10 @@ final class SessionKeeper {
     private var storesInDoubt = false
     /// A main window has started in this run.
     private var begun = false
+    /// A sign-out a core has said is ending and not yet said is forgotten:
+    /// the window whose core it is, and whether everything on the device
+    /// was taken away (so the mark may go when the core says the rest).
+    private var underWay: (window: Weak<SystemEffects>, finished: Bool)?
 
     nonisolated static let log = Logger(subsystem: "com.navree.native", category: "session")
 
@@ -174,13 +194,24 @@ final class SessionKeeper {
 
     /// A window's effects take part in the session.
     func join(_ window: SystemEffects) {
+        settle()
         windows.removeAll { $0.object == nil }
         windows.append(Weak(window))
     }
 
     private func live() -> [SystemEffects] {
+        settle()
         windows.removeAll { $0.object == nil }
         return windows.compactMap(\.object)
+    }
+
+    /// A sign-out whose window went away before its core said the session
+    /// was forgotten has nothing more to wait for: its mark goes, if
+    /// everything on the device was taken away.
+    private func settle() {
+        guard let said = underWay, said.window.object == nil else { return }
+        underWay = nil
+        if said.finished { record?.unmarkWipe() }
     }
 
     /// A window's core is about to start. The first main window of a run
@@ -202,14 +233,42 @@ final class SessionKeeper {
 
     // MARK: - The end
 
-    /// Ends the session for every window, as the type's own words set out.
-    /// `ender` is the window whose core said the person signed out: it goes
-    /// on in the session that follows, and every other window's core is told.
+    /// A window's core says the session is ending (`session_ending`): the
+    /// person signed out, and the core is still asking the server to forget
+    /// this install's push token. Everything a sign-out takes away on the
+    /// device goes now, for every window, as the type's own words set out;
+    /// only the requests of `window` itself go on, the token's removal among
+    /// them, and the mark stays until its core says the session is forgotten.
+    func ending(by window: SystemEffects) {
+        let finished = takeAway(by: window, sparing: true)
+        underWay = (Weak(window), finished)
+    }
+
+    /// A window's core says the session is forgotten (`forget_session`).
+    /// When the same core said before that it was ending, everything is
+    /// done and nothing is done twice: the mark goes, if all of it finished.
+    /// Otherwise the session ends here, for every window. `ender` is the
+    /// window whose core said so: it goes on in the session that follows,
+    /// and every other window's core is told.
     func end(by ender: SystemEffects? = nil) {
+        if let said = underWay, let ender, said.window.object === ender {
+            underWay = nil
+            if said.finished { record?.unmarkWipe() }
+            return
+        }
+        if takeAway(by: ender, sparing: false) { record?.unmarkWipe() }
+    }
+
+    /// Takes away everything of the session on this device, for every
+    /// window, and moves the session's number on. With `sparing`, the
+    /// requests of `ender` itself are left to be answered. `true` when the
+    /// mark was written and everything is gone: the mark may then go.
+    private func takeAway(by ender: SystemEffects?, sparing: Bool) -> Bool {
+        underWay = nil
         number += 1
         let marked = record?.markWipe() ?? true
         let windows = live()
-        for window in windows { window.stopWork() }
+        for window in windows where !(sparing && window === ender) { window.stopWork() }
         // What could bring the session back: the cookies, then the web view's store.
         var finished = true
         var jars: [CookieJar] = []
@@ -231,10 +290,10 @@ final class SessionKeeper {
         } else {
             SystemAppNotifications().signedOut()
         }
-        if marked, finished { record?.unmarkWipe() }
         for window in windows where window !== ender { window.sessionEnded() }
         ender?.caughtUp()
         removeRetired(emptying: old)
+        return marked && finished
     }
 
     /// Who a window's core says is signed in, as far as a client can tell
