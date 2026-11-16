@@ -3,6 +3,7 @@ package com.navree.client.platform
 import com.navree.client.core.Body
 import com.navree.client.core.Effect
 import okhttp3.CookieJar
+import okhttp3.RequestBody.Companion.toRequestBody
 import okio.Buffer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -24,6 +25,32 @@ class HttpTest {
         assertEquals("orders", request!!.header("x-navree-region"))
         assertEquals("GET", request.method)
         assertNotNull(fetchRequest(fetch(url = "https://patiala.shop.example/orders"), origins, CookieJar.NO_COOKIES))
+    }
+
+    @Test
+    fun a_files_name_in_a_multipart_request_is_never_a_path_a_header_or_a_way_out_of_its_quotes() {
+        val names = listOf(
+            "Rasid \"Moga\".pdf" to "Rasid %22Moga%22.pdf",
+            "Bill\r\nX-Moga: 1\r\n\r\nJalandhar.pdf" to "BillX-Moga: 1Jalandhar.pdf",
+            "../../papers/Rasid Ludhiana.pdf" to "Rasid Ludhiana.pdf",
+            "C:\\papers\\Rasid.pdf" to "Rasid.pdf",
+        )
+        for ((given, written) in names) {
+            val parts = listOf(
+                com.navree.client.core.Part.Text("label", "#16a34a"),
+                com.navree.client.core.Part.File("papers", "0123456789abcdef0123456789abcdef", given, "application/pdf"),
+                com.navree.client.core.Part.Text("city", "Bathinda"),
+            )
+            val request = fetchRequest(fetch(method = "post", body = Body.Multipart(parts)), origins, CookieJar.NO_COOKIES, files = { "%PDF".toRequestBody(null) })
+            assertNotNull(given, request)
+            val text = Buffer().also { request!!.body!!.writeTo(it) }.readUtf8()
+            val lines = text.split("\r\n")
+            assertEquals("$given: one file part, under the field's name, with the name written as $written: $text", 1, lines.count { it == "Content-Disposition: form-data; name=\"papers\"; filename=\"$written\"" })
+            assertEquals("$given: nothing else starts a part: $text", 3, lines.count { it.startsWith("Content-Disposition:") })
+            assertEquals("$given: no header of the name's own: $text", 0, lines.count { it.startsWith("X-Moga") })
+            assertTrue("$given: the other parts are as they were: $text", text.contains("name=\"label\"\r\n\r\n#16a34a\r\n") && text.contains("name=\"city\"\r\n\r\nBathinda\r\n"))
+            assertTrue("$given: the file's bytes follow its headers: $text", text.contains("\r\n\r\n%PDF\r\n"))
+        }
     }
 
     @Test
