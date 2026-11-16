@@ -9,7 +9,7 @@ mod support;
 
 use std::sync::{Arc, Mutex};
 
-use navree_access::{AccessModule, Subject};
+use navree_access::{AbilityFactory, AccessModule, Subject};
 use navree_contracts::{ModuleBuilderPermissionsExt, Permission, permission_catalog, permitted};
 use navree_kernel::{Module, ModuleBuilder, ModuleId, PluginInfo};
 use navree_testing::{TestAppBuilder, principal};
@@ -99,11 +99,11 @@ mod navree_plugin_announcements {
         }
     }
 
-    /// A subject of the announcements plugin's crate, under its namespace.
+    /// A subject of the announcements plugin's crate, named under its namespace.
     pub struct Announcement;
 
     impl Subject for Announcement {
-        const SUBJECT: &'static str = "Announcement";
+        const SUBJECT: &'static str = "announcements.Announcement";
         const PERMISSION_PREFIX: &'static str = "announcements";
     }
 
@@ -115,9 +115,46 @@ mod navree_plugin_announcements {
         const SUBJECT: &'static str = "Bulletin";
         const PERMISSION_PREFIX: &'static str = "reports";
     }
+
+    /// A subject of the announcements plugin's crate named outside its namespace.
+    pub struct Unnamed;
+
+    impl Subject for Unnamed {
+        const SUBJECT: &'static str = "Announcement";
+        const PERMISSION_PREFIX: &'static str = "announcements";
+    }
+
+    /// A subject of the announcements plugin's crate named like every subject.
+    pub struct Everything;
+
+    impl Subject for Everything {
+        const SUBJECT: &'static str = "all";
+        const PERMISSION_PREFIX: &'static str = "announcements.everything";
+    }
+
+    /// A subject of the announcements plugin's crate named like the app's `reports.*`
+    /// permissions, which no subject of the app maps.
+    pub struct Reports;
+
+    impl Subject for Reports {
+        const SUBJECT: &'static str = "reports";
+        const PERMISSION_PREFIX: &'static str = "announcements.reports";
+    }
+
+    /// A module of the announcements plugin that registers what `.0` adds.
+    pub struct NoticeSubjects(pub fn(&mut ModuleBuilder));
+
+    impl Module for NoticeSubjects {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(super::plugin("navree-plugin-announcements", "announcements"));
+            (self.0)(m);
+        }
+    }
 }
 
-use navree_plugin_announcements::{Announcement, Bulletin, Extras, Plugin};
+use navree_plugin_announcements::{
+    Announcement, Bulletin, Everything, Extras, NoticeSubjects, Plugin, Unnamed,
+};
 
 /// A module of the app, named `name`, that describes `permissions`.
 struct Plain(&'static str, &'static [Permission]);
@@ -220,6 +257,19 @@ struct Report;
 impl Subject for Report {
     const SUBJECT: &'static str = "Report";
     const PERMISSION_PREFIX: &'static str = "reports";
+}
+
+/// A subject of the app named under the announcements plugin's namespace.
+struct Ledger;
+
+impl Subject for Ledger {
+    const SUBJECT: &'static str = "announcements.Ledger";
+    const PERMISSION_PREFIX: &'static str = "ledger";
+}
+
+/// Registers the subject `S` from the module `m` is the builder of.
+fn subject_of<S: Subject + Send + Sync + 'static>(m: &mut ModuleBuilder) {
+    m.import(AccessModule::for_subject::<S>());
 }
 
 /// The test app of the module tests (posts, the access module, a database of
@@ -408,7 +458,7 @@ async fn a_plugin_whose_namespace_is_another_modules_permission_prefix_fails_the
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn a_plugin_subject_outside_its_namespace_fails_the_boot() {
+async fn a_plugin_subject_with_a_permission_prefix_outside_its_namespace_fails_the_boot() {
     let warnings = Warnings::default();
     let _guard = warnings.install();
     // The plugin's own subject would make `reports.*` grants mean its records.
@@ -430,6 +480,79 @@ async fn a_plugin_subject_outside_its_namespace_fails_the_boot() {
         .try_build()
         .await
         .expect("a subject of the app boots");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_plugin_subject_outside_its_namespace_fails_the_boot() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    // Each beside the support app, whose `GET /reports/sales` asks for `reports.view`, a
+    // permission no subject maps: a plugin's subject `reports` would be what it checks.
+    let cases: [(fn(&mut ModuleBuilder), &str, &str); 3] = [
+        (subject_of::<Unnamed>, "Announcement", "Unnamed"),
+        (subject_of::<Everything>, "all", "Everything"),
+        (
+            subject_of::<navree_plugin_announcements::Reports>,
+            "reports",
+            "Reports",
+        ),
+    ];
+    for (register, subject, type_name) in cases {
+        let error = boot_error(builder().module(NoticeSubjects(register))).await;
+        let expected = format!(
+            "plugin `navree-plugin-announcements` registers the subject `{subject}` in `AccessSubject<plugins::navree_plugin_announcements::{type_name}>`, a name outside its namespace; name it `announcements.{subject}`"
+        );
+        assert!(error.contains(&expected), "{subject}: {error}");
+    }
+    // Named under its namespace, the plugin's subject boots.
+    builder()
+        .module(NoticeSubjects(subject_of::<Announcement>))
+        .try_build()
+        .await
+        .expect("a plugin's subject under its namespace boots");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_subject_of_another_crate_under_a_plugins_namespace_fails_the_boot() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    let app = builder()
+        .module(AccessModule::for_subject::<Ledger>())
+        .module(ANNOUNCEMENTS);
+    let error = boot_error(app).await;
+    assert!(
+        error.contains(
+            "plugin `navree-plugin-announcements` uses the namespace `announcements`, under which `AccessSubject<plugins::Ledger>` registers the subject `announcements.Ledger`; set another with plugin_info!(namespace = \"..\")"
+        ),
+        "{error}"
+    );
+    // Without the plugin, the name is the app's to choose.
+    builder()
+        .module(AccessModule::for_subject::<Ledger>())
+        .try_build()
+        .await
+        .expect("the app's subject boots without the plugin");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_app_may_register_a_plugins_subject() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    // The app registers the plugin's subject `reports` from its own root: its own line.
+    let app = builder()
+        .module(AccessModule::for_subject::<navree_plugin_announcements::Reports>())
+        .module(ANNOUNCEMENTS)
+        .try_build()
+        .await
+        .expect("the app's registration of a plugin's subject boots");
+    let factory = app.get::<AbilityFactory>().await;
+    assert_eq!(
+        factory
+            .permission_subjects()
+            .get("announcements.reports")
+            .map(String::as_str),
+        Some("reports")
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -1,7 +1,7 @@
 //! The boot checks of the permissions modules describe with
 //! `m.permissions` (navree-contracts' `permission_catalog`): their names, a
-//! community plugin's namespace and its own subjects' permission prefixes,
-//! and a name two modules describe. Describing
+//! community plugin's namespace, the names of its subjects and their
+//! permission prefixes, and a name two modules describe. Describing
 //! a permission grants it to nobody; these checks grant nothing either.
 //! They run where the app has AccessModule: without it nothing checks the
 //! catalog and nothing reads the descriptions, while a workspace role still
@@ -20,10 +20,13 @@ use crate::subject::SubjectRegistration;
 ///
 /// 1. every described name is two or more lower-case words joined by `.`;
 /// 2. a community plugin's names start with its namespace and `.`;
-/// 3. a community plugin's own subjects (types of its crate) take permission
-///    prefixes inside its namespace (the namespace, or the namespace and
-///    `.` and more), and its namespace is neither the first word of a
-///    permission prefix a subject of another crate registers nor `all`;
+/// 3. a subject that a module acting for a community plugin registers is
+///    named under the plugin's namespace (the namespace, or the namespace,
+///    `.` and a name), and no other module registers a subject of another
+///    crate under that namespace; a community plugin's own subjects (types
+///    of its crate) take permission prefixes inside its namespace, and its
+///    namespace is neither the first word of a permission prefix a subject
+///    of another crate registers nor `all`;
 /// 4. a name two modules describe is an error when either module belongs to
 ///    a community plugin, and otherwise a warning at target `navree::access`.
 pub(crate) fn check(ctx: &AppContext) -> Result<(), AccessError> {
@@ -53,6 +56,37 @@ pub(crate) fn check(ctx: &AppContext) -> Result<(), AccessError> {
     }
 
     let subjects = ctx.contributions::<SubjectRegistration>();
+    for contributed in &subjects {
+        let registration = &contributed.value;
+        let (subject, module) = (registration.subject, contributed.module.name);
+        if let Some(plugin) = community_plugin(&plugins, contributed.module.id) {
+            // A plugin's subjects are the names under its namespace, so none of
+            // them is a subject the app checks, registered or not.
+            let namespace = plugin.info.namespace;
+            if !is_under(subject, namespace) {
+                return Err(AccessError::Config(format!(
+                    "plugin `{}` registers the subject `{subject}` in `{module}`, a name outside its namespace; name it `{namespace}.{subject}`",
+                    plugin.info.name
+                )));
+            }
+            continue;
+        }
+        // Under a plugin's namespace: the plugin's subjects only, and the app's
+        // registrations of them.
+        for plugin in plugins.iter().filter(|plugin| !plugin.first_party) {
+            let namespace = plugin.info.namespace;
+            let of_the_plugin = registration
+                .type_name
+                .strip_prefix(plugin.info.crate_name)
+                .is_some_and(|rest| rest.starts_with("::"));
+            if !of_the_plugin && is_under(subject, namespace) {
+                return Err(AccessError::Config(format!(
+                    "plugin `{}` uses the namespace `{namespace}`, under which `{module}` registers the subject `{subject}`; set another with plugin_info!(namespace = \"..\")",
+                    plugin.info.name
+                )));
+            }
+        }
+    }
     for plugin in plugins.iter().filter(|plugin| !plugin.first_party) {
         let namespace = plugin.info.namespace;
         // A subject whose type lives in the plugin's own crate is its own.
@@ -105,11 +139,23 @@ pub(crate) fn check(ctx: &AppContext) -> Result<(), AccessError> {
     Ok(())
 }
 
-/// The community plugin `module` belongs to, if it belongs to one.
-fn community_plugin(plugins: &[PluginReport], module: ModuleId) -> Option<&PluginReport> {
+/// The community plugin `module` acts for, if it acts for one: the plugin the
+/// `plugins` listing lists it under, when the kernel does not find that plugin
+/// first-party.
+pub(crate) fn community_plugin(
+    plugins: &[PluginReport],
+    module: ModuleId,
+) -> Option<&PluginReport> {
     plugins.iter().find(|plugin| {
         !plugin.first_party && plugin.modules.iter().any(|member| member.id == module)
     })
+}
+
+/// Whether `name` is under `namespace`: the namespace itself, or the
+/// namespace, `.` and more.
+pub(crate) fn is_under(name: &str, namespace: &str) -> bool {
+    name.strip_prefix(namespace)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
 }
 
 /// The refusal of a community plugin whose namespace is the permission
@@ -141,7 +187,28 @@ fn is_permission_name(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_permission_name;
+    use super::{is_permission_name, is_under};
+
+    #[test]
+    fn a_name_is_under_a_namespace_it_is_or_starts_with_and_a_dot() {
+        for name in [
+            "announcements",
+            "announcements.Announcement",
+            "announcements.notice_board.Notice",
+        ] {
+            assert!(is_under(name, "announcements"), "{name:?} is under it");
+        }
+        for name in [
+            "Announcement",
+            "announcements_extra.Notice",
+            "announcementsNotice",
+            "reports.announcements",
+            "all",
+            "",
+        ] {
+            assert!(!is_under(name, "announcements"), "{name:?} is not under it");
+        }
+    }
 
     #[test]
     fn permission_names_are_two_or_more_lower_case_words() {

@@ -29,7 +29,7 @@ use crate::page::DataFn;
 /// let _link = HelmLink::new("Announcements", "/announcements")
 ///     .group("Workspace")
 ///     .icon("megaphone")
-///     .can("read", "Announcement");
+///     .can("read", "announcements.Announcement");
 /// ```
 #[derive(Clone, Debug)]
 #[non_exhaustive]
@@ -186,7 +186,7 @@ impl fmt::Debug for HelmWidget {
 ///             .helm_widget(
 ///                 HelmWidget::new("announcements", "Latest announcements")
 ///                     .template("admin/widgets/announcements")
-///                     .can("read", "Announcement"),
+///                     .can("read", "announcements.Announcement"),
 ///             );
 ///     }
 /// }

@@ -74,12 +74,22 @@ impl AccessModule {
     /// by its key, in the request's unit of work), and its policy,
     /// if it has one ([`SubjectRecords::policy`]), joins every principal's
     /// rules.
+    ///
+    /// A plugin's module (one that is not one of the framework's own
+    /// packages) names its subjects under the plugin's namespace, as its
+    /// permissions are (`announcements.Announcement`); no other module names
+    /// a subject of another crate under that namespace.
     pub fn for_feature<S: SubjectRecords>() -> impl Module {
         AccessFeature::<S>(PhantomData)
     }
 
     /// Registers a subject without records (only its permission
     /// prefix, e.g. `reports` → `Report`).
+    ///
+    /// A plugin's module (one that is not one of the framework's own
+    /// packages) names its subjects under the plugin's namespace, as its
+    /// permissions are (`announcements.Announcement`); no other module names
+    /// a subject of another crate under that namespace.
     pub fn for_subject<S: Subject + Send + Sync + 'static>() -> impl Module {
         AccessSubject::<S>(PhantomData)
     }
