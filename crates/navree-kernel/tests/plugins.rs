@@ -1393,3 +1393,66 @@ fn a_module_typed_as_a_reference_acts_for_the_plugin_of_the_type_behind_it() {
         "plugin `navree-plugin-helper` registers the command `check` in `helper` (a module of the plugin's crate `plugins::navree_plugin_helper`), a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise"
     );
 }
+
+// A module typed as a reference to a trait object.
+
+/// The parts plugin: its crate is this module.
+mod navree_plugin_parts {
+    use navree_kernel::{CommandSpec, Module, ModuleBuilder, ModuleId, PluginInfo};
+
+    /// The plugin's info.
+    const PARTS: PluginInfo =
+        PluginInfo::new("navree-plugin-parts", module_path!(), "parts", "1.0.0");
+
+    /// A part of the plugin: a trait of the plugin's crate.
+    pub trait Part: Sync {
+        /// The command the part registers.
+        fn command(&self) -> &'static str;
+    }
+
+    /// The plugin's one part: it registers the framework's command `check`.
+    pub struct Gear;
+
+    impl Part for Gear {
+        fn command(&self) -> &'static str {
+            "check"
+        }
+    }
+
+    /// The one part, as a trait object.
+    pub static THE_PART: &dyn Part = &Gear;
+
+    /// A part as a module, typed as a reference to the trait object, with an id that names no
+    /// crate of a plugin.
+    impl Module for &'static dyn Part {
+        fn id(&self) -> ModuleId {
+            ModuleId::named::<String>("part")
+        }
+
+        fn register(&self, m: &mut ModuleBuilder) {
+            let command = CommandSpec::new(self.command(), "The part's", |_, _| async { Ok(()) });
+            m.command(command);
+        }
+    }
+
+    /// The plugin's module: it imports the part as a trait object.
+    pub struct PartsPlugin;
+
+    impl Module for PartsPlugin {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PARTS).import(THE_PART);
+        }
+    }
+}
+
+#[test]
+fn a_module_typed_as_a_trait_object_acts_for_the_plugin_of_the_traits_crate() {
+    use navree_plugin_parts::PartsPlugin;
+    // Its own type is `&dyn Part`, read as `Part`, a trait of the plugin's crate: only that
+    // crate can make such a type a module, so it acts for the plugin, whatever its id names,
+    // and is held to the plugin's rules.
+    assert_eq!(
+        errors(Navree::app().module(PartsPlugin)),
+        "plugin `navree-plugin-parts` registers the command `check` in `part` (a module of the plugin's crate `plugins::navree_plugin_parts`), a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise"
+    );
+}

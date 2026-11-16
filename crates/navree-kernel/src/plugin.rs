@@ -641,7 +641,9 @@ pub(crate) fn names_crate(type_name: &str, crate_name: &str) -> bool {
 /// The type a module's type name stands for, read through a reference or a
 /// pointer (`&T`, `&mut T`, `*const T`, `*mut T`) and inside `Box<..>` and
 /// `Pin<..>`, at any depth: a module typed `&'static Helper` or
-/// `Box<Helper>` is read as `Helper`, so its crate is `Helper`'s.
+/// `Box<Helper>` is read as `Helper`, so its crate is `Helper`'s. A trait
+/// object behind them is read as its trait ([`object_trait`]): a module typed
+/// `&'static dyn Part` is read as `Part`, so its crate is the trait's.
 pub(crate) fn module_path(type_name: &str) -> &str {
     let mut path = type_name.trim();
     loop {
@@ -652,10 +654,33 @@ pub(crate) fn module_path(type_name: &str) -> &str {
         let inside = ["alloc::boxed::Box<", "core::pin::Pin<"]
             .iter()
             .find_map(move |wrapper| current.strip_prefix(*wrapper)?.strip_suffix('>'));
-        match behind.or(inside) {
+        // A trait object with more bounds than one, written in parentheses.
+        let grouped = current
+            .strip_prefix('(')
+            .and_then(|inner| inner.strip_suffix(')'));
+        match behind.or(inside).or(grouped) {
             Some(inner) => path = inner.trim(),
-            None => return path,
+            None => return object_trait(path),
         }
+    }
+}
+
+/// The trait a trait object's type name stands for: `dyn x::Part` and
+/// `dyn x::Part + core::marker::Sync` are `x::Part`, a path of the trait's
+/// crate, which is the only crate that can make such a type a module. The
+/// kernel's own `dyn Module` stands for a module of any crate, so it is
+/// returned as it is, with no crate to read; and so is a name that is no
+/// trait object.
+fn object_trait(path: &str) -> &str {
+    let Some(object) = path.strip_prefix("dyn ") else {
+        return path;
+    };
+    let principal = object.split(" + ").next().unwrap_or(object).trim();
+    let any_module = std::any::type_name::<dyn crate::Module>();
+    if any_module.strip_prefix("dyn ") == Some(principal) {
+        path
+    } else {
+        principal
     }
 }
 
@@ -797,14 +822,34 @@ mod tests {
         ] {
             assert_eq!(module_path(type_name), helper, "{type_name}");
         }
-        // Another generic type is read as it is, and a boxed trait object has no crate.
+        // Another generic type is read as it is.
         assert_eq!(
             module_path("acme::Wrap<navree_plugin_a::Helper>"),
             "acme::Wrap<navree_plugin_a::Helper>"
         );
+        // A trait object of a crate is read as its trait, with more bounds or without, in
+        // parentheses or not, behind a reference, in a box or in a pin.
+        for type_name in [
+            "&dyn navree_plugin_a::Part",
+            "&dyn navree_plugin_a::Part + core::marker::Sync",
+            "&(dyn navree_plugin_a::Part + core::marker::Sync)",
+            "alloc::boxed::Box<dyn navree_plugin_a::Part + core::marker::Send>",
+            "core::pin::Pin<&dyn navree_plugin_a::Part>",
+        ] {
+            assert_eq!(
+                module_path(type_name),
+                "navree_plugin_a::Part",
+                "{type_name}"
+            );
+        }
+        // The kernel's own trait object is a module of any crate: it has no crate.
         assert_eq!(
             module_path("alloc::boxed::Box<dyn navree_kernel::module::Module>"),
             "dyn navree_kernel::module::Module"
+        );
+        assert_eq!(
+            module_path(std::any::type_name::<Box<dyn crate::Module>>()),
+            std::any::type_name::<dyn crate::Module>()
         );
         // First-party reads the module's type the same way.
         let listed = [("navree-flags", "navree_flags")];

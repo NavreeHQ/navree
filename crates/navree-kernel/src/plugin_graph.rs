@@ -422,7 +422,8 @@ impl Graph {
     ///
     /// A module acts for the plugin it names. Else, for the plugin of the
     /// crate its type path is in, up to its first `<` and read through a
-    /// reference, a `Box` or a `Pin` (`&'static Helper` is `Helper`): the type
+    /// reference, a `Box` or a `Pin` (`&'static Helper` is `Helper`), a trait
+    /// object as its trait (`&'static dyn Part` is `Part`): the type
     /// of the module value the app or its importer passed, else the type its
     /// id names. For each type, among plugins whose crates hold it, the
     /// longest crate name wins, then the plugin first in import order. When
