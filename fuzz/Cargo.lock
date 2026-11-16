@@ -2116,6 +2116,7 @@ dependencies = [
  "chrono",
  "http",
  "navree-bounded",
+ "navree-config",
  "navree-contracts",
  "navree-db",
  "navree-http",
