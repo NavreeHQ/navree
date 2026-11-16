@@ -366,15 +366,14 @@ public sealed class SessionKeeper : IDisposable
     /// <see cref="EndAsync"/> runs there: the mark is left on disk, the cookies go from memory, and <paramref name="stopWork"/> stops what is
     /// running. Then every step runs at once, in the order of <see cref="EndAsync"/> and without waiting for the core: the cookie file,
     /// <paramref name="beforeKept"/>, everything else kept, <paramref name="afterKept"/>. Nothing is written for anybody until the core has
-    /// let go (<paramref name="coreLetsGo"/>): until then what it or a timer asks to keep is still the leaving person's. When it has let go,
-    /// <paramref name="onceLetGo"/> run, for what the person's screens, which were still shown meanwhile, gained since. The mark goes when
-    /// every step finished and the core let go in time.
+    /// let go (<paramref name="coreLetsGo"/>): until then what it or a timer asks to keep is still the leaving person's. Nothing runs a
+    /// second time when it lets go: the core closed the person's screens before it said the session is ending, so nothing of theirs is
+    /// gained in between. The mark goes when every step finished and the core let go in time.
     /// </summary>
     /// <param name="stopWork">As for <see cref="EndAsync"/>. It leaves the leaving person's last request running (<see cref="SessionGate.IsLast"/>).</param>
     /// <param name="coreLetsGo">Completes when the core has let go of the person.</param>
     /// <param name="beforeKept">Steps that run after the cookie file goes and before the rest of what is kept.</param>
     /// <param name="afterKept">Steps that run after.</param>
-    /// <param name="onceLetGo">Steps that run when the core has let go.</param>
     /// <param name="limit">How long one step may take, and how long the core may take to let go once the steps have run; <see cref="Wipe.StepLimit"/> when left out.</param>
     /// <returns>What came of each step.</returns>
     public async Task<WipeReport> EndBeforeCoreAsync(
@@ -382,14 +381,12 @@ public sealed class SessionKeeper : IDisposable
         Task coreLetsGo,
         IEnumerable<WipeStep> beforeKept,
         IEnumerable<WipeStep> afterKept,
-        IEnumerable<WipeStep> onceLetGo,
         TimeSpan? limit = null)
     {
         ArgumentNullException.ThrowIfNull(stopWork);
         ArgumentNullException.ThrowIfNull(coreLetsGo);
         ArgumentNullException.ThrowIfNull(beforeKept);
         ArgumentNullException.ThrowIfNull(afterKept);
-        ArgumentNullException.ThrowIfNull(onceLetGo);
         TimeSpan each = limit ?? Wipe.StepLimit;
         List<KeyValuePair<string, string>> failed = [];
         lock (gate)
@@ -453,18 +450,15 @@ public sealed class SessionKeeper : IDisposable
         }
 
         // A core that did not let go keeps it so: what it asks to keep is still the leaving person's, and nothing is written.
-        WipeReport since = new([], []);
         if (letGo)
         {
             lock (gate)
             {
                 ending = false;
             }
-
-            since = await Wipe.RunAsync(onceLetGo, each).ConfigureAwait(false);
         }
 
-        WipeReport report = new([.. first.Done, .. rest.Done, .. since.Done], [.. failed, .. first.Failed, .. rest.Failed, .. since.Failed]);
+        WipeReport report = new([.. first.Done, .. rest.Done], [.. failed, .. first.Failed, .. rest.Failed]);
         await FinishAsync(report).ConfigureAwait(false);
         return report;
     }

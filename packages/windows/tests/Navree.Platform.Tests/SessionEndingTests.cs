@@ -136,11 +136,6 @@ public sealed class SessionEndingTests
                     _ = Interlocked.Increment(ref windowsEmptied);
                     _ = stepsRan.TrySetResult();
                     return Task.CompletedTask;
-                })],
-                [new WipeStep("the files chosen for forms", () =>
-                {
-                    _ = Interlocked.Increment(ref windowsEmptied);
-                    return Task.CompletedTask;
                 })]);
 
             // From that line on, before anything is awaited: the mark is on disk and her cookie is out of memory.
@@ -197,7 +192,11 @@ public sealed class SessionEndingTests
             Expect.That(report.Complete, "the sign-out did not finish: " + string.Join(", ", report.Failed.Select(failed => failed.Key + " (" + failed.Value + ")")));
             Expect.That(!kept.WipeMarked, "the mark stays though the sign-out finished and the core let go: every start would begin signed out");
             Expect.That(!keeper.Ending, "nothing is kept for whoever comes next");
-            Assert.AreEqual(2, Volatile.Read(ref windowsEmptied), "what her screens gained while the core waited is not taken away when it lets go");
+            Assert.AreEqual(1, Volatile.Read(ref windowsEmptied), "a step of the sign-out ran a second time when the core let go");
+            CollectionAssert.AreEqual(
+                new[] { "the cookies", "what the web view keeps", "what is kept on the device", "the files chosen for forms" },
+                report.Done.ToArray(),
+                "the steps did not each run once, in their order");
 
             // Whoever signs in next is kept as usual.
             cookies.Store("https://shop.example/", ["session=manpreet; Path=/; Max-Age=3600"], DateTimeOffset.UtcNow);
@@ -232,7 +231,7 @@ public sealed class SessionEndingTests
             SessionGate gate = new();
             _ = gate.Asked([Removal(), new SessionEndingEffect()]);
             gate.SessionIsEnding();
-            ending = ended.EndBeforeCoreAsync(() => { }, coreLetsGo.Task, [new WipeStep("what the web view keeps", () => browserEnds.Task)], [], []);
+            ending = ended.EndBeforeCoreAsync(() => { }, coreLetsGo.Task, [new WipeStep("what the web view keeps", () => browserEnds.Task)], []);
             Expect.That(kept.WipeMarked, "no mark is on disk when the core has said the session is ending");
 
             // The cookie file goes first and at once; the rest of what is hers is still on disk behind the web view's step.

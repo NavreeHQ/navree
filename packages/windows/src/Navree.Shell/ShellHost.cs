@@ -471,9 +471,6 @@ public sealed partial class ShellHost : IDisposable
                     // The sign-out began when the core said the session was ending: it is done or under way, and none begins here. It is
                     // told that the core has let go.
                     coreLetsGo = null;
-
-                    // What the person's screens drew while the core had not let go is not handed to a screen of whoever comes next.
-                    PictureCache.Clear();
                     _ = begun.TrySetResult();
                 }
                 else
@@ -669,11 +666,11 @@ public sealed partial class ShellHost : IDisposable
                 }.Concat(moreWipeSteps),
             ];
 
-            // When the core said the session is ending and lets go later, everything runs at once. The person's screens are still shown until
-            // the core lets go, and can gain a file or a picture meanwhile, so what is the windows' own is taken away once more then.
+            // When the core said the session is ending and lets go later, everything runs at once and nothing waits for it; nothing runs a
+            // second time when it does let go (the core closed the person's screens before it said so, so nothing is gained in between).
             report = coreLetsGoLater is null
                 ? await session.EndAsync(StopWork, coreEnded ? null : TellCore, web, ofTheWindows).ConfigureAwait(false)
-                : await session.EndBeforeCoreAsync(StopWork, coreLetsGoLater, web, ofTheWindows, ofTheWindows).ConfigureAwait(false);
+                : await session.EndBeforeCoreAsync(StopWork, coreLetsGoLater, web, ofTheWindows).ConfigureAwait(false);
         }
         catch (Exception problem)
         {
@@ -761,8 +758,9 @@ public sealed partial class ShellHost : IDisposable
             }
         }
 
-        // The pictures drawn for the person are let go of now, and again when the core lets go and in the windows' own step: they are held
-        // by their address alone, and an address may be the same for whoever comes next (a person's own picture at one address for everyone).
+        // The pictures drawn for the person are let go of now, again just before the core is told when the client ends the session (the
+        // person's screens are up until then), and in the windows' own step: they are held by their address alone, and an address may be
+        // the same for whoever comes next (a person's own picture at one address for everyone).
         PictureCache.Clear();
         Place?.HoldSnapshots(true);
     }
