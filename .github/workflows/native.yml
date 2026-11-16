@@ -769,13 +769,14 @@ jobs:
       WINAPP_VERSION: "0.8.0"
       # What the audit of the walks counts, added over every look of the three demos (nine files): the most it may count today. The
       # job fails when a count goes above its number; a number is brought down when the count is. The counts move a little from one run
-      # to the next (a popup open, a table that has realised a row or not), so each number is the most two runs counted, with five in
-      # a hundred added. "no name" is the in-process audit's own count, which asks a control's own peer and so calls a list row nameless
-      # (the system's tool names it).
-      AUDIT_NO_NAME: "2400"
-      AUDIT_SMALL_TARGETS: "2760"
-      AUDIT_TEXTS_CUT: "340"
-      AUDIT_PAST_EDGE: "1040"
+      # to the next (a popup open, a table that has realised a row or not), so the two that count something today (104 controls with
+      # no name, 104 parts past the edge) are written with fifteen in a hundred added, and the two that count nothing are written as
+      # nothing: one target under 24 px or one text cut fails the job. "no name" is the in-process audit's own count, which asks a
+      # control's own peer and so calls a list row nameless (the system's tool names it).
+      AUDIT_NO_NAME: "120"
+      AUDIT_SMALL_TARGETS: "0"
+      AUDIT_TEXTS_CUT: "0"
+      AUDIT_PAST_EDGE: "120"
       # What the press run proves: how many of its checks must pass.
       PRESS_PASSES: "7"
       # Checks that say FAIL today because the page does not do the thing yet: one pattern for each. A check that says FAIL and is not named
