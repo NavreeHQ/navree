@@ -145,7 +145,7 @@ public sealed class FetcherTests
     [TestMethod]
     public async Task No_answer_is_offline_or_timeout_and_a_cancelled_request_is_other()
     {
-        Answering offline = new(_ => throw new HttpRequestException("no route"));
+        Answering offline = new(_ => throw new HttpRequestException(HttpRequestError.ConnectionError, "no route", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.NetworkUnreachable)));
         using HttpFetcher down = new(Shop, new CookieStore(Shop), offline);
         Assert.AreEqual("offline", (await down.FetchAsync(Get("https://shop.example/"), CancellationToken.None)).Error);
 

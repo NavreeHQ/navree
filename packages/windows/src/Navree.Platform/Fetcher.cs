@@ -131,13 +131,14 @@ public sealed class HttpFetcher : IFetcher, IDisposable
         {
             return Failed("timeout");
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException problem)
         {
-            return Failed("offline");
+            return Failed(TransportError(problem));
         }
         catch (IOException)
         {
-            return Failed("offline");
+            // The answer's stream broke after the request went out.
+            return Failed("other");
         }
         catch (InvalidOperationException)
         {
@@ -402,6 +403,27 @@ public sealed class HttpFetcher : IFetcher, IDisposable
 
             bytes.Write(buffer, 0, read);
         }
+    }
+
+    /// <summary>
+    /// What a request that failed is reported as. <c>offline</c> only when nothing of it can have been sent: the name was not found, or the
+    /// connection (to the server, through a proxy's tunnel, or its TLS handshake) was never made, which <see cref="HttpRequestException.HttpRequestError"/>
+    /// says. Anything else (the connection reset or ended after the request began to be written, an answer that does not read, or a reason the
+    /// exception does not give) is <c>other</c>: when it cannot be told, the request may have been sent, and a write may have run.
+    /// </summary>
+    /// <param name="problem">What the request threw.</param>
+    /// <returns><c>offline</c> or <c>other</c>.</returns>
+    public static string TransportError(HttpRequestException problem)
+    {
+        ArgumentNullException.ThrowIfNull(problem);
+        return problem.HttpRequestError switch
+        {
+            HttpRequestError.NameResolutionError
+                or HttpRequestError.ConnectionError
+                or HttpRequestError.ProxyTunnelError
+                or HttpRequestError.SecureConnectionError => "offline",
+            _ => "other",
+        };
     }
 
     private static FetchResult Failed(string error) =>
