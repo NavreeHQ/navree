@@ -653,6 +653,8 @@ for (const name of NAMES) {
 
       test("the waterfall's bars each start where the last ended, and the keys walk its rows", async () => {
         const page = await open("/charts?case=waterfall");
+        // The bars grow in: they are measured where they end.
+        await settle(page);
         const bars = await page.evaluate(() =>
           [...document.querySelectorAll("#waterfall [data-slot=chart-bar]")].map((b) => {
             const r = b.getBoundingClientRect();
