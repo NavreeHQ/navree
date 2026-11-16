@@ -30,6 +30,8 @@ public sealed class SessionKeeper : IDisposable
     private string lastCookies = string.Empty;
     private bool ending;
     private int wiping;
+    private int ends;
+    private bool endFailed;
 
     /// <summary>Makes the keeper. Nothing is read until <see cref="Open"/>.</summary>
     /// <param name="kept">What is kept between launches.</param>
@@ -259,7 +261,8 @@ public sealed class SessionKeeper : IDisposable
     /// <paramref name="stopWork"/> stops what is running for the person. Then, in order, each with the limit of <see cref="Wipe"/>: the cookie
     /// file and <paramref name="beforeKept"/> (what the web view keeps); the core is told and its answer awaited (<paramref name="tellCore"/>;
     /// none when it is the core that ended the session), after which writes are made again for whoever comes next; everything else kept; and
-    /// <paramref name="afterKept"/>. The mark goes when every one of them finished and the core let go.
+    /// <paramref name="afterKept"/>. The mark goes when every one of them finished and the core let go, and no other sign-out is still
+    /// running: when two overlap, it goes with the last of them, and only if both finished.
     /// </summary>
     /// <param name="stopWork">Stops the requests, streams, timers and snapshots under way. If it throws, that is written down in what is
     /// returned and the sign-out goes on to its end: its steps run and the core is told, so nothing of the person is left for whoever comes
@@ -281,6 +284,10 @@ public sealed class SessionKeeper : IDisposable
             ending = true;
             wiping++;
             lastCookies = string.Empty;
+            if (ends++ == 0)
+            {
+                endFailed = false;
+            }
         }
 
         // The start. A sign-out that has begun is carried to its end whatever a part of its start throws: the part is written down, and the
@@ -349,18 +356,7 @@ public sealed class SessionKeeper : IDisposable
             each).ConfigureAwait(false);
 
         WipeReport report = new([.. first.Done, .. rest.Done], [.. failed, .. first.Failed, .. rest.Failed]);
-        if (report.Complete)
-        {
-            try
-            {
-                await disk.RunAsync(kept.UnmarkWipe).ConfigureAwait(false);
-            }
-            catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
-            {
-                // The mark stays: the next start takes away again what is already gone.
-            }
-        }
-
+        await FinishAsync(report).ConfigureAwait(false);
         return report;
     }
 
@@ -401,6 +397,10 @@ public sealed class SessionKeeper : IDisposable
             ending = true;
             wiping++;
             lastCookies = string.Empty;
+            if (ends++ == 0)
+            {
+                endFailed = false;
+            }
         }
 
         // The start, as in EndAsync: a part that throws is written down and the sign-out goes on.
@@ -465,18 +465,7 @@ public sealed class SessionKeeper : IDisposable
         }
 
         WipeReport report = new([.. first.Done, .. rest.Done, .. since.Done], [.. failed, .. first.Failed, .. rest.Failed, .. since.Failed]);
-        if (report.Complete)
-        {
-            try
-            {
-                await disk.RunAsync(kept.UnmarkWipe).ConfigureAwait(false);
-            }
-            catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
-            {
-                // The mark stays: the next start takes away again what is already gone.
-            }
-        }
-
+        await FinishAsync(report).ConfigureAwait(false);
         return report;
     }
 
@@ -486,6 +475,32 @@ public sealed class SessionKeeper : IDisposable
 
     /// <inheritdoc />
     public void Dispose() => disk.Dispose();
+
+    // The end of one sign-out. Two can overlap (the person signs out while the server ends the session), and the mark is theirs together:
+    // it goes when none is still running and every one that ran with this one finished.
+    private async Task FinishAsync(WipeReport report)
+    {
+        bool unmark;
+        lock (gate)
+        {
+            endFailed |= !report.Complete;
+            unmark = --ends == 0 && !endFailed;
+        }
+
+        if (!unmark)
+        {
+            return;
+        }
+
+        try
+        {
+            await disk.RunAsync(kept.UnmarkWipe).ConfigureAwait(false);
+        }
+        catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+        {
+            // The mark stays: the next start takes away again what is already gone.
+        }
+    }
 
     // One part of the start of a sign-out: what it throws is written down, and the next part runs.
     private static void Begin(string name, Action part, List<KeyValuePair<string, string>> failed)

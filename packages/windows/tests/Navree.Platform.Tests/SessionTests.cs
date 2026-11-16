@@ -209,6 +209,47 @@ public sealed class SessionTests
     }
 
     [TestMethod]
+    public async Task The_mark_stays_until_the_last_of_two_sign_outs_that_overlap_has_finished_and_goes_only_if_both_did()
+    {
+        string folder = Folder();
+        try
+        {
+            SignedInBefore(folder);
+            (SessionKeeper keeper, _, KeptStore kept, _) = Start(folder);
+            using (keeper)
+            {
+                // The person signs out, and a step of it takes long. Meanwhile the server ends the session too, and that sign-out finishes first.
+                TaskCompletionSource slow = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                Task<WipeReport> first = keeper.EndAsync(() => { }, () => Task.CompletedTask, [], [new WipeStep("the files chosen for forms", () => slow.Task)]);
+                WipeReport second = await keeper.EndAsync(() => { }, null, [], []).WaitAsync(Short);
+                Expect.That(second.Complete, "the second sign-out did not finish");
+                Expect.That(!first.IsCompleted, "the first sign-out finished before the test let it");
+                Expect.That(kept.WipeMarked, "the mark went while a sign-out was still running: an app ended now would not finish it at its next start");
+                slow.SetResult();
+                Expect.That((await first.WaitAsync(Short)).Complete, "the first sign-out did not finish");
+                Expect.That(!kept.WipeMarked, "the mark stays though both sign-outs finished: every start would begin signed out");
+
+                // Two that overlap, one of which does not finish: the mark stays when the other, which finished, is the last to end.
+                TaskCompletionSource slowAgain = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                Task<WipeReport> third = keeper.EndAsync(() => { }, null, [], [new WipeStep("the files chosen for forms", () => slowAgain.Task)]);
+                WipeReport fourth = await keeper.EndAsync(() => { }, null, [new WipeStep("what the web view keeps", () => throw new IOException("held"))], []).WaitAsync(Short);
+                Expect.That(!fourth.Complete, "a sign-out with a step that failed is said to have finished");
+                slowAgain.SetResult();
+                Expect.That((await third.WaitAsync(Short)).Complete, "the sign-out whose steps all ran did not finish");
+                Expect.That(kept.WipeMarked, "the mark went though one of two sign-outs that overlapped did not finish");
+
+                // A sign-out by itself after that, which finishes, takes the mark as usual.
+                WipeReport alone = await keeper.EndAsync(() => { }, null, [], []).WaitAsync(Short);
+                Expect.That(alone.Complete && !kept.WipeMarked, "a sign-out that finished by itself left the mark");
+            }
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
     public async Task A_sign_out_the_server_asked_for_whose_start_throws_still_takes_everything_of_the_person_away()
     {
         string folder = Folder();
