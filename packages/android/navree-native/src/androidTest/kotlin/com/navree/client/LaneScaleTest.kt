@@ -14,6 +14,7 @@ import androidx.compose.ui.test.swipe
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.navree.client.core.Content
 import com.navree.client.core.Stage
+import com.navree.client.ui.CardCost
 import mockwebserver3.MockWebServer
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.After
