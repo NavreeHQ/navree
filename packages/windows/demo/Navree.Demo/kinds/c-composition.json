@@ -1,0 +1,610 @@
+{
+ "navree": 1,
+ "build": "x",
+ "vocab": 0,
+ "screen": {
+  "title": "Composition, flags and status",
+  "id": "c-composition",
+  "nav": "/",
+  "body": {
+   "t": "stack",
+   "gap": 4,
+   "children": [
+    {
+     "t": "section",
+     "title": "Flags",
+     "children": [
+      {
+       "t": "stack",
+       "gap": 2,
+       "children": [
+        {
+         "t": "stack",
+         "axis": "horizontal",
+         "gap": 2,
+         "align": "center",
+         "children": [
+          {
+           "t": "text",
+           "value": "\ud83c\uddee\ud83c\uddf3"
+          },
+          {
+           "t": "text",
+           "value": "Ludhiana, Punjab"
+          }
+         ]
+        },
+        {
+         "t": "stack",
+         "axis": "horizontal",
+         "gap": 2,
+         "align": "center",
+         "children": [
+          {
+           "t": "text",
+           "value": "\ud83c\uddfa\ud83c\uddf8"
+          },
+          {
+           "t": "text",
+           "value": "Harpreet Kaur, the US office"
+          }
+         ]
+        },
+        {
+         "t": "stack",
+         "axis": "horizontal",
+         "gap": 2,
+         "align": "center",
+         "children": [
+          {
+           "t": "text",
+           "value": "\ud83c\uddec\ud83c\udde7"
+          },
+          {
+           "t": "text",
+           "value": "Gurpreet Singh, the UK office"
+          }
+         ]
+        },
+        {
+         "t": "stack",
+         "axis": "horizontal",
+         "gap": 2,
+         "align": "center",
+         "children": [
+          {
+           "t": "text",
+           "value": "\ud83c\udde6\ud83c\uddea"
+          },
+          {
+           "t": "text",
+           "value": "Navdeep Kaur, the UAE office"
+          }
+         ]
+        },
+        {
+         "t": "stack",
+         "axis": "horizontal",
+         "gap": 2,
+         "align": "center",
+         "children": [
+          {
+           "t": "text",
+           "value": "\ud83c\uddf3\ud83c\uddf5"
+          },
+          {
+           "t": "text",
+           "value": "Ravneet Kaur, the Nepal office: a country with no flag of its own here"
+          }
+         ]
+        },
+        {
+         "t": "text",
+         "value": "Ship to \ud83c\uddee\ud83c\uddf3 India or \ud83c\uddef\ud83c\uddf5 Japan or \ud83c\uddeb\ud83c\uddf7 France or \ud83c\udde9\ud83c\uddea Germany.",
+         "style": "title2"
+        },
+        {
+         "t": "text",
+         "value": "\ud83c\uddee\ud83c\uddf3",
+         "style": "display"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Status with its words",
+     "children": [
+      {
+       "t": "stack",
+       "axis": "horizontal",
+       "gap": 3,
+       "wrap": true,
+       "children": [
+        {
+         "t": "badge",
+         "text": "Paid",
+         "tone": "success",
+         "dot": true
+        },
+        {
+         "t": "badge",
+         "text": "Packed",
+         "tone": "info",
+         "dot": true
+        },
+        {
+         "t": "badge",
+         "text": "Late",
+         "tone": "warning",
+         "dot": true
+        },
+        {
+         "t": "badge",
+         "text": "Failed",
+         "tone": "danger",
+         "dot": true
+        },
+        {
+         "t": "badge",
+         "text": "Draft",
+         "tone": "neutral",
+         "dot": true
+        },
+        {
+         "t": "badge",
+         "text": "Plain badge",
+         "tone": "accent"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Progress with its tone",
+     "children": [
+      {
+       "t": "progress",
+       "value": 620,
+       "label": "62% of the day's goal",
+       "colour": {
+        "hue": "green"
+       }
+      },
+      {
+       "t": "progress",
+       "value": 910,
+       "label": "Stock room: 91% full",
+       "tone": "warning"
+      },
+      {
+       "t": "progress",
+       "value": 330,
+       "label": "Returns: 33%",
+       "tone": "danger"
+      },
+      {
+       "t": "progress",
+       "label": "Syncing"
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Shapes and layers",
+     "children": [
+      {
+       "t": "stack",
+       "axis": "horizontal",
+       "gap": 3,
+       "align": "center",
+       "wrap": true,
+       "children": [
+        {
+         "t": "shape",
+         "form": "capsule",
+         "fill": {
+          "hue": "danger"
+         },
+         "size": {
+          "width": 6,
+          "height": 36,
+          "scaled": true
+         }
+        },
+        {
+         "t": "shape",
+         "form": "circle",
+         "fill": {
+          "hue": "accent"
+         },
+         "size": {
+          "width": 24,
+          "height": 24
+         }
+        },
+        {
+         "t": "shape",
+         "form": "rounded",
+         "fill": {
+          "hue": "violet",
+          "to": "rose"
+         },
+         "size": {
+          "width": 64,
+          "height": 40
+         }
+        },
+        {
+         "t": "shape",
+         "form": "rect",
+         "stroke": {
+          "hue": "neutral"
+         },
+         "size": {
+          "width": 64,
+          "height": 40
+         },
+         "label": "An empty box"
+        },
+        {
+         "t": "layers",
+         "size": {
+          "width": 44,
+          "height": 44,
+          "scaled": true
+         },
+         "children": [
+          {
+           "t": "shape",
+           "form": "circle",
+           "fill": {
+            "hue": "accent"
+           },
+           "soft": true
+          },
+          {
+           "t": "icon",
+           "name": "heart",
+           "colour": {
+            "hue": "accent"
+           }
+          }
+         ]
+        },
+        {
+         "t": "layers",
+         "place": "bottom_end",
+         "children": [
+          {
+           "t": "layers",
+           "size": {
+            "width": 40,
+            "height": 40
+           },
+           "children": [
+            {
+             "t": "shape",
+             "form": "circle",
+             "fill": {
+              "hue": "danger"
+             },
+             "soft": true
+            },
+            {
+             "t": "icon",
+             "name": "cart",
+             "colour": {
+              "hue": "danger"
+             }
+            }
+           ]
+          },
+          {
+           "t": "shape",
+           "form": "circle",
+           "fill": {
+            "hue": "danger"
+           },
+           "stroke": {
+            "hue": "neutral"
+           },
+           "size": {
+            "width": 12,
+            "height": 12
+           },
+           "label": "Out of stock"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Cards: tint, menu, action",
+     "children": [
+      {
+       "t": "grid",
+       "min": 200,
+       "gap": 3,
+       "children": [
+        {
+         "t": "card",
+         "colour": {
+          "hue": "rose"
+         },
+         "label": "Heart, 20% of score",
+         "action": {
+          "t": "navigate",
+          "href": "/heart"
+         },
+         "menu": [
+          {
+           "t": "button",
+           "label": "Pin to the summary",
+           "action": {
+            "t": "navigate",
+            "href": "/pin"
+           }
+          },
+          {
+           "t": "divider"
+          },
+          {
+           "t": "button",
+           "label": "Hide",
+           "action": {
+            "t": "navigate",
+            "href": "/hide"
+           }
+          }
+         ],
+         "appear": "rise",
+         "children": [
+          {
+           "t": "text",
+           "value": "Heart",
+           "style": "headline"
+          },
+          {
+           "t": "text",
+           "value": "20% of score",
+           "style": "caption",
+           "muted": true
+          }
+         ]
+        },
+        {
+         "t": "card",
+         "colour": {
+          "hue": "violet"
+         },
+         "children": [
+          {
+           "t": "text",
+           "value": "Sleep",
+           "style": "headline"
+          },
+          {
+           "t": "text",
+           "value": "25% of score",
+           "style": "caption",
+           "muted": true
+          }
+         ]
+        },
+        {
+         "t": "card",
+         "children": [
+          {
+           "t": "text",
+           "value": "Plain",
+           "style": "headline"
+          },
+          {
+           "t": "text",
+           "value": "No tint",
+           "style": "caption",
+           "muted": true
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Carousel",
+     "children": [
+      {
+       "t": "carousel",
+       "min": 148,
+       "gap": 3,
+       "label": "Top sellers today",
+       "children": [
+        {
+         "t": "card",
+         "pad": 3,
+         "children": [
+          {
+           "t": "text",
+           "value": "Amritsari papad",
+           "style": "callout",
+           "weight": "medium"
+          },
+          {
+           "t": "text",
+           "value": "31 sold \u00b7 \u20b94,340",
+           "style": "caption",
+           "muted": true
+          }
+         ]
+        },
+        {
+         "t": "card",
+         "pad": 3,
+         "children": [
+          {
+           "t": "text",
+           "value": "Amritsari papad",
+           "style": "callout",
+           "weight": "medium"
+          },
+          {
+           "t": "text",
+           "value": "31 sold \u00b7 \u20b94,340",
+           "style": "caption",
+           "muted": true
+          }
+         ]
+        },
+        {
+         "t": "card",
+         "pad": 3,
+         "children": [
+          {
+           "t": "text",
+           "value": "Amritsari papad",
+           "style": "callout",
+           "weight": "medium"
+          },
+          {
+           "t": "text",
+           "value": "31 sold \u00b7 \u20b94,340",
+           "style": "caption",
+           "muted": true
+          }
+         ]
+        },
+        {
+         "t": "card",
+         "pad": 3,
+         "children": [
+          {
+           "t": "text",
+           "value": "Amritsari papad",
+           "style": "callout",
+           "weight": "medium"
+          },
+          {
+           "t": "text",
+           "value": "31 sold \u00b7 \u20b94,340",
+           "style": "caption",
+           "muted": true
+          }
+         ]
+        },
+        {
+         "t": "card",
+         "pad": 3,
+         "children": [
+          {
+           "t": "text",
+           "value": "Amritsari papad",
+           "style": "callout",
+           "weight": "medium"
+          },
+          {
+           "t": "text",
+           "value": "31 sold \u00b7 \u20b94,340",
+           "style": "caption",
+           "muted": true
+          }
+         ]
+        },
+        {
+         "t": "card",
+         "pad": 3,
+         "children": [
+          {
+           "t": "text",
+           "value": "Amritsari papad",
+           "style": "callout",
+           "weight": "medium"
+          },
+          {
+           "t": "text",
+           "value": "31 sold \u00b7 \u20b94,340",
+           "style": "caption",
+           "muted": true
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "t": "carousel",
+       "paged": true,
+       "label": "Highlights",
+       "children": [
+        {
+         "t": "card",
+         "pad": 3,
+         "children": [
+          {
+           "t": "text",
+           "value": "Page one",
+           "style": "headline"
+          },
+          {
+           "t": "text",
+           "value": "Swipe or use the marks",
+           "muted": true
+          }
+         ]
+        },
+        {
+         "t": "card",
+         "pad": 3,
+         "children": [
+          {
+           "t": "text",
+           "value": "Page two",
+           "style": "headline"
+          }
+         ]
+        },
+        {
+         "t": "card",
+         "pad": 3,
+         "children": [
+          {
+           "t": "text",
+           "value": "Page three",
+           "style": "headline"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "t": "section",
+     "title": "Text",
+     "children": [
+      {
+       "t": "text",
+       "value": "\u20b91,24,050",
+       "style": "display",
+       "tabular": true,
+       "colour": {
+        "hue": "green"
+       }
+      },
+      {
+       "t": "text",
+       "value": "Changed",
+       "change": "count"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
