@@ -332,7 +332,8 @@ class LaneMoveTest {
         // Enter on the handle opens its menu.
         pressKey(KeyEvent.KEYCODE_ENTER)
         chooseInMenu("Move down")
-        waitFor("the card third") { shown().take(4) == listOf(1, 2, 0, 3) }
+        // Three cards stand in the window at the largest text, so the order is read of the first three: the card is the third.
+        waitFor("the card third") { shown().take(3) == listOf(1, 2, 0) }
         told(1, item = 0, before = 3)
         assertTrue("the focus stays on the card after a move from its menu", focused(0))
         Shots.take("lane-moved")
