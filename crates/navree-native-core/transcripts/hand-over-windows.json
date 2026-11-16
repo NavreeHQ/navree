@@ -116,17 +116,20 @@
       }
     },
     {
-      "note": "No sign-in is open now: a link on the app's scheme is an ordinary link, with a state or without one. `/signed-in` is neither a destination nor a route of the shell, so it is not opened, and nothing is exchanged.",
+      "note": "No sign-in is open now: a link on the app's scheme that carries a code and a state is a sign-in's return all the same, so it is not used and not opened as a page.",
       "send": {"t":"open_link","url":"charkha://signed-in?code=PLANTED000&state=ISIjJCUmJygpKissLS4vMA"},
       "expect": {
         "changed": [],
-        "effects": []
+        "effects": [
+          {"t":"report","what":"sign_in","detail":"a sign-in's return arrived with no sign-in open, and was not used"}
+        ]
       },
       "check": [
         {"at":"/screens/2","is":null}
       ]
     },
     {
+      "note": "One with a code and no state is an ordinary link: `/signed-in` is neither a destination nor a route of the shell, so it is not opened, and nothing is exchanged.",
       "send": {"t":"open_link","url":"charkha://signed-in?code=PLANTED000"},
       "expect": {
         "changed": [],
