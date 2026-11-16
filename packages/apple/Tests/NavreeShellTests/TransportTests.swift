@@ -137,6 +137,49 @@ struct HTTPTests {
         #expect(get.httpBody == nil)
     }
 
+    @Test func anAnswerThatAnnouncesMoreThanTheProtocolAllowsIsNotReadAndIsAnsweredAsAFailure() async throws {
+        let host = "export.shop.example"
+        // An export of a gigabyte, linked from a page of the app.
+        StubOrigin.answer(host, .init(status: 200, headers: ["Content-Length": "1073741824"], body: "{}"))
+        let jar = CookieJar(origin: "https://\(host)", persistent: false)
+        let transport = HTTPTransport(jar: jar, configuration: StubOrigin.configuration)
+        let response = await fetched(transport, FetchRequest(request: 3, url: "https://\(host)/exports/orders.json"))
+        #expect(response.error == "other")
+        #expect(response.status == 0)
+        #expect(response.body.isEmpty)
+    }
+
+    @Test func aBodyIsReadUpToTheLimitAndGivenUpAtTheByteAfterIt() async throws {
+        let host = "long.shop.example"
+        let session = URLSession(configuration: StubOrigin.configuration)
+        let request = URLRequest(url: try #require(URL(string: "https://\(host)/backup")))
+        // A body that does not say how long it is: counted as it arrives.
+        StubOrigin.answer(host, .init(status: 200, headers: [:], body: String(repeating: "x", count: 4097)))
+        let pastTheLimit = try await HTTPTransport.read(request, with: session, most: 4096).0
+        let atTheLimit = try await HTTPTransport.read(request, with: session, most: 4097).0
+        #expect(pastTheLimit == nil)
+        #expect(atTheLimit?.count == 4097)
+        // One that says so is refused before a byte of it is kept.
+        StubOrigin.answer(host, .init(status: 200, headers: ["Content-Length": "4097"], body: String(repeating: "x", count: 4097)))
+        let announcedPast = try await HTTPTransport.read(request, with: session, most: 4096).0
+        let announcedAt = try await HTTPTransport.read(request, with: session, most: 4097).0
+        #expect(announcedPast == nil)
+        #expect(announcedAt?.count == 4097)
+        // A picture larger than a picture may be is not shown.
+        StubOrigin.answer(host, .init(status: 200, headers: ["Content-Length": "\(PictureLoader.mostBytes + 1)"], body: "png"))
+        let pictures = PictureLoader(jar: CookieJar(origin: "https://\(host)", persistent: false), configuration: StubOrigin.configuration)
+        let poster = try #require(URL(string: "https://\(host)/storage/poster.png"))
+        let shown = await pictures.load(poster)
+        #expect(shown == nil)
+    }
+
+    @Test func theLimitIsTheProtocolsOwn() throws {
+        let source = Fixtures.repository.appendingPathComponent("crates/navree-native/src/lib.rs")
+        let rust = try String(contentsOf: source, encoding: .utf8)
+        #expect(rust.contains("pub const MAX_BODY: usize = 8 * 1024 * 1024;"))
+        #expect(Wire.maxBody == 8 * 1024 * 1024)
+    }
+
     @Test func noAnswerIsSaidInTheCoresWords() {
         #expect(HTTPTransport.failure(URLError(.notConnectedToInternet)) == .offline)
         #expect(HTTPTransport.failure(URLError(.cannotFindHost)) == .offline)

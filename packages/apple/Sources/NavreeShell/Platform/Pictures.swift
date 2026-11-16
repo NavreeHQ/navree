@@ -5,8 +5,9 @@ import Foundation
 /// view share, so a picture only a signed-in person may see is seen. A
 /// picture from one of the configured picture hosts goes with no cookie, and
 /// what it answers is never kept in the jar. No other address is asked for,
-/// and no redirect is followed. What it loaded is kept in memory until the
-/// session ends.
+/// and no redirect is followed. A picture is read up to ``mostBytes`` and no
+/// further; a larger one is not shown. What it loaded is kept in memory until
+/// the session ends.
 @MainActor
 public final class PictureLoader {
     private let jar: CookieJar?
@@ -17,6 +18,8 @@ public final class PictureLoader {
     /// Moves on when the session ends or the person changes: a picture asked
     /// for before is not kept.
     private(set) var era = 0
+    /// The most bytes one picture may have: 10 MiB.
+    public static let mostBytes = 10 * 1024 * 1024
     /// The origin a picture's address is read against.
     public let site: Origin?
     /// Other hosts pictures may come from, with no cookie.
@@ -63,8 +66,9 @@ public final class PictureLoader {
         let request = request(url)
         let era = era
         let asked = jar?.session
-        guard let (data, response) = try? await session.data(for: request),
-            let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode), era == self.era
+        guard let (read, response) = try? await HTTPTransport.read(request, with: session, most: Self.mostBytes),
+            let data = read, let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+            era == self.era
         else { return nil }
         if isOurs(url) { jar?.take(from: http, for: url, session: asked) }
         kept.setObject(data as NSData, forKey: url as NSURL, cost: data.count)
