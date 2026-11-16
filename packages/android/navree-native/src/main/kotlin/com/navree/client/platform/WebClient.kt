@@ -176,7 +176,10 @@ object WebRules {
      * calls is taken when the script starts, before any script of the page,
      * and is called only through
      * the saved `Reflect.apply` and `Reflect.construct`: a global, a method or a
-     * getter the page replaces afterwards is never used. It holds for the scripts
+     * getter the page replaces afterwards is never used. (In a frame whose
+     * first, empty window is kept for a document of the same origin, what the
+     * page replaced in that window beforehand is what is taken: no more than
+     * the empty frame gave it already.) It holds for the scripts
      * of the document and of its frames that are given a document, not the empty
      * first document of a frame the page makes and has not navigated, whose
      * window the script never ran in. It does not reach into a worker: a script
