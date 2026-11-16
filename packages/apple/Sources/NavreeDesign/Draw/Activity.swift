@@ -20,8 +20,8 @@ struct FeedRowPart: View {
                     Text(RunText.attributed(row.runs))
                         .foregroundStyle(row.muted ? Color.secondary : Color.primary)
                         .fixedSize(horizontal: false, vertical: true)
-                    ForEach(Array(row.detail.enumerated()), id: \.offset) { _, part in
-                        NodeView(part).font(.subheadline).foregroundStyle(Color.secondary)
+                    ForEach(row.detail.told) { part in
+                        NodeView(part.item).font(.subheadline).foregroundStyle(Color.secondary)
                             .environment(\.navreeInRowDetail, true)
                     }
                     if let time = row.time {
@@ -84,8 +84,8 @@ struct MessagePart: View {
                         .font(.subheadline)
                         .foregroundStyle(.orange)
                 }
-                ForEach(Array(message.body.enumerated()), id: \.offset) { _, part in
-                    NodeView(part)
+                ForEach(message.body.told) { part in
+                    NodeView(part.item)
                 }
                 if let delivery = message.delivery, let words = MessageRules.delivery(delivery) {
                     Label(words.text, systemImage: words.symbol)

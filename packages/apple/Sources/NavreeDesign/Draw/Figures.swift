@@ -136,7 +136,8 @@ struct TimelinePart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ForEach(Array(timeline.items.enumerated()), id: \.offset) { _, moment in
+            ForEach(IdentityRules.told(timeline.items) { $0.id }) { told in
+                let moment = told.item
                 HStack(alignment: .center, spacing: 12) {
                     let colour = moment.tone.map(Hues.color) ?? Color.accentColor
                     ZStack {
@@ -153,8 +154,8 @@ struct TimelinePart: View {
                         if let subtitle = moment.subtitle {
                             Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
                         }
-                        ForEach(Array(moment.detail.enumerated()), id: \.offset) { _, part in
-                            NodeView(part).font(.footnote).foregroundStyle(.secondary)
+                        ForEach(moment.detail.told) { part in
+                            NodeView(part.item).font(.footnote).foregroundStyle(.secondary)
                         }
                     }
                     Spacer(minLength: 8)

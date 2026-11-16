@@ -31,14 +31,14 @@ struct ComposerBar: View {
                         switch layout {
                         case .row:
                             HStack(spacing: 12) {
-                                ForEach(Array(others.enumerated()), id: \.offset) { _, part in
-                                    NodeView(part).fixedSize()
+                                ForEach(others.told) { part in
+                                    NodeView(part.item).fixedSize()
                                 }
                             }
                         case .column:
                             VStack(alignment: .leading, spacing: 8) {
-                                ForEach(Array(others.enumerated()), id: \.offset) { _, part in
-                                    NodeView(part).fixedSize(horizontal: false, vertical: true)
+                                ForEach(others.told) { part in
+                                    NodeView(part.item).fixedSize(horizontal: false, vertical: true)
                                 }
                             }
                         }

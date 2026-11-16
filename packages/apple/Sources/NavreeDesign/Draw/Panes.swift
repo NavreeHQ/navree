@@ -12,10 +12,12 @@ struct PaneScreenBody: View {
     var body: some View {
         let layout = PaneRules.layout(panes, width: WidthClass(sizeClass))
         HStack(spacing: 0) {
-            ForEach(Array(layout.shown.enumerated()), id: \.offset) { index, pane in
-                if index > 0 { Divider().ignoresSafeArea() }
-                PaneList(pane: pane)
-                    .frame(maxWidth: Self.width(pane, of: layout.shown.count))
+            // A pane is known by its id: its list keeps its place when the
+            // panes shown change with the window's width.
+            ForEach(IdentityRules.told(layout.shown) { $0.id }) { pane in
+                if pane.index > 0 { Divider().ignoresSafeArea() }
+                PaneList(pane: pane.item)
+                    .frame(maxWidth: Self.width(pane.item, of: layout.shown.count))
             }
         }
         .modifier(Inspector(pane: layout.inspector, shown: $inspecting))
@@ -55,7 +57,7 @@ struct PanePart: View {
             if let title = pane.title, !title.isEmpty {
                 Text(title).font(.headline).accessibilityAddTraits(.isHeader)
             }
-            ForEach(Array(pane.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
+            ForEach(pane.children.told) { child in NodeView(child.item) }
         }
     }
 }

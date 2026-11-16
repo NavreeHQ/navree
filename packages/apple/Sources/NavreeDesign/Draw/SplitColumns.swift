@@ -287,6 +287,8 @@ struct CellControls: View {
 
     struct Filling: Identifiable {
         let control: CellControl
+        /// The title of the record the control belongs to, taken with it.
+        let subject: String
         var id: String { (control.form?.action ?? "") + control.button.label }
     }
 
@@ -296,7 +298,7 @@ struct CellControls: View {
             ForEach(Array(controls.enumerated()), id: \.offset) { _, control in
                 Button(role: buttonRole(control.button.role)) {
                     if control.opensSheet {
-                        filling = Filling(control: control)
+                        filling = Filling(control: control, subject: title)
                     } else if let action = control.button.action {
                         context.send(.act(action, Place(form: control.form.map(FormRef.init), ask: PresentationRules.question(control.button))))
                     }
@@ -310,7 +312,7 @@ struct CellControls: View {
         }
         .sheet(item: $filling) { filling in
             if let form = filling.control.form {
-                FormSheet(title: filling.control.button.label, subtitle: title, form: form, confirm: filling.control.button)
+                FormSheet(title: filling.control.button.label, subtitle: filling.subject, form: form, confirm: filling.control.button)
             }
         }
     }
@@ -371,14 +373,14 @@ struct InPlaceSplit: View {
         let parts = SplitRules.inPlace(split, width: window)
         if parts.sideBySide {
             HStack(alignment: .top, spacing: 20) {
-                ForEach(Array(parts.panes.enumerated()), id: \.offset) { _, pane in
-                    NodeView(pane).frame(maxWidth: .infinity, alignment: .leading)
+                ForEach(parts.panes.told) { pane in
+                    NodeView(pane.item).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         } else {
             VStack(alignment: .leading, spacing: 16) {
-                ForEach(Array(parts.panes.enumerated()), id: \.offset) { _, pane in
-                    NodeView(pane)
+                ForEach(parts.panes.told) { pane in
+                    NodeView(pane.item)
                 }
             }
         }

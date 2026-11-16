@@ -55,8 +55,8 @@ public struct NodeView: View {
             }
         case .table(let table):
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(table.rows.enumerated()), id: \.offset) { _, record in
-                    RecordContent(row: RecordRules.row(columns: table.columns, record: record))
+                ForEach(IdentityRules.told(table.rows) { $0.id }) { record in
+                    RecordContent(row: RecordRules.row(columns: table.columns, record: record.item))
                 }
             }
         case .chart(let chart): ChartPart(chart: chart)
@@ -66,7 +66,7 @@ public struct NodeView: View {
         case .menu(let menu): MenuPart(menu: menu)
         case .form(let form):
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(form.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
+                ForEach(form.children.told) { child in NodeView(child.item) }
             }
             .environment(\.navreeForm, FormRef(form))
         case .field(let field): FieldControl(field: field)
@@ -229,8 +229,8 @@ struct SectionPart: View {
             if let subtitle = section.subtitle {
                 Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
             }
-            ForEach(Array((section.actions + section.children + section.footer).enumerated()), id: \.offset) { _, child in
-                NodeView(child)
+            ForEach((section.actions + section.children + section.footer).told) { child in
+                NodeView(child.item)
             }
         }
     }
@@ -514,7 +514,7 @@ struct TabsPart: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             if selected < tabs.items.count {
-                ForEach(Array(tabs.items[selected].children.enumerated()), id: \.offset) { _, child in NodeView(child) }
+                ForEach(tabs.items[selected].children.told) { child in NodeView(child.item) }
             }
         }
     }
@@ -528,7 +528,7 @@ struct DisclosurePart: View {
 
     var body: some View {
         DisclosureGroup(disclosure.label, isExpanded: Binding(get: { open ?? disclosure.open }, set: { open = $0 })) {
-            ForEach(Array(disclosure.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
+            ForEach(disclosure.children.told) { child in NodeView(child.item) }
         }
         // In a row it is one of the row's actions, not a heading inside it.
         .accessibilityHidden(row != nil)
@@ -551,7 +551,7 @@ struct RegionPart: View {
                 .task { context.send(.appear(region: region.id)) }
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(region.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
+                ForEach(region.children.told) { child in NodeView(child.item) }
             }
         }
     }
@@ -566,7 +566,7 @@ struct BannerPart: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let title = banner.title { Text(title).font(.headline) }
                 if let text = banner.text { Text(text).font(.subheadline).foregroundStyle(.secondary) }
-                ForEach(Array(banner.actions.enumerated()), id: \.offset) { _, action in NodeView(action) }
+                ForEach(banner.actions.told) { action in NodeView(action.item) }
             }
         } icon: {
             Image(systemName: Tones.symbol(banner.tone)).foregroundStyle(Tones.color(banner.tone))
@@ -589,11 +589,11 @@ struct EmptyPart: View {
         } description: {
             if let text = empty.text { Text(text) }
         } actions: {
-            ForEach(Array(empty.actions.enumerated()), id: \.offset) { _, action in
-                if case .button(let button) = action {
+            ForEach(empty.actions.told) { action in
+                if case .button(let button) = action.item {
                     ButtonPart(button: button, prominent: true)
                 } else {
-                    NodeView(action)
+                    NodeView(action.item)
                 }
             }
         }

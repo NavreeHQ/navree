@@ -506,13 +506,7 @@ public enum CompositionRules {
     /// identity, so it comes in as it says; the parts already drawn keep
     /// theirs, and what they hold (a chosen tab, a scroll) stays.
     public static func identities(_ nodes: [Navree.Node]) -> [String] {
-        var seen = Set<String>()
-        return nodes.enumerated().map { index, node in
-            var identity = node.id.map { "#" + $0 } ?? "@\(index)"
-            while seen.contains(identity) { identity += "'" }
-            seen.insert(identity)
-            return identity
-        }
+        IdentityRules.identities(nodes.map(\.id))
     }
 }
 

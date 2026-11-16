@@ -298,7 +298,7 @@ struct LinkPart: View {
 
     private var drawn: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(link.children.enumerated()), id: \.offset) { _, child in NodeView(child) }
+            ForEach(link.children.told) { child in NodeView(child.item) }
         }
         .frame(maxWidth: .infinity)
     }
