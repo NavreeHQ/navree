@@ -42,23 +42,65 @@ pub(crate) struct ProviderDef {
 }
 
 /// A module value as the app or an importing module passed it, with the type
-/// it was passed as.
-pub(crate) struct Passed {
+/// it was passed as: the module's own type, which the plugin checks read,
+/// whatever type its id names. It is made only from a typed value, so the
+/// type it records is always the value's own: no crate can write it out or
+/// change it, an implementation of [`IntoModules`] included. Not public API;
+/// Navree's own crates use it.
+///
+/// ```compile_fail
+/// use navree_kernel::__private::PassedModule;
+/// use navree_kernel::{Module, ModuleBuilder};
+///
+/// struct Claim;
+///
+/// impl Module for Claim {
+///     fn register(&self, _: &mut ModuleBuilder) {}
+/// }
+///
+/// // The type it records is the kernel's to write: its fields are private.
+/// let _ = PassedModule {
+///     module: Box::new(Claim),
+///     type_name: "navree_flags::module::FlagsModule",
+/// };
+/// ```
+pub struct PassedModule {
     /// The module.
     pub(crate) module: Box<dyn Module>,
     /// `std::any::type_name` of the value passed (that of `Box<dyn Module>` for
-    /// a module passed already boxed): the module's own type, which the plugin
-    /// checks read, whatever type its id names.
+    /// a module passed already boxed).
     pub(crate) type_name: &'static str,
 }
 
-impl Passed {
-    /// `module`, passed as a value of type `M`.
-    pub(crate) fn of<M: Module>(module: M) -> Passed {
-        Passed {
+impl PassedModule {
+    /// `module`, passed as a value of type `M`: it records `M`'s type.
+    pub fn of<M: Module>(module: M) -> PassedModule {
+        PassedModule {
             module: Box::new(module),
             type_name: std::any::type_name::<M>(),
         }
+    }
+
+    /// `module`, passed already boxed: it records the type `Box<dyn Module>`.
+    pub(crate) fn boxed(module: Box<dyn Module>) -> PassedModule {
+        PassedModule {
+            module,
+            type_name: std::any::type_name::<Box<dyn Module>>(),
+        }
+    }
+
+    /// The module's readable name.
+    pub fn name(&self) -> &'static str {
+        self.module.name()
+    }
+}
+
+impl fmt::Debug for PassedModule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PassedModule")
+            .field("module", &self.module.name())
+            .field("type_name", &self.type_name)
+            .finish()
     }
 }
 
@@ -67,7 +109,7 @@ pub struct ModuleBuilder {
     pub(crate) id: ModuleId,
     pub(crate) name: &'static str,
     pub(crate) global: bool,
-    pub(crate) imports: Vec<Passed>,
+    pub(crate) imports: Vec<PassedModule>,
     pub(crate) providers: Vec<ProviderDef>,
     pub(crate) exports: Vec<ProviderKey>,
     pub(crate) contributions: Vec<Contribution>,
@@ -142,18 +184,13 @@ impl ModuleBuilder {
 
     /// Imports a module: its exports become visible to this module.
     pub fn import(&mut self, module: impl Module) -> &mut Self {
-        self.imports.push(Passed::of(module));
+        self.imports.push(PassedModule::of(module));
         self
     }
 
     /// Imports several modules (a tuple of up to 16 modules or a `Vec<Box<dyn Module>>`).
     pub fn imports(&mut self, modules: impl IntoModules) -> &mut Self {
-        self.imports.extend(
-            modules
-                .into_passed_modules()
-                .into_iter()
-                .map(|(module, type_name)| Passed { module, type_name }),
-        );
+        self.imports.extend(modules.into_passed_modules());
         self
     }
 
@@ -397,6 +434,78 @@ fn into_kernel_error(error: BoxError, provider: String) -> KernelError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ConfiguredModule;
+    use crate::graph::Graph;
+
+    /// The app's module: it imports a module of each shape the kernel takes.
+    struct Root;
+
+    impl Module for Root {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.import(Single)
+                .imports((First, Second))
+                .imports(vec![Box::new(Boxed) as Box<dyn Module>])
+                .import(ConfiguredModule::<Configured, ()>::for_root((), |_, _| {}));
+        }
+    }
+
+    /// Imported alone.
+    struct Single;
+
+    impl Module for Single {
+        fn register(&self, _: &mut ModuleBuilder) {}
+    }
+
+    /// Imported in a tuple.
+    struct First;
+
+    impl Module for First {
+        fn register(&self, _: &mut ModuleBuilder) {}
+    }
+
+    /// Imported in a tuple, after `First`.
+    struct Second;
+
+    impl Module for Second {
+        fn register(&self, _: &mut ModuleBuilder) {}
+    }
+
+    /// Imported already boxed.
+    struct Boxed;
+
+    impl Module for Boxed {
+        fn register(&self, _: &mut ModuleBuilder) {}
+    }
+
+    /// Imported configured.
+    struct Configured;
+
+    impl Module for Configured {
+        fn register(&self, _: &mut ModuleBuilder) {}
+    }
+
+    #[test]
+    fn each_way_of_passing_a_module_records_the_type_it_was_passed_as() {
+        use std::any::type_name;
+
+        let graph = Graph::build_passed(&[PassedModule::of(Root)], &[]).expect("valid");
+        let recorded = |id: ModuleId| {
+            let m = graph.module_of(id).expect("in the graph");
+            graph.modules[m].type_name
+        };
+        assert_eq!(recorded(ModuleId::of::<Root>()), type_name::<Root>());
+        assert_eq!(recorded(ModuleId::of::<Single>()), type_name::<Single>());
+        assert_eq!(recorded(ModuleId::of::<First>()), type_name::<First>());
+        assert_eq!(recorded(ModuleId::of::<Second>()), type_name::<Second>());
+        assert_eq!(
+            recorded(ModuleId::of::<Boxed>()),
+            type_name::<Box<dyn Module>>()
+        );
+        assert_eq!(
+            recorded(ModuleId::of::<Configured>()),
+            type_name::<ConfiguredModule<Configured, ()>>()
+        );
+    }
 
     #[test]
     fn contribute_records_the_type_name_for_the_counts() {

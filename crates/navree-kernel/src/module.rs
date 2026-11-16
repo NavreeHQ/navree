@@ -2,6 +2,7 @@
 
 use std::marker::PhantomData;
 
+use crate::builder::PassedModule;
 use crate::{BoxFuture, KernelError, ModuleBuilder, ModuleId, ProviderKey, Resolver, Scope};
 
 /// A unit of an app: it registers providers, exports, imports, contributions,
@@ -163,19 +164,18 @@ pub trait IntoModules {
     /// Converts into boxed modules, in order.
     fn into_modules(self) -> Vec<Box<dyn Module>>;
 
-    /// Converts into boxed modules, in order, each with `std::any::type_name`
-    /// of the value it was given as: a module given already boxed has the type
-    /// `Box<dyn Module>`. The kernel reads a module's own type from it. Not
-    /// public API; the kernel calls it.
+    /// Converts into modules, in order, each with the type of the value it was
+    /// given as: a module given already boxed has the type `Box<dyn Module>`.
+    /// The kernel reads a module's own type from it, and only a typed value
+    /// makes a `PassedModule`. Not public API; the kernel calls it.
     #[doc(hidden)]
-    fn into_passed_modules(self) -> Vec<(Box<dyn Module>, &'static str)>
+    fn into_passed_modules(self) -> Vec<PassedModule>
     where
         Self: Sized,
     {
-        let boxed = std::any::type_name::<Box<dyn Module>>();
         self.into_modules()
             .into_iter()
-            .map(|module| (module, boxed))
+            .map(PassedModule::boxed)
             .collect()
     }
 }
@@ -185,8 +185,8 @@ impl<M: Module> IntoModules for M {
         vec![Box::new(self)]
     }
 
-    fn into_passed_modules(self) -> Vec<(Box<dyn Module>, &'static str)> {
-        vec![(Box::new(self), std::any::type_name::<M>())]
+    fn into_passed_modules(self) -> Vec<PassedModule> {
+        vec![PassedModule::of(self)]
     }
 }
 
@@ -206,12 +206,9 @@ macro_rules! tuple_into_modules {
             }
 
             #[allow(non_snake_case)]
-            fn into_passed_modules(self) -> Vec<(Box<dyn Module>, &'static str)> {
+            fn into_passed_modules(self) -> Vec<PassedModule> {
                 let ($($name,)+) = self;
-                vec![$((
-                    Box::new($name) as Box<dyn Module>,
-                    std::any::type_name::<$name>(),
-                )),+]
+                vec![$(PassedModule::of($name)),+]
             }
         }
     };

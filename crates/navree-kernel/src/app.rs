@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
-use crate::builder::{Passed, ProviderDef, value_def};
+use crate::builder::{PassedModule, ProviderDef, value_def};
 use crate::command::help_text;
 use crate::container::{AppInner, RequestScope};
 use crate::graph::{Graph, GraphReport, ROOT};
@@ -37,7 +37,7 @@ impl Navree {
 /// Collects the root modules of an app, then validates, boots or runs it.
 pub struct AppBuilder {
     /// The root modules, each with the type it was passed as.
-    modules: Vec<Passed>,
+    modules: Vec<PassedModule>,
     overrides: Vec<ProviderDef>,
     shutdown: CancellationToken,
     shutdown_timeout: Duration,
@@ -57,7 +57,16 @@ impl Default for AppBuilder {
 impl AppBuilder {
     /// Adds a root module (imported by the implicit app root).
     pub fn module(mut self, m: impl Module) -> Self {
-        self.modules.push(Passed::of(m));
+        self.modules.push(PassedModule::of(m));
+        self
+    }
+
+    /// Adds a root module that was given to another builder first (the
+    /// testing app's), with the type it was given as there. Not public API;
+    /// Navree's own crates use it.
+    #[doc(hidden)]
+    pub fn passed_module(mut self, module: PassedModule) -> Self {
+        self.modules.push(module);
         self
     }
 

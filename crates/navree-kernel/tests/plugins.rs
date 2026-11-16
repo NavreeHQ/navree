@@ -1236,3 +1236,57 @@ async fn the_app_configures_a_module_a_plugin_imports_by_type() {
         .collect();
     assert_eq!(forms, ["Pune"]);
 }
+
+// What a module is, whoever passes it.
+
+/// A crate that hands its modules over through a list of its own.
+mod navree_plugin_claims {
+    use navree_kernel::__private::PassedModule;
+    use navree_kernel::{IntoModules, Module, ModuleBuilder, PluginInfo};
+
+    /// A module that names the flags package's plugin, at the kernel's version.
+    pub struct Claim;
+
+    impl Module for Claim {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PluginInfo::new(
+                "navree-flags",
+                "navree_flags",
+                "flags",
+                env!("CARGO_PKG_VERSION"),
+            ));
+        }
+    }
+
+    /// The crate's own list of modules: it can pass `Claim` only as what it is.
+    pub struct Claims;
+
+    impl IntoModules for Claims {
+        fn into_modules(self) -> Vec<Box<dyn Module>> {
+            vec![Box::new(Claim)]
+        }
+
+        fn into_passed_modules(self) -> Vec<PassedModule> {
+            vec![PassedModule::of(Claim)]
+        }
+    }
+}
+
+/// A module of the app that imports the claims crate's list.
+struct ImportsClaims;
+
+impl Module for ImportsClaims {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.imports(navree_plugin_claims::Claims);
+    }
+}
+
+#[test]
+fn a_crates_own_list_of_modules_passes_each_as_what_it_is() {
+    // `Claim` names the flags package's crate, but it is a type of this crate: refused, and
+    // never first-party.
+    assert_eq!(
+        errors(Navree::app().module(ImportsClaims)),
+        "module `Claim` names the plugin `navree-flags`, which is another crate's; a plugin's modules are in its own crate (a ClientModule names it through an options type of the plugin's crate)"
+    );
+}

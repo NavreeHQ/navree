@@ -7,7 +7,8 @@ use http::HeaderValue;
 use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::Principal;
 use navree_http::{HttpModule, HttpServer, build_router};
-use navree_kernel::{App, AppBuilder, AppContext, BoxError, Module, ModuleBuilder, ModuleId};
+use navree_kernel::__private::PassedModule;
+use navree_kernel::{App, AppBuilder, AppContext, BoxError, Module};
 
 use crate::auth::TestAuthenticator;
 use crate::client::Target;
@@ -200,7 +201,9 @@ impl std::fmt::Debug for TestApp {
 #[derive(Default)]
 pub struct TestAppBuilder {
     app: AppBuilder,
-    modules: Vec<Box<dyn Module>>,
+    /// The added modules, each with the type it was added as, which the kernel's plugin
+    /// checks read.
+    modules: Vec<PassedModule>,
     sources: ConfigSources,
     /// Whether [`sources`](TestAppBuilder::sources) replaced the defaults.
     custom_sources: bool,
@@ -274,7 +277,7 @@ impl TestAppBuilder {
 
     /// Adds a root module.
     pub fn module(mut self, m: impl Module) -> Self {
-        self.modules.push(Box::new(m));
+        self.modules.push(PassedModule::of(m));
         self
     }
 
@@ -314,7 +317,7 @@ impl TestAppBuilder {
             .module(ConfigModule::for_root(sources))
             .module(HttpModule);
         for module in self.modules {
-            builder = builder.module(Boxed(module));
+            builder = builder.passed_module(module);
         }
         if self.fake_auth {
             builder = TestAuthenticator::install(builder);
@@ -345,24 +348,59 @@ impl std::fmt::Debug for TestAppBuilder {
     }
 }
 
-/// A boxed module, so modules collected before the build can be handed to
-/// `AppBuilder::module` in order.
-struct Boxed(Box<dyn Module>);
+#[cfg(test)]
+mod tests {
+    use super::TestApp;
 
-impl Module for Boxed {
-    fn id(&self) -> ModuleId {
-        self.0.id()
+    /// The notices plugin: its crate is this module.
+    mod navree_plugin_notices {
+        use navree_kernel::{Module, ModuleBuilder, ModuleId, PluginInfo};
+
+        /// The plugin's info.
+        const NOTICES: PluginInfo =
+            PluginInfo::new("navree-plugin-notices", module_path!(), "notices", "1.0.0");
+
+        /// The plugin's module.
+        pub struct NoticesModule;
+
+        impl Module for NoticesModule {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(NOTICES);
+            }
+        }
+
+        /// A module of the plugin's crate that names no plugin, and whose id names a type
+        /// of another crate.
+        pub struct Helper;
+
+        impl Module for Helper {
+            fn id(&self) -> ModuleId {
+                ModuleId::named::<String>("Helper")
+            }
+
+            fn register(&self, _: &mut ModuleBuilder) {}
+        }
     }
 
-    fn name(&self) -> &'static str {
-        self.0.name()
-    }
+    #[tokio::test]
+    async fn a_module_added_to_the_test_app_keeps_the_type_it_was_added_as() {
+        use navree_plugin_notices::{Helper, NoticesModule};
 
-    fn is_configured(&self) -> bool {
-        self.0.is_configured()
-    }
-
-    fn register(&self, m: &mut ModuleBuilder) {
-        self.0.register(m);
+        // By its id `Helper` is in no plugin's crate: only its own type, which the test app
+        // hands on to the kernel, puts it in the notices plugin's crate.
+        let app = TestApp::builder()
+            .module(NoticesModule)
+            .module(Helper)
+            .build()
+            .await;
+        let report = app.ctx().plugins();
+        let notices = &report.plugins[0];
+        let modules: Vec<&str> = notices
+            .modules
+            .iter()
+            .map(|module| module.id.name())
+            .collect();
+        assert!(modules.contains(&"Helper"), "{modules:?}");
+        app.shutdown().await.unwrap();
     }
 }

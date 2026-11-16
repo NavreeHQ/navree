@@ -5,7 +5,7 @@ use std::any::TypeId;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
-use crate::builder::{Contribution, Passed, ProviderDef};
+use crate::builder::{Contribution, PassedModule, ProviderDef};
 use crate::lifecycle::LifecycleDef;
 use crate::plugin::names_crate;
 use crate::{
@@ -247,7 +247,7 @@ impl Graph {
     /// `roots` are the modules the app passed, each with the type it was
     /// passed as.
     pub(crate) fn build_passed(
-        roots: &[Passed],
+        roots: &[PassedModule],
         overrides: &[ProviderDef],
     ) -> Result<Graph, BootErrors> {
         let roots: Vec<(&dyn Module, &'static str)> = roots
@@ -938,7 +938,7 @@ struct Walked {
 /// an import owned by the walk, each with the type it was passed as.
 enum Source<'a> {
     Root(&'a dyn Module, &'static str),
-    Import(Passed),
+    Import(PassedModule),
 }
 
 impl Source<'_> {
