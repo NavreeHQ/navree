@@ -13,7 +13,11 @@ import java.util.Locale
  *
  * An origin of [also] whose host starts with `*.` stands for every host under
  * that name (a host `*.shop.example` covers `patiala.shop.example`), never for
- * a name that merely ends in the same letters. Plain `http` is an
+ * a name that merely ends in the same letters. The client does not know which
+ * names are public suffixes, where anybody can register a name: a pattern
+ * such as `*.co.in` or `*.github.io` reads, and makes every host under it the
+ * app's own, its pages, its requests and its cookies. Name the app's own
+ * registered domain (`*.shop.co.in`). Plain `http` is an
  * origin only for the machine itself (`localhost`, `127.0.0.1`, `[::1]`, and
  * `10.0.2.2`, the emulator's name for the machine it runs on), and only when
  * [loopbackHttp] says so, which a release build never does.
@@ -128,6 +132,28 @@ class Origins(
         }
     }
 
+    /**
+     * The app's own origins that name one host each, as `scheme://host[:port]`,
+     * the one it was built for first. An origin of [also] that is a `*.`
+     * pattern stands for hosts nobody can list, and is not among them.
+     */
+    fun ownOrigins(): List<String> = (listOfNotNull(home) + others).filter { !it.host.startsWith("*.") }.map { it.origin() }
+
+    /** The hosts named for the web view that are one host each, as the origins a document from them has. */
+    fun webHostOrigins(): List<String> = web.filter { (host, _) -> !host.startsWith("*.") }.flatMap { (host, port) ->
+        buildList {
+            add(Site("https", host, port ?: 443).origin())
+            if (loopback && host in LOOPBACK) add(Site("http", host, port ?: 80).origin())
+        }
+    }
+
+    /**
+     * The origin of a whole address, as `scheme://host[:port]`, when it is one
+     * of the app's own or on a host it names for the web view; null for any
+     * other address.
+     */
+    fun originOf(address: String): String? = if (ours(address) || webHost(address)) Site.read(address)?.origin() else null
+
     internal companion object {
         val LOOPBACK = setOf("localhost", "127.0.0.1", "10.0.2.2", "[::1]")
 
@@ -227,6 +253,9 @@ internal data class Site(
 
     /** Whether this origin of the configuration covers [site]. */
     fun covers(site: Site): Boolean = scheme == site.scheme && port == site.port && hostCovers(host, site.host)
+
+    /** The origin as a browser writes it: `scheme://host`, with the port where it is not the scheme's own. */
+    fun origin(): String = "$scheme://$host" + if (port == (if (scheme == "http") 80 else 443)) "" else ":$port"
 
     companion object {
         fun read(text: String, wildcard: Boolean = false): Site? {

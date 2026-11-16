@@ -37,6 +37,29 @@ fun addressCases(text: String): List<AddressCase> =
 
 class OriginsTest {
     @Test
+    fun the_origins_that_name_one_host_are_written_as_a_browser_writes_them_and_a_pattern_is_none() {
+        val origins = Origins(
+            "https://shop.example",
+            also = listOf("https://pay.shop.example:8443", "https://*.shop.example"),
+            loopbackHttp = true,
+            webHosts = listOf("pay.example", "*.cdn.example", "localhost:8097", "cards.example:444"),
+        )
+        assertEquals(listOf("https://shop.example", "https://pay.shop.example:8443"), origins.ownOrigins())
+        assertEquals(
+            listOf("https://pay.example", "https://localhost:8097", "http://localhost:8097", "https://cards.example:444"),
+            origins.webHostOrigins(),
+        )
+        // An address under a pattern has an origin of its own, which is how a host nobody can list is known once a page was there.
+        assertEquals("https://patiala.shop.example", origins.originOf("https://patiala.shop.example/orders?page=2"))
+        assertEquals("https://fonts.cdn.example", origins.originOf("https://fonts.cdn.example/a.woff2"))
+        assertEquals("https://pay.shop.example:8443", origins.originOf("https://pay.shop.example:8443/"))
+        assertEquals("https://shop.example", origins.originOf("https://shop.example:443/x"))
+        assertNull("another site has no origin here", origins.originOf("https://other.example/"))
+        assertNull(origins.originOf("blob:https://shop.example/1b2c"))
+        assertNull(origins.originOf("data:text/html,x"))
+    }
+
+    @Test
     fun every_address_of_the_table_is_ours_or_not_as_it_says() {
         val cases = addressCases(Fixtures.text("addresses/ours.json"))
         assertTrue("the table has its cases", cases.size > 40)
