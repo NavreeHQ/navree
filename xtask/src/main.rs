@@ -14,7 +14,7 @@ cargo xtask release <command>
 cargo xtask native-models [--check]
 
 native-models [--check]
-    Writes the Kotlin and Swift models of Navree Native's protocol from
+    Writes the Kotlin, Swift and C# models of Navree Native's protocol from
     crates/navree-native/schema/navree-native.schema.json; with --check,
     writes nothing and fails when a written model is stale.
 
@@ -222,9 +222,10 @@ fn cmd_native_models(check: bool) -> Result<ExitCode, String> {
     let stale = native_models::run(&root, check)?;
     if !check {
         println!(
-            "wrote {} and {} from {}",
+            "wrote {}, {} and {} from {}",
             native_models::KOTLIN,
             native_models::SWIFT,
+            native_models::CSHARP,
             native_models::SCHEMA
         );
         return Ok(ExitCode::SUCCESS);

@@ -15,7 +15,7 @@
 //! | `publish` | publishes every crate in dependency order, resumably ([`publish`]) |
 //!
 //! And outside the release, `cargo xtask native-models [--check]` writes the
-//! Kotlin and Swift models of Navree Native's protocol from its schema, or
+//! Kotlin, Swift and C# models of Navree Native's protocol from its schema, or
 //! says which are stale ([`native_models`]).
 //!
 //! Nothing here keeps state of its own: the registry's index says which
