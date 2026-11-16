@@ -7,7 +7,7 @@
 // The list items are `role=none` and each item's row is the `treeitem`: its name is its
 // own label, not the text of everything under it, and its group is owned with
 // `aria-owns`. A row is what has the tab stop and the focus.
-import { active, all, attr, body, byId, clean, closest, every, fetchHere, fresh as freshPage, has, make, on, sameOrigin, set, unset } from "./dom.js";
+import { active, all, attr, body, byId, clean, closest, emit, every, fetchHere, fresh as freshPage, has, make, on, sameOrigin, set, unset } from "./dom.js";
 
 const ROOT = "[data-ui-tree]";
 const ITEM = "li[data-slot=tree-item],li[data-slot=tree-more],li[data-slot=tree-note]";
@@ -354,6 +354,8 @@ function settle(root, parent, items) {
     // by the page stays whole as pages of its children come, until the person changes something under it.
     if (held || !(input && input.checked)) refresh(parent);
   }
+  // What came in the items starts, as after any swap.
+  emit(new Event("ui:swap"));
 }
 
 /**

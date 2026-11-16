@@ -575,6 +575,8 @@ async function feed(el, src, current) {
       trim(into, keeps(el));
       notice(el, into);
       say(el, fresh.filter((row) => !row.hasAttribute("data-filtered")).length);
+      // What came in the rows starts, and what went with the rows dropped ends.
+      emit(new Event("ui:swap"));
     }
   }
   const cursor = response.headers.get("x-ui-cursor");
