@@ -800,7 +800,7 @@ impl Module for OwnShell {
 
 #[tokio::test(flavor = "current_thread")]
 async fn a_plugins_error_shell_fails_the_boot() {
-    let refusal = "plugin `navree-plugin-pretty` builds the shell of the app's error pages (an ErrorShell in `PrettyShell`); only the app chooses that: contribute it from a module of the app";
+    let refusal = "plugin `navree-plugin-pretty` builds the shell of the app's error pages (an ErrorShell in `PrettyShell`); only the app chooses that: remove the plugin or update it to a version that leaves the shell to the app, and to use the plugin's shell, contribute it from a module of the app";
     let alone = boot_error(builder(Shell::new("Kesar")).module(PrettyShell)).await;
     // Whatever the order, beside the app's own shell.
     let after_the_apps = boot_error(

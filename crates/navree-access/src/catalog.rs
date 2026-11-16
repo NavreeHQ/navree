@@ -97,7 +97,7 @@ pub(crate) fn check(
             let namespace = plugin.info.namespace;
             if !is_under(subject, namespace) {
                 return Err(AccessError::Config(format!(
-                    "plugin `{}` registers the subject `{subject}` in `{module}`, a name outside its namespace; name it `{namespace}.{subject}`",
+                    "plugin `{}` registers the subject `{subject}` in `{module}`, a name outside its namespace `{namespace}`; a plugin's subjects are named under its namespace: remove the plugin or update it to a version that names them under `{namespace}.`, and to register `{subject}`, register it from a module of the app",
                     plugin.info.name
                 )));
             }
@@ -113,7 +113,7 @@ pub(crate) fn check(
                 .is_some_and(|rest| rest.starts_with("::"));
             if !of_the_plugin && is_under(subject, namespace) {
                 return Err(AccessError::Config(format!(
-                    "plugin `{}` uses the namespace `{namespace}`, under which `{module}` registers the subject `{subject}`; set another with plugin_info!(namespace = \"..\")",
+                    "plugin `{}` uses the namespace `{namespace}`, under which `{module}` registers the subject `{subject}`; the names under a plugin's namespace are its subjects: remove the plugin, or name the app's subject outside `{namespace}.`",
                     plugin.info.name
                 )));
             }
@@ -135,9 +135,10 @@ pub(crate) fn check(
                 // A prefix outside its namespace would take over the meaning of permissions
                 // the app grants under that prefix.
                 if !is_under(registration.prefix, namespace) {
+                    let prefix = registration.prefix;
                     return Err(AccessError::Config(format!(
-                        "plugin `{}` registers the subject `{}` with the permission prefix `{}`, outside its namespace `{namespace}`",
-                        plugin.info.name, registration.subject, registration.prefix
+                        "plugin `{}` registers the subject `{}` with the permission prefix `{prefix}`, outside its namespace `{namespace}`; the app's permissions under `{prefix}` would check the plugin's subject: remove the plugin or update it to a version that keeps its permission prefixes under `{namespace}`",
+                        plugin.info.name, registration.subject
                     )));
                 }
             } else if registration.prefix.split('.').next() == Some(namespace) {
@@ -265,13 +266,15 @@ fn listed_under(plugins: &[PluginReport], plugin: &str, module: ModuleId) -> boo
 /// `subject`, which is not one of the plugin's own.
 fn outside_its_subjects(policy: &PluginPolicy, subject: &str) -> AccessError {
     let refusal = format!(
-        "plugin `{}` registers the policy `{}` in `{}`, which writes a rule on `{subject}`; a plugin's policy writes rules on its own subjects only",
+        "plugin `{}` registers the policy `{}` in `{}`, which writes a rule on `{subject}`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them",
         policy.plugin, policy.policy, policy.module
     );
     AccessError::Config(if subject == ALL {
         refusal
     } else {
-        format!("{refusal} (register it from a module of the app to apply it to `{subject}`)")
+        format!(
+            "{refusal}, and to apply the policy to `{subject}`, register it from a module of the app (AccessModule::for_policy)"
+        )
     })
 }
 
@@ -367,7 +370,7 @@ fn namespace_holds(plugin: &PluginReport, declared: &str) -> AccessError {
 /// prefix of `subject`, which `module` registers.
 fn namespace_taken(plugin: &PluginReport, subject: &str, module: &str) -> AccessError {
     AccessError::Config(format!(
-        "plugin `{}` uses the namespace `{}`, which is the permission prefix of `{subject}` (`{module}`); set another with plugin_info!(namespace = \"..\")",
+        "plugin `{}` uses the namespace `{}`, which is the permission prefix of `{subject}` (`{module}`); a plugin's policies decide the names under its namespace: remove the plugin, or give the app's subject a permission prefix under another word",
         plugin.info.name, plugin.info.namespace
     ))
 }

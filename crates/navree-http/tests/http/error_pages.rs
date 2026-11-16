@@ -264,7 +264,7 @@ fn pretty_pages() -> Pages {
 
 #[tokio::test]
 async fn a_plugins_error_pages_fail_the_boot() {
-    let refusal = "plugin `navree-plugin-pretty` answers the app's errors (m.error_pages in `PrettyPages`); only the app chooses that: register the plugin's pages from a module of the app";
+    let refusal = "plugin `navree-plugin-pretty` answers the app's errors (m.error_pages in `PrettyPages`); only the app chooses that: remove the plugin or update it to a version that leaves its pages to the app, and to use the plugin's pages, register them from a module of the app";
     let alone = Setup::new(routes())
         .authenticated()
         .module(PrettyPages(pretty_pages()))

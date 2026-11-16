@@ -328,7 +328,7 @@ fn error_shells_of_plugins(ctx: &AppContext) -> Result<(), String> {
         });
         if let Some(plugin) = plugin {
             return Err(format!(
-                "plugin `{}` builds the shell of the app's error pages (an ErrorShell in `{}`); only the app chooses that: contribute it from a module of the app",
+                "plugin `{}` builds the shell of the app's error pages (an ErrorShell in `{}`); only the app chooses that: remove the plugin or update it to a version that leaves the shell to the app, and to use the plugin's shell, contribute it from a module of the app",
                 plugin.info.name, shell.module.name
             ));
         }

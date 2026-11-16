@@ -713,8 +713,21 @@ pub(crate) fn check_scoped_subjects(ctx: &AppContext) -> Result<(), String> {
             };
             let (name, namespace) = (plugin.info.name, plugin.info.namespace);
             let subject = first.value.subject;
+            // A name under the plugin's namespace is the plugin's: the other module renames.
+            let under = subject
+                .strip_prefix(namespace)
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'));
+            let advice = if under {
+                format!(
+                    "the names under `{namespace}` are the plugin's, so name the subject of the model `{other}` scopes outside `{namespace}.`, or remove the plugin"
+                )
+            } else {
+                format!(
+                    "remove the plugin or update it to a version that names its subject under its namespace, such as `{namespace}.{subject}`"
+                )
+            };
             return Err(format!(
-                "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`, and `{other}` scopes another model under that name; a plugin scopes only a subject no other module scopes: remove the plugin or update it to a version that names its subject under its namespace, such as `{namespace}.{subject}`"
+                "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`, and `{other}` scopes another model under that name; a plugin scopes only a subject no other module scopes: {advice}"
             ));
         }
     }

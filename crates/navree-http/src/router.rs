@@ -212,7 +212,7 @@ fn error_pages_of_plugins(
         .filter_map(|pages| {
             let plugin = community_plugin(&plugins, pages.module.id)?;
             Some(format!(
-                "plugin `{}` answers the app's errors (m.error_pages in `{}`); only the app chooses that: register the plugin's pages from a module of the app",
+                "plugin `{}` answers the app's errors (m.error_pages in `{}`); only the app chooses that: remove the plugin or update it to a version that leaves its pages to the app, and to use the plugin's pages, register them from a module of the app",
                 plugin.info.name, pages.module.name
             ))
         })

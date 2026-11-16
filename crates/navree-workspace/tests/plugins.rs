@@ -109,6 +109,52 @@ async fn a_plugin_scoped_subject_of_another_subject_fails_the_boot() {
     );
 }
 
+/// The app's own notices, a model the app names like the plugin's subject.
+mod app_notice {
+    use serde::Serialize;
+    use uuid::Uuid;
+
+    /// A notice the app keeps itself, under the name of the plugin's subject.
+    #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+    #[model(
+        table = "app_notices",
+        subject = "notices.Notice",
+        permission_prefix = "app_notices"
+    )]
+    pub struct Model {
+        pub id: Uuid,
+        pub workspace_id: Uuid,
+        pub title: String,
+    }
+}
+
+impl navree_workspace::WorkspaceScoped for app_notice::Model {}
+
+/// A module of the app: it scopes the app's own notices.
+struct AppNotices;
+
+impl Module for AppNotices {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.workspace_scoped::<app_notice::Model>();
+    }
+}
+
+#[tokio::test]
+async fn a_subject_of_the_app_under_a_plugins_namespace_is_for_the_app_to_rename() {
+    // The plugin scopes its own `notices.Notice`, and the app another model under that name,
+    // under the plugin's namespace: the app's module renames its subject.
+    let plugin = NoticesModule(|m| {
+        m.workspace_scoped::<navree_plugin_notices::notice::Model>();
+    });
+    let app = support::builder().module(plugin).module(AppNotices);
+    let error = boot_error(app).await;
+    let expected = "plugin `navree-plugin-notices` scopes the subject `notices.Notice` to workspaces in `NoticesModule`, and `AppNotices` scopes another model under that name; a plugin scopes only a subject no other module scopes: the names under `notices` are the plugin's, so name the subject of the model `AppNotices` scopes outside `notices.`, or remove the plugin";
+    assert!(
+        error.contains(expected),
+        "expected `{expected}` in:\n{error}"
+    );
+}
+
 #[tokio::test]
 async fn a_plugin_scopes_its_own_subject() {
     let plugin = NoticesModule(|m| {

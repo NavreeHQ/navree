@@ -451,7 +451,7 @@ fn plugin_policy<P: Policy>() -> PolicyModule<P> {
 fn writes_outside<P: Policy>(subject: &str) -> String {
     let policy = std::any::type_name::<P>();
     format!(
-        "plugin `navree-plugin-announcements` registers the policy `{policy}` in `AccessPolicy<{policy}>`, which writes a rule on `{subject}`; a plugin's policy writes rules on its own subjects only (register it from a module of the app to apply it to `{subject}`)"
+        "plugin `navree-plugin-announcements` registers the policy `{policy}` in `AccessPolicy<{policy}>`, which writes a rule on `{subject}`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them, and to apply the policy to `{subject}`, register it from a module of the app (AccessModule::for_policy)"
     )
 }
 
@@ -612,7 +612,7 @@ async fn a_badly_named_permission_fails_the_boot() {
 async fn a_plugin_whose_namespace_is_another_modules_permission_prefix_fails_the_boot() {
     let warnings = Warnings::default();
     let _guard = warnings.install();
-    let tail = "); set another with plugin_info!(namespace = \"..\")";
+    let tail = "); a plugin's policies decide the names under its namespace: remove the plugin, or give the app's subject a permission prefix under another word";
 
     // A subject of the app.
     let app = builder()
@@ -836,7 +836,7 @@ async fn a_subject_a_plugin_registers_takes_a_prefix_inside_its_namespace_whatev
     for (register, subject) in cases {
         let error = boot_error(builder().module(CrmModule(register))).await;
         let expected = format!(
-            "plugin `navree-plugin-crm` registers the subject `{subject}` with the permission prefix `deals`, outside its namespace `crm`"
+            "plugin `navree-plugin-crm` registers the subject `{subject}` with the permission prefix `deals`, outside its namespace `crm`; the app's permissions under `deals` would check the plugin's subject: remove the plugin or update it to a version that keeps its permission prefixes under `crm`"
         );
         assert!(error.contains(&expected), "{subject}: {error}");
     }
@@ -869,7 +869,7 @@ async fn a_plugin_subject_outside_its_namespace_fails_the_boot() {
     for (register, subject, type_name) in cases {
         let error = boot_error(builder().module(NoticeSubjects(register))).await;
         let expected = format!(
-            "plugin `navree-plugin-announcements` registers the subject `{subject}` in `AccessSubject<plugins::navree_plugin_announcements::{type_name}>`, a name outside its namespace; name it `announcements.{subject}`"
+            "plugin `navree-plugin-announcements` registers the subject `{subject}` in `AccessSubject<plugins::navree_plugin_announcements::{type_name}>`, a name outside its namespace `announcements`; a plugin's subjects are named under its namespace: remove the plugin or update it to a version that names them under `announcements.`, and to register `{subject}`, register it from a module of the app"
         );
         assert!(error.contains(&expected), "{subject}: {error}");
     }
@@ -891,7 +891,7 @@ async fn a_subject_of_another_crate_under_a_plugins_namespace_fails_the_boot() {
     let error = boot_error(app).await;
     assert!(
         error.contains(
-            "plugin `navree-plugin-announcements` uses the namespace `announcements`, under which `AccessSubject<plugins::Ledger>` registers the subject `announcements.Ledger`; set another with plugin_info!(namespace = \"..\")"
+            "plugin `navree-plugin-announcements` uses the namespace `announcements`, under which `AccessSubject<plugins::Ledger>` registers the subject `announcements.Ledger`; the names under a plugin's namespace are its subjects: remove the plugin, or name the app's subject outside `announcements.`"
         ),
         "{error}"
     );
@@ -1023,7 +1023,7 @@ async fn a_plugin_policy_on_another_subject_fails_the_boot() {
     let error = boot_error(builder().module(plugin_policy::<Everyone>())).await;
     assert!(
         error.contains(
-            "plugin `navree-plugin-announcements` registers the policy `plugins::navree_plugin_announcements::Everyone` in `AccessPolicy<plugins::navree_plugin_announcements::Everyone>`, which writes a rule on `Post`; a plugin's policy writes rules on its own subjects only (register it from a module of the app to apply it to `Post`)"
+            "plugin `navree-plugin-announcements` registers the policy `plugins::navree_plugin_announcements::Everyone` in `AccessPolicy<plugins::navree_plugin_announcements::Everyone>`, which writes a rule on `Post`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them, and to apply the policy to `Post`, register it from a module of the app (AccessModule::for_policy)"
         ),
         "{error}"
     );
