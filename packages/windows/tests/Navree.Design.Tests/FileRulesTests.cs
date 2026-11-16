@@ -2,6 +2,42 @@ using Navree.Design.Inputs;
 
 namespace Navree.Design.Tests;
 
+/// <summary>What is offered to a file field when things are dropped on it: files on this computer, and words for the rest.</summary>
+[TestClass]
+public sealed class DroppedTests
+{
+    [TestMethod]
+    public void Files_on_this_computer_are_offered_and_a_folder_or_an_item_with_no_path_is_refused_with_words()
+    {
+        Dropped dropped = FileRules.Sort(
+        [
+            new DroppedItem("Harpreet Kaur - PAN.pdf", @"C:\Users\harpreet\Documents\Harpreet Kaur - PAN.pdf", false),
+            new DroppedItem("Photo from the phone.jpg", string.Empty, false),
+            new DroppedItem("lohri.jpg", "https://charkha.example/photos/lohri.jpg", false),
+            new DroppedItem("Bills", @"C:\Users\harpreet\Documents\Bills", true),
+            new DroppedItem("Shop lease, Ludhiana.pdf", @"\\office\papers\Shop lease, Ludhiana.pdf", false),
+        ]);
+
+        CollectionAssert.AreEqual(new[] { @"C:\Users\harpreet\Documents\Harpreet Kaur - PAN.pdf", @"\\office\papers\Shop lease, Ludhiana.pdf" }, dropped.Paths.ToArray());
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "Photo from the phone.jpg is not a file on this computer (it may be on a phone or a link from a browser), so it was not added. Save it to a folder first and choose it from there.",
+                "lohri.jpg is not a file on this computer (it may be on a phone or a link from a browser), so it was not added. Save it to a folder first and choose it from there.",
+                "Folders cannot be added; choose the files in it.",
+            },
+            dropped.Words.ToArray());
+    }
+
+    [TestMethod]
+    public void A_drop_of_nothing_offers_nothing_and_says_nothing()
+    {
+        Dropped dropped = FileRules.Sort([]);
+        Assert.AreEqual(0, dropped.Paths.Count);
+        Assert.AreEqual(0, dropped.Words.Count);
+    }
+}
+
 /// <summary>What a file field takes, the words it refuses a file with, and the words said of a file.</summary>
 [TestClass]
 public sealed class FileRulesTests

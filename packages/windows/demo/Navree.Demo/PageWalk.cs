@@ -95,6 +95,7 @@ internal sealed partial class PageWalk(ShellHost host, ShellWindow window, strin
                     await GuardedAsync("the disclosure", DisclosureAsync);
                     await GuardedAsync("a pane that waits for its page", PaneAsync);
                     await GuardedAsync("the colour field and the file field", InputsAsync);
+                    await GuardedAsync("a table's search after its query form moved", LedgerAsync);
                     break;
                 case "8095":
                     await StoreAsync();

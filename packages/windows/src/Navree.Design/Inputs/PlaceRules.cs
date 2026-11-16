@@ -1,6 +1,4 @@
-using System.Buffers.Binary;
-using System.Text;
-
+// A picture leaves the device only if this code can say where every place in it could be and has emptied each; what it cannot be sure of is refused with words, never sent as it is.
 namespace Navree.Design.Inputs;
 
 /// <summary>What became of the place a picture was taken.</summary>
@@ -9,7 +7,7 @@ public enum PlaceOutcome
     /// <summary>The picture holds no place (or is not a picture): nothing was changed.</summary>
     None,
 
-    /// <summary>The place was taken out; the bytes handed in were changed in place.</summary>
+    /// <summary>The place was taken out: <see cref="PlaceResult.Bytes"/> is what to send.</summary>
     Removed,
 
     /// <summary>The picture may hold a place and this client cannot take it out of this kind of picture, or cannot read it well enough to be sure.</summary>
@@ -19,414 +17,229 @@ public enum PlaceOutcome
 /// <summary>What <see cref="PlaceRules.TakeOut"/> found.</summary>
 /// <param name="Outcome">What became of the place.</param>
 /// <param name="Why">When refused, the words to say at the field.</param>
-public sealed record PlaceResult(PlaceOutcome Outcome, string? Why = null);
+public sealed record PlaceResult(PlaceOutcome Outcome, string? Why = null)
+{
+    /// <summary>What to send when the picture was not refused: the bytes handed in (changed in place), or new bytes when parts of the file went.</summary>
+    public byte[]? Bytes { get; init; }
+}
 
 /// <summary>
-/// Takes the place a photograph was taken (its GPS tags) out of the bytes of a picture before it is sent, unless the field keeps it. The pictures
-/// are changed where the place is written and nowhere else, so every pixel and every other tag stays as it was: the GPS directory of the EXIF
-/// block and the GPS values of an XMP packet are emptied in place, with the sizes of everything left as they were.
-/// Covered: JPEG, PNG, WebP and TIFF (the EXIF block and the XMP packet); GIF, BMP and SVG have no EXIF block and are checked for GPS text.
-/// Not covered, and refused when they are chosen for a field that does not keep the place: HEIC, HEIF, AVIF, JPEG XL, raw formats, and a picture
-/// of a covered kind that cannot be read to the end. Not covered at all: the place in a video, and a place written in a maker's own note.
+/// Takes the place a photograph was taken out of a picture before it is sent, unless the field keeps it. What a file is comes from its first bytes
+/// (<see cref="PlaceKinds"/>), and for each kind every part that can hold a place is read: what holds one is emptied where it is written, so the
+/// picture's own data (a JPEG's scans, a PNG's IDAT, a TIFF's strips and tiles) never changes, and a part this code does not read is emptied or the
+/// file refused. Where each kind can hold a place, with the specification each fact comes from, is written beside the code of that kind:
+/// <list type="bullet">
+/// <item>JPEG (PlaceJpeg.cs): every segment up to the end of the picture, scans included; every picture after the first; anything else after it is refused, a motion photo's video with words of its own.</item>
+/// <item>TIFF and the EXIF block (PlaceTiff.cs): every directory, its GPS directory, the maker's note, the XMP, IPTC and Photoshop tags, the thumbnail; a camera's raw picture is refused.</item>
+/// <item>PNG (PlacePng.cs) and WebP (PlaceWebp.cs): the EXIF and XMP chunks, the text chunks, and chunks this code does not know.</item>
+/// <item>XMP anywhere (PlaceXmp.cs): a packet that holds any property about a place goes whole.</item>
+/// <item>GIF, BMP and SVG: searched for a property about a place, and refused when one is found.</item>
+/// </list>
+/// Refused by their bytes: HEIC, HEIF, AVIF, JPEG XL, JPEG 2000, BigTIFF. Not looked into: words a person wrote (a caption, a comment), a video.
 /// </summary>
-public static class PlaceRules
+public static partial class PlaceRules
 {
-    private const ushort GpsPointer = 0x8825;
+    // How deep pictures and blocks inside one another are followed (a thumbnail in an EXIF block in a JPEG is two), and how many pictures one JPEG file may hold.
+    private const int Deepest = 4;
+    private const int MostPictures = 64;
 
-    /// <summary>Whether a media type is a picture, which is the only kind this looks into.</summary>
+    // The raw formats of cameras, by extension (XMP Specification Part 3, 1.1.1.1, Table 4): many look like TIFF and are not ("Do not attempt to
+    // process camera raw files with generic TIFF software"), so a file named so is refused whatever its bytes look like, unless they are a JPEG,
+    // PNG or WebP. TIF is in that table too, for two makers, and is left out: a TIFF is read as one.
+    private static readonly HashSet<string> RawExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "dng", "crw", "cr2", "erf", "x3f", "raf", "3fr", "fff", "kdc", "dcr", "mos", "rwl", "mfw", "mef", "mrw", "orf", "nef", "nrw", "rw2",
+        "raw", "pef", "iiq", "srw", "arw", "srf", "sr2",
+    };
+
+    /// <summary>Whether a media type is a picture.</summary>
     /// <param name="mediaType">The media type.</param>
     /// <returns>True for a picture.</returns>
     public static bool IsPicture(string mediaType) => mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Takes the place out of a picture's bytes, in place.</summary>
-    /// <param name="file">The whole file. Changed when the outcome is <see cref="PlaceOutcome.Removed"/>.</param>
-    /// <param name="name">The file's name, which says what it should be when its bytes do not.</param>
-    /// <returns>What became of the place.</returns>
+    /// <summary>Whether a file must be looked into before it is sent from a field that does not keep the place: a picture by its bytes, by its name, or a camera's raw picture by its name.</summary>
+    /// <param name="head">The file's first bytes (<see cref="PlaceKinds.Head"/> of them, or all of a shorter file).</param>
+    /// <param name="name">The file's name.</param>
+    /// <param name="mediaType">The media type its name says.</param>
+    /// <returns>True when it must be looked into.</returns>
+    public static bool MustLook(ReadOnlySpan<byte> head, string name, string mediaType) =>
+        PlaceKinds.KindOf(head) != PictureKind.NotAPicture || IsPicture(mediaType) || IsRawName(name);
+
+    /// <summary>Takes the place out of a picture.</summary>
+    /// <param name="file">The whole file. It may be changed in place; when the outcome is a refusal it must not be sent.</param>
+    /// <param name="name">The file's name, which can only make the code more careful: it never makes a picture be read as another kind.</param>
+    /// <returns>What became of the place, and what to send.</returns>
     public static PlaceResult TakeOut(byte[] file, string name)
     {
         ArgumentNullException.ThrowIfNull(file);
-        string type = FileRules.MediaTypeOf(name);
+        ArgumentNullException.ThrowIfNull(name);
+        PictureKind kind = PlaceKinds.KindOf(file.AsSpan(0, Math.Min(file.Length, PlaceKinds.Head)));
+        Cleaning work = new(file);
         try
         {
-            if (Is(file, [0xFF, 0xD8, 0xFF]))
+            switch (kind)
             {
-                return Done(Jpeg(file));
-            }
+                case PictureKind.Jpeg:
+                    JpegFile(work);
+                    break;
+                case PictureKind.Png:
+                    Png(work);
+                    break;
+                case PictureKind.Webp:
+                    Webp(work);
+                    break;
+                case PictureKind.Tiff:
+                    if (IsRawName(name))
+                    {
+                        return Refused(Doubt.Raw);
+                    }
 
-            if (Is(file, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
-            {
-                return Done(Png(file));
-            }
+                    new TiffBlock(work, 0, file.Length, 0, true).Clean();
+                    break;
+                case PictureKind.Gif or PictureKind.Bmp or PictureKind.Svg:
+                    // A GIF's XMP is read by a GIF reader as sub-blocks (XMP Part 3, 1.1.2), so it cannot be emptied in place: such a file is refused.
+                    if (HoldsPlace(file))
+                    {
+                        return Refused(Doubt.Said);
+                    }
 
-            if (Is(file, "RIFF"u8) && file.Length >= 12 && Is(file.AsSpan(8), "WEBP"u8))
-            {
-                return Done(Webp(file));
-            }
+                    break;
+                case PictureKind.NotAPicture:
+                    if (IsRawName(name))
+                    {
+                        return Refused(Doubt.Raw);
+                    }
 
-            if (Is(file, "II*\0"u8) || Is(file, "MM\0*"u8))
-            {
-                return Done(Exif(file, 0, file.Length));
-            }
+                    // Not a picture by its bytes: a file whose name says it is one may still hold a place nobody here can see.
+                    if (IsPicture(FileRules.MediaTypeOf(name)))
+                    {
+                        return Refused(Doubt.Unknown);
+                    }
 
-            if (Is(file, "GIF8"u8) || Is(file, "BM"u8) || type == "image/svg+xml")
-            {
-                return Contains(file, "GPSLatitude"u8) || Contains(file, "GPSLongitude"u8) ? Refuse(type) : new PlaceResult(PlaceOutcome.None);
+                    break;
+                case PictureKind.OtherMedia:
+                    return Refused(Doubt.Unknown);
+                default:
+                    return Refuse(kind);
             }
         }
-        catch (FormatException)
+        catch (PlaceDoubtException doubt)
         {
-            return Refuse(type);
+            return Refused(doubt.Why);
+        }
+        catch (Exception problem) when (problem is not OutOfMemoryException)
+        {
+            // Nothing above is meant to throw anything but a doubt; if something does, the picture is not sent.
+            return Refused(Doubt.Fault);
         }
 
-        // Not one of the kinds above: a picture of another kind (or one whose bytes are not what its name says) may hold a place nobody here can see.
-        return IsPicture(type) ? Refuse(type) : new PlaceResult(PlaceOutcome.None);
+        return new PlaceResult(work.Changed ? PlaceOutcome.Removed : PlaceOutcome.None) { Bytes = work.Bytes };
     }
 
-    private static PlaceResult Done(bool removed) => new(removed ? PlaceOutcome.Removed : PlaceOutcome.None);
-
-    private static PlaceResult Refuse(string type)
+    /// <summary>Whether a name is that of a camera's raw picture.</summary>
+    /// <param name="name">The file's name.</param>
+    /// <returns>True when its extension is one of the raw formats.</returns>
+    public static bool IsRawName(string name)
     {
-        string kind = type.StartsWith("image/", StringComparison.Ordinal) ? type["image/".Length..].ToUpperInvariant() : "this kind of";
-        return new PlaceResult(PlaceOutcome.Refused, "The place it was taken cannot be taken out of a " + kind + " picture here, so it was not added. Save it as a JPEG or PNG picture and choose that.");
+        ArgumentNullException.ThrowIfNull(name);
+        string shown = FileRules.DisplayName(name);
+        int dot = shown.LastIndexOf('.');
+        return dot > 0 && RawExtensions.Contains(shown[(dot + 1)..]);
     }
 
-    // ---- JPEG -------------------------------------------------------------------------------------------------
-
-    private static bool Jpeg(byte[] file)
+    private static PlaceResult Refuse(PictureKind kind)
     {
-        bool removed = false;
-        int at = 2;
-        while (at + 4 <= file.Length)
-        {
-            if (file[at] != 0xFF)
-            {
-                throw new FormatException("a JPEG marker was expected");
-            }
-
-            byte marker = file[at + 1];
-            if (marker == 0xFF)
-            {
-                at++;
-                continue;
-            }
-
-            if (marker is 0xD9 or 0xDA)
-            {
-                // The end of the picture, or the start of its pixels: the metadata comes before.
-                return removed;
-            }
-
-            if (marker is 0x01 or (>= 0xD0 and <= 0xD8))
-            {
-                at += 2;
-                continue;
-            }
-
-            int length = BinaryPrimitives.ReadUInt16BigEndian(file.AsSpan(at + 2));
-            int start = at + 4;
-            int end = at + 2 + length;
-            if (length < 2 || end > file.Length)
-            {
-                throw new FormatException("a JPEG segment runs past the end");
-            }
-
-            if (marker == 0xE1)
-            {
-                if (HasPrefix(file, start, end, "Exif\0\0"u8))
-                {
-                    removed |= Exif(file, start + 6, end - start - 6);
-                }
-                else if (HasPrefix(file, start, end, "http://ns.adobe.com/xap/1.0/\0"u8) || HasPrefix(file, start, end, "http://ns.adobe.com/xmp/extension/\0"u8))
-                {
-                    removed |= Xmp(file, start, end);
-                }
-            }
-
-            at = end;
-        }
-
-        return removed;
+        string named = PlaceKinds.Named(kind);
+        string article = named[0] is 'A' or 'E' or 'I' or 'O' or 'U' ? "an " : "a ";
+        return new PlaceResult(PlaceOutcome.Refused, "The place it was taken cannot be taken out of " + article + named + " picture here, so it was not added. Save it as a JPEG or PNG picture and choose that.");
     }
 
-    // ---- PNG --------------------------------------------------------------------------------------------------
-
-    private static bool Png(byte[] file)
+    private static PlaceResult Refused(Doubt why) => new(PlaceOutcome.Refused, why switch
     {
-        bool removed = false;
-        int at = 8;
-        while (at + 12 <= file.Length)
-        {
-            uint length = BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(at));
-            int start = at + 8;
-            if (length > int.MaxValue || start + (long)length + 4 > file.Length)
-            {
-                throw new FormatException("a PNG chunk runs past the end");
-            }
+        Doubt.Video => "This photo holds a short video (a motion photo), and the video can hold the place it was taken, so it was not added. Save the photo as a still, without its video, and choose that.",
+        Doubt.After => "Something follows the picture in this file that cannot be read here and may hold the place it was taken, so it was not added. Save it again as a JPEG or PNG picture and choose that.",
+        Doubt.Raw => "The place it was taken cannot be taken out of a camera's raw picture here, so it was not added. Save it as a JPEG or PNG picture and choose that.",
+        Doubt.Said => "This picture says where it was taken in a way that cannot be taken out here, so it was not added. Save it as a JPEG or PNG picture and choose that.",
+        Doubt.Unknown => "The place it was taken cannot be looked for in this file here, because its bytes are not those of a picture this client reads, so it was not added. Save it as a JPEG or PNG picture and choose that.",
+        Doubt.Fault => "The place it was taken could not be looked for in this picture, because reading it failed here, so it was not added. Save it again as a JPEG or PNG picture and choose that.",
+        _ => "The place it was taken cannot be looked for in this picture, because a part of it cannot be read here, so it was not added. Save it again as a JPEG or PNG picture and choose that.",
+    });
 
-            int end = start + (int)length;
-            string kind = Encoding.ASCII.GetString(file, at + 4, 4);
-            if (kind == "IEND")
-            {
-                return removed;
-            }
+    private static PlaceDoubtException Doubted(Doubt why = Doubt.Unreadable) => new(why);
 
-            bool changed = false;
-            if (kind == "eXIf")
-            {
-                changed = Exif(file, start, (int)length);
-            }
-            else if (kind == "iTXt" && KeywordIs(file, start, end, "XML:com.adobe.xmp"))
-            {
-                int flag = start + "XML:com.adobe.xmp".Length + 1;
-                if (flag < end && file[flag] != 0)
-                {
-                    throw new FormatException("a compressed XMP packet cannot be read");
-                }
+    /// <summary>Why a picture is refused.</summary>
+    private enum Doubt
+    {
+        // A part of it cannot be read: cut short, a structure that does not hold together, a packet that is not UTF-8.
+        Unreadable,
 
-                changed = Xmp(file, start, end);
-            }
-            else if (kind is "tEXt" or "zTXt" or "iTXt" && KeywordStarts(file, start, end, "Raw profile type"))
-            {
-                throw new FormatException("a profile written as text cannot be read");
-            }
+        // A motion photo's video follows the picture.
+        Video,
 
-            if (changed)
-            {
-                removed = true;
-                uint crc = Crc32(file.AsSpan(at + 4, 4 + (int)length));
-                BinaryPrimitives.WriteUInt32BigEndian(file.AsSpan(end), crc);
-            }
+        // Something that is not a picture follows the picture.
+        After,
 
-            at = end + 4;
-        }
+        // A camera's raw picture.
+        Raw,
 
-        return removed;
+        // A GIF, BMP or SVG that names a place.
+        Said,
+
+        // The name says picture and the bytes say nothing this code reads.
+        Unknown,
+
+        // Reading it failed in a way nothing here expects.
+        Fault,
     }
 
-    private static bool KeywordIs(byte[] file, int start, int end, string keyword) =>
-        start + keyword.Length < end && file[start + keyword.Length] == 0 && Encoding.Latin1.GetString(file, start, keyword.Length) == keyword;
-
-    private static bool KeywordStarts(byte[] file, int start, int end, string prefix) =>
-        start + prefix.Length <= end && Encoding.Latin1.GetString(file, start, prefix.Length) == prefix;
-
-    // ---- WebP -------------------------------------------------------------------------------------------------
-
-    private static bool Webp(byte[] file)
+    /// <summary>The one thing the reading of a picture throws: it cannot be sure, and says why.</summary>
+    private sealed class PlaceDoubtException : Exception
     {
-        bool removed = false;
-        int at = 12;
-        while (at + 8 <= file.Length)
+        public PlaceDoubtException(Doubt why)
+            : base(why.ToString()) => Why = why;
+
+        public PlaceDoubtException()
         {
-            uint size = BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(at + 4));
-            int start = at + 8;
-            if (size > int.MaxValue || start + (long)size > file.Length)
-            {
-                throw new FormatException("a WebP chunk runs past the end");
-            }
-
-            int end = start + (int)size;
-            string kind = Encoding.ASCII.GetString(file, at, 4);
-            if (kind == "EXIF")
-            {
-                // Some writers put the six bytes "Exif" and two zeros before the block, as a JPEG does; the block itself is the same.
-                int offset = HasPrefix(file, start, end, "Exif\0\0"u8) ? 6 : 0;
-                removed |= Exif(file, start + offset, (int)size - offset);
-            }
-            else if (kind == "XMP ")
-            {
-                removed |= Xmp(file, start, end);
-            }
-
-            at = end + (int)(size & 1);
         }
 
-        return removed;
+        public PlaceDoubtException(string message)
+            : base(message)
+        {
+        }
+
+        public PlaceDoubtException(string message, Exception inner)
+            : base(message, inner)
+        {
+        }
+
+        public Doubt Why { get; }
     }
 
-    // ---- the EXIF block (a TIFF structure) ---------------------------------------------------------------------
-
-    // Empties the GPS directory of the TIFF structure at file[from .. from + length], the out-of-line values first, then the directory itself.
-    // Everything keeps its place and its size, so nothing else in the file moves. Returns true when a directory holding something was emptied.
-    private static bool Exif(byte[] file, int from, int length)
+    /// <summary>The file being cleaned, and whether anything in it changed.</summary>
+    private sealed class Cleaning(byte[] bytes)
     {
-        if (length < 8 || from < 0 || from + (long)length > file.Length)
-        {
-            throw new FormatException("the EXIF block is too short");
-        }
+        public byte[] Bytes { get; set; } = bytes;
 
-        bool little = file[from] == (byte)'I' && file[from + 1] == (byte)'I';
-        if (!little && !(file[from] == (byte)'M' && file[from + 1] == (byte)'M'))
-        {
-            throw new FormatException("the EXIF block has no byte order");
-        }
+        public bool Changed { get; set; }
 
-        ushort Read16(long at)
+        // Fills bytes with zeros; a change only when one of them was not zero already.
+        public void Zero(int from, int end) => Fill(from, end, 0);
+
+        // Fills bytes with spaces: a value of words that is to say nothing.
+        public void Spaces(int from, int end) => Fill(from, end, (byte)' ');
+
+        private void Fill(int from, int end, byte value)
         {
-            if (at < 0 || at + 2 > length)
+            Span<byte> span = Bytes.AsSpan(from, end - from);
+            if (span.ContainsAnyExcept(value))
             {
-                throw new FormatException("the EXIF block is cut");
-            }
-
-            return little ? BinaryPrimitives.ReadUInt16LittleEndian(file.AsSpan(from + (int)at)) : BinaryPrimitives.ReadUInt16BigEndian(file.AsSpan(from + (int)at));
-        }
-
-        uint Read32(long at)
-        {
-            if (at < 0 || at + 4 > length)
-            {
-                throw new FormatException("the EXIF block is cut");
-            }
-
-            return little ? BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan(from + (int)at)) : BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(from + (int)at));
-        }
-
-        if (Read16(2) != 42)
-        {
-            throw new FormatException("the EXIF block is not a TIFF structure");
-        }
-
-        long first = Read32(4);
-        int entries = Read16(first);
-        long gps = -1;
-        for (int entry = 0; entry < entries; entry++)
-        {
-            long place = first + 2 + (12L * entry);
-            if (Read16(place) == GpsPointer)
-            {
-                gps = Read32(place + 8);
-                break;
+                span.Fill(value);
+                Changed = true;
             }
         }
-
-        if (gps < 0)
-        {
-            return false;
-        }
-
-        int count = Read16(gps);
-        if (count == 0)
-        {
-            return false;
-        }
-
-        long directoryEnd = gps + 2 + (12L * count) + 4;
-        if (directoryEnd > length)
-        {
-            throw new FormatException("the GPS directory runs past the end");
-        }
-
-        for (int entry = 0; entry < count; entry++)
-        {
-            long place = gps + 2 + (12L * entry);
-            long size = TypeSize(Read16(place + 2)) * (long)Read32(place + 4);
-            if (size > 4)
-            {
-                long where = Read32(place + 8);
-                if (where < 0 || where + size > length)
-                {
-                    throw new FormatException("a GPS value runs past the end");
-                }
-
-                Array.Clear(file, from + (int)where, (int)size);
-            }
-        }
-
-        Array.Clear(file, from + (int)gps, (int)(directoryEnd - gps));
-        return true;
-    }
-
-    private static int TypeSize(ushort type) => type switch
-    {
-        1 or 2 or 6 or 7 => 1,
-        3 or 8 => 2,
-        4 or 9 or 11 => 4,
-        5 or 10 or 12 or 16 or 17 or 18 => 8,
-        _ => 1,
-    };
-
-    // ---- XMP --------------------------------------------------------------------------------------------------
-
-    // Empties the value of every GPS property of the packet at file[from .. end], written as an attribute (exif:GPSLatitude="...") or as an element
-    // (<exif:GPSLatitude>...</exif:GPSLatitude>), with spaces, so the packet stays well formed and keeps its length. Returns true when a value was emptied.
-    private static bool Xmp(byte[] file, int from, int end)
-    {
-        bool removed = false;
-        ReadOnlySpan<byte> mark = "GPS"u8;
-        int at = from;
-        while (at + 4 < end)
-        {
-            int found = file.AsSpan(at, end - at).IndexOf(mark);
-            if (found < 0)
-            {
-                break;
-            }
-
-            int name = at + found;
-            at = name + mark.Length;
-
-            // A property of the exif namespace: "exif:" (or any prefix) then GPS then the rest of the name, then "=" or ">".
-            if (name == 0 || file[name - 1] != (byte)':')
-            {
-                continue;
-            }
-
-            int after = at;
-            while (after < end && (char.IsAsciiLetterOrDigit((char)file[after])))
-            {
-                after++;
-            }
-
-            if (after >= end)
-            {
-                break;
-            }
-
-            int valueStart;
-            int valueEnd;
-            if (file[after] == (byte)'=' && after + 1 < end && file[after + 1] is (byte)'"' or (byte)'\'')
-            {
-                byte quote = file[after + 1];
-                valueStart = after + 2;
-                valueEnd = Array.IndexOf(file, quote, valueStart, end - valueStart);
-            }
-            else if (file[after] == (byte)'>')
-            {
-                valueStart = after + 1;
-                valueEnd = Array.IndexOf(file, (byte)'<', valueStart, end - valueStart);
-            }
-            else
-            {
-                continue;
-            }
-
-            if (valueEnd < 0)
-            {
-                throw new FormatException("an XMP value is not closed");
-            }
-
-            for (int index = valueStart; index < valueEnd; index++)
-            {
-                if (file[index] != (byte)' ')
-                {
-                    removed = true;
-                    file[index] = (byte)' ';
-                }
-            }
-
-            at = valueEnd;
-        }
-
-        return removed;
     }
 
     // ---- bytes ------------------------------------------------------------------------------------------------
-
-    private static bool Is(ReadOnlySpan<byte> file, ReadOnlySpan<byte> head) => file.Length >= head.Length && file[..head.Length].SequenceEqual(head);
-
-    private static bool Contains(byte[] file, ReadOnlySpan<byte> text) => file.AsSpan().IndexOf(text) >= 0;
-
-    private static bool HasPrefix(byte[] file, int start, int end, ReadOnlySpan<byte> prefix) =>
-        end - start >= prefix.Length && file.AsSpan(start, prefix.Length).SequenceEqual(prefix);
 
     private static readonly uint[] Table = MakeTable();
 

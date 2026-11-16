@@ -6,6 +6,17 @@ namespace Navree.Design.Inputs;
 /// <param name="Words">What is said at the field.</param>
 public sealed record Refusal(string Words);
 
+/// <summary>One thing dropped on a file field, as the system hands it over.</summary>
+/// <param name="Name">Its name.</param>
+/// <param name="Path">Where it is on this computer; empty for a thing that has no path here (a file on a phone seen through Explorer, a link from a browser).</param>
+/// <param name="Folder">Whether it is a folder.</param>
+public sealed record DroppedItem(string Name, string? Path, bool Folder);
+
+/// <summary>What comes of a drop: the paths offered to the field, and the words said for what was not.</summary>
+/// <param name="Paths">The files on this computer, in the order they were dropped.</param>
+/// <param name="Words">The words for the rest, one for each, and one for all the folders.</param>
+public sealed record Dropped(IReadOnlyList<string> Paths, IReadOnlyList<string> Words);
+
 /// <summary>
 /// What a file field takes: the kinds named by the web's own list (<c>image/*,.pdf</c>), the most bytes of all the files of one field together,
 /// and the words said about a file. The protocol carries no largest size, so it is the client's own option.
@@ -24,7 +35,8 @@ public static class FileRules
     // Extension (no dot) to media type: the kinds a person is likely to attach. A kind not here is sent as application/octet-stream.
     private static readonly Dictionary<string, string> Types = new(StringComparer.Ordinal)
     {
-        ["jpg"] = "image/jpeg", ["jpeg"] = "image/jpeg", ["jpe"] = "image/jpeg", ["png"] = "image/png", ["gif"] = "image/gif",
+        ["jpg"] = "image/jpeg", ["jpeg"] = "image/jpeg", ["jpe"] = "image/jpeg", ["jfif"] = "image/jpeg", ["jfi"] = "image/jpeg", ["jif"] = "image/jpeg",
+        ["png"] = "image/png", ["gif"] = "image/gif",
         ["webp"] = "image/webp", ["bmp"] = "image/bmp", ["tif"] = "image/tiff", ["tiff"] = "image/tiff", ["heic"] = "image/heic",
         ["heif"] = "image/heif", ["avif"] = "image/avif", ["svg"] = "image/svg+xml", ["ico"] = "image/vnd.microsoft.icon",
         ["jxl"] = "image/jxl", ["dng"] = "image/x-adobe-dng",
@@ -223,6 +235,60 @@ public static class FileRules
         }
 
         return null;
+    }
+
+    /// <summary>What is said of a folder dropped on a field.</summary>
+    public const string FolderWords = "Folders cannot be added; choose the files in it.";
+
+    /// <summary>What is said when the system's file picker could not be opened.</summary>
+    public const string PickerFailedWords = "The file picker could not be opened, so nothing was added. Try again, or drop the files on the field.";
+
+    /// <summary>What is said when what was dropped could not be read at all.</summary>
+    public const string DropFailedWords = "What was dropped could not be read, so nothing was added. Save it to a folder first and choose it from there.";
+
+    /// <summary>Whether a path is one of a file on this computer: a full path with a drive or a share, not a name alone or an address.</summary>
+    /// <param name="path">The path.</param>
+    /// <returns>True when it is.</returns>
+    public static bool IsOnThisComputer(string? path) =>
+        !string.IsNullOrWhiteSpace(path) && path.IndexOf("://", StringComparison.Ordinal) < 0 && Path.IsPathFullyQualified(path);
+
+    /// <summary>What is said of a thing that is not a file on this computer.</summary>
+    /// <param name="name">Its name, or nothing.</param>
+    /// <returns>The words.</returns>
+    public static string NotHere(string? name) =>
+        (string.IsNullOrWhiteSpace(name) ? "This item" : name.Trim()) + " is not a file on this computer (it may be on a phone or a link from a browser), so it was not added. Save it to a folder first and choose it from there.";
+
+    /// <summary>Sorts what was dropped on a field: files on this computer are offered; a folder, or a thing with no path here, is said in words.</summary>
+    /// <param name="items">What was dropped.</param>
+    /// <returns>The paths to offer and the words to say.</returns>
+    public static Dropped Sort(IReadOnlyList<DroppedItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        List<string> paths = [];
+        List<string> words = [];
+        bool folders = false;
+        foreach (DroppedItem item in items)
+        {
+            if (item.Folder)
+            {
+                folders = true;
+            }
+            else if (IsOnThisComputer(item.Path))
+            {
+                paths.Add(item.Path!);
+            }
+            else
+            {
+                words.Add(NotHere(item.Name));
+            }
+        }
+
+        if (folders)
+        {
+            words.Add(FolderWords);
+        }
+
+        return new Dropped(paths, words);
     }
 
     /// <summary>What a screen reader says of one chosen file: its name and its size.</summary>

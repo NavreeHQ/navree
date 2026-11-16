@@ -27,11 +27,16 @@ internal sealed partial class PageWalk
 
         internal int Asked { get; private set; }
 
+        // When set, the picker fails as the system's can, with a COM error.
+        internal bool Fails { get; set; }
+
         public Task<IReadOnlyList<string>> PickAsync(FilePickRequest request, Microsoft.UI.WindowId window)
         {
             Last = request;
             Asked++;
-            return Task.FromResult<IReadOnlyList<string>>(Next.Count > 0 ? Next.Dequeue() : []);
+            return Fails
+                ? Task.FromException<IReadOnlyList<string>>(new System.Runtime.InteropServices.COMException("the walk's picker fails as the system's can"))
+                : Task.FromResult<IReadOnlyList<string>>(Next.Count > 0 ? Next.Dequeue() : []);
         }
     }
 
@@ -409,5 +414,34 @@ internal sealed partial class PageWalk
             await Task.Delay(600);
             Check("a file shown as gone can be taken out", !TextIsOnScreen("Shop lease, Ludhiana.pdf") && !CoreFiles().Contains("Shop lease", StringComparison.Ordinal), CoreFiles());
         }
+
+        // 6. An item with no path on this computer, as a drop from a phone seen through Explorer or a link from a browser hands over, and a picker
+        // that fails: each is said in words at the field and the app goes on. The walk cannot make a real drop; a drop offers what it holds to the
+        // field the same way the picker does (FileFieldView.OfferAsync), after FileRules.Sort, whose decision the unit tests hold.
+        Button? again = ButtonStarting("Choose files for Papers");
+        if (again is null)
+        {
+            Check("the Choose button is still there for the last two cases", false, "none");
+            return;
+        }
+
+        int before = CoreCount();
+        picker.Next.Enqueue([string.Empty]);
+        Foreground();
+        _ = again.Focus(FocusState.Keyboard);
+        await Task.Delay(300);
+        await PressAsync(SpaceKey);
+        await SettleAsync();
+        await Task.Delay(800);
+        Check("an item with no path on this computer is refused with words and the app goes on", TextIsOnScreen("is not a file on this computer") && CoreCount() == before, "core holds " + CoreCount() + " files, before " + before);
+        picker.Fails = true;
+        _ = again.Focus(FocusState.Keyboard);
+        await PressAsync(SpaceKey);
+        await SettleAsync();
+        await Task.Delay(800);
+        picker.Fails = false;
+        Check("a file picker that fails is said in words and the app goes on", TextIsOnScreen(FileRules.PickerFailedWords) && CoreCount() == before, "core holds " + CoreCount() + " files");
+        await ShowAsync(box);
+        await ShotAsync("inputs-files-not-here");
     }
 }
