@@ -769,7 +769,7 @@ internal sealed partial class NodeRenderer
                         PlaceholderText = choice.Placeholder ?? string.Empty,
                         IsEnabled = !field.Disabled,
                         UpdateTextOnSelect = false,
-                        Text = options.FirstOrDefault(option => option.Value == chosen)?.Label ?? string.Empty,
+                        Text = options.FirstOrDefault(option => option.Value == chosen) is { } first ? ChoiceRules.Words(first) : string.Empty,
                     };
                     // The words of every option the box has been given, by value: what the box says when the core sets the value itself.
                     Dictionary<string, string> words = new(StringComparer.Ordinal);
@@ -778,7 +778,7 @@ internal sealed partial class NodeRenderer
                     {
                         foreach (Models.ChoiceOption option in found)
                         {
-                            words[option.Value] = option.Label;
+                            words[option.Value] = ChoiceRules.Words(option);
                         }
 
                         offered = ChoiceRules.Offer(found, more, choice.Create?.Label, typed);
@@ -800,7 +800,7 @@ internal sealed partial class NodeRenderer
                         switch (act)
                         {
                             case ChoiceAct.Send when line?.Value is string value:
-                                box.Text = line.Label;
+                                box.Text = line.Words;
                                 choiceShown.Chose(value, DateTime.UtcNow);
                                 send(new TextValue(value));
                                 break;
@@ -840,7 +840,7 @@ internal sealed partial class NodeRenderer
                     RadioButtons radios = new() { Header = header, IsEnabled = !field.Disabled };
                     foreach (Models.ChoiceOption option in options)
                     {
-                        radios.Items.Add(option.Label);
+                        radios.Items.Add(ChoiceRules.Words(option));
                     }
 
                     radios.SelectedIndex = IndexOfValue(options, chosen);
@@ -867,7 +867,7 @@ internal sealed partial class NodeRenderer
                                 radios.Items.Clear();
                                 foreach (Models.ChoiceOption option in latest)
                                 {
-                                    radios.Items.Add(option.Label);
+                                    radios.Items.Add(ChoiceRules.Words(option));
                                 }
                             }
 
@@ -887,7 +887,7 @@ internal sealed partial class NodeRenderer
                     ComboBox combo = new() { Header = header, PlaceholderText = choice.Placeholder ?? string.Empty, IsEnabled = !field.Disabled, HorizontalAlignment = HorizontalAlignment.Stretch };
                     foreach (Models.ChoiceOption option in options)
                     {
-                        combo.Items.Add(option.Label);
+                        combo.Items.Add(ChoiceRules.Words(option));
                     }
 
                     // The options go on past those held (a list the server gives by cursor): the last entry asks for the next of them.
@@ -946,7 +946,7 @@ internal sealed partial class NodeRenderer
                                 combo.Items.Clear();
                                 foreach (Models.ChoiceOption option in latest)
                                 {
-                                    combo.Items.Add(option.Label);
+                                    combo.Items.Add(ChoiceRules.Words(option));
                                 }
 
                                 if (more)
@@ -995,7 +995,7 @@ internal sealed partial class NodeRenderer
                     ticked.Clear();
                     foreach (Models.ChoiceOption option in manyOptions)
                     {
-                        CheckBox check = new() { Content = option.Label, IsChecked = ticks.Has(option.Value) };
+                        CheckBox check = new() { Content = ChoiceRules.Words(option), IsChecked = ticks.Has(option.Value) };
                         string value = option.Value;
                         check.Click += (_, _) => send(new ManyValue(ticks.Tick(value, check.IsChecked == true, DateTime.UtcNow)));
                         boxes.Children.Add(check);

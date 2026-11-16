@@ -29,6 +29,31 @@ public sealed class ChoiceRulesTests
     }
 
     [TestMethod]
+    public void Two_options_of_one_name_read_apart_by_the_few_words_the_page_gives_beside_the_label()
+    {
+        Models.ChoiceOption ludhiana = new() { Label = "Amit Kumar", Value = "customer-17", Detail = "Ludhiana" };
+        Models.ChoiceOption jalandhar = new() { Label = "Amit Kumar", Value = "customer-42", Detail = "Jalandhar" };
+        Assert.AreEqual("Amit Kumar (Ludhiana)", ChoiceRules.Words(ludhiana));
+        Assert.AreEqual("Amit Kumar (Jalandhar)", ChoiceRules.Words(jalandhar));
+
+        // In the searched list the two lines read apart, and the one chosen is named in full where it is shown afterwards.
+        IReadOnlyList<Suggestion> offered = ChoiceRules.Offer([ludhiana, jalandhar], more: false, createWords: null, typed: "amit");
+        Assert.AreNotEqual(offered[0].ToString(), offered[1].ToString(), "two people of one name read the same in the list");
+        Assert.AreEqual("Amit Kumar (Jalandhar)", offered[1].Words);
+        Assert.AreEqual("Amit Kumar", offered[1].Label);
+        Assert.AreEqual("customer-42", ChoiceRules.Chosen(offered, offered[1]).Line?.Value);
+
+        // An option with no such words, or with blank ones, is its label alone.
+        Assert.AreEqual("Clothing", ChoiceRules.Words(Option("Clothing", "clothing")));
+        Assert.AreEqual("Clothing", ChoiceRules.Words("Clothing", "  "));
+        Assert.AreEqual("Clothing (12)", ChoiceRules.Words("Clothing", " 12 "));
+
+        // A list whose words beside the label changed is another list: a control that shows the first is filled again.
+        Assert.IsFalse(ChoiceRules.SameOptions([ludhiana], [ludhiana with { Detail = "Moga" }]), "a control would go on showing the old words beside the label");
+        Assert.IsTrue(ChoiceRules.SameOptions([ludhiana, jalandhar], [ludhiana with { }, jalandhar with { }]));
+    }
+
+    [TestMethod]
     public void A_thing_that_only_reads_like_a_line_of_the_list_is_not_chosen()
     {
         IReadOnlyList<Suggestion> offered = ChoiceRules.Offer([Option("Amit Kumar", "customer-17"), Option("Amit Kumar", "customer-42")], more: true, createWords: "Add a customer", typed: "amit");

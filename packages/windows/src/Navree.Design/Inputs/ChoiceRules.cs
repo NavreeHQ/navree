@@ -26,27 +26,32 @@ public sealed class Suggestion
 {
     /// <summary>Makes a line.</summary>
     /// <param name="kind">What it is.</param>
-    /// <param name="label">The words shown for it.</param>
+    /// <param name="label">The option's label, or the line's own words.</param>
     /// <param name="value">The value sent when it is chosen; none for a line that is not an option.</param>
-    public Suggestion(SuggestionKind kind, string label, string? value)
+    /// <param name="detail">The few words the page gives beside the label, by which two options of one name are told apart; or none.</param>
+    public Suggestion(SuggestionKind kind, string label, string? value, string? detail = null)
     {
         Kind = kind;
         Label = label;
         Value = value;
+        Words = ChoiceRules.Words(label, detail);
     }
 
     /// <summary>What it is.</summary>
     public SuggestionKind Kind { get; }
 
-    /// <summary>The words shown for it.</summary>
+    /// <summary>The option's label.</summary>
     public string Label { get; }
 
     /// <summary>The value sent when it is chosen.</summary>
     public string? Value { get; }
 
+    /// <summary>The words shown for it: the label, and beside it the few words the page gives with it.</summary>
+    public string Words { get; }
+
     /// <summary>The words the list shows for the line.</summary>
-    /// <returns>Its label.</returns>
-    public override string ToString() => Label;
+    /// <returns>Its words.</returns>
+    public override string ToString() => Words;
 }
 
 /// <summary>What choosing a line of a searched choice's list does.</summary>
@@ -83,7 +88,7 @@ public static class ChoiceRules
         List<Suggestion> lines = [];
         foreach (Models.ChoiceOption option in options)
         {
-            lines.Add(new Suggestion(option.Disabled ? SuggestionKind.Disabled : SuggestionKind.Option, option.Label, option.Value));
+            lines.Add(new Suggestion(option.Disabled ? SuggestionKind.Disabled : SuggestionKind.Option, option.Label, option.Value, option.Detail));
         }
 
         if (more)
@@ -127,7 +132,7 @@ public static class ChoiceRules
     }
 
     /// <summary>
-    /// Whether two lists of options are one list: the same words, the same values and the same states in the same order. Two lists that read the
+    /// Whether two lists of options are one list: the same words (label and detail), the same values and the same states in the same order. Two lists that read the
     /// same and send other values are two lists, and a control that shows the first must be filled again for the second.
     /// </summary>
     /// <param name="shown">The options a control was filled with.</param>
@@ -144,7 +149,7 @@ public static class ChoiceRules
 
         for (int at = 0; at < shown.Count; at++)
         {
-            if (shown[at].Label != now[at].Label || shown[at].Value != now[at].Value || shown[at].Disabled != now[at].Disabled)
+            if (shown[at].Label != now[at].Label || shown[at].Value != now[at].Value || shown[at].Disabled != now[at].Disabled || shown[at].Detail != now[at].Detail)
             {
                 return false;
             }
@@ -152,6 +157,25 @@ public static class ChoiceRules
 
         return true;
     }
+
+    /// <summary>
+    /// The words an option is shown by, in every control that offers it: its label, and beside it, in brackets, the few words the page gives
+    /// with it (<c>detail</c>: the town of a person, how many records hold a value). Two options of one name read apart by them.
+    /// </summary>
+    /// <param name="option">The option.</param>
+    /// <returns>The words.</returns>
+    public static string Words(Models.ChoiceOption option)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        return Words(option.Label, option.Detail);
+    }
+
+    /// <summary>The words a label and its detail are shown by.</summary>
+    /// <param name="label">The label.</param>
+    /// <param name="detail">The few words beside it, or none.</param>
+    /// <returns>The label alone when there is no detail; else the label and the detail in brackets.</returns>
+    public static string Words(string label, string? detail) =>
+        string.IsNullOrWhiteSpace(detail) ? label : label + " (" + detail.Trim() + ")";
 
     /// <summary>The place of a value in a list of options: the first option that holds it.</summary>
     /// <param name="options">The options.</param>
