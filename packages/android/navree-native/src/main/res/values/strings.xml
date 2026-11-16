@@ -22,11 +22,58 @@
     <string name="navree_upgrade_title">Update the app to continue</string>
     <string name="navree_upgrade_text">This version is too old to use safely.</string>
     <string name="navree_upgrade_action">Update</string>
+    <!-- The runtime core stopped after a failure inside it: the app can only be started again. -->
+    <string name="navree_stopped_title">The app has stopped</string>
+    <string name="navree_stopped_text">Something went wrong inside it, and it can\'t go on. Start it again to continue.</string>
+    <string name="navree_stopped_action">Start again</string>
     <string name="navree_show_password">Show password</string>
     <string name="navree_hide_password">Hide password</string>
     <string name="navree_pick_date">Choose a date</string>
     <string name="navree_pick_dates">Choose dates</string>
     <string name="navree_pick_time">Choose a time</string>
+    <!-- A file field. -->
+    <string name="navree_file_none">Nothing chosen yet</string>
+    <string name="navree_choose_file">Choose a file</string>
+    <string name="navree_choose_files">Choose files</string>
+    <string name="navree_add_files">Add files</string>
+    <string name="navree_replace_file">Replace file</string>
+    <string name="navree_file_button_for">%1$s, %2$s</string>
+    <string name="navree_remove_file">Remove %1$s</string>
+    <string name="navree_file_gone">No longer available. Choose it again.</string>
+    <string name="navree_file_reading">Reading the file</string>
+    <string name="navree_file_too_large">%1$s is larger than %2$s and was not added.</string>
+    <string name="navree_file_too_large_together">Adding %1$s would take the files of this field over %2$s, so it was not added.</string>
+    <string name="navree_file_wrong_type">%1$s is not a kind of file this field takes. It takes: %2$s.</string>
+    <string name="navree_file_unreadable">%1$s could not be read and was not added.</string>
+    <string name="navree_file_no_answer">%1$s was not added: where it is kept did not answer in time. Choose it again.</string>
+    <string name="navree_file_with_location">%1$s has the place it was taken in it, which cannot be taken out of this kind of file, so it was not added.</string>
+    <string name="navree_file_place_unchecked">%1$s is a kind of picture this device cannot check for the place it was taken, so it was not added.</string>
+    <string name="navree_file_no_picker">No app on this device can choose files.</string>
+    <!-- A colour field. -->
+    <string name="navree_colour_none">No colour chosen</string>
+    <string name="navree_choose_colour">Choose a colour</string>
+    <string name="navree_colour_named">%1$s, %2$s</string>
+    <string name="navree_colour_hex">Hex value</string>
+    <string name="navree_colour_hex_hint">Six hex digits, like %1$s</string>
+    <string name="navree_colour_hex_wrong">Not a colour. Use six hex digits, like %1$s.</string>
+    <string name="navree_hue">Hue</string>
+    <string name="navree_saturation">Saturation</string>
+    <string name="navree_lightness">Lightness</string>
+    <string name="navree_degrees">%1$d degrees</string>
+    <string name="navree_percent_value">%1$d percent</string>
+    <string name="navree_colour_black">Black</string>
+    <string name="navree_colour_white">White</string>
+    <string name="navree_colour_grey">Grey</string>
+    <string name="navree_colour_red">Red</string>
+    <string name="navree_colour_orange">Orange</string>
+    <string name="navree_colour_brown">Brown</string>
+    <string name="navree_colour_yellow">Yellow</string>
+    <string name="navree_colour_green">Green</string>
+    <string name="navree_colour_teal">Teal</string>
+    <string name="navree_colour_cyan">Cyan</string>
+    <string name="navree_colour_blue">Blue</string>
+    <string name="navree_colour_purple">Purple</string>
+    <string name="navree_colour_pink">Pink</string>
     <string name="navree_increase">Increase</string>
     <string name="navree_decrease">Decrease</string>
     <string name="navree_required_note">* Required</string>
@@ -46,6 +93,10 @@
     <string name="navree_notice_fields">Some fields need your attention</string>
     <string name="navree_notice_loaded">More loaded</string>
     <string name="navree_notice_second_step">One more step is needed to sign in. Sign in another way to finish.</string>
+    <string name="navree_notice_saved_not_refreshed">Saved. The screen couldn\'t be brought up to date.</string>
+    <!-- A notice of a runtime core newer than this build: by its tone, something that failed, or something else. -->
+    <string name="navree_notice_unknown_failed">That didn\'t work.</string>
+    <string name="navree_notice_unknown">Something happened that this version of the app can\'t describe.</string>
     <string name="navree_copied">Copied</string>
     <string name="navree_more_failed">Couldn\'t load more</string>
     <!-- The headline of the question a destructive action asks: the action's own words. -->
@@ -78,6 +129,7 @@
     <string name="navree_today">Today</string>
     <string name="navree_now">Now</string>
     <string name="navree_drag_handle">Reorder</string>
+    <string name="navree_move_card">Move %1$s</string>
     <string name="navree_move_up">Move up</string>
     <string name="navree_move_down">Move down</string>
     <string name="navree_move_to">Move to %1$s</string>
