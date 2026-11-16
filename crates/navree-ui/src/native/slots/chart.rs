@@ -73,6 +73,14 @@ pub(crate) fn figure(cx: &mut Cx, element: &Element) -> Read {
             format!("a chart with no reader here yet: the protocol has {waits} for it"),
         );
     }
+    // A waterfall's bars float at a running total, which no kind of the protocol draws: it is
+    // the web view's, and never read as plain bars.
+    if attr(element, "data-kind").as_deref() == Some("waterfall") {
+        return fail_on(
+            "chart:waterfall",
+            "a chart with no reader here yet: the protocol has no kind whose bars float at a running total",
+        );
+    }
     let mut parts = Parts::of(element);
     let header = parts.slot("chart-header");
     let state = parts.slot("chart-state");

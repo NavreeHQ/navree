@@ -67,6 +67,7 @@ is dropped.
 | Line chart, area chart or bar chart (several series, stacked, to 100%, horizontal) | `Chart::line(title)` / `Chart::area(title)` / `Chart::bar(title)` with `.days(..)`, `.categories(..)` or `.times(..)`, `.series(Series::new(name, values))`, `.stacked()`, `.horizontal()`, `.toggles()`, `.annotation(..)`; a table of the same numbers comes with it |
 | Donut chart, pie | `Donut::new(title).part(name, value)`, `.part_tone(name, value, tone)`, `.pie()`, `.center(big, small)` |
 | Funnel | `Funnel::new(title).stage(Stage::new(name, count))` |
+| Waterfall: a settlement after fees, profit after costs, each bar floating at the running total | `Waterfall::new(title).start(label, amount).step(label, signed_amount).total(label)`, `.colors(added, deducted, total)`, `.format(NumberFormat::currency("₹"))` |
 | Trend beside a figure | `Stat::new(..).chart(Sparkline::new(title, values))` |
 | A report over a date window (Reports) | `Report::from_query(..)`, `report.chart(Chart::bar(title)).series(..)` |
 | A ring of progress, a score in a circle | `Ring::new(title, value).max(goal).label(..).sublabel(..)`; several against their goals: `Rings::new(title).ring(RingValue::new(name, value).max(goal))` |

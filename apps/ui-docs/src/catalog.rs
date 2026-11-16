@@ -178,6 +178,7 @@ pub const GROUPS: &[Group] = &[
             "donut-chart",
             "sparkline",
             "funnel",
+            "waterfall",
             "ring",
             "rings",
             "gauge",
@@ -851,6 +852,14 @@ pub const COMPONENTS: &[Component] = &[
     component("donut-chart", "Donut chart", &["Donut"], "thumb")
         .about("One whole split into a few parts, with the total in the middle. A pie has no hole.")
         .parts("default"),
+    component(
+        "waterfall",
+        "Waterfall",
+        &["Waterfall", "WaterfallLabels"],
+        "thumb",
+    )
+    .about("An amount built up and taken down a step at a time, each bar floating at the running total, with totals from zero.")
+    .parts("default"),
     component("sparkline", "Sparkline", &["Sparkline"], "thumb")
         .about("A small line with no axes, beside a figure: the shape of a series at a glance.")
         .parts("default"),

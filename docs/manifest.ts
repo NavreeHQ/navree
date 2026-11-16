@@ -443,6 +443,7 @@ export const sections: DocsSection[] = [
       "donut-chart",
       "sparkline",
       "funnel",
+      "waterfall",
       "ring",
       "rings",
       "gauge",

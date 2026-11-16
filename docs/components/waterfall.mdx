@@ -1,0 +1,118 @@
+---
+title: "Waterfall"
+description: "An amount built up and taken down a step at a time: each bar floats at the running total, steps that add and steps that take away in their own colours, totals from zero. Drawn on the server."
+---
+
+<UiPreview example="waterfall/default" />
+
+`Waterfall` shows how an amount becomes another, a step at a time: what customers paid down to what reached the bank, revenue down to profit. Each step's bar starts where the last one ended, so it floats at the running total. A step that adds runs on in one colour, a step that takes away runs back in another, and a total is a bar from zero in a third. Each row writes its amount at its end, a step's with its sign.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Waterfall::new("This month's settlement")
+    .description("From what the store's customers paid to what reached the bank")
+    .locale("en-IN")
+    .format(NumberFormat::currency("₹").max_decimals(0))
+    .start("Orders", 2_50_000)
+    .step("Store fee", -25_000)
+    .step("Tax on the fee", -4_500)
+    .step("Returns", -12_000)
+    .step("Promotions refunded", 3_000)
+    .step("Tax withheld", -2_500)
+    .total("Paid to the bank")
+```
+
+`.start(label, amount)` is a bar from zero, drawn as a total, where the running total begins. `.step(label, amount)` adds to the running total when the amount is above zero and takes away when it is below. `.total(label)` draws a bar from zero to the running total so far: a subtotal between steps, or the net at the end. The rows are drawn in the order you add them.
+
+## When to use it
+
+Use a waterfall when the reader needs to see what each step did to a total: fees and taxes off a settlement, costs off revenue. To compare amounts that don't add up to one another, use a [bar chart](/docs/components/bar-chart/). For how many reach each stage of a process, use a [funnel](/docs/components/funnel/). For the parts of one whole, use a [meter](/docs/components/meter/) or a [donut chart](/docs/components/donut-chart/).
+
+## Anatomy
+
+<UiAnatomy component="waterfall" />
+
+## Steps, subtotals and colours
+
+The scale runs from zero, or from below it when the running total goes negative, to the highest point any bar reaches. A dashed line runs from each running total down to the step after it, which starts there.
+
+`.colors(added, deducted, total)` sets the three colours: chart colours 1 and 2 for the steps and the text ink, `Ink::text()`, for the totals by default, so a total stands apart from the steps that make it. Use tones when adding means good and taking away bad.
+
+```rust
+use navree::ui::charts::*;
+use navree::ui::*;
+
+Waterfall::new("Studio profit, October")
+    .locale("en-IN")
+    .format(NumberFormat::currency("₹").max_decimals(0))
+    .step("Classes", 4_20_000)
+    .step("Retail", 85_000)
+    .total("Revenue")
+    .step("Instructors", -1_90_000)
+    .step("Premises", -95_000)
+    .step("Stock", -42_000)
+    .total("Profit")
+    .colors(Ink::tone(Tone::Success), Ink::tone(Tone::Danger), Ink::slot(7))
+```
+
+<UiPreview example="waterfall/subtotals" />
+
+A step with no amount, `None` or a value that is not a finite number, is a row with no bar that leaves the running total as it was. A waterfall draws at most 24 rows, the first ones, and a note under it says so.
+
+## Amounts and words
+
+`.format(NumberFormat)` writes the amounts: `NumberFormat::currency("₹")` for money. `.locale("en-IN")` groups them in lakh and crore. The legend names the colours the rows use, in the order they meet them: "Total", "Added" and "Deducted". These words, the table's columns and the summary's template are fields of `WaterfallLabels`: change the ones you need and pass it to `.words(...)`.
+
+```rust
+use navree::ui::charts::*;
+
+let mut words = WaterfallLabels::english();
+words.added = "जोड़ा".into();
+words.deducted = "घटाया".into();
+Waterfall::new("भुगतान").locale("hi").words(words)
+```
+
+## Right to left and motion
+
+`.rtl()` runs the bars from the right, for a right-to-left page. `.motion(Motion::new())` grows each bar from where it starts, one after another. The bars are drawn finished, so a reader who asks for less motion sees the final state.
+
+## Loading, failed and empty
+
+The states work as on a [line chart](/docs/components/line-chart/#loading-failed-and-empty). A waterfall with no amount is empty.
+
+<UiPreview example="waterfall/states" />
+
+## The table
+
+The table has a row for each row drawn: its label, its amount (with its sign for a step) and the running total after it. See [The table](/docs/components/line-chart/#the-table).
+
+## Keyboard and accessibility
+
+<UiA11y>
+
+| Key | Does |
+|---|---|
+| `Tab` | Moves into the waterfall, which is one tab stop. |
+| `↑`, `↓`, `←`, `→` | Moves to the row before or after. |
+| `Home`, `End` | Moves to the first or the last row. |
+| `Page Up`, `Page Down` | Moves a tenth of the way back or on, and at least one row. |
+| `Esc` | Hides the tooltip. |
+
+- The waterfall is a group named by its title and described by its summary: where it starts, where it ends, and how much was added and taken away on the way.
+- A move by key marks the row and is announced politely: its label, its amount and the running total.
+- Every row writes its amount in words beside its bar, and the legend names what each colour means, so the colour is never alone.
+- With `.rtl()`, `←` and `→` swap.
+
+</UiA11y>
+
+## API
+
+### Waterfall
+
+<UiProps type="Waterfall" />
+
+### WaterfallLabels
+
+<UiProps type="WaterfallLabels" />

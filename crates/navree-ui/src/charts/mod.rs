@@ -1,5 +1,5 @@
 //! Charts drawn on the server as SVG: [`Chart`] (line, area and bar, vertical and
-//! horizontal, grouped and stacked), [`Donut`], [`Sparkline`] and [`Funnel`], the
+//! horizontal, grouped and stacked), [`Donut`], [`Sparkline`], [`Funnel`] and [`Waterfall`], the
 //! grids and points ([`Heatmap`], [`CalendarHeatmap`], [`MatrixHeatmap`], [`RelationList`]
 //! and [`Scatter`]), and
 //! [`Report`], which reads a date range from the URL, picks a grain and buckets a
@@ -65,6 +65,7 @@ mod scale;
 mod sparkline;
 mod strip;
 mod value;
+mod waterfall;
 
 pub use axes::{Axis, Domain, Gridlines, Ticks};
 pub use cartesian::{Annotation, At, Chart, Merge, Series};
@@ -95,6 +96,7 @@ pub use scale::Grain;
 pub use sparkline::Sparkline;
 pub use strip::{ColorStrip, MAX_CELLS};
 pub use value::IntoValue;
+pub use waterfall::{MAX_WATERFALL_ROWS, Waterfall, WaterfallLabels};
 
 /// The most categorical colours: a ninth series folds into Other.
 pub const MAX_SERIES: usize = 8;

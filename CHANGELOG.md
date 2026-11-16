@@ -286,6 +286,21 @@ every `@navree/*` package carries the same version.
   others and is set apart from the chart colours of its parts. It writes `data-color="text"`,
   which the charts sheet and the chart paint sheet each gain a rule for, and a chart picture
   draws it in the theme's text colour. Every other ink is drawn as before.
+- `Waterfall` draws an amount built up and taken down a row at a time, such as a settlement
+  from what customers paid to what reached the bank. `start(label, amount)` is a bar from zero
+  where the running total begins, `step(label, amount)` a bar that floats at the running total
+  (above zero it adds, below it takes away) and `total(label)` a bar from zero to the running
+  total so far, a subtotal or the net. Steps that add, steps that take away and totals each take
+  a colour,
+  `colors(added, deducted, total)` (chart colours 1 and 2 and `Ink::text()` by default); each row
+  writes its amount at its end, a step's with its sign, in the chart's `format` and `locale`
+  (`NumberFormat::currency("₹")` and `en-IN` write `-₹25,000`); a dashed line runs from each running
+  total to the step that starts there; and a legend names the colours. The rows are one tab stop
+  with a tooltip each, the table holds each row's amount and the running total after it, and the
+  summary says where it starts and ends and how much was added and taken away. `rtl()`,
+  `motion(..)` and `words(WaterfallLabels)` work as on the other charts. It draws at most
+  `MAX_WATERFALL_ROWS` (24) rows and says so when it cuts. The charts sheet gains the rule for the
+  dashed line.
 
 ### Fixed
 

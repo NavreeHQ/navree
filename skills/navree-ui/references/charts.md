@@ -15,6 +15,7 @@ Pick by what the reader has to see:
 | A value for each hour of a day, round a clock face | the day clock (`DayClock`) |
 | One whole split into parts (sleep stages, time in heart-rate zones) | `Meter` |
 | The same parts for several items, side by side | mini columns (`MiniColumns`) |
+| An amount built up and taken down step by step (a settlement after fees, profit after costs) | a waterfall (`Waterfall`) |
 | A category or a band for each slot of time | a colour strip (`ColorStrip`) |
 | One reading between two ends (a BMI, a resting heart rate) | a range scale (`RangeScale`) |
 | A reading or a category for each row at each column (days by hours, people by weeks) | the heat map (`Heatmap`) |
@@ -174,6 +175,15 @@ category (`category` and `cells`) or a reading coloured by its band
 another each take `hide_legend()` but one, and declare the same categories
 in the same order, so the one legend left names every category.
 
+A waterfall (`Waterfall`) builds an amount up and takes it down a row at a
+time: `start(label, amount)` is a bar from zero where the running total
+begins, `step(label, amount)` floats at the running total (above zero it
+adds, below it takes away), and `total(label)` is a bar from zero to the
+running total so far. Steps that add, steps that take away and totals each
+have a colour (`colors(added, deducted, total)`: chart colours 1 and 2 and
+`Ink::text()` by default), the amount is written at the end of each row with
+its sign, and a legend names the colours. At most 24 rows.
+
 A range scale (`RangeScale`) puts one value on a scale between two ends,
 with a marker, words at the ends (`ends`) and a track that can be a
 gradient. A reading past either end is drawn at the end and still written
@@ -185,9 +195,23 @@ and green or red by what it means (`up_is_bad()` for a resting heart rate).
 ```rust
 use navree::ui::charts::{
     ColorScale, ColorStrip, Gradient, Ink, Meter, MiniColumn, MiniColumns, Motion, NumberFormat,
-    RangeScale, Segment,
+    RangeScale, Segment, Waterfall,
 };
 use navree::ui::{Grid, Stat, Tone, Trend};
+
+/// A month's settlement, from what customers paid to what reached the bank, in rupees.
+pub fn settlement() -> Waterfall {
+    Waterfall::new("This month's settlement")
+        .locale("en-IN")
+        .format(NumberFormat::currency("₹").max_decimals(0))
+        .start("Orders", 2_50_000)
+        .step("Store fee", -25_000)
+        .step("Tax on the fee", -4_500)
+        .step("Returns", -12_000)
+        .step("Promotions refunded", 3_000)
+        .step("Tax withheld", -2_500)
+        .total("Paid to the bank")
+}
 
 /// Last night's stages, in minutes.
 pub fn sleep_stages() -> Meter {

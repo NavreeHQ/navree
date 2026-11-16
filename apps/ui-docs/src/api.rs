@@ -98,6 +98,7 @@ pub const FILES: &[&str] = &[
     "charts/cartesian.rs",
     "charts/donut.rs",
     "charts/funnel.rs",
+    "charts/waterfall.rs",
     "charts/linear.rs",
     "charts/meter.rs",
     "charts/mini_columns.rs",

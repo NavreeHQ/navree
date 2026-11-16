@@ -75,6 +75,8 @@
 [data-slot=chart-row-label]{font-size:12px;line-height:1.3;color:var(--fg-1);overflow-wrap:anywhere}
 [data-slot=chart-row-value]{font-size:12px;font-variant-numeric:tabular-nums;color:var(--fg);text-align:end}
 [data-slot=chart-row][data-active] [data-slot=chart-row-label]{color:var(--fg)}
+/* A waterfall's link: from one row's running total down to where the next row's bar starts. */
+[data-slot=chart-link]{stroke:var(--line-3);stroke-width:1px;stroke-dasharray:2 2}
 
 /* The funnel: an ordered list, one hue stepping from faint to full. */
 [data-slot=chart-stages]{display:flex;flex-direction:column;gap:.875rem;margin:0;padding:0;list-style:none}

@@ -2122,6 +2122,7 @@ mod tests {
         use crate::charts::{
             CalendarHeatmap, ColorStrip, DayClock, Gauge, Heatmap, MatrixHeatmap, Meter,
             MiniColumn, MiniColumns, RangeScale, Ring, RingValue, Rings, Scatter, Segment,
+            Waterfall,
         };
         use crate::native::TestNative;
         use crate::{CopyField, DayPager, Dock, DockItem, InfoTip, View};
@@ -2168,6 +2169,14 @@ mod tests {
                     .row("North", [3, 5])
                     .into(),
                 "chart:heatmap",
+            ),
+            (
+                Waterfall::new("Settlement")
+                    .start("Paid", 1200)
+                    .step("Fees", -90)
+                    .total("Net")
+                    .into(),
+                "chart:waterfall",
             ),
             (Scatter::new("Pairs").into(), "chart:scatter"),
             (
