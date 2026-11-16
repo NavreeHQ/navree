@@ -523,15 +523,17 @@ pub const RESERVED_NAMESPACES: &[&str] = &[
     "workspace",
 ];
 
-/// The providers that decide who may do what in the app, the app's shell and
-/// its clock, by type name: a module of a plugin that is not first-party may
-/// not register one (value, factory or multi-binding, exported or not). Not
-/// public API; Navree's own crates and tests use it.
+/// The providers that decide who may do what in the app, the app's shell, its
+/// clock and the observers of every commit, by type name: a module of a plugin
+/// that is not first-party may not register one (value, factory or
+/// multi-binding, exported or not). Not public API; Navree's own crates and
+/// tests use it.
 pub const APP_ONLY_PROVIDERS: &[&str] = &[
     "dyn navree_access::workspace_gate::WorkspaceGate",
     "dyn navree_auth::strategy::Strategy",
     "dyn navree_contracts::clock::Clock",
     "dyn navree_contracts::permissions::PermissionCheck",
+    "dyn navree_db::uow::ChangeObserver",
     "dyn navree_http::auth::Authenticator",
     "dyn navree_http::auth::RouteAuthorizer",
     "dyn navree_ui::shell::contribute::NativeShellPart",
@@ -556,6 +558,9 @@ pub(crate) fn app_only_role(provider: &str) -> &'static str {
         }
         "dyn navree_contracts::permissions::PermissionCheck" => {
             "which answers the app's permission checks"
+        }
+        "dyn navree_db::uow::ChangeObserver" => {
+            "which sees, and can change, every write the app commits"
         }
         "dyn navree_http::auth::Authenticator" => "which decides who a request is signed in as",
         "dyn navree_http::auth::RouteAuthorizer" => "which decides who may open the app's routes",

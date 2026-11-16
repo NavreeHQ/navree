@@ -812,6 +812,7 @@ mod navree_plugin_guard {
     use navree::BoxFuture;
     use navree::auth::{AuthError, SignInAttempt, SignInPolicy, Strategy};
     use navree::contracts::{Clock, FixedClock, PermissionCheck, Principal};
+    use navree::db::{ChangeEvent, ChangeObserver, DbError, Uow};
     use navree::kernel::KernelError;
     use navree::plugin::PluginInfo;
     use navree::prelude::*;
@@ -919,6 +920,26 @@ mod navree_plugin_guard {
         })
     }
 
+    /// An observer of every commit: it sees the writes, and here changes nothing.
+    pub struct Watches;
+
+    impl ChangeObserver for Watches {
+        fn observe<'a>(
+            &'a self,
+            _uow: &'a Uow,
+            _changes: &'a [ChangeEvent],
+        ) -> BoxFuture<'a, Result<(), DbError>> {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    /// The plugin's observer of every commit, for a module of the app to register.
+    pub fn change_observer() -> Factory<dyn ChangeObserver> {
+        Factory::new(|_| async {
+            Ok(Arc::new(Watches) as Arc<dyn ChangeObserver>)
+        })
+    }
+
     /// A module of the plugin's crate that names no plugin, and registers what `.0` adds.
     pub struct Helper(pub fn(&mut ModuleBuilder));
 
@@ -970,6 +991,7 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
     use navree::access::{AbilityFactory, WorkspaceGate};
     use navree::auth::{AuthOptions, Strategy};
     use navree::contracts::Clock;
+    use navree::db::ChangeObserver;
     use navree::helm::HelmOptions;
     use navree::http::{Authenticator, RouteAuthorizer};
     use navree::ui::NativeShellPart;
@@ -1074,6 +1096,14 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
             }),
             type_name::<dyn Clock>(),
             "which sets the time the app's sessions, signed links and invitations expire by",
+        ),
+        // An observer that sees, and could change, every write the app commits.
+        (
+            Provides(|m| {
+                m.multi(navree_plugin_guard::change_observer());
+            }),
+            type_name::<dyn ChangeObserver>(),
+            "which sees, and can change, every write the app commits",
         ),
     ];
     for (provides, provider, role) in cases {
@@ -1265,6 +1295,30 @@ async fn the_app_may_register_a_plugins_clock() {
         .await;
     let clock = app.get::<dyn Clock>().await;
     assert_eq!(clock.now(), DateTime::<Utc>::UNIX_EPOCH);
+
+    app.shutdown().await.unwrap();
+}
+
+/// A module of the app: it registers the guard plugin's observer of every commit.
+struct GuardObserver;
+
+impl Module for GuardObserver {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.multi(navree_plugin_guard::change_observer());
+    }
+}
+
+#[tokio::test]
+async fn the_app_may_register_a_plugins_change_observer() {
+    use navree::db::ChangeObserver;
+
+    let app = TestApp::builder()
+        .module(navree_plugin_guard::Provides(|_| {}))
+        .module(GuardObserver)
+        .build()
+        .await;
+    let observers = app.ctx().get_all::<dyn ChangeObserver>().await.unwrap();
+    assert_eq!(observers.len(), 1);
 
     app.shutdown().await.unwrap();
 }
