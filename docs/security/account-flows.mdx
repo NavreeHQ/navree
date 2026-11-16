@@ -246,7 +246,7 @@ A new name is trimmed and must not be empty. A new **email address** needs more 
 - The [sign-in policies](/docs/security/authentication/#sign-in-policies) must allow a password for the old address and for the new one, once the current password checks out. An account of a domain that enforces [single sign-on](/docs/security/single-sign-on/#enforcement) can't leave it, and no account can take an address of such a domain: the answer is `403 sso_required` and nothing changes.
 - The new address is unverified until the user follows the verification link mailed to it.
 - The old address gets a notice ("Your email address was changed"), so a takeover doesn't go unnoticed.
-- A pending password reset for the old address is cancelled.
+- A pending password reset for the old address is cancelled, and so are the [sign-in links and codes](/docs/security/passwordless/) not used yet.
 
 The audit entry `auth.profile_updated` records the old and new values of the fields that changed. A request that changes nothing returns the user and records nothing.
 

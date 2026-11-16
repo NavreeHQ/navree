@@ -310,6 +310,11 @@ every `@navree/*` package carries the same version.
   told to wait for content that was not coming. A region that fails now drops the mark as it shows
   the failure.
 
+### Security
+
+- Changing an account's email address ends the sign-in links and codes it has not used yet, so one
+  mailed to the old address no longer signs in.
+
 ## [1.2.4] - 2026-11-15
 
 ### Fixed

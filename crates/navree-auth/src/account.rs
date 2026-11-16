@@ -14,6 +14,7 @@ use navree_orm::Model as _;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
+use crate::login_token::Model as LoginToken;
 use crate::password_reset_token::Model as PasswordResetToken;
 use crate::service::{entry, invalid, normalize_email, record, revoke_user};
 use crate::{AuthError, AuthService, ClientMeta, TokenPair, USER_SUBJECT, User, mail, user};
@@ -342,8 +343,9 @@ impl AuthService {
     /// unverified until the user follows the verification link mailed to
     /// it; the old address is told about the change (both when the app has
     /// a `Mailer`), and a pending password reset of the old address is
-    /// cancelled. Audited as `auth.profile_updated` with the old and new
-    /// values of the changed fields.
+    /// cancelled, as are the user's sign-in links and codes not used yet.
+    /// Audited as `auth.profile_updated` with the old and new values of the
+    /// changed fields.
     pub async fn update_profile(
         &self,
         user_id: Uuid,
@@ -436,9 +438,15 @@ impl AuthService {
                     return Err(AuthError::EmailTaken);
                 }
                 // A reset token mailed to the old address must not reset
-                // whoever takes that address next.
+                // whoever takes that address next, and a sign-in link or
+                // code mailed to it signs in only while the account holds it.
                 PasswordResetToken::query()
                     .where_key(user.email.clone())
+                    .delete(&uow)
+                    .await?;
+                LoginToken::query()
+                    .where_(LoginToken::USER_ID.eq(user.id))
+                    .where_null(LoginToken::USED_AT)
                     .delete(&uow)
                     .await?;
             }

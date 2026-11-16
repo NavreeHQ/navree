@@ -5,7 +5,8 @@
 //!   `<id>.<48 base62>`, stored as its SHA-256; a code is stored as an
 //!   HMAC-SHA-256 keyed by a key derived from the application key), work
 //!   once, expire (`auth.magic_link.ttl_secs`, `auth.otp.ttl_secs`), and a
-//!   new one replaces the user's previous one.
+//!   new one replaces the user's previous one. Changing the account's
+//!   address removes the ones not used yet.
 //! - Requests always answer the same (202), whether the address is
 //!   registered or not; a second request within `throttle_secs` sends
 //!   nothing.
