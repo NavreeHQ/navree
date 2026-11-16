@@ -169,7 +169,9 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
 /// (`chat.support` beside a plugin whose namespace is `chat`): the first
 /// matching pattern decides a channel, in module order, so the plugin's
 /// `chat.{room}` would otherwise decide the app's channel, or the app's the
-/// plugin's.
+/// plugin's. The app keeps two ways: a channel named outside the namespace,
+/// which its own authorizer decides, or no pattern of its own, which leaves
+/// the channel to the plugin's.
 ///
 /// The refusals are joined with `; `, as `Realtime::new` joins its own. A
 /// first-party plugin's module is not held to a namespace, and the app's
@@ -207,7 +209,7 @@ fn channels_of_plugins(
             .find(|plugin| !plugin.first_party && plugin.info.namespace == first);
         if let Some(owner) = owner {
             refusals.push(format!(
-                "channel pattern `{pattern}` of module `{module}`: `{first}` is the namespace of plugin `{}`, whose authorizer would decide the channels named under it, and only the plugin's modules authorize channels there: name the app's channel under another word, or remove the plugin",
+                "channel pattern `{pattern}` of module `{module}`: `{first}` is the namespace of plugin `{}`, whose authorizer would decide the channels named under it, and only the plugin's modules authorize channels there: name the channel outside the plugin's namespace, or leave that channel to the plugin's own pattern",
                 owner.info.name
             ));
         }
@@ -356,7 +358,8 @@ pub trait ModuleBuilderRealtimeExt {
     /// the plugin's function from a module of its own, but none whose first
     /// segment is such a plugin's namespace (`announcements.board` beside
     /// that plugin fails the boot): the channels named under it are the
-    /// plugin's.
+    /// plugin's. The app names its channel outside the namespace, or leaves
+    /// the channel to the plugin's own pattern.
     ///
     /// The module does not need to import `RealtimeModule`.
     ///

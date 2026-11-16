@@ -206,10 +206,20 @@ impl Module for SupportDeskWithChat {
     }
 }
 
+/// A module of the app: its support desk is named outside the chat plugin's namespace,
+/// `support.desk`, for its staff only.
+struct SupportDeskOutside;
+
+impl Module for SupportDeskOutside {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.channel("support.desk", staff_only);
+    }
+}
+
 /// The refusal of the app's `module` authorizing `chat.support` beside the chat plugin.
 fn under_chat(module: &str) -> String {
     format!(
-        "channel pattern `chat.support` of module `{module}`: `chat` is the namespace of plugin `navree-plugin-chat`, whose authorizer would decide the channels named under it, and only the plugin's modules authorize channels there: name the app's channel under another word, or remove the plugin"
+        "channel pattern `chat.support` of module `{module}`: `chat` is the namespace of plugin `navree-plugin-chat`, whose authorizer would decide the channels named under it, and only the plugin's modules authorize channels there: name the channel outside the plugin's namespace, or leave that channel to the plugin's own pattern"
     )
 }
 
@@ -247,6 +257,36 @@ async fn an_app_channel_under_a_plugins_namespace_fails_the_boot() {
     // The plugin's own `chat.{room}` alone boots, and its authorizer decides its rooms.
     let server = Server::serve(support::app(support::options()).module(ChatModule)).await;
     let channel = "private-chat.7";
+    let reply = server.auth(Some(Uuid::now_v7()), SOCKET, channel).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
+    assert_eq!(reply.json["auth"], signature(SOCKET, channel, None));
+}
+
+#[tokio::test]
+async fn the_two_ways_out_of_a_channel_under_a_plugins_namespace_boot() {
+    // The app names its support desk outside the plugin's namespace: its own authorizer decides
+    // it, in either order of the modules, and the plugin's decides the plugin's rooms.
+    let outside = [
+        support::app(support::options())
+            .module(SupportDeskOutside)
+            .module(ChatModule),
+        support::app(support::options())
+            .module(ChatModule)
+            .module(SupportDeskOutside),
+    ];
+    for builder in outside {
+        let server = Server::serve(builder).await;
+        let gurpreet = Uuid::now_v7();
+        let desk = server.auth(Some(gurpreet), SOCKET, "private-support.desk").await;
+        assert_eq!(desk.status, StatusCode::FORBIDDEN, "{}", desk.json);
+        let room = server.auth(Some(gurpreet), SOCKET, "private-chat.7").await;
+        assert_eq!(room.status, StatusCode::OK, "{}", room.json);
+    }
+
+    // The app registers no pattern of its own: `chat.support` is left to the plugin's
+    // `chat.{room}`, which decides it as it decides every room.
+    let server = Server::serve(support::app(support::options()).module(ChatModule)).await;
+    let channel = "private-chat.support";
     let reply = server.auth(Some(Uuid::now_v7()), SOCKET, channel).await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
     assert_eq!(reply.json["auth"], signature(SOCKET, channel, None));

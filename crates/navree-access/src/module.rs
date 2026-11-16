@@ -192,7 +192,8 @@ fn register(m: &mut ModuleBuilder, options: AccessOptions) {
         .controller::<AccessAdminController>()
         .migrations(migrations())
         .map_error::<AccessError>(map_access_error)
-        // Once every controller is built: no route of the app under a plugin's namespace.
+        // Once every controller is built: under a plugin's namespace, a route of the app
+        // declares the plugin's own names only.
         .value(RouteNamespaces)
         .lifecycle::<RouteNamespaces>();
     for command in commands() {

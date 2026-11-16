@@ -255,7 +255,7 @@ for (module, permission) in navree::contracts::permission_catalog(&ctx) {
 }
 ```
 
-A name is two or more lower-case words joined by `.`, each a letter followed by up to 63 letters, digits or `_` (`announcements.publish`, `announcements.notice_board.publish`). A plugin that is not one of the framework's own packages describes only permissions that start with its namespace and `.`. Every subject its modules register takes a permission prefix inside its namespace (the namespace itself, or starting with it and `.`), whatever crate the subject's type is in, and so does a subject whose type is of its crate, whichever module registers it. Its namespace may not be the first word of a permission or a subject that another module describes or declares (a plugin in the namespace `deals` next to the app's subject with the prefix `deals`, or next to the app's permission `deals.export`, stops the boot). A subject its modules register is named under its namespace too. [Subjects a plugin registers](#subjects-a-plugin-registers) and [A namespace the app already uses](#a-namespace-the-app-already-uses) have the texts. A name two modules describe is a warning, or a boot error when one of the two is such a plugin.
+A name is two or more lower-case words joined by `.`, each a letter followed by up to 63 letters, digits or `_` (`announcements.publish`, `announcements.notice_board.publish`). A plugin that is not one of the framework's own packages describes only permissions that start with its namespace and `.`. Every subject its modules register takes a permission prefix inside its namespace (the namespace itself, or starting with it and `.`), whatever crate the subject's type is in, and so does a subject whose type is of its crate, whichever module registers it. Its namespace may not be the first word of a permission that another module describes, of the permission prefix of a subject another module registers, or of a permission or a subject that a route of another module declares and that is not the plugin's own (a plugin in the namespace `deals` next to the app's subject with the prefix `deals`, or next to the app's permission `deals.export`, stops the boot). A subject its modules register is named under its namespace too. [Subjects a plugin registers](#subjects-a-plugin-registers) and [A namespace the app already uses](#a-namespace-the-app-already-uses) have the texts. A name two modules describe is a warning, or a boot error when one of the two is such a plugin.
 
 The name, namespace and prefix checks and the check of a name two modules describe run in `AccessModule` at boot. Without `AccessModule`, nothing checks them and nothing reads the descriptions, but roles still hold what `workspace.roles.{role}.permissions` lists, and no route can require a permission.
 
@@ -407,7 +407,7 @@ A plugin ships the provider as a function, and your app registers it: `m.multi(k
 A plugin's policies write the rules on every name under its namespace, so they would decide who may use anything of your app that is named there. The boot refuses a plugin whose namespace is the first word of a name your app uses:
 
 - a permission that a module of your app describes;
-- a permission that a route of your app requires, or a subject that a route of your app checks (a permission prefix no subject registers stands for itself);
+- a permission that a route of your app requires and the plugin does not describe, or a subject that a route of your app checks and that is not registered as the plugin's (a permission prefix no subject registers stands for itself);
 - the permission prefix of a subject that a module of your app registers, and `all`.
 
 Each refusal names the plugin, the namespace and what it meets:
@@ -417,18 +417,18 @@ plugin `navree-plugin-khata` uses the namespace `khata`, the first word of the p
 ```
 
 ```text wrap
-plugin `navree-plugin-reports` uses the namespace `reports`, the first word of the permission `reports.view` that the route `GET /reports/sales` of `PostsModule` requires; a plugin's policies decide the names under its namespace, so they would decide who may use it: remove the plugin, or name it under another word in the app
+plugin `navree-plugin-reports` uses the namespace `reports`, the first word of the permission `reports.view` that the route `GET /reports/sales` of `PostsModule` requires, and the plugin describes no permission of that name; a plugin's policies decide the names under its namespace, so they would decide who may use it: require a permission the plugin describes, or name the app's permission under another word
 ```
 
 ```text wrap
-plugin `navree-plugin-ledger` uses the namespace `ledger`, the first word of the subject `ledger` that the route `GET /ledger/summary` of `LedgerModule` checks; a plugin's policies decide the names under its namespace, so they would decide who may use it: remove the plugin, or name it under another word in the app
+plugin `navree-plugin-ledger` uses the namespace `ledger`, the first word of the subject `ledger` that the route `GET /ledger/summary` of `LedgerModule` checks, and the plugin registers no subject of that name; a plugin's policies decide the names under its namespace, so they would decide who may use it: check a subject the plugin registers, or name the app's subject under another word
 ```
 
 ```text wrap
 plugin `navree-plugin-deals` uses the namespace `deals`, which is the permission prefix of `Deal` (`AccessSubject<crm::Deal>`); a plugin's policies decide the names under its namespace: remove the plugin, or give the app's subject a permission prefix under another word
 ```
 
-The routes of your app are read once every controller is built, at the end of the boot, in an app that has the HTTP module. A route of a module that acts for the plugin is the plugin's own and is not refused, and a plugin may describe and require what it likes under its own namespace. To use a plugin's permission in a route of your own, check it in the handler with `permitted`, which no boot check reads. The same rule holds for realtime channels: see [Authorizing channels](/docs/digging-deeper/broadcasting/#authorizing-channels).
+The routes of your app are read once every controller is built, at the end of the boot, in an app that has the HTTP module. A route of a module that acts for the plugin is the plugin's own and is not refused, and a plugin may describe and require what it likes under its own namespace. A route of your own may use the plugin's own names on purpose: it may require a permission the plugin describes (`#[permissions("announcements.read")]` beside the announcements plugin) and check a subject that is registered as the plugin's (`#[can(Read, Announcement)]`), and the app boots. A subject is the plugin's when a module of the plugin registers it, or when its type is of the plugin's crate and your app registers it. Any other name under the namespace is your app's own name under a word the plugin's policies decide, so the boot refuses it, and the text gives both ways out: use a name the plugin describes or registers, or name yours under another word. A realtime channel under a plugin's namespace has a rule of its own: see [Authorizing channels](/docs/digging-deeper/broadcasting/#authorizing-channels).
 
 #### What the plugin rules are, and are not
 

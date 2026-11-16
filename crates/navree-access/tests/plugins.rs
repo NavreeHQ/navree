@@ -18,7 +18,8 @@ use navree_access::{
 use navree_contracts::{ModuleBuilderPermissionsExt, Permission, permission_catalog, permitted};
 use navree_http::{Controller, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
-    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ModuleId, PluginInfo, Resolver,
+    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ModuleId, PluginInfo, ProviderKey,
+    Resolver,
 };
 use navree_testing::{TestApp, TestAppBuilder, TestResponse, principal};
 use serde_json::{Value, json};
@@ -695,9 +696,17 @@ impl Module for LedgerModule {
     }
 }
 
-/// The tail of every refusal of a plugin whose namespace is the first word of what another
-/// module declares.
+/// The tail of the refusal of a plugin whose namespace is the first word of a permission
+/// another module describes.
 const HOLDS: &str = "; a plugin's policies decide the names under its namespace, so they would decide who may use it: remove the plugin, or name it under another word in the app";
+
+/// The tail of the refusal of a permission under a plugin's namespace that a route of another
+/// module requires and the plugin does not describe.
+const NOT_DESCRIBED: &str = ", and the plugin describes no permission of that name; a plugin's policies decide the names under its namespace, so they would decide who may use it: require a permission the plugin describes, or name the app's permission under another word";
+
+/// The tail of the refusal of a subject under a plugin's namespace that a route of another
+/// module checks and that is not registered as the plugin's.
+const NOT_REGISTERED: &str = ", and the plugin registers no subject of that name; a plugin's policies decide the names under its namespace, so they would decide who may use it: check a subject the plugin registers, or name the app's subject under another word";
 
 #[tokio::test(flavor = "current_thread")]
 async fn a_plugin_whose_namespace_is_the_first_word_of_the_apps_permission_fails_the_boot() {
@@ -714,20 +723,20 @@ async fn a_plugin_whose_namespace_is_the_first_word_of_the_apps_permission_fails
     assert!(error.contains(&expected), "{error}");
 
     // A permission a route of the app requires: the support app's `GET /reports/sales` asks
-    // for `reports.view`, which no subject maps, so a policy of the plugin writing
-    // `can(VIEW, "reports")` would open it to everyone.
+    // for `reports.view`, which no subject maps and the plugin does not describe, so a policy
+    // of the plugin writing `can(VIEW, "reports")` would open it to everyone.
     let reports = Plugin(plugin("navree-plugin-reports", "reports"), &[]);
     let error = boot_error(builder().module(reports)).await;
     let expected = format!(
-        "plugin `navree-plugin-reports` uses the namespace `reports`, the first word of the permission `reports.view` that the route `GET /reports/sales` of `PostsModule` requires{HOLDS}"
+        "plugin `navree-plugin-reports` uses the namespace `reports`, the first word of the permission `reports.view` that the route `GET /reports/sales` of `PostsModule` requires{NOT_DESCRIBED}"
     );
     assert!(error.contains(&expected), "{error}");
 
-    // A subject a route of the app checks.
+    // A subject a route of the app checks, which nothing registers as the plugin's.
     let ledger = Plugin(plugin("navree-plugin-ledger", "ledger"), &[]);
     let error = boot_error(builder().module(LedgerModule).module(ledger)).await;
     let expected = format!(
-        "plugin `navree-plugin-ledger` uses the namespace `ledger`, the first word of the subject `ledger` that the route `GET /ledger/summary` of `LedgerModule` checks{HOLDS}"
+        "plugin `navree-plugin-ledger` uses the namespace `ledger`, the first word of the subject `ledger` that the route `GET /ledger/summary` of `LedgerModule` checks{NOT_REGISTERED}"
     );
     assert!(error.contains(&expected), "{error}");
 
@@ -740,6 +749,147 @@ async fn a_plugin_whose_namespace_is_the_first_word_of_the_apps_permission_fails
         .try_build()
         .await
         .expect("the plugin's own permission, beside the app's routes under other words");
+}
+
+/// What the one route of the app's notice board declares.
+struct Declared(fn(RouteDef) -> RouteDef);
+
+/// `GET /board`, a route of the app that declares what its module's [`Declared`] says.
+struct BoardController(Arc<Declared>);
+
+impl Injectable for BoardController {
+    fn dependencies() -> Vec<ProviderKey> {
+        vec![ProviderKey::of::<Declared>()]
+    }
+
+    fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async move { Ok(BoardController(r.get::<Declared>().await?)) })
+    }
+}
+
+impl Controller for BoardController {
+    fn prefix(&self) -> &'static str {
+        "!/board"
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        let declare = self.0.0;
+        vec![declare(RouteDef::on(Method::GET, "/", || async { "Jalandhar" }))]
+    }
+}
+
+/// A module of the app with [`BoardController`], whose route declares what `.0` says.
+struct BoardModule(fn(RouteDef) -> RouteDef);
+
+impl Module for BoardModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.value(Declared(self.0)).controller::<BoardController>();
+    }
+}
+
+/// What a route that checks `read` on the announcements plugin's subject declares.
+fn reads_announcements(route: RouteDef) -> RouteDef {
+    route.can(READ, "announcements.Announcement", None)
+}
+
+/// `user` opens the app's notice board (`GET /board`).
+async fn board(app: &TestApp, user: Uuid) -> TestResponse {
+    app.acting_as(principal(user)).get("/board").send().await
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn an_app_route_may_require_a_permission_the_plugin_describes() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+
+    // The announcements plugin describes `announcements.read`: a route of the app requires it on
+    // purpose, and the app boots. Who holds it is still the app's grant.
+    let app = builder()
+        .module(ANNOUNCEMENTS)
+        .module(BoardModule(|route| route.permissions(&["announcements.read"])))
+        .try_build()
+        .await
+        .expect("a route of the app may require a permission the plugin describes");
+    let (harpreet, meera) = (Uuid::now_v7(), Uuid::now_v7());
+    give_role(&app, harpreet, "notice-reader", &["announcements.read"]).await;
+    board(&app, harpreet).await.assert_status(200);
+    board(&app, meera).await.assert_status(403);
+
+    // `announcements.archive` is under the namespace and the plugin does not describe it: it is
+    // the app's own name under a word the plugin's policies decide, and the boot says both ways
+    // out.
+    let app = builder()
+        .module(ANNOUNCEMENTS)
+        .module(BoardModule(|route| route.permissions(&["announcements.archive"])));
+    let error = boot_error(app).await;
+    let expected = format!(
+        "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the permission `announcements.archive` that the route `GET /board` of `BoardModule` requires{NOT_DESCRIBED}"
+    );
+    assert!(error.contains(&expected), "{error}");
+
+    // A permission of the plugin beside one it does not describe: the second is still refused.
+    let both = BoardModule(|route| {
+        route.permissions(&["announcements.read", "announcements.archive"])
+    });
+    let error = boot_error(builder().module(ANNOUNCEMENTS).module(both)).await;
+    assert!(error.contains(&expected), "{error}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn an_app_route_may_check_a_subject_registered_as_the_plugins() {
+    use navree_plugin_crm::CrmModule;
+
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+
+    // The plugin's module registers `announcements.Announcement`: a route of the app checks it
+    // on purpose, and the app boots.
+    builder()
+        .module(NoticeSubjects(subject_of::<Announcement>))
+        .module(BoardModule(reads_announcements))
+        .try_build()
+        .await
+        .expect("a route of the app may check a subject the plugin's module registers");
+
+    // The app registers the plugin's subject from a module of its own: the subject's type is of
+    // the plugin's crate, so the name is still the plugin's.
+    builder()
+        .module(AccessModule::for_subject::<Announcement>())
+        .module(ANNOUNCEMENTS)
+        .module(BoardModule(reads_announcements))
+        .try_build()
+        .await
+        .expect("a route of the app may check the plugin's subject the app registers");
+
+    // A subject of the plugin's `-core` crate that the plugin's module registers is the plugin's
+    // too.
+    builder()
+        .module(CrmModule(subject_of::<crm_core::Stage>))
+        .module(BoardModule(|route| route.can(READ, "crm.Stage", None)))
+        .try_build()
+        .await
+        .expect("a route of the app may check a subject of the plugin's `-core` crate");
+
+    // Nothing registers the subject: the name is the app's own under a word the plugin's
+    // policies decide, and the boot says both ways out.
+    let app = builder()
+        .module(ANNOUNCEMENTS)
+        .module(BoardModule(reads_announcements));
+    let error = boot_error(app).await;
+    let expected = format!(
+        "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the subject `announcements.Announcement` that the route `GET /board` of `BoardModule` checks{NOT_REGISTERED}"
+    );
+    assert!(error.contains(&expected), "{error}");
+
+    // Another name under the namespace beside a registered one is refused as well.
+    let app = builder()
+        .module(NoticeSubjects(subject_of::<Announcement>))
+        .module(BoardModule(|route| route.can(READ, "announcements.Draft", None)));
+    let error = boot_error(app).await;
+    let expected = format!(
+        "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the subject `announcements.Draft` that the route `GET /board` of `BoardModule` checks{NOT_REGISTERED}"
+    );
+    assert!(error.contains(&expected), "{error}");
 }
 
 #[tokio::test(flavor = "current_thread")]

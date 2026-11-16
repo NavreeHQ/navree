@@ -8,14 +8,16 @@
 //! holds what `workspace.roles` lists. Then the boot asks each policy of a
 //! community plugin what it writes, as each principal it knows, and, once
 //! every controller is built, reads what the app's routes require under a
-//! community plugin's namespace.
+//! community plugin's namespace: a permission the plugin describes and a
+//! subject registered as the plugin's are the plugin's own names, which the
+//! app may require, and any other name under the namespace is refused.
 
 use std::collections::BTreeSet;
 
 use navree_config::Config;
-use navree_contracts::permission_catalog;
+use navree_contracts::{Permission, permission_catalog};
 use navree_http::{HttpOptions, RouteMeta, route_table};
-use navree_kernel::{AppContext, ModuleId, PluginReport};
+use navree_kernel::{AppContext, Contributed, ModuleId, ModuleInfo, PluginReport};
 use uuid::Uuid;
 
 use crate::context::AbilityCtx;
@@ -297,13 +299,15 @@ pub(crate) fn is_under(name: &str, namespace: &str) -> bool {
         .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
 }
 
-/// Checks, once every controller is built, that no route of a module that
-/// does not act for a community plugin requires a permission, or checks a
-/// subject, under the plugin's namespace: a permission prefix no subject
-/// registers stands for itself, and the plugin's policies decide the names
-/// under its namespace, so they would decide who may open the route. An app
-/// with no community plugin, or without HttpModule, has nothing to check.
-/// Mounts are not read.
+/// Checks, once every controller is built, the permissions and the subjects
+/// that the routes of modules not acting for a community plugin declare under
+/// the plugin's namespace. A permission the plugin describes, and a subject
+/// registered as the plugin's, is the plugin's own name, used on purpose: the
+/// route may require it. Any other name under the namespace is the app's own
+/// (a permission prefix no subject registers stands for itself), and the
+/// plugin's policies, which decide the names under its namespace, would
+/// decide who may open the route: it is refused. An app with no community
+/// plugin, or without HttpModule, has nothing to check. Mounts are not read.
 pub(crate) async fn check_routes(ctx: &AppContext) -> Result<(), AccessError> {
     let plugins = ctx.plugins().plugins;
     if plugins.iter().all(|plugin| plugin.first_party) {
@@ -316,14 +320,62 @@ pub(crate) async fn check_routes(ctx: &AppContext) -> Result<(), AccessError> {
     let routes = route_table(ctx)
         .await
         .map_err(|error| AccessError::Config(error.to_string()))?;
-    routes_under_namespaces(&plugins, &routes)
+    routes_under_namespaces(&plugins, &OwnNames::of(ctx), &routes)
+}
+
+/// What the app's modules describe and register, read to tell a community
+/// plugin's own names from the app's names under the plugin's namespace.
+struct OwnNames {
+    /// Every described permission, with the module that describes it.
+    described: Vec<(ModuleInfo, Permission)>,
+    /// Every registered subject, with the module that registers it.
+    registered: Vec<Contributed<SubjectRegistration>>,
+}
+
+impl OwnNames {
+    /// The permissions and subjects of the modules of `ctx`.
+    fn of(ctx: &AppContext) -> Self {
+        OwnNames {
+            described: permission_catalog(ctx),
+            registered: ctx.contributions::<SubjectRegistration>(),
+        }
+    }
+
+    /// Whether a module that acts for `plugin` describes the permission
+    /// `name`.
+    fn describes(&self, plugin: &PluginReport, name: &str) -> bool {
+        self.described
+            .iter()
+            .any(|(module, permission)| permission.name == name && lists(plugin, module.id))
+    }
+
+    /// Whether `subject` is registered as one of `plugin`'s: by a module that
+    /// acts for the plugin, or with a type of the plugin's crate, whichever
+    /// module registers it.
+    fn registers(&self, plugin: &PluginReport, subject: &str) -> bool {
+        let own = format!("{}::", plugin.info.crate_name);
+        self.registered.iter().any(|contributed| {
+            let registration = &contributed.value;
+            registration.subject == subject
+                && (lists(plugin, contributed.module.id)
+                    || registration.type_name.starts_with(&own))
+        })
+    }
+}
+
+/// Whether the plugins listing lists `module` under `plugin`: the module acts
+/// for it.
+fn lists(plugin: &PluginReport, module: ModuleId) -> bool {
+    plugin.modules.iter().any(|member| member.id == module)
 }
 
 /// The first route of `routes` whose module does not act for a community
-/// plugin of `plugins` and that requires a permission, or checks a subject,
-/// under that plugin's namespace.
+/// plugin of `plugins` and that requires a permission the plugin does not
+/// describe, or checks a subject not registered as the plugin's, under that
+/// plugin's namespace.
 fn routes_under_namespaces(
     plugins: &[PluginReport],
+    own: &OwnNames,
     routes: &[RouteMeta],
 ) -> Result<(), AccessError> {
     for route in routes {
@@ -339,17 +391,28 @@ fn routes_under_namespaces(
             let namespace = plugin.info.namespace;
             let label = format!("the route `{method} {path}` of `{module}`");
             for permission in &route.access.permissions {
-                if is_under(permission, namespace) {
+                if is_under(permission, namespace) && !own.describes(plugin, permission) {
                     let declared = format!("the permission `{permission}` that {label} requires");
-                    return Err(namespace_holds(plugin, &declared));
+                    return Err(not_its_own(
+                        plugin,
+                        &declared,
+                        "describes no permission of that name",
+                        "require a permission the plugin describes, or name the app's permission under another word",
+                    ));
                 }
             }
             if let Some(can) = &route.access.can
                 && is_under(&can.subject, namespace)
+                && !own.registers(plugin, &can.subject)
             {
                 let subject = &can.subject;
                 let declared = format!("the subject `{subject}` that {label} checks");
-                return Err(namespace_holds(plugin, &declared));
+                return Err(not_its_own(
+                    plugin,
+                    &declared,
+                    "registers no subject of that name",
+                    "check a subject the plugin registers, or name the app's subject under another word",
+                ));
             }
         }
     }
@@ -357,11 +420,23 @@ fn routes_under_namespaces(
 }
 
 /// The refusal of the community plugin `plugin`, whose namespace is the
-/// first word of `declared` (a permission or a subject, with who declares
+/// first word of `declared` (a permission, with the module that describes
 /// it): the plugin's policies decide the names under its namespace.
 fn namespace_holds(plugin: &PluginReport, declared: &str) -> AccessError {
     AccessError::Config(format!(
         "plugin `{}` uses the namespace `{}`, the first word of {declared}; a plugin's policies decide the names under its namespace, so they would decide who may use it: remove the plugin, or name it under another word in the app",
+        plugin.info.name, plugin.info.namespace
+    ))
+}
+
+/// The refusal of a name under the namespace of the community plugin
+/// `plugin` that a route of another module declares and that is not the
+/// plugin's own: `declared` is the permission or the subject with the route
+/// that declares it, `lacks` what the plugin would have to do for the name to
+/// be its own, and `ways` the two ways out.
+fn not_its_own(plugin: &PluginReport, declared: &str, lacks: &str, ways: &str) -> AccessError {
+    AccessError::Config(format!(
+        "plugin `{}` uses the namespace `{}`, the first word of {declared}, and the plugin {lacks}; a plugin's policies decide the names under its namespace, so they would decide who may use it: {ways}",
         plugin.info.name, plugin.info.namespace
     ))
 }

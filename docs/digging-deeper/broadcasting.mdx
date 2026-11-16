@@ -148,10 +148,10 @@ A pattern made only of parameters (`{scope}.{id}`), one that starts with the nam
 The channels under a plugin's namespace are the plugin's, so the rule runs the other way too. A pattern of a module that does not act for the plugin stops the boot when its first segment is the plugin's namespace, whatever the order of the modules, so the plugin's authoriser never decides a channel you named and yours never decides the plugin's (`chat.support` beside a plugin whose namespace is `chat`, or `chat` alone):
 
 ```text wrap
-channel pattern `chat.support` of module `SupportDesk`: `chat` is the namespace of plugin `navree-plugin-chat`, whose authorizer would decide the channels named under it, and only the plugin's modules authorize channels there: name the app's channel under another word, or remove the plugin
+channel pattern `chat.support` of module `SupportDesk`: `chat` is the namespace of plugin `navree-plugin-chat`, whose authorizer would decide the channels named under it, and only the plugin's modules authorize channels there: name the channel outside the plugin's namespace, or leave that channel to the plugin's own pattern
 ```
 
-Your own channels under words no plugin holds (`crm.deals`, `users.{id}`) boot beside a plugin as before. The check reads a first segment that is literal text, so a pattern that starts with a parameter is not read, and the first matching pattern still decides when two overlap. [What a plugin may not grant](/docs/security/authorization/#what-a-plugin-may-not-grant) says which modules count as a plugin's.
+There are two ways out. Name your channel outside the plugin's namespace (`support.desk`), and your own authoriser decides it. Or register no pattern of your own for it, and the plugin's pattern decides the channel as it decides the plugin's other channels. Your own channels under words no plugin holds (`crm.deals`, `users.{id}`) boot beside a plugin as before. The check reads a first segment that is literal text, so a pattern that starts with a parameter is not read, and the first matching pattern still decides when two overlap. [What a plugin may not grant](/docs/security/authorization/#what-a-plugin-may-not-grant) says which modules count as a plugin's.
 
 It returns a `ChannelDecision`:
 
