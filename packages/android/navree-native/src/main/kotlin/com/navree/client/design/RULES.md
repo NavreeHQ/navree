@@ -342,6 +342,10 @@ With nothing opened, the list has the window.
   its detail keep the order they are laid out in. A table that loads rows as Tab
   goes has no end: whatever stands after it is reached only backwards, so on a
   phone the bottom navigation is reached by Shift+Tab from the top.
+- The web view's client is asked about the first address of each request a
+  page makes, never about where a redirect then takes it (the platform does
+  not ask): what the app's server redirects elsewhere is held only by the
+  page's own content security policy, which the engine checks on every hop.
 - A service worker a page registers is held to the origins the web view is:
   its requests to any other origin are answered 403. A page's own scripts open
   a socket or start a worker only for an address on the app's origins or a

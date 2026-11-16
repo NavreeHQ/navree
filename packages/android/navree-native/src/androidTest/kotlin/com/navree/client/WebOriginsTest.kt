@@ -57,9 +57,10 @@ class WebOriginsTest {
         named.close()
     }
 
-    private fun html(body: String) = MockResponse.Builder()
+    private fun html(body: String, policy: String? = null) = MockResponse.Builder()
         .code(200)
         .addHeader("Content-Type", "text/html; charset=utf-8")
+        .apply { policy?.let { addHeader("Content-Security-Policy", it) } }
         .body("<!doctype html><html><head><meta charset=\"utf-8\"></head><body>$body</body></html>")
         .build()
 
@@ -121,11 +122,24 @@ class WebOriginsTest {
                     "/sandboxed" -> html("<p>sandboxed</p><script>new Image().src = '$base/ran-sandboxed'</script>")
                     "/sandboxed-out" -> html("<p>a sandboxed frame through a redirect</p><iframe sandbox=\"allow-scripts\" src=\"/out?sandboxed\"></iframe>")
                     "/named-frame" -> html("<p>a frame of a named host</p><iframe src=\"$namedBase/frame\"></iframe>")
+                    // A picture, a script and a fetch of the app's own addresses that the app's server answers with a
+                    // redirect to another origin; once without a policy, once with one that names only the app.
+                    "/redirected-loads" -> html(redirectedLoads)
+                    "/redirected-loads-with-policy" -> html(redirectedLoads, policy = "default-src 'self'; script-src 'self' 'unsafe-inline'")
+                    "/img-out" -> moved(302, "$elsewhere/img")
+                    "/script-out" -> moved(302, "$elsewhere/script.js")
+                    "/fetch-out" -> moved(302, "$elsewhere/fetch")
                     else -> MockResponse.Builder().code(204).build()
                 }
             }
         }
     }
+
+    private val redirectedLoads = "<p>loads through a redirect</p><img src=\"/img-out\"><script src=\"/script-out\"></script>" +
+        "<script>fetch('/fetch-out').catch(function(){})</script>"
+
+    /** Every address the web view's client was asked about. */
+    private val asked = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     private val links = java.util.concurrent.CopyOnWriteArrayList<String>()
     private val pageLeft = AtomicBoolean(false)
@@ -154,6 +168,11 @@ class WebOriginsTest {
                             onLink = { links += it },
                             onLeft = { pageLeft.set(true) },
                         ) {
+                            override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
+                                asked += request.url.toString()
+                                return super.shouldInterceptRequest(view, request)
+                            }
+
                             override fun onPageFinished(view: WebView, url: String?) {
                                 super.onPageFinished(view, url)
                                 url?.let { finished += it }
@@ -241,6 +260,38 @@ class WebOriginsTest {
         Thread.sleep(1_000)
         android.util.Log.i("WebOriginsTest", "a sandboxed frame redirected elsewhere: asked of the other origin $otherAsked")
         assertFalse("the sandboxed frame redirected elsewhere ran", appAsked.any { it.endsWith(" /ran") })
+    }
+
+    // What the client cannot check: the platform asks the web view's client about the first address of a request,
+    // and "in the case of redirects, this is only called for the initial resource URL, not any subsequent redirect
+    // URLs" (WebViewClient.shouldInterceptRequest). A picture, a script and a fetch of the app's own address that the
+    // app's server redirects elsewhere are loaded from there; the README says so, and the day this test fails it
+    // says something that is no longer true. What holds them is the page's own policy, which the engine checks on
+    // every hop: the test after this one.
+    @Test
+    fun aPictureAScriptAndAFetchRedirectedElsewhereAreLoadedFromThereAndTheClientIsAskedOnlyTheFirstAddress() {
+        webView(documents = true)
+        open("/redirected-loads")
+        val reached = listOf("GET /img", "GET /script.js", "GET /fetch")
+        runCatching { compose.waitUntil(15_000) { otherAsked.containsAll(reached) } }
+        val elsewhere = other.url("/").toString().trimEnd('/')
+        val text = "the app was asked: $appAsked\nthe other origin was asked: $otherAsked\nthe client was asked about: $asked\n"
+        android.util.Log.i("WebOriginsTest", "redirected loads: $text")
+        Shots.put("redirect-loads.txt", "a picture, a script and a fetch redirected to another origin, no policy\n$text")
+        assertTrue("the other origin was asked for each: $otherAsked", otherAsked.containsAll(reached))
+        assertTrue("the client was asked about each first address: $asked", listOf("/img-out", "/script-out", "/fetch-out").all { path -> asked.any { it.endsWith(path) } })
+        assertEquals("the client was never asked about an address on the other origin: $asked", emptyList<String>(), asked.filter { it.startsWith(elsewhere) })
+    }
+
+    @Test
+    fun aPictureAScriptAndAFetchRedirectedElsewhereAreStoppedByThePagesOwnPolicy() {
+        webView(documents = true)
+        open("/redirected-loads-with-policy")
+        compose.waitUntil(15_000) { listOf("/img-out", "/script-out", "/fetch-out").all { path -> appAsked.contains("GET $path") } }
+        // As long as the test before waits for the other origin to be asked.
+        Thread.sleep(15_000)
+        Shots.put("redirect-loads-policy.txt", "the same with default-src 'self' on the page\nthe app was asked: $appAsked\nthe other origin was asked: $otherAsked\n")
+        assertEquals("the other origin was asked: $otherAsked", emptyList<String>(), otherAsked.toList())
     }
 
     @Test
