@@ -541,6 +541,36 @@ pub const APP_ONLY_PROVIDERS: &[&str] = &[
     "navree_workspace::config::WorkspaceConfig",
 ];
 
+/// What a provider of [`APP_ONLY_PROVIDERS`] does in the app, as the clause
+/// after its name in the text that refuses a plugin's.
+pub(crate) fn app_only_role(provider: &str) -> &'static str {
+    match provider {
+        "dyn navree_access::workspace_gate::WorkspaceGate" => {
+            "which decides who enters the app's workspaces"
+        }
+        "dyn navree_auth::strategy::Strategy" => "which signs requests in",
+        "dyn navree_contracts::permissions::PermissionCheck" => {
+            "which answers the app's permission checks"
+        }
+        "dyn navree_http::auth::Authenticator" => "which decides who a request is signed in as",
+        "dyn navree_http::auth::RouteAuthorizer" => "which decides who may open the app's routes",
+        "navree_access::factory::AbilityFactory" => "which builds every user's abilities",
+        "navree_access::options::AccessOptions" => {
+            "which sets the options of the app's access rules"
+        }
+        "navree_auth::options::AuthOptions" => "which sets the options of the app's sign-in",
+        "navree_helm::options::HelmOptions" => "which sets the options of the app's admin panel",
+        "navree_ui::shell::Shell" => "which is the app's shell",
+        "navree_workspace::config::WorkspaceConfig" => {
+            "which sets the options of the app's workspaces"
+        }
+        _ => OTHER_ROLE,
+    }
+}
+
+/// [`app_only_role`] of a type name it does not know.
+const OTHER_ROLE: &str = "which decides who may do what in the app";
+
 /// The start of the type name of a model hook's provider key,
 /// `dyn ModelHook<M>` of navree-orm, the model's type path following it.
 /// Not public API; Navree's own crates and tests use it.
@@ -741,6 +771,13 @@ mod tests {
         assert!(APP_ONLY_PROVIDERS.windows(2).all(|w| w[0] < w[1]));
         assert!(APP_ONLY_PROVIDERS.iter().all(|name| name.contains("::")));
         assert!(MODEL_HOOK_KEY.starts_with("dyn ") && MODEL_HOOK_KEY.ends_with('<'));
+    }
+
+    #[test]
+    fn every_app_only_provider_says_what_it_does() {
+        for provider in APP_ONLY_PROVIDERS {
+            assert_ne!(app_only_role(provider), OTHER_ROLE, "{provider}");
+        }
     }
 
     /// A namespace is a folder name (`resources/views/<namespace>/`): every word the path

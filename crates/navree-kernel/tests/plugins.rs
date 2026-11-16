@@ -1164,7 +1164,7 @@ mod navree_plugin_forecast {
 }
 
 /// The refusal of the forecast plugin's module configuring the app's `Ledger`.
-const FORECAST_CONFIGURES_LEDGER: &str = "plugin `navree-plugin-forecast` configures the module `Ledger` in `ForecastModule` (for_root or from_config); only the app configures a module of another crate: import it by type in the plugin, and configure it in the app";
+const FORECAST_CONFIGURES_LEDGER: &str = "plugin `navree-plugin-forecast` configures the module `Ledger` in `ForecastModule` (for_root or from_config); only a module of the app configures a module of another crate: remove the plugin or update it to a version that imports `Ledger` without configuring it, and configure `Ledger` in a module of the app";
 
 #[test]
 fn a_plugin_that_configures_another_crates_module_fails_the_boot() {

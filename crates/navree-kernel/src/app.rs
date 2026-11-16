@@ -168,7 +168,8 @@ impl AppBuilder {
     ///   `"plugins"` array as [`PluginsReport::to_json`] writes it);
     /// - `plugins [--json]` validates the graph without constructing anything
     ///   and prints its plugins and what each adds ([`PluginsReport`], or its
-    ///   JSON with `--json`);
+    ///   JSON with `--json`); when the checks refuse the graph, it prints the
+    ///   listing first and fails with the refusals;
     /// - `plugin:publish <plugin> [--tag views|locales|config|files] [--force]
     ///   [--dry-run]` validates the graph without constructing anything and
     ///   copies the files the plugin (a namespace or a plugin's name) ships
@@ -215,7 +216,21 @@ impl AppBuilder {
                 Ok(())
             }
             Some("plugins") => {
-                let graph = self.graph()?;
+                let graph = match self.graph() {
+                    Ok(graph) => graph,
+                    Err(refused) => {
+                        // Which module acts for which plugin matters most when the
+                        // checks refuse the graph: the listing comes before the errors.
+                        if let Some(report) = Graph::plugins_of_refused(&self.modules) {
+                            if rest.iter().any(|arg| arg == "--json") {
+                                println!("{}", report.to_json());
+                            } else {
+                                println!("{report}");
+                            }
+                        }
+                        return Err(refused.into());
+                    }
+                };
                 if graph.has_command("plugins") {
                     return self.boot_and_run(graph, "plugins".to_owned(), rest).await;
                 }

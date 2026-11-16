@@ -12,12 +12,13 @@
 #![allow(missing_docs)]
 
 use std::any::TypeId;
+use std::marker::PhantomData;
 use std::sync::Mutex;
 use std::time::Duration;
 
 use http::Method;
 use navree::config::ConfigSection;
-use navree::contracts::{permission_catalog, permitted};
+use navree::contracts::{PermissionCheck, permission_catalog, permitted};
 use navree::crypto::generate_key;
 use navree::db::Db;
 use navree::http::extract::Request;
@@ -744,7 +745,7 @@ mod navree_plugin_roster {
 /// The refusal of the roster plugin's module configuring `module`.
 fn roster_configures(module: &str) -> String {
     format!(
-        "plugin `navree-plugin-roster` configures the module `{module}` in `RosterModule` (for_root or from_config); only the app configures a module of another crate: import it by type in the plugin, and configure it in the app"
+        "plugin `navree-plugin-roster` configures the module `{module}` in `RosterModule` (for_root or from_config); only a module of the app configures a module of another crate: remove the plugin or update it to a version that imports `{module}` without configuring it, and configure `{module}` in a module of the app"
     )
 }
 
@@ -781,6 +782,26 @@ fn a_plugin_that_configures_access_or_workspaces_fails_the_boot() {
         .expect_err("the plugin configures workspaces")
         .to_string();
     assert_eq!(workspaces, roster_configures("WorkspaceModule"));
+}
+
+#[test]
+fn a_plugin_that_configures_a_module_only_it_imports_is_refused_once() {
+    use navree_plugin_roster::RosterModule;
+    // No module of the app imports access, so its configured instance acts for the plugin:
+    // what it registers is the configured module's, which the one refusal names.
+    let text = Navree::app()
+        .module(RosterModule(|m| {
+            m.import(AccessModule::for_root(AccessOptions::default()));
+        }))
+        .validate()
+        .expect_err("the plugin configures access")
+        .to_string();
+    let roster: Vec<&str> = text
+        .lines()
+        .filter(|line| line.contains("navree-plugin-roster"))
+        .collect();
+    let expected = roster_configures("AccessModule");
+    assert_eq!(roster, [expected.as_str()], "{text}");
 }
 
 /// The guard plugin: its crate is this module, so the app's modules at the top of the file are in
@@ -871,20 +892,42 @@ mod navree_plugin_guard {
             Box::pin(async { Ok(()) })
         }
     }
+
+    /// A module of the plugin's crate that names no plugin, and registers what `.0` adds.
+    pub struct Helper(pub fn(&mut ModuleBuilder));
+
+    impl Module for Helper {
+        fn register(&self, m: &mut ModuleBuilder) {
+            (self.0)(m);
+        }
+    }
 }
 
-/// The refusal of the guard plugin's module providing `provider`.
-fn guard_provides(provider: &str) -> String {
+/// The refusal of the guard plugin's `module` (its name, then why it acts for the plugin when
+/// it does not name it) providing `provider`, which does what `role` says.
+fn guard_provides(module: &str, provider: &str, role: &str) -> String {
     format!(
-        "plugin `navree-plugin-guard` provides `{provider}` in `Provides`, which decides who may do what in the app; only the app registers it: register the plugin's from a module of the app"
+        "plugin `navree-plugin-guard` provides `{provider}` in {module}, {role}; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and to use the plugin's, register it from a module of the app"
     )
 }
 
 /// The refusal of the guard plugin's module hooking `model`.
 fn guard_hooks(model: &str) -> String {
     format!(
-        "plugin `navree-plugin-guard` hooks the model `{model}` in `Provides`, a model of another crate; register the hook from a module of the app"
+        "plugin `navree-plugin-guard` hooks the model `{model}` in `Provides`, a model of another crate; only a module of the app hooks it: remove the plugin or update it to a version that leaves the hook to the app, and to use the plugin's hook, register it from a module of the app"
     )
+}
+
+/// A generic module of the app's crate that registers a permission check granting every
+/// permission: imported only by a module of the guard plugin, it acts for that plugin.
+struct GrantsAll<T>(PhantomData<fn() -> T>);
+
+impl<T: 'static> Module for GrantsAll<T> {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.multi(Factory::<dyn PermissionCheck>::new(|_| async {
+            Ok(Arc::new(navree_plugin_guard::Grants(None)) as Arc<dyn PermissionCheck>)
+        }));
+    }
 }
 
 /// A provider of `T` that is never built: the plugin checks run before anything is built.
@@ -900,13 +943,13 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
 
     use navree::access::{AbilityFactory, WorkspaceGate};
     use navree::auth::{AuthOptions, Strategy};
-    use navree::contracts::PermissionCheck;
     use navree::helm::HelmOptions;
     use navree::http::{Authenticator, RouteAuthorizer};
     use navree::workspace::WorkspaceConfig;
     use navree_plugin_guard::{ChapterHours, Grants, Provides, TrustEveryone};
 
-    // One app per provider, each registered by the plugin's module.
+    // One app per provider, each registered by the plugin's module, with what the refusal
+    // says the provider does.
     let cases = [
         // A permission check that grants every permission to everyone.
         (
@@ -916,75 +959,86 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
                 }));
             }),
             type_name::<dyn PermissionCheck>(),
+            "which answers the app's permission checks",
         ),
         (
             Provides(|m| {
                 m.factory(never_built::<dyn RouteAuthorizer>());
             }),
             type_name::<dyn RouteAuthorizer>(),
+            "which decides who may open the app's routes",
         ),
         (
             Provides(|m| {
                 m.factory(never_built::<dyn Authenticator>());
             }),
             type_name::<dyn Authenticator>(),
+            "which decides who a request is signed in as",
         ),
         (
             Provides(|m| {
                 m.strategy::<TrustEveryone>();
             }),
             type_name::<dyn Strategy>(),
+            "which signs requests in",
         ),
         (
             Provides(|m| {
                 m.factory(never_built::<dyn WorkspaceGate>());
             }),
             type_name::<dyn WorkspaceGate>(),
+            "which decides who enters the app's workspaces",
         ),
         (
             Provides(|m| {
                 m.value(AccessOptions::default());
             }),
             type_name::<AccessOptions>(),
+            "which sets the options of the app's access rules",
         ),
         (
             Provides(|m| {
                 m.factory(never_built::<AbilityFactory>());
             }),
             type_name::<AbilityFactory>(),
+            "which builds every user's abilities",
         ),
         (
             Provides(|m| {
                 m.value(WorkspaceConfig::default());
             }),
             type_name::<WorkspaceConfig>(),
+            "which sets the options of the app's workspaces",
         ),
         (
             Provides(|m| {
                 m.value(AuthOptions::default());
             }),
             type_name::<AuthOptions>(),
+            "which sets the options of the app's sign-in",
         ),
         (
             Provides(|m| {
                 m.value(HelmOptions::default());
             }),
             type_name::<HelmOptions>(),
+            "which sets the options of the app's admin panel",
         ),
         (
             Provides(|m| {
                 m.value(Shell::new("Khata")).exports::<Shell>();
             }),
             type_name::<Shell>(),
+            "which is the app's shell",
         ),
     ];
-    for (provides, provider) in cases {
+    for (provides, provider, role) in cases {
         let refused = Navree::app()
             .module(provides)
             .validate()
             .expect_err(provider)
             .to_string();
-        assert_eq!(refused, guard_provides(provider));
+        assert_eq!(refused, guard_provides("`Provides`", provider, role));
     }
     // A sign-in policy may only refuse a sign-in: a plugin registers its own.
     Navree::app()
@@ -993,6 +1047,49 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
         }))
         .validate()
         .expect("a plugin's sign-in policy");
+}
+
+#[test]
+fn a_refusal_says_why_a_module_acts_for_the_plugin() {
+    use std::any::type_name;
+
+    use navree_plugin_guard::{Helper, Provides};
+
+    let provider = type_name::<dyn PermissionCheck>();
+    let role = "which answers the app's permission checks";
+    // A module of the plugin's crate that does not name the plugin.
+    let in_crate = Navree::app()
+        .module(Provides(|_| {}))
+        .module(Helper(|m| {
+            m.multi(navree_plugin_guard::permission_check());
+        }))
+        .validate()
+        .expect_err("a module of the plugin's crate")
+        .to_string();
+    assert_eq!(
+        in_crate,
+        guard_provides(
+            "`Helper` (a module of the plugin's crate `plugins_docs::navree_plugin_guard`)",
+            provider,
+            role,
+        )
+    );
+    // A generic module of the app's crate that only the plugin's module imports.
+    let imported = Navree::app()
+        .module(Provides(|m| {
+            m.import(GrantsAll::<u8>(PhantomData));
+        }))
+        .validate()
+        .expect_err("a module only the plugin imports")
+        .to_string();
+    assert_eq!(
+        imported,
+        guard_provides(
+            "`GrantsAll<u8>` (only the plugin's modules import it)",
+            provider,
+            role,
+        )
+    );
 }
 
 /// A module of the app: it registers the guard plugin's permission check.

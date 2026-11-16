@@ -243,7 +243,7 @@ pub enum KernelError {
     /// A module that acts for a plugin that is not first-party imports a
     /// configured instance of a module whose type does not name the plugin's crate.
     #[error(
-        "plugin `{plugin}` configures the module `{module}` in `{importer}` (for_root or from_config); only the app configures a module of another crate: import it by type in the plugin, and configure it in the app"
+        "plugin `{plugin}` configures the module `{module}` in `{importer}`{reason} (for_root or from_config); only a module of the app configures a module of another crate: remove the plugin or update it to a version that imports `{module}` without configuring it, and configure `{module}` in a module of the app"
     )]
     PluginConfiguresModule {
         /// The plugin's name.
@@ -252,24 +252,33 @@ pub enum KernelError {
         module: &'static str,
         /// The module that imports the configured instance.
         importer: &'static str,
+        /// Why `importer` acts for the plugin when it does not name it, in
+        /// parentheses after a space; empty when it names it.
+        reason: String,
     },
     /// A module that acts for a plugin that is not first-party registers a
-    /// provider that decides who may do what in the app.
+    /// provider that only the app registers: one that decides who may do what
+    /// in the app, the options of such a module, or the app's shell.
     #[error(
-        "plugin `{plugin}` provides `{provider}` in `{module}`, which decides who may do what in the app; only the app registers it: register the plugin's from a module of the app"
+        "plugin `{plugin}` provides `{provider}` in `{module}`{reason}, {role}; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and to use the plugin's, register it from a module of the app"
     )]
     PluginProvidesAppOnly {
         /// The plugin's name.
         plugin: &'static str,
         /// The provider's type name.
         provider: &'static str,
+        /// What the provider does in the app, as a clause after its name.
+        role: &'static str,
         /// The module that registers it.
         module: &'static str,
+        /// Why `module` acts for the plugin when it does not name it, in
+        /// parentheses after a space; empty when it names it.
+        reason: String,
     },
     /// A module that acts for a plugin that is not first-party hooks a model of
     /// another crate.
     #[error(
-        "plugin `{plugin}` hooks the model `{model}` in `{module}`, a model of another crate; register the hook from a module of the app"
+        "plugin `{plugin}` hooks the model `{model}` in `{module}`{reason}, a model of another crate; only a module of the app hooks it: remove the plugin or update it to a version that leaves the hook to the app, and to use the plugin's hook, register it from a module of the app"
     )]
     PluginHooksModel {
         /// The plugin's name.
@@ -278,6 +287,9 @@ pub enum KernelError {
         model: &'static str,
         /// The module that registers the hook.
         module: &'static str,
+        /// Why `module` acts for the plugin when it does not name it, in
+        /// parentheses after a space; empty when it names it.
+        reason: String,
     },
 }
 

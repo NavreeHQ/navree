@@ -7,7 +7,7 @@ use crate::KernelError;
 use crate::graph::{Graph, ModuleNode, ROOT};
 use crate::plugin::{
     APP_ONLY_PROVIDERS, FIRST_PARTY, MODEL_HOOK_KEY, PluginInfo, PublishTag, Publishable,
-    RESERVED_NAMESPACES, destination, is_first_party, is_namespace, names_crate,
+    RESERVED_NAMESPACES, app_only_role, destination, is_first_party, is_namespace, names_crate,
 };
 use crate::publish::{
     first_case_collision, first_file_and_folder, is_locale_path, is_safe_relative_path,
@@ -79,7 +79,8 @@ impl Graph {
     ///     module that acts for a plugin that is not first-party, of a module
     ///     whose type does not name the plugin's crate:
     ///     `PluginConfiguresModule` (a second configured instance of a module
-    ///     reads the same way, see `configured_twice`);
+    ///     reads the same way, see `configured_twice`), and that module is left
+    ///     out of steps 11 and 12;
     /// 11. a module that acts for a plugin that is not first-party and
     ///     registers a provider (value, factory or multi-binding) whose key is
     ///     on [`APP_ONLY_PROVIDERS`]: one `PluginProvidesAppOnly` per module and
@@ -271,7 +272,10 @@ impl Graph {
         self.acts_for = self.attribution(&groups);
         self.first_party.extend(first_party);
 
-        // Step 10.
+        // Step 10. A module whose configured instance it refuses is left out of
+        // steps 11 and 12: what it registers is the configured module's, and
+        // the refusal already names it.
+        let mut configured_refused: Vec<usize> = Vec::new();
         for m in self.import_order() {
             let module = &self.modules[m];
             let Some(importer) = module.configured_by else {
@@ -281,10 +285,12 @@ impl Graph {
                 continue;
             };
             if !names_crate(module.id.type_name(), info.crate_name) {
+                configured_refused.push(m);
                 errors.push(KernelError::PluginConfiguresModule {
                     plugin: info.name,
                     module: module.name,
                     importer: self.modules[importer].name,
+                    reason: self.acts_for_reason(importer, info),
                 });
             }
         }
@@ -294,6 +300,9 @@ impl Graph {
             let Some(info) = self.community_plugin(m) else {
                 continue;
             };
+            if configured_refused.contains(&m) {
+                continue;
+            }
             let module = &self.modules[m];
             let mut refused: Vec<&'static str> = Vec::new();
             for &p in &module.providers {
@@ -303,7 +312,9 @@ impl Graph {
                     errors.push(KernelError::PluginProvidesAppOnly {
                         plugin: info.name,
                         provider,
+                        role: app_only_role(provider),
                         module: module.name,
+                        reason: self.acts_for_reason(m, info),
                     });
                 }
             }
@@ -314,6 +325,9 @@ impl Graph {
             let Some(info) = self.community_plugin(m) else {
                 continue;
             };
+            if configured_refused.contains(&m) {
+                continue;
+            }
             let module = &self.modules[m];
             let mut refused: Vec<&'static str> = Vec::new();
             for &p in &module.providers {
@@ -335,6 +349,7 @@ impl Graph {
                         plugin: info.name,
                         model,
                         module: module.name,
+                        reason: self.acts_for_reason(m, info),
                     });
                 }
             }
@@ -348,6 +363,34 @@ impl Graph {
         let first = self.acts_for.get(m).copied().flatten()?;
         let info = self.modules[first].plugin.as_ref()?;
         (!self.first_party.contains(info.name)).then_some(info)
+    }
+
+    /// Why module `m` acts for the plugin `info`, for the text that refuses
+    /// what it registers: nothing when it names the plugin; else that it is a
+    /// module of the plugin's crate; else that only the plugin's modules
+    /// import it. In parentheses after a space.
+    pub(crate) fn acts_for_reason(&self, m: usize, info: &PluginInfo) -> String {
+        let module = &self.modules[m];
+        if module
+            .plugin
+            .as_ref()
+            .is_some_and(|named| named.name == info.name)
+        {
+            return String::new();
+        }
+        let in_crate = |type_name: &str| {
+            let outer = type_name
+                .split_once('<')
+                .map_or(type_name, |(outer, _)| outer);
+            outer
+                .strip_prefix(info.crate_name)
+                .is_some_and(|rest| rest.starts_with("::"))
+        };
+        if in_crate(module.type_name) || in_crate(module.id.type_name()) {
+            format!(" (a module of the plugin's crate `{}`)", info.crate_name)
+        } else {
+            String::from(" (only the plugin's modules import it)")
+        }
     }
 
     /// Which plugin each module acts for, by module index: the `first` of its

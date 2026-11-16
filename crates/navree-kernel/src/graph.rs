@@ -9,8 +9,8 @@ use crate::builder::{Contribution, PassedModule, ProviderDef};
 use crate::lifecycle::LifecycleDef;
 use crate::plugin::names_crate;
 use crate::{
-    BootErrors, CommandSpec, KernelError, Module, ModuleBuilder, ModuleId, PluginInfo, ProviderKey,
-    Scope,
+    BootErrors, CommandSpec, KernelError, Module, ModuleBuilder, ModuleId, PluginInfo,
+    PluginsReport, ProviderKey, Scope,
 };
 
 /// The validated module graph, as printed by `check --graph`.
@@ -318,6 +318,28 @@ impl Graph {
         Ok(graph)
     }
 
+    /// The plugins listing of `roots` when their graph is refused: the modules
+    /// are walked and assembled again (each `register` runs once more), and
+    /// the plugin checks run only to learn which plugin each module acts for.
+    /// `None` when the walk itself fails or the modules import each other in a
+    /// cycle. Nothing is built.
+    pub(crate) fn plugins_of_refused(roots: &[PassedModule]) -> Option<PluginsReport> {
+        let roots: Vec<(&dyn Module, &'static str)> = roots
+            .iter()
+            .map(|passed| (passed.module.as_ref(), passed.type_name))
+            .collect();
+        let walked = walk(&roots).ok()?;
+        let mut graph = assemble(walked.registered, &mut Vec::new());
+        if graph.find_module_cycle().is_some() {
+            return None;
+        }
+        graph.check_plugins(&mut Vec::new());
+        // The listing goes in dependency order, which a refused graph lacks:
+        // imports before the modules that import them stands in for it.
+        graph.order = graph.import_order();
+        Some(graph.plugins_report())
+    }
+
     /// The errors of the configured instances the walk dropped (`twice`, in
     /// its order), once [`check_plugins`](Graph::check_plugins) has recorded
     /// which plugin each module acts for. Each is `PluginConfiguresModule`
@@ -342,6 +364,7 @@ impl Graph {
                                 plugin: info.name,
                                 module: twice.name,
                                 importer: self.modules[importer].name,
+                                reason: self.acts_for_reason(importer, info),
                             }
                         })
                     })
@@ -1178,6 +1201,32 @@ mod tests {
 
     use super::*;
     use crate::{Factory, Resolver};
+
+    /// A plugin that is not first-party, in a namespace the framework keeps.
+    const LEDGER: PluginInfo =
+        PluginInfo::new("navree-plugin-ledger", module_path!(), "billing", "1.0.0");
+
+    /// The ledger plugin's module.
+    struct Reserved;
+
+    impl Module for Reserved {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(LEDGER);
+        }
+    }
+
+    #[test]
+    fn a_refused_graph_still_lists_its_plugins() {
+        let roots = [PassedModule::of(Reserved)];
+        assert!(Graph::build_passed(&roots, &[]).is_err());
+        let report = Graph::plugins_of_refused(&roots).expect("the modules walk");
+        let listed: Vec<(&str, usize)> = report
+            .plugins
+            .iter()
+            .map(|plugin| (plugin.info.name, plugin.modules.len()))
+            .collect();
+        assert_eq!(listed, [("navree-plugin-ledger", 1)]);
+    }
 
     /// Provides a private `u32` and an unexported `String`.
     struct Private;
