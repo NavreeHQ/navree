@@ -49,7 +49,9 @@ narrow Stage Manager window), **medium** (under 1000 points) and **expanded**.
 A Mac window is never compact. Each rule has a test in
 `packages/apple/Tests/NavreeDesignTests`.
 
-The Apple client is in development and is not in the repository yet.
+The Apple client is in the repository (`packages/apple`), in preview: it runs
+the example apps on simulators and on a Mac; no package is published and
+nothing has run on a real device.
 
 | Your page says | The client draws |
 |---|---|

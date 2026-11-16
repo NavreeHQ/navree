@@ -600,9 +600,10 @@ Say these plainly to the owner; do not build around them.
   Not built; it needs a trust design of its own.
 - **Project scaffolding.** There is no `navree native:init`, `native:run` or
   `native:build`. The Android client is a package in the repository
-  (`packages/android`, with a demo app). The Apple client is in development
-  and is not in the repository yet. A store build of your own app is not
-  packaged yet.
+  (`packages/android`, with a demo app). The Apple client is in the
+  repository (`packages/apple`), in preview: it runs the example apps on
+  simulators and on a Mac; no package is published and nothing has run on a
+  real device. A store build of your own app is not packaged yet.
 
 ## 8. Which skill next
 
