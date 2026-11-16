@@ -79,7 +79,7 @@ So escape data before a library writes it as HTML. Where a library takes HTML, i
 
 ### Markup outside an owned body
 
-Only an owned body is sealed. Markup outside one gets none of the seal: the root's other children, an island's body (a plugin's island too), a popup or a tooltip a library puts on `<body>`, and anything else a script writes in the page. A hook written there drives the runtime as one the server wrote would, a field written there joins the form around it, and an element written there with `data-ui-ext` is mounted, with the routes it names as far as they follow the server's rules. Markup a script writes into the server's other children lasts until the next morph removes it.
+Only an owned body and the body of a plugin's island are sealed. The body of a plugin's island, one whose script is built with `.namespace(..)`, is sealed with the same four steps before the `islands` module imports its script (see [a plugin's island](/docs/ui/islands/#a-plugins-island)). Markup anywhere else gets none of the seal: the root's other children, the body of an app's own island, a popup or a tooltip a library puts on `<body>`, and anything else a script writes in the page. A hook written there drives the runtime as one the server wrote would, a field written there joins the form around it, and an element written there with `data-ui-ext` is mounted, with the routes it names as far as they follow the server's rules. Markup a script writes into the server's other children lasts until the next morph removes it.
 
 So a script writes its own markup only into an owned body. Where a library opens popups, have it put them inside the body; most take an option for the element they go in.
 
@@ -194,7 +194,7 @@ A plugin is code the app's owner chose to compile into the app. Its script runs 
 |---|---|
 | imports a script from another origin, uses `eval`, or writes a `style` element or a `style` attribute | the page's policy |
 | imports another script this site serves: another plugin's, an island's, the toolkit's own | nothing: the page's policy allows every script of its own origin |
-| writes markup inside an owned body that drives the runtime, stands in for one of the page's elements, or joins a surrounding form | the seal, once the task that wrote it is over |
+| writes markup inside an owned body, or inside the body of a plugin's island, that drives the runtime, stands in for one of the page's elements, or joins a surrounding form | the seal, once the task that wrote it is over |
 | calls a path outside its prefixes and exact addresses with `ui.call` or `ui.get` | `ui.call` and `ui.get` |
 | writes `data-ui-*` outside its owned bodies, in a popup on `<body>` too | nothing: the hook drives the runtime as one the server wrote would, until a morph removes it |
 | posts with `fetch` and the token it read itself, to any path of the site | nothing |

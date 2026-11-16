@@ -132,7 +132,10 @@ every `@navree/*` package carries the same version.
   `navree-ui-ext-macros`, which only an app with that feature compiles. `Element::extension`,
   `extension_with` and `extension_call` name the files on an element: the page links the stylesheets it names (those in table rows and replies too), and a new
   runtime module mounts the script, seals what it draws and lets it call only the routes the server
-  named (browser contract 1). `GET /_navree/ui/ext/{file}` serves the files of an app that
+  named (browser contract 1). A page with a plugin's island (an `IslandScript` built with
+  `.namespace(..)`) loads that module ahead of the islands module, which has it seal the island's body
+  before the island's script is imported and imports no such script it could not seal; an app's own
+  island is not sealed. `GET /_navree/ui/ext/{file}` serves the files of an app that
   contributes one. `navree::plugin` names `UiExtension`, `ExtensionFile`, `FieldControl`, `Control`,
   `ControlCx`, `ControlField`, `EditedValue`, `PageSources`, `Directive` and `PagePolicy` for a
   plugin's modules.

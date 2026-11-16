@@ -3,7 +3,7 @@ title: "Islands"
 description: "A part of a server-drawn page that a script of your own draws in the browser, mounted once, kept through every morph, and let go of when it leaves."
 ---
 
-An island is a part of a page that a script of your own draws in the browser: a map, a rich text editor, a chart Navree UI doesn't draw. The rest of the page stays the server's. The server writes the island with its props and with what shows before the script runs, and with no script at all. A page with an island loads the `islands` module (under 1 KB) and the island's own script, nothing more.
+An island is a part of a page that a script of your own draws in the browser: a map, a rich text editor, a chart Navree UI doesn't draw. The rest of the page stays the server's. The server writes the island with its props and with what shows before the script runs, and with no script at all. A page with an island of your app's own loads the `islands` module (under 1 KB) and the island's own script, nothing more. A plugin's island loads the `extensions` module as well, which seals its body (see [a plugin's island](#a-plugins-island)).
 
 ```rust
 use navree::prelude::*;
@@ -56,6 +56,16 @@ export function mount(body, props, island) {
 ## What runs
 
 Only a script of your app's own runs. The `islands` module imports an address on the page's own origin under `/_navree/ui/island/`, named by its content hash (`depots-1a2b3c4d5e6f.js`), and nothing else, whatever a page's markup says. The script is served `immutable`, under the page's own content security policy: `script-src 'self'`, no inline code, nothing from another site. An old hash still gets the current script, uncached, so a page that stays open across a deploy keeps working.
+
+## A plugin's island
+
+An island whose script is built with `.namespace(..)` (see [Size](#size)) is a plugin's. Its body is sealed before its script is imported, as the [owned body of a plugin's component](/docs/ui/extension-contract/#owned-bodies-and-the-seal) is: every `data-ui-*` hook inside it is removed, the body is marked stored content, every form field inside it joins no form, and an observer keeps all three true for whatever the script, or a library it bundles, writes there later. A command written there does nothing, a field written there doesn't post with the form around the island, and an element written there with `data-ui-ext` is not mounted.
+
+A page with a plugin's island loads the `extensions` module ahead of the `islands` module, and the `islands` module asks it to seal the body before it imports the script. When nothing seals the body, as on a page whose `extensions` module didn't load, the script is not imported: the fallback stays, and the island carries `data-ui-failed`. If the `extensions` module comes later, the island is sealed and mounted then.
+
+The seal also removes the hooks from what the server drew in the body, so put commands, forms and components beside the island, not in its fallback. What the script writes outside the body, on the island's own element or in a popup on `<body>`, is not sealed.
+
+An app's own island, whose script has no namespace, is not sealed. Its script is the app's own code, so the page treats what it draws as the server's own markup: a hook there acts, and a field there posts with the form around the island, as before. A page with only such islands loads the `islands` module alone.
 
 ## Size
 
