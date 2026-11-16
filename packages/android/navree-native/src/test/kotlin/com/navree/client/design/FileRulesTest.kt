@@ -92,6 +92,13 @@ class FileRulesTest {
         assertEquals("file", FileRules.displayName("  "))
         assertEquals("file", FileRules.displayName("folder/"))
         assertEquals("keeps letters of any script", "ਰਸੀਦ.pdf", FileRules.displayName("ਰਸੀਦ.pdf"))
+        assertEquals("a format character outside the first plane goes too", "ab.pdf", FileRules.displayName("a\uDB40\uDC41b.pdf"))
+        assertEquals("half of a pair that stands alone is no character", "ab.pdf", FileRules.displayName("a\uD83Db.pdf"))
+        assertEquals("a character outside the first plane that is none of those stays", "\uD83D\uDCC4.pdf", FileRules.displayName("\uD83D\uDCC4.pdf"))
+        val cut = FileRules.displayName("\u0A30".repeat(5_000) + "\uD83D\uDCC4".repeat(5_000) + ".pdf")
+        assertEquals("a name is no longer than this", FileRules.MOST_NAME, cut.codePointCount(0, cut.length))
+        assertTrue("and keeps its ending: $cut", cut.endsWith(".pdf"))
+        assertEquals("\u0A30".repeat(FileRules.MOST_NAME), FileRules.displayName("\u0A30".repeat(FileRules.MOST_NAME)))
         assertEquals("no character that turns the text around", "Bill Mogafdp.exe", FileRules.displayName("Bill Moga\u202Efdp.exe"))
         assertEquals("nor one that hides in it", "Rasid.pdf", FileRules.displayName("Ra\u200Bsid\u2066.pdf"))
     }

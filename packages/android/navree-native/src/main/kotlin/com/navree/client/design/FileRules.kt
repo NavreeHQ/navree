@@ -211,16 +211,40 @@ object FileRules {
         else -> null
     }
 
+    /** The most characters of a file's name that are kept. */
+    const val MOST_NAME = 255
+
     /**
      * The name a file is sent under and shown by: the last part of what the
      * provider gave (never a path), without control characters or the format
      * characters that turn the order of text around or hide in it (such as
-     * U+202E), `file` when nothing is left.
+     * U+202E), `file` when nothing is left. It is read character by
+     * character and not by halves of one, so a format character outside the
+     * first plane (a tag character, which draws nothing) goes too, and so
+     * does half of a pair that stands alone. A name longer than [MOST_NAME]
+     * characters is cut to that, and keeps its ending.
      */
     fun displayName(raw: String?): String {
         val last = raw.orEmpty().substringAfterLast('/').substringAfterLast('\\')
-        val clean = last.filter { !it.isISOControl() && Character.getType(it) != Character.FORMAT.toInt() }.trim()
-        return clean.ifEmpty { "file" }
+        val clean = StringBuilder()
+        var at = 0
+        while (at < last.length) {
+            val point = last.codePointAt(at)
+            at += Character.charCount(point)
+            val type = Character.getType(point)
+            if (Character.isISOControl(point) || type == Character.FORMAT.toInt() || type == Character.SURROGATE.toInt()) continue
+            clean.appendCodePoint(point)
+        }
+        return shortened(clean.toString().trim()).ifEmpty { "file" }
+    }
+
+    /** A name of at most [MOST_NAME] characters: a longer one loses its middle part, never its ending (what stands after the last dot, where that is short). */
+    private fun shortened(name: String): String {
+        if (name.codePointCount(0, name.length) <= MOST_NAME) return name
+        val dot = name.lastIndexOf('.')
+        val ending = if (dot > 0 && name.length - dot <= 16) name.substring(dot) else ""
+        val kept = MOST_NAME - ending.codePointCount(0, ending.length)
+        return name.substring(0, name.offsetByCodePoints(0, kept)).trim() + ending
     }
 
     /** A token the client made for a kept file: 32 lower-case hex digits, so it can never name a path. */
