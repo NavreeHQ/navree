@@ -182,9 +182,9 @@ internal sealed partial class NodeRenderer
                 return false;
             }
 
-            if (!PageRules.SameButFieldValues(QueryNode(previous), QueryNode(next)) && !UpdateToolbar(toolbarRecords, next))
+            if (!PageRules.SameButFieldValues(QueryNode(previous), QueryNode(next)) && !UpdateToolbar(toolbarRecords, previous.Query!, next.Query!))
             {
-                PageReports.Note("a table's bar of fields changed beyond what the fields hold");
+                PageReports.Note("a table's bar of fields sends to another form now, or changed beyond what the fields hold");
                 return false;
             }
 
@@ -217,11 +217,13 @@ internal sealed partial class NodeRenderer
         && previous.Columns.Select(column => column.Key ?? column.Label).SequenceEqual(next.Columns.Select(column => column.Key ?? column.Label));
 
     // The fields of the query form are drawn in the bar above the table and stand: each is the same control while only its starting value changed, and
-    // what the screen holds for it is shown by its handle. A query with other fields, or a field that changed otherwise, is a table drawn again.
-    private static bool UpdateToolbar(List<Drawn> records, Models.Table next)
+    // what the screen holds for it is shown by its handle. The fields send to their form by its id, so a query form with another id (one with no id
+    // is known by its address, which a sort or a filter in the address changes), other fields, or a field that changed otherwise, is a table drawn
+    // again (QueryBarRules.Stands).
+    private static bool UpdateToolbar(List<Drawn> records, Models.Form before, Models.Form after)
     {
-        List<Models.Node> now = QueryFields(next.Query!);
-        if (records.Count != now.Count)
+        IReadOnlyList<Models.Node> now = QueryBarRules.Fields(after);
+        if (records.Count != now.Count || !QueryBarRules.Stands(before, after))
         {
             return false;
         }
@@ -240,13 +242,6 @@ internal sealed partial class NodeRenderer
         }
 
         return true;
-    }
-
-    // The nodes the query form is drawn from, in the order they are drawn: the search field, then the rest.
-    private static List<Models.Node> QueryFields(Models.Form query)
-    {
-        Models.Field? search = query.Children.OfType<Models.Field>().FirstOrDefault(field => field.Input is Models.TextInput { Kind: Models.TextKind.Search });
-        return search is null ? [.. query.Children] : [search, .. query.Children.Where(child => !ReferenceEquals(child, search))];
     }
 
     /// <summary>The table a drawn table of the protocol stands for now, with its rows by key.</summary>

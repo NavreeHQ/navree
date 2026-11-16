@@ -34,8 +34,23 @@ internal sealed class PageFetcher(string corpus) : IFetcher
           {"t":"text","value":"Rs 1,00,000 in all."},
           {"t":"button","label":"New customer","action":{"t":"navigate","href":"/customers/new"}},
           {"t":"button","label":"A slow order","action":{"t":"navigate","href":"/orders/slow","present":"sheet"}},
-          {"t":"button","label":"An order beside","action":{"t":"navigate","href":"/orders/beside"}}]}}}
+          {"t":"button","label":"An order beside","action":{"t":"navigate","href":"/orders/beside"}},
+          {"t":"button","label":"A ledger","action":{"t":"navigate","href":"/ledger"}}]}}}
         """;
+
+    // A table whose query form has no id, so it is known by its address; the first answer puts it at /ledger with an empty search, every later one
+    // at /ledger/paid (a filter carried in the address) with the search the server says it holds.
+    private const string Ledger = """
+        {"navree":1,"build":"3f9a1c07b2de","vocab":0,"screen":{"title":"Ledger","body":{"t":"region","id":"ledger-region","src":"/ledger","children":[{"t":"table","id":"ledger","caption":"Ledger",
+          "columns":[{"key":"name","label":"Name","role":"title"},{"key":"amount","label":"Amount","numeric":true,"align":"end","sort":{"href":"/ledger?sort=amount"}}],
+          "rows":[{"id":"1","cells":[{"t":"text","value":"Harpreet Kaur"},{"t":"text","value":"Rs 1,00,000"}]},{"id":"2","cells":[{"t":"text","value":"Gurpreet Singh"},{"t":"text","value":"Rs 24,500"}]},{"id":"3","cells":[{"t":"text","value":"Jaspreet Kaur"},{"t":"text","value":"Rs 8,200"}]}],
+          "query":{"action":"ACTION","children":[{"t":"field","name":"search","id":"ledger-search","label":"Search","input":{"t":"text","kind":"search","placeholder":"Search the ledger","value":"VALUE"},"purpose":"search","changed":{"t":"submit"}}]}}]}}}
+        """;
+
+    /// <summary>What the ledger's search holds in every answer after the first.</summary>
+    internal const string LedgerSearch = "Harpreet Kaur";
+
+    private int ledgerAsked;
 
     private static readonly Navree.Design.Origins Origin = new("https://charkha.example", [], false);
 
@@ -90,6 +105,15 @@ internal sealed class PageFetcher(string corpus) : IFetcher
         {
             besideAsked++;
             return new FetchResult(200, "application/vnd.navree.native+json", null, [], besideAsked == 1 ? BesideEmpty : BesideFilled, null);
+        }
+
+        if (path is "/ledger" or "/ledger/paid")
+        {
+            ledgerAsked++;
+            string page = ledgerAsked == 1
+                ? Ledger.Replace("ACTION", "/ledger", StringComparison.Ordinal).Replace("VALUE", string.Empty, StringComparison.Ordinal)
+                : Ledger.Replace("ACTION", "/ledger/paid", StringComparison.Ordinal).Replace("VALUE", LedgerSearch, StringComparison.Ordinal);
+            return new FetchResult(200, "application/vnd.navree.native+json", null, [], page, null);
         }
 
         if (path == "/orders/slow")
