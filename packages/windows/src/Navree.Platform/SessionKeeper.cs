@@ -261,8 +261,9 @@ public sealed class SessionKeeper : IDisposable
     /// none when it is the core that ended the session), after which writes are made again for whoever comes next; everything else kept; and
     /// <paramref name="afterKept"/>. The mark goes when every one of them finished and the core let go.
     /// </summary>
-    /// <param name="stopWork">Stops the requests, streams, timers and snapshots under way. If it throws, the sign-out stops there, nothing is
-    /// written again in this run, and the mark makes the next start finish it.</param>
+    /// <param name="stopWork">Stops the requests, streams, timers and snapshots under way. If it throws, that is written down in what is
+    /// returned and the sign-out goes on to its end: its steps run and the core is told, so nothing of the person is left for whoever comes
+    /// next and the app can be used again; the mark stays, and the next start finishes the sign-out once more.</param>
     /// <param name="tellCore">Tells the core the client ended the session and completes when the core has handled it; null when the core ended it.</param>
     /// <param name="beforeKept">Steps that run after the cookie file goes and before the rest of what is kept.</param>
     /// <param name="afterKept">Steps that run after.</param>
@@ -282,29 +283,12 @@ public sealed class SessionKeeper : IDisposable
             lastCookies = string.Empty;
         }
 
-        try
-        {
-            kept.MarkWipe();
-        }
-        catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
-        {
-            failed.Add(new KeyValuePair<string, string>("the mark that a sign-out is under way", problem.GetType().Name));
-        }
-
-        cookies.Clear();
-        try
-        {
-            stopWork();
-        }
-        catch (Exception)
-        {
-            lock (gate)
-            {
-                wiping--;
-            }
-
-            throw;
-        }
+        // The start. A sign-out that has begun is carried to its end whatever a part of its start throws: the part is written down, and the
+        // steps still run and the core is still told. Stopping here would leave everything of the person on disk for the rest of the run,
+        // where the core of whoever comes next reads its pages from, and would leave the app unable to keep or ask for anything again.
+        Begin("the mark that a sign-out is under way", kept.MarkWipe, failed);
+        Begin("the cookies in memory", cookies.Clear, failed);
+        Begin("the work under way", stopWork, failed);
 
         WipeReport first;
         try
@@ -386,6 +370,19 @@ public sealed class SessionKeeper : IDisposable
 
     /// <inheritdoc />
     public void Dispose() => disk.Dispose();
+
+    // One part of the start of a sign-out: what it throws is written down, and the next part runs.
+    private static void Begin(string name, Action part, List<KeyValuePair<string, string>> failed)
+    {
+        try
+        {
+            part();
+        }
+        catch (Exception problem)
+        {
+            failed.Add(new KeyValuePair<string, string>(name, problem.GetType().Name));
+        }
+    }
 
     // Whether a write stamped with a session is still to be made: that session is the store's now, and no sign-out is under way.
     private bool Current(long stamp)

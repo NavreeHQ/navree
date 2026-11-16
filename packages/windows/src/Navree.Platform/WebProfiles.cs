@@ -175,7 +175,7 @@ public sealed class WebProfiles
             {
                 // Without the new folder on disk a later start would take the old one for the session's: nothing is shown instead.
                 refused = true;
-                say?.Invoke("a new folder for the web view could not be made: no web page is shown until the app is started again");
+                Say("a new folder for the web view could not be made: no web page is shown until the app is started again");
                 return false;
             }
 
@@ -187,7 +187,7 @@ public sealed class WebProfiles
     /// <summary>
     /// The end of a session begins: its folder is never used again from this line on. The session's number goes up and the folder of whoever
     /// comes next is made and in force at once, before anything of the old one is emptied; when it cannot be made, no web page is shown for
-    /// the rest of this run. Nothing here waits, and nothing here can leave the old folder in use.
+    /// the rest of this run. Nothing here waits, nothing here throws, and nothing here can leave the old folder in use.
     /// </summary>
     /// <returns>The folder of the session that ended, to be emptied and deleted (<see cref="Finish"/>).</returns>
     public string MoveOn()
@@ -196,11 +196,21 @@ public sealed class WebProfiles
         {
             long ended = current;
             current = ended + 1;
-            if (!folders.Make(PathOf(current)))
+            bool made = false;
+            try
+            {
+                made = folders.Make(PathOf(current));
+            }
+            catch (Exception)
+            {
+                // Whatever kept it from being made, it was not made. The end of the session goes on.
+            }
+
+            if (!made)
             {
                 // Without the new folder on disk a later start would take the old one for the session's: nothing is shown instead.
                 refused = true;
-                say?.Invoke("a new folder for the web view could not be made: no web page is shown until the app is started again");
+                Say("a new folder for the web view could not be made: no web page is shown until the app is started again");
             }
 
             return PathOf(ended);
@@ -229,7 +239,7 @@ public sealed class WebProfiles
             if (!taken && !gone)
             {
                 refused = true;
-                say?.Invoke("what the web view kept could be neither cleared nor deleted: no web page is shown until the app is started again");
+                Say("what the web view kept could be neither cleared nor deleted: no web page is shown until the app is started again");
             }
 
             // While no web page may be shown in this run (this session's data is still there, an earlier one's is, or no new folder could be
@@ -252,8 +262,21 @@ public sealed class WebProfiles
             if (!folders.Delete(Path.Combine(root, name), limit))
             {
                 left.Add(name);
-                say?.Invoke("an older folder of the web view could not be deleted yet (" + name + "): it is not used again, and is tried again later");
+                Say("an older folder of the web view could not be deleted yet (" + name + "): it is not used again, and is tried again later");
             }
+        }
+    }
+
+    // Says it to whoever listens. What a listener throws changes nothing here: the folders are settled before anybody is told.
+    private void Say(string what)
+    {
+        try
+        {
+            say?.Invoke(what);
+        }
+        catch (Exception)
+        {
+            // Told or not, what was decided stands.
         }
     }
 

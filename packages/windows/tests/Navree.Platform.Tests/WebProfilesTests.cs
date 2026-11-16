@@ -9,6 +9,8 @@ internal sealed class FakeWebFolders : IWebFolders
 
     internal bool NothingCanBeMade { get; set; }
 
+    internal bool MakingThrows { get; set; }
+
     internal List<string> Asked { get; } = [];
 
     public IReadOnlyList<string> Names(string root) =>
@@ -16,6 +18,11 @@ internal sealed class FakeWebFolders : IWebFolders
 
     public bool Make(string path)
     {
+        if (MakingThrows)
+        {
+            throw new InvalidOperationException("the disk threw");
+        }
+
         if (NothingCanBeMade)
         {
             return false;
@@ -45,6 +52,32 @@ public sealed class WebProfilesTests
     private static readonly string Root = Path.Combine(Path.GetTempPath(), "navree-web-profiles");
 
     private static string In(string name) => Path.Combine(Root, name);
+
+    [TestMethod]
+    public void The_folder_moves_on_whatever_making_the_new_one_or_telling_of_it_throws_and_no_web_page_is_shown_then()
+    {
+        FakeWebFolders disk = new();
+        List<string> said = [];
+        WebProfiles profiles = new(Root, disk, what =>
+        {
+            said.Add(what);
+            throw new InvalidOperationException("whoever listens threw");
+        });
+        Assert.IsTrue(profiles.Open(lastSessionEnded: false));
+        disk.There.Add(In("1"));
+
+        // The person signs out, and making the folder of whoever comes next throws; so does whoever is told of it.
+        disk.MakingThrows = true;
+        string ended = profiles.MoveOn();
+        Assert.AreEqual(In("1"), ended, "the end of the session was not given the folder to empty");
+        Assert.IsNull(profiles.Folder, "a web page may be shown though the folder of whoever comes next is not there");
+        Assert.AreEqual(1, said.Count);
+
+        // The folder of the person who left is emptied and deleted as usual, and the sign-out is not finished: the next start goes on in a new folder.
+        Assert.IsFalse(profiles.Finish(ended, taken: true));
+        Assert.IsFalse(disk.There.Contains(In("1")), "the folder of the person who left is still on disk though nothing held it");
+        Assert.IsNull(profiles.Folder);
+    }
 
     [TestMethod]
     public void Each_session_keeps_its_web_data_in_a_folder_of_its_own_and_the_next_start_goes_on_in_the_last()

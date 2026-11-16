@@ -571,15 +571,24 @@ public sealed partial class ShellHost : IDisposable
         // leaving person's until it is told: the point is marked on the core's own thread, just before it is told.
         asked.SessionIsEnding();
 
-        // The web view's folder moves on first, before any step and before any wait: a web page asked for from this line on is given the
-        // folder of whoever comes next, or none, and never the folder of the person who is leaving, however long emptying that one takes.
-        string webEnded = webProfiles.MoveOn();
+        // Whether the core has been told (or ended the session itself). The window's side has moved on to whoever comes next; until the core's
+        // side has too, everything the core asks is taken for the leaving person's and refused. The two always come in a pair.
+        int told = coreEnded ? 1 : 0;
+        Task TellCore()
+        {
+            Volatile.Write(ref told, 1);
+            return client.SendAsync(Events.SignedOut, asked.CoreIsToldTheSessionEnded);
+        }
+
         WipeReport report;
         try
         {
+            // The web view's folder moves on first, before any step and before any wait: a web page asked for from this line on is given the
+            // folder of whoever comes next, or none, and never the folder of the person who is leaving, however long emptying that one takes.
+            string webEnded = webProfiles.MoveOn();
             report = await session.EndAsync(
                 StopWork,
-                coreEnded ? null : () => client.SendAsync(Events.SignedOut, asked.CoreIsToldTheSessionEnded),
+                coreEnded ? null : TellCore,
                 [new WipeStep("what the web view keeps", () => EndWebAsync(webEnded), OnUi)],
                 [.. new[]
                 {
@@ -593,6 +602,22 @@ public sealed partial class ShellHost : IDisposable
         catch (Exception problem)
         {
             report = new WipeReport([], [new KeyValuePair<string, string>("the start of the sign-out", problem.GetType().Name)]);
+        }
+        finally
+        {
+            // Whatever the lines above threw, a sign-out that began is one the core is told of: otherwise the app would ask for nothing again
+            // until it is started again. The keeper tells the core itself whatever its own start throws, so this is for what nobody foresaw.
+            if (Volatile.Read(ref told) == 0)
+            {
+                try
+                {
+                    await TellCore().WaitAsync(Wipe.StepLimit).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    // The core did not answer. The report says the sign-out did not finish, and the person is told to start the app again.
+                }
+            }
         }
 
         if (!await OnDispatcherAsync())
@@ -644,9 +669,9 @@ public sealed partial class ShellHost : IDisposable
                 {
                     source.Cancel();
                 }
-                catch (ObjectDisposedException)
+                catch (Exception)
                 {
-                    // It had ended.
+                    // It had ended, or something that waited on it threw as it was told. It is cancelled either way, and the rest still are.
                 }
             }
 

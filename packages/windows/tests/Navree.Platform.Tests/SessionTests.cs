@@ -187,12 +187,11 @@ public sealed class SessionTests
         try
         {
             SignedInBefore(folder);
-            (SessionKeeper keeper, _, _, _) = Start(folder);
+            (SessionKeeper keeper, _, KeptStore cut, _) = Start(folder);
             using (keeper)
             {
-                // The process ends at the first thing the sign-out does (the lid is closed, the app is killed).
-                Assert.ThrowsExactly<InvalidOperationException>(() =>
-                    keeper.EndAsync(() => throw new InvalidOperationException("the process ended here"), null, [], []).GetAwaiter().GetResult());
+                // The process ends when the sign-out has done its first thing, the mark, and nothing else (the lid is closed, the app is killed).
+                cut.MarkWipe();
             }
 
             (SessionKeeper next, CookieStore cookies, KeptStore kept, bool finished) = Start(folder);
@@ -210,18 +209,62 @@ public sealed class SessionTests
     }
 
     [TestMethod]
+    public async Task A_sign_out_the_server_asked_for_whose_start_throws_still_takes_everything_of_the_person_away()
+    {
+        string folder = Folder();
+        try
+        {
+            SignedInBefore(folder);
+            (SessionKeeper keeper, CookieStore cookies, KeptStore kept, _) = Start(folder);
+            using (keeper)
+            {
+                keeper.WriteCached("page:https://shop.example/orders", "{\"name\":\"Harpreet Kaur, Ludhiana\"}");
+                await keeper.DrainAsync().WaitAsync(Short);
+                Assert.IsNotNull(cookies.Header("https://shop.example/", DateTimeOffset.UtcNow));
+
+                // The core ended the session (nobody is to be told), and stopping the work under way throws.
+                WipeReport report = await keeper.EndAsync(() => throw new InvalidOperationException("a request threw as it was cancelled"), null, [], []).WaitAsync(Short);
+                await keeper.DrainAsync().WaitAsync(Short);
+
+                // The core has started again for whoever comes next, and reads its pages from the disk: nothing of the person is there.
+                Assert.IsNull(kept.ReadCached("page:https://shop.example/orders"), "a page kept for the person who left can be read by whoever comes next");
+                Assert.IsNull(kept.Read("page:https://shop.example/orders"));
+                Assert.IsNull(kept.Read(SessionKeeper.CookiesKey), "the cookie file of the person who left is on disk");
+                Assert.IsNull(cookies.Header("https://shop.example/", DateTimeOffset.UtcNow), "the cookie of the person who left is in memory");
+                Assert.AreEqual(0, Directory.GetFiles(folder, "*.kept").Length + Directory.GetFiles(folder, "*.page").Length);
+
+                // What threw is said, so the person is told, and the mark stays for the next start.
+                Expect.That(!report.Complete, "a sign-out whose start threw is said to have finished");
+                Expect.That(report.Failed.Any(failed => failed.Key == "the work under way"), "what threw is not named: " + string.Join(", ", report.Failed.Select(failed => failed.Key)));
+                Expect.That(kept.WipeMarked, "the mark went though the sign-out did not finish");
+                Expect.That(!keeper.Ending, "nothing is kept again in this run");
+                Expect.That(!keeper.Wiping, "the web view is kept off the network for the rest of this run");
+            }
+
+            (SessionKeeper next, _, _, bool finished) = Start(folder);
+            using (next)
+            {
+                Expect.That(finished, "the next start does not finish the sign-out once more");
+            }
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
     public async Task A_kept_file_another_program_holds_does_not_stop_the_start_that_finishes_a_sign_out_and_is_never_read_again()
     {
         string folder = Folder();
         try
         {
             SignedInBefore(folder);
-            (SessionKeeper keeper, _, _, _) = Start(folder);
+            (SessionKeeper keeper, _, KeptStore cut, _) = Start(folder);
             using (keeper)
             {
-                // The process ends at the first thing the sign-out does: the mark is on disk, and so is everything of the person.
-                Assert.ThrowsExactly<InvalidOperationException>(() =>
-                    keeper.EndAsync(() => throw new InvalidOperationException("the process ended here"), null, [], []).GetAwaiter().GetResult());
+                // The process ends when the sign-out has done its first thing and nothing else: the mark is on disk, and so is everything of the person.
+                cut.MarkWipe();
             }
 
             // Another program (a scanner, an indexer) holds every kept file open in a way that does not let it be deleted.
@@ -289,12 +332,11 @@ public sealed class SessionTests
         try
         {
             SignedInBefore(folder);
-            (SessionKeeper keeper, _, _, _) = Start(folder);
+            (SessionKeeper keeper, _, KeptStore cut, _) = Start(folder);
             using (keeper)
             {
-                // A sign-out is cut short at its first step: the mark is on disk, and so is everything of the person.
-                _ = Assert.ThrowsExactly<InvalidOperationException>(() =>
-                    keeper.EndAsync(() => throw new InvalidOperationException("the process ended here"), null, [], []).GetAwaiter().GetResult());
+                // A sign-out is cut short when it has done its first thing and nothing else: the mark is on disk, and so is everything of the person.
+                cut.MarkWipe();
             }
 
             // Another program holds the kept files, so the start that finishes the sign-out sets them aside and names them in the list.
