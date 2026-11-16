@@ -17,7 +17,8 @@
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
-use http::StatusCode;
+use http::header::ALLOW;
+use http::{HeaderValue, StatusCode};
 use navree_http::body::{BodyError, BodyLimit, read_body};
 use navree_http::extract::{FromRequest, Request, urlencoded};
 use serde::Deserialize;
@@ -229,6 +230,13 @@ impl From<EditCell> for Node {
 /// The body is read within the route's body limit (413 past it), and a post with no `value`
 /// is a 400.
 ///
+/// It has the answer to cross-site request forgery that [`Submit`](crate::Submit) has, with or
+/// without a session, and it is checked before the body is read: a post from another site is
+/// refused with 403 unless its `Origin` is in `http.cors.allowed_origins`, and so is a post that
+/// sends neither `Sec-Fetch-Site` nor `Origin` but carries a cookie, unless the session layer
+/// checked its CSRF token; a body that isn't a urlencoded form is refused with 415, and a `GET`
+/// or `HEAD` with 405.
+///
 /// ```
 /// use navree_http::Extension;
 /// use navree_kernel::AppContext;
@@ -267,6 +275,16 @@ impl<T> FromRequest for EditedValue<T> {
 
     async fn from_request(request: Request) -> Result<Self, Self::Rejection> {
         let (parts, body) = request.into_parts();
+        // The doors of a form's post: not from another site, not a link or a prefetch, and a
+        // urlencoded body.
+        if let Some(status) = crate::form::refusal(&parts).await {
+            let refused = navree_http::AppError::from_status(status);
+            return Err(if status == StatusCode::METHOD_NOT_ALLOWED {
+                refused.with_header(ALLOW, HeaderValue::from_static("POST"))
+            } else {
+                refused
+            });
+        }
         let limit = BodyLimit::of(&parts.extensions);
         let bytes = read_body(body, limit).await.map_err(|error| match error {
             BodyError::TooLarge => navree_http::AppError::payload_too_large(limit),

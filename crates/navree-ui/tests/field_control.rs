@@ -5,8 +5,10 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
 
 use http::{Method, StatusCode};
+use navree_http::body::Body;
+use navree_http::extract::FromRequest;
 use navree_http::response::{IntoResponse, Response};
-use navree_http::{Controller, Extension, HttpModule, ModuleBuilderHttpExt, RouteDef};
+use navree_http::{AppError, Controller, Extension, HttpModule, ModuleBuilderHttpExt, RouteDef};
 use navree_kernel::{
     AppContext, BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };
@@ -1099,6 +1101,68 @@ async fn an_inline_edit_through_a_control_is_refused_by_the_controls_check() {
     // The built-in editors have no control to check, and read the value as its type only.
     let response = post(&app, "/deliveries/42/note", "value=110001", true).await;
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+/// An inline edit's post of `value=141001` to `/deliveries/42/pin`, with `headers`.
+fn edit_post(method: Method, headers: &[(&str, &str)]) -> http::Request<Body> {
+    let mut request = http::Request::builder()
+        .method(method)
+        .uri("/deliveries/42/pin");
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    request.body(Body::from("value=141001")).expect("a post")
+}
+
+/// What an inline edit's post is refused with, or `None` when its value is read.
+async fn edit_refused(request: http::Request<Body>) -> Option<AppError> {
+    EditedValue::<String>::from_request(request).await.err()
+}
+
+// An inline edit has the doors a form's post has, with or without a session: a post from another
+// site, a body that is not a form, and a GET or a HEAD are refused before the value is read.
+#[tokio::test]
+async fn an_edited_value_is_refused_from_another_site_in_another_body_and_by_a_get() {
+    let form = ("content-type", FORM);
+    let request = edit_post(Method::POST, &[form]);
+    let Ok(edit) = EditedValue::<String>::from_request(request).await else {
+        panic!("a post from this site is read");
+    };
+    assert_eq!(edit.text(), "141001");
+
+    // A post from a sibling subdomain or another site, one whose origin is another site's, and
+    // one that carries a cookie and says nothing of where it comes from.
+    let elsewhere: [&[(&str, &str)]; 4] = [
+        &[form, ("sec-fetch-site", "same-site")],
+        &[form, ("sec-fetch-site", "cross-site")],
+        &[form, ("host", "app.example"), ("origin", "https://evil.example")],
+        &[form, ("cookie", "sid=abc")],
+    ];
+    for headers in elsewhere {
+        let refused = edit_refused(edit_post(Method::POST, headers)).await;
+        assert_eq!(
+            refused.map(|refused| refused.status),
+            Some(StatusCode::FORBIDDEN),
+            "{headers:?}"
+        );
+    }
+
+    // A body any page can send without asking first, text that reads as a form would.
+    let request = edit_post(Method::POST, &[("content-type", "text/plain")]);
+    let refused = edit_refused(request).await;
+    assert_eq!(
+        refused.map(|refused| refused.status),
+        Some(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+    );
+
+    // A link or a prefetch edits nothing.
+    for method in [Method::GET, Method::HEAD] {
+        let refused = edit_refused(edit_post(method.clone(), &[form]))
+            .await
+            .expect("refused");
+        assert_eq!(refused.status, StatusCode::METHOD_NOT_ALLOWED, "{method}");
+        assert_eq!(refused.into_response().headers()["allow"], "POST");
+    }
 }
 
 // A value that is not of the field's type is refused in the form's own words, with no check of
