@@ -248,8 +248,11 @@ impl Core {
     /// the shell's own answer decides who is signed in, so nothing is
     /// emptied and nobody is cleared; the shell is asked again (once, while
     /// none is on its way) and it says. An answer the core made itself, one
-    /// that never came from the app, and one from another origin that names
-    /// nobody are not compared.
+    /// that never came from the app, one from another origin that names
+    /// nobody, and one that did not get through to the app (a 5xx, a 429)
+    /// and names nobody are not compared. Any answer that names a person is,
+    /// and so is every other answer that names nobody: a 401 or a 403 among
+    /// them is the news that the session ended.
     pub(crate) fn same_session(&mut self, asked: &Asked, mut response: Response) -> Response {
         if response.error.is_some()
             || response.left.is_some()
@@ -264,6 +267,13 @@ impl Core {
         let made_for = response
             .header(navree_native::PERSON_HEADER)
             .filter(|id| !id.is_empty());
+        // What a proxy or a gateway in front of the app answers while the app
+        // restarts or sheds load names nobody: it is not the app's word on
+        // who is signed in, and the next answer that gets through is. Such an
+        // answer is never kept, so passing it over keeps nothing of anybody.
+        if made_for.is_none() && !crate::reduce::got_through(&response) {
+            return response;
+        }
         // A session belongs to a host: an answer from another origin the app
         // allows that names nobody says nothing of the person the app's own
         // shell named. One that names a person (a session cookie shared
