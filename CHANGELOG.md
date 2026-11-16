@@ -301,6 +301,11 @@ every `@navree/*` package carries the same version.
   `motion(..)` and `words(WaterfallLabels)` work as on the other charts. It draws at most
   `MAX_WATERFALL_ROWS` (24) rows and says so when it cuts. The charts sheet gains the rule for the
   dashed line.
+- `ErrorContext::impersonator` names the user acting as `ErrorContext::user` when the request that
+  ended in an error is an impersonation (the `Impersonator` the authenticator sets), so a page of
+  the error, or an `ErrorShell` that builds the shell around it, can say so and offer to stop it.
+  It is `None` for a request of the user's own, for a guest, and after a panic or a timeout, which
+  cannot say. `ErrorContext::new` leaves it `None`.
 
 ### Fixed
 

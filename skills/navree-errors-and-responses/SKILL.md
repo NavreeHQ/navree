@@ -245,8 +245,9 @@ For a route written by hand, the same marks are `RouteDef::on(..).page()` and
   which accepts only a path on your site.
 - **Another form of error.** The trait is `ErrorPages` in navree-http. Its
   `render` gets an `ErrorContext` (the method, the URI, the headers a page
-  may depend on, the request id, the route's `RouteMeta`, the signed-in user
-  and the API prefix) and the `AppError`, and answers `Some(response)` or
+  may depend on, the request id, the route's `RouteMeta`, the signed-in user,
+  the user impersonating them when the request is an impersonation
+  (`impersonator`), and the API prefix) and the `AppError`, and answers `Some(response)` or
   `None` to keep the JSON body. It must not panic. A `json_only` route is never
   asked, and the app uses the first `ErrorPages` contributed. With `UiModule`
   in the app you do not write one.

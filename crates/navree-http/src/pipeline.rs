@@ -23,7 +23,7 @@ use http::header::{
 };
 use http::{HeaderMap, Method, StatusCode};
 use http_body_util::BodyExt;
-use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, RequestId};
+use navree_contracts::{AuditEntry, AuditKind, AuditSink, AuthState, Impersonator, RequestId};
 use navree_kernel::{AppContext, RequestScope};
 use navree_telemetry::{
     EventKind, ExceptionReported, RequestHandled, RequestInfo, Telemetry, TelemetryContext,
@@ -60,6 +60,10 @@ pub(crate) struct LoggedUser(pub(crate) Uuid);
 /// one takes the JSON error shape. A mounted service's 5xx is not marked.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AsWritten;
+
+/// The user impersonating the authenticated one, recorded on the response for an error's page.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LoggedImpersonator(pub(crate) Uuid);
 
 /// The request's tracing span, so inner layers can record fields on it.
 #[derive(Clone, Debug)]
@@ -291,6 +295,7 @@ where
         request_id: Some(request_id.clone()),
         route: None,
         user: None,
+        impersonator: None,
         api_prefix: state.api_prefix.clone(),
         matched: Some(matched_route.0.clone()),
         finder: state.finder.clone(),
@@ -461,7 +466,15 @@ where
                 }));
             }
             let error = AppError::from_status(StatusCode::INTERNAL_SERVER_ERROR);
-            error_response(&error, format, pages, context.as_deref(), None, None).await
+            error_response(
+                &error,
+                format,
+                pages,
+                context.as_deref(),
+                None,
+                (None, None),
+            )
+            .await
         }
     }
 }
@@ -516,7 +529,7 @@ where
                     request_id = request_id.as_ref().map(tracing::field::display),
                     "request timed out"
                 );
-                return error_response(&timeout_error(), format, pages, context.as_deref(), None, None)
+                return error_response(&timeout_error(), format, pages, context.as_deref(), None, (None, None))
                     .await;
             }
         }
@@ -597,17 +610,17 @@ fn error_context_of(request: &Request) -> Option<Arc<ErrorContext>> {
 const PAGES_DEADLINE: Duration = Duration::from_secs(3);
 
 /// The response for `error`: the page the module renders when it answers, else the JSON
-/// body. `route` and `user` are what the request found out on its way in: a route that ran
-/// has set `route`; for an error raised before one did (or for a panic or a timeout, which
-/// leave no response behind) the router is asked which route the request names. A panic or a
-/// timeout does not know the user.
+/// body. `route` and `(user, impersonator)` are what the request found out on its way in: a
+/// route that ran has set `route`; for an error raised before one did (or for a panic or a
+/// timeout, which leave no response behind) the router is asked which route the request names.
+/// A panic or a timeout does not know the user or who impersonates them.
 async fn error_response(
     error: &AppError,
     format: ErrorFormat,
     pages: Option<&ErrorPagesHandle>,
     context: Option<&ErrorContext>,
     route: Option<Arc<RouteMeta>>,
-    user: Option<Uuid>,
+    (user, impersonator): (Option<Uuid>, Option<Uuid>),
 ) -> Response {
     let (Some(pages), Some(context)) = (pages, context) else {
         return error.render(format);
@@ -625,6 +638,7 @@ async fn error_response(
     let mut context = context.clone();
     context.route = route;
     context.user = user;
+    context.impersonator = impersonator.filter(|_| user.is_some());
     // A module that fails or panics here leaves the error as JSON: the answer to a failure
     // can't be another failure.
     let page = tokio::time::timeout(
@@ -742,7 +756,12 @@ async fn finalize(
 
     let route = response.extensions().get::<Arc<RouteMeta>>().cloned();
     let user = response.extensions().get::<LoggedUser>().map(|u| u.0);
-    let rendered = error_response(&error, format, pages, context, route, user).await;
+    let impersonator = response
+        .extensions()
+        .get::<LoggedImpersonator>()
+        .map(|i| i.0);
+    let rendered =
+        error_response(&error, format, pages, context, route, (user, impersonator)).await;
     let (mut parts, _) = response.into_parts();
     let (rendered_parts, body) = rendered.into_parts();
     parts.status = rendered_parts.status;
@@ -992,6 +1011,8 @@ where
             .unwrap_or_default(),
     };
     let user = state.0.as_ref().map(|p| p.user_id);
+    // Who acts as the user, when the authenticator says the request is an impersonation.
+    let impersonator = user.and(parts.extensions.get::<Impersonator>().map(|i| i.0));
     if let (Some(user), Some(span)) = (user, parts.extensions.get::<RequestSpan>()) {
         span.0.record("user_id", tracing::field::display(user));
     }
@@ -1002,6 +1023,11 @@ where
     let mut response = next(Request::from_parts(parts, body)).await;
     if let Some(user) = user {
         response.extensions_mut().insert(LoggedUser(user));
+    }
+    if let Some(impersonator) = impersonator {
+        response
+            .extensions_mut()
+            .insert(LoggedImpersonator(impersonator));
     }
     response
 }
