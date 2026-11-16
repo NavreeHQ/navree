@@ -54,6 +54,45 @@ object NavigationRules {
     const val BAR_MOST = 5
     const val RAIL_MOST = 7
 
+    /** The width of an average glyph of a navigation label (12 sp at the default text size), in dp. */
+    private const val LABEL_GLYPH_DP = 6.5f
+
+    /** The width of an item of the rail, collapsed, in dp: its label stands under its icon. */
+    const val RAIL_ITEM_DP = 80
+
+    /** What an item of the bar keeps free at its sides, in dp. */
+    private const val ITEM_SIDES_DP = 8f
+
+    /** A word's width at the default text size, in dp, as a count of glyphs: for where nothing measures it. */
+    fun estimate(word: String): Float = word.length * LABEL_GLYPH_DP
+
+    /**
+     * The text size a bar's labels grow to. They follow the person's setting as
+     * far as the longest word of any label still fits in its item's share of the
+     * width, so no word is broken in the middle; never below the default size.
+     * `wordDp` is a word's width at the default size (measured by the drawing,
+     * so a script with wide glyphs, or with no spaces, is told as it is).
+     */
+    fun labelScale(fontScale: Float, widthDp: Int, labels: List<String>, wordDp: (String) -> Float = ::estimate): Float {
+        val longest = labels.flatMap { label -> label.split(' ').filter { it.isNotEmpty() } }.maxOfOrNull(wordDp) ?: 0f
+        if (longest <= 0f) return fontScale
+        val room = widthDp / labels.size - ITEM_SIDES_DP
+        val fits = room / longest
+        return minOf(fontScale, maxOf(1f, fits))
+    }
+
+    /**
+     * How many lines the labels of a bar's equal items may take: two where a
+     * whole label does not fit on one line of its item at the default size (it
+     * wraps between its words, rather than ending in an ellipsis), else what
+     * the plan says.
+     */
+    fun labelLines(widthDp: Int, labels: List<String>, planned: Int, wordDp: (String) -> Float = ::estimate): Int {
+        val widest = labels.maxOfOrNull(wordDp) ?: return planned
+        val room = widthDp / labels.size.coerceAtLeast(1) - ITEM_SIDES_DP
+        return if (widest > room) maxOf(planned, 2) else planned
+    }
+
     /** `groups` is how many destinations each group of the shell holds. */
     fun plan(window: WindowInfo, groups: List<Int>): NavigationPlan {
         val total = groups.sum()
