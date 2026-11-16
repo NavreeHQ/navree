@@ -141,11 +141,25 @@ public final class CookieJar {
         }
     }
 
-    /// The `Cookie` header for a request to `url`, or `nil` when no cookie goes.
+    /// The `Cookie` header for a request to `url`, or `nil` when no cookie
+    /// goes. A cookie that cannot go on the wire as it is (``isSendable(_:)``)
+    /// is left out, so one such cookie does not stop every request of the
+    /// app, the sign-out among them: the others go, and the server answers
+    /// for the one it did not get.
     public func header(for url: URL, at now: Date = Date()) -> String? {
-        let matching = records.filter { $0.applies(to: url, at: now) }
+        let matching = records.filter { $0.applies(to: url, at: now) && Self.isSendable($0) }
             .sorted { $0.path.count > $1.path.count }
         return matching.isEmpty ? nil : matching.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+    }
+
+    /// Whether a cookie can go in a `Cookie` header as it is: a name, and a
+    /// value, of printable ASCII with no `;`. A letter of another script or a
+    /// control character, which an answer or a page's script may set, cannot.
+    nonisolated static func isSendable(_ cookie: CookieRecord) -> Bool {
+        func plain(_ text: String) -> Bool {
+            text.utf8.allSatisfy { (0x20...0x7E).contains($0) && $0 != 0x3B }
+        }
+        return !cookie.name.isEmpty && plain(cookie.name) && plain(cookie.value)
     }
 
     /// The value an `x-xsrf-token` header carries for `url`: the `XSRF-TOKEN`
