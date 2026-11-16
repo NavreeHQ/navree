@@ -218,6 +218,47 @@ class AxisRulesTest {
     }
 }
 
+class ChartLabelFitTest {
+    @Test
+    fun a_last_label_pushed_against_the_one_before_it_takes_its_place() {
+        // Six marks, a label 60 wide each; the last was kept inside the chart and now touches the one before it.
+        val spans = listOf(0f to 60f, 80f to 140f, 160f to 220f, 240f to 300f, 320f to 380f, 350f to 410f)
+        assertEquals(listOf(0, 1, 2, 3, 5), AxisRules.fit(spans, 6f))
+    }
+
+    @Test
+    fun labels_that_stand_clear_are_all_kept_and_one_that_meets_another_is_left_out() {
+        assertEquals(listOf(0, 1, 2), AxisRules.fit(listOf(0f to 40f, 50f to 90f, 100f to 140f), 6f))
+        assertEquals(listOf(0, 2), AxisRules.fit(listOf(0f to 40f, 42f to 80f, 100f to 140f), 6f))
+        assertEquals(emptyList<Int>(), AxisRules.fit(emptyList(), 6f))
+    }
+}
+
+class ChartLabelStepTest {
+    @Test
+    fun labels_that_would_touch_stand_every_second_or_third_mark() {
+        assertEquals(1, AxisRules.labelStep(40f, 60f, 6f))
+        assertEquals(2, AxisRules.labelStep(60f, 56f, 6f))
+        assertEquals(3, AxisRules.labelStep(100f, 40f, 6f))
+        assertEquals(1, AxisRules.labelStep(40f, 0f, 6f))
+    }
+}
+
+class ChartTouchTest {
+    @Test
+    fun a_touch_is_over_the_bar_it_falls_in_and_the_nearest_point_of_a_line() {
+        // A plot 100 wide from 20: seven bars, each 14.28 wide.
+        assertEquals(0, AxisRules.touchIndex(25f, 20f, 100f, 7, bars = true, rtl = false))
+        assertEquals(6, AxisRules.touchIndex(118f, 20f, 100f, 7, bars = true, rtl = false))
+        assertEquals(3, AxisRules.touchIndex(70f, 20f, 100f, 7, bars = true, rtl = false))
+        // Five points, 25 apart: x = 70 is between the second and third, nearer the third.
+        assertEquals(2, AxisRules.touchIndex(70f, 20f, 100f, 5, bars = false, rtl = false))
+        assertEquals(0, AxisRules.touchIndex(118f, 20f, 100f, 5, bars = false, rtl = true))
+        assertNull("outside the plot", AxisRules.touchIndex(5f, 20f, 100f, 7, bars = true, rtl = false))
+        assertNull("no marks", AxisRules.touchIndex(50f, 20f, 100f, 0, bars = true, rtl = false))
+    }
+}
+
 class PagerRulesTest {
     private fun corpus(name: String): Navree.Screen = Fixtures.screen(name)
 
@@ -228,6 +269,15 @@ class PagerRulesTest {
         assertSame((today.body as Navree.Stack).children.first(), pager)
         assertEquals("2026-11-13", pager.date)
         assertNull("a screen that does not start with one", PagerRules.inBar(corpus("screen-fitness.json")))
+    }
+
+    @Test
+    fun a_swipe_turns_the_day_the_way_the_page_moves_with_the_finger() {
+        assertEquals("/day/10", PagerRules.swipe(120f, rtl = false, previous = "/day/10", next = "/day/12"))
+        assertEquals("/day/12", PagerRules.swipe(-120f, rtl = false, previous = "/day/10", next = "/day/12"))
+        assertEquals("/day/12", PagerRules.swipe(120f, rtl = true, previous = "/day/10", next = "/day/12"))
+        assertNull("a short swipe", PagerRules.swipe(40f, rtl = false, previous = "/day/10", next = "/day/12"))
+        assertNull("no day after today", PagerRules.swipe(-120f, rtl = false, previous = "/day/10", next = null))
     }
 
     @Test
@@ -247,5 +297,14 @@ class CardRulesTest {
         assertEquals(2, ContentRules.cardColumns(1000))
         assertEquals(3, ContentRules.cardColumns(1400))
         assertEquals("larger text keeps fewer", 1, ContentRules.cardColumns(1000, 2f))
+    }
+}
+
+class CentreFitTest {
+    @Test
+    fun two_lines_in_a_hole_are_made_smaller_together_when_they_are_taller_than_the_hole_allows() {
+        assertEquals("they fit", 1f, ClockRules.centreFit(100f, 200f), 0.0001f)
+        assertEquals("105 % of 200 px is 210 px: 420 px of lines are halved", 0.5f, ClockRules.centreFit(420f, 200f), 0.0001f)
+        assertEquals("no lines", 1f, ClockRules.centreFit(0f, 200f), 0.0001f)
     }
 }

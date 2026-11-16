@@ -214,6 +214,17 @@ object ClockRules {
         return minOf(wantSp * scale, fits) / scale
     }
 
+    /**
+     * How much to shrink the two lines in the middle of a dial (a total and its
+     * unit under it) so their height, `linesPx`, stands inside the hole, which
+     * is `holePx` across: both lines together, with their line spacing, may be as tall as 105 %
+     * of it: the hole itself is wider than the bars' inner ends, and a line's
+     * own spacing holds the letters a little in from its edges.
+     * 1 when they already fit.
+     */
+    fun centreFit(linesPx: Float, holePx: Float): Float =
+        if (linesPx <= 0f) 1f else minOf(1f, holePx * 1.05f / linesPx)
+
     /** The width of one hour's bar at the dial's start, in dp: most of the gap between neighbours. */
     fun barDp(innerDp: Float): Float = (2f * Math.PI.toFloat() * innerDp / 24f) * 0.62f
 }
@@ -270,6 +281,36 @@ object BidiRules {
      * otherwise read "kcal 540/600" in a right to left line.
      */
     fun amount(text: String): String = "$ISOLATE_LTR$text$POP_ISOLATE"
+
+    private val PHONE = Regex("""^\+?\d[\d\s().-]{5,}\d$""")
+    private val EMAIL = Regex("""^[^\s@]+@[^\s@]+\.[^\s@]+$""")
+    private val HEX_COLOUR = Regex("""^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$""")
+    private val ISO_DATE = Regex("""^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$""")
+    private val DAY_FIRST_DATE = Regex("""^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$""")
+
+    /** Whether the text is a date: a year of four digits from 1000 on, a month 1 to 12 and a day 1 to 31, in either order; a phone number written like a date is not one. */
+    fun isDate(text: String): Boolean {
+        ISO_DATE.matchEntire(text)?.let { m ->
+            val (year, month, day) = m.destructured
+            return year.toInt() >= 1000 && month.toInt() in 1..12 && day.toInt() in 1..31
+        }
+        DAY_FIRST_DATE.matchEntire(text)?.let { m ->
+            val (day, month, _) = m.destructured
+            return day.toInt() in 1..31 && month.toInt() in 1..12
+        }
+        return false
+    }
+
+    /**
+     * A phone number, an e-mail address or a hex colour in a right to left line, read left to
+     * right as Android's right to left guidance has it (a number read right to
+     * left has its groups reversed); any other text as it is, and every text
+     * as it is in a left to right line, where an isolate says nothing and only
+     * lands in what a screen reader reads and what is copied. A date is not a
+     * phone number.
+     */
+    fun codes(text: String, rtl: Boolean): String =
+        if (rtl && !isDate(text) && (PHONE.matches(text) || EMAIL.matches(text) || HEX_COLOUR.matches(text))) amount(text) else text
 }
 
 /** Parts of a whole: a meter's segments, a column's parts, a strip's cells. */
@@ -341,6 +382,49 @@ object MatrixRules {
 
 /** The bounds of a chart's axes. */
 object AxisRules {
+    /**
+     * How many marks apart the labels under a chart stand so that none touches
+     * the next: 1 when the widest label fits its mark's share of the line with
+     * a gap, else every second, third and so on.
+     */
+    fun labelStep(widestPx: Float, slotPx: Float, gapPx: Float): Int {
+        if (slotPx <= 0f) return 1
+        return Math.ceil(((widestPx + gapPx) / slotPx).toDouble()).toInt().coerceAtLeast(1)
+    }
+
+    /**
+     * Which of a row of labels are drawn, from where each would stand (its
+     * left and right edge, in the order of the marks): a label is kept when it
+     * stands `gap` clear of the one kept before it. The last label stays, and
+     * the one before it gives way, where the clamp that keeps it inside the
+     * chart brought it up against that one.
+     */
+    fun fit(spans: List<Pair<Float, Float>>, gap: Float): List<Int> {
+        fun meets(a: Pair<Float, Float>, b: Pair<Float, Float>) = a.first < b.second + gap && b.first < a.second + gap
+        val kept = ArrayList<Int>()
+        for (at in spans.indices) {
+            if (kept.isEmpty() || !meets(spans[at], spans[kept.last()])) {
+                kept += at
+            } else if (at == spans.lastIndex) {
+                while (kept.isNotEmpty() && meets(spans[at], spans[kept.last()])) kept.removeAt(kept.lastIndex)
+                kept += at
+            }
+        }
+        return kept
+    }
+
+    /**
+     * The mark of a chart a touch at `x` is over, or null outside the plot:
+     * the bar whose width it falls in, or the nearest point of a line. Where
+     * the line runs right to left the first mark is at the right.
+     */
+    fun touchIndex(x: Float, plotLeft: Float, plotWidth: Float, count: Int, bars: Boolean, rtl: Boolean): Int? {
+        if (count <= 0 || plotWidth <= 0f) return null
+        val along = ((if (rtl) plotLeft + plotWidth - x else x - plotLeft) / plotWidth)
+        if (along < -0.02f || along > 1.02f) return null
+        val clamped = along.coerceIn(0f, 1f)
+        return if (bars) (clamped * count).toInt().coerceAtMost(count - 1) else if (count == 1) 0 else Math.round(clamped * (count - 1))
+    }
     data class Bounds(val low: Double, val high: Double) {
         val span: Double get() = (high - low).takeIf { it > 0 } ?: 1.0
 
@@ -452,4 +536,20 @@ object PagerRules {
 
     /** The day as the core wants it in `text`. */
     fun text(day: LocalDate): String = day.toString()
+
+    /** The least a swipe along the line goes to turn the day, in dp. */
+    const val SWIPE_DP = 72f
+
+    /**
+     * The day a horizontal swipe goes to, as the address the pager gives for it.
+     * The page moves with the finger: a swipe toward the end of the line
+     * shows the day before, and a swipe toward the start the day after; where
+     * the line runs right to left, the other way round. A short swipe, or one
+     * toward a day there is none of, turns nothing.
+     */
+    fun swipe(dragDp: Float, rtl: Boolean, previous: String?, next: String?): String? {
+        if (kotlin.math.abs(dragDp) < SWIPE_DP) return null
+        val towardEnd = if (rtl) dragDp < 0f else dragDp > 0f
+        return if (towardEnd) previous else next
+    }
 }
