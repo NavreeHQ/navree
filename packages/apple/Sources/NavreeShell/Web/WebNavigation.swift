@@ -26,14 +26,15 @@ public enum WebNavigationRules {
     ///
     /// - `linkActivated`: the system's type for it is a link the person activated.
     /// - `mainFrame`: it would replace the page itself, not a frame inside it.
-    /// - `ours`: its address is the app's own, whole.
+    /// - `ours`: its address is the app's own, whole; for a frame, also one
+    ///   of a host the app names for the web view (``WebRules``).
     /// - `loaded`: its address is the one the app itself asked the web view to load.
     /// - `empty`: its address is `about:`, an empty frame.
     public static func decide(
         linkActivated: Bool, mainFrame: Bool, ours: Bool, loaded: Bool = false, empty: Bool = false
     ) -> WebNavigation {
         guard mainFrame else {
-            // A frame stays the origin's own, or empty; it never takes the person anywhere.
+            // A frame stays where the app lets a frame be, or empty; it never takes the person anywhere.
             return ours || empty ? .allow : .cancel
         }
         // The page the app asked for, and its own reload.

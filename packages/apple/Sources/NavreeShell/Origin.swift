@@ -66,6 +66,12 @@ public struct Origin: Sendable, Equatable {
         scheme + "://" + host + (port.map { ":\($0)" } ?? "")
     }
 
+    /// The origin as a browser writes it: the scheme's own port left out.
+    public var serialized: String {
+        let shown = port.flatMap { $0 == Self.defaultPort(scheme) ? nil : $0 }
+        return scheme + "://" + host + (shown.map { ":\($0)" } ?? "")
+    }
+
     /// Hosts on this machine, where plain `http` may be allowed in development.
     static let loopback: Set<String> = ["localhost", "127.0.0.1", "[::1]"]
 
