@@ -89,7 +89,7 @@
     & > [data-slot=sidebar]{top:.5rem;height:calc(100dvh - 1rem);margin:.5rem;margin-inline-end:0;border:1px solid var(--line-2);border-radius:var(--radius-lg)}
     & [data-slot=topbar]{border-bottom-color:transparent}
   }
-  [data-collapse=never] [data-ui-sidebar-trigger]{display:none}
+  [data-collapse=never] :is([data-ui-sidebar-trigger],[data-ui-sidebar-trigger] + [data-slot=separator]){display:none}
   [data-collapse=offcanvas][data-collapsed] > [data-slot=sidebar]{width:0;border-width:0;margin:0;visibility:hidden}
 }
 

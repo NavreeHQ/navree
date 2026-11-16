@@ -234,6 +234,34 @@ async fn today(shell: AppShell, day: Day) -> AppPage {
 }
 ```
 
+## The top bar and the page header
+
+The top bar starts with the sidebar's button and a separator, then the breadcrumb, and ends with the shell's search and theme menu. The page header holds the title and the page's actions.
+
+- **Actions in the top bar:** `AppPage::topbar_actions(nodes)` puts a detail page's buttons at the end of the top bar, before the search and the theme menu. On a phone too narrow for them they scroll sideways inside the bar, and the page never does.
+- **The last crumb:** the breadcrumb ends with the page's title. `AppPage::current_crumb(label)` names it otherwise ("LDH-1" over a page titled "LDH-1, Ludhiana"), and `AppPage::current_crumb_mono()` draws it in the mono face, for a name that is a code. The heading and the browser's tab keep the title. The breadcrumb's size and its last part's weight are the `breadcrumb` style of the theme's [type scale](/docs/ui/themes/#type).
+- **Beside and under the title:** `AppPage::title_aside(nodes)` puts badges after the title, on its line and wrapping under it when there is no room; `AppPage::subtitle(text)` puts a line of the shell's muted text 6 px under it.
+- **The title's face:** `AppPage::title_face(Face::Mono)` draws the title in another face than the theme's page title takes: an invoice's number, a code.
+- **No fold button:** with `Collapse::Never` the button is gone on wide screens, and the separator after it goes with it.
+
+```rust
+async fn invoice(shell: AppShell, invoice: Invoice) -> AppPage {
+    shell
+        .page(invoice.number.clone())
+        .title_face(Face::Mono)
+        .crumb("Invoices", "/invoices")
+        .current_crumb_mono()
+        .title_aside((
+            Badge::new("Paid").variant(BadgeVariant::Success),
+            Badge::new("Annual"),
+        ))
+        .subtitle("Wholesale · Ludhiana")
+        .topbar_actions((Button::ghost("Download invoice"), Button::outline("Pause")))
+}
+```
+
+What these draw is in the shell parts stylesheet, and the mono crumb in the parts stylesheet; a page links them only when it draws one.
+
 ## The title in the tab
 
 The page's heading is also its title in the browser's tab, unless you say otherwise. `Shell::title_template("{} · Kesar")` writes every title through a template, `{}` standing for the page's own, and `AppPage::document_title("Today")` titles a page whose heading is a greeting ("Good evening, Simran") by what it is. Both keep the heading as it is.

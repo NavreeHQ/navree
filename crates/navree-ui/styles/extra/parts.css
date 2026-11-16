@@ -74,6 +74,9 @@ h6[data-slot=heading]{font-size:.75rem;letter-spacing:.04em;text-transform:upper
   & [data-ui-clear][hidden]{display:none}
 }
 
+/* Breadcrumb: the current page's name in the mono face */
+[data-slot=breadcrumb] [data-mono]{font-family:var(--font-mono)}
+
 /* Breadcrumb: the trail folded into an ellipsis that opens the pages left out */
 [data-slot=breadcrumb-ellipsis]{position:relative;
   & > details{position:relative}

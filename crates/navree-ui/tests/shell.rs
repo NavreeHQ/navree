@@ -720,3 +720,216 @@ fn the_person_can_have_initials_and_no_chevron_and_the_row_still_opens_its_menu(
     let bar = &header[header.find(r#"data-slot="topbar-user""#).unwrap()..];
     assert!(user_row(bar).contains("data-initials"), "{header}");
 }
+
+// The top bar and the page header
+
+/// The page header of `html`.
+fn page_header(html: &str) -> &str {
+    let at = html.find(r#"<div data-slot="page-header">"#).unwrap();
+    &html[at..at + html[at..].find("</main>").unwrap()]
+}
+
+/// The source of the stylesheet `name` in `styles/`.
+fn source(name: &str) -> String {
+    std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("styles")
+            .join(name),
+    )
+    .unwrap()
+    .replace("\r\n", "\n")
+}
+
+#[test]
+fn the_top_bar_takes_a_pages_actions_before_its_search() {
+    let page = || {
+        crm()
+            .page("Deal 12", "/deals/12")
+            .topbar_actions((Button::outline("Export CSV"), Button::primary("Close deal")))
+    };
+    let view = page().to_view();
+    assert!(view.uses().has(navree_ui::Uses::SHELL_PARTS));
+    let html = view.to_html();
+    let bar = &html[html.find(r#"<header data-slot="topbar""#).unwrap()..];
+    let bar = &bar[..bar.find("</header>").unwrap()];
+    let actions = bar
+        .find(
+            r#"<div data-slot="topbar-actions"><button data-slot="button" data-variant="outline""#,
+        )
+        .unwrap_or_else(|| panic!("{bar}"));
+    assert!(bar[actions..].contains("Close deal"), "{bar}");
+    assert!(actions < bar.find(r#"type="search""#).unwrap(), "{bar}");
+    // With a page's own middle, they stand at the start of the bar's end.
+    let centred = page()
+        .topbar(el("nav").attr("aria-label", "Day").child("Tue 11 Nov"))
+        .to_view()
+        .to_html();
+    assert!(
+        centred.contains(r#"<div data-slot="topbar-end"><div data-slot="topbar-actions">"#),
+        "{centred}"
+    );
+    // None, no box for them.
+    assert!(!drawn(&crm()).contains("topbar-actions"));
+    let css = shell_parts();
+    assert!(css.contains("[data-slot=topbar-actions]{display:flex;align-items:center;gap:.5rem;min-width:0;margin:-.25rem;padding:.25rem;overflow-x:auto;scrollbar-width:none}"));
+}
+
+#[test]
+fn the_last_crumb_can_differ_from_the_title_and_be_drawn_in_mono() {
+    let html = crm()
+        .page("LDH-1, Ludhiana", "/depots/1")
+        .crumb("Depots", "/depots")
+        .current_crumb("LDH-1")
+        .to_view()
+        .to_html();
+    assert!(
+        html.contains(r#"<li><span aria-current="page">LDH-1</span></li>"#),
+        "{html}"
+    );
+    assert!(html.contains(r#"<h1 data-slot="page-title">LDH-1, Ludhiana</h1>"#));
+    assert!(html.contains("<title>LDH-1, Ludhiana</title>"));
+    let mono = crm()
+        .page("INV-2041", "/invoices/2041")
+        .crumb("Invoices", "/invoices")
+        .current_crumb_mono()
+        .to_view();
+    assert!(mono.uses().has(navree_ui::Uses::PARTS_STYLES));
+    let html = mono.to_html();
+    assert!(
+        html.contains(r#"<span aria-current="page" data-mono>INV-2041</span>"#),
+        "{html}"
+    );
+    let parts = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("styles/extra/parts.css"),
+    )
+    .unwrap();
+    assert!(parts.contains("[data-slot=breadcrumb] [data-mono]{font-family:var(--font-mono)}"));
+    // The component on its own.
+    let trail: navree_ui::Node = navree_ui::Breadcrumb::new()
+        .link("Invoices", "/invoices")
+        .current_mono("INV-2041")
+        .into();
+    assert_eq!(
+        navree_ui::measure(&trail).uses,
+        navree_ui::Uses::PARTS_STYLES
+    );
+}
+
+#[test]
+fn badges_stand_beside_the_title_and_a_subtitle_under_it() {
+    let view = crm()
+        .page("INV-2041", "/invoices/2041")
+        .title_aside((
+            Badge::new("Paid").variant(BadgeVariant::Success),
+            Badge::new("Annual"),
+        ))
+        .subtitle("Wholesale · Gulati Exports · Ludhiana")
+        .actions(Button::outline("Download invoice"))
+        .to_view();
+    assert!(view.uses().has(navree_ui::Uses::SHELL_PARTS));
+    let html = view.to_html();
+    assert_eq!(
+        page_header(&html)
+            .split(r#"<div data-slot="page-actions">"#)
+            .next()
+            .unwrap(),
+        concat!(
+            r#"<div data-slot="page-header"><div data-slot="page-heading"><h1 data-slot="page-title">INV-2041</h1>"#,
+            r#"<span data-slot="badge" data-variant="success">Paid</span><span data-slot="badge">Annual</span>"#,
+            r#"<p data-slot="page-subtitle">Wholesale · Gulati Exports · Ludhiana</p></div>"#
+        )
+    );
+    // A subtitle alone, and badges alone.
+    let subtitle = crm()
+        .page("Invoices", "/invoices")
+        .subtitle("This month")
+        .to_view()
+        .to_html();
+    assert!(subtitle.contains(r#"<div data-slot="page-heading"><h1 data-slot="page-title">Invoices</h1><p data-slot="page-subtitle">This month</p></div>"#), "{subtitle}");
+    let badges = crm()
+        .page("Invoices", "/invoices")
+        .title_aside(Badge::new("Paid"))
+        .to_view()
+        .to_html();
+    assert!(!badges.contains("page-subtitle"), "{badges}");
+    // Neither: the title stands in the header as before.
+    let plain = crm().page("Invoices", "/invoices").to_view().to_html();
+    assert!(
+        plain.contains(r#"<div data-slot="page-header"><h1 data-slot="page-title">Invoices</h1>"#)
+    );
+    let css = shell_parts();
+    assert!(css.contains("[data-slot=page-heading]{display:flex;flex-wrap:wrap;align-items:center;gap:.375rem .5rem;min-width:0}"));
+    assert!(css.contains(
+        "[data-slot=page-subtitle]{flex-basis:100%;color:var(--shell-muted,var(--fg-3))}"
+    ));
+}
+
+#[test]
+fn the_title_can_take_another_face() {
+    for (face, id, family) in [
+        (navree_ui::theme::Face::Mono, "mono", "var(--font-mono)"),
+        (navree_ui::theme::Face::Text, "text", "var(--font-sans)"),
+        (
+            navree_ui::theme::Face::Display,
+            "display",
+            "var(--font-display,var(--font-sans))",
+        ),
+    ] {
+        let view = crm()
+            .page("INV-2041", "/invoices/2041")
+            .title_face(face)
+            .to_view();
+        assert!(view.uses().has(navree_ui::Uses::SHELL_PARTS));
+        let html = view.to_html();
+        assert!(
+            html.contains(&format!(
+                r#"<h1 data-slot="page-title" data-face="{id}">INV-2041</h1>"#
+            )),
+            "{html}"
+        );
+        assert!(shell_parts().contains(&format!(
+            "[data-slot=page-title][data-face={id}]{{font-family:{family}}}"
+        )));
+    }
+}
+
+#[test]
+fn with_collapse_never_the_separator_goes_with_the_fold_button() {
+    let css = source("40-shell.css");
+    let wide = &css[css.find("  [data-collapse=never]").unwrap()..];
+    assert!(wide.starts_with(
+        "  [data-collapse=never] :is([data-ui-sidebar-trigger],[data-ui-sidebar-trigger] + [data-slot=separator]){display:none}"
+    ));
+    // On wide screens only: on a phone the button opens the sheet, and its separator stays.
+    let media = css[..css.find("  [data-collapse=never]").unwrap()]
+        .rfind("@media")
+        .unwrap();
+    assert!(css[media..].starts_with("@media (min-width:768px){"));
+    // The markup is as it was: the button, then the separator.
+    let html = drawn(&store().collapse(Collapse::Never));
+    assert!(
+        html.contains(r#"data-ui-sidebar-trigger="" aria-expanded="true""#),
+        "{html}"
+    );
+    let trigger = html.find("data-ui-sidebar-trigger").unwrap();
+    let rest = &html[trigger..];
+    let after = &rest[rest.find("</button>").unwrap() + "</button>".len()..];
+    assert!(
+        after.starts_with(
+            r#"<div data-slot="separator" role="separator" aria-orientation="vertical"></div>"#
+        ),
+        "{after}"
+    );
+}
+
+#[test]
+fn the_breadcrumbs_weight_is_the_current_parts() {
+    let css = source("20-display.css");
+    let at = css.find("[data-slot=breadcrumb]{").unwrap();
+    let rule = &css[at..at + css[at..].find('\n').unwrap()];
+    let own = &rule[..rule.find("& ol").unwrap()];
+    assert!(!own.contains("font-weight"), "{own}");
+    assert!(rule.contains(
+        "& [aria-current=page]{overflow:hidden;color:var(--fg);font-weight:var(--text-breadcrumb-weight);text-overflow:ellipsis}"
+    ));
+}

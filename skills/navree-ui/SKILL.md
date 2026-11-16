@@ -131,7 +131,11 @@ pub struct HomeModule;
 
 `shell.page(title)` builds the page; `.crumb(label, href)` adds a
 breadcrumb, `.actions(..)` the buttons beside the title (one primary action
-per page) and `.body(..)` the content. A page outside the shell (a sign-in
+per page) and `.body(..)` the content. `.topbar_actions(..)` puts buttons at
+the end of the top bar, `.title_aside(..)` badges after the title,
+`.subtitle(text)` a muted line under it, `.title_face(Face::Mono)` a title in
+mono, and `.current_crumb(label)` (with `.current_crumb_mono()`) a last crumb
+other than the title. A page outside the shell (a sign-in
 page, a receipt) is `View::new(title).body(..)`. Add `HomeModule` to the app
 root with `.module(HomeModule)`. Components carry no outer margin: space
 between them comes from `Stack`, `Row` and `Grid`.

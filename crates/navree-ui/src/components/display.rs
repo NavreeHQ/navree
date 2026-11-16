@@ -643,6 +643,8 @@ pub struct Breadcrumb {
     el: Element,
     label: &'static str,
     items: Vec<(Node, Option<Href>)>,
+    /// Whether the current page's name is drawn in the mono face.
+    mono: bool,
     prefetch: bool,
     max: usize,
     hidden_label: &'static str,
@@ -655,6 +657,7 @@ impl Breadcrumb {
             el: el("nav").slot("breadcrumb"),
             label: "Breadcrumb",
             items: Vec::new(),
+            mono: false,
             prefetch: false,
             max: usize::MAX,
             hidden_label: "Show hidden pages",
@@ -694,6 +697,22 @@ impl Breadcrumb {
         self
     }
 
+    /// Adds the current page, its name in the mono face: a name that is a code
+    /// ("INV-2041"). Its style comes with the parts stylesheet.
+    ///
+    /// ```
+    /// use navree_ui::{Breadcrumb, render};
+    ///
+    /// let html = render(&Breadcrumb::new().link("Invoices", "/invoices").current_mono("INV-2041").into());
+    /// assert!(html.contains(r#"<span aria-current="page" data-mono>INV-2041</span>"#));
+    /// ```
+    pub fn current_mono(mut self, label: impl Into<Node>) -> Self {
+        self.items.push((label.into(), None));
+        self.mono = true;
+        self.el = self.el.uses(Uses::PARTS_STYLES);
+        self
+    }
+
     /// Fetches the trail's links when the pointer rests on one or it takes focus, so
     /// the page is often there before the click. Off unless asked, as for every link.
     pub fn prefetch(mut self) -> Self {
@@ -703,13 +722,17 @@ impl Breadcrumb {
 
     fn into_node(self) -> Node {
         let prefetch = self.prefetch;
+        let mono = self.mono;
         let item = |(label, href): (Node, Option<Href>)| {
             el("li").child(match href {
                 Some(href) => el("a")
                     .href(href)
                     .flag("data-ui-prefetch", prefetch)
                     .child(label),
-                None => el("span").attr("aria-current", "page").child(label),
+                None => el("span")
+                    .attr("aria-current", "page")
+                    .flag("data-mono", mono)
+                    .child(label),
             })
         };
         let count = self.items.len();

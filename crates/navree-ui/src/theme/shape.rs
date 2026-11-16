@@ -161,8 +161,8 @@ impl Face {
     /// Every face.
     const ALL: [Self; 3] = [Self::Text, Self::Display, Self::Mono];
 
-    /// The id a stored theme names it by.
-    const fn id(self) -> &'static str {
+    /// The id a stored theme names it by, and the page title's `data-face`.
+    pub(crate) const fn id(self) -> &'static str {
         match self {
             Self::Text => "text",
             Self::Display => "display",
@@ -381,7 +381,8 @@ impl TypeScale {
         self.with(11, style)
     }
 
-    /// A breadcrumb trail. Without it: 13 px.
+    /// A breadcrumb trail: its size, line, tracking and face, and the current page's weight
+    /// (the links keep the text's). Without it: 13 px.
     pub const fn breadcrumb(self, style: TextStyle) -> Self {
         self.with(12, style)
     }

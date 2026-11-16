@@ -121,6 +121,24 @@ every `@navree/*` package carries the same version.
   as before. `Shell::footer_slot`, `AppShell::footer_slot`, `UserMenu::avatar` and
   `UserMenu::chevron` are new inherent methods: an app whose own extension trait gives one of
   these types a method of one of these names calls it through the trait.
+- A page in the app shell takes more of its frame: `AppPage::topbar_actions(nodes)` puts buttons
+  at the end of the top bar, before its search and theme menu (on a phone too narrow for them
+  they scroll inside the bar); `AppPage::current_crumb(label)` names the breadcrumb's last part
+  otherwise than the title, and `AppPage::current_crumb_mono()` draws it in the mono face;
+  `AppPage::title_aside(nodes)` puts badges after the title, wrapping under it, and
+  `AppPage::subtitle(text)` a line of the shell's muted text 6 px under it;
+  `AppPage::title_face(face)` draws the title in another face than the theme's.
+  `Breadcrumb::current_mono(label)` adds a current page whose name is in the mono face. A theme's
+  `breadcrumb` text style now gives its weight to the current page, and the links keep the
+  text's. A page with none of these is drawn as before. These are new inherent methods: an app
+  whose own extension trait gives `AppPage` or `Breadcrumb` a method of one of these names calls
+  it through the trait.
+
+### Fixed
+
+- With `Shell::collapse(Collapse::Never)`, the top bar of a wide screen had no fold button but
+  kept the separator that stands after it. The separator now goes with the button; on a phone,
+  where the button opens the sidebar, both stay.
 
 ## [1.7.0] - 2026-11-27
 

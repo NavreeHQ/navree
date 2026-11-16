@@ -24,7 +24,7 @@ use crate::html::Href;
 use crate::icons::{self, Icon};
 use crate::node::{Element, IntoNodes, Node, Uses, el};
 use crate::op::ToastTone;
-use crate::theme::{Appearance, Density, Mode, Theme, ThemeMenu, ThemeSetting};
+use crate::theme::{Appearance, Density, Face, Mode, Theme, ThemeMenu, ThemeSetting};
 use crate::view::View;
 
 mod contribute;
@@ -1299,6 +1299,18 @@ pub struct AppPage {
     document_title: Option<Cow<'static, str>>,
     /// Starts from a clean document: see [`fresh`](Self::fresh).
     fresh: bool,
+    /// What stands at the end of the top bar for this page, before its search.
+    topbar_actions: Vec<Node>,
+    /// The breadcrumb's last part, in place of the title.
+    current_crumb: Option<Cow<'static, str>>,
+    /// Whether the breadcrumb's last part is drawn in the mono face.
+    current_crumb_mono: bool,
+    /// What stands after the title: badges.
+    title_aside: Vec<Node>,
+    /// The line under the title.
+    subtitle: Option<Cow<'static, str>>,
+    /// The face the title is drawn in, in place of the theme's.
+    title_face: Option<Face>,
 }
 
 impl AppPage {
@@ -1336,6 +1348,12 @@ impl AppPage {
             topbar: None,
             document_title: None,
             fresh: false,
+            topbar_actions: Vec::new(),
+            current_crumb: None,
+            current_crumb_mono: false,
+            title_aside: Vec::new(),
+            subtitle: None,
+            title_face: None,
             shell,
         }
     }
@@ -1357,6 +1375,72 @@ impl AppPage {
     /// ```
     pub fn topbar(mut self, node: impl Into<Node>) -> Self {
         self.topbar = Some(node.into());
+        self
+    }
+
+    /// Puts `actions` at the end of the top bar, before its search and theme menu: a detail
+    /// page's buttons ("Export CSV", "Close account"). On a phone too narrow for them they scroll
+    /// sideways inside the bar, and the page never does.
+    ///
+    /// ```
+    /// use navree_ui::{Button, Shell};
+    ///
+    /// let html = Shell::new("Kesar")
+    ///     .page("Order 2041", "/orders/2041")
+    ///     .topbar_actions((Button::outline("Refund"), Button::primary("Ship")))
+    ///     .to_view()
+    ///     .to_html();
+    /// assert!(html.contains(r#"<div data-slot="topbar-actions"><button data-slot="button" data-variant="outline""#));
+    /// ```
+    pub fn topbar_actions(mut self, actions: impl IntoNodes) -> Self {
+        actions.push_into(&mut self.topbar_actions);
+        self
+    }
+
+    /// Names the breadcrumb's last part, in place of the page's title: "LDH-1" over a page
+    /// titled "LDH-1, Ludhiana". The heading and the browser's tab keep the title.
+    pub fn current_crumb(mut self, label: impl Into<Cow<'static, str>>) -> Self {
+        self.current_crumb = Some(label.into());
+        self
+    }
+
+    /// Draws the breadcrumb's last part in the mono face: a name that is a code
+    /// ("INV-2041"). See [`Breadcrumb::current_mono`].
+    pub fn current_crumb_mono(mut self) -> Self {
+        self.current_crumb_mono = true;
+        self
+    }
+
+    /// Puts `nodes` after the page's title, on its line and wrapping under it when there is no
+    /// room: badges for the state of what the page shows ("Paid", "Annual").
+    ///
+    /// ```
+    /// use navree_ui::{Badge, BadgeVariant, Shell};
+    ///
+    /// let html = Shell::new("Kesar")
+    ///     .page("INV-2041", "/invoices/2041")
+    ///     .title_aside((Badge::new("Paid").variant(BadgeVariant::Success), Badge::new("Annual")))
+    ///     .subtitle("Wholesale · Ludhiana")
+    ///     .to_view()
+    ///     .to_html();
+    /// assert!(html.contains(r#"INV-2041</h1><span data-slot="badge" data-variant="success">Paid</span>"#));
+    /// assert!(html.contains(r#"<p data-slot="page-subtitle">Wholesale · Ludhiana</p>"#));
+    /// ```
+    pub fn title_aside(mut self, nodes: impl IntoNodes) -> Self {
+        nodes.push_into(&mut self.title_aside);
+        self
+    }
+
+    /// Puts a line of quieter text under the title: what the page is about, in a few words.
+    pub fn subtitle(mut self, text: impl Into<Cow<'static, str>>) -> Self {
+        self.subtitle = Some(text.into());
+        self
+    }
+
+    /// Draws the title in `face`, in place of the face the theme's page title takes: a mono
+    /// title for a name that is a code.
+    pub fn title_face(mut self, face: Face) -> Self {
+        self.title_face = Some(face);
         self
     }
 
@@ -1508,7 +1592,15 @@ impl AppPage {
         for (label, href) in std::mem::take(&mut self.crumbs) {
             crumbs = crumbs.link(label, href);
         }
-        crumbs = crumbs.current(self.title.clone());
+        let current = self
+            .current_crumb
+            .take()
+            .unwrap_or_else(|| self.title.clone());
+        crumbs = if self.current_crumb_mono {
+            crumbs.current_mono(current)
+        } else {
+            crumbs.current(current)
+        };
         if self.prefetch_crumbs {
             crumbs = crumbs.prefetch();
         }
@@ -1548,7 +1640,14 @@ impl AppPage {
             header.then(|| shell.topnav(&self.path)),
             (!header).then(|| crumbs.clone()),
         ));
+        let actions = std::mem::take(&mut self.topbar_actions);
         let end = Node::list((
+            (!actions.is_empty()).then(|| {
+                el("div")
+                    .slot("topbar-actions")
+                    .uses(Uses::SHELL_PARTS)
+                    .child(actions)
+            }),
             shell.search.clone(),
             menu,
             user.filter(|_| header).map(|user| {
@@ -1581,8 +1680,34 @@ impl AppPage {
         if let Some(token) = &self.csrf {
             toaster = toaster.csrf(token.clone());
         }
+        let title = el("h1")
+            .slot("page-title")
+            .attr_opt("data-face", self.title_face.map(Face::id))
+            .uses(if self.title_face.is_some() {
+                Uses::SHELL_PARTS
+            } else {
+                Uses::NONE
+            })
+            .child(self.title.clone());
+        let aside = std::mem::take(&mut self.title_aside);
+        // A title with badges beside it or a line under it stands in a heading of its own.
+        let title: Node = if aside.is_empty() && self.subtitle.is_none() {
+            title.into()
+        } else {
+            el("div")
+                .slot("page-heading")
+                .uses(Uses::SHELL_PARTS)
+                .children((
+                    title,
+                    aside,
+                    self.subtitle
+                        .take()
+                        .map(|text| el("p").slot("page-subtitle").child(text)),
+                ))
+                .into()
+        };
         let heading = el("div").slot("page-header").children((
-            el("h1").slot("page-title").child(self.title.clone()),
+            title,
             (!self.actions.is_empty()).then(|| {
                 el("div")
                     .slot("page-actions")

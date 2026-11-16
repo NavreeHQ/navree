@@ -28,8 +28,10 @@ is dropped.
 | User at the foot of the sidebar | `UserMenu::new(name, email).link(..).action(..)`; `AppShell::user_menu(menu)` for one request | `action` posts; `.avatar(Avatar::initials(name).shape(AvatarShape::Circle))` in place of the person icon, `.chevron(false)` for a row with no chevron; the name takes the theme's `sidebar_user` text and the second line `shell_muted` |
 | A tile at the foot of the sidebar, above the user (seats, a plan) | `Shell::footer_slot(node)`; `AppShell::footer_slot(node)` for one request | 12 px above the user, hidden when the sidebar folds; the tile is the app's composition (`Card`, `Stat`, `Button`) |
 | A workspace switcher under the app's name | `Shell::header_slot(node)`; `AppShell::header_slot(node)` for one request | `navree_workspace::WorkspaceSwitcher` is the node; a two-line card with the organisation's tile is `.variant(SwitcherVariant::Card).media(Avatar::initials(name).solid()).description("City · Role")`, in the theme's `card` colour and `field` corner, lined up with the sidebar's rows |
-| Breadcrumbs | `AppPage::crumb(label, href)`; on a plain page `Breadcrumb::new().link(..).current(..)` | |
-| Page title and page buttons | `shell.page(title)`, `.actions(..)` | one primary action per page |
+| Breadcrumbs | `AppPage::crumb(label, href)`; on a plain page `Breadcrumb::new().link(..).current(..)` | a last part that differs from the title is `AppPage::current_crumb(label)`, a code in mono `.current_crumb_mono()` (`Breadcrumb::current_mono`); the theme's `breadcrumb` text sets the size and the last part's weight |
+| Page title and page buttons | `shell.page(title)`, `.actions(..)` | one primary action per page; buttons at the end of the top bar are `.topbar_actions(..)` |
+| Badges beside the title, a line under it, a title in mono | `.title_aside((Badge::new(..), ..))`, `.subtitle(text)`, `.title_face(Face::Mono)` | the subtitle is the shell's muted text, 6 px under the title |
+| No fold button and no separator in the top bar | `Shell::collapse(Collapse::Never)` | the separator goes with the button on wide screens |
 | A page outside the shell (sign-in, receipt) | `View::new(title).body(..)` | |
 | A module's own frame (a tool page) | `Shell::for_request(path, &headers)` | |
 | Sidebar layouts, folding | `Shell::layout(ShellLayout::Sidebar \| Inset \| Floating \| Header)`, `Shell::collapse(Collapse::Icons \| Offcanvas \| Never)` | the choice is a cookie read on the server |

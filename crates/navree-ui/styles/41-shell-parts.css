@@ -2,7 +2,8 @@
  * navree-ui's stylesheet: what the application shell draws only when an app asks for it, a sheet
  * of its own that a page links when it draws one of these (`Uses::SHELL_PARTS`): a workspace
  * switcher drawn as a card, a bare or dark mark and a badge in the brand row, a slot at the
- * sidebar's foot. The shell itself is drawn by the sheet every page loads.
+ * sidebar's foot, actions in the top bar, a page heading with badges or a subtitle and a title
+ * in another face. The shell itself is drawn by the sheet every page loads.
  */
 
 /* The brand row: a bare mark, a light and a dark mark in one picture, a badge at the end. */
@@ -28,3 +29,13 @@
 [data-slot=switcher-description]{color:var(--shell-muted,var(--fg-3));font-size:12px}
 /* A workspace's picture in the menu, with the current one's tick at the end of its row. */
 [data-slot=menu-link] > [data-slot=switcher-media] ~ [data-slot=icon]{margin-inline-start:auto}
+
+/* The top bar's actions: on a phone too narrow for them they scroll inside the bar, with room for
+ * their focus rings. */
+[data-slot=topbar-actions]{display:flex;align-items:center;gap:.5rem;min-width:0;margin:-.25rem;padding:.25rem;overflow-x:auto;scrollbar-width:none}
+/* A title with badges beside it, wrapping under it, and a line 6 px under it. */
+[data-slot=page-heading]{display:flex;flex-wrap:wrap;align-items:center;gap:.375rem .5rem;min-width:0}
+[data-slot=page-subtitle]{flex-basis:100%;color:var(--shell-muted,var(--fg-3))}
+[data-slot=page-title][data-face=text]{font-family:var(--font-sans)}
+[data-slot=page-title][data-face=display]{font-family:var(--font-display,var(--font-sans))}
+[data-slot=page-title][data-face=mono]{font-family:var(--font-mono)}

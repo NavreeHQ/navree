@@ -39,6 +39,18 @@ Breadcrumb::new()
     .current("Sutlej Supply")
 ```
 
+## The current page in mono
+
+`.current_mono(label)` adds the current page with its name in the mono face: a name that is a code, such as an invoice's (`INV-2041`). Its style comes with the parts stylesheet. In the [app shell](/docs/ui/app-shell/#the-top-bar-and-the-page-header), `AppPage::current_crumb_mono()` does this for the page's own trail.
+
+```rust
+Breadcrumb::new()
+    .link("Invoices", "/invoices")
+    .current_mono("INV-2041")
+```
+
+A theme's `breadcrumb` text style ([themes](/docs/ui/themes/#type)) sets the trail's size, line, tracking and face, and the current page's weight: the links keep the text's.
+
 ## Keyboard and accessibility
 
 <UiA11y>
