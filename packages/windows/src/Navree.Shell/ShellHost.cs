@@ -387,7 +387,7 @@ public sealed partial class ShellHost : IDisposable
             : Events.Response(fetch.Request, result.Status, result.ContentType, result.Location, result.Headers, result.Body);
         client.Send(answer);
 
-        // What the cookie store holds is kept for the next launch, protected for this person on this device.
+        // What the cookie store holds is kept for the next launch, protected for the Windows user (see KeptStore for what that does and does not keep out).
         session.KeepCookies();
     }
 

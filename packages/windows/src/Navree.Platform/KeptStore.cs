@@ -5,9 +5,10 @@ namespace Navree.Platform;
 
 /// <summary>
 /// What the core asks the client to keep between launches (the shell, the pages it may keep, the snapshot), under
-/// the keys it names. Each value is protected for this person on this device (<see cref="Dpapi"/>), written in the
-/// app's own folder under the person's local application data (not the roaming one, which is copied to other
-/// devices), and kept out of content indexing. A file that cannot be opened here is not an error: it is nothing.
+/// the keys it names. Each value is protected with Windows' data protection for the Windows user the app runs as
+/// (<see cref="Dpapi"/>): other people who sign in to the computer cannot read it, and any program that runs as the same
+/// Windows user can. It is written in the app's own folder under the local application data (not the roaming one, which
+/// is copied to other computers), and kept out of content indexing. A file that cannot be opened here is not an error: it is nothing.
 /// </summary>
 public sealed class KeptStore
 {
@@ -18,7 +19,7 @@ public sealed class KeptStore
 
     /// <summary>Opens the store in a folder.</summary>
     /// <param name="folder">The app's own folder for what it keeps.</param>
-    /// <param name="appName">The app's name, which must be given again to open what was kept.</param>
+    /// <param name="appName">The app's name, which must be given again to open what was kept (so one app's store is not read as another's by mistake).</param>
     public KeptStore(string folder, string appName)
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);

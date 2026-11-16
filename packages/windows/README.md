@@ -8,7 +8,7 @@ The Windows client of Navree Native, written in C# on .NET 10 and WinUI 3. The r
 | `src/Navree.Protocol` | the protocol's models |
 | `src/Navree.Runtime` | the view state, events and effects, and the client that drives the core |
 | `src/Navree.Design` | the rules as plain functions, with no UI types: what is the app's own address, the window's width classes, the words and icons, the tree walked |
-| `src/Navree.Platform` | what the client does with the system that needs no window, as plain .NET: the connections (no redirect followed, only the app's origins), the cookies, what is kept on the device (protected for this person), the wipe |
+| `src/Navree.Platform` | what the client does with the system that needs no window, as plain .NET: the connections (no redirect followed, only the app's origins), the cookies, what is kept on the device (protected for the Windows user the app runs as: see "What is kept on the device"), the wipe |
 | `src/Navree.Presence` | the app's place in Windows as plain rules and the few calls of the system that need no window: what a build offers with and without package identity, the count on the taskbar, when a notification is due, the addresses of a jump list and of a sign-in's return, the notification-area icon |
 | `src/Navree.Controls` | our own controls over WinUI 3 |
 | `src/Navree.Shell` | the app: window, title bar, navigation, pages, the tree drawn with the system's own controls, every effect carried out, the web view held to the app's origins |
@@ -56,6 +56,10 @@ A file field is a row: the label, a Choose button, and each file chosen with its
 ## The app's place in Windows
 
 Each feature is offered only where the build can do it, and the client's capability list and the About page say which. With a package: the taskbar badge, the jump list, the startup task. Without: an overlay icon on the taskbar button, the person's own list of programs to run at sign-in. Either way: the icon in the notification area with a small window by it, app notifications (not to an app that runs as an administrator), the share sheet, several windows over the one core, one running app (a second start hands what it was asked to the first), and a sign-in in the system's browser that comes back on the app's own scheme. `--system-walk <folder>` walks these and writes what each answered; `--probe <file>` runs the app for a while so a second start and an address on its scheme can be tried on it; `scripts/take-system-pictures.ps1` does both with and without a package.
+
+## What is kept on the device
+
+What the app keeps between launches (the cookies, the pages the core may keep, the snapshot it starts again from, the widths of a table's columns, the notifications that wait) is in its own folder under the local application data, each value protected with Windows' data protection (`CryptProtectData`) for the Windows user the app runs as. That keeps it from other people who sign in to the same computer. It does not keep it from other programs: any program that runs as the same Windows user can read it, and a user with a roaming profile can open it on another computer.
 
 ## The data table's columns
 

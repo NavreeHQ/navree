@@ -6,17 +6,21 @@ using System.Runtime.InteropServices;
 namespace Navree.Platform;
 
 /// <summary>
-/// Windows' data protection for the person signed in to Windows: what is protected can be opened only by this
-/// person, on this device. Nothing about it roams or syncs; a copy of the file on another device or for another
-/// person is bytes that mean nothing. It exists on Windows only.
+/// Windows' data protection (<c>CryptProtectData</c>) for the Windows user the app runs as. Microsoft's page for it says that typically only
+/// a user with the same logon credentials can decrypt the data, usually only on the computer where it was protected, and that a user with a
+/// roaming profile can decrypt it from another computer on the network. It does not keep programs apart: any program that runs as the same
+/// Windows user can open what this one protected, given the entropy, which is a constant of the app and no secret. It exists on Windows only.
 /// </summary>
 public static unsafe partial class Dpapi
 {
     private const uint UiForbidden = 0x1;
 
-    /// <summary>Protects bytes for the current person on this device.</summary>
+    /// <summary>Protects bytes for the Windows user the app runs as.</summary>
     /// <param name="plain">The bytes.</param>
-    /// <param name="entropy">Bytes that must be given again to open them: the app's name, so another app cannot.</param>
+    /// <param name="entropy">
+    /// Bytes that must be given again to open them. The app's name: it keeps one app's store from being read as another's by mistake, and is no
+    /// protection against a program that reads it from this one.
+    /// </param>
     /// <returns>The protected bytes.</returns>
     /// <exception cref="InvalidOperationException">The system refused.</exception>
     public static byte[] Protect(ReadOnlySpan<byte> plain, ReadOnlySpan<byte> entropy)
@@ -36,11 +40,11 @@ public static unsafe partial class Dpapi
         }
     }
 
-    /// <summary>Opens bytes <see cref="Protect"/> protected, for the same person on the same device.</summary>
+    /// <summary>Opens bytes <see cref="Protect"/> protected, as the same Windows user.</summary>
     /// <param name="protectedBytes">The protected bytes.</param>
     /// <param name="entropy">The bytes given to <see cref="Protect"/>.</param>
     /// <returns>The bytes.</returns>
-    /// <exception cref="InvalidOperationException">They cannot be opened here, by this person, with this entropy.</exception>
+    /// <exception cref="InvalidOperationException">They cannot be opened here, as this Windows user, with this entropy.</exception>
     public static byte[] Unprotect(ReadOnlySpan<byte> protectedBytes, ReadOnlySpan<byte> entropy)
     {
         fixed (byte* input = protectedBytes)
