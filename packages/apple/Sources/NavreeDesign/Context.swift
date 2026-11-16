@@ -29,6 +29,17 @@ public struct FormRef: Sendable, Equatable, Hashable {
     public static let loose = FormRef(key: "")
 }
 
+extension Navree.Field {
+    /// What a field's value and messages are kept under: its id, which the
+    /// runtime core makes its own on its screen. Two fields of one form may
+    /// share a name (the quantity of each line of an order); they never share
+    /// an id. A tree the core has not named (one drawn for a picture) has
+    /// only the name.
+    public var key: String {
+        id ?? name
+    }
+}
+
 /// An entry of a navigation stack's path: a screen the runtime holds, or a
 /// tap on a link that asks the runtime to open one. A tap is never shown: the
 /// runtime answers it with the screen it opens, or with nothing.
@@ -68,8 +79,10 @@ public struct Place: Sendable, Hashable {
 public enum Intent: Sendable, Equatable {
     /// A control's action: a tap on a button, a link, a row, a menu item.
     case act(Navree.Action, Place)
-    /// A field's values changed.
-    case change(form: FormRef, name: String, values: [String])
+    /// A field's values changed. The field is said by its key (its id,
+    /// `Navree.Field.key`), never by its name, which another field of the
+    /// same form may share.
+    case change(form: FormRef, field: String, values: [String])
     /// A region that came empty is on screen.
     case appear(region: String)
     /// A region that failed is to be fetched again.
@@ -77,8 +90,8 @@ public enum Intent: Sendable, Equatable {
     /// The end of a list or table is on screen: fetch what comes after.
     case more(target: String, href: String)
     /// The reader searched: the words, sent with the query form of the table
-    /// or the screen's search.
-    case search(form: FormRef, name: String, text: String)
+    /// (in its search field, said by its key) or the screen's search.
+    case search(form: FormRef, field: String, text: String)
     /// A sheet or dialog of the screen was dismissed by the system (a swipe
     /// down, a tap outside, the alert's own button).
     case dismissed(overlay: String)
@@ -90,8 +103,9 @@ public enum Intent: Sendable, Equatable {
     case tab(id: String, index: Int)
     /// The focus moved to the field the screen asked for.
     case focused(serial: Int)
-    /// Files were picked for a field: the app keeps their bytes for the form.
-    case files(form: FormRef, name: String, urls: [URL])
+    /// Files were picked for a field, said by its key: the app keeps their
+    /// bytes for the form.
+    case files(form: FormRef, field: String, urls: [URL])
     /// A row of a table was ticked or cleared; without a row, all of them;
     /// with `across`, every record that matches its query.
     case choose(table: String, row: String?, on: Bool, across: Bool)
@@ -140,8 +154,9 @@ public struct FocusRequest: Sendable, Equatable {
 public struct DrawingContext: Sendable {
     public var send: @MainActor @Sendable (Intent) -> Void
     /// The values a form's field holds now, or `nil` for those it came with.
+    /// The field is asked for by its key (its id), never by its name.
     public var values: @MainActor @Sendable (FormRef, String) -> [String]?
-    /// What is wrong with a form's field, or `nil` for what the tree says.
+    /// What is wrong with a form's field, by its key, or `nil` for what the tree says.
     public var errors: @MainActor @Sendable (FormRef, String) -> [String]?
     /// How the rows after a list's or table's last are coming, by its id.
     public var list: @MainActor @Sendable (String) -> ListStatus

@@ -184,10 +184,13 @@ public struct FormView: Sendable {
     public var pending: Bool
     public var fields: [String: FieldView]
 
-    /// The id of the field with `name`, when one field has it.
+    /// The id of the field with `name`, when exactly one field has it. Two
+    /// fields of one form may share a name, and then a name finds neither: a
+    /// field is found by its id (`fields[id]`).
     public func field(named name: String) -> (id: String, view: FieldView)? {
-        let found = fields.filter { $0.value.name == name }.sorted { $0.key < $1.key }
-        return found.first.map { ($0.key, $0.value) }
+        let found = fields.filter { $0.value.name == name }
+        guard found.count == 1, let only = found.first else { return nil }
+        return (only.key, only.value)
     }
 }
 

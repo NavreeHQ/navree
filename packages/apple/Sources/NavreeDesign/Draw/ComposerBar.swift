@@ -17,7 +17,7 @@ struct ComposerBar: View {
     private var label: String { field.label ?? field.name }
 
     private var text: String {
-        context.values(ref, field.name)?.first ?? field.input.initialValues.first ?? ""
+        context.values(ref, field.key)?.first ?? field.input.initialValues.first ?? ""
     }
 
     var body: some View {
@@ -60,7 +60,7 @@ struct ComposerBar: View {
                         .accessibilityHidden(true)
                     TextField(
                         placeholder ?? label,
-                        text: Binding(get: { text }, set: { context.send(.change(form: ref, name: field.name, values: [$0])) }),
+                        text: Binding(get: { text }, set: { context.send(.change(form: ref, field: field.key, values: [$0])) }),
                         axis: .vertical
                     )
                     .lineLimit(1...6)
@@ -92,7 +92,7 @@ struct ComposerBar: View {
                 .padding(.bottom, 4)
             }
             .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            let error = (context.errors(ref, field.name) ?? field.error.map { [$0] } ?? []).joined(separator: " ")
+            let error = (context.errors(ref, field.key) ?? field.error.map { [$0] } ?? []).joined(separator: " ")
             if !error.isEmpty {
                 Label(error, systemImage: "exclamationmark.circle.fill")
                     .font(.footnote)

@@ -75,7 +75,7 @@ public struct ScreenView: View {
         let width = WidthClass(sizeClass)
         let table = sections.compactMap(\.table).first
         let query = QueryForm(screen: screen, table: table, region: sections.first { $0.table != nil }?.region)
-        content(drawn, sections: sections, width: width, table: table, searched: query?.searchName != nil)
+        content(drawn, sections: sections, width: width, table: table, searched: query?.searchField != nil)
             .modifier(ComposerDock(found: composer))
             .navigationTitle(NavigationRules.title(screen.title, appName: appName))
             .modifier(Subtitle(text: screen.subtitle, underLargeTitle: screen.pager == nil))
@@ -370,7 +370,9 @@ public struct NoticeRow: View {
 /// What a table's query form offers: a search field, filters, sorts.
 struct QueryForm {
     var form: FormRef
-    var searchName: String?
+    /// The search field, by its key in the query form; the screen's own
+    /// search has one field, said by its name.
+    var searchField: String?
     var searchValue: String
     var searchPrompt: String?
     var filters: [Navree.Field]
@@ -400,21 +402,21 @@ struct QueryForm {
             var value = ""
             var prompt: String?
             if let field = fields.search {
-                name = field.name
+                name = field.key
                 if case .text(let text) = field.input {
                     value = text.value
                     prompt = text.placeholder
                 }
             }
             self.filters = filters
-            searchName = name
+            searchField = name
             searchValue = value
             searchPrompt = prompt
         } else if let search = screen.search {
             form = FormRef(key: "search", method: .get, action: search.action, hidden: search.hidden)
             source = nil
             filters = []
-            searchName = search.name
+            searchField = search.name
             searchValue = search.value
             searchPrompt = search.placeholder
         } else if !sorts.isEmpty {
@@ -517,7 +519,7 @@ struct SearchModifier: ViewModifier {
     @Environment(\.navree) private var context
 
     func body(content: Content) -> some View {
-        if let query, let name = query.searchName {
+        if let query, let name = query.searchField {
             let binding = Binding(get: { text ?? query.searchValue }, set: { text = $0 })
             content
                 .searchable(text: binding, placement: Self.placement(placement), prompt: query.searchPrompt ?? "Search")
@@ -534,7 +536,7 @@ struct SearchModifier: ViewModifier {
     }
 
     private func send(_ query: QueryForm, _ name: String) {
-        context.send(.search(form: query.form, name: name, text: text ?? query.searchValue))
+        context.send(.search(form: query.form, field: name, text: text ?? query.searchValue))
     }
 
     static func placement(_ placement: SearchPlacement) -> SearchFieldPlacement {

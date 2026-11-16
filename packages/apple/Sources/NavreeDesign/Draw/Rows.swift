@@ -563,11 +563,11 @@ struct OptionRow: View {
     @Environment(\.navree) private var context
 
     var body: some View {
-        let values = context.values(form, field.name) ?? field.input.initialValues
+        let values = context.values(form, field.key) ?? field.input.initialValues
         let chosen = values.contains(option.value)
         Button {
             let next = chosen ? values.filter { $0 != option.value } : values + [option.value]
-            context.send(.change(form: form, name: field.name, values: next))
+            context.send(.change(form: form, field: field.key, values: next))
         } label: {
             HStack {
                 Text(option.label).foregroundStyle(.primary)

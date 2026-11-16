@@ -34,10 +34,18 @@ final class FakeTransport: Transport {
     var stopped = 0
     var jar: CookieJar? = CookieJar(origin: "https://shop.example", persistent: false)
 
+    /// Answers written in the test itself, by address: asked before the recorded files.
+    var pages: [String: String] = [:]
+
     func fetch(_ request: FetchRequest, answer: @escaping @MainActor (Response) -> Void) {
         fetched.append(request)
         let components = URLComponents(string: request.url)
         let address = (components?.percentEncodedPath ?? "") + (components?.percentEncodedQuery.map { "?" + $0 } ?? "")
+        if let page = pages[address] {
+            return answer(Response(
+                request: request.request, status: 200, contentType: "application/vnd.navree.native+json", body: page
+            ))
+        }
         guard let found = answers[address] else { return }
         answer(Response(
             request: request.request, status: found.status, contentType: "application/vnd.navree.native+json",

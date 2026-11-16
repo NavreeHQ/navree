@@ -16,8 +16,8 @@ extension NativeClient {
         let state = screen(id)
         var context = DrawingContext(
             send: { [weak self] intent in self?.perform(intent, on: id) },
-            values: { [weak self] form, name in self?.field(form, name, on: id)?.value.values },
-            errors: { [weak self] form, name in self?.field(form, name, on: id)?.errors },
+            values: { [weak self] form, field in self?.field(form, field, on: id)?.value.values },
+            errors: { [weak self] form, field in self?.field(form, field, on: id)?.errors },
             list: { [weak self] list in
                 let view = self?.screen(id)?.lists[list]
                 var status = ListStatus(loading: view?.loading ?? false, failed: view?.failed ?? false)
@@ -44,10 +44,11 @@ extension NativeClient {
         return context
     }
 
-    /// The core's state of a form's field, found by the field's name in the
-    /// form the control stands in.
-    func field(_ form: FormRef, _ name: String, on id: ScreenID) -> FieldView? {
-        screen(id)?.forms[form.key]?.field(named: name)?.view
+    /// The core's state of a form's field, found by the field's id in the
+    /// form the control stands in: never by its name, which two fields of
+    /// one form may share (the quantity of each line of an order).
+    func field(_ form: FormRef, _ field: String, on id: ScreenID) -> FieldView? {
+        screen(id)?.forms[form.key]?.fields[field]
     }
 
     /// Says an intent of the drawing of screen `id` to the core.
@@ -62,12 +63,11 @@ extension NativeClient {
                 screen: id, action: action, form: Self.formID(place.form), overlay: place.overlay, text: place.text,
                 ask: place.ask, from: place.from, now: Int(Date().timeIntervalSince1970)
             )))
-        case .change(let form, let name, let values):
-            guard let found = screen(id)?.forms[form.key]?.field(named: name) else {
-                return problem("a field the core does not hold changed: \(form.key) \(name)")
+        case .change(let form, let field, let values):
+            guard let held = self.field(form, field, on: id) else {
+                return problem("a field the core does not hold changed: \(form.key) \(field)")
             }
-            let value = found.view.value.replaced(with: values)
-            send(.field(screen: id, form: Self.formID(form), field: found.id, value: value))
+            send(.field(screen: id, form: Self.formID(form), field: field, value: held.value.replaced(with: values)))
         case .appear:
             // A region is fetched by the core as the screen arrives.
             break
@@ -75,12 +75,12 @@ extension NativeClient {
             send(.regionRetry(screen: id, region: region))
         case .more(let target, _):
             send(.more(screen: id, id: target, before: false))
-        case .search(let form, let name, let text):
+        case .search(let form, let field, let text):
             if form.key == SearchForm.key {
                 send(.search(screen: id, text: text))
             } else {
                 // A table's query: the words in its field, then the query sent.
-                perform(.change(form: form, name: name, values: [text]), on: id)
+                perform(.change(form: form, field: field, values: [text]), on: id)
                 send(.act(CoreEvent.Act(screen: id, action: .submit(Navree.Action.Submit()), form: Self.formID(form))))
             }
         case .dismissed(let overlay):
@@ -93,9 +93,9 @@ extension NativeClient {
             send(.tab(screen: id, id: tabs, index: index))
         case .focused(let serial):
             send(.focused(screen: id, serial: serial))
-        case .files(let form, let name, let urls):
-            guard let found = screen(id)?.forms[form.key]?.field(named: name) else {
-                return problem("a file field the core does not hold changed: \(form.key) \(name)")
+        case .files(let form, let field, let urls):
+            guard self.field(form, field, on: id) != nil else {
+                return problem("a file field the core does not hold changed: \(form.key) \(field)")
             }
             let files = urls.compactMap { url -> FileRef? in
                 // A file from another app's storage is lent for as long as it is copied.
@@ -103,7 +103,7 @@ extension NativeClient {
                 defer { if lent { url.stopAccessingSecurityScopedResource() } }
                 return FileStore.shared.keep(url)
             }
-            send(.field(screen: id, form: Self.formID(form), field: found.id, value: .files(files)))
+            send(.field(screen: id, form: Self.formID(form), field: field, value: .files(files)))
         case .choose(let table, let row, let on, let across):
             send(.choose(screen: id, table: table, row: row, on: on, across: across))
         case .move(let item, let from, let to, let before):

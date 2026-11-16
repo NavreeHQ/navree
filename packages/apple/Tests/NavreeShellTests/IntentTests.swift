@@ -19,17 +19,56 @@ struct IntentTests {
 
         context.send(.act(.commands(.init(list: [.open(.init(id: "refund"))])), Place()))
         #expect(shell.client.screen(order)?.overlays == ["refund"])
-        context.send(.change(form: refund, name: "amount", values: ["0"]))
+        context.send(.change(form: refund, field: "refund-amount", values: ["0"]))
         #expect(shell.client.screen(order)?.forms["refund"]?.fields["refund-amount"]?.value == .text("0"))
-        #expect(context.values(refund, "amount") == ["0"])
+        #expect(context.values(refund, "refund-amount") == ["0"])
 
         context.send(.act(.submit(.init()), Place(form: refund, overlay: "refund")))
         let post = try #require(shell.transport.fetched.last)
         #expect(post.method == "post")
         #expect(post.url == "https://shop.example/orders/1/refund")
         // The 422 came back at once: the message is at its field, read by the drawing.
-        #expect(context.errors(refund, "amount") == ["Enter an amount above zero, like 24.00."])
-        #expect(context.errors(refund, "reason") == [])
+        #expect(context.errors(refund, "refund-amount") == ["Enter an amount above zero, like 24.00."])
+        #expect(context.errors(refund, "refund-reason") == [])
+        // A field is never found by its name.
+        #expect(context.values(refund, "amount") == nil)
+        #expect(shell.problems.list.isEmpty, "\(shell.problems.list)")
+    }
+
+    @Test func twoFieldsOfOneNameEachShowAndChangeTheirOwnValue() throws {
+        let shell = try Shell()
+        // An order's lines: a quantity for each, every one named `qty[]`.
+        shell.transport.pages["/orders"] = """
+            {"build": "152bd84abf4d", "navree": 1, "vocab": 0, "screen": {"title": "Order CS-20481", "body":
+              {"t": "form", "id": "lines", "method": "post", "action": "/orders/1/lines", "children": [
+                {"t": "field", "name": "qty[]", "label": "Phulkari dupatta", "input": {"t": "text", "value": "2"}},
+                {"t": "field", "name": "qty[]", "label": "Punjabi jutti", "input": {"t": "text", "value": "1"}},
+                {"t": "field", "name": "qty[]", "label": "Brass lota", "input": {"t": "text", "value": "4"}}]}}}
+            """
+        shell.client.begin()
+        shell.client.send(.select(destination: 1))
+        let order = try #require(shell.client.nav.front)
+        let tree = try #require(shell.client.screen(order)?.screen)
+        var fields: [Navree.Field] = []
+        var found: Navree.Form?
+        tree.body.walk { node in
+            if case .field(let field) = node { fields.append(field) }
+            if case .form(let form) = node { found = form }
+        }
+        let form = FormRef(try #require(found))
+        // The core gave each line's field an id of its own.
+        #expect(fields.count == 3)
+        #expect(Set(fields.map(\.key)).count == 3)
+        let context = shell.client.context(for: order, depth: 0, base: nil)
+        #expect(fields.map { context.values(form, $0.key) } == [["2"], ["1"], ["4"]])
+
+        // The person changes the third line to 5.
+        context.send(.change(form: form, field: fields[2].key, values: ["5"]))
+
+        #expect(fields.map { context.values(form, $0.key) } == [["2"], ["1"], ["5"]])
+        let held = try #require(shell.client.screen(order)?.forms[form.key])
+        #expect(held.fields[fields[0].key]?.value == .text("2"))
+        #expect(held.fields[fields[2].key]?.value == .text("5"))
         #expect(shell.problems.list.isEmpty, "\(shell.problems.list)")
     }
 
@@ -107,7 +146,7 @@ struct IntentTests {
         shell.client.send(.select(destination: 1))
         let orders = try #require(shell.client.nav.front)
         let before = shell.transport.fetched.count
-        shell.client.perform(.search(form: FormRef(key: "search"), name: "q", text: "Ludhiana"), on: orders)
+        shell.client.perform(.search(form: FormRef(key: "search"), field: "q", text: "Ludhiana"), on: orders)
         #expect(shell.problems.list.isEmpty, "\(shell.problems.list)")
         // Whether the core asks now or after a pause is its own; nothing is refused.
         #expect(shell.transport.fetched.count >= before)
