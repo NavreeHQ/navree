@@ -76,12 +76,13 @@ owner's answer. A deviation the owner hasn't approved blocks stop 2.
 
 | ID | Screen | What the design has | What the page will have | Why | Picture | Owner | Date |
 | DV-02 | all | primary #22c55e | accent #3dff8f (the Navree theme) | translate mode uses the Navree theme; keep mode would use a theme of the app's own | 04-reconcile/dv/DV-02.png | approved | 2026-11-04 |
-| DV-03 | DS-02, DS-04 | pill-shaped chips | Badge with 4 px corners | app rule: no pills | 04-reconcile/dv/DV-03.png | approved | 2026-11-04 |
+| DV-03 | DS-02, DS-04 | pill-shaped chips | Badge with 4 px corners | translate mode keeps the Navree theme's corners; keep mode would give badges `Corner::Pill` in a theme of the app's own | 04-reconcile/dv/DV-03.png | approved | 2026-11-04 |
 | DV-05 | DS-04 | the table sorts in the browser | sort on the server, in the URL | mistakes.md 2 | none | approved | 2026-11-04 |
 ```
 
-Reasons fall into four kinds: an app rule (corners, pills, glow, inline
-style), a missing token or component (a gap with an interim
+Reasons fall into four kinds: an app rule (glow, inline style, and in
+translate mode the Navree theme's corners where the design has others or
+pills), a missing token or component (a gap with an interim
 form), a design mistake (`mistakes.md`), or accessibility (a pair below
 4.5:1, a target too small, a missing label). The picture is the design's
 part beside the page's part, cut from the screenshots; write "none" only
