@@ -190,11 +190,14 @@ function helpers(el, src, signal) {
     },
     /**
      * A write to one of the element's routes, through core's write path with the session's token. Ops
-     * are applied; JSON is the script's; a page is shown only when asked for. Anything else fails.
+     * are applied; JSON is the script's; a page is shown only when asked for. Anything else fails. Once
+     * the element has left, its answer is for a part of the page that is gone: nothing of it is applied,
+     * and nothing is said.
      * @param {string} url @param {FormData | URLSearchParams | Record<string, string>} [data]
-     * @param {{method?: string, quiet?: boolean, page?: boolean}} [options]
+     * @param {{method?: string, quiet?: boolean, page?: boolean} | null} [options]
      */
-    async call(url, data, options = {}) {
+    async call(url, data, options) {
+      const { method, quiet, page } = options || {};
       let ok = false, status = 0, answer = null;
       try {
         const href = allowed(url), given = /** @type {any} */ (hand());
@@ -203,38 +206,43 @@ function helpers(el, src, signal) {
         const token = cookie("XSRF-TOKEN");
         if (token) headers["x-xsrf-token"] = token;
         const sent = data instanceof FormData || data instanceof URLSearchParams ? data : new URLSearchParams(Object.entries(data || {}));
-        // A write takes the page's turn: what was fetched before it is not shown after it.
-        const response = await given.writing(() => fetchHere(href, { method: options.method || "POST", headers, body: sent }));
+        // A write takes the page's turn: what was fetched before it is not shown after it, and a navigation
+        // already on its way is overtaken.
+        const response = await given.writing(() => fetchHere(href, { method: method || "POST", headers, body: sent }));
         status = response.status;
         const type = response.headers.get("content-type") || "";
         // A page that starts clean answers nothing into this one.
         if (!response.headers.has("x-navree-fresh")) {
+          const json = type.startsWith(OPS) || type.startsWith("application/json") ? await response.json() : null;
+          signal.throwIfAborted();
           // The ops bring their own word on how it went.
           if (type.startsWith(OPS)) {
-            given.apply(await response.json());
+            given.apply(json);
             return { ok: response.ok, status, data: null };
           }
           if (type.startsWith("text/html")) {
-            if (options.page) location.assign(response.url);
-            ok = !!options.page && response.ok;
+            if (page) location.assign(response.url);
+            ok = !!page && response.ok;
           } else {
-            if (type.startsWith("application/json")) answer = await response.json();
+            answer = json;
             ok = response.ok;
           }
         }
       } catch {}
-      if (!ok && !options.quiet) toast("danger", "That didn't work. Try again.");
+      if (!ok && !quiet && !signal.aborted) toast("danger", "That didn't work. Try again.");
       return { ok, status, data: answer };
     },
     /**
-     * A read of one of the element's routes. Headers of the runtime's own are not the script's to send.
+     * A read of one of the element's routes. It takes no turn of the page's, and ends when the element
+     * leaves. Headers of the runtime's own are not the script's to send.
      * @param {string} url @param {Record<string, string>} [headers]
      */
     async get(url, headers = {}) {
       /** @type {Record<string, string>} */
       const sent = { "x-navree-ui": "1" };
       for (const name in headers) if (!/^x-navree-/i.test(name)) sent[name] = headers[name];
-      const response = await fetchHere(allowed(url), { headers: sent });
+      const response = await fetchHere(allowed(url), { headers: sent, signal });
+      signal.throwIfAborted();
       if (response.headers.has("x-navree-fresh")) throw new TypeError("an answer of a page that starts clean");
       return response;
     },
