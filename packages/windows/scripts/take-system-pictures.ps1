@@ -1,7 +1,7 @@
 # Walks the demo's place in Windows and writes what each part answered, with a picture of the screen after each:
 # the count on the taskbar, the icon in the notification area and the small window by it, settings, opening at sign-in,
 # a notification, a window of its own, the full screen, the offer to start again, the title bar's search, the first
-# load failing. It then tries what comes from outside on the running app: a second start, and an address on its scheme.
+# load failing. It then tries what comes from outside on the running app: a second start, and that it claims no scheme of its own.
 #
 # Without -Packaged the demo is started from its build folder (no package identity). With -Packaged the demo's package
 # project is registered with the winapp command, which gives the app package identity, and started the same way.
@@ -85,7 +85,7 @@ foreach ($walk in $walks) {
 
 # What comes from outside, tried on the app while it runs as it would for a person.
 Say ""
-Say "== a second start, and an address on the app's scheme, tried on the running app"
+Say "== a second start tried on the running app, and the app's scheme not claimed"
 $probeFile = Join-Path $OutDir 'probe.txt'
 $running = Start-Demo @('--probe', $probeFile, '--light') $false
 if ($null -ne $running) {
@@ -99,7 +99,7 @@ if ($null -ne $running) {
     Say ("the first copy: window " + $ready + ", still running " + (-not $running.HasExited))
     Start-Sleep -Seconds 6
     if ($Packaged) {
-        # A package is started again through its identity: from the Start menu's own entry, and by an address on its scheme.
+        # A package is started again through its identity: from the Start menu's own entry.
         $family = (Get-AppxPackage -Name 'Navree.Demo' -ErrorAction SilentlyContinue | Select-Object -First 1).PackageFamilyName
         Say ("the package family: " + $family)
         if ($family) {
@@ -107,27 +107,17 @@ if ($null -ne $running) {
             Say "the app was started again from its entry in the Start menu"
         }
         Start-Sleep -Seconds 6
+        # Signing in through the browser is not offered on Windows, so the package claims no scheme: none is opened here (an address on a scheme
+        # nobody claims makes Windows ask which program to open it with, and that question waits for a person).
         $registered = 'Registry::HKEY_CLASSES_ROOT\navree-demo'
-        Say ("the scheme is known to Windows: " + (Test-Path $registered))
-        if (Test-Path $registered) { Get-ChildItem $registered -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Say ("   " + $_.Name) } }
-        try {
-            Start-Process 'navree-demo://signed-in?code=abc&state=xyz' -ErrorAction Stop
-            Say "an address on the scheme was opened"
-        } catch { Say ("the address on the scheme did not open: " + $_.Exception.Message) }
-        Start-Sleep -Seconds 6
-        try {
-            Start-Process -FilePath 'explorer.exe' -ArgumentList 'navree-demo://signed-in?code=abc&state=xyz' -ErrorAction Stop
-            Say "an address on the scheme was opened through Explorer"
-        } catch { Say ("Explorer did not open the address: " + $_.Exception.Message) }
-        Start-Sleep -Seconds 8
+        Say ("the scheme is known to Windows (it should not be): " + (Test-Path $registered))
+        Start-Sleep -Seconds 2
     } else {
         $second = Start-Demo @('--open=%2Forders') $false
         Say ("a second start with a path: " + (Wait-Demo $second 40))
-        try {
-            Start-Process 'navree-demo://signed-in?code=abc&state=xyz' -ErrorAction Stop
-            Say "an address on the scheme was opened"
-        } catch { Say ("the address on the scheme did not open: " + $_.Exception.Message) }
-        Start-Sleep -Seconds 8
+        # As above: the app registers no scheme, so none is opened.
+        Say ("the scheme is registered for this person (it should not be): " + (Test-Path 'HKCU:\Software\Classes\navree-demo'))
+        Start-Sleep -Seconds 2
         $third = Start-Demo @('--new-window') $false
         Say ("a second start asking for a window: " + (Wait-Demo $third 40))
     }
