@@ -293,7 +293,7 @@ every `@navree/*` package carries the same version.
 - `Widget` gains `Control`, and the `Form` derive's message for an unknown option lists `control`.
 - The configuration section `ui.policy` and the provider `PagePolicy` show in
   `config:show --defaults`, `config:schema`, `check --graph` and `introspect --json`.
-- The core runtime grows by 121 bytes gzip (12,939 to 13,060) and acts on a `ui:core` event whose
+- The core runtime grows by 141 bytes gzip (12,939 to 13,080) and acts on a `ui:core` event whose
   detail is an object; `extensions-*.js` joins the toolkit's files; the tree module takes no
   children from a page that starts clean.
 - In an app with a UI extension, a plugin's island script or an allowed source, the sign-in and
@@ -309,6 +309,23 @@ every `@navree/*` package carries the same version.
 - A lazy region whose fetch failed stayed marked busy (`aria-busy="true"`), so a screen reader was
   told to wait for content that was not coming. A region that fails now drops the mark as it shows
   the failure.
+- A morph could take an element inside a kept element, such as an island's body, for the page's
+  own element with the same id or `data-key`: a field an island's script drew with the id of the
+  form's own field took that field's place, and the page's own was removed. What is inside a kept
+  element below the element being morphed now stays in it; a kept element itself still moves whole.
+- A feed that adds or drops rows, and a tree that draws the items of a branch or the next page of a
+  list, now send `ui:swap`, as a lazy list does. What the new rows and items bring that starts on a
+  swap, a chart or a component of your own, starts at once instead of at the next swap of something
+  else, and a component in a dropped row leaves.
+- Components of your own: a body that a morph adds to a mounted component, or puts in place of its
+  body, is sealed at once, also while the script is still loading, and the script's helpers search
+  it. A form a library writes with the id the sealed fields name (`ui-sealed`) owns none of them.
+  Every `meta`, `link` and `base` written into a body is taken out. `ui.call` and `ui.get` reach
+  only route prefixes the server can write, so `/` alone or a prefix under `/_navree/` opens
+  nothing. The answer of a call whose component has left the page is not applied and shows no
+  toast, and a read is ended. `ui.call` takes `null` for its options. The browser contract now says
+  what the seal does not stop, the refresh a written `meta` schedules or a request to a host the
+  policy allows among it, and asks authors to escape data before a library writes it as HTML.
 
 ## [1.2.4] - 2026-11-15
 
