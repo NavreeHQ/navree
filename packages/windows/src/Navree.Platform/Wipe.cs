@@ -3,7 +3,11 @@ namespace Navree.Platform;
 /// <summary>One thing the wipe takes away, and how.</summary>
 /// <param name="Name">What it is, for the report.</param>
 /// <param name="Run">Takes it away.</param>
-public sealed record WipeStep(string Name, Func<Task> Run);
+/// <param name="On">
+/// Runs it where its state lives (the window's thread, for state only that thread may touch) and completes when it has run there; when left out
+/// the step runs on the thread pool.
+/// </param>
+public sealed record WipeStep(string Name, Func<Task> Run, Func<Func<Task>, Task>? On = null);
 
 /// <summary>What came of a wipe, step by step, in the order they ran.</summary>
 /// <param name="Done">The steps that finished.</param>
@@ -17,7 +21,8 @@ public sealed record WipeReport(IReadOnlyList<string> Done, IReadOnlyList<KeyVal
 /// <summary>
 /// The end of a session, when the person signs out: everything of theirs goes, in an order that never leaves the
 /// next person a door open (what could rebuild a session goes first), and each step has a limit, so one that hangs
-/// does not keep the rest from running. A step that fails is reported, and the next still runs.
+/// does not keep the rest from running. A step that fails is reported, and the next still runs. A step runs where its state lives
+/// (<see cref="WipeStep.On"/>), never on a thread that state is not safe on.
 /// </summary>
 public static class Wipe
 {
@@ -38,7 +43,7 @@ public static class Wipe
         {
             try
             {
-                Task running = Task.Run(step.Run);
+                Task running = step.On is null ? Task.Run(step.Run) : Task.Run(() => step.On(step.Run));
                 if (await Task.WhenAny(running, Task.Delay(each)).ConfigureAwait(false) == running)
                 {
                     await running.ConfigureAwait(false);

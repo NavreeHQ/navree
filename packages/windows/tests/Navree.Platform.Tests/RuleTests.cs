@@ -119,4 +119,58 @@ public sealed class RuleTests
         CollectionAssert.AreEqual(new[] { "hangs", "fails" }, report.Failed.Select(failure => failure.Key).ToArray());
         Assert.IsFalse(report.Complete);
     }
+
+    [TestMethod]
+    public async Task A_wipe_step_whose_state_lives_on_one_thread_runs_there_and_the_wipe_waits_for_it()
+    {
+        // One thread that owns its state, as the window's thread does, and runs what is handed to it in turn.
+        using System.Collections.Concurrent.BlockingCollection<Action> handed = [];
+        Thread owner = new(() =>
+        {
+            foreach (Action action in handed.GetConsumingEnumerable())
+            {
+                action();
+            }
+        }) { IsBackground = true };
+        owner.Start();
+        Task OnOwner(Func<Task> step)
+        {
+            TaskCompletionSource done = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            handed.Add(() =>
+            {
+                Task ran;
+                try
+                {
+                    ran = step();
+                }
+                catch (Exception problem)
+                {
+                    ran = Task.FromException(problem);
+                }
+
+                _ = ran.ContinueWith(finished => _ = finished.IsFaulted ? done.TrySetException(finished.Exception!.InnerExceptions) : done.TrySetResult(), TaskScheduler.Default);
+            });
+            return done.Task;
+        }
+
+        int ranOn = 0;
+        List<string> order = [];
+        WipeReport report = await Wipe.RunAsync(
+            [
+                new WipeStep("the pictures", () =>
+                {
+                    ranOn = Environment.CurrentManagedThreadId;
+                    order.Add("the pictures");
+                    return Task.CompletedTask;
+                }, OnOwner),
+                new WipeStep("fails where it lives", () => throw new InvalidOperationException("no"), OnOwner),
+                new WipeStep("after", () => { order.Add("after"); return Task.CompletedTask; }),
+            ],
+            TimeSpan.FromSeconds(5));
+        handed.CompleteAdding();
+
+        Assert.AreEqual(owner.ManagedThreadId, ranOn, "the step ran on another thread than the one its state lives on");
+        CollectionAssert.AreEqual(new[] { "the pictures", "after" }, order.ToArray());
+        CollectionAssert.AreEqual(new[] { "fails where it lives" }, report.Failed.Select(failure => failure.Key).ToArray());
+    }
 }

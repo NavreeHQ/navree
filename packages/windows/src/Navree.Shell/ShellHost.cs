@@ -147,11 +147,11 @@ public sealed partial class ShellHost : IDisposable
 
     /// <summary>
     /// Adds a step to the wipe at sign-out, after the host's own: something else the shell keeps of the person (the pictures of the pages
-    /// it drew). Each step has the wipe's limit, and a step that fails is reported with the rest.
+    /// it drew). Each step runs on the UI thread, where the window's state lives, has the wipe's limit, and a step that fails is reported with the rest.
     /// </summary>
     /// <param name="name">What it takes away, for the report.</param>
-    /// <param name="run">Takes it away.</param>
-    public void AddWipeStep(string name, Func<Task> run) => moreWipeSteps.Add(new WipeStep(name, run));
+    /// <param name="run">Takes it away, on the UI thread.</param>
+    public void AddWipeStep(string name, Func<Task> run) => moreWipeSteps.Add(new WipeStep(name, run, OnUi));
 
     /// <summary>Tells the core what happened.</summary>
     /// <param name="eventJson">An event, from <see cref="Events"/>.</param>
@@ -186,29 +186,28 @@ public sealed partial class ShellHost : IDisposable
         session.Dispose();
     }
 
-    // Runs a step that must be on the UI thread, and completes when it has been.
-    private Func<Task> OnUiAsync(Func<Task> step) =>
-        () =>
+    // Runs a step on the UI thread, where the window's state lives, and completes when it has run there (a wipe step's WipeStep.On).
+    private Task OnUi(Func<Task> step)
+    {
+        TaskCompletionSource done = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!dispatcher.TryEnqueue(async () =>
         {
-            TaskCompletionSource done = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            if (!dispatcher.TryEnqueue(async () =>
+            try
             {
-                try
-                {
-                    await step();
-                    done.SetResult();
-                }
-                catch (Exception problem)
-                {
-                    done.SetException(problem);
-                }
-            }))
-            {
-                done.SetException(new InvalidOperationException("the window is gone"));
+                await step();
+                done.SetResult();
             }
+            catch (Exception problem)
+            {
+                done.SetException(problem);
+            }
+        }))
+        {
+            done.SetException(new InvalidOperationException("the window is gone"));
+        }
 
-            return done.Task;
-        };
+        return done.Task;
+    }
 
     /// <summary>What a page in the web view is answered with when the app has recorded answers instead of a network.</summary>
     internal Func<Uri, (byte[] Body, string ContentType)?>? RecordedPages => Options.RecordedPages;
@@ -236,22 +235,20 @@ public sealed partial class ShellHost : IDisposable
                 what => Problem?.Invoke(what)));
     }
 
-    // Completes on the dispatcher the host was given, whatever thread the caller finished on: the host's own state changes only there.
-    // False when the queue is gone, which is the end of the app.
-    private Task<bool> OnDispatcherAsync()
+    // Goes on, after the await, on the dispatcher the host was given, whatever thread the caller finished on: the host's own state (the requests,
+    // streams and timers under way) changes only there. What follows the await is itself the item handed to the dispatcher, so it runs there
+    // and nowhere else. When the queue is gone (the end of the app) it does not go on at all.
+    private ToDispatcher OnDispatcherAsync() => new(dispatcher);
+
+    private readonly struct ToDispatcher(DispatcherQueue queue) : System.Runtime.CompilerServices.INotifyCompletion
     {
-        if (dispatcher.HasThreadAccess)
-        {
-            return Task.FromResult(true);
-        }
+        public bool IsCompleted => queue.HasThreadAccess;
 
-        TaskCompletionSource<bool> arrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!dispatcher.TryEnqueue(() => arrived.SetResult(true)))
-        {
-            arrived.SetResult(false);
-        }
+        public ToDispatcher GetAwaiter() => this;
 
-        return arrived.Task;
+        public void OnCompleted(Action continuation) => _ = queue.TryEnqueue(() => continuation());
+
+        public bool GetResult() => queue.HasThreadAccess;
     }
 
     private void Run(Effect effect, ViewState state)
@@ -378,7 +375,7 @@ public sealed partial class ShellHost : IDisposable
             // The core no longer wants the answer, or the app is ending.
         }
 
-        if (!await OnDispatcherAsync().ConfigureAwait(false))
+        if (!await OnDispatcherAsync())
         {
             return;
         }
@@ -430,7 +427,7 @@ public sealed partial class ShellHost : IDisposable
             // A stream that broke ends as one that could not be kept open.
         }
 
-        if (!await OnDispatcherAsync().ConfigureAwait(false))
+        if (!await OnDispatcherAsync())
         {
             return;
         }
@@ -470,7 +467,7 @@ public sealed partial class ShellHost : IDisposable
             // The core no longer wants it.
         }
 
-        if (!await OnDispatcherAsync().ConfigureAwait(false))
+        if (!await OnDispatcherAsync())
         {
             return;
         }
@@ -488,13 +485,19 @@ public sealed partial class ShellHost : IDisposable
     // it has let go already.
     private async Task EndSessionAsync(bool coreEnded)
     {
+        // Already there when the core's effect or the window asks (then nothing waits); otherwise it goes there first.
+        if (!await OnDispatcherAsync())
+        {
+            return;
+        }
+
         WipeReport report;
         try
         {
             report = await session.EndAsync(
                 StopWork,
                 coreEnded ? null : () => client.SendAsync(Events.SignedOut),
-                [new WipeStep("what the web view keeps", OnUiAsync(() => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName), what => ReportProblem("web wipe " + what))))],
+                [new WipeStep("what the web view keeps", () => WebPage.ClearAllAsync(Options.WebFolder ?? WebData.DefaultFolder(Options.AppName), what => ReportProblem("web wipe " + what)), OnUi)],
                 [.. new[]
                 {
                     new WipeStep("the files chosen for forms", () =>
@@ -504,7 +507,7 @@ public sealed partial class ShellHost : IDisposable
                     }),
 
                     // What the system shows or holds for the person (notifications waiting and shown, the count, the jump list), before the windows' own.
-                    new WipeStep("the notifications, the count and the jump list", OnUiAsync(() => Place?.EndSessionAsync() ?? Task.CompletedTask)),
+                    new WipeStep("the notifications, the count and the jump list", () => Place?.EndSessionAsync() ?? Task.CompletedTask, OnUi),
                 }.Concat(moreWipeSteps)]).ConfigureAwait(false);
         }
         catch (Exception problem)
@@ -512,7 +515,7 @@ public sealed partial class ShellHost : IDisposable
             report = new WipeReport([], [new KeyValuePair<string, string>("the start of the sign-out", problem.GetType().Name)]);
         }
 
-        if (!await OnDispatcherAsync().ConfigureAwait(false))
+        if (!await OnDispatcherAsync())
         {
             return;
         }
