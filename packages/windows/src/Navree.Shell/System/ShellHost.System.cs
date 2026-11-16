@@ -124,7 +124,7 @@ public sealed partial class ShellHost
         }
 
         TimeSpan limit = TimeSpan.FromMinutes(10);
-        int ticket = signIn.Begin(comesBack, DateTimeOffset.UtcNow, limit);
+        int ticket = signIn.Begin(comesBack, DateTimeOffset.UtcNow, limit, SignInRules.QueryValue(effect.Url, "state"));
         _ = OpenSignInAsync(effect.Url, ticket, limit);
     }
 
@@ -210,6 +210,13 @@ public sealed partial class ShellHost
         switch (BrowserSignIn.Route(BrowserSignIn.Offered, signIn.IsOpen, address))
         {
             case Arrival.SignInDone:
+                // The sign-in's own return ends the sign-in here too: it is no longer open, so what arrives after it is a link from outside,
+                // and its time running out tells the core nothing more. Any other address leaves it open; the core is told either way.
+                if (signIn.Offer(address, out _) == SignInOffer.Taken)
+                {
+                    StopLoopback();
+                }
+
                 client.Send(Events.SignInDone(address));
                 break;
             case Arrival.OpenLink:

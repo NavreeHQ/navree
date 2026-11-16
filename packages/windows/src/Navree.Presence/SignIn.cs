@@ -130,6 +130,65 @@ public static class SignInRules
     /// <param name="scheme">The scheme.</param>
     /// <returns>The name.</returns>
     public static string RegisteredName(string scheme) => scheme.ToLowerInvariant();
+
+    /// <summary>The value of a parameter in an address's query, read as the core reads one: the first of that name, decoded; nothing after a <c>#</c> is read.</summary>
+    /// <param name="address">The whole address.</param>
+    /// <param name="name">The parameter's name.</param>
+    /// <returns>Its value, or null when the query has none of that name.</returns>
+    public static string? QueryValue(string? address, string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (address is null)
+        {
+            return null;
+        }
+
+        int mark = address.IndexOf('?', StringComparison.Ordinal);
+        if (mark < 0)
+        {
+            return null;
+        }
+
+        string query = address[(mark + 1)..];
+        int hash = query.IndexOf('#', StringComparison.Ordinal);
+        if (hash >= 0)
+        {
+            query = query[..hash];
+        }
+
+        foreach (string pair in query.Split('&'))
+        {
+            int equals = pair.IndexOf('=', StringComparison.Ordinal);
+            string key = equals < 0 ? pair : pair[..equals];
+            if (Decoded(key) == name)
+            {
+                return equals < 0 ? string.Empty : Decoded(pair[(equals + 1)..]);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether two texts are the same, in time that does not say where they differ.</summary>
+    /// <param name="one">One text.</param>
+    /// <param name="other">The other.</param>
+    /// <returns>Whether they are the same.</returns>
+    public static bool Same(string? one, string? other) =>
+        one is not null
+        && other is not null
+        && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(System.Text.Encoding.UTF8.GetBytes(one), System.Text.Encoding.UTF8.GetBytes(other));
+
+    private static string Decoded(string text)
+    {
+        try
+        {
+            return Uri.UnescapeDataString(text.Replace('+', ' '));
+        }
+        catch (UriFormatException)
+        {
+            return text;
+        }
+    }
 }
 
 /// <summary>What became of an address offered to a sign-in.</summary>
@@ -147,11 +206,14 @@ public enum SignInOffer
 
 /// <summary>
 /// The one sign-in that may be open: a new one takes the place of an older one, whose end is then no longer waited for, and one
-/// that is not answered ends by itself after a time. It holds no clock of its own.
+/// that is not answered ends by itself after a time. It holds no clock of its own. A sign-in is over once its own return has arrived (on
+/// the way back it named and, when it was started with a <c>state</c>, carrying that state): from then on it is not open, an address that
+/// arrives is no longer its return, and its time running out says nothing.
 /// </summary>
 public sealed class SignInTracker
 {
     private SignInReturn? expected;
+    private string? state;
     private DateTimeOffset expires;
     private int serial;
 
@@ -165,11 +227,13 @@ public sealed class SignInTracker
     /// <param name="comesBack">Where it comes back.</param>
     /// <param name="now">The time.</param>
     /// <param name="limit">How long it may stay open.</param>
+    /// <param name="startedWith">The <c>state</c> the sign-in's address carried when the browser was sent to it, or null when it carried none.</param>
     /// <returns>Its number.</returns>
-    public int Begin(SignInReturn comesBack, DateTimeOffset now, TimeSpan limit)
+    public int Begin(SignInReturn comesBack, DateTimeOffset now, TimeSpan limit, string? startedWith = null)
     {
         ArgumentNullException.ThrowIfNull(comesBack);
         expected = comesBack;
+        state = string.IsNullOrEmpty(startedWith) ? null : startedWith;
         expires = now + limit;
         return ++serial;
     }
@@ -186,13 +250,16 @@ public sealed class SignInTracker
             return SignInOffer.NoneOpen;
         }
 
-        if (!expected.Matches(address))
+        // Its own return comes back the way the sign-in named and, when the sign-in was started with a state, carries that state: an address
+        // that only comes back the same way is not it, and leaves the sign-in open.
+        if (!expected.Matches(address) || (state is not null && !SignInRules.Same(state, SignInRules.QueryValue(address, "state"))))
         {
             return SignInOffer.NotTheReturn;
         }
 
         ticket = serial;
         expected = null;
+        state = null;
         return SignInOffer.Taken;
     }
 
@@ -208,6 +275,7 @@ public sealed class SignInTracker
         }
 
         expected = null;
+        state = null;
         return serial;
     }
 }
