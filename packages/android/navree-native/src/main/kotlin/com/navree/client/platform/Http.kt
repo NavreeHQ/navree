@@ -209,13 +209,24 @@ class OriginGuard(private val allowed: (String) -> Boolean) : Interceptor {
  * the core asked for before the end of a session goes out with that session's
  * cookies, and one asked for after goes out only once the wipe has finished.
  */
+/**
+ * Whether an answer is the last a write that carried files will get, so the
+ * copies of its files can be let go: an answer under 400 that is neither a 307
+ * nor a 308. Those two the core answers by asking again with the same body,
+ * the same files in it (`follow` in the core's `reduce.rs`), and the files must
+ * still be there for it; after a 301, 302 or 303 it only reads. A refusal (400
+ * and over) and a failure keep the copies too: the form stays on the screen
+ * with its files, for the person to send again.
+ */
+internal fun writeEnded(status: Int): Boolean = status < 400 && status != 307 && status != 308
+
 class CoreHttp(
     val cookies: CookieJar,
     private val origins: Origins,
     loopbackHttp: Boolean = false,
     private val state: StoredState = StoredState { it.run() },
     private val files: (String) -> RequestBody? = { null },
-    /** The tokens of the files a request carried, once its server took it (an answer under 400). */
+    /** The tokens of the files a request carried, once the write has its last answer ([writeEnded]). */
     private val sent: (List<String>) -> Unit = {},
     /** Where an answer goes: posted to the thread the core is driven on. */
     private val answer: (JsonObject) -> Unit,
@@ -274,8 +285,8 @@ class CoreHttp(
                     } catch (_: Exception) {
                         Events.responseFailed(effect.request, "other")
                     }
-                    // The server took the form: the copies of the files it carried are let go.
-                    if (response.code < 400) fileTokens(effect).takeIf { it.isNotEmpty() }?.let(sent)
+                    // The write has its last answer: the copies of the files it carried are let go.
+                    if (writeEnded(response.code)) fileTokens(effect).takeIf { it.isNotEmpty() }?.let(sent)
                     answer(event)
                 }
             },

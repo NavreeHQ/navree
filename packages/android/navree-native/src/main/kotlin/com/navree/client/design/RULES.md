@@ -304,7 +304,8 @@ With nothing opened, the list has the window.
   into its multipart body. A copy that is gone is shown as gone ("No longer
   available. Choose it again.") when the app comes back to the front, and no
   part is sent for it, never an empty one. The copies are removed when the
-  form's server takes the form, when the person leaves the form's screen, when a
+  form's write has its last answer (a 307 or a 308 is not one: the same body is
+  sent again, with its files), when the person leaves the form's screen, when a
   file is removed or replaced, at the end of a session, at the next start, and
   a day after they were made.
 - Unless the field says `keep_location`, the place a picture was taken is taken

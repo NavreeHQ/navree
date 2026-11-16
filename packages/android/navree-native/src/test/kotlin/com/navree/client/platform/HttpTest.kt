@@ -19,6 +19,15 @@ class HttpTest {
         Effect.Fetch(request = 5, method = method, url = url, headers = headers, body = body, timeoutMs = 30_000, xsrf = false)
 
     @Test
+    fun the_copies_of_a_writes_files_are_kept_until_the_write_has_its_last_answer() {
+        for (status in listOf(200, 201, 204, 301, 302, 303)) assertTrue("$status ends the write", writeEnded(status))
+        // The core sends the same body again after these two: the files are still needed.
+        for (status in listOf(307, 308)) assertTrue("$status is not the last answer", !writeEnded(status))
+        // A refusal keeps the form, and its files, for the person to send again.
+        for (status in listOf(400, 401, 413, 422, 500, 503)) assertTrue("$status keeps the files", !writeEnded(status))
+    }
+
+    @Test
     fun a_request_on_the_apps_origins_is_built_with_its_headers() {
         val request = fetchRequest(fetch(headers = listOf("x-navree-region" to "orders", "accept" to "application/vnd.navree.native+json")), origins, CookieJar.NO_COOKIES)
         assertNotNull(request)

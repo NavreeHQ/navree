@@ -120,9 +120,15 @@ class InputFieldsTest {
     private class Claims(private val recorded: Recorded, private val form: String) : Dispatcher() {
         val posts: MutableList<RecordedRequest> = Collections.synchronizedList(ArrayList())
 
+        /** When set, the first post is answered 307 to this path, which keeps the method and the body. */
+        @Volatile
+        var sendAgainTo: String? = null
+
         override fun dispatch(request: RecordedRequest): MockResponse {
             if (request.method != "POST") return recorded.dispatch(request)
             posts += request
+            val again = sendAgainTo
+            if (again != null && posts.size == 1) return MockResponse.Builder().code(307).addHeader("Location", again).build()
             return MockResponse.Builder().code(200).addHeader("Content-Type", "application/vnd.navree.native+json").body(form).build()
         }
     }
@@ -753,6 +759,30 @@ class InputFieldsTest {
         assertNotNull(PickedFiles.of(context).file(token))
         save()
         waitFor("the copy to go after the server took the form") { PickedFiles.of(context).file(token) == null }
+    }
+
+    /**
+     * A form answered 307 is sent again by the core with the same body: the
+     * second request carries the file's own bytes, and the copy goes only
+     * after the answer that ends the write.
+     */
+    @Test
+    fun aFormThatIsSentAgainAfterARedirectThatKeepsItsBodyCarriesItsFileAgain() {
+        startOnTheClaimsForm()
+        claims.sendAgainTo = "/claims/kept"
+        val bytes = randomBytes(30_000, seed = 11)
+        pick("Papers", "Choose files", document("Rasid Bathinda.pdf", pdf, bytes))
+        waitFor("the file to reach the core") { heldFiles("f-papers").size == 1 }
+        val token = heldFiles("f-papers").single().token
+        save()
+        waitFor("the form to be sent a second time, where the first answer pointed") { claims.posts.size == 2 }
+        assertEquals("/claims/kept", claims.posts[1].url.encodedPath)
+        for ((at, request) in claims.posts.withIndex()) {
+            val file = partsOf(request).singleOrNull { it.name == "papers" }
+            assertNotNull("request ${at + 1} carries the file", file)
+            assertEquals("request ${at + 1} carries the file's own bytes", sha(bytes), sha(file!!.bytes))
+        }
+        waitFor("the copy to go after the answer that ended the write") { PickedFiles.of(context).file(token) == null }
     }
 
     /** The copies of a form's files go when the person leaves its screen. */
