@@ -248,36 +248,73 @@ public final class HTTPTransport: Transport {
         for (name, value) in sent { request.setValue(value, forHTTPHeaderField: name) }
         let streams = streams
         open[stream] = Task { [weak self] in
-            var status: Int?
-            do {
-                let (bytes, response) = try await streams.bytes(for: request)
-                status = (response as? HTTPURLResponse)?.statusCode
-                if status == 200 {
-                    report(.open)
-                    // Lines by hand: an event ends at a blank line, which a sequence of lines leaves out.
-                    var reader = EventStreamReader()
-                    var line: [UInt8] = []
-                    for try await byte in bytes {
-                        guard byte == 0x0A else {
-                            line.append(byte)
-                            continue
-                        }
-                        if line.last == 0x0D { line.removeLast() }
-                        if let event = reader.read(String(decoding: line, as: UTF8.self)) {
-                            report(.event(name: event))
-                        }
-                        line.removeAll(keepingCapacity: true)
-                    }
-                }
-            } catch {}
+            // Read away from the main actor: a stream that sends fast does not hold up the app.
+            let status = await Self.listen(to: request, with: streams) { [weak self] state in
+                // Said only while the core holds the stream open.
+                guard let self, self.open[stream] != nil else { return }
+                report(state)
+            }
             // Ended or failed; said only when the core did not close it.
             guard let self, self.open.removeValue(forKey: stream) != nil else { return }
             report(.closed(status: status))
         }
     }
 
+    /// Reads a stream until it ends or fails, and says it is open and each
+    /// event's name. Gives the answer's status, when there was an answer.
+    /// It runs away from the main actor, and holds at most one line's worth
+    /// of the stream (``LineCutter``).
+    nonisolated static func listen(
+        to request: URLRequest, with session: URLSession, report: @escaping @MainActor (CoreEvent.StreamState) -> Void
+    ) async -> Int? {
+        var status: Int?
+        do {
+            let (bytes, response) = try await session.bytes(for: request)
+            status = (response as? HTTPURLResponse)?.statusCode
+            guard status == 200 else { return status }
+            await report(.open)
+            // Lines by hand: an event ends at a blank line, which a sequence of lines leaves out.
+            var reader = EventStreamReader()
+            var lines = LineCutter()
+            for try await byte in bytes {
+                guard let line = lines.take(byte), let event = reader.read(line) else { continue }
+                await report(.event(name: event))
+            }
+        } catch {}
+        return status
+    }
+
     public func close(stream: Int) {
         open.removeValue(forKey: stream)?.cancel()
+    }
+}
+
+/// Cuts a stream's bytes into lines. It holds at most ``most`` bytes of a
+/// line: of a longer one only that start is kept and given, so a stream
+/// that never ends a line costs no more memory than one line may. What a
+/// stream is read for is each event's name, a few bytes at the start of a
+/// line; the data, which may be long, is never read.
+struct LineCutter {
+    /// The most of one line that is held.
+    static let most = 64 * 1024
+
+    private let limit: Int
+    private var line: [UInt8] = []
+
+    init(most: Int = LineCutter.most) {
+        limit = most
+    }
+
+    /// Takes the stream's next byte. Gives the line it ends, without its
+    /// line break; `nil` while the line goes on.
+    mutating func take(_ byte: UInt8) -> String? {
+        guard byte == 0x0A else {
+            if line.count < limit { line.append(byte) }
+            return nil
+        }
+        defer { line.removeAll(keepingCapacity: true) }
+        if line.last == 0x0D { line.removeLast() }
+        return String(decoding: line, as: UTF8.self)
     }
 }
 

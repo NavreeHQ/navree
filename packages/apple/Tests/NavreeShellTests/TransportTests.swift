@@ -281,6 +281,67 @@ struct HTTPTests {
     }
 }
 
+@Test func aStreamsLineIsCutAtItsBreakAndOfALongOneOnlyTheStartIsHeld() {
+    var cutter = LineCutter(most: 8)
+    var lines: [String] = []
+    for byte in "event: a\n\r\ndata: 0123456789abcdef".utf8 {
+        if let line = cutter.take(byte) { lines.append(line) }
+    }
+    // A line of exactly the most that is held, and a blank one that ends an event.
+    #expect(lines == ["event: a", ""])
+    // A line that goes on past it is given by its start, once it ends.
+    for byte in "ghij\nok\r\n".utf8 {
+        if let line = cutter.take(byte) { lines.append(line) }
+    }
+    #expect(lines == ["event: a", "", "data: 01", "ok"])
+    // However long a line with no end is, no more of it is held.
+    var endless = LineCutter()
+    var given = 0
+    for _ in 0..<(LineCutter.most * 3) where endless.take(0x78) != nil { given += 1 }
+    #expect(given == 0)
+    #expect(endless.take(0x0A)?.utf8.count == LineCutter.most)
+}
+
+@MainActor
+struct StreamTests {
+    /// What a stream said, in order.
+    @MainActor
+    final class Heard {
+        var states: [CoreEvent.StreamState] = []
+    }
+
+    @Test func aStreamIsReadToItsEndWhateverTheLengthOfItsLines() async {
+        let host = "streams-long.shop.example"
+        let long = String(repeating: "x", count: LineCutter.most * 3)
+        StubOrigin.answer(host, .init(
+            status: 200, headers: ["Content-Type": "text/event-stream"],
+            body: "event: orders\ndata: \(long)\n\n: still here\nevent: stats\r\ndata: {}\r\n\r\n"
+        ))
+        let jar = CookieJar(origin: "https://\(host)", persistent: false)
+        let transport = HTTPTransport(jar: jar, configuration: StubOrigin.configuration)
+        let heard = Heard()
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            transport.open(stream: 4, url: "https://\(host)/broadcasting/stream?topics=orders,stats", headers: []) { state in
+                heard.states.append(state)
+                if case .closed = state { done.resume() }
+            }
+        }
+        #expect(heard.states == [.open, .event(name: "orders"), .event(name: "stats"), .closed(status: 200)])
+    }
+
+    @Test func aStreamTheCoreClosedSaysNothingMore() async throws {
+        let host = "streams-closed.shop.example"
+        StubOrigin.answer(host, .init(status: 200, headers: [:], body: "event: orders\ndata: {}\n\n"))
+        let jar = CookieJar(origin: "https://\(host)", persistent: false)
+        let transport = HTTPTransport(jar: jar, configuration: StubOrigin.configuration)
+        let heard = Heard()
+        transport.open(stream: 5, url: "https://\(host)/broadcasting/stream", headers: []) { heard.states.append($0) }
+        transport.close(stream: 5)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(heard.states.isEmpty)
+    }
+}
+
 @Test func anEventStreamSaysEachEventsNameAndNeverItsData() {
     var reader = EventStreamReader()
     var events: [String?] = []
