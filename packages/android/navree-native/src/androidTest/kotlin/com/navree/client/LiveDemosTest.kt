@@ -292,6 +292,11 @@ class LiveDemosTest {
     fun aKeyboardGoesThroughAWindowInTheOrderItIsRead() {
         val origin = arguments.getString("store")
         assumeTrue("no store demo was named", origin != null)
+        // A window still in touch mode takes its first Tab as the one that leaves it, and puts the focus where the screen's
+        // first control is by position, not by order. A person whose keyboard is in use has left it: so is the window, before the app is drawn.
+        Shots.pressTab()
+        compose.waitForIdle()
+        val touch = compose.activity.window.decorView.isInTouchMode
         val app = start(origin!!)
         send(app, Events.select(2))
         settled(app)
@@ -304,9 +309,9 @@ class LiveDemosTest {
         }
         val first = stops.first()
         if (tablet) {
-            assertTrue("on a tablet the first stop is in the navigation at the start: $stops", navigation.any { first.startsWith(it) })
+            assertTrue("on a tablet the first stop is in the navigation at the start (the window was in touch mode before the walk: $touch, look ${Shots.look}): $stops", navigation.any { first.startsWith(it) })
         } else {
-            assertTrue("on a phone the first stop is in the top bar, where Search and the account are: $stops", first.contains("Search", ignoreCase = true) || first.contains("Account", ignoreCase = true))
+            assertTrue("on a phone the first stop is in the top bar, where Search and the account are (the window was in touch mode before the walk: $touch, look ${Shots.look}): $stops", first.contains("Search", ignoreCase = true) || first.contains("Account", ignoreCase = true))
         }
         val search = stops.indexOfFirst { it.contains("Search", ignoreCase = true) }
         val row = stops.indexOfFirst { it.startsWith("Units of") || it.contains("Restock") }
