@@ -16,8 +16,10 @@
 //!   (`session_ending`), and each such word is followed by one
 //!   `forget_session`, whatever ends the wait: the removal's first answer (a
 //!   redirect of it is not followed), its failure, or the client saying it
-//!   ended the session itself (`signed_out`). What was asked meanwhile is
-//!   dropped then, and the shell is asked for anew.
+//!   ended the session itself (`signed_out`). A shell asked for meanwhile is
+//!   dropped then, and the shell is asked for anew. The removal stays on its
+//!   way through a change of person, so somebody who signs in while it is
+//!   awaited does not leave the wait without its word.
 //! - A session that ran out is not a sign-out: the way in is put up over the
 //!   work, and the work stays.
 
@@ -217,13 +219,16 @@ impl Core {
     }
 
     /// Tells the client to forget the session, and starts again from the
-    /// shell. What was asked while the removal was awaited (a shell, when
-    /// the app came to the front) was asked in the session that is now
-    /// forgotten: a client may have refused it and will never answer, or
-    /// have sent it with that session's cookies or with none. None of it is
-    /// wanted any more, so the shell is asked for anew, after the word.
+    /// shell. A shell asked for while the removal was awaited (when the app
+    /// came to the front) was asked in the session that is now forgotten: a
+    /// client may have refused it and will never answer, or have sent it
+    /// with that session's cookies or with none. It is wanted no more, and
+    /// the shell is asked for anew, after the word. Nothing else is dropped:
+    /// with no shell there are no screens to ask for anything, and where a
+    /// shell did answer in the wait and somebody signed in, what is on its
+    /// way is theirs.
     pub(crate) fn session_forgotten(&mut self) {
-        self.drop_pending(|_| true);
+        self.drop_pending(|purpose| *purpose == Pending::Shell);
         self.effects.push(Effect::ForgetSession);
         self.start();
     }
