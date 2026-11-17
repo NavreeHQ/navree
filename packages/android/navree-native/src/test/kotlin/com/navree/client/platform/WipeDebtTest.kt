@@ -135,6 +135,23 @@ class WipeDebtTest {
     }
 
     @Test
+    fun a_deletion_that_could_do_nothing_is_no_longer_on_its_way_and_the_whole_stays_owed() {
+        val debt = debt()
+        val end = debt.owe()
+        // The cookie store never said its cookies are gone, so the mark was not narrowed; the deletion gives up.
+        assertFalse(debt.over(null, end))
+        assertFalse("nothing is being done any more", debt.running)
+        assertTrue(debt.owed && debt.all)
+        assertTrue(debt.held(shop))
+        assertNull("the cookies are not a go's to take: the next start does the whole", debt.begin())
+        assertTrue(debt().let { it.owed && it.all })
+
+        // The cookie store answers after all: what pages stored is then a go's to take, when one is asked for.
+        debt.narrow(end)
+        assertEquals(end, debt.begin())
+    }
+
+    @Test
     fun a_go_is_at_every_origin_known_until_one_has_ended_and_then_at_those_it_left() {
         val debt = debt()
         debt.saw(patiala)

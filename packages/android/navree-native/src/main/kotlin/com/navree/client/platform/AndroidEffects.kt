@@ -245,7 +245,10 @@ class AndroidEffects(
      * the pages of the others are shown again. Until the cookies are gone and
      * on the disk the mark owes the whole of this, and a start of the app that
      * finds it so does all of it again, the push token's deletion with it,
-     * before anything of that run is kept (the `init` above).
+     * before anything of that run is kept (the `init` above). The cookie
+     * store is waited for no longer than [COOKIES_WAIT_MS]: what follows the
+     * cookies then goes on without its word, and the mark goes on owing the
+     * whole until the store has said they are gone.
      */
     private fun end() {
         // Owed from this moment and written down, whatever the store is still busy with: a page of the next session is not
@@ -322,6 +325,8 @@ class AndroidEffects(
                 }
                 Unit
             }
+            // Whether the cookie store has said its cookies are gone: only then are they called gone in the mark.
+            val cookiesGone = AtomicBoolean(false)
             // What follows the web view's own deletion goes on once: when the web view says what sites stored is gone, at once
             // where it cannot say, and after SITES_WAIT_MS where it has not said.
             val started = AtomicBoolean(false)
@@ -329,11 +334,12 @@ class AndroidEffects(
                 if (started.compareAndSet(false, true)) {
                     // The cookies are written to disk before the wipe is done, off the main thread: nothing after it, the end
                     // of the session's thread included, comes first. Once they are, the mark owes only what pages stored at
-                    // the origins: a run of the app that ends before that does all of this again.
+                    // the origins: a run of the app that ends before that does all of this again. Where the cookie store has
+                    // not said its cookies are gone, the mark goes on owing the whole.
                     thread(name = "navree-cookie-flush", isDaemon = true) {
                         val flushed = try {
                             cookies.flush()
-                            SiteWipe.narrow(debt)
+                            if (cookiesGone.get()) SiteWipe.narrow(debt)
                             true
                         } catch (_: Throwable) {
                             false
@@ -341,8 +347,10 @@ class AndroidEffects(
                         main.post {
                             // Whatever the web view's own call took, and whether or not it has said so: a document of the
                             // client's own on each origin unregisters its service workers, deletes its caches and says what
-                            // is left, so nothing is called gone on that call's word alone.
-                            if (!flushed) {
+                            // is left, so nothing is called gone on that call's word alone. Not while the cookie store has
+                            // not said its cookies are gone: no origin is shown a document while the session's cookies may
+                            // stand, and the deletion is called over with the whole owed still.
+                            if (!flushed || !cookiesGone.get()) {
                                 last(null)
                             } else {
                                 try {
@@ -355,19 +363,35 @@ class AndroidEffects(
                     }
                 }
             }
-            try {
-                // The cookies first: they do not wait for the web view's deletion of what sites stored, which has no limit of its own.
-                cookies.clear {
-                    main.postDelayed({ rest() }, SITES_WAIT_MS)
-                    try {
-                        clearWebViews(app) { rest() }
-                    } catch (_: Throwable) {
-                        // No web view on this device: nothing of it to clear, and no page of it to show.
-                        rest()
+            // The cookies first: they do not wait for the web view's deletion of what sites stored, which has no limit of its own.
+            // Nor does what follows wait for the cookie store longer than COOKIES_WAIT_MS: a store that never answers does not
+            // keep the web view's cache and what sites stored from being deleted, nor the deletion from being called over, after
+            // which something can be done about what is owed again. The store's word then comes late or never, and until it
+            // comes the mark owes the whole.
+            stepWithLimit(
+                arm = { release -> main.postDelayed({ release() }, COOKIES_WAIT_MS) },
+                step = { said -> cookies.clear { said() } },
+                late = {
+                    // The cookies are gone after all: written to the disk, the mark then owes only what pages stored, and
+                    // that is a go's to take, begun here unless the deletion is still on its way and comes to it itself.
+                    cookiesGone.set(true)
+                    thread(name = "navree-cookie-flush", isDaemon = true) {
+                        val narrowed = runCatching {
+                            cookies.flush()
+                            SiteWipe.narrow(debt)
+                        }.isSuccess
+                        if (narrowed) main.post { SiteWipe.finish() }
                     }
+                },
+            ) { said ->
+                cookiesGone.set(said)
+                main.postDelayed({ rest() }, SITES_WAIT_MS)
+                try {
+                    clearWebViews(app) { rest() }
+                } catch (_: Throwable) {
+                    // No web view on this device: nothing of it to clear, and no page of it to show.
+                    rest()
                 }
-            } catch (_: Throwable) {
-                last(null)
             }
         }
     }
@@ -528,5 +552,8 @@ class AndroidEffects(
 
         /** The longest the web view is waited for to say that what sites stored is gone, before what follows goes on without its word. */
         const val SITES_WAIT_MS = 4_000L
+
+        /** The longest the cookie store is waited for to say its cookies are gone, before what follows goes on without its word. */
+        const val COOKIES_WAIT_MS = 4_000L
     }
 }
