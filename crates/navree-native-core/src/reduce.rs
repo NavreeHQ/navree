@@ -1372,7 +1372,9 @@ impl Core {
         self.inner.messages.clear();
         self.inner.calls.clear();
         self.inner.launch = None;
-        self.drop_pending(|purpose| *purpose != Pending::Shell);
+        // The removal of a push token is the session's before, and the wait
+        // for it ends with the word that the session is forgotten: it stays.
+        self.drop_pending(|purpose| !matches!(purpose, Pending::Shell | Pending::PushGone));
         self.touch(Change::Nav);
         self.touch(Change::Messages);
     }
@@ -4002,6 +4004,97 @@ mod tests {
             ..Response::default()
         }));
         assert_eq!(core.view.stage, Stage::Ready, "the app starts");
+    }
+
+    /// Somebody signs in while the removal is still awaited: the client sent
+    /// the shell that was asked for in the wait, it named nobody, and a
+    /// sign-in followed within the removal's few seconds. The change of
+    /// person does not take the removal away, so the wait still ends with
+    /// its word; and what the person who signed in asked for is not dropped
+    /// with the wait.
+    #[test]
+    fn a_sign_in_while_the_removal_is_awaited_leaves_the_wait_to_end_with_its_word() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        const HARPREET: &str = "0193a4b2-0000-7000-8000-00000000hs02";
+        let hers = include_str!("../transcripts/fixtures/store/shell.json");
+        let nobody = include_str!("../transcripts/fixtures/made/shell-nobody.json");
+        let his = include_str!("../transcripts/fixtures/made/shell-other.json");
+        // Ravneet is signed in, the server holds her device's token, and she signs out.
+        let mut core = signed_in_as(Some(RAVNEET), hers);
+        core.inner.push_route = Some("/api/notifications/push-devices".to_owned());
+        core.inner.push.registered = Some("fcm-token-2604".to_owned());
+        core.signed_out_on_purpose();
+        let effects = std::mem::take(&mut core.effects);
+        let removal = effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(request) if request.method == Verb::Delete => Some(request.request),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("the token's removal is asked for: {effects:?}"));
+        // The app comes to the front: a shell is asked for, sent, and names nobody.
+        let front = core.send(Event::Foreground);
+        let asked = front
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .unwrap_or_else(|| panic!("coming to the front asks for a shell: {front:?}"));
+        core.send(native(asked, nobody, None, false));
+        // Harpreet signs in at once, and the shell asked for after it names him.
+        let again = core.send(Event::Foreground);
+        let asked = again
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .unwrap_or_else(|| panic!("the shell is asked for again: {again:?}"));
+        let named = core.send(native(asked, his, Some(HARPREET), false));
+        assert_eq!(
+            core.view
+                .app
+                .as_ref()
+                .and_then(|app| app.user.as_ref())
+                .map(|user| user.name.as_str()),
+            Some("Harpreet Singh")
+        );
+        assert!(
+            !named
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Cancel { request } if *request == removal)),
+            "the removal went with the person before: the wait would never end: {named:?}"
+        );
+        assert!(core.inner.signing_out, "the core still waits");
+        let his_pages: Vec<u64> = core
+            .inner
+            .pending
+            .iter()
+            .filter(|(_, asked)| matches!(asked.purpose, Pending::Page { .. }))
+            .map(|(request, _)| *request)
+            .collect();
+        assert!(!his_pages.is_empty(), "his first page is asked for");
+
+        // The removal is answered: the word is said, once, and his page is still on its way.
+        let answered = core.send(Event::Response(Response {
+            request: removal,
+            status: 204,
+            ..Response::default()
+        }));
+        assert_eq!(
+            answered
+                .effects
+                .iter()
+                .filter(|effect| matches!(effect, Effect::ForgetSession))
+                .count(),
+            1,
+            "{answered:?}"
+        );
+        assert!(!core.inner.signing_out, "the wait is over");
+        assert!(
+            his_pages
+                .iter()
+                .all(|request| core.inner.pending.contains_key(request)),
+            "what he asked for went with the wait: {answered:?}"
+        );
     }
 
     /// Signing out ends what a snapshot waited for, as signing out on purpose
