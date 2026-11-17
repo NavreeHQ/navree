@@ -104,8 +104,10 @@ public enum Intent: Sendable, Equatable {
     /// The focus moved to the field the screen asked for.
     case focused(serial: Int)
     /// Files were picked for a field, said by its key: the app keeps their
-    /// bytes for the form.
-    case files(form: FormRef, field: String, urls: [URL])
+    /// bytes for the form. `keepLocation` is the field's own word
+    /// (`keep_location`): without it, the app takes the place a photo was
+    /// taken out of it before it is kept.
+    case files(form: FormRef, field: String, urls: [URL], keepLocation: Bool = false)
     /// A row of a table was ticked or cleared; without a row, all of them;
     /// with `across`, every record that matches its query.
     case choose(table: String, row: String?, on: Bool, across: Bool)

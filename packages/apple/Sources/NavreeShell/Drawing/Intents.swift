@@ -93,7 +93,7 @@ extension NativeClient {
             send(.tab(screen: id, id: tabs, index: index))
         case .focused(let serial):
             send(.focused(screen: id, serial: serial))
-        case .files(let form, let field, let urls):
+        case .files(let form, let field, let urls, let keepLocation):
             guard self.field(form, field, on: id) != nil else {
                 return problem("a file field the core does not hold changed: \(form.key) \(field)")
             }
@@ -101,7 +101,8 @@ extension NativeClient {
                 // A file from another app's storage is lent for as long as it is copied.
                 let lent = url.startAccessingSecurityScopedResource()
                 defer { if lent { url.stopAccessingSecurityScopedResource() } }
-                return FileStore.shared.keep(url)
+                // A photo is kept without the place it was taken, unless the field asks for it.
+                return FileStore.shared.keep(url, keepLocation: keepLocation)
             }
             send(.field(screen: id, form: Self.formID(form), field: field, value: .files(files)))
         case .choose(let table, let row, let on, let across):

@@ -88,7 +88,7 @@ struct FieldControl: View {
             ))
         case .file(let input):
             FileControl(label: label, input: input, chosen: values) { urls in
-                context.send(.files(form: ref, field: field.key, urls: urls))
+                context.send(.files(form: ref, field: field.key, urls: urls, keepLocation: input.keepLocation))
             }
         case .range(let input):
             RangeControl(label: label, input: input, values: values) { set($0) }
