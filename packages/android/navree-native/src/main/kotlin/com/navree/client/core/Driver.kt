@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.navree.protocol.Navree
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -47,6 +48,13 @@ class Driver(private val engine: Engine) {
 
     /** Failures of the core itself: an event that did not read, a part that did not decode. */
     var problems: (String) -> Unit = {}
+
+    /**
+     * Who the app's part names as signed in, said each time that part is read
+     * back: before any effect of the same update is carried out, and before
+     * the interface is drawn from it. Null when it names nobody.
+     */
+    var person: (Navree.User?) -> Unit = {}
 
     var app: AppPart? by mutableStateOf(null)
         private set
@@ -95,6 +103,7 @@ class Driver(private val engine: Engine) {
     fun readAll() {
         val all = query(JsonObject(emptyMap())) as? JsonObject ?: return
         app = all["app"]?.let { decode(AppPart.serializer(), it) }
+        sayPerson()
         nav = decode(NavPart.serializer(), all) ?: nav
         val kept = (all["screens"] as? JsonObject).orEmpty()
         screens.clear()
@@ -128,6 +137,15 @@ class Driver(private val engine: Engine) {
         for (effect in (update["effects"] as? JsonArray).orEmpty()) carryOut(Effect.read(effect))
     }
 
+    /** Says who the app's part names now. What fails there is reported by its kind, and the rest of the update goes on. */
+    private fun sayPerson() {
+        try {
+            person(app?.user)
+        } catch (e: Throwable) {
+            problems("who is signed in could not be heard: ${e::class.simpleName}")
+        }
+    }
+
     /** Whether an answer of the core says it has stopped for good: the mark, or the words a core without the mark says it in. */
     private fun stops(answer: JsonObject): Boolean =
         (answer["stopped"] as? JsonPrimitive)?.booleanOrNull == true || (answer["error"] as? JsonPrimitive)?.contentOrNull == CORE_STOPPED
@@ -158,7 +176,10 @@ class Driver(private val engine: Engine) {
         fun s(name: String) = (change[name] as? JsonPrimitive)?.contentOrNull
         fun l(name: String) = (change[name] as? JsonPrimitive)?.longOrNull
         when (s("t")) {
-            "app" -> app = query(part("app"))?.let { decode(AppPart.serializer(), it) }
+            "app" -> {
+                app = query(part("app"))?.let { decode(AppPart.serializer(), it) }
+                sayPerson()
+            }
             "nav" -> {
                 query(part("nav"))?.let { decode(NavPart.serializer(), it) }?.let { nav = it }
                 // A screen in no stack is gone.

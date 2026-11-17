@@ -78,6 +78,36 @@ class DriverTest {
     }
 
     @Test
+    fun who_the_apps_part_names_is_said_when_the_part_is_read_back_before_any_effect_of_the_same_update() {
+        val named = """{"name":"Charkha Supply Co.","home":"/","user":{"name":"Ravneet Kaur","email":"ravneet.kaur@example.com"}}"""
+        val engine = Scripted(ArrayDeque(listOf("""{"changed":[{"t":"app"}],"effects":[{"t":"cache_clear"},{"t":"haptic","kind":"success"}]}""")), mapOf("app" to named))
+        val driver = Driver(engine)
+        val order = ArrayList<String>()
+        driver.person = { user -> order += "the app names " + user?.name + ", " + user?.email }
+        driver.effects = EffectRunner { effect -> order += "an effect: " + effect::class.simpleName }
+        driver.send(Events.start)
+        assertEquals(listOf("the app names Ravneet Kaur, ravneet.kaur@example.com", "an effect: CacheClear", "an effect: Haptic"), order)
+
+        // An app part that names nobody is said too, as nobody; and a failure where it is heard is reported and the effects still run.
+        val nobody = Scripted(ArrayDeque(listOf("""{"changed":[{"t":"app"}],"effects":[{"t":"cache_clear"}]}""")), mapOf("app" to """{"name":"Charkha Supply Co.","home":"/"}"""))
+        val second = Driver(nobody)
+        val problems = ArrayList<String>()
+        val ran = ArrayList<Effect>()
+        var heard = "not said"
+        second.problems = { problems += it }
+        second.person = { user ->
+            heard = user?.name ?: "nobody"
+            throw IllegalStateException("the disk is full")
+        }
+        second.effects = EffectRunner { ran += it }
+        second.send(Events.start)
+        assertEquals("nobody", heard)
+        assertEquals(listOf<Effect>(Effect.CacheClear), ran)
+        assertEquals(1, problems.size)
+        assertTrue("named by its kind, not by what it held", "IllegalStateException" in problems.single() && "disk" !in problems.single())
+    }
+
+    @Test
     fun an_event_sent_while_one_is_handled_waits_its_turn() {
         val engine = Scripted(ArrayDeque(listOf("""{"changed":[],"effects":[{"t":"cache_read","key":"boot"}]}""")), emptyMap())
         val driver = Driver(engine)

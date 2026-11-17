@@ -75,6 +75,8 @@ class NavreeSession(
 
     init {
         driver.effects = effects
+        // Who the core names as signed in is heard the moment its answer is read back, before anything is drawn from it.
+        driver.person = effects::hears
         effects.picked.mostBytes = config.mostFileBytes
         // Said once, at start: an entry of the configuration that does not read is left out.
         for (entry in effects.origins.refused) android.util.Log.w("Navree", "left out of the configuration, it does not read: $entry")

@@ -182,6 +182,9 @@ internal class SessionEnd(
     /** The core said the session is ending and has not yet said it is forgotten: the end of the session is begun. */
     private var begun = false
 
+    /** Whether a session is ending and not yet forgotten: what the core says meanwhile says nothing of who comes next. */
+    val under: Boolean get() = begun
+
     /** The core says the session is ending. */
     fun ending() {
         begin()
