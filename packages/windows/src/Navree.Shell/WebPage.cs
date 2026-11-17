@@ -268,12 +268,13 @@ internal sealed class WebPage : Grid, ILiveWebView
         }
         catch (WebViewNotEmptiedException)
         {
-            // What the web view kept for a person who signed out is still on the device: no web view is started in this run, so no page can
-            // be shown with it, and the person is told the way on.
+            // What the web view kept for the person before (one who signed out, or one whose place another person took with no sign-out
+            // between) is still on the device: no web view is started in this run, so no page can be shown with it, and the person is
+            // told the way on.
             CloseNow();
             Children.Clear();
-            Children.Add(Look.Label("This page cannot be shown until the app is started again: what its web pages kept for the person who signed out could not be removed from this device. Close the app and start it again.", muted: true));
-            host.ReportProblem("a web page was not shown: what the web view kept at the last sign-out could not be taken away");
+            Children.Add(Look.Label("This page cannot be shown until the app is started again: what its web pages kept for the person who was signed in before could not be removed from this device. Close the app and start it again.", muted: true));
+            host.ReportProblem("a web page was not shown: what the web view kept for the person before could not be taken away");
         }
         catch (Exception problem)
         {
@@ -307,13 +308,13 @@ internal sealed class WebPage : Grid, ILiveWebView
     // The runtime has no way to ask the app about the requests of a page's workers, so the page is not shown.
     private sealed class WebViewTooOldException(Exception inner) : Exception("the web view runtime has no request filter for workers", inner);
 
-    // What the web view kept for a person who signed out could be neither cleared nor deleted, so no web view is started in this run.
-    private sealed class WebViewNotEmptiedException() : Exception("what the web view kept at the last sign-out could not be taken away");
+    // What the web view kept for the person before could be neither cleared nor deleted, so no web view is started in this run.
+    private sealed class WebViewNotEmptiedException() : Exception("what the web view kept for the person before could not be taken away");
 
     private async Task StartAsync()
     {
-        // The folder of the session now, which no earlier session's profile was ever in; none when a sign-out of this run could not take
-        // away what the web view kept.
+        // The folder of the session now, which no earlier session's profile was ever in; none when a sign-out or a change of person of this
+        // run could not take away what the web view kept.
         string folder = host.WebFolder ?? throw new WebViewNotEmptiedException();
         startedIn = folder;
         if (!closed)

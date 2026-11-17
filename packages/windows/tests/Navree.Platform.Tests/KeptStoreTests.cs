@@ -91,6 +91,49 @@ public sealed class KeptStoreTests
     }
 
     [TestMethod]
+    public void Taking_what_is_kept_for_a_person_leaves_the_keys_named_and_the_cache_and_never_reads_again_a_file_it_could_not_delete()
+    {
+        string folder = Folder();
+        try
+        {
+            KeptStore store = new(folder, "Navree.Tests");
+            store.Write("pending-notifications", "[{\"id\":\"call-simran\"}]");
+            string reminder = Directory.GetFiles(folder, "*.kept").Single();
+            store.Write("cookies", "session=manpreet");
+            store.Write("snapshot", "{\"typed\":\"Jasleen's draft\"}");
+            store.WriteCached("boot", "{\"app\":\"Charkha Supply Co.\"}");
+            store.WriteCached("snapshot", "what the core keeps under the same word");
+
+            // Another program holds the reminders' file (a scanner is reading it), so it cannot be deleted.
+            using (FileStream other = new(reminder, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                store.ClearOwn("cookies");
+                Expect.That(File.Exists(reminder), "the file another program holds was deleted: this test shows nothing");
+                Assert.IsNull(store.Read("pending-notifications"), "a file of the person before that could not be deleted is still read");
+            }
+
+            Assert.AreEqual("session=manpreet", store.Read("cookies"), "a key that was to stay went");
+            Assert.IsNull(store.Read("snapshot"), "what was kept for the person before stayed");
+            Assert.AreEqual("{\"app\":\"Charkha Supply Co.\"}", store.ReadCached("boot"), "the core's cache went with what the client keeps for the person");
+            Assert.AreEqual("what the core keeps under the same word", store.ReadCached("snapshot"));
+
+            // A later start does not read the file either, and deletes it now that nothing holds it.
+            KeptStore next = new(folder, "Navree.Tests");
+            Assert.IsNull(next.Read("pending-notifications"), "the next start reads a file of the person before");
+            Assert.AreEqual(0, next.DeleteSetAside());
+            Expect.That(!File.Exists(reminder), "the file set aside is still on disk after it was let go");
+
+            // What is kept under the same key afterwards is the next person's, and is read.
+            next.Write("pending-notifications", "[{\"id\":\"stock-count\"}]");
+            Assert.AreEqual("[{\"id\":\"stock-count\"}]", next.Read("pending-notifications"));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void The_default_folder_is_under_the_local_application_data_and_not_the_roaming_one()
     {
         string folder = KeptStore.DefaultFolder("Charkha");
