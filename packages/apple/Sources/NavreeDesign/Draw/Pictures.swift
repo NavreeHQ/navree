@@ -1,3 +1,4 @@
+import ImageIO
 import SwiftUI
 
 #if canImport(UIKit)
@@ -6,7 +7,7 @@ import UIKit
 import AppKit
 #endif
 
-/// When a picture that was loaded is shown.
+/// When a picture that was loaded is shown, and how large it is drawn from.
 enum PictureRules {
     /// Whether a picture loaded from `loaded` is shown where `asked` is now
     /// asked for: only its own. A view that comes to stand for another
@@ -15,6 +16,24 @@ enum PictureRules {
     /// never the picture of the record that stood there before.
     static func shows(loaded: URL?, asked: URL?) -> Bool {
         loaded != nil && loaded == asked
+    }
+
+    /// The most pixels along a picture's longer side that are held: more
+    /// than the widest screen shows.
+    static let mostPixels = 4096
+
+    /// The picture in `data`, made no larger than ``mostPixels`` along its
+    /// longer side as it is read, and turned the way it was taken. A picture
+    /// a server sends may be a few megabytes of file and tens of thousands of
+    /// pixels a side: drawn at its full size it would take more memory than
+    /// the app is given. A smaller picture is read as it is.
+    static func decoded(_ data: Data) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: mostPixels,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 }
 
@@ -47,10 +66,11 @@ struct RemotePicture<Content: View, Placeholder: View>: View {
     }
 
     static func image(_ data: Data) -> Image? {
+        guard let picture = PictureRules.decoded(data) else { return nil }
         #if canImport(UIKit)
-        UIImage(data: data).map { Image(uiImage: $0) }
+        return Image(uiImage: UIImage(cgImage: picture))
         #elseif canImport(AppKit)
-        NSImage(data: data).map { Image(nsImage: $0) }
+        return Image(nsImage: NSImage(cgImage: picture, size: .zero))
         #endif
     }
 }
