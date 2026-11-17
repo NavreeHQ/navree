@@ -33,8 +33,8 @@ use crate::effect::{Body, Change, Effect, Request, Update, Verb};
 use crate::event::{Event, Response, StreamState, TransportError};
 use crate::origin::{Target, https_address, openable};
 use crate::state::{
-    App, Asked, Content, Destination, Failure, Goes, Held, Message, MessageInner, Modal, Notice,
-    Pending, ScreenId, ScreenInner, ScreenView, Stage, TimerFor,
+    App, AppUser, Asked, Content, Destination, Failure, Goes, Held, Message, MessageInner, Modal,
+    Notice, Pending, ScreenId, ScreenInner, ScreenView, Stage, TimerFor,
 };
 use crate::tree::{Names, Survey, has_id, opens, roots, walk};
 
@@ -1279,12 +1279,10 @@ impl Core {
             .unwrap_or(0);
         // The person as a client is given them carries the core's key for
         // them, by which a client tells one person from another. It is the
-        // core's alone to write: whatever a server wrote there is written over.
+        // core's alone to write: the protocol's own type has no such field,
+        // so whatever a server wrote there was not read.
         let key = self.inner.user.as_ref().map(Who::key);
-        let signed_in = shell.user.map(|mut user| {
-            user.key = key;
-            user
-        });
+        let signed_in = shell.user.zip(key).map(|(user, key)| AppUser { user, key });
         self.view.app = Some(App {
             name: shell.name,
             context: if from_device { None } else { shell.context },
@@ -5969,7 +5967,7 @@ mod tests {
 
     /// The key a client is given for the person signed in.
     fn key_of(core: &Core) -> Option<String> {
-        core.view.app.as_ref()?.user.as_ref()?.key.clone()
+        Some(core.view.app.as_ref()?.user.as_ref()?.key.clone())
     }
 
     /// The person a client is given carries the core's key for them. When
@@ -6065,10 +6063,12 @@ mod tests {
     }
 
     /// The key is the core's to write. A server leaves it out, and one a
-    /// server writes is written over: no answer can make two people one to
-    /// a client, or one person two.
+    /// server writes is not kept (the protocol's own type has no such field,
+    /// and the core writes its own): no answer can make two people one to a
+    /// client, or one person two. In what a client is given, the key stands
+    /// among the shell's own fields for the person, in one object.
     #[test]
-    fn a_key_a_server_writes_is_written_over() {
+    fn a_key_a_server_writes_is_not_kept() {
         const FIRST: &str = "7f1c2a90-0001-4000-8000-00000000a001";
         let shell = include_str!("../transcripts/fixtures/made/shell-harpreet-no-email.json");
         let written = shell.replacen(
@@ -6086,6 +6086,32 @@ mod tests {
                 "{id:?}: what a server wrote changed the key"
             );
         }
+
+        // As a client reads it: one object, the shell's fields and the key.
+        let core = signed_in_as(Some(FIRST), &written);
+        let user = serde_json::to_value(core.view())
+            .expect("the view state writes")
+            .pointer("/app/user")
+            .cloned()
+            .expect("somebody is signed in");
+        assert_eq!(user["name"], "Harpreet Singh");
+        assert!(user["menu"].is_array(), "{user}");
+        assert_eq!(
+            user["key"].as_str().map(str::to_owned),
+            key_of(&core),
+            "{user}"
+        );
+        assert_eq!(
+            user.get("user"),
+            None,
+            "the shell's fields are nested: {user}"
+        );
+        // And it reads back as what it was.
+        let read: crate::ViewState = serde_json::from_value(
+            serde_json::to_value(core.view()).expect("the view state writes"),
+        )
+        .expect("the view state reads");
+        assert_eq!(&read, core.view());
     }
 
     /// Two cores over one store, one still naming Ravneet and one naming a

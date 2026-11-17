@@ -115,12 +115,38 @@ pub struct App {
     /// The brand's part in the look.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<Theme>,
-    /// The person signed in, with their menu and the core's key for them
-    /// (`key`): the same for one person, another for another account. The
-    /// core always fills it, from the id the server named them by when it
-    /// gave one, and from their name and email otherwise.
+    /// The person signed in: what the shell says of them, and the core's key
+    /// for them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub user: Option<User>,
+    pub user: Option<AppUser>,
+}
+
+/// The person signed in, as a client is given them: what the shell says of
+/// them (their name, their email, their menu), and beside it the core's own
+/// name for them, `key`. In the JSON the two are one object: `key` stands
+/// among the shell's fields, where a client's models read it.
+///
+/// The key is no field of the protocol's [`User`]: a server does not write
+/// it, and one a server wrote is not read. The core makes it, always.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppUser {
+    /// What the shell says of them.
+    #[serde(flatten)]
+    pub user: User,
+    /// The same for one person, another for another account, by which a
+    /// client tells when somebody else is signed in. Made from the id the
+    /// server named the person by when it gave one (then it is the value a
+    /// snapshot's `person` holds, and never the id), and from their name and
+    /// email otherwise.
+    pub key: String,
+}
+
+impl std::ops::Deref for AppUser {
+    type Target = User;
+
+    fn deref(&self) -> &User {
+        &self.user
+    }
 }
 
 /// A top-level destination and the screens stacked in it. The stack is empty

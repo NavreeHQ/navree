@@ -29,6 +29,11 @@
 //!   arrived in.
 //! - `default` on every field a client may leave out; `anyOf` with `null` for
 //!   a value that may be absent; `x-json` for any JSON value.
+//! - `x-core` on a field the runtime core adds to a value of the protocol in
+//!   what it hands a client (see `CORE_FIELDS`). No type of this crate holds
+//!   such a field and no server writes one. It is in the schema because a
+//!   client's models are written from it, and a client reads the field
+//!   there.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
@@ -145,6 +150,22 @@ fn snake(name: &str) -> String {
     out
 }
 
+/// What the runtime core adds to a value of the protocol in what it hands a
+/// client: the type's name in the schema and the field's name in the JSON.
+/// Each is text, or absent.
+///
+/// The types of this crate do not hold these fields: they are what a server
+/// writes, and a server writes none of them (one it wrote is not read, since
+/// the type has no such field). The core's view state carries the protocol's
+/// value with the field beside its own, in one JSON object. A client's models
+/// are written from this schema, so the field is described here, on the type
+/// it stands in, and marked `x-core`.
+///
+/// - `User.key`: the core's own name for the person signed in, the same for
+///   one person and another for another account, by which a client tells
+///   when somebody else is signed in.
+const CORE_FIELDS: &[(&str, &str)] = &[("User", "key")];
+
 /// The vocabulary a field arrived in: its entry in [`LATER_FIELDS`], or its
 /// type's.
 fn field_since(ty: &str, field: &str, own: u32) -> u32 {
@@ -186,6 +207,22 @@ impl Schema {
             for (field, property) in properties {
                 property["x-since"] = field_since(name, field, since).into();
             }
+        }
+    }
+
+    /// Describes a field the runtime core adds to the definition `name`
+    /// ([`CORE_FIELDS`]): text that may be absent, marked `x-core`.
+    fn core_adds(&mut self, name: &str, field: &str) {
+        let mut property = Option::<String>::describe(self);
+        property["default"] = Value::Null;
+        property["x-since"] = field_since(name, field, 0).into();
+        property["x-core"] = true.into();
+        if let Some(Value::Object(properties)) = self
+            .defs
+            .get_mut(name)
+            .and_then(|def| def.get_mut("properties"))
+        {
+            properties.insert(field.to_owned(), property);
         }
     }
 }
@@ -1082,7 +1119,7 @@ object!(Shell { navree, build, name, home } {
 object!(Nav {} { groups });
 object!(NavGroup {} { label, items });
 object!(NavItem { label, href } { icon, badge, items });
-object!(User { name } { email, menu, key });
+object!(User { name } { email, menu });
 object!(Route { matches = "match" } { present, chrome: true });
 object!(Theme {} { name, accent, accent_dark });
 object!(Push { register } {});
@@ -1312,6 +1349,10 @@ pub(crate) fn described() -> Schema {
             variant["x-since"] = since.into();
         }
     }
+    // What the runtime core adds to a value in what it hands a client.
+    for (name, field) in CORE_FIELDS {
+        schema.core_adds(name, field);
+    }
     schema
 }
 
@@ -1345,11 +1386,11 @@ mod tests {
                 Some("object") => {
                     let least = least(defs, def, depth + 1);
                     let mut more = least.clone();
-                    let optional = def["properties"]
-                        .as_object()
-                        .into_iter()
-                        .flatten()
-                        .find(|(field, _)| !required(def).contains(field.as_str()));
+                    let optional = def["properties"].as_object().into_iter().flatten().find(
+                        |(field, property)| {
+                            !required(def).contains(field.as_str()) && property["x-core"] != true
+                        },
+                    );
                     if let Some((field, property)) = optional
                         && let Some(sample) = samples(defs, property, depth + 1).into_iter().next()
                     {
@@ -1432,6 +1473,11 @@ mod tests {
                     });
                     let needed = required(def);
                     for (field, property) in def["properties"].as_object().unwrap() {
+                        // What the core adds is no field of the type: it is
+                        // held to its own rule below.
+                        if property["x-core"] == true {
+                            continue;
+                        }
                         if needed.contains(field.as_str()) {
                             let mut without = least.clone();
                             without.as_object_mut().unwrap().remove(field);
@@ -1492,6 +1538,54 @@ mod tests {
                 }
                 kind => panic!("{name} is of no kind I know: {kind}"),
             }
+        }
+    }
+
+    /// What the runtime core adds to a value is in the schema, for a client's
+    /// models, and in no type of the protocol: a server cannot write it. The
+    /// type reads a value that carries one and writes it back without it.
+    #[test]
+    fn what_the_core_adds_is_in_the_schema_and_in_no_type_of_the_protocol() {
+        let schema = described();
+        let defs = schema.defs();
+        assert!(CORE_FIELDS.contains(&("User", "key")));
+        let mut marked = Vec::new();
+        for (name, def) in defs {
+            for (field, property) in def["properties"].as_object().into_iter().flatten() {
+                if property["x-core"] == true {
+                    marked.push((name.as_str(), field.as_str()));
+                }
+            }
+        }
+        assert_eq!(marked, CORE_FIELDS, "the schema marks other fields");
+        for (name, field) in CORE_FIELDS {
+            let def = &defs[*name];
+            let property = &def["properties"][*field];
+            assert_eq!(
+                property["anyOf"],
+                json!([{"type": "string"}, {"type": "null"}]),
+                "{name}.{field}"
+            );
+            assert_eq!(property["default"], Value::Null, "{name}.{field}");
+            assert!(
+                !required(def).contains(field),
+                "{name}.{field}: a server would have to write it"
+            );
+            let check = schema.checks[*name];
+            let read_fields = check.fields.expect("an object reads its fields");
+            let least = least(defs, def, 0);
+            let own = read_fields(least.clone()).expect("the least value reads");
+            assert!(
+                !own.contains_key(*field),
+                "{name}.{field} is a field of the protocol's own type"
+            );
+            let mut written = least.clone();
+            written[*field] = json!("written-by-a-server");
+            assert_eq!(
+                (check.round_trip)(written),
+                (check.round_trip)(least),
+                "{name}.{field}: what a server wrote there is kept"
+            );
         }
     }
 

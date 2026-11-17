@@ -12649,6 +12649,7 @@
             }
           ],
           "default": null,
+          "x-core": true,
           "x-since": 0
         },
         "menu": {
