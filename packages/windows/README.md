@@ -38,6 +38,14 @@ The product depends on the Windows App SDK and on what .NET itself ships. The te
 
 The DLL is copied next to every program that uses `Navree.Core`. The "Native clients" workflow does both on a Windows runner, and starts the demo from its build folder.
 
+Every project restores the packages its lock file names (`packages.lock.json`, beside the project), and where `CI` is `true` a restore that would change one fails. A restore for one runtime alone asks for another set of runtimes than that file names, so it is held to a second file beside the first, named for the runtime: `packages.win-x64.lock.json`. The demo's package is built from such a restore. When a version in `Directory.Packages.props` changes, both are written again, with `CI` not set:
+
+```
+dotnet restore Navree.Native.sln --force-evaluate
+dotnet restore demo/Navree.Demo.Packaged/Navree.Demo.Packaged.csproj --force-evaluate
+dotnet restore demo/Navree.Demo.Packaged/Navree.Demo.Packaged.csproj -r win-x64 -p:RuntimeIdentifier=win-x64 --force-evaluate
+```
+
 A build without the DLL stops with an error that says where it was looked for. The DLL is built for x64 only. When the DLL is missing as the app starts, cannot be loaded, or is for another processor, making the `ShellHost` throws `CoreUnavailableException`, whose words name the file and the one folder it was looked for in (the program's own); the demo shows them in a `StartFailureWindow`, which ends the app when the person closes it, and an app does the same.
 
 ## The demo

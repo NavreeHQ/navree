@@ -7,7 +7,8 @@
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
 
     <!-- Every project restores the packages its lock file names, at the versions it names, and a restore that would change one
-         fails in the build that runs on a server. -->
+         fails in the build that runs on a server. A restore for one runtime alone has a lock file of its own, which
+         Directory.Build.targets names. -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
 
