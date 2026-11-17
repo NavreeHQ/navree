@@ -55,6 +55,27 @@ class WipeDebtTest {
     }
 
     @Test
+    fun asking_whether_a_page_is_held_back_begins_nothing_however_often_it_is_asked() {
+        val debt = debt()
+        val end = debt.owe()
+        debt.narrow(end)
+        debt.over(setOf(pay), end)
+        // A page on the origin that was left is on the screen: it is drawn again each time what is owed changes, and asks each time.
+        repeat(1_000) { assertTrue(debt.held(pay)) }
+        assertFalse("no go was begun by the asking", debt.running)
+        assertEquals("the mark is as the go left it", WipeRules.lines(setOf(pay)), mark.readText())
+
+        // "Try again" asks for a go, and one begins; a second asking while it runs begins none.
+        assertEquals(end, debt.begin())
+        assertTrue(debt.running)
+        assertNull(debt.begin())
+        // The go leaves the origin again. Nothing begins another until somebody asks.
+        debt.over(setOf(pay), end)
+        repeat(1_000) { assertTrue(debt.held(pay)) }
+        assertFalse(debt.running)
+    }
+
+    @Test
     fun a_go_that_ends_with_nothing_left_ends_what_is_owed() {
         val debt = debt()
         val end = debt.owe()
