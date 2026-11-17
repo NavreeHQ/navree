@@ -41,6 +41,11 @@ public final class PictureLoader {
         kept.totalCostLimit = 32 << 20
     }
 
+    deinit {
+        // The system holds a session with a delegate until it is ended.
+        session.invalidateAndCancel()
+    }
+
     /// The address of a picture the server names, or `nil` when it may not be asked for.
     public func address(_ source: String) -> URL? {
         site?.picture(source, hosts: hosts)
