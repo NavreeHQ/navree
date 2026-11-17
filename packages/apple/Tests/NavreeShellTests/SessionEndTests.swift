@@ -617,23 +617,26 @@ struct SessionEndTests {
         #expect(places.record.person() == gurpreet)
     }
 
-    @Test func aCoresUserIsKnownByItsKeyWhenItHasOneAndByItsNameAndAddressAlways() {
+    @Test func aCoresUserIsKnownByItsKeyWhenItHasOneAndByItsNameAndAddressOnlyWhenItHasNone() {
         let mark = SessionKeeper.mark(name: "Harpreet Singh", email: nil)
         // Two accounts of one name and no address, as a core that gives keys names them.
         let first = SystemEffects.person(Navree.User(key: "person-1f0c", name: "Harpreet Singh"))
         let second = SystemEffects.person(Navree.User(key: "person-77ab", name: "Harpreet Singh"))
         #expect(first == SessionKeeper.Person(key: "person-1f0c", mark: mark))
         #expect(!first.isSame(as: second))
+        #expect(first.isSame(as: SystemEffects.person(Navree.User(key: "person-1f0c", name: "Harpreet S. Gill"))))
         // A core that gives no key, or an empty one: the name and the address alone.
         let plain = SystemEffects.person(Navree.User(name: "Harpreet Singh"))
         #expect(plain == SessionKeeper.Person(key: nil, mark: mark))
         #expect(SystemEffects.person(Navree.User(key: "", name: "Harpreet Singh")) == plain)
-        // And then the two accounts are one, and either is whoever was written down with a key.
-        #expect(plain.isSame(as: first))
-        #expect(plain.isSame(as: second))
+        #expect(plain.isSame(as: SystemEffects.person(Navree.User(name: "Harpreet Singh"))))
+        // One known by a key and one known by name are never the same
+        // person, though the name and the address are the same.
+        #expect(!plain.isSame(as: first))
+        #expect(!first.isSame(as: plain))
     }
 
-    @Test func twoPeopleOfOneNameAreToldApartByTheCoresKeyAndAKeyThatFirstArrivesChangesNothing() throws {
+    @Test func twoPeopleOfOneNameAreToldApartByTheCoresKeyAndAPersonWhoChangesTheirNameStaysTheSame() throws {
         let places = Places()
         defer { places.remove() }
         let keeper = SessionKeeper.open(
@@ -646,29 +649,23 @@ struct SessionEndTests {
         // Two accounts are named Harpreet Singh, and neither has an address: one mark for both.
         let mark = SessionKeeper.mark(name: "Harpreet Singh", email: nil)
 
-        // A core that gives no key names him: he is written down by the mark.
-        keeper.hears(SessionKeeper.Person(key: nil, mark: mark), from: window)
-        #expect(places.record.person() == SessionKeeper.Person(key: nil, mark: mark))
-        // The core now gives a key for him. The same name and address is the
-        // same person: the key is written down, and nothing is taken away.
+        // The core names the first of them, with his key.
         let first = SessionKeeper.Person(key: "person-1f0c", mark: mark)
         keeper.hears(first, from: window)
-        #expect(played.signOuts == 0)
-        #expect(keeper.number == 0)
         #expect(places.record.person() == first)
-        // Named once more without a key, he keeps the one written down.
-        keeper.hears(SessionKeeper.Person(key: nil, mark: mark), from: window)
-        #expect(keeper.person == first)
-        // He changes the name he is shown by: the same key is the same person.
+        // He changes the name he is shown by: the same key is the same
+        // person, nothing is taken away, and he is written down as he is named now.
         let renamed = SessionKeeper.Person(key: "person-1f0c", mark: SessionKeeper.mark(name: "Harpreet S. Gill", email: nil))
         keeper.hears(renamed, from: window)
         #expect(played.signOuts == 0)
         #expect(keeper.number == 0)
         #expect(places.record.person() == renamed)
+        keeper.hears(first, from: window)
+        #expect(played.signOuts == 0)
 
         // His session runs out, and the other Harpreet Singh signs in: the
-        // name the first one had, and another key. He is another person,
-        // and what was kept for the first one goes.
+        // same name, and another key. He is another person, and what was
+        // kept for the first one goes.
         places.snapshots.write("snapshot-first", "what the first Harpreet typed")
         let second = SessionKeeper.Person(key: "person-77ab", mark: mark)
         keeper.hears(second, from: window)
@@ -678,6 +675,55 @@ struct SessionEndTests {
         #expect(places.record.person() == second)
     }
 
+    @Test func aPersonWrittenDownByNameIsNeverTakenForOneNamedWithAKeyNorTheOtherWayRound() throws {
+        let places = Places()
+        defer { places.remove() }
+        let slot = MemorySlot()
+        // One name and one address throughout: only what the person is known by differs.
+        let mark = SessionKeeper.mark(name: "Gurpreet Kaur", email: "gurpreet@charkha.example")
+        let byName = SessionKeeper.Person(key: nil, mark: mark)
+        let byKey = SessionKeeper.Person(key: "person-9a04", mark: mark)
+
+        // The app as it was with a core that gave no key: she is written
+        // down by the mark of her name and address, and her place is kept.
+        let before = SessionKeeper.open(
+            origin: "https://shop.example", slot: slot, cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        before.hears(byName, from: SystemEffects(transport: FakeTransport(), keeper: before))
+        places.snapshots.write("snapshot-first", "what was typed under that name")
+        #expect(places.record.person() == byName)
+
+        // The app is updated to a core that gives keys, and the first person
+        // it names has that very name and address. A name is no ground for
+        // handing whoever signs in at the update what was kept before it:
+        // the first key is another person's, and everything goes, once.
+        let after = SessionKeeper.open(
+            origin: "https://shop.example", slot: slot, cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        let window = SystemEffects(transport: FakeTransport(), keeper: after)
+        let played = PlayedNotifications()
+        window.devices.notifications = played
+        after.hears(byKey, from: window)
+        #expect(played.signOuts == 1)
+        #expect(after.number == 1)
+        #expect(places.snapshots.read("snapshot-first") == nil)
+        #expect(places.record.person() == byKey)
+        // From then on the key is what she is known by: named again, nothing goes.
+        after.hears(byKey, from: window)
+        #expect(played.signOuts == 1)
+        #expect(after.number == 1)
+
+        // And the other way round: a person written down with a key, and a
+        // state that names the same name and address with none.
+        places.snapshots.write("snapshot-first", "what was typed under that key")
+        after.hears(byName, from: window)
+        #expect(played.signOuts == 2)
+        #expect(after.number == 2)
+        #expect(places.snapshots.read("snapshot-first") == nil)
+        #expect(places.record.person() == byName)
+    }
     @Test func withoutAKeyTwoPeopleOfOneNameAndNoAddressAreOneAndARenamedPersonIsAnother() throws {
         let places = Places()
         defer { places.remove() }

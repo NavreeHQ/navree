@@ -512,12 +512,19 @@ final class SessionKeeper {
         /// Whether this is the person `other` is. By the core's key when
         /// both have one: somebody who changes their name is the same
         /// person, and two people of one name are two. By the mark of name
-        /// and address when either has none: so with a core that gives no
-        /// key, and the first time a key arrives for a person written down
-        /// without one, which by itself changes nothing.
+        /// and address only when neither has a key, which is a core that
+        /// gives none. One with a key and one without are never the same
+        /// person, whatever their names: a key says more than a name can,
+        /// so a name is no ground for taking one for the other. A person
+        /// written down by name alone, when the first key arrives (the app
+        /// was updated to a core that gives keys), is therefore another
+        /// person, and what was kept for them goes once.
         func isSame(as other: Person) -> Bool {
-            if let key, let theirs = other.key { return key == theirs }
-            return mark == other.mark
+            switch (key, other.key) {
+            case (let mine?, let theirs?): mine == theirs
+            case (nil, nil): mark == other.mark
+            default: false
+            }
         }
     }
 
@@ -544,19 +551,16 @@ final class SessionKeeper {
     /// when all of it went: an app ended in the middle, or a part that
     /// failed, leaves the person before written down, and the next start
     /// does the change over.
-    func hears(_ named: Person, from window: SystemEffects) {
+    func hears(_ now: Person, from window: SystemEffects) {
         guard let before = person else {
-            person = named
-            if keeps() { _ = record?.keep(person: named) }
+            person = now
+            if keeps() { _ = record?.keep(person: now) }
             return
         }
-        var now = named
-        // The person written down with a key, named once without one, keeps it.
-        if now.key == nil, before.isSame(as: now) { now.key = before.key }
         guard before != now else { return }
         person = now
-        // The same person, named anew (a key where there was none, another
-        // name under the same key), is only written down as they are now.
+        // The same person under another name (the same key) is only written
+        // down as they are named now.
         if before.isSame(as: now) || personChanged(by: window) {
             if keeps() { _ = record?.keep(person: now) }
         }
