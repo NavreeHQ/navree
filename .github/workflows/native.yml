@@ -639,13 +639,15 @@ jobs:
   # in light, dark, the largest text size, right to left and an iPad's regular
   # width, with what each screen looked like kept as an artifact. Once on the
   # current Xcode and once on the one before, the two systems the client
-  # supports (the one before in fewer passes, as its runner is slower).
+  # supports (the one before in fewer passes, as its runner is slower). The
+  # current Xcode's six passes take 13 to 16 minutes each on its runner, after
+  # 12 to 15 minutes of package tests, so its job is given 150 minutes.
   apple:
     name: Apple client (Xcode ${{ matrix.xcode }})
     needs: [changes, core]
     if: needs.changes.outputs.apple == 'true'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    timeout-minutes: 150
     concurrency:
       group: native-apple-${{ github.ref }}-${{ matrix.xcode }}
       cancel-in-progress: true
