@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.webkit.WebViewFeature
 import com.navree.client.core.Body
@@ -25,6 +26,8 @@ import com.navree.client.core.Engine
 import com.navree.client.platform.AndroidEffects
 import com.navree.client.platform.OriginWebClient
 import com.navree.client.platform.Origins
+import com.navree.client.platform.OwedToken
+import com.navree.client.platform.PushProvider
 import com.navree.client.platform.SiteWipe
 import com.navree.client.platform.WipeRules
 import com.navree.client.platform.guardDocuments
@@ -90,11 +93,29 @@ class WebSignOutTest {
     @Volatile
     private var removalCookie: String? = null
 
+    /**
+     * A push service of the test's own: it keeps each deletion of the token it is asked for, and answers one only when
+     * the test has it answer, so the time between the client being told and the service's answer is the test's to hold open.
+     */
+    private class Pushes : PushProvider {
+        override val provider = "fcm"
+
+        val asked = CopyOnWriteArrayList<(Boolean) -> Unit>()
+
+        override fun token(done: (String?) -> Unit) = done(null)
+
+        override fun forget(done: (gone: Boolean) -> Unit) {
+            asked += done
+        }
+    }
+
     @After
     fun stop() {
         app.close()
         // A deletion a test here left unfinished has failed that test; it does not go on to refuse the web pages of the tests after it.
         SiteWipe.forget()
+        // Nor does a push token a test left owed hold back what a later test shows.
+        OwedToken.of(ApplicationProvider.getApplicationContext()).gone()
     }
 
     private fun page(script: String) = MockResponse.Builder()
@@ -287,9 +308,9 @@ class WebSignOutTest {
     /**
      * A client of the app made now, as at a start of the app, and [then] with
      * it; waits until whatever it owes of the end of a session is done, and
-     * then [after] with it.
+     * then [after] with it. With [push], the app has that push service.
      */
-    private fun client(after: (AndroidEffects) -> Unit = {}, then: (AndroidEffects) -> Unit) {
+    private fun client(push: PushProvider? = null, after: (AndroidEffects) -> Unit = {}, then: (AndroidEffects) -> Unit) {
         val driver = Driver(object : Engine {
             override fun send(event: ByteArray): ByteArray = "{}".encodeToByteArray()
 
@@ -297,7 +318,7 @@ class WebSignOutTest {
         })
         lateinit var effects: AndroidEffects
         compose.runOnUiThread {
-            effects = AndroidEffects(compose.activity, driver, "$base/".toHttpUrl(), null, null, Origins(base, loopbackHttp = true), loopbackHttp = true)
+            effects = AndroidEffects(compose.activity, driver, "$base/".toHttpUrl(), null, push, Origins(base, loopbackHttp = true), loopbackHttp = true)
             then(effects)
         }
         // Whatever the store does after the end of the session runs only once the wipe is done, or its time limit has passed.
@@ -433,6 +454,14 @@ class WebSignOutTest {
      * done, the cookie gone and nothing owed, while the removal is still
      * unanswered. When the core then says the session is forgotten, nothing
      * is begun a second time.
+     *
+     * The push service's own token is asked to go at the same moment, the
+     * removal unanswered, and its deletion is on the disk as owed when the
+     * effect returns; the session forgotten afterwards asks the push service
+     * no second time. The push service here never answers that run of the
+     * app: the token stays owed when everything else is done, and a client
+     * made afterwards, as the next start of the app makes one, asks the push
+     * service again; when that is answered, nothing is owed.
      */
     @Test
     fun theEndOfASessionBeginsWhenTheCoreSaysItIsEndingAndDoesNotWaitForThePushTokensRemoval() {
@@ -440,18 +469,27 @@ class WebSignOutTest {
         val cookies = CookieManager.getInstance()
         cookies.setCookie(base, "session=Gurdaspur; path=/")
         val mark = File(compose.activity.noBackupFilesDir, "navree-web-wipe")
+        val tokenMark = File(compose.activity.noBackupFilesDir, "navree-push-token")
+        val service = Pushes()
         var written: String? = null
+        var tokenOwed = false
+        var askedAtOnce = -1
+        var askedAfter = -1
         var owedAgain = true
         try {
             client(
+                push = service,
                 then = {
                     it.run(Effect.Fetch(1, "delete", "$base$removal", listOf("content-type" to "application/json"), Body.Json("{}"), 5_000, false))
                     it.run(Effect.SessionEnding)
                     written = runCatching { mark.readText() }.getOrNull()
+                    tokenOwed = tokenMark.isFile
+                    askedAtOnce = service.asked.size
                 },
                 after = {
                     it.run(Effect.ForgetSession)
                     owedAgain = SiteWipe.owes
+                    askedAfter = service.asked.size
                 },
             )
             assertEquals("the mark was on the disk when the effect returned", WipeRules.EVERYTHING + "\n", written)
@@ -459,6 +497,16 @@ class WebSignOutTest {
             assertEquals("the removal was sent with the session's cookie", "session=Gurdaspur", removalCookie)
             assertTrue("no cookie is left: ${cookies.getCookie(base)}", cookies.getCookie(base).isNullOrEmpty())
             assertFalse("the session forgotten after it was ending begins nothing again", owedAgain)
+            assertTrue("the push token's deletion was on the disk as owed when the effect returned", tokenOwed)
+            assertEquals("the push service was asked to delete the token when the core said the session is ending", 1, askedAtOnce)
+            assertEquals("the session forgotten after it was ending asked the push service no second time", 1, askedAfter)
+            // The push service did not answer, and that client is closed: the token is owed still, and the next start asks again.
+            assertTrue("the token is still owed when the rest of the end of the session is done", tokenMark.isFile)
+            val next = Pushes()
+            client(push = next) {}
+            assertEquals("the next start of the app asked the push service to delete the token", 1, next.asked.size)
+            next.asked.single()(true)
+            assertTrue("once the push service says the token is gone, nothing is owed", waitFor(15) { !tokenMark.exists() })
         } finally {
             unanswered.countDown()
         }

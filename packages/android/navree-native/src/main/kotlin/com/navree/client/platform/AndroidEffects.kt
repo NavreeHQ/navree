@@ -124,6 +124,21 @@ class AndroidEffects(
     val snapshots = SealedCache(app, "navree-snapshot")
     private val random = SecureRandom()
 
+    /** The push service's side of the end of a session: the token's deletion, owed until the service says it is gone. */
+    private val tokens = PushEnd(push, OwedToken.of(app), onMain = { work -> main.post { work() } }, emptyShade = ::emptyShade, ask = ::askToken)
+
+    /**
+     * The core's two words for the end of a session. `session_ending` comes
+     * in the update in which the core asks the server to forget this device's
+     * push token: the request for the removal stands before it in the same
+     * update, so the store has given the removal its cookies before the turn
+     * of the end of the session comes. The push service is asked to delete
+     * the token then as well: until it has, the server may still send to the
+     * token and the push service still deliver, and what arrives in that time
+     * is not drawn (the messaging service asks [OwedToken] first).
+     */
+    private val ends = SessionEnd(begin = ::end, tokens = tokens, emptyShade = ::emptyShade)
+
     init {
         if (SiteWipe.owesAll) {
             // A run of the app was told that the session ended and did not get as far as the cookies. What the app reads at
@@ -136,11 +151,14 @@ class AndroidEffects(
             } catch (_: Throwable) {
                 // The same three go again in the store's turn.
             }
-            forget()
+            ends.forgotten()
         } else if (SiteWipe.owes) {
             // Only what pages stored at the origins is left of it: no web page is shown before that is gone.
             main.post { SiteWipe.finish() }
         }
+        // The token of a session a run before this one was told had ended, where the push service had not said it is deleted:
+        // asked for again now, whatever else is owed or not.
+        tokens.delete()
     }
 
     /** The activity in front, while there is one. */
@@ -158,6 +176,15 @@ class AndroidEffects(
 
     private fun post(event: JsonObject) {
         main.post { driver.send(event) }
+    }
+
+    /** Takes every notification of the app out of the shade, those the push service drew itself among them. */
+    private fun emptyShade() {
+        try {
+            NotificationManagerCompat.from(app).cancelAll()
+        } catch (_: Throwable) {
+            // Nothing shown.
+        }
     }
 
     override fun run(effect: Effect) {
@@ -203,8 +230,8 @@ class AndroidEffects(
                 driver.send(Events.random(effect.request, bytes.joinToString("") { "%02x".format(it) }))
                 bytes.fill(0)
             }
-            Effect.SessionEnding -> ending()
-            Effect.ForgetSession -> forget()
+            Effect.SessionEnding -> ends.ending()
+            Effect.ForgetSession -> ends.forgotten()
             is Effect.Unknown -> if (BuildConfig.DEBUG) Log.w(TAG, "an effect this build does not know: ${effect.t}")
         }
     }
@@ -212,11 +239,15 @@ class AndroidEffects(
     /**
      * Asks the push service for this install's token and hands it to the
      * core, which registers it with the server. At every launch, and when the
-     * person allows notifications.
+     * person allows notifications. While the token of a session that ended
+     * is still to delete, none is asked for, since the service would give
+     * that one: its deletion is asked for instead, and the new token when it
+     * is gone ([PushEnd]).
      */
     fun askToken() {
         val push = push ?: return
         PushTokens.listener = { token -> post(Events.pushToken(token)) }
+        if (tokens.owed) return tokens.delete()
         push.token { token -> token?.let { post(Events.pushToken(it)) } }
     }
 
@@ -249,43 +280,21 @@ class AndroidEffects(
      * store is waited for no longer than [COOKIES_WAIT_MS]: what follows the
      * cookies then goes on without its word, and the mark goes on owing the
      * whole until the store has said they are gone.
+     *
+     * The push service's token has a mark of its own, written here before the
+     * other ([PushEnd.owe]): its deletion is owed from this moment until the
+     * push service has said the token is gone, whatever becomes of the rest,
+     * and a start of the app that finds it owed asks for it again.
      */
     private fun end() {
         // Owed from this moment and written down, whatever the store is still busy with: a page of the next session is not
         // shown over what this one's pages left, and a start of the app after a run that ended here does all of it.
+        tokens.owe()
         val debt = SiteWipe.owe()
         state.end { finished ->
             // The time limit is armed before anything it guards: whatever happens below, the queue goes on.
             endWithLimit(finished, arm = { release -> main.postDelayed({ release() }, WIPE_WAIT_MS) }) { done -> wipe(debt, done) }
         }
-    }
-
-    /** The core said the session is ending and has not yet said it is forgotten: the end of the session is begun ([ending]). */
-    private var begun = false
-
-    /**
-     * The core says the session is ending (`session_ending`), in the update
-     * in which it asks the server to forget this device's push token: the end
-     * of the session begins now ([end]) and does not wait for that answer.
-     * The request for the removal stands before this in the same update, so
-     * the store has given it its cookies before the turn of the end of the
-     * session comes.
-     */
-    private fun ending() {
-        begun = true
-        end()
-    }
-
-    /**
-     * The core says the session is forgotten (`forget_session`). Where it
-     * said before that the session was ending, the end of the session is
-     * begun or done and nothing of it is done twice; where it did not (no
-     * push token to remove), it begins here. The push service's token for
-     * this install is deleted and a new one asked for.
-     */
-    private fun forget() {
-        if (begun) begun = false else end()
-        push?.forget { askToken() }
     }
 
     /**
@@ -309,12 +318,7 @@ class AndroidEffects(
             // A copy that could not be deleted is in the cache folder, which no backup takes and the system may empty.
         }
         main.post {
-            try {
-                // Every notification of the app, also those the push service drew itself.
-                NotificationManagerCompat.from(app).cancelAll()
-            } catch (_: Throwable) {
-                // Nothing shown.
-            }
+            emptyShade()
             val last = { left: Set<String>? ->
                 thread(name = "navree-web-wipe", isDaemon = true) {
                     try {
@@ -428,8 +432,13 @@ class AndroidEffects(
         }
     }
 
-    /** The activity is in front again. A sign-in session that brought nothing back was given up. */
+    /**
+     * The activity is in front again. A sign-in session that brought nothing
+     * back was given up. A push token whose deletion the push service has not
+     * yet said is done is asked for again.
+     */
     fun resumed() {
+        tokens.delete()
         activity?.let { devices.resumed(it) }
         if (signingIn) {
             main.postDelayed({

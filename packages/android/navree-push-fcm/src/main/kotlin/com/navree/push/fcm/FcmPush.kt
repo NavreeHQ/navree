@@ -14,6 +14,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.navree.client.NavreeActivity
 import com.navree.client.platform.LockScreen
+import com.navree.client.platform.OwedToken
 import com.navree.client.platform.PushProvider
 import com.navree.client.platform.PushTokens
 
@@ -42,14 +43,20 @@ class FcmPush(context: Context) : PushProvider {
             .addOnFailureListener { done(null) }
     }
 
-    /** Deletes this install's token at Firebase; the next one asked for is a new token. */
-    override fun forget(done: () -> Unit) {
-        firebase(app) ?: return done()
+    /**
+     * Deletes this install's token at Firebase; the next one asked for is a
+     * new token. [done] is told whether Firebase said it is deleted: a
+     * deletion that failed (no network, the service not reachable) is `false`,
+     * and the client asks again. With no Firebase project named there is no
+     * token, and nothing to delete.
+     */
+    override fun forget(done: (gone: Boolean) -> Unit) {
+        firebase(app) ?: return done(true)
         try {
             @Suppress("DEPRECATION")
-            FirebaseMessaging.getInstance().deleteToken().addOnCompleteListener { done() }
+            FirebaseMessaging.getInstance().deleteToken().addOnCompleteListener { done(it.isSuccessful) }
         } catch (_: Exception) {
-            done()
+            done(false)
         }
     }
 
@@ -87,12 +94,24 @@ class FcmPush(context: Context) : PushProvider {
  * Firebase library itself, as the server wrote it, and never reaches here:
  * the option above does not hold for it.
  *
+ * A message that arrives while the token of a session that ended is still to
+ * delete is not drawn ([OwedToken]): from the moment the client is told the
+ * session is ending until Firebase has said the token is deleted, what is
+ * sent to this install was sent for the person who left. The mark is a file,
+ * so this holds in a process the system starts only for the message, after a
+ * run of the app that ended before Firebase answered. What the Firebase
+ * library draws itself (a `notification` message in the background) is not
+ * asked of this code; the client takes it out of the shade when the token is
+ * gone.
+ *
  * A token that changes goes to the runtime core of the app while it runs (and
  * is asked for again at every launch); the core registers it. This module's
  * manifest declares the service, so an app that adds the module has it.
  */
 class NavreeMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
+        // Sent to the token of a session that ended, which Firebase has not yet said is deleted: it is not this person's.
+        if (OwedToken.of(this).owed) return
         val shown = notificationText(message.notification?.title, message.notification?.body, message.data) ?: return
         // Only a path inside the app is kept; the core checks it again before anything opens.
         val href = message.data["href"]?.takeIf { it.startsWith("/") && !it.startsWith("//") }
