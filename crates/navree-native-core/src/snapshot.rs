@@ -133,10 +133,9 @@ enum Person {
 fn person_of(user: Option<&crate::cache::Who>) -> Person {
     match user {
         None => Person::Nobody,
-        Some(who) => match &who.id {
-            Some(id) => Person::Told(crate::sign_in::fingerprint(&format!(
-                "navree-person-id\n{id}"
-            ))),
+        // The same name a client is given for them in `app.user.key`.
+        Some(who) => match who.id_key() {
+            Some(key) => Person::Told(key),
             None => Person::Unknown,
         },
     }

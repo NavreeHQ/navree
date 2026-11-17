@@ -33,7 +33,10 @@
           {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"label\\\": \\\"Store\\\",\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Orders\\\",\\n      \\\"href\\\": \\\"/orders\\\",\\n      \\\"badge\\\": \\\"12\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Inventory\\\",\\n      \\\"href\\\": \\\"/inventory\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"user\\\": {\\n  \\\"name\\\": \\\"Harpreet Singh\\\",\\n  \\\"menu\\\": [\\n   {\\n    \\\"t\\\": \\\"link\\\",\\n    \\\"label\\\": \\\"Profile\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"navigate\\\",\\n     \\\"href\\\": \\\"/profile\\\"\\n    }\\n   },\\n   {\\n    \\\"t\\\": \\\"button\\\",\\n    \\\"label\\\": \\\"Sign out\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"request\\\",\\n     \\\"method\\\": \\\"post\\\",\\n     \\\"href\\\": \\\"/sign-out\\\"\\n    }\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ]\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"id\":\"7f1c2a90-0001-4000-8000-00000000a001\",\"name\":\"Harpreet Singh\"}},\"build\":\"152bd84abf4d\"}"},
           {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
-      }
+      },
+      "check": [
+        {"at":"/app/user/key","is":"1bc3dcdc8ebf5d231237007ccc4903b602f64185813b65bc5b6d1f5f798fcab7"}
+      ]
     },
     {
       "send": {"t":"select","destination":1},
@@ -92,7 +95,8 @@
       },
       "check": [
         {"at":"/screens/2","is":null},
-        {"at":"/app/user/name","is":"Harpreet Singh"}
+        {"at":"/app/user/name","is":"Harpreet Singh"},
+        {"at":"/app/user/key","is":"9cc5ffc2817cc3c911c721e28112cc30ae527d56ce46fbc784f9207caf606c75"}
       ]
     },
     {
@@ -151,7 +155,10 @@
           {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"label\\\": \\\"Store\\\",\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Orders\\\",\\n      \\\"href\\\": \\\"/orders\\\",\\n      \\\"badge\\\": \\\"12\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Inventory\\\",\\n      \\\"href\\\": \\\"/inventory\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"user\\\": {\\n  \\\"name\\\": \\\"Harpreet Singh\\\",\\n  \\\"menu\\\": [\\n   {\\n    \\\"t\\\": \\\"link\\\",\\n    \\\"label\\\": \\\"Profile\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"navigate\\\",\\n     \\\"href\\\": \\\"/profile\\\"\\n    }\\n   },\\n   {\\n    \\\"t\\\": \\\"button\\\",\\n    \\\"label\\\": \\\"Sign out\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"request\\\",\\n     \\\"method\\\": \\\"post\\\",\\n     \\\"href\\\": \\\"/sign-out\\\"\\n    }\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ]\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"id\":\"7f1c2a90-0002-4000-8000-00000000b002\",\"name\":\"Harpreet Singh\"}},\"build\":\"152bd84abf4d\"}"},
           {"t":"fetch","request":3,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
-      }
+      },
+      "check": [
+        {"at":"/app/user/key","is":"9cc5ffc2817cc3c911c721e28112cc30ae527d56ce46fbc784f9207caf606c75"}
+      ]
     },
     {
       "send": {"t":"select","destination":1},
@@ -200,7 +207,10 @@
           {"t":"nav"}
         ],
         "effects": []
-      }
+      },
+      "check": [
+        {"at":"/app/user/key","is":"1bc3dcdc8ebf5d231237007ccc4903b602f64185813b65bc5b6d1f5f798fcab7"}
+      ]
     },
     {
       "send": {"t":"select","destination":1},

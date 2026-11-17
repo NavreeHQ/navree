@@ -1277,12 +1277,20 @@ impl Core {
             .iter()
             .position(|destination| Some(&destination.href) == was.as_ref())
             .unwrap_or(0);
+        // The person as a client is given them carries the core's key for
+        // them, by which a client tells one person from another. It is the
+        // core's alone to write: whatever a server wrote there is written over.
+        let key = self.inner.user.as_ref().map(Who::key);
+        let signed_in = shell.user.map(|mut user| {
+            user.key = key;
+            user
+        });
         self.view.app = Some(App {
             name: shell.name,
             context: if from_device { None } else { shell.context },
             home: shell.home,
             theme: shell.theme,
-            user: if from_device { None } else { shell.user },
+            user: if from_device { None } else { signed_in },
         });
         self.inner.shell_kept = from_device;
         if self.view.stage != Stage::Upgrade {
@@ -5852,6 +5860,139 @@ mod tests {
             body: body.to_owned(),
             ..Response::default()
         })
+    }
+
+    /// A core whose first shell is `shell`, answered for the person of `id`,
+    /// or with no id when the server names nobody by one.
+    fn signed_in_as(id: Option<&str>, shell: &str) -> Core {
+        let mut core = Core::new(Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        ));
+        core.send(Event::Start);
+        core.send(native(1, shell, id, false));
+        core
+    }
+
+    /// The key a client is given for the person signed in.
+    fn key_of(core: &Core) -> Option<String> {
+        core.view.app.as_ref()?.user.as_ref()?.key.clone()
+    }
+
+    /// The person a client is given carries the core's key for them. When
+    /// the server named them by id, the key is made from the id: it is the
+    /// name a snapshot is for, and never the id itself. Two accounts of one
+    /// name and no email are two people, and one account is one person
+    /// whatever its name and email become.
+    #[test]
+    fn the_person_signed_in_carries_a_key_made_from_the_id_the_server_named_them_by() {
+        const FIRST: &str = "7f1c2a90-0001-4000-8000-00000000a001";
+        const SECOND: &str = "7f1c2a90-0002-4000-8000-00000000b002";
+        let harpreet = include_str!("../transcripts/fixtures/made/shell-harpreet-no-email.json");
+        let first = signed_in_as(Some(FIRST), harpreet);
+        let key = key_of(&first).expect("the person signed in has a key");
+        assert_eq!(key.len(), 64, "a hash: {key}");
+        assert!(
+            !key.contains(FIRST) && !key.contains("Harpreet"),
+            "nothing of the person is in it: {key}"
+        );
+        assert_eq!(
+            first.snapshot().person.as_deref(),
+            Some(key.as_str()),
+            "the key is the name a snapshot is for"
+        );
+        // The same account at another launch has the same key.
+        assert_eq!(
+            key_of(&signed_in_as(Some(FIRST), harpreet)),
+            Some(key.clone())
+        );
+        // Another account of the same name and no email has another.
+        let other = key_of(&signed_in_as(Some(SECOND), harpreet)).expect("a key");
+        assert_ne!(other, key, "two accounts of one name have one key");
+        // The same account under another name and with an email has the same.
+        let renamed = include_str!("../transcripts/fixtures/made/shell-other.json");
+        assert_eq!(
+            key_of(&signed_in_as(Some(FIRST), renamed)),
+            Some(key),
+            "one account has two keys when its name and email change"
+        );
+    }
+
+    /// A person the server names without an id is told by their name and
+    /// email, which is all there is to tell them by: the key is made from
+    /// those, and is not the key of a person of that name who is named by
+    /// id. Nobody signed in is nobody: there is no person, and so no key.
+    #[test]
+    fn a_person_named_without_an_id_has_a_key_made_from_their_name_and_email() {
+        let no_email = include_str!("../transcripts/fixtures/made/shell-harpreet-no-email.json");
+        let with_email = include_str!("../transcripts/fixtures/made/shell-other.json");
+        let ravneet = include_str!("../transcripts/fixtures/store/shell.json");
+        let named = signed_in_as(None, no_email);
+        let key = key_of(&named).expect("a person named without an id has a key");
+        assert!(
+            key.len() == 64 && !key.contains("Harpreet"),
+            "a hash, with nothing of the person in it: {key}"
+        );
+        assert_eq!(
+            named.snapshot().person,
+            None,
+            "no snapshot is for a person named without an id"
+        );
+        assert_eq!(
+            key_of(&signed_in_as(None, no_email)),
+            Some(key.clone()),
+            "the same name and email have two keys"
+        );
+        let emailed = key_of(&signed_in_as(None, with_email)).expect("a key");
+        let another = key_of(&signed_in_as(None, ravneet)).expect("a key");
+        assert!(
+            emailed != key && another != key && another != emailed,
+            "another email, or another name, has the same key"
+        );
+        assert_ne!(
+            key_of(&signed_in_as(
+                Some("7f1c2a90-0001-4000-8000-00000000a001"),
+                no_email
+            )),
+            Some(key),
+            "a person named by id has the key of one named without"
+        );
+
+        let nobody = include_str!("../transcripts/fixtures/made/shell-nobody.json");
+        let visitor = signed_in_as(None, nobody);
+        assert!(
+            visitor
+                .view
+                .app
+                .as_ref()
+                .is_some_and(|app| app.user.is_none()),
+            "nobody is signed in, and a person is named"
+        );
+        assert_eq!(key_of(&visitor), None);
+    }
+
+    /// The key is the core's to write. A server leaves it out, and one a
+    /// server writes is written over: no answer can make two people one to
+    /// a client, or one person two.
+    #[test]
+    fn a_key_a_server_writes_is_written_over() {
+        const FIRST: &str = "7f1c2a90-0001-4000-8000-00000000a001";
+        let shell = include_str!("../transcripts/fixtures/made/shell-harpreet-no-email.json");
+        let written = shell.replacen(
+            "\"name\": \"Harpreet Singh\",",
+            "\"name\": \"Harpreet Singh\", \"key\": \"written-by-a-server\",",
+            1,
+        );
+        assert_ne!(written, shell, "the shell names Harpreet Singh");
+        for id in [Some(FIRST), None] {
+            let key = key_of(&signed_in_as(id, &written)).expect("a key");
+            assert_ne!(key, "written-by-a-server", "{id:?}: the server's is kept");
+            assert_eq!(
+                Some(key),
+                key_of(&signed_in_as(id, shell)),
+                "{id:?}: what a server wrote changed the key"
+            );
+        }
     }
 
     /// Two cores over one store, one still naming Ravneet and one naming a

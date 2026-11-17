@@ -115,7 +115,10 @@ pub struct App {
     /// The brand's part in the look.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<Theme>,
-    /// The person signed in, with their menu.
+    /// The person signed in, with their menu and the core's key for them
+    /// (`key`): the same for one person, another for another account. The
+    /// core always fills it, from the id the server named them by when it
+    /// gave one, and from their name and email otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<User>,
 }

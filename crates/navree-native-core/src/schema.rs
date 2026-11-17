@@ -44,6 +44,17 @@ fn protocol(name: &str) -> Value {
     json!({"type": "object", "description": format!("`{name}` of the protocol: see the schema of `navree-native`.")})
 }
 
+/// The person signed in, as the view state holds them: the protocol's
+/// `shell::User`, with the `key` the core always fills.
+fn user() -> Value {
+    json!({
+        "type": "object",
+        "description": "`shell::User` of the protocol: see the schema of `navree-native`. Its `key` is always there. It is the core's own name for the person: the same for one person and another for another account. When the server named the person by id it is a hash of that id, the same value as a snapshot's `person`, and never the id; otherwise it is a hash of their name and email. The core writes it: a `key` a server wrote is not kept. A client that keeps something of its own for the person keeps this beside it, and when a state carries another `key` with no sign-out between, somebody else is signed in.",
+        "properties": {"key": string()},
+        "required": ["key"],
+    })
+}
+
 /// An object with exactly these fields. A name that ends in `?` may be left out.
 fn object(fields: &[(&str, Value)]) -> Value {
     let mut properties = Map::new();
@@ -462,7 +473,7 @@ pub fn schema() -> Value {
                 ("context?", string()),
                 ("home", string()),
                 ("theme?", protocol("shell::Theme")),
-                ("user?", protocol("shell::User")),
+                ("user?", user()),
             ])),
             ("destinations", list(object(&[
                 ("label", string()),

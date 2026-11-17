@@ -24,7 +24,10 @@
         "effects": [
           {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
-      }
+      },
+      "check": [
+        {"at":"/app/user/key","is":"a5e6cbd53a0871ea6f18622e1d0b5d518a53324a19796af0c335aad7cc1e43a1"}
+      ]
     },
     {
       "note": "The first page.",
