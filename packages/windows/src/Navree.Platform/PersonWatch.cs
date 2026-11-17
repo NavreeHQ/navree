@@ -37,14 +37,19 @@ public enum PersonHeard
 /// then, and only then, a person is told by name and email, which is as far as a client can tell by itself.
 /// </para>
 /// <para>
+/// The two ways of telling are never held to each other. A person told by a key and a person told by name and email are two people,
+/// whichever came first and whatever their names and emails are: a name and an email say nothing of which account it is, so nothing of
+/// the one is kept for the other.
+/// </para>
+/// <para>
 /// A state that names nobody changes nothing: the person named before may sign in again and find everything as it was. A sign-out forgets
 /// who was named (<see cref="SignedOut"/>), since it takes everything away itself, so whoever is named after one is the first.
 /// </para>
 /// <para>
 /// What is remembered is a mark (<see cref="MarkOfKey"/>, or <see cref="MarkOf"/> with no key): it tells two people apart and says nothing
-/// of either, so it is kept for the next start, which then sees a change of person that happened across a restart. A mark kept by name and
-/// email is not taken for another person when the core first gives a key: the name and email named now are held to it once more, and when
-/// they are the same the key takes its place. A start that finds something kept and no mark cannot say whose it is, and takes the first
+/// of either, so it is kept for the next start, which then sees a change of person that happened across a restart. A mark of one kind is
+/// never the mark of the other kind, so a mark kept by name and email is another person's when the core gives a key, and a key kept is
+/// another person's when the core gives none. A start that finds something kept and no mark cannot say whose it is, and takes the first
 /// person named for another. It is used from one thread, the window's.
 /// </para>
 /// </remarks>
@@ -81,8 +86,7 @@ public sealed class PersonWatch
             return PersonHeard.Nobody;
         }
 
-        bool keyed = !string.IsNullOrEmpty(key);
-        string now = keyed ? MarkOfKey(key!) : MarkOf(name, email);
+        string now = string.IsNullOrEmpty(key) ? MarkOf(name, email) : MarkOfKey(key);
         if (named is not string before)
         {
             named = now;
@@ -101,21 +105,10 @@ public sealed class PersonWatch
             return PersonHeard.Same;
         }
 
+        // Any other mark is another person. That holds across the two kinds of mark as well: a mark made from a name and an email beside
+        // a key, or a key beside a state that gives none, cannot be shown to be one person, and a name and an email two accounts share
+        // would make them one. So nothing of the one is kept for the other.
         named = now;
-        bool keyedBefore = before.StartsWith(KeyPrefix, StringComparison.Ordinal);
-        if (keyed && !keyedBefore)
-        {
-            // The mark kept was made from a name and an email, by a core that gave no key, and this is the first key: the two cannot be
-            // compared, so the name and email named now are held to the mark once more. The same person keeps what is theirs.
-            return string.Equals(before, MarkOf(name, email), StringComparison.Ordinal) ? PersonHeard.Same : PersonHeard.Another;
-        }
-
-        if (!keyed && keyedBefore)
-        {
-            // A key was kept and the core gives none now: there is nothing to hold the name and email to, and nothing says it is another person.
-            return PersonHeard.Same;
-        }
-
         return PersonHeard.Another;
     }
 
@@ -126,7 +119,10 @@ public sealed class PersonWatch
         unknownBefore = false;
     }
 
-    /// <summary>The mark of a person the core gave a key for: the key, said to be one. Nothing of the person can be read from it.</summary>
+    /// <summary>
+    /// The mark of a person the core gave a key for: the key, said to be one, so it is never the mark <see cref="MarkOf"/> makes from a
+    /// name and an email. Nothing of the person can be read from it.
+    /// </summary>
     /// <param name="key">The core's key for the person (<c>app.user.key</c>).</param>
     /// <returns>The mark.</returns>
     public static string MarkOfKey(string key)

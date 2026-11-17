@@ -57,13 +57,17 @@ public sealed class PersonChange
     private readonly SessionKeeper keeper;
     private readonly PersonChangeParts parts;
     private readonly Action<string> problem;
+    private bool saidNoKey;
 
     /// <summary>Makes it for one host.</summary>
     /// <param name="watch">Who was named last.</param>
     /// <param name="gate">The gate the host marks what the core says with.</param>
     /// <param name="keeper">What is kept on the device for the person.</param>
     /// <param name="parts">What the shell itself does at a change.</param>
-    /// <param name="problem">Told, in words that name no person, when a change did not finish. It may be called on any thread.</param>
+    /// <param name="problem">
+    /// Told, in words that name no person, when a change did not finish, and once when the core names a person and gives no key for them.
+    /// It may be called on any thread.
+    /// </param>
     public PersonChange(PersonWatch watch, SessionGate gate, SessionKeeper keeper, PersonChangeParts parts, Action<string> problem)
     {
         ArgumentNullException.ThrowIfNull(watch);
@@ -97,6 +101,13 @@ public sealed class PersonChange
         if (gate.OfSomeoneLeaving(stateMark) || state.App?.User is not Models.User user)
         {
             return PersonHeard.Nobody;
+        }
+
+        if (string.IsNullOrEmpty(user.Key) && !saidNoKey)
+        {
+            // The core always gives a key for the person it names. One that gives none is not the core this client was built with.
+            saidNoKey = true;
+            Say("the core named the person who is signed in and gave no key for them: they are told by their name and email, which two accounts can share");
         }
 
         PersonHeard heard = watch.Hear(user.Key, user.Name, user.Email);
@@ -158,17 +169,23 @@ public sealed class PersonChange
         // What did not finish is done over at the next start: the mark of the person before is still the one kept.
         if (!report.Complete)
         {
-            try
-            {
-                problem("what was kept for the person who was signed in before was not all taken away: " + string.Join(", ", report.Failed.Select(failed => failed.Key)));
-            }
-            catch (Exception)
-            {
-                // Told or not, the change is as it is.
-            }
+            Say("what was kept for the person who was signed in before was not all taken away: " + string.Join(", ", report.Failed.Select(failed => failed.Key)));
         }
 
         return report;
+    }
+
+    // Told or not, what is said of is as it is: whoever listens cannot stop it.
+    private void Say(string what)
+    {
+        try
+        {
+            problem(what);
+        }
+        catch (Exception)
+        {
+            // Nothing to do for it here.
+        }
     }
 
     // A part that is done at the call: what it throws is kept for the report, and the next part is still done.
