@@ -560,8 +560,13 @@ struct SessionEndTests {
         let places = Places()
         defer { places.remove() }
         let slot = MemorySlot()
-        let gurpreet = SessionKeeper.mark(name: "Gurpreet Kaur", email: "gurpreet@charkha.example")
-        let simran = SessionKeeper.mark(name: "Simran Sandhu", email: "simran@charkha.example")
+        // A core that gives no key for a person: each is known by the mark of their name and address.
+        let gurpreet = SessionKeeper.Person(
+            key: nil, mark: SessionKeeper.mark(name: "Gurpreet Kaur", email: "gurpreet@charkha.example")
+        )
+        let simran = SessionKeeper.Person(
+            key: nil, mark: SessionKeeper.mark(name: "Simran Sandhu", email: "simran@charkha.example")
+        )
         /// A start of the app: the session opened from what the device holds, and one window in it.
         func start() -> (keeper: SessionKeeper, window: SystemEffects, played: PlayedNotifications) {
             let keeper = SessionKeeper.open(
@@ -609,6 +614,79 @@ struct SessionEndTests {
         #expect(run.keeper.number == before.number)
         #expect(run.played.signOuts == before.signOuts)
         #expect(places.record.person() == gurpreet)
+    }
+
+    @Test func twoPeopleOfOneNameAreToldApartByTheCoresKeyAndAKeyThatFirstArrivesChangesNothing() throws {
+        let places = Places()
+        defer { places.remove() }
+        let keeper = SessionKeeper.open(
+            origin: "https://shop.example", slot: MemorySlot(), cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        let window = SystemEffects(transport: FakeTransport(), keeper: keeper)
+        let played = PlayedNotifications()
+        window.devices.notifications = played
+        // Two accounts are named Harpreet Singh, and neither has an address: one mark for both.
+        let mark = SessionKeeper.mark(name: "Harpreet Singh", email: nil)
+
+        // A core that gives no key names him: he is written down by the mark.
+        keeper.hears(SessionKeeper.Person(key: nil, mark: mark), from: window)
+        #expect(places.record.person() == SessionKeeper.Person(key: nil, mark: mark))
+        // The core now gives a key for him. The same name and address is the
+        // same person: the key is written down, and nothing is taken away.
+        let first = SessionKeeper.Person(key: "person-1f0c", mark: mark)
+        keeper.hears(first, from: window)
+        #expect(played.signOuts == 0)
+        #expect(keeper.number == 0)
+        #expect(places.record.person() == first)
+        // Named once more without a key, he keeps the one written down.
+        keeper.hears(SessionKeeper.Person(key: nil, mark: mark), from: window)
+        #expect(keeper.person == first)
+        // He changes the name he is shown by: the same key is the same person.
+        let renamed = SessionKeeper.Person(key: "person-1f0c", mark: SessionKeeper.mark(name: "Harpreet S. Gill", email: nil))
+        keeper.hears(renamed, from: window)
+        #expect(played.signOuts == 0)
+        #expect(keeper.number == 0)
+        #expect(places.record.person() == renamed)
+
+        // His session runs out, and the other Harpreet Singh signs in: the
+        // name the first one had, and another key. He is another person,
+        // and what was kept for the first one goes.
+        places.snapshots.write("snapshot-first", "what the first Harpreet typed")
+        let second = SessionKeeper.Person(key: "person-77ab", mark: mark)
+        keeper.hears(second, from: window)
+        #expect(played.signOuts == 1)
+        #expect(keeper.number == 1)
+        #expect(places.snapshots.read("snapshot-first") == nil)
+        #expect(places.record.person() == second)
+    }
+
+    @Test func withoutAKeyTwoPeopleOfOneNameAndNoAddressAreOneAndARenamedPersonIsAnother() throws {
+        let places = Places()
+        defer { places.remove() }
+        let keeper = SessionKeeper.open(
+            origin: "https://shop.example", slot: MemorySlot(), cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        let window = SystemEffects(transport: FakeTransport(), keeper: keeper)
+        let played = PlayedNotifications()
+        window.devices.notifications = played
+        // A core that gives no key says only a name and an address. That is
+        // the limit of telling people apart by them, in both directions.
+        let harpreet = SessionKeeper.Person(key: nil, mark: SessionKeeper.mark(name: "Harpreet Singh", email: nil))
+        keeper.hears(harpreet, from: window)
+        // Another account of the same name and no address is not told from the first.
+        keeper.hears(harpreet, from: window)
+        #expect(played.signOuts == 0)
+        #expect(keeper.number == 0)
+        // And the same person under a new name is taken for another, once.
+        let renamed = SessionKeeper.Person(key: nil, mark: SessionKeeper.mark(name: "Harpreet S. Gill", email: nil))
+        keeper.hears(renamed, from: window)
+        #expect(played.signOuts == 1)
+        #expect(keeper.number == 1)
+        keeper.hears(renamed, from: window)
+        #expect(played.signOuts == 1)
+        #expect(places.record.person() == renamed)
     }
 
     // MARK: - A mark and the session after it

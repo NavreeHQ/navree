@@ -40,12 +40,12 @@ import os
 /// count has moved past is an earlier session's, and ends nothing.
 ///
 /// Who is signed in is the session's too, heard from every window's core and
-/// written down as a mark made from the name and address the core names
-/// them by, from which neither can be read. When a core names somebody else
-/// with no sign-out between (a session ran out, and another person signed
-/// in), what was the last person's goes for every window, and every other
-/// window's core starts again (``hears(_:from:)``), also when the two are a
-/// launch apart.
+/// written down: the key the core gives for the person, and a mark made from
+/// the name and address it names them by, from which neither can be read.
+/// When a core names somebody else with no sign-out between (a session ran
+/// out, and another person signed in), what was the last person's goes for
+/// every window, and every other window's core starts again
+/// (``hears(_:from:)``), also when the two are a launch apart.
 ///
 /// A core says a sign-out in one effect or in two. With no push token to
 /// take back it says `forget_session` at once (``end(by:)``). With one, it
@@ -86,9 +86,9 @@ final class SessionKeeper {
     var pushAwaitsSignIn = false
     /// A sign-out the run before began was finished as this one started.
     private(set) var finishedAtStart = false
-    /// The mark of who is signed in, as the windows' cores last named them
-    /// (``mark(name:email:)``): none since the last sign-out.
-    private(set) var person: String?
+    /// Who is signed in, as the windows' cores last named them: nobody
+    /// since the last sign-out.
+    private(set) var person: Person?
     /// How often a core's word that the session is forgotten was passed
     /// over, because the session it spoke of had been ended already.
     private(set) var passedOver = 0
@@ -499,34 +499,66 @@ final class SessionKeeper {
 
     // MARK: - Who is signed in
 
+    /// Who a core says is signed in, as far as a client tells one person
+    /// from another, and nothing that says who they are.
+    struct Person: Equatable, Codable, Sendable {
+        /// The key the core gives for the person: the same for one person,
+        /// another for another account. None from a core that gives none.
+        var key: String?
+        /// The mark made from the name and the address the core names them
+        /// by (``SessionKeeper/mark(name:email:)``).
+        var mark: String
+
+        /// Whether this is the person `other` is. By the core's key when
+        /// both have one: somebody who changes their name is the same
+        /// person, and two people of one name are two. By the mark of name
+        /// and address when either has none: so with a core that gives no
+        /// key, and the first time a key arrives for a person written down
+        /// without one, which by itself changes nothing.
+        func isSame(as other: Person) -> Bool {
+            if let key, let theirs = other.key { return key == theirs }
+            return mark == other.mark
+        }
+    }
+
     /// The mark of a person, made from the name and the address a core
     /// names them by: the same for the same two, another for any other, and
     /// neither can be read from it. A person with no address and one whose
-    /// address is empty are two. The name and the address are all a core
-    /// says of who is signed in, so they are how a client tells people
-    /// apart: somebody who changes their name or address is taken for
-    /// another person once, and two people with the same name and address
-    /// are one.
+    /// address is empty are two. Where a core gives no key for the person,
+    /// the name and the address are all it says of them, and the mark is how
+    /// a client tells people apart: somebody who changes their name or
+    /// address is then taken for another person once, and two people with
+    /// the same name and address are one.
     nonisolated static func mark(name: String, email: String?) -> String {
         let written = String(name.utf16.count) + ":" + name + (email.map { "+" + $0 } ?? "-")
         return SHA256.hash(data: Data(written.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
-    /// A window's core names who is signed in, by their mark. The first
-    /// person named since the last sign-out is written down as the one what
-    /// is kept is kept for. Somebody else than that, with no sign-out
-    /// between, is a change of person: a session ran out, and another person
-    /// signed in, in this run or since the one before it. What was the last
-    /// person's then goes for every window (``personChanged(by:)``), and the
-    /// new mark is written down only when all of it went: an app ended in
-    /// the middle, or a part that failed, leaves the mark of the person
-    /// before, and the next start does the change over.
-    func hears(_ mark: String, from window: SystemEffects) {
-        let before = person
-        guard before != mark else { return }
-        person = mark
-        if before == nil || personChanged(by: window) {
-            if keeps() { _ = record?.keep(person: mark) }
+    /// A window's core names who is signed in. The first person named since
+    /// the last sign-out is written down as the one what is kept is kept
+    /// for. Somebody else than that (``Person/isSame(as:)``), with no
+    /// sign-out between, is a change of person: a session ran out, and
+    /// another person signed in, in this run or since the one before it.
+    /// What was the last person's then goes for every window
+    /// (``personChanged(by:)``), and who is written down is replaced only
+    /// when all of it went: an app ended in the middle, or a part that
+    /// failed, leaves the person before written down, and the next start
+    /// does the change over.
+    func hears(_ named: Person, from window: SystemEffects) {
+        guard let before = person else {
+            person = named
+            if keeps() { _ = record?.keep(person: named) }
+            return
+        }
+        var now = named
+        // The person written down with a key, named once without one, keeps it.
+        if now.key == nil, before.isSame(as: now) { now.key = before.key }
+        guard before != now else { return }
+        person = now
+        // The same person, named anew (a key where there was none, another
+        // name under the same key), is only written down as they are now.
+        if before.isSame(as: now) || personChanged(by: window) {
+            if keeps() { _ = record?.keep(person: now) }
         }
     }
 
@@ -758,25 +790,26 @@ struct SessionRecord: Sendable {
         return !FileManager.default.fileExists(atPath: mark.path)
     }
 
-    /// The mark of the person what is kept on the device is kept for
-    /// (``SessionKeeper/mark(name:email:)``); none when nobody was named
-    /// since the last sign-out.
-    func person() -> String? {
+    /// The person what is kept on the device is kept for, by the core's key
+    /// and the mark of their name and address (``SessionKeeper/Person``);
+    /// none when nobody was named since the last sign-out.
+    func person() -> SessionKeeper.Person? {
         guard let data = try? Data(contentsOf: who) else { return nil }
-        let mark = String(decoding: data, as: UTF8.self)
-        return mark.isEmpty ? nil : mark
+        return try? JSONDecoder().decode(SessionKeeper.Person.self, from: data)
     }
 
-    /// Writes down whose what is kept is, or with no mark that it is
+    /// Writes down whose what is kept is, or with nobody that it is
     /// nobody's. `false` when it could not be.
-    func keep(person mark: String?) -> Bool {
-        guard let mark else {
+    func keep(person: SessionKeeper.Person?) -> Bool {
+        guard let person else {
             try? FileManager.default.removeItem(at: who)
             return !FileManager.default.fileExists(atPath: who.path)
         }
         do {
             try prepare()
-            try Data(mark.utf8).write(to: who, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            try JSONEncoder().encode(person).write(
+                to: who, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+            )
             return true
         } catch {
             return false

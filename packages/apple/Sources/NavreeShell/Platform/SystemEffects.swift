@@ -186,7 +186,13 @@ public final class SystemEffects: EffectRunner {
         guard tail == .none, let user = client.app?.user else { return }
         heard = true
         askForPush()
-        keeper.hears(SessionKeeper.mark(name: user.name, email: user.email), from: self)
+        keeper.hears(Self.person(user), from: self)
+    }
+
+    /// Who a core's user is to the session: the mark of their name and
+    /// address, which is all this build's models read of who is signed in.
+    static func person(_ user: Navree.User) -> SessionKeeper.Person {
+        SessionKeeper.Person(key: nil, mark: SessionKeeper.mark(name: user.name, email: user.email))
     }
 
     /// What loads the pictures of a screen, with the session's cookies.
