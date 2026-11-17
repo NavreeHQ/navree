@@ -42,6 +42,33 @@ public static class Delivery
         }
     }
 
+    /// <summary>
+    /// Shows a state to the windows, after whoever has to hear of it first has heard: the windows are given a state that names another
+    /// person only once what was kept for the person before has begun to go. A hearing that fails is reported by its kind alone, and the
+    /// state is shown all the same.
+    /// </summary>
+    /// <param name="state">The state.</param>
+    /// <param name="hear">Hears the state before any window is given it.</param>
+    /// <param name="show">Gives the state to the windows.</param>
+    /// <param name="problem">Told what failed.</param>
+    public static void Show(ViewState state, Action<ViewState> hear, Action<ViewState> show, Action<string> problem)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(hear);
+        ArgumentNullException.ThrowIfNull(show);
+        ArgumentNullException.ThrowIfNull(problem);
+        try
+        {
+            hear(state);
+        }
+        catch (Exception failure)
+        {
+            problem("who is signed in could not be heard: " + failure.GetType().Name);
+        }
+
+        show(state);
+    }
+
     /// <summary>Asks the fetcher; a fetcher that throws is a request that failed, which the core is told. A request that was cancelled throws as such.</summary>
     /// <param name="fetcher">What answers requests.</param>
     /// <param name="effect">The request.</param>

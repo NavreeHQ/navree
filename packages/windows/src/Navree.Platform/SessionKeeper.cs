@@ -1,6 +1,15 @@
 namespace Navree.Platform;
 
 /// <summary>
+/// A change of person that has begun (<see cref="SessionKeeper.BeginPersonChange"/>) and is to be finished
+/// (<see cref="SessionKeeper.FinishPersonChangeAsync"/>).
+/// </summary>
+/// <param name="Number">Which change it is: only the newest writes its mark.</param>
+/// <param name="Stamp">The session it was seen in; null when a sign-out was under way.</param>
+/// <param name="KeptGone">Completes when what was kept for the person before has been deleted, in its turn in the queue.</param>
+public readonly record struct PersonChangeBegun(long Number, long? Stamp, Task KeptGone);
+
+/// <summary>
 /// What is written on the device for the person signed in, and the end of their session.
 /// </summary>
 /// <remarks>
@@ -29,7 +38,7 @@ public sealed class SessionKeeper : IDisposable
     /// <summary>The key the cookies are kept under.</summary>
     public const string CookiesKey = "cookies";
 
-    /// <summary>The key the mark of the person is kept under, whom the rest is kept for (<see cref="PersonWatch.MarkOf"/>).</summary>
+    /// <summary>The key the mark of the person is kept under, whom the rest is kept for (<see cref="PersonWatch.Named"/>).</summary>
     public const string PersonKey = "person";
 
     private readonly KeptStore kept;
@@ -499,7 +508,7 @@ public sealed class SessionKeeper : IDisposable
     /// time. Nothing is written while a sign-out is under way, nor while a change of person has not finished
     /// (<see cref="PersonChangedAsync"/>): the mark kept is then still that of the person before, and stays so.
     /// </summary>
-    /// <param name="mark">The person's mark (<see cref="PersonWatch.MarkOf"/>).</param>
+    /// <param name="mark">The person's mark (<see cref="PersonWatch.Named"/>).</param>
     public void KeepPerson(string mark)
     {
         ArgumentException.ThrowIfNullOrEmpty(mark);
@@ -514,20 +523,51 @@ public sealed class SessionKeeper : IDisposable
         WritePerson(Stamp(), mark);
     }
 
+    /// <summary>
+    /// Whether anything is kept for a person besides the cookies and the mark of whom it is kept for: a snapshot, the widths of a table's
+    /// columns, notifications that wait. A start that reads no mark asks this: when something is kept and nothing says whose, the first
+    /// person named is not taken for its owner (<see cref="PersonWatch"/>).
+    /// </summary>
+    /// <returns>Whether something is kept.</returns>
+    public bool KeepsOfAPerson() => kept.HoldsOwn(CookiesKey, PersonKey);
+
     // Writes the mark of the person in its turn, when the session it was asked in is still the one now and it is not the mark last written.
+    // A write that fails is not counted as made: the mark is asked to be kept each time the core names the person, so it is tried again
+    // with the next state, until it is on disk.
     private void WritePerson(long? stamp, string mark)
     {
+        long asked;
         lock (gate)
         {
-            if (stamp is not long asked || ending || asked != cookies.Session || mark == lastPerson)
+            if (stamp is not long given || ending || given != cookies.Session || mark == lastPerson)
             {
                 return;
             }
 
+            asked = given;
             lastPerson = mark;
         }
 
-        Write(stamp, PersonKey, mark);
+        disk.Run(() =>
+        {
+            try
+            {
+                if (Current(asked))
+                {
+                    kept.Write(PersonKey, mark);
+                }
+            }
+            catch (Exception)
+            {
+                lock (gate)
+                {
+                    if (lastPerson == mark)
+                    {
+                        lastPerson = string.Empty;
+                    }
+                }
+            }
+        });
     }
 
     /// <summary>
@@ -547,15 +587,22 @@ public sealed class SessionKeeper : IDisposable
     /// another person named than the one it remembers, and does all of this over.
     /// </para>
     /// </remarks>
-    /// <param name="mark">The mark of the person who is signed in now (<see cref="PersonWatch.MarkOf"/>).</param>
+    /// <param name="mark">The mark of the person who is signed in now (<see cref="PersonWatch.Named"/>).</param>
     /// <param name="steps">What else takes away something of the person before, each with the limit of <see cref="Wipe"/>.</param>
     /// <param name="limit">How long one step may take; <see cref="Wipe.StepLimit"/> when left out.</param>
     /// <returns>What came of each step.</returns>
-    public Task<WipeReport> PersonChangedAsync(string mark, IEnumerable<WipeStep> steps, TimeSpan? limit = null)
-    {
-        ArgumentException.ThrowIfNullOrEmpty(mark);
-        ArgumentNullException.ThrowIfNull(steps);
+    public Task<WipeReport> PersonChangedAsync(string mark, IEnumerable<WipeStep> steps, TimeSpan? limit = null) =>
+        FinishPersonChangeAsync(BeginPersonChange(), mark, steps, limit);
 
+    /// <summary>
+    /// Begins a change of person, before anything else of it is done. From this call on the mark kept stays that of the person before, and
+    /// no other is written, until <see cref="FinishPersonChangeAsync"/> finds that every step finished: whatever happens between, the next
+    /// start does the change over. What is kept for the person before is given its turn in the queue here, ahead of anything that is asked
+    /// to be kept after the call.
+    /// </summary>
+    /// <returns>The change, to be given to <see cref="FinishPersonChangeAsync"/>.</returns>
+    public PersonChangeBegun BeginPersonChange()
+    {
         // The session the change was seen in: when it has ended by the time the steps are done, a sign-out took everything and no mark is written.
         long? stamp = Stamp();
         long change;
@@ -565,24 +612,35 @@ public sealed class SessionKeeper : IDisposable
             personOwed = true;
         }
 
-        Task keptGone = disk.RunAsync(() => kept.ClearOwn(CookiesKey, PersonKey));
-        return FinishPersonChangeAsync(mark, stamp, change, keptGone, steps, limit ?? Wipe.StepLimit);
+        return new PersonChangeBegun(change, stamp, disk.RunAsync(() => kept.ClearOwn(CookiesKey, PersonKey)));
     }
 
-    private async Task<WipeReport> FinishPersonChangeAsync(string mark, long? stamp, long change, Task keptGone, IEnumerable<WipeStep> steps, TimeSpan each)
+    /// <summary>
+    /// Finishes a change of person: waits for what was kept to be gone, runs <paramref name="steps"/>, each with the limit of
+    /// <see cref="Wipe"/>, and when every one finished, and no newer change or sign-out began meanwhile, writes the mark of the person who
+    /// is here now in place of the mark of the person before.
+    /// </summary>
+    /// <param name="begun">What <see cref="BeginPersonChange"/> gave.</param>
+    /// <param name="mark">The mark of the person who is signed in now.</param>
+    /// <param name="steps">What else takes away something of the person before.</param>
+    /// <param name="limit">How long one step may take; <see cref="Wipe.StepLimit"/> when left out.</param>
+    /// <returns>What came of each step.</returns>
+    public async Task<WipeReport> FinishPersonChangeAsync(PersonChangeBegun begun, string mark, IEnumerable<WipeStep> steps, TimeSpan? limit = null)
     {
+        ArgumentException.ThrowIfNullOrEmpty(mark);
+        ArgumentNullException.ThrowIfNull(steps);
         WipeReport report = await Wipe.RunAsync(
             [
-                new WipeStep("what was kept for the person before", () => keptGone),
+                new WipeStep("what was kept for the person before", () => begun.KeptGone),
                 .. steps,
             ],
-            each).ConfigureAwait(false);
+            limit ?? Wipe.StepLimit).ConfigureAwait(false);
 
         // When yet another person signed in while the steps ran, the mark is theirs to write, when their own steps have finished. A change
         // that did not finish leaves the mark of the person before for the rest of this run.
         lock (gate)
         {
-            if (!report.Complete || change != personChanges)
+            if (!report.Complete || begun.Number != personChanges)
             {
                 return report;
             }
@@ -590,7 +648,7 @@ public sealed class SessionKeeper : IDisposable
             personOwed = false;
         }
 
-        WritePerson(stamp, mark);
+        WritePerson(begun.Stamp, mark);
         return report;
     }
 
