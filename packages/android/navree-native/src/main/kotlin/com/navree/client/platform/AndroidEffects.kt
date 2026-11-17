@@ -206,14 +206,16 @@ class AndroidEffects(
      * and it is asked again before each effect, for a host that gives the
      * driver only this runner. While a session is ending, what the core says
      * is of the person who is leaving, or of nobody, and says nothing of who
-     * comes next. The mark of the first person named, or of the same one, is
-     * written down as whom what is kept here is kept for; another person
-     * than the one before, with no sign-out between, is a change of person
+     * comes next. A person is who the core's key says they are, and where
+     * the core gives none, who their name and email say ([PersonWatch]). The
+     * mark of the first person named, or of the same one, is written down as
+     * whom what is kept here is kept for; another person than the one
+     * before, with no sign-out between, is a change of person
      * ([personChanged]).
      */
     fun hears(user: Navree.User?) {
         if (user == null || ends.under) return
-        val word = person.hear(user.name, user.email)
+        val word = person.hear(user.key, user.name, user.email)
         when {
             word.heard == Heard.Another -> personChanged(word)
             // Dropped when a session ends before its turn: the sign-out takes the mark with everything else.
