@@ -32,6 +32,7 @@ import com.navree.client.platform.SiteWipe
 import com.navree.client.platform.WipeRules
 import com.navree.client.platform.guardDocuments
 import com.navree.client.platform.guardWorkers
+import com.navree.protocol.Navree
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
@@ -115,7 +116,10 @@ class WebSignOutTest {
         // A deletion a test here left unfinished has failed that test; it does not go on to refuse the web pages of the tests after it.
         SiteWipe.forget()
         // Nor does a push token a test left owed hold back what a later test shows.
-        OwedToken.of(ApplicationProvider.getApplicationContext()).gone()
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        OwedToken.of(context).gone()
+        // Nor is the person a test named here remembered by a later one.
+        File(context.noBackupFilesDir, "navree-person").delete()
     }
 
     private fun page(script: String) = MockResponse.Builder()
@@ -287,8 +291,17 @@ class WebSignOutTest {
         return Json.parseToJsonElement(found) as JsonObject
     }
 
+    /**
+     * The control, and what a change of person takes. A page shown after
+     * another finds all five while nobody signed out and the same person is
+     * signed in. Then the core names another person, as it does when a
+     * session ran out and somebody else signed in, and the client is told of
+     * no end of a session: a page shown after that finds nothing of what the
+     * pages of the person before stored, and still finds the cookie, since
+     * the one store's cookies are the new person's and are not deleted.
+     */
     @Test
-    fun aPageShownAfterAnotherFindsWhatItStoredWhenNobodySignedOut() {
+    fun aPageShownAfterAnotherFindsWhatItStoredWhenNobodySignedOutAndAllButTheCookieIsGoneOnceAnotherPersonIsSignedIn() {
         start()
         val found = looked("web-storage-kept.txt", "no sign-out between the two pages")
         assertTrue("the cookie: $found", found.getValue("cookie").jsonPrimitive.content.contains("city=Amritsar"))
@@ -296,6 +309,20 @@ class WebSignOutTest {
         assertTrue("IndexedDB: $found", found.getValue("indexeddb").jsonArray.any { it.jsonPrimitive.content == "orders" })
         assertTrue("Cache Storage: $found", found.getValue("caches").jsonArray.any { it.jsonPrimitive.content == "pages" })
         assertEquals("a service worker: $found", 1, found.getValue("workers").jsonPrimitive.int)
+
+        // The page that looked is left; then the core names one person, and after her another, with no word of a sign-out.
+        compose.runOnUiThread { shown = null }
+        compose.waitForIdle()
+        client {
+            it.hears(Navree.User(name = "Anjali Verma", email = "anjali.verma@example.com"))
+            it.hears(Navree.User(name = "Karan Malhotra", email = "karan.malhotra@example.com"))
+        }
+        val after = looked("web-storage-after-another-person.txt", "another person was signed in, with no sign-out between")
+        assertTrue("the cookie stays, in the one store that holds the new person's session: $after", after.getValue("cookie").jsonPrimitive.content.contains("city=Amritsar"))
+        assertEquals("nothing in local storage: $after", 0, after.getValue("local").jsonPrimitive.int)
+        assertEquals("no IndexedDB database: $after", 0, after.getValue("indexeddb").jsonArray.size)
+        assertEquals("nothing in Cache Storage: $after", 0, after.getValue("caches").jsonArray.size)
+        assertEquals("no service worker: $after", 0, after.getValue("workers").jsonPrimitive.int)
     }
 
     /**

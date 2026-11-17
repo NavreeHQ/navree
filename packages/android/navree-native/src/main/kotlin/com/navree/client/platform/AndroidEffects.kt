@@ -29,8 +29,10 @@ import com.navree.client.core.Effect
 import com.navree.client.core.EffectRunner
 import com.navree.client.core.Events
 import com.navree.client.core.Notice
+import com.navree.protocol.Navree
 import kotlinx.serialization.json.JsonObject
 import okhttp3.HttpUrl
+import java.io.File
 import java.security.SecureRandom
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -56,6 +58,26 @@ import kotlin.concurrent.thread
  * it, once. Answers whether every kind of site data was asked to go.
  */
 fun clearWebViews(context: Context, done: (everyKind: Boolean) -> Unit = {}): Boolean {
+    clearWebViewKept(context)
+    val storage = WebStorage.getInstance()
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)) {
+        WebStorageCompat.deleteBrowsingData(storage) { done(true) }
+        return true
+    }
+    storage.deleteAllData()
+    done(false)
+    return false
+}
+
+/**
+ * Empties what the system's web views keep for the app beside what sites
+ * stored and the cookies: the resource cache on disk, the back and forward
+ * list, the form data, and the saved sign-ins for sites. No cookie goes by
+ * this, so it is also what is done when another person is signed in with no
+ * sign-out between, whose cookies the one store already holds. Call on the
+ * main thread.
+ */
+fun clearWebViewKept(context: Context) {
     val database = WebViewDatabase.getInstance(context)
     @Suppress("DEPRECATION")
     database.clearFormData()
@@ -67,14 +89,6 @@ fun clearWebViews(context: Context, done: (everyKind: Boolean) -> Unit = {}): Bo
         clearHistory()
         destroy()
     }
-    val storage = WebStorage.getInstance()
-    if (WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)) {
-        WebStorageCompat.deleteBrowsingData(storage) { done(true) }
-        return true
-    }
-    storage.deleteAllData()
-    done(false)
-    return false
 }
 
 /**
@@ -128,6 +142,13 @@ class AndroidEffects(
     private val tokens = PushEnd(push, OwedToken.of(app), onMain = { work -> main.post { work() } }, emptyShade = ::emptyShade, ask = ::askToken)
 
     /**
+     * Who the core last said is signed in, and on the disk the mark of whom
+     * what is kept here is kept for: read now, so this run sees a change of
+     * person that happened while the app was closed.
+     */
+    private val person = PersonWatch(File(app.noBackupFilesDir, PersonWatch.MARK), "${origin.scheme}://${origin.host}:${origin.port}")
+
+    /**
      * The core's two words for the end of a session. `session_ending` comes
      * in the update in which the core asks the server to forget this device's
      * push token: the request for the removal stands before it in the same
@@ -178,6 +199,78 @@ class AndroidEffects(
         main.post { driver.send(event) }
     }
 
+    /**
+     * Hears who the core says is signed in. The driver says it each time the
+     * app's part of the view state is read back, which is before any effect
+     * of the same update is carried out and before anything is drawn from it;
+     * and it is asked again before each effect, for a host that gives the
+     * driver only this runner. While a session is ending, what the core says
+     * is of the person who is leaving, or of nobody, and says nothing of who
+     * comes next. The mark of the first person named, or of the same one, is
+     * written down as whom what is kept here is kept for; another person
+     * than the one before, with no sign-out between, is a change of person
+     * ([personChanged]).
+     */
+    fun hears(user: Navree.User?) {
+        if (user == null || ends.under) return
+        val word = person.hear(user.name, user.email)
+        when {
+            word.heard == Heard.Another -> personChanged(word)
+            // Dropped when a session ends before its turn: the sign-out takes the mark with everything else.
+            word.write -> state.write { person.keep(word) }
+        }
+    }
+
+    /**
+     * Another person is signed in than the one what is kept here was kept
+     * for, and nobody signed out between: a session ran out, or the server
+     * ended it and said nothing of it to the client, and somebody else signed
+     * in, in this run or while the app was closed. The core has let go of
+     * the person before and has its own cache emptied. What the client keeps
+     * of its own for that person goes here, before the state that names the
+     * new one is drawn:
+     * - the app's notifications in the shade;
+     * - what the web view keeps beside the cookies: its cache, history, form
+     *   data and saved sign-ins for sites now ([clearWebViewKept]), and what
+     *   pages stored at the origins as something owed from this moment and
+     *   written down ([SiteWipe.owePages]), so no web page is shown until it
+     *   is gone and a start of the app goes on with what a run did not
+     *   finish;
+     * - in the store's turn, ahead of anything kept from now on: the copies
+     *   of the files chosen for forms, and the snapshot of the launch.
+     *
+     * No cookie goes. The one store is the native requests' as well as the
+     * web view's, and the session in it is already the new person's, set by
+     * the sign-in that brought them; a cookie of the person before that the
+     * sign-in did not replace stays with it. Nor does the client keep
+     * anything else for a person: pictures are held only by the screens that
+     * draw them, which the core has taken down, and the client schedules no
+     * notification and writes no count or shortcut of its own.
+     *
+     * The mark of the person before stays on the disk until the store's turn
+     * has deleted the files, and only then is the new person's written in its
+     * place ([PersonWatch.changed]). An app that ends before that, or a file
+     * that could not be deleted, leaves the old mark, and the next start
+     * hears another person than the one it remembers and does all of this
+     * over.
+     */
+    private fun personChanged(word: PersonWatch.Word) {
+        emptyShade()
+        SiteWipe.owePages()
+        try {
+            clearWebViewKept(app)
+        } catch (_: Throwable) {
+            // No web view on this device: nothing of it to clear, and no page of it to show.
+        }
+        SiteWipe.finish()
+        // Dropped when a session ends before its turn: the sign-out deletes both itself, and forgets the mark.
+        state.write {
+            picked.clear()
+            snapshots.clear()
+            person.changed(word)
+        }
+    }
+
     /** Takes every notification of the app out of the shade, those the push service drew itself among them. */
     private fun emptyShade() {
         try {
@@ -188,6 +281,7 @@ class AndroidEffects(
     }
 
     override fun run(effect: Effect) {
+        hears(driver.app?.user)
         when (effect) {
             is Effect.Fetch -> http.fetch(effect)
             is Effect.Cancel -> http.cancel(effect.request)
@@ -287,6 +381,9 @@ class AndroidEffects(
      * and a start of the app that finds it owed asks for it again.
      */
     private fun end() {
+        // Everything of the person goes with the session, the mark of whom it was kept for among it: whoever the core names
+        // next is the first of the next session.
+        person.signedOut()
         // Owed from this moment and written down, whatever the store is still busy with: a page of the next session is not
         // shown over what this one's pages left, and a start of the app after a run that ended here does all of it.
         tokens.owe()

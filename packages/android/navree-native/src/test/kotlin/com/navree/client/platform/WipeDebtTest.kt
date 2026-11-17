@@ -169,6 +169,55 @@ class WipeDebtTest {
     }
 
     @Test
+    fun when_another_person_is_signed_in_what_pages_stored_is_owed_at_every_origin_and_never_the_whole() {
+        val debt = debt()
+        debt.saw(patiala)
+        assertTrue("what is owed changed", debt.owePages())
+        assertTrue(debt.owed)
+        assertFalse("the cookies are the new person's: the whole of an end of a session is not owed", debt.all)
+        assertEquals("the mark is on the disk, owing what pages stored and no more", "", mark.readText())
+        assertTrue("no web page is shown until it is gone", debt.held(shop))
+        assertEquals("at every origin known", listOf(shop, pay, patiala), debt.targets(own = listOf(shop), hosts = listOf(pay)))
+        // A run of the app that ends here: the next start finds it owed, and it is a go's to take, not the cookies'.
+        assertTrue(debt().let { it.owed && !it.all && it.left == null })
+
+        val go = debt.begin()
+        assertTrue("the deletion is a go, asked for next", go != null && debt.running)
+        assertTrue(debt.over(emptySet(), go!!))
+        assertFalse(debt.owed)
+        assertFalse(mark.exists())
+    }
+
+    @Test
+    fun a_go_on_its_way_when_another_person_is_signed_in_says_nothing_about_what_is_owed_from_then() {
+        val debt = debt()
+        val end = debt.owe()
+        debt.narrow(end)
+        debt.over(setOf(pay), end)
+        // "Try again" has a go at the origin a sign-out left. While it runs, another person is signed in.
+        val earlier = debt.begin()!!
+        assertTrue(debt.owePages())
+        assertTrue("every origin is owed again, not only the one that was left", debt.held(shop))
+        assertFalse("and nothing is on its way for it yet", debt.running)
+        assertFalse(debt.over(emptySet(), earlier))
+        assertTrue("the earlier go's end leaves it owed", debt.owed && debt.held(shop))
+        // The go asked for next is the one that says when its pages may be shown.
+        val go = debt.begin()!!
+        assertTrue(go != earlier)
+        assertTrue(debt.over(emptySet(), go))
+        assertFalse(debt.owed)
+    }
+
+    @Test
+    fun while_the_whole_of_an_end_of_a_session_is_owed_another_person_changes_nothing_of_it() {
+        val debt = debt()
+        debt.owe()
+        assertFalse(debt.owePages())
+        assertTrue("the whole is owed still, the cookies with it", debt.owed && debt.all && debt.running)
+        assertEquals(WipeRules.EVERYTHING + "\n", mark.readText())
+    }
+
+    @Test
     fun a_mark_that_names_no_origin_owes_every_origin_and_one_that_cannot_be_read_owes_the_whole() {
         mark.writeText("https:/\n")
         assertTrue("a line that does not read names no origin: every origin is owed", debt().let { it.owed && !it.all && it.left == null })

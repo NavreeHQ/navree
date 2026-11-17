@@ -440,6 +440,28 @@ internal class WipeDebt(private val folder: () -> File?) {
     }
 
     /**
+     * Another person is signed in than the one before, with no sign-out
+     * between: what the pages of the person before stored is owed from now,
+     * at every origin, and never the cookies, which are already the new
+     * person's. So the mark owes only what pages stored, and it has reached
+     * the disk when this returns. Nothing is on its way yet: a go that was,
+     * for something owed before, says nothing about this ([number] moves on),
+     * and the one asked for next takes its place. While the whole of an end
+     * of a session is owed that stands, since it takes what pages stored with
+     * it. Answers whether what is owed changed.
+     */
+    fun owePages(): Boolean {
+        if (owed && all) return false
+        owed = true
+        all = false
+        running = false
+        left = null
+        number++
+        folder()?.let { runCatching { WipeRules.put(File(it, OWED), "") } }
+        return true
+    }
+
+    /**
      * The cookies, and everything else of the end of the session numbered
      * [of] that is not what pages stored, are gone and on the disk: from now
      * the mark owes only what pages stored at the origins. Dropped when a
@@ -553,8 +575,9 @@ internal class WipeDebt(private val folder: () -> File?) {
  * left, the mark stays and names it, its pages stay held back, and every
  * later go (one the person asks for with "Try again", and the next start's)
  * is at the origins that were left. A go begins only there: when a session
- * ends, when the app starts, and when the person asks. Asking whether a page
- * may be shown begins none.
+ * ends, when another person is signed in with no sign-out between
+ * ([owePages]), when the app starts, and when the person asks. Asking whether
+ * a page may be shown begins none.
  */
 object SiteWipe {
     private val lock = Any()
@@ -627,6 +650,19 @@ object SiteWipe {
     }
 
     /**
+     * Another person is signed in than the one before, with no sign-out
+     * between: what the pages of the person before stored in the web view is
+     * owed from now, at every origin, and no web page is shown until it is
+     * gone. Never the cookies, which are the new person's. The mark has
+     * reached the disk when this returns, so a start of the app goes on with
+     * what a run did not finish; the deletion itself is [finish], asked for
+     * next. Call on the thread the client is driven on.
+     */
+    fun owePages() {
+        synchronized(lock) { if (debt.owePages()) changed.intValue++ }
+    }
+
+    /**
      * The cookies, and everything else of the end of the session numbered
      * [of] that is not what pages stored, are gone and on the disk: from now
      * the mark owes only what pages stored at the origins. Says nothing when
@@ -684,8 +720,9 @@ object SiteWipe {
      * of the end of a session is owed ([owesAll]) this does nothing, and the
      * next start of the app does all of it. Nor anything while a deletion is
      * on its way already. Asked for at a start of the app that finds
-     * something owed, and by "Try again" on a page that is held back. Call on
-     * the main thread.
+     * something owed, when another person is signed in with no sign-out
+     * between, and by "Try again" on a page that is held back. Call on the
+     * main thread.
      */
     fun finish() {
         val (context, them, began) = synchronized(lock) {
