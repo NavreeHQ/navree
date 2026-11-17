@@ -78,6 +78,14 @@ pub struct User {
     /// What their menu offers: links and buttons.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub menu: Vec<Node>,
+    /// The runtime core's own name for the person, in what it hands a client:
+    /// the same for one person, another for another account, and nothing of
+    /// the person can be read from it. A client tells by it when the person
+    /// signed in is no longer the one before. The core fills it. A server
+    /// leaves it out, and one a server writes is not kept: the core writes
+    /// its own over it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
 }
 
 /// How the screens under an address are presented.

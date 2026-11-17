@@ -1082,7 +1082,7 @@ object!(Shell { navree, build, name, home } {
 object!(Nav {} { groups });
 object!(NavGroup {} { label, items });
 object!(NavItem { label, href } { icon, badge, items });
-object!(User { name } { email, menu });
+object!(User { name } { email, menu, key });
 object!(Route { matches = "match" } { present, chrome: true });
 object!(Theme {} { name, accent, accent_dark });
 object!(Push { register } {});

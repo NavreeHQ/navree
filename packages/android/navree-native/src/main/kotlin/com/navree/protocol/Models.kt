@@ -3392,6 +3392,7 @@ public object Navree {
     @Serializable
     public data class User(
         val email: String? = null,
+        val key: String? = null,
         val menu: kotlin.collections.List<Navree.Node> = emptyList(),
         val name: String,
     )

@@ -10851,21 +10851,25 @@ extension Navree {
     /// `User`.
     public struct User: Codable, Hashable, Sendable {
         public var email: String?
+        public var key: String?
         public var menu: [Navree.Node]
         public var name: String
 
         public init(
             email: String? = nil,
+            key: String? = nil,
             menu: [Navree.Node] = [],
             name: String
         ) {
             self.email = email
+            self.key = key
             self.menu = menu
             self.name = name
         }
 
         private enum CodingKeys: String, CodingKey {
             case email = "email"
+            case key = "key"
             case menu = "menu"
             case name = "name"
         }
@@ -10873,6 +10877,7 @@ extension Navree {
         public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             self.email = try container.decodeIfPresent(String.self, forKey: .email)
+            self.key = try container.decodeIfPresent(String.self, forKey: .key)
             self.menu = try container.decodeIfPresent([Navree.Node].self, forKey: .menu) ?? []
             self.name = try container.decode(String.self, forKey: .name)
         }
@@ -10880,6 +10885,7 @@ extension Navree {
         public func encode(to encoder: any Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encodeIfPresent(self.email, forKey: .email)
+            try container.encodeIfPresent(self.key, forKey: .key)
             if self.menu != [] { try container.encode(self.menu, forKey: .menu) }
             try container.encode(self.name, forKey: .name)
         }
