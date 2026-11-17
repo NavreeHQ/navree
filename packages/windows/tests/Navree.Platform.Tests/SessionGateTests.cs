@@ -338,10 +338,11 @@ public sealed class SessionGateTests
             // the core lets go when the server has answered.
             FetchEffect removal = new(7, "delete", "https://shop.example/_navree/native/devices/this", [], null, 5000, false);
             long[] ending = gate.Asked([removal, new SessionEndingEffect()]);
-            Expect.That(gate.Live(ending[1]), "the word is not of the session now: no sign-out would begin at it");
+            EndingWords words = new(gate);
+            Task? coreLetsGo = words.Ending(ending[1]);
+            Expect.That(coreLetsGo is { IsCompleted: false }, "no sign-out begins at the core's word that the session is ending");
             gate.SessionIsEnding();
-            TaskCompletionSource coreLetsGo = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            Task<WipeReport> atTheWord = keeper.EndBeforeCoreAsync(() => { }, coreLetsGo.Task, [], []);
+            Task<WipeReport> atTheWord = keeper.EndBeforeCoreAsync(() => { }, coreLetsGo!, [], []);
 
             // Before the server has answered, the person signs out in the client too: a sign-out of the client's own begins, and tells the
             // core. The core, told while it waited, drops its last request, and says in one update that the session is forgotten and
@@ -350,6 +351,7 @@ public sealed class SessionGateTests
             FetchEffect shell = Get(9, "https://shop.example/_navree/native/shell");
             Effect[] said = [new CancelEffect(removal.Request), new CacheClearEffect(), new ForgetSessionEffect(), shell];
             long[]? marks = null;
+            bool? aThirdBegins = null;
             Task<WipeReport> ownSignOut = keeper.EndAsync(
                 () => { },
                 () =>
@@ -358,7 +360,7 @@ public sealed class SessionGateTests
                     marks = gate.Asked(said);
 
                     // The window carries the word out by telling the sign-out that began at the core's first word: no third one begins.
-                    coreLetsGo.SetResult();
+                    aThirdBegins = words.Forgotten();
                     return Task.CompletedTask;
                 },
                 [],
@@ -366,6 +368,7 @@ public sealed class SessionGateTests
 
             WipeReport[] reports = await Task.WhenAll(atTheWord, ownSignOut).WaitAsync(Short);
             await keeper.DrainAsync().WaitAsync(Short);
+            Expect.That(aThirdBegins == false, "a sign-out begins at the word that the session is forgotten though one began at the word before it");
             Expect.That(reports.All(report => report.Complete), "a sign-out did not finish: " + string.Join(", ", reports.SelectMany(report => report.Failed).Select(failed => failed.Key + " (" + failed.Value + ")")));
             Expect.That(!kept.WipeMarked, "the mark stays though both sign-outs finished and the core let go: every start would begin signed out");
             Expect.That(!keeper.Ending, "nothing is kept for whoever comes next");
@@ -409,8 +412,10 @@ public sealed class SessionGateTests
         Expect.That(gate.MayRun(late[1], marks[1]), "the word that the session is ending is not carried out");
         Expect.That(!gate.Live(marks[1]), "the word is taken for one of the session now: a second sign-out would begin at it");
 
-        // The host begins no sign-out at a word whose mark is not live, and counts the word.
-        gate.SessionIsEnding();
+        // No sign-out begins at a word whose mark is not live: the word is counted.
+        EndingWords words = new(gate);
+        Assert.IsNull(words.Ending(marks[1]), "a second sign-out begins for a session the person has already ended in the client");
+        Expect.That(words.Waiting, "the word that follows is not waited for: a sign-out would begin at it");
         Expect.That(gate.OfSomeoneLeaving(waiting), "the state the core gave with the word is not the leaving person's");
 
         // The sign-out that is under way tells the core, which was waiting: it drops its request, says the session is forgotten, and asks
@@ -420,6 +425,7 @@ public sealed class SessionGateTests
         Effect[] said = [new CancelEffect(removal.Request), new ForgetSessionEffect(), shell];
         long[] after = gate.Asked(said, out long started);
         Expect.That(gate.MayRun(said[1], after[1]), "the word that the session is to be forgotten is not carried out");
+        Expect.That(!words.Forgotten(), "a sign-out begins at the word that follows a word that was only counted");
         Expect.That(gate.MayRun(shell, after[2]), "the start after the sign-out is refused: the app would stay on its start screen until it is started again");
         Expect.That(!gate.OfSomeoneLeaving(started), "the state of whoever comes next is taken for the leaving person's: no web page would load");
         Expect.That(!gate.IsLast(removal.Request), "the request that was refused is still somebody's last");
@@ -432,5 +438,39 @@ public sealed class SessionGateTests
         uncounted.CoreIsToldTheSessionEnded();
         long[] apart = uncounted.Asked(said);
         Expect.That(!uncounted.MayRun(shell, apart[2]), "the word need not be counted: this test shows nothing");
+    }
+
+    [TestMethod]
+    public void The_word_that_the_session_is_forgotten_begins_a_sign_out_only_when_no_word_that_it_is_ending_came_before()
+    {
+        SessionGate gate = new();
+        EndingWords words = new(gate);
+
+        // With no push token to take back, the core says at once that the session is forgotten: the sign-out begins at that word, each time.
+        Expect.That(!words.Waiting, "a word is waited for though the core said none");
+        Expect.That(words.Forgotten(), "no sign-out begins when the core says the session is forgotten");
+        Expect.That(words.Forgotten(), "the second sign-out of a run does not begin");
+
+        // With one, it says first that the session is ending: the sign-out begins there, and the task it is given completes at the word
+        // that follows, at which none begins.
+        FetchEffect removal = new(4, "delete", "https://shop.example/_navree/native/devices/this", [], null, 5000, false);
+        long[] marks = gate.Asked([removal, new SessionEndingEffect()]);
+        Task? letsGo = words.Ending(marks[1]);
+        Expect.That(letsGo is { IsCompleted: false }, "no sign-out begins at the core's word that the session is ending");
+        Expect.That(gate.Live(marks[1]), "the word moved the window's side itself: the sign-out that begins at it moves it");
+        gate.SessionIsEnding();
+
+        // A second word while the first is still open begins nothing and counts nothing.
+        Assert.IsNull(words.Ending(marks[1]), "a word that is still open begins a second sign-out");
+
+        FetchEffect shell = Get(5, "https://shop.example/_navree/native/shell");
+        long[] after = gate.Asked([new ForgetSessionEffect(), shell]);
+        Expect.That(!words.Forgotten(), "a second sign-out begins at the word that the session is forgotten");
+        Expect.That(letsGo is { IsCompleted: true }, "the sign-out that began at the first word is not told that the core has let go");
+        Expect.That(gate.MayRun(shell, after[1]), "the start after the sign-out is refused: a word was counted twice");
+        Expect.That(!words.Waiting, "the pair is still open after its second word");
+
+        // The pair is over: the next word that the session is forgotten, with none before it, begins a sign-out again.
+        Expect.That(words.Forgotten(), "a sign-out with no word before it does not begin after an earlier pair");
     }
 }

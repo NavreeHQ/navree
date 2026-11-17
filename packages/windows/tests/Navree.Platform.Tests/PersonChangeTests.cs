@@ -1,11 +1,13 @@
+using System.Security.Cryptography;
+using System.Text;
 using Navree.Design;
 
 namespace Navree.Platform.Tests;
 
 /// <summary>
-/// Another person signs in with no sign-out between: a session ran out, or a server ended it and said nothing of it to the client. The core
-/// only has its cache emptied. What the client keeps of its own for the person before goes, and the cookies, which are already those of the
-/// person who is here now, stay.
+/// Another person signs in with no sign-out between: a session ran out, or a server ended it and said nothing of it to the client. No
+/// effect of the core says so. A person is told from another by the key the core gives for them. What the client keeps of its own for the
+/// person before goes, and the cookies, which are already those of the person who is here now, stay.
 /// </summary>
 [TestClass]
 public sealed class PersonChangeTests
@@ -14,10 +16,16 @@ public sealed class PersonChangeTests
     private const string Orders = "page:https://shop.example/orders";
     private const string Waiting = "pending-notifications";
     private const string RitusReminder = "[{\"id\":\"dr-malhotra\",\"title\":\"Your appointment with Dr. Malhotra, Model Town, 10:30\"}]";
+
+    // The core's keys for the two people, as it gives them in app.user.key: each a hash of the id the server names the person by.
+    private const string RituKey = "1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e";
+    private const string HarpreetKey = "38c9705141ffe6c8247000b823439d8248a231f176ef18db39fa1940e1e809cc";
+    private const string ManpreetKey = "6b1f0d2c9a7e4853b1c6d0e2f4a8975c3e2d1b0a9f8e7d6c5b4a39281706f5e4";
+    private const string SimranKey = "0a9b8c7d6e5f40312233445566778899aabbccddeeff00112233445566778899";
     private static readonly Origins Shop = new("https://shop.example");
     private static readonly TimeSpan Short = TimeSpan.FromSeconds(5);
-    private static readonly string Ritu = PersonWatch.MarkOf("Ritu Sharma", "ritu.sharma@example.com");
-    private static readonly string Harpreet = PersonWatch.MarkOf("Harpreet Kaur", "harpreet.kaur@example.com");
+    private static readonly string Ritu = PersonWatch.MarkOfKey(RituKey);
+    private static readonly string Harpreet = PersonWatch.MarkOfKey(HarpreetKey);
 
     private static string Folder() => Path.Combine(Path.GetTempPath(), "navree-person-" + Guid.NewGuid().ToString("N"));
 
@@ -54,32 +62,52 @@ public sealed class PersonChangeTests
     public void The_first_person_named_is_remembered_and_only_another_one_with_no_sign_out_between_is_a_change()
     {
         PersonWatch watch = new();
-        Assert.AreEqual(PersonHeard.Nobody, watch.Hear(null, null), "a state that names nobody is taken for a person");
+        Assert.AreEqual(PersonHeard.Nobody, watch.Hear(null, null, null), "a state that names nobody is taken for a person");
         Assert.IsNull(watch.Named);
 
-        Assert.AreEqual(PersonHeard.First, watch.Hear("Ritu Sharma", "ritu.sharma@example.com"));
+        Assert.AreEqual(PersonHeard.First, watch.Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"));
         Assert.AreEqual(Ritu, watch.Named);
-        Assert.AreEqual(PersonHeard.Same, watch.Hear("Ritu Sharma", "ritu.sharma@example.com"));
+        Assert.AreEqual(PersonHeard.Same, watch.Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"));
 
         // Her session runs out: the shell names nobody. She signs in again and finds everything as it was.
-        Assert.AreEqual(PersonHeard.Nobody, watch.Hear(null, null));
+        Assert.AreEqual(PersonHeard.Nobody, watch.Hear(null, null, null));
         Assert.AreEqual(Ritu, watch.Named, "a state that names nobody made the watch forget who was here");
-        Assert.AreEqual(PersonHeard.Same, watch.Hear("Ritu Sharma", "ritu.sharma@example.com"), "the same person signing in again is taken for another");
+        Assert.AreEqual(PersonHeard.Same, watch.Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"), "the same person signing in again is taken for another");
 
         // It runs out again over lunch, and this time Harpreet signs in. That is said once.
-        Assert.AreEqual(PersonHeard.Nobody, watch.Hear(null, null));
-        Assert.AreEqual(PersonHeard.Another, watch.Hear("Harpreet Kaur", "harpreet.kaur@example.com"), "another person with no sign-out between is not seen");
+        Assert.AreEqual(PersonHeard.Nobody, watch.Hear(null, null, null));
+        Assert.AreEqual(PersonHeard.Another, watch.Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"), "another person with no sign-out between is not seen");
         Assert.AreEqual(Harpreet, watch.Named);
-        Assert.AreEqual(PersonHeard.Same, watch.Hear("Harpreet Kaur", "harpreet.kaur@example.com"), "one change of person is said twice");
+        Assert.AreEqual(PersonHeard.Same, watch.Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"), "one change of person is said twice");
 
         // Harpreet signs out: the sign-out takes everything away itself, so Ritu, who signs in after it, is the first again.
         watch.SignedOut();
         Assert.IsNull(watch.Named);
-        Assert.AreEqual(PersonHeard.First, watch.Hear("Ritu Sharma", "ritu.sharma@example.com"), "a person who signs in after a sign-out is taken for a change with no sign-out between");
+        Assert.AreEqual(PersonHeard.First, watch.Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"), "a person who signs in after a sign-out is taken for a change with no sign-out between");
     }
 
     [TestMethod]
-    public void Two_people_are_told_apart_by_name_and_email_and_the_mark_says_nothing_of_either()
+    public void Two_accounts_of_one_name_and_no_email_are_two_people_and_an_account_whose_name_changes_is_one()
+    {
+        // Two staff accounts at the counter in Amritsar sign in by phone number, and the app shows each as "Harpreet Singh", with no email.
+        // The core gives each its own key, from the id the server names the account by.
+        const string FirstAccount = "1bc3dcdc8ebf5d231237007ccc4903b602f64185813b65bc5b6d1f5f798fcab7";
+        const string SecondAccount = "9cc5ffc2817cc3c911c721e28112cc30ae527d56ce46fbc784f9207caf606c75";
+        PersonWatch watch = new();
+        Assert.AreEqual(PersonHeard.First, watch.Hear(FirstAccount, "Harpreet Singh", null));
+        Assert.AreEqual(PersonHeard.Another, watch.Hear(SecondAccount, "Harpreet Singh", null), "two accounts of one name and no email are one person: the second is left everything of the first");
+        Assert.AreEqual(PersonHeard.Same, watch.Hear(SecondAccount, "Harpreet Singh", null));
+
+        // He writes his full name and an email into his profile: the account is the same, and so is its key.
+        Assert.AreEqual(PersonHeard.Same, watch.Hear(SecondAccount, "Harpreet Singh Gill", "harpreet.gill@example.com"), "a person whose name or email changes is taken for another: what was kept for them would go");
+
+        // What is remembered is the key, and nothing of the person.
+        Assert.AreEqual(PersonWatch.MarkOfKey(SecondAccount), watch.Named);
+        Expect.That(watch.Named?.Contains("Harpreet", StringComparison.OrdinalIgnoreCase) == false, "the mark says who it is the mark of");
+    }
+
+    [TestMethod]
+    public void With_no_key_from_the_core_two_people_are_told_apart_by_name_and_email_and_the_mark_says_nothing_of_either()
     {
         // The same name with another email, with none, and with an empty one are four people.
         string[] marks =
@@ -98,22 +126,100 @@ public sealed class PersonChangeTests
             Expect.That(!mark.Contains("Gurpreet", StringComparison.OrdinalIgnoreCase) && !mark.Contains("example", StringComparison.OrdinalIgnoreCase), "the mark says who it is the mark of");
         }
 
+        // A core that gives no key, or an empty one, is an older one: the watch tells by name and email.
         PersonWatch watch = new();
-        Assert.AreEqual(PersonHeard.First, watch.Hear("Gurpreet Singh", null));
-        Assert.AreEqual(PersonHeard.Same, watch.Hear("Gurpreet Singh", null));
-        Assert.AreEqual(PersonHeard.Another, watch.Hear("Gurpreet Singh", "gurpreet.singh@example.com"));
+        Assert.AreEqual(PersonHeard.First, watch.Hear(null, "Gurpreet Singh", null));
+        Assert.AreEqual(marks[2], watch.Named);
+        Assert.AreEqual(PersonHeard.Same, watch.Hear(string.Empty, "Gurpreet Singh", null));
+        Assert.AreEqual(PersonHeard.Another, watch.Hear(null, "Gurpreet Singh", "gurpreet.singh@example.com"));
+    }
+
+    [TestMethod]
+    public void A_mark_kept_by_name_and_email_is_the_same_person_when_the_core_first_gives_a_key()
+    {
+        // The last run's core gave no key, so the mark kept for Ritu was made from her name and email. This run's core gives one.
+        string keptByName = PersonWatch.MarkOf("Ritu Sharma", "ritu.sharma@example.com");
+        PersonWatch watch = new(keptByName);
+        Assert.AreEqual(PersonHeard.Same, watch.Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"), "the first key is taken for another person: everything kept for her would go");
+        Assert.AreEqual(Ritu, watch.Named, "the key did not take the place of the mark made from her name and email");
+        Assert.AreEqual(PersonHeard.Same, watch.Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"));
+
+        // From then on the key decides: a new name is the same person, and another key is another.
+        Assert.AreEqual(PersonHeard.Same, watch.Hear(RituKey, "Ritu S.", null));
+        Assert.AreEqual(PersonHeard.Another, watch.Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"));
+
+        // When the first key comes with somebody else's name and email, the mark kept says it is another person.
+        Assert.AreEqual(
+            PersonHeard.Another,
+            new PersonWatch(keptByName).Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"),
+            "another person who signs in as the first key arrives is left what was kept for the one before");
+
+        // A key was kept and the core gives none now: nothing says it is another person.
+        Assert.AreEqual(PersonHeard.Same, new PersonWatch(Ritu).Hear(null, "Ritu Sharma", "ritu.sharma@example.com"));
     }
 
     [TestMethod]
     public void A_start_that_remembers_whom_the_last_run_kept_for_sees_another_person_named_as_a_change()
     {
         // The last run ended with Ritu named. Her session ran out while the app was closed.
-        Assert.AreEqual(PersonHeard.Another, new PersonWatch(Ritu).Hear("Harpreet Kaur", "harpreet.kaur@example.com"), "a change of person across a restart is not seen");
-        Assert.AreEqual(PersonHeard.Same, new PersonWatch(Ritu).Hear("Ritu Sharma", "ritu.sharma@example.com"), "the same person at the next start is taken for another");
+        Assert.AreEqual(PersonHeard.Another, new PersonWatch(Ritu).Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"), "a change of person across a restart is not seen");
+        Assert.AreEqual(PersonHeard.Same, new PersonWatch(Ritu).Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"), "the same person at the next start is taken for another");
 
         // Nothing was kept (a first start, or one after a sign-out): whoever is named is the first.
-        Assert.AreEqual(PersonHeard.First, new PersonWatch(null).Hear("Harpreet Kaur", "harpreet.kaur@example.com"));
-        Assert.AreEqual(PersonHeard.First, new PersonWatch(string.Empty).Hear("Harpreet Kaur", "harpreet.kaur@example.com"));
+        Assert.AreEqual(PersonHeard.First, new PersonWatch(null).Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"));
+        Assert.AreEqual(PersonHeard.First, new PersonWatch(string.Empty).Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"));
+    }
+
+    [TestMethod]
+    public async Task A_start_that_finds_something_kept_and_no_mark_takes_the_first_person_named_for_another()
+    {
+        string folder = Folder();
+        string onlyCookies = Folder();
+        try
+        {
+            // Gurpreet was signed in on a shared computer. His reminder waits on disk, and his mark is not there: its write failed.
+            using (SessionKeeper before = new(new KeptStore(folder, App), new CookieStore(Shop)))
+            {
+                _ = before.Open();
+                before.Write(Waiting, "[{\"id\":\"call-supplier\",\"title\":\"Call the supplier in Jalandhar\"}]");
+                await before.DrainAsync().WaitAsync(Short);
+            }
+
+            // His session runs out overnight. In the morning the app is started, and Manpreet signs in.
+            using (SessionKeeper next = new(new KeptStore(folder, App), new CookieStore(Shop)))
+            {
+                _ = next.Open();
+                Assert.IsNull(next.KeptPerson(), "a mark is kept: this test shows nothing");
+                Expect.That(next.KeepsOfAPerson(), "a reminder that waits is not counted as something kept for a person");
+                PersonWatch watch = new(next.KeptPerson(), next.KeepsOfAPerson());
+                Assert.AreEqual(
+                    PersonHeard.Another,
+                    watch.Hear(ManpreetKey, "Manpreet Kaur", null),
+                    "with no mark, whoever is named first is taken for the owner of what is kept: the reminder of the person before would be shown to her");
+                Assert.AreEqual(PersonHeard.Same, watch.Hear(ManpreetKey, "Manpreet Kaur", null), "the change is said twice");
+            }
+
+            // Only the cookies are kept: that is the session, and nothing of a person besides. Whoever is named is the first.
+            KeptStore keptOnlyCookies = new(onlyCookies, App);
+            CookieStore cookies = new(Shop);
+            using SessionKeeper signedIn = new(keptOnlyCookies, cookies);
+            _ = signedIn.Open();
+            cookies.Store("https://shop.example/", ["session=simran; Path=/; Max-Age=3600"], DateTimeOffset.UtcNow);
+            signedIn.KeepCookies();
+            await signedIn.DrainAsync().WaitAsync(Short);
+            Expect.That(!signedIn.KeepsOfAPerson(), "the cookies alone are counted as something kept for a person nobody knows");
+            Assert.AreEqual(PersonHeard.First, new PersonWatch(signedIn.KeptPerson(), signedIn.KeepsOfAPerson()).Hear(SimranKey, "Simran Kaur", null));
+
+            // A sign-out takes everything away, whoever it was kept for: whoever is named after it is the first.
+            PersonWatch signedOut = new(null, somethingKept: true);
+            signedOut.SignedOut();
+            Assert.AreEqual(PersonHeard.First, signedOut.Hear(SimranKey, "Simran Kaur", null));
+        }
+        finally
+        {
+            Delete(folder);
+            Delete(onlyCookies);
+        }
     }
 
     [TestMethod]
@@ -191,7 +297,7 @@ public sealed class PersonChangeTests
             using SessionKeeper next = new(keptNext, cookiesNext);
             Expect.That(!next.Open(), "a change of person was taken for an unfinished sign-out");
             Assert.AreEqual("session=harpreet", cookiesNext.Header("https://shop.example/", DateTimeOffset.UtcNow), "the next start came up signed out though nobody signed out");
-            Assert.AreEqual(PersonHeard.Same, new PersonWatch(next.KeptPerson()).Hear("Harpreet Kaur", "harpreet.kaur@example.com"), "the next start takes Harpreet for another person");
+            Assert.AreEqual(PersonHeard.Same, new PersonWatch(next.KeptPerson(), next.KeepsOfAPerson()).Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"), "the next start takes Harpreet for another person");
             Assert.IsNull(keptNext.Read("table-layout:orders"));
         }
         finally
@@ -235,7 +341,7 @@ public sealed class PersonChangeTests
             CookieStore cookiesNext = new(Shop);
             using SessionKeeper next = new(keptNext, cookiesNext);
             _ = next.Open();
-            Assert.AreEqual(PersonHeard.Another, new PersonWatch(next.KeptPerson()).Hear("Harpreet Kaur", "harpreet.kaur@example.com"), "the next start does not see the change that was left unfinished");
+            Assert.AreEqual(PersonHeard.Another, new PersonWatch(next.KeptPerson()).Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"), "the next start does not see the change that was left unfinished");
             bool ranAgain = false;
             WipeReport again = await next.PersonChangedAsync(
                 Harpreet,
@@ -282,7 +388,7 @@ public sealed class PersonChangeTests
             CookieStore cookiesNext = new(Shop);
             using SessionKeeper next = new(keptNext, cookiesNext);
             Expect.That(!next.Open(), "a change of person cut short was taken for an unfinished sign-out");
-            Assert.AreEqual(PersonHeard.Another, new PersonWatch(next.KeptPerson()).Hear("Harpreet Kaur", "harpreet.kaur@example.com"), "the next start does not see the change that was cut short");
+            Assert.AreEqual(PersonHeard.Another, new PersonWatch(next.KeptPerson()).Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"), "the next start does not see the change that was cut short");
             Assert.AreEqual("session=harpreet", cookiesNext.Header("https://shop.example/", DateTimeOffset.UtcNow));
         }
         finally
@@ -330,6 +436,42 @@ public sealed class PersonChangeTests
             keeper.KeepPerson(Harpreet);
             await keeper.DrainAsync().WaitAsync(Short);
             Assert.AreEqual(Harpreet, kept.Read(SessionKeeper.PersonKey), "the mark that could not be written during the sign-out was never written");
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
+    public async Task A_mark_whose_write_failed_is_written_the_next_time_the_person_is_named()
+    {
+        string folder = Folder();
+        try
+        {
+            KeptStore kept = new(folder, App);
+            CookieStore cookies = new(Shop);
+            using SessionKeeper keeper = new(kept, cookies);
+            _ = keeper.Open();
+            cookies.Store("https://shop.example/", ["session=gurpreet; Path=/; Max-Age=3600"], DateTimeOffset.UtcNow);
+            keeper.KeepCookies();
+            await keeper.DrainAsync().WaitAsync(Short);
+
+            // Another program holds the file the mark is written through (a scanner has it open), so the write fails.
+            string through = Path.Combine(folder, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(SessionKeeper.PersonKey))) + ".kept.part");
+            using (FileStream other = new(through, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+            {
+                keeper.KeepPerson(Ritu);
+                await keeper.DrainAsync().WaitAsync(Short);
+                Assert.IsNull(kept.Read(SessionKeeper.PersonKey), "the mark was written though its file was held: this test shows nothing");
+            }
+
+            File.Delete(through);
+
+            // The core names the person again with its next state, and the mark is asked to be kept as it is with every state.
+            keeper.KeepPerson(Ritu);
+            await keeper.DrainAsync().WaitAsync(Short);
+            Assert.AreEqual(Ritu, kept.Read(SessionKeeper.PersonKey), "a mark whose write failed is not tried again: the next start would not know whom what is kept is kept for");
         }
         finally
         {

@@ -80,6 +80,39 @@ public sealed class DeliveryTests
     }
 
     [TestMethod]
+    public void Who_a_state_names_is_heard_before_any_window_is_given_the_state()
+    {
+        List<string> order = [];
+        ViewState state = ViewState.Empty with { App = new AppPart { Name = "Charkha Supply Co." } };
+        Delivery.Show(
+            state,
+            heard =>
+            {
+                Expect.That(ReferenceEquals(state, heard), "another state is heard than the one that is shown");
+                order.Add("heard");
+            },
+            shown =>
+            {
+                Expect.That(ReferenceEquals(state, shown), "another state is shown than the one that was heard");
+                order.Add("shown");
+            },
+            order.Add);
+        CollectionAssert.AreEqual(new[] { "heard", "shown" }, order, "a window was given the state before who it names was heard");
+    }
+
+    [TestMethod]
+    public void A_hearing_that_fails_is_reported_by_its_kind_alone_and_the_state_is_shown_all_the_same()
+    {
+        List<string> problems = [];
+        bool shown = false;
+        Delivery.Show(ViewState.Empty, _ => throw new IOException("Ritu Sharma's folder would not move"), _ => shown = true, problems.Add);
+        Expect.That(shown, "a hearing that failed kept the state from the windows: the app would stand still");
+        Assert.AreEqual(1, problems.Count);
+        StringAssert.Contains(problems[0], nameof(IOException));
+        Assert.IsFalse(problems[0].Contains("Ritu", StringComparison.Ordinal), problems[0]);
+    }
+
+    [TestMethod]
     public async Task A_fetcher_that_throws_answers_the_core_with_a_failure()
     {
         FetchResult answer = await Delivery.FetchAsync(new Throwing(new InvalidOperationException()), Request(), CancellationToken.None);
