@@ -12,12 +12,25 @@ public enum IdentityRules {
     /// or its place among them when it has none (or an empty one), each made
     /// unique. A part that arrives is a new name; the parts already drawn
     /// keep theirs wherever they now stand.
+    ///
+    /// An id a page gives twice or more (the tree does not promise they
+    /// differ) names its second part `#id'2`, its third `#id'3`, by a count
+    /// kept for each id. So the work is one step for each part and a name is
+    /// never longer than its id and a count, however many parts share an id:
+    /// this runs each time a list is drawn, with as many rows as a page sends.
     public static func identities(_ ids: [String?]) -> [String] {
-        var seen = Set<String>()
+        var counts: [String: Int] = [:]
+        var taken = Set<String>()
+        taken.reserveCapacity(ids.count)
         return ids.enumerated().map { index, id in
-            var identity = id.flatMap { $0.isEmpty ? nil : "#" + $0 } ?? "@\(index)"
-            while seen.contains(identity) { identity += "'" }
-            seen.insert(identity)
+            let base = id.flatMap { $0.isEmpty ? nil : "#" + $0 } ?? "@\(index)"
+            var count = counts[base] ?? 0
+            var identity = base
+            repeat {
+                count += 1
+                identity = count == 1 ? base : base + "'\(count)"
+            } while !taken.insert(identity).inserted
+            counts[base] = count
             return identity
         }
     }

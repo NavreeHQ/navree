@@ -28,9 +28,22 @@ struct IdentityTests {
     }
 
     @Test func rowsWithNoIdAreKnownByTheirPlaceAndTheSameIdTwiceStaysTwoRows() {
-        #expect(IdentityRules.identities([nil, "a", "a", "", nil]) == ["@0", "#a", "#a'", "@3", "@4"])
+        #expect(IdentityRules.identities([nil, "a", "a", "", nil]) == ["@0", "#a", "#a'2", "@3", "@4"])
         let twice = IdentityRules.told(Self.rows([Self.order("7", "A"), Self.order("7", "B"), Self.order(nil, "C")])) { $0.identity }
         #expect(Set(twice.map(\.id)).count == 3)
+    }
+
+    @Test func manyPartsOfOneIdAreNamedByACountAndEachNameIsItsOwn() {
+        // A page gives every one of its rows the same id: the customer's, on a list of one customer's orders.
+        let names = IdentityRules.identities(Array(repeating: "customer-41", count: 20_000))
+        #expect(Set(names).count == 20_000)
+        #expect(names.first == "#customer-41")
+        #expect(names.last == "#customer-41'20000")
+        // A name is its id and a count, never a mark for each part before it.
+        #expect(names.allSatisfy { $0.count <= "#customer-41'20000".count })
+        // An id that is itself written like a counted name takes no other part's name.
+        #expect(IdentityRules.identities(["a", "a'2", "a", "a"]) == ["#a", "#a'2", "#a'3", "#a'4"])
+        #expect(IdentityRules.identities(["a", "a", "a'2"]) == ["#a", "#a'2", "#a'2'2"])
     }
 
     @Test func eachKindOfRowIsNamedByWhatTheTreeGivesIt() {
