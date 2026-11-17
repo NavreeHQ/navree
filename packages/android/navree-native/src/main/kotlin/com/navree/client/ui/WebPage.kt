@@ -43,13 +43,18 @@ private const val NOT_GUARDED = "not guarded"
  * the rules for a service worker's requests are in force, whether the script
  * at the start of every document was added to a web view, and whether the web
  * view holds nothing of a session that ended on the origin of the page's
- * address. The app has only the real ones;
- * a test gives answers of its own, to see the page refused when one is missing.
+ * address. [clean] only answers: a page is drawn again whenever what is owed
+ * changes, and asks each time, so asking begins nothing. What has another go
+ * at what an ended session's pages left is [again], which the person asks for
+ * with "Try again" on a page held back for it. The app has only the real
+ * ones; a test gives answers of its own, to see the page refused when one is
+ * missing.
  */
 internal class WebGuards(
     val workers: () -> Boolean = { WorkerGuard.ensure() },
     val documents: (WebView, Origins) -> Boolean = { view, origins -> guardDocuments(view, origins) },
     val clean: (address: String) -> Boolean = { address -> SiteWipe.shows(address) },
+    val again: () -> Unit = { SiteWipe.finish() },
 )
 
 /** The guards [WebPage] asks: the real ones unless a test provides others. */
@@ -100,9 +105,10 @@ internal fun WebPage(
     // the web view itself, so its answer comes from the web view made for this attempt.
     val workers = remember(url, serial, attempt) { guards.workers() }
     var documents by remember(url, serial, attempt) { mutableStateOf(true) }
-    // Nor while the web view still holds what the pages of a session that ended stored: asked again each time, and asking sets
-    // it going. And asked again whenever what is owed changes: a page on the screen when a session ends goes at once, its web
-    // view with it, and one that was held back is shown when the deletion is done.
+    // Nor while the web view still holds what the pages of a session that ended stored: asked again each time, and whenever
+    // what is owed changes, so a page on the screen when a session ends goes at once, its web view with it, and one that was
+    // held back is shown when the deletion is done. Asking begins nothing: a deletion that ends with this page's origin left
+    // changes what is owed too, and a page that set it going each time it was drawn again would never stop.
     val owed = SiteWipe.changes
     val clean = remember(url, serial, attempt, owed) { guards.clean(url) }
     val missing = WebRules.missingGuards(workers, documents, clean)
@@ -116,6 +122,8 @@ internal fun WebPage(
                 val again: () -> Unit = {
                     gone = 0
                     failed = !origins.ours(url)
+                    // The person asks for it: another go at what an ended session's pages left begins here, and nowhere in the drawing.
+                    if (!clean) guards.again()
                     attempt++
                 }
                 if (!failed && workers && documents && !clean) {

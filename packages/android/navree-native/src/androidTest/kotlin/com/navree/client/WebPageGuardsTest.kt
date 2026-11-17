@@ -64,6 +64,9 @@ class WebPageGuardsTest {
     private val documentsAsked = AtomicInteger()
     private val cleanAsked = AtomicInteger()
 
+    /** How many times the page asked for another go at what an ended session's pages left. */
+    private val againAsked = AtomicInteger()
+
     private fun show() {
         app.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
@@ -95,6 +98,7 @@ class WebPageGuardsTest {
                 cleanAsked.incrementAndGet()
                 clean.get()
             },
+            again = { againAsked.incrementAndGet() },
         )
         compose.setContent {
             MaterialTheme {
@@ -157,7 +161,10 @@ class WebPageGuardsTest {
         show()
         refused("something of an ended session left in the web view")
         assertTrue("the page asked whether the web view is clean", cleanAsked.get() >= 1)
+        // A page that is held back only asks: however long it is on the screen, it sets no deletion going by itself.
+        assertEquals("the page asked for no go at what was left while it was only drawn", 0, againAsked.get())
         clean.set(true)
         loadsOnceTheGuardIsThere()
+        assertEquals("\"Try again\" on the page that was held back asked for one go", 1, againAsked.get())
     }
 }

@@ -369,7 +369,9 @@ internal class WipeGoes {
  *
  * Each end of a session has a number ([owe]), and what is done for one end
  * says nothing about a later one: [narrow] and [over] name the end they were
- * begun for, and are dropped when a later one has come.
+ * begun for, and are dropped when a later one has come. Asking whether a page
+ * is held back ([held]) changes nothing and starts nothing: a go begins only
+ * where one is asked for ([begin]).
  *
  * [SiteWipe] holds the app's one, under its lock: nothing here guards itself
  * against two threads.
@@ -550,7 +552,9 @@ internal class WipeDebt(private val folder: () -> File?) {
  * An origin that does not say it is clean does not hold the others: it is
  * left, the mark stays and names it, its pages stay held back, and every
  * later go (one the person asks for with "Try again", and the next start's)
- * is at the origins that were left.
+ * is at the origins that were left. A go begins only there: when a session
+ * ends, when the app starts, and when the person asks. Asking whether a page
+ * may be shown begins none.
  */
 object SiteWipe {
     private val lock = Any()
@@ -659,18 +663,11 @@ object SiteWipe {
     /**
      * Whether a web page at [address] may be shown: nothing is owed, or a go
      * has ended and the page's origin is not one it left ([WipeRules.held]).
-     * Asking for a page that is held back while nothing is being done about it
-     * starts another go, so "Try again" on the page that was refused is a way
-     * on. Call on the main thread.
+     * Asking changes nothing and begins nothing, however often a screen that
+     * is drawn again asks: for a page that is held back, "Try again" is what
+     * has another go ([finish]). Any thread.
      */
-    fun shows(address: String): Boolean {
-        val busy = synchronized(lock) {
-            if (!debt.held(origins?.originOf(address))) return true
-            debt.running
-        }
-        if (!busy) finish()
-        return false
-    }
+    fun shows(address: String): Boolean = !held(address)
 
     /**
      * Whether a document at [address] is held back as a page on its origin
@@ -686,7 +683,9 @@ object SiteWipe {
      * Never the cookies, which may be a new session's by now: while the whole
      * of the end of a session is owed ([owesAll]) this does nothing, and the
      * next start of the app does all of it. Nor anything while a deletion is
-     * on its way already. Call on the main thread.
+     * on its way already. Asked for at a start of the app that finds
+     * something owed, and by "Try again" on a page that is held back. Call on
+     * the main thread.
      */
     fun finish() {
         val (context, them, began) = synchronized(lock) {
