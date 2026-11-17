@@ -192,4 +192,64 @@ class WipeGoTest {
         assertEquals(emptySet<String>(), left())
         assertEquals(emptyList<String>(), surface.loaded)
     }
+
+    /** The path and the word of a second go: the first go's, read backwards, so they are hex digits and another go's. */
+    private val laterPath = token.reversed()
+    private val laterWord = word.reversed()
+
+    @Test
+    fun a_go_begun_while_another_runs_takes_its_place_and_the_older_one_ends_leaving_what_it_had_not_cleared() {
+        val goes = WipeGoes()
+        val first = Surface()
+        var firstLeft: Set<String>? = null
+        var firstEnds = 0
+        goes.start(listOf(shop, pay), token, word, first) {
+            firstLeft = it
+            firstEnds++
+        }
+        first.says(clean(), shop)
+        assertEquals("the first go is at its second origin", address(pay), first.loaded.last())
+        assertEquals("its address is the one answered as the client's own document", token, goes.going)
+
+        // A later session ended: its go begins while the first is still at an origin.
+        val second = Surface()
+        var secondLeft: Set<String>? = null
+        goes.start(listOf(patiala), laterPath, laterWord, second) { secondLeft = it }
+        assertEquals("the first go is told to end, with the origin it had not cleared left", setOf(pay), firstLeft)
+        assertEquals("and its web view is gone, so nothing of it asks for its address any more", 1, first.closed)
+        assertFalse(first.waiting)
+        assertEquals("the one address answered is the second go's", laterPath, goes.going)
+        assertNull(secondLeft)
+
+        // What the first go's web view might still say changes nothing, and does not take the second go's address away.
+        first.says(clean(), pay)
+        first.pass()
+        first.lose()
+        assertEquals(1, firstEnds)
+        assertEquals(laterPath, goes.going)
+
+        second.says(clean(laterWord), patiala)
+        assertEquals(emptySet<String>(), secondLeft)
+        assertNull("with no go on its way no address is the client's own document", goes.going)
+        assertEquals(1, second.closed)
+    }
+
+    @Test
+    fun a_go_that_ended_by_itself_is_not_ended_again_by_the_next() {
+        val goes = WipeGoes()
+        val first = Surface()
+        var firstEnds = 0
+        goes.start(listOf(shop), token, word, first) { firstEnds++ }
+        first.says(clean(), shop)
+        assertEquals(1, firstEnds)
+        assertNull(goes.going)
+
+        val second = Surface(opens = false)
+        var secondLeft: Set<String>? = null
+        goes.start(listOf(pay), laterPath, laterWord, second) { secondLeft = it }
+        assertEquals("the first go is told its end once", 1, firstEnds)
+        assertEquals(1, first.closed)
+        assertEquals("a go whose web view cannot be made leaves its origins", setOf(pay), secondLeft)
+        assertNull("and its address is answered no longer", goes.going)
+    }
 }

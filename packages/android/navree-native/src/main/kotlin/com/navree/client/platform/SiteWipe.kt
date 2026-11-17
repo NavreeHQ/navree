@@ -299,7 +299,7 @@ internal class WipeGo(
         next()
     }
 
-    /** The web view is lost, or could not be made: every origin not yet cleared is left. */
+    /** The web view is lost or could not be made, or another go takes this one's place ([WipeGoes]): every origin not yet cleared is left. */
     fun broke() {
         if (ended) return
         turns.stop()
@@ -320,6 +320,214 @@ internal class WipeGo(
 }
 
 /**
+ * The go on its way, of which there is one at a time. A go begun while
+ * another runs takes its place: the older one was begun for an end of a
+ * session that a later one has overtaken, so it ends there and then, leaving
+ * the origins it had not cleared ([WipeGo.broke]), and its web view goes with
+ * it. So the one address answered as the client's own document ([going]) is
+ * always that of the only go there is, and no go's address is left to reach a
+ * server because another go's took its place. Every call is on the one thread
+ * the surfaces call back on.
+ */
+internal class WipeGoes {
+    /** The path of the address the go on its way loads. Read on the thread a service worker's requests are asked on. */
+    @Volatile
+    var going: String? = null
+        private set
+
+    private var live: WipeGo? = null
+
+    /**
+     * Begins a go at [targets] in [surface], whose address is the path
+     * [token] and whose document answers with [word], after ending the go on
+     * its way, if there is one. [done] is told, once, which origins the new
+     * go left.
+     */
+    fun start(targets: List<String>, token: String, word: String, surface: WipeSurface, done: (left: Set<String>) -> Unit) {
+        // The older go says what it left before the new one's address becomes the one that is answered.
+        live?.broke()
+        going = token
+        val go = WipeGo(targets, token, word, surface) { left ->
+            if (going == token) {
+                going = null
+                live = null
+            }
+            done(left)
+        }
+        live = go
+        go.start()
+    }
+}
+
+/**
+ * What the end of a session still owes of what the web view holds, as plain
+ * state, so it can be tested without a device: whether anything is owed, how
+ * much of it (the whole of the end of a session, or only what pages stored),
+ * the origins a go left, whether something is being done about it, and the two
+ * files that tell the next run of the app ([folder] says where they are; null
+ * while the app is not known).
+ *
+ * Each end of a session has a number ([owe]), and what is done for one end
+ * says nothing about a later one: [narrow] and [over] name the end they were
+ * begun for, and are dropped when a later one has come.
+ *
+ * [SiteWipe] holds the app's one, under its lock: nothing here guards itself
+ * against two threads.
+ */
+internal class WipeDebt(private val folder: () -> File?) {
+    /** Whether a deletion is owed. */
+    var owed = false
+        private set
+
+    /** While a deletion is owed: whether it is the whole of the end of a session, the cookies and the rest with what pages stored. */
+    var all = false
+        private set
+
+    /** Whether something is being done about what is owed: the end of a session's own deletion, or a go. */
+    var running = false
+        private set
+
+    /** While a deletion is owed: the origins a go left, or null while no go has ended and every origin is still to clear. */
+    var left: Set<String>? = null
+        private set
+
+    /** The number of the last end of a session. It grows with every deletion that becomes owed, so that what was begun for an earlier one says nothing about this one. */
+    var number = 0L
+        private set
+
+    private var seen: MutableSet<String>? = null
+
+    /** Reads whether an earlier run of the app left a deletion owed, how much of it, and for which origins. */
+    fun read() {
+        if (owed) return
+        val mark = File(folder() ?: return, OWED)
+        if (!mark.exists()) return
+        owed = true
+        // A mark that cannot be read owes everything.
+        val text = runCatching { mark.readText() }.getOrDefault(WipeRules.EVERYTHING)
+        all = WipeRules.everything(text)
+        // The origins an earlier go left, where the mark names them; a mark that names none owes every origin.
+        left = WipeRules.listed(text).toSet().ifEmpty { null }
+    }
+
+    /** A document of the app is on [origin]: it is one to clear, written to the file before this returns. */
+    fun saw(origin: String) {
+        val folder = folder() ?: return
+        val known = seen ?: load(folder).also { seen = it }
+        // The whole list is written again, in one step. One that could not be written is not known, so the next sighting writes it.
+        if (known.add(origin) && runCatching { WipeRules.put(File(folder, SEEN), WipeRules.lines(known)) }.isFailure) known.remove(origin)
+    }
+
+    private fun load(folder: File): MutableSet<String> =
+        runCatching { WipeRules.listed(File(folder, SEEN).readText()).toCollection(LinkedHashSet()) }.getOrElse { LinkedHashSet() }
+
+    /**
+     * A session ended: the whole of what that deletes is owed from now, what
+     * its pages stored at every origin with it, and the deletion is on its
+     * way. The mark has reached the disk when this returns. Answers the
+     * number of this end of a session.
+     */
+    fun owe(): Long {
+        owed = true
+        all = true
+        running = true
+        left = null
+        number++
+        folder()?.let { runCatching { WipeRules.put(File(it, OWED), WipeRules.EVERYTHING + "\n") } }
+        return number
+    }
+
+    /**
+     * The cookies, and everything else of the end of the session numbered
+     * [of] that is not what pages stored, are gone and on the disk: from now
+     * the mark owes only what pages stored at the origins. Dropped when a
+     * later session has ended since: the cookies of that one are not gone.
+     */
+    fun narrow(of: Long) {
+        if (of != number || !owed || !all) return
+        all = false
+        folder()?.let { runCatching { WipeRules.put(File(it, OWED), "") } }
+    }
+
+    /**
+     * The deletion begun for the end of a session numbered [of] ended. [left]
+     * names the origins that did not say they are clean. None: nothing is
+     * owed any more. Some: they stay owed and the mark names them, while the
+     * pages of every other origin are shown again. Null: nothing could be
+     * done at all, and what was owed before is owed still. Dropped when a
+     * later session has ended since, whose own deletion is on its way.
+     * Answers whether which pages are held back has changed.
+     */
+    fun over(left: Set<String>?, of: Long): Boolean {
+        // A deletion begun before a later end of a session says nothing about what that one owes.
+        if (of != number) return false
+        running = false
+        // While the whole is owed nothing a go says ends it: the cookies come first ([narrow]).
+        if (!owed || all || left == null) return false
+        val folder = folder()
+        // A go at every origin, and no page shown since the deletion became owed: the list of origins seen starts again, from those that were left.
+        if (this.left == null) {
+            seen = LinkedHashSet(left)
+            folder?.let { runCatching { if (left.isEmpty()) File(it, SEEN).delete() else WipeRules.put(File(it, SEEN), WipeRules.lines(left)) } }
+        }
+        if (left.isEmpty()) {
+            owed = false
+            this.left = null
+            folder?.let { runCatching { File(it, OWED).delete() } }
+        } else {
+            this.left = left
+            folder?.let { runCatching { WipeRules.put(File(it, OWED), WipeRules.lines(left)) } }
+        }
+        return true
+    }
+
+    /**
+     * A go at what pages stored is asked for. It may begin when something is
+     * owed, nothing is being done about it, and it is not the whole of the
+     * end of a session (whose cookies only its own deletion or the next start
+     * takes). Answers the number of the end of a session the go is for, and
+     * from then something is being done; null when no go begins.
+     */
+    fun begin(): Long? {
+        if (!owed || running || all) return null
+        running = true
+        return number
+    }
+
+    /** Whether a page on [origin] is held back ([WipeRules.held]): something is owed, and no go has ended yet or the origin is one it left. */
+    fun held(origin: String?): Boolean = owed && WipeRules.held(left, origin)
+
+    /**
+     * The origins a go is at now: those an earlier go left, or, while none
+     * has ended, every one known ([WipeRules.origins]: the app's [own], its
+     * web [hosts], and those a document of the app was seen on).
+     */
+    fun targets(own: List<String>, hosts: List<String>): List<String> {
+        val known = seen ?: (folder()?.let(::load) ?: LinkedHashSet()).also { seen = it }
+        return left?.toList() ?: WipeRules.origins(own, hosts, known.toList())
+    }
+
+    /** Lets go of what is owed without doing it ([SiteWipe.forget]). */
+    fun forget() {
+        owed = false
+        all = false
+        running = false
+        left = null
+        number++
+        seen = LinkedHashSet()
+        folder()?.let { for (name in listOf(OWED, SEEN)) runCatching { File(it, name).delete() } }
+    }
+
+    companion object {
+        /** The mark that a deletion is owed, and how much of it. */
+        const val OWED = "navree-web-wipe"
+
+        /** The origins a document of the app was seen on. */
+        const val SEEN = "navree-web-origins"
+    }
+}
+
+/**
  * What the end of a session deletes on this device, as something owed: from
  * the moment the session ends until the web view has said that what its pages
  * stored is gone, a deletion is owed ([owe], [over]), a web page is shown only
@@ -328,7 +536,8 @@ internal class WipeGo(
  * outlives the process, and it says how much is owed: the whole of the end of
  * a session ([owesAll]), until the cookies and everything else that is not a
  * page's own storage are gone and on the disk ([narrow]); after that only
- * what pages stored at the origins ([finish]).
+ * what pages stored at the origins ([finish]). What is owed and what the mark
+ * says of it is plain state ([WipeDebt]), kept here under a lock.
  *
  * Where the system's web view deletes every kind of site data itself
  * (`WebViewFeature.DELETE_BROWSING_DATA`) that call is what is waited for.
@@ -344,32 +553,17 @@ internal class WipeGo(
  * is at the origins that were left.
  */
 object SiteWipe {
-    private const val OWED = "navree-web-wipe"
-    private const val SEEN = "navree-web-origins"
-
     private val lock = Any()
     private val main = Handler(Looper.getMainLooper())
     private var app: Context? = null
     private var origins: Origins? = null
-    private var owed = false
-    private var running = false
-
-    /** While a deletion is owed: whether it is the whole of the end of a session, the cookies and the rest with what pages stored. */
-    private var all = false
-
-    /** While a deletion is owed: the origins a go left, or null while no go has ended and every origin is still to clear. */
-    private var left: Set<String>? = null
-
-    /** Grows with every deletion that becomes owed, so that a go begun for an earlier one says nothing about this one. */
-    private var debt = 0L
+    private val debt = WipeDebt { app?.noBackupFilesDir }
 
     /** Grows whenever what is owed changes; kept as state, so a screen that reads [changes] is drawn again when it does. */
     private val changed = mutableIntStateOf(0)
-    private var seen: MutableSet<String>? = null
 
-    /** The path of the address the go on its way loads. Read on the thread a service worker's requests are asked on. */
-    @Volatile
-    private var going: String? = null
+    /** The go on its way: one at a time. */
+    private val goes = WipeGoes()
 
     /** Says which app and which origins this is for, and reads whether an earlier run of the app left a deletion owed, and for which origins. */
     fun arm(context: Context, origins: Origins) {
@@ -377,20 +571,12 @@ object SiteWipe {
         synchronized(lock) {
             app = application
             this.origins = origins
-            if (owed) return
-            val mark = File(application.noBackupFilesDir, OWED)
-            if (!mark.exists()) return
-            owed = true
-            // A mark that cannot be read owes everything.
-            val text = runCatching { mark.readText() }.getOrDefault(WipeRules.EVERYTHING)
-            all = WipeRules.everything(text)
-            // The origins an earlier go left, where the mark names them; a mark that names none owes every origin.
-            left = WipeRules.listed(text).toSet().ifEmpty { null }
+            debt.read()
         }
     }
 
     /** Whether a deletion is owed. */
-    val owes: Boolean get() = synchronized(lock) { owed }
+    val owes: Boolean get() = synchronized(lock) { debt.owed }
 
     /**
      * A number that is another one whenever what is owed has changed. A web
@@ -407,7 +593,7 @@ object SiteWipe {
      * client then does all of it again, as at the end of a session, before
      * anything of this run is read, kept or shown ([AndroidEffects]).
      */
-    val owesAll: Boolean get() = synchronized(lock) { owed && all }
+    val owesAll: Boolean get() = synchronized(lock) { debt.owed && debt.all }
 
     /**
      * A document of the app is, or is about to be, at this address or on this
@@ -419,81 +605,44 @@ object SiteWipe {
      */
     fun saw(address: String) {
         val origin = synchronized(lock) { origins }?.originOf(address) ?: return
-        synchronized(lock) {
-            val folder = app?.noBackupFilesDir ?: return
-            val known = seen ?: load(folder).also { seen = it }
-            // The whole list is written again, in one step. One that could not be written is not known, so the next sighting writes it.
-            if (known.add(origin) && runCatching { WipeRules.put(File(folder, SEEN), WipeRules.lines(known)) }.isFailure) known.remove(origin)
-        }
+        synchronized(lock) { debt.saw(origin) }
     }
-
-    private fun load(folder: File): MutableSet<String> =
-        runCatching { WipeRules.listed(File(folder, SEEN).readText()).toCollection(LinkedHashSet()) }.getOrElse { LinkedHashSet() }
 
     /**
      * A session ended: the whole of what that deletes is owed from now, what
      * its pages stored at every origin with it, and the deletion is on its
      * way. Called the moment the client is told, on the thread it is told on,
      * before anything is waited for: the mark is a few bytes, and it has
-     * reached the disk when this returns.
+     * reached the disk when this returns. Answers the number of this end of a
+     * session, which the deletion begun for it names when it says how far it
+     * is ([narrow], [over]).
      */
-    fun owe() {
-        synchronized(lock) {
-            owed = true
-            all = true
-            running = true
-            left = null
-            debt++
-            changed.intValue++
-            app?.let { context -> runCatching { WipeRules.put(File(context.noBackupFilesDir, OWED), WipeRules.EVERYTHING + "\n") } }
-        }
+    fun owe(): Long = synchronized(lock) {
+        changed.intValue++
+        debt.owe()
     }
 
     /**
-     * The cookies, and everything else of the end of a session that is not
-     * what pages stored, are gone and on the disk: from now the mark owes only
-     * what pages stored at the origins. Not on the main thread.
+     * The cookies, and everything else of the end of the session numbered
+     * [of] that is not what pages stored, are gone and on the disk: from now
+     * the mark owes only what pages stored at the origins. Says nothing when
+     * a later session has ended since. Not on the main thread.
      */
-    fun narrow() {
-        synchronized(lock) {
-            if (!owed || !all) return
-            all = false
-            app?.let { context -> runCatching { WipeRules.put(File(context.noBackupFilesDir, OWED), "") } }
-        }
+    fun narrow(of: Long) {
+        synchronized(lock) { debt.narrow(of) }
     }
 
     /**
-     * The deletion on its way ended. [left] names the origins that did not say
-     * they are clean. None: nothing is owed any more. Some: they stay owed and
-     * the mark names them, while the pages of every other origin are shown
-     * again. Null: nothing could be done at all, and what was owed before is
-     * owed still. Not on the main thread.
+     * The deletion begun for the end of a session numbered [of] ended. [left]
+     * names the origins that did not say they are clean. None: nothing is
+     * owed any more. Some: they stay owed and the mark names them, while the
+     * pages of every other origin are shown again. Null: nothing could be
+     * done at all, and what was owed before is owed still. Says nothing when
+     * a later session has ended since: that one's own deletion is on its way,
+     * and only it says when its pages may be shown. Not on the main thread.
      */
-    fun over(left: Set<String>?): Unit = over(left, null)
-
-    private fun over(left: Set<String>?, of: Long?) {
-        synchronized(lock) {
-            // A go begun before a later end of a session says nothing about what that one owes.
-            if (of != null && of != debt) return
-            running = false
-            // While the whole is owed nothing a go says ends it: the cookies come first ([narrow]).
-            if (!owed || all || left == null) return
-            changed.intValue++
-            val folder = app?.noBackupFilesDir
-            // A go at every origin, and no page shown since the deletion became owed: the list of origins seen starts again, from those that were left.
-            if (this.left == null) {
-                seen = LinkedHashSet(left)
-                folder?.let { runCatching { if (left.isEmpty()) File(it, SEEN).delete() else WipeRules.put(File(it, SEEN), WipeRules.lines(left)) } }
-            }
-            if (left.isEmpty()) {
-                owed = false
-                this.left = null
-                folder?.let { runCatching { File(it, OWED).delete() } }
-            } else {
-                this.left = left
-                folder?.let { runCatching { WipeRules.put(File(it, OWED), WipeRules.lines(left)) } }
-            }
-        }
+    fun over(left: Set<String>?, of: Long) {
+        synchronized(lock) { if (debt.over(left, of)) changed.intValue++ }
     }
 
     /**
@@ -502,14 +651,8 @@ object SiteWipe {
      */
     internal fun forget() {
         synchronized(lock) {
-            owed = false
-            all = false
-            running = false
-            left = null
-            debt++
+            debt.forget()
             changed.intValue++
-            seen = LinkedHashSet()
-            app?.let { context -> for (name in listOf(OWED, SEEN)) runCatching { File(context.noBackupFilesDir, name).delete() } }
         }
     }
 
@@ -522,8 +665,8 @@ object SiteWipe {
      */
     fun shows(address: String): Boolean {
         val busy = synchronized(lock) {
-            if (!owed || !WipeRules.held(left, origins?.originOf(address))) return true
-            running
+            if (!debt.held(origins?.originOf(address))) return true
+            debt.running
         }
         if (!busy) finish()
         return false
@@ -534,7 +677,7 @@ object SiteWipe {
      * is: what the web view's client asks for a frame, and for where a
      * redirect leads. Any thread.
      */
-    fun held(address: String): Boolean = synchronized(lock) { owed && WipeRules.held(left, origins?.originOf(address)) }
+    fun held(address: String): Boolean = synchronized(lock) { debt.held(origins?.originOf(address)) }
 
     /**
      * Does what is still owed of what pages stored: what the older call
@@ -542,19 +685,19 @@ object SiteWipe {
      * then the documents, at every origin or at those an earlier go left.
      * Never the cookies, which may be a new session's by now: while the whole
      * of the end of a session is owed ([owesAll]) this does nothing, and the
-     * next start of the app does all of it. Call on the main thread.
+     * next start of the app does all of it. Nor anything while a deletion is
+     * on its way already. Call on the main thread.
      */
     fun finish() {
         val (context, them, began) = synchronized(lock) {
-            if (!owed || running || all) return
             val context = app ?: return
             val them = origins ?: return
-            running = true
-            Triple(context, them, debt)
+            val began = debt.begin() ?: return
+            Triple(context, them, began)
         }
         try {
             // Once pages are shown again, what the web view holds is a later session's as well, and the older call takes everything: it is not made then.
-            if (synchronized(lock) { left } == null) WebStorage.getInstance().deleteAllData()
+            if (synchronized(lock) { debt.left } == null) WebStorage.getInstance().deleteAllData()
             documents(context, them) { left -> thread(name = "navree-web-wipe", isDaemon = true) { over(left, began) } }
         } catch (_: Throwable) {
             thread(name = "navree-web-wipe", isDaemon = true) { over(null, began) }
@@ -573,31 +716,28 @@ object SiteWipe {
      * the address is never sent to a server. Any thread.
      */
     internal fun document(url: String): WebResourceResponse? =
-        going?.takeIf { WipeRules.own(url, it) }?.let { answer(200, "OK", "text/html", WipeRules.DOCUMENT) }
+        goes.going?.takeIf { WipeRules.own(url, it) }?.let { answer(200, "OK", "text/html", WipeRules.DOCUMENT) }
 
     /**
      * Shows each origin to clear the client's own document, one after the
      * other in one web view that is never drawn, and waits for each to say its
      * workers are unregistered and its caches deleted ([WipeGo]). The origins
      * are every one known ([WipeRules.origins]), or those an earlier go left.
-     * [done] is told which did not say so; null when the go could not be made
-     * (a system web view without the script at the start of a document or the
-     * listener, or one that does not take the rules for a service worker's
-     * requests). Call on the main thread; [done] runs on it, once.
+     * A go that is still on its way when this one begins ends there
+     * ([WipeGoes]): there is one go at a time. [done] is told which origins
+     * did not say so; null when the go could not be made (a system web view
+     * without the script at the start of a document or the listener, or one
+     * that does not take the rules for a service worker's requests). Call on
+     * the main thread; [done] runs on it, once.
      */
     fun documents(context: Context, origins: Origins, done: (left: Set<String>?) -> Unit) {
         val application = context.applicationContext
-        val (known, only) = synchronized(lock) { (seen ?: load(application.noBackupFilesDir).also { seen = it }).toList() to left }
-        val targets = only?.toList() ?: WipeRules.origins(origins.ownOrigins(), origins.webHostOrigins(), known)
+        val targets = synchronized(lock) { debt.targets(origins.ownOrigins(), origins.webHostOrigins()) }
         if (targets.isEmpty()) return done(emptySet())
         // The go's address is answered where a service worker's requests are asked as well, so those rules have to be in force.
         if (!able() || !guardWorkers(origins)) return done(null)
         val token = hex()
-        going = token
-        WipeGo(targets, token, hex(), WebSurface(application, token)) { left ->
-            if (going == token) going = null
-            done(left)
-        }.start()
+        goes.start(targets, token, hex(), WebSurface(application, token)) { left -> done(left) }
     }
 
     /** Sixteen bytes from the system's source of random numbers, as hex digits. */

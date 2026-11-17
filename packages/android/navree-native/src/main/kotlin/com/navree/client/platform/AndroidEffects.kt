@@ -250,10 +250,10 @@ class AndroidEffects(
     private fun end() {
         // Owed from this moment and written down, whatever the store is still busy with: a page of the next session is not
         // shown over what this one's pages left, and a start of the app after a run that ended here does all of it.
-        SiteWipe.owe()
+        val debt = SiteWipe.owe()
         state.end { finished ->
             // The time limit is armed before anything it guards: whatever happens below, the queue goes on.
-            endWithLimit(finished, arm = { release -> main.postDelayed({ release() }, WIPE_WAIT_MS) }) { done -> wipe(done) }
+            endWithLimit(finished, arm = { release -> main.postDelayed({ release() }, WIPE_WAIT_MS) }) { done -> wipe(debt, done) }
         }
     }
 
@@ -285,8 +285,14 @@ class AndroidEffects(
         push?.forget { askToken() }
     }
 
-    /** The steps of [end], in order; [done] when the cookie store says its cookies are gone and the web view that nothing of its pages is left. */
-    private fun wipe(done: () -> Unit) {
+    /**
+     * The steps of [end], in order, for the end of a session numbered [debt]
+     * ([SiteWipe.owe]): what it says to the mark it says for that end only, so
+     * a later end of a session is not called done by this one. [done] when
+     * the cookie store says its cookies are gone and the web view that
+     * nothing of its pages is left.
+     */
+    private fun wipe(debt: Long, done: () -> Unit) {
         try {
             cache.clear()
             snapshots.clear()
@@ -309,7 +315,7 @@ class AndroidEffects(
             val last = { left: Set<String>? ->
                 thread(name = "navree-web-wipe", isDaemon = true) {
                     try {
-                        SiteWipe.over(left)
+                        SiteWipe.over(left, debt)
                     } finally {
                         done()
                     }
@@ -327,7 +333,7 @@ class AndroidEffects(
                     thread(name = "navree-cookie-flush", isDaemon = true) {
                         val flushed = try {
                             cookies.flush()
-                            SiteWipe.narrow()
+                            SiteWipe.narrow(debt)
                             true
                         } catch (_: Throwable) {
                             false
