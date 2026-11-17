@@ -18,7 +18,8 @@ struct NumbersTests {
         #expect(SafeNumbers.int(9.3e18) == Int.max)
         #expect(SafeNumbers.int(1e19) == Int.max)
         #expect(SafeNumbers.int(-1e19) == Int.min)
-        #expect(SafeNumbers.int(9_223_372_036_854_775_807) == Int.max)
+        // The largest whole number, as a number with a fraction, is one past it.
+        #expect(SafeNumbers.int(Double(Int.max)) == Int.max)
         #expect(SafeNumbers.int(9.2e18) == 9_200_000_000_000_000_000)
     }
 
