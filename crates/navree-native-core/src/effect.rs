@@ -173,12 +173,17 @@ pub enum Effect {
     /// everything of the person that needs no network, without waiting. The
     /// `forget_session` that follows finds that done or under way, and is
     /// still sent, unchanged: a client that does not know this effect passes
-    /// over it and does what it does today. The push token's removal, the
-    /// request just before it in the same update, goes out with the session's
-    /// cookie: a client takes that request's cookies before it removes them
-    /// (or carries the effects out in order and finishes sending that
-    /// request's headers first). Everything else of the person may be removed
-    /// at once.
+    /// over it and does what it does today. One `forget_session` follows
+    /// each `session_ending`, whatever ends the wait: the removal's first
+    /// answer (a redirect of it is not followed), its failure, or the
+    /// client's own `signed_out`. What the core asks between the two is the
+    /// leaving session's: a client may refuse it and leave it unanswered,
+    /// and the core asks for the shell anew after `forget_session`. The push
+    /// token's removal, the request just before it in the same update, goes
+    /// out with the session's cookie: a client takes that request's cookies
+    /// before it removes them (or carries the effects out in order and
+    /// finishes sending that request's headers first). Everything else of
+    /// the person may be removed at once.
     SessionEnding,
     /// Forget the session: every cookie of the app's origins, in the web
     /// view's store too. The person signed out.

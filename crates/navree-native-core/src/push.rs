@@ -12,6 +12,12 @@
 //!   failed, is the client told to forget the session's cookies: a request
 //!   takes its cookies when it is sent, not when it is asked for. Then the
 //!   app starts again from the shell, which says nobody is signed in.
+//! - The client is told the session is ending while the removal is awaited
+//!   (`session_ending`), and each such word is followed by one
+//!   `forget_session`, whatever ends the wait: the removal's first answer (a
+//!   redirect of it is not followed), its failure, or the client saying it
+//!   ended the session itself (`signed_out`). What was asked meanwhile is
+//!   dropped then, and the shell is asked for anew.
 //! - A session that ran out is not a sign-out: the way in is put up over the
 //!   work, and the work stays.
 
@@ -202,15 +208,22 @@ impl Core {
     }
 
     /// The token's removal was answered, or failed: either way the session
-    /// is forgotten now.
+    /// is forgotten now. Any answer is the end of it, a redirect too (the
+    /// reducer follows none for the removal).
     pub(crate) fn push_gone_answered(&mut self) {
         if std::mem::take(&mut self.inner.signing_out) {
             self.session_forgotten();
         }
     }
 
-    /// Tells the client to forget the session, and starts again from the shell.
-    fn session_forgotten(&mut self) {
+    /// Tells the client to forget the session, and starts again from the
+    /// shell. What was asked while the removal was awaited (a shell, when
+    /// the app came to the front) was asked in the session that is now
+    /// forgotten: a client may have refused it and will never answer, or
+    /// have sent it with that session's cookies or with none. None of it is
+    /// wanted any more, so the shell is asked for anew, after the word.
+    pub(crate) fn session_forgotten(&mut self) {
+        self.drop_pending(|_| true);
         self.effects.push(Effect::ForgetSession);
         self.start();
     }
