@@ -495,6 +495,9 @@ look at when you update:
   sign in. A sign-in link, a code or an email verification link marks the address verified only if
   the account still holds that address when the mark is written; otherwise a verification link
   answers 403 `invalid_verification_link` and marks nothing.
+- The web app that `navree new --ui next` and `navree new --kit` make uses Next.js 16.4.5, which
+  fixes GHSA-mfr8-8qww-v76h in 16.4.3. An app made with an earlier version moves to 16.4.5 or later
+  in its `web/package.json`.
 
 ## [1.2.4] - 2026-11-15
 
