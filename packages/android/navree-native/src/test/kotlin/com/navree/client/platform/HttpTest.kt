@@ -28,6 +28,27 @@ class HttpTest {
     }
 
     @Test
+    fun a_request_cancelled_before_its_turn_is_not_sent_and_a_cancel_with_nothing_to_cancel_keeps_nothing() {
+        val unsent = Unsent()
+        unsent.asked(5)
+        assertTrue("one left alone is sent when its turn comes", unsent.due(5))
+        assertTrue("and its turn comes once", !unsent.due(5))
+
+        unsent.asked(6)
+        unsent.cancel(6)
+        assertTrue("one the core cancelled before its turn is not sent", !unsent.due(6))
+
+        // The core cancels what it asked while a session was ending: one that was answered long ago, one this client was never given.
+        unsent.cancel(5)
+        unsent.cancel(99)
+        // Nothing was kept of either: a request asked for under such a number afterwards is sent.
+        unsent.asked(5)
+        unsent.asked(99)
+        assertTrue(unsent.due(5))
+        assertTrue(unsent.due(99))
+    }
+
+    @Test
     fun a_request_on_the_apps_origins_is_built_with_its_headers() {
         val request = fetchRequest(fetch(headers = listOf("x-navree-region" to "orders", "accept" to "application/vnd.navree.native+json")), origins, CookieJar.NO_COOKIES)
         assertNotNull(request)
