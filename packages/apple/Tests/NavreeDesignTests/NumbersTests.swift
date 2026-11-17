@@ -75,7 +75,8 @@ struct NumbersTests {
             for equal in [false, true] {
                 let bounds = AxisRules.scatter(Navree.Scatter(equalAxes: equal, series: [points], x: x, y: y))
                 #expect(bounds.x.low < bounds.x.high && bounds.y.low < bounds.y.high, "\(x) \(y) \(equal)")
-                #expect([bounds.x.low, bounds.x.high, bounds.y.low, bounds.y.high].allSatisfy(\.isFinite))
+                let finite = [bounds.x.low, bounds.x.high, bounds.y.low, bounds.y.high].allSatisfy { $0.isFinite }
+                #expect(finite, "\(x) \(y) \(equal)")
             }
         }
     }
