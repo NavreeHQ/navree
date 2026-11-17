@@ -41,6 +41,18 @@ public final class SystemEffects: EffectRunner {
     private weak var client: NativeClient?
     /// The clipboard a `copy` goes to: the system's, or a stand-in in tests.
     var clipboard: any Clipboard = SystemClipboard()
+    /// What asks the system for this install's push token and gives it up:
+    /// the system, or a stand-in in tests.
+    var push: any PushToken = SystemPushToken()
+    /// Where this window's core stands in a sign-out it said in two words:
+    /// the session keeps it (``SessionKeeper/Tail``).
+    var tail = SessionKeeper.Tail.none
+    /// Whether this window's core has named who is signed in since it
+    /// started, or since the session last changed under it.
+    private var heard = false
+    /// Whether this window has asked the system for the push token since
+    /// its core last named somebody.
+    private var askedPush = false
     private var timers: [Int: Task<Void, Never>] = [:]
 
     static let log = Logger(subsystem: "com.navree.native", category: "effects")
@@ -96,13 +108,23 @@ public final class SystemEffects: EffectRunner {
     /// (`nil` for a window that is not one of the app's main ones).
     func begins(restoring: Bool?) {
         session = keeper.number
+        heard = false
+        askedPush = false
         keeper.windowBegins(restoring: restoring)
+        // A sign-out the run before began was finished as this one started:
+        // the push token that sign-out was giving up is given up, since its
+        // removal on the server may never have been asked for.
+        if signedWith.contains(.pushNotifications), keeper.takesPushRemoval() {
+            push.giveUp()
+            keeper.pushAwaitsSignIn = true
+        }
     }
 
     /// Writes what is kept of the window under `key`, or deletes it; nothing
-    /// is written for a session that has ended.
+    /// is written for a session that has ended, nor while the sign-out of
+    /// the session before is not finished on the device.
     func keep(snapshot: Data?, under key: String) {
-        guard snapshot == nil || isCurrent else { return }
+        guard snapshot == nil || (isCurrent && keeper.keeps()) else { return }
         snapshots.writeData(key, snapshot)
     }
 
@@ -112,54 +134,75 @@ public final class SystemEffects: EffectRunner {
         transport.stop()
     }
 
-    /// The session ended in another window: this window's core is told the
-    /// client ended it, drops what it held of the person and starts again.
+    /// The session ended in another window, or the person changed there:
+    /// this window's core is told the client ended it, drops what it held of
+    /// the person and starts again.
     func sessionEnded() {
         session = keeper.number
-        named = nil
+        heard = false
+        askedPush = false
         if let client, client.began { client.send(.signedOut) }
     }
 
     /// This window's own core ended the session, and goes on in the one that follows.
     func caughtUp() {
         session = keeper.number
-        named = nil
+        heard = false
+        askedPush = false
+    }
+
+    /// This window's core named the person the session is now: it goes on
+    /// in the session as it is.
+    func follows() {
+        session = keeper.number
     }
 
     /// This install's push token goes with the person, once for a sign-out;
     /// it is asked for again when somebody signs in.
     private func giveUpPushToken() {
         guard signedWith.contains(.pushNotifications), !keeper.pushAwaitsSignIn else { return }
-        AppEvents.unregisterForPush()
+        push.giveUp()
         keeper.pushAwaitsSignIn = true
     }
 
-    /// The person this window's core last said is signed in.
-    private var named: SessionKeeper.Person?
+    /// Asks the system for this install's push token, once for each time
+    /// this window's core comes to name somebody: only while somebody is
+    /// signed in, so a start with nobody signed in asks for nothing, and the
+    /// token a sign-out gave up stays given up until the next person signs in.
+    /// Each window asks, so each window's core is handed the token.
+    private func askForPush() {
+        guard signedWith.contains(.pushNotifications), !askedPush else { return }
+        askedPush = true
+        keeper.pushAwaitsSignIn = false
+        push.ask()
+    }
 
-    /// Hears who the window's core says is signed in. Somebody else than
-    /// before, with no sign-out between, is a change of person the core was
-    /// not told of by a sign-out: the session takes away what was the last
-    /// person's (``SessionKeeper/personChanged(by:)``).
-    private func hear(_ user: Navree.User?) {
-        guard let user else { return }
-        let now = SessionKeeper.Person(name: user.name, email: user.email)
-        defer { named = now }
-        if let named, named != now { keeper.personChanged(by: self) }
+    /// Hears who the window's core says is signed in, and tells the session
+    /// (``SessionKeeper/hears(_:from:)``): somebody else than before, with
+    /// no sign-out between, is a change of person the client is told of by
+    /// nothing else. A core that names nobody says nothing of who was here
+    /// or who comes next, and neither does one that is signing out.
+    private func hear(_ client: NativeClient) {
+        guard tail == .none, let user = client.app?.user else { return }
+        heard = true
+        askForPush()
+        keeper.hears(SessionKeeper.mark(name: user.name, email: user.email), from: self)
     }
 
     /// What loads the pictures of a screen, with the session's cookies.
     public private(set) lazy var pictures = PictureLoader(jar: transport.jar, site: site, hosts: pictureHosts)
 
+    public func appChanged(for client: NativeClient) {
+        self.client = client
+        hear(client)
+    }
+
     public func run(_ effect: CoreEffect, for client: NativeClient) {
         self.client = client
-        hear(client.app?.user)
-        if keeper.pushAwaitsSignIn, client.app?.user != nil {
-            keeper.pushAwaitsSignIn = false
-            AppEvents.registerForPush()
-        }
+        if !heard { hear(client) }
         switch effect {
         case .fetch(let request):
+            keeper.asks(by: self)
             transport.fetch(request) { [weak client] response in client?.send(.response(response)) }
         case .cancel(let request):
             transport.cancel(request)
@@ -177,7 +220,12 @@ public final class SystemEffects: EffectRunner {
             Self.feel(kind)
         case .device(let call, let device, let posts, let options):
             devices.answer = { [weak client] call, outcome in client?.send(.deviceResult(call: call, outcome: outcome)) }
-            devices.allowed = { AppEvents.registerForPush() }
+            devices.allowed = { [weak self, weak client] in
+                // The person allowed notifications: the token is asked for, while somebody is signed in.
+                guard let self, client?.app?.user != nil else { return }
+                self.askedPush = false
+                self.askForPush()
+            }
             devices.run(call: call, device: device, posts: posts, options: options)
         case .random(let request, let count):
             // Answered at once. The bytes are a secret: never logged, never kept.
@@ -194,15 +242,16 @@ public final class SystemEffects: EffectRunner {
         case .forgetSession:
             // The person signed out: the session ends for every window, here
             // and now, before the next effect; or it already has, when the
-            // core said before that it was ending.
-            keeper.end(by: self)
-            giveUpPushToken()
+            // core said before that it was ending, and then nothing is done
+            // twice, the token's giving up neither.
+            if keeper.end(by: self) { giveUpPushToken() }
         case .cacheRead(let key):
             client.send(.cache(key: key, value: isCurrent ? cache.read(key) : nil))
         case .cacheWrite(let key, let value):
             // Taking a key away is always done; a value is kept only for the
-            // session as it is now.
-            if value == nil || isCurrent { cache.write(key, value) }
+            // session as it is now, and not while the sign-out of the one
+            // before is not finished on the device.
+            if value == nil || (isCurrent && keeper.keeps()) { cache.write(key, value) }
         case .cacheClear:
             cache.clear()
         case .announce(let text, let notice, let count):
@@ -296,6 +345,22 @@ public final class SystemEffects: EffectRunner {
         defer { for index in bytes.indices { bytes[index] = 0 } }
         return bytes.map { String(format: "%02x", $0) }.joined()
     }
+}
+
+/// What asks the system for this install's push token and gives it up.
+@MainActor
+protocol PushToken: AnyObject {
+    /// Asks the system for the token; it comes later, as an event of its own.
+    func ask()
+    /// Gives the token up: no push reaches this install until it is asked for again.
+    func giveUp()
+}
+
+/// The system's own registration for push.
+@MainActor
+final class SystemPushToken: PushToken {
+    func ask() { AppEvents.registerForPush() }
+    func giveUp() { AppEvents.unregisterForPush() }
 }
 
 /// What the app hears from the system outside any view: the push token, a

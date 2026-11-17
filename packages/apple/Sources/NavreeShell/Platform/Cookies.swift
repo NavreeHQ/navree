@@ -331,13 +331,32 @@ public final class CookieJar {
         return slot?.delete() ?? true
     }
 
+    /// Asked before the cookies are written to the Keychain: whether what
+    /// the session holds now may be kept on the device. While it may not
+    /// (the sign-out of the session before is not finished there), the
+    /// cookies stay in memory, and are written when it may (``keep()``).
+    var mayKeep: (@MainActor () -> Bool)?
+
     private func save() {
         guard let slot else { return }
         if records.isEmpty {
             _ = slot.delete()
-        } else if let data = try? JSONEncoder().encode(records) {
+        } else if mayKeep?() ?? true, let data = try? JSONEncoder().encode(records) {
             slot.write(data)
         }
+    }
+
+    /// Writes the cookies the jar holds to the Keychain now.
+    func keep() {
+        guard let slot, !records.isEmpty, let data = try? JSONEncoder().encode(records) else { return }
+        slot.write(data)
+    }
+
+    /// Deletes what the Keychain holds and leaves the cookies in memory as
+    /// they are: what was kept there is an ended session's. `false` when the
+    /// item could not be deleted.
+    func unkeep() -> Bool {
+        slot?.delete() ?? true
     }
 }
 
