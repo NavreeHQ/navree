@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import NavreeProtocol
 import NavreeRuntime
@@ -28,6 +29,23 @@ import os
 /// 6. Every other window's core is told, and starts again as nobody's.
 /// 7. The mark is taken away, only when everything before it finished and
 ///    the core has said the session is forgotten.
+///
+/// The mark names the session it ends, by a count the record keeps across
+/// launches. While a mark stands, the session after it writes nothing to the
+/// device (no cookie in the Keychain, no page, nothing of a window, no web
+/// view store) before the count has moved past the mark; and the count moves
+/// only once everything of the ended session is off the device. So a start
+/// that finds a mark naming the session the device still holds finishes that
+/// sign-out and can take nothing of a later person with it; and a mark the
+/// count has moved past is an earlier session's, and ends nothing.
+///
+/// Who is signed in is the session's too, heard from every window's core and
+/// written down as a mark made from the name and address the core names
+/// them by, from which neither can be read. When a core names somebody else
+/// with no sign-out between (a session ran out, and another person signed
+/// in), what was the last person's goes for every window, and every other
+/// window's core starts again (``hears(_:from:)``), also when the two are a
+/// launch apart.
 ///
 /// A core says a sign-out in one effect or in two. With no push token to
 /// take back it says `forget_session` at once (``end(by:)``). With one, it
@@ -68,6 +86,12 @@ final class SessionKeeper {
     var pushAwaitsSignIn = false
     /// A sign-out the run before began was finished as this one started.
     private(set) var finishedAtStart = false
+    /// The mark of who is signed in, as the windows' cores last named them
+    /// (``mark(name:email:)``): none since the last sign-out.
+    private(set) var person: String?
+    /// How often a core's word that the session is forgotten was passed
+    /// over, because the session it spoke of had been ended already.
+    private(set) var passedOver = 0
 
     private let origin: String?
     private let loopbackHTTP: Bool
@@ -85,10 +109,52 @@ final class SessionKeeper {
     private var storesInDoubt = false
     /// A main window has started in this run.
     private var begun = false
-    /// A sign-out a core has said is ending and not yet said is forgotten:
-    /// the window whose core it is, and whether everything on the device
-    /// was taken away (so the mark may go when the core says the rest).
-    private var underWay: (window: Weak<SystemEffects>, finished: Bool)?
+    /// The window whose core has said the session is ending and not yet
+    /// that it is forgotten: the one the mark waits for.
+    private var underWay: Weak<SystemEffects>?
+    /// Everything is being taken away now: a sign-out said meanwhile, from
+    /// inside it, has nothing left to take.
+    private var taking = false
+
+    /// Where a window's core stands in a sign-out it said in two words.
+    enum Tail: Sendable {
+        /// It is in none.
+        case none
+        /// It said the session is ending: everything was taken away then,
+        /// and its word that the session is forgotten is still to come.
+        case awaited
+        /// It was then told the session ended, by another window's sign-out
+        /// or a change of person. A core either says the session is
+        /// forgotten in answer to that, before it asks for anything new, or
+        /// never says it for that sign-out.
+        case told
+    }
+    /// The mark of a sign-out that still stands on the device.
+    private var standing: Standing?
+    /// A sign-out finished at this start has not yet given the push token up.
+    private var owesPushRemoval = false
+
+    /// What a sign-out could not take off the device.
+    struct Left: OptionSet, Sendable {
+        let rawValue: Int
+        static let keychain = Left(rawValue: 1 << 0)
+        static let store = Left(rawValue: 1 << 1)
+        static let pages = Left(rawValue: 1 << 2)
+        static let places = Left(rawValue: 1 << 3)
+        static let files = Left(rawValue: 1 << 4)
+        static let person = Left(rawValue: 1 << 5)
+    }
+
+    /// A sign-out whose mark stands on the device.
+    private struct Standing {
+        /// The session it ends, by the record's count.
+        var session: Int
+        /// What of that session could not be taken off the device yet.
+        var left: Left
+        /// A later session has written to the device since: the record's
+        /// count has moved past this mark, which ends nothing any more.
+        var passed = false
+    }
 
     nonisolated static let log = Logger(subsystem: "com.navree.native", category: "session")
 
@@ -114,6 +180,7 @@ final class SessionKeeper {
         self.files = files
         self.record = record
         self.removes = removes
+        jar?.mayKeep = { [weak self] in self?.passMark(savingCookies: false) ?? true }
     }
 
     // MARK: - The start
@@ -135,18 +202,35 @@ final class SessionKeeper {
             origin: origin, loopbackHTTP: loopbackHTTP, slot: slot, cache: cache, snapshots: snapshots, files: files,
             record: record, removes: removes
         )
-        if let record, record.owesWipe {
-            keeper.finishedAtStart = true
-            keeper.readsSlot = false
-            var finished = slot?.delete() ?? true
-            let retired = record.retireStore()
-            keeper.storesInDoubt = !retired
-            finished = retired && finished
-            finished = keeper.clearKept() && finished
-            SystemAppNotifications().signedOut()
-            if finished { record.unmarkWipe() }
-            log.notice("a sign-out the last run began was finished at this start: \(finished ? "all of it" : "not all of it yet", privacy: .public)")
+        if let record, let marked = record.marked() {
+            if marked >= record.serial() {
+                // No session has written to the device since that sign-out
+                // began: it is finished here, and takes nobody else's with it.
+                keeper.finishedAtStart = true
+                keeper.owesPushRemoval = true
+                keeper.readsSlot = false
+                var left: Left = []
+                if !(slot?.delete() ?? true) { left.insert(.keychain) }
+                if !record.retireStore() {
+                    left.insert(.store)
+                    keeper.storesInDoubt = true
+                }
+                left.formUnion(keeper.clearKept())
+                if !record.keep(person: nil) { left.insert(.person) }
+                SystemAppNotifications().signedOut()
+                if left.isEmpty {
+                    record.unmarkWipe()
+                } else {
+                    keeper.standing = Standing(session: marked, left: left)
+                }
+                log.notice("a sign-out the last run began was finished at this start: \(left.isEmpty ? "all of it" : "not all of it yet", privacy: .public)")
+            } else {
+                // A later session has written to the device since that
+                // sign-out began: the mark is its own session's, and ends no other.
+                record.unmarkWipe()
+            }
         }
+        keeper.person = record?.person()
         cache.clearFolders()
         snapshots.clearFolders()
         keeper.removeRetired()
@@ -186,6 +270,7 @@ final class SessionKeeper {
     func networkJar() -> CookieJar {
         if let made { return made }
         let jar = CookieJar(origin: origin ?? "", loopbackHTTP: loopbackHTTP, slot: slot, reads: readsSlot)
+        jar.mayKeep = { [weak self] in self?.passMark(savingCookies: false) ?? true }
         made = jar
         return jar
     }
@@ -209,9 +294,9 @@ final class SessionKeeper {
     /// was forgotten has nothing more to wait for: its mark goes, if
     /// everything on the device was taken away.
     private func settle() {
-        guard let said = underWay, said.window.object == nil else { return }
+        guard let said = underWay, said.object == nil else { return }
         underWay = nil
-        if said.finished { record?.unmarkWipe() }
+        unmark()
     }
 
     /// A window's core is about to start. The first main window of a run
@@ -240,86 +325,258 @@ final class SessionKeeper {
     /// only the requests of `window` itself go on, the token's removal among
     /// them, and the mark stays until its core says the session is forgotten.
     func ending(by window: SystemEffects) {
-        let finished = takeAway(by: window, sparing: true)
-        underWay = (Weak(window), finished)
+        guard takeAway(by: window, sparing: true) else { return }
+        window.tail = .awaited
+        underWay = Weak(window)
     }
 
     /// A window's core says the session is forgotten (`forget_session`).
-    /// When the same core said before that it was ending, everything is
-    /// done and nothing is done twice: the mark goes, if all of it finished.
-    /// Otherwise the session ends here, for every window. `ender` is the
-    /// window whose core said so: it goes on in the session that follows,
-    /// and every other window's core is told.
-    func end(by ender: SystemEffects? = nil) {
-        if let said = underWay, let ender, said.window.object === ender {
-            underWay = nil
-            if said.finished { record?.unmarkWipe() }
-            return
+    /// A core says it once for each time it said the session was ending:
+    /// when the token's removal is answered, or in answer to being told that
+    /// the session ended meanwhile. Either way the session it speaks of was
+    /// ended when it said it was ending, and what came after is not its to
+    /// end: the word is counted and passed over, nothing is taken away
+    /// twice, and the mark goes if it waited for this window and all of it
+    /// finished. Otherwise (a sign-out said in one word) the session ends
+    /// here, for every window. `ender` is the window whose core said so: it
+    /// goes on in the session that follows, and every other window's core is
+    /// told. `true` when the session ended here, `false` when it had ended
+    /// already.
+    @discardableResult
+    func end(by ender: SystemEffects? = nil) -> Bool {
+        if let ender, ender.tail != .none {
+            ender.tail = .none
+            passedOver += 1
+            if let said = underWay, said.object === ender {
+                underWay = nil
+                unmark()
+            }
+            return false
         }
-        if takeAway(by: ender, sparing: false) { record?.unmarkWipe() }
+        guard takeAway(by: ender, sparing: false) else {
+            passedOver += 1
+            return false
+        }
+        unmark()
+        return true
+    }
+
+    /// A window's core asks for something new. One that was told the
+    /// session ended while its own sign-out waited, and has not said the
+    /// session is forgotten by now, never will for that sign-out: the next
+    /// time it says so is a sign-out of its own.
+    func asks(by window: SystemEffects) {
+        if window.tail == .told { window.tail = .none }
+    }
+
+    /// Tells a window's core that the session ended in another window.
+    private func tell(_ window: SystemEffects) {
+        if window.tail == .awaited { window.tail = .told }
+        window.sessionEnded()
     }
 
     /// Takes away everything of the session on this device, for every
     /// window, and moves the session's number on. With `sparing`, the
-    /// requests of `ender` itself are left to be answered. `true` when the
-    /// mark was written and everything is gone: the mark may then go.
+    /// requests of `ender` itself are left to be answered. The mark it
+    /// writes names the session it ends, and stands until ``unmark()``.
+    /// `false`, and nothing done, when it is asked for from inside itself (a
+    /// core that answers being told with a sign-out of its own): what is
+    /// under way is already taking everything away, for every window.
+    @discardableResult
     private func takeAway(by ender: SystemEffects?, sparing: Bool) -> Bool {
+        guard !taking else { return false }
+        taking = true
+        defer { taking = false }
         underWay = nil
         number += 1
-        let marked = record?.markWipe() ?? true
+        let session = record?.serial() ?? 0
+        let marked = record?.markWipe(ending: session) ?? false
         let windows = live()
         for window in windows where !(sparing && window === ender) { window.stopWork() }
         // What could bring the session back: the cookies, then the web view's store.
-        var finished = true
+        var left: Left = []
         var jars: [CookieJar] = []
         for jar in [made] + windows.map({ $0.transport.jar }) {
             if let jar, !jars.contains(where: { $0 === jar }) { jars.append(jar) }
         }
-        for jar in jars { finished = jar.forget() && finished }
-        if made == nil, let slot { finished = slot.delete() && finished }
+        for jar in jars {
+            if !jar.forget() { left.insert(.keychain) }
+        }
+        if made == nil, let slot, !slot.delete() { left.insert(.keychain) }
         let old = web?.store
         web = nil
-        let retired = record?.retireStore() ?? true
-        storesInDoubt = storesInDoubt || !retired
-        finished = retired && finished
-        // Then everything else kept of the person.
-        finished = clearKept() && finished
+        if !(record?.retireStore() ?? true) {
+            left.insert(.store)
+            storesInDoubt = true
+        }
+        // Then everything else kept of the person, and who they were.
+        left.formUnion(clearKept())
+        person = nil
+        if !(record?.keep(person: nil) ?? true) { left.insert(.person) }
         for window in windows { window.pictures.forget() }
         if let teller = ender ?? windows.first {
             teller.devices.notifications.signedOut()
         } else {
             SystemAppNotifications().signedOut()
         }
-        for window in windows where window !== ender { window.sessionEnded() }
+        // The mark stands from here: what the windows write as they start
+        // again is the next session's, and goes through ``keeps()``.
+        standing = marked ? Standing(session: session, left: left) : nil
+        for window in windows where window !== ender { tell(window) }
         ender?.caughtUp()
         removeRetired(emptying: old)
-        return marked && finished
+        return true
     }
 
-    /// Who a window's core says is signed in, as far as a client can tell
-    /// two people apart: by name and address.
-    struct Person: Equatable {
-        var name: String
-        var email: String?
+    /// Takes the mark of a sign-out away, once nothing of its session is
+    /// left on the device. While something is, the mark stands: it is tried
+    /// again when the next session first has something to write
+    /// (``keeps()``), and at the next start.
+    private func unmark() {
+        guard let mark = standing, mark.left.isEmpty else { return }
+        record?.unmarkWipe()
+        standing = nil
     }
 
-    /// A window's core now names another person than it did, and nobody
-    /// signed out between: a session ran out, and somebody else signed in.
-    /// What a core keeps it empties itself. What is the person's and not a
-    /// core's goes here, for every window: the pictures loaded, the files
-    /// picked for forms, the notifications and the count on the app's icon.
-    func personChanged(by window: SystemEffects) {
-        for window in live() { window.pictures.forget() }
-        files.clear()
+    // MARK: - What the session after a sign-out may write
+
+    /// Whether something of the session as it is now may be written to the
+    /// device: asked before a cookie goes into the Keychain, a page or what
+    /// is kept of a window is written, a web view store is named. It may,
+    /// unless the mark of a sign-out stands and names the session the device
+    /// still holds. Then what that sign-out could not take away is tried
+    /// again, and once it is gone the record's count moves past the mark
+    /// before anything is written; until then the session is kept in memory
+    /// only. So a start that finds a mark naming the device's session finds
+    /// nothing of a later one beside it.
+    func keeps() -> Bool {
+        passMark(savingCookies: true)
+    }
+
+    private func passMark(savingCookies: Bool) -> Bool {
+        guard var mark = standing, !mark.passed, let record else { return true }
+        if !mark.left.isEmpty {
+            mark.left = takeLeft(mark.left)
+            standing = mark
+            guard mark.left.isEmpty else { return false }
+        }
+        guard record.move(past: mark.session) else { return false }
+        mark.passed = true
+        standing = mark
+        // A mark no core's word is still waited for has nothing more to say.
+        if underWay?.object == nil {
+            underWay = nil
+            unmark()
+        }
+        // What the session held in memory meanwhile is written now.
+        if savingCookies { made?.keep() }
+        return true
+    }
+
+    /// Tries again to take off the device what a sign-out could not: what
+    /// is still left afterwards.
+    private func takeLeft(_ left: Left) -> Left {
+        var still: Left = []
+        if left.contains(.keychain) {
+            // Only what the Keychain holds goes: the cookies in memory are
+            // the session's as it is now.
+            let gone = made.map { $0.unkeep() } ?? slot?.delete() ?? true
+            if !gone { still.insert(.keychain) }
+        }
+        if left.contains(.store) {
+            if record?.retireStore() ?? true {
+                storesInDoubt = false
+            } else {
+                still.insert(.store)
+            }
+        }
+        if left.contains(.pages), !cache.clear() { still.insert(.pages) }
+        if left.contains(.places), !snapshots.clear() { still.insert(.places) }
+        if left.contains(.files), !files.clear() { still.insert(.files) }
+        if left.contains(.person), !(record?.keep(person: nil) ?? true) { still.insert(.person) }
+        return still
+    }
+
+    // MARK: - Who is signed in
+
+    /// The mark of a person, made from the name and the address a core
+    /// names them by: the same for the same two, another for any other, and
+    /// neither can be read from it. A person with no address and one whose
+    /// address is empty are two. The name and the address are all a core
+    /// says of who is signed in, so they are how a client tells people
+    /// apart: somebody who changes their name or address is taken for
+    /// another person once, and two people with the same name and address
+    /// are one.
+    nonisolated static func mark(name: String, email: String?) -> String {
+        let written = String(name.utf16.count) + ":" + name + (email.map { "+" + $0 } ?? "-")
+        return SHA256.hash(data: Data(written.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// A window's core names who is signed in, by their mark. The first
+    /// person named since the last sign-out is written down as the one what
+    /// is kept is kept for. Somebody else than that, with no sign-out
+    /// between, is a change of person: a session ran out, and another person
+    /// signed in, in this run or since the one before it. What was the last
+    /// person's then goes for every window (``personChanged(by:)``), and the
+    /// new mark is written down only when all of it went: an app ended in
+    /// the middle, or a part that failed, leaves the mark of the person
+    /// before, and the next start does the change over.
+    func hears(_ mark: String, from window: SystemEffects) {
+        let before = person
+        guard before != mark else { return }
+        person = mark
+        if before == nil || personChanged(by: window) {
+            if keeps() { _ = record?.keep(person: mark) }
+        }
+    }
+
+    /// The core of `window` names another person than the session's, and
+    /// nobody signed out between. The cookies are the new person's already,
+    /// and what a core keeps of pages it empties itself. Everything else
+    /// that was the last person's goes here, for every window: the session's
+    /// number moves on, so what was begun for them is refused; the other
+    /// windows' requests are dropped and their cores told, as at a sign-out,
+    /// so none of them shows the last person's screens or sends what they
+    /// typed as the new one; the web view's store is retired; what was kept
+    /// of each window, the files picked for forms, the pictures loaded, the
+    /// notifications and the count on the app's icon go. `true` when all of
+    /// it went.
+    private func personChanged(by window: SystemEffects) -> Bool {
+        number += 1
+        let windows = live()
+        for other in windows where other !== window { other.stopWork() }
+        let old = web?.store
+        web = nil
+        var finished = true
+        if !(record?.retireStore() ?? true) {
+            storesInDoubt = true
+            finished = false
+        }
+        finished = snapshots.clear() && finished
+        finished = files.clear() && finished
+        for each in windows { each.pictures.forget() }
         window.devices.notifications.signedOut()
+        for other in windows where other !== window { tell(other) }
+        window.follows()
+        removeRetired(emptying: old)
+        return finished
     }
 
-    /// Deletes the pages, what was kept of each window, and the picked files.
-    private func clearKept() -> Bool {
-        let pages = cache.clear()
-        let places = snapshots.clear()
-        let picked = files.clear()
-        return pages && places && picked
+    /// Whether a sign-out finished at this start still has the push token
+    /// to give up: answered `true` once.
+    func takesPushRemoval() -> Bool {
+        defer { owesPushRemoval = false }
+        return owesPushRemoval
+    }
+
+    /// Deletes the pages, what was kept of each window, and the picked
+    /// files: what of them is still on the device afterwards.
+    private func clearKept() -> Left {
+        var left: Left = []
+        if !cache.clear() { left.insert(.pages) }
+        if !snapshots.clear() { left.insert(.places) }
+        if !files.clear() { left.insert(.files) }
+        return left
     }
 
     // MARK: - The web view's store
@@ -345,7 +602,7 @@ final class SessionKeeper {
 
     /// The identifier of the session's store, written down before it is used.
     func storeIdentifier() -> UUID? {
-        guard let record, record.keepsWebStore, !storesInDoubt, !record.owesWipe else { return nil }
+        guard let record, record.keepsWebStore, !storesInDoubt, keeps() else { return nil }
         var list = record.stores()
         if let current = list.current { return current }
         let new = UUID()
@@ -406,10 +663,12 @@ final class SessionKeeper {
 }
 
 /// What the session writes down about itself, in a folder of the app's own
-/// that no backup takes: that a sign-out has begun and not finished, and
-/// which web view store is the session's and which belong to sessions that
-/// ended. Nothing in it is a secret, and it can be read whenever the Keychain
-/// item can (after the device's first unlock).
+/// that no backup takes: that a sign-out has begun and not finished, and of
+/// which session; the number of the session the device holds; the mark of
+/// the person what is kept is kept for; and which web view store is the
+/// session's and which belong to sessions that ended. Nothing in it is a
+/// secret, and it can be read whenever the Keychain item can (after the
+/// device's first unlock).
 struct SessionRecord: Sendable {
     let folder: URL
     /// Whether the session's web view store is kept between launches.
@@ -430,18 +689,58 @@ struct SessionRecord: Sendable {
 
     private var mark: URL { folder.appendingPathComponent("signing-out") }
     private var list: URL { folder.appendingPathComponent("web-stores.json") }
+    private var count: URL { folder.appendingPathComponent("sessions") }
+    private var who: URL { folder.appendingPathComponent("person") }
 
-    /// Whether a sign-out began and did not finish.
-    var owesWipe: Bool {
-        FileManager.default.fileExists(atPath: mark.path)
+    /// The number of the session the device holds, counted across launches.
+    /// It moves on when a session first writes to the device while the mark
+    /// of the sign-out before it still stands (``move(past:)``), and at no
+    /// other time: it is what a mark names its session by. 0 until then.
+    func serial() -> Int {
+        guard let data = try? Data(contentsOf: count) else { return 0 }
+        return Int(String(decoding: data, as: UTF8.self)) ?? 0
     }
 
-    /// Writes down that a sign-out has begun, and has the system put it on
-    /// the disk before anything is deleted. `false` when it could not be.
-    func markWipe() -> Bool {
+    /// Moves the device's session number past `session`: a later session is
+    /// about to write to the device. `false` when that could not be written
+    /// down, and then nothing of the later session may be written either.
+    func move(past session: Int) -> Bool {
         do {
             try prepare()
-            try Data("1".utf8).write(to: mark, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            try Data(String(session + 1).utf8).write(
+                to: count, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+            )
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// The session the mark of a sign-out names, when one stands. A mark
+    /// that does not read names the session the device holds.
+    func marked() -> Int? {
+        guard FileManager.default.fileExists(atPath: mark.path) else { return nil }
+        guard let data = try? Data(contentsOf: mark) else { return serial() }
+        return Int(String(decoding: data, as: UTF8.self)) ?? serial()
+    }
+
+    /// Whether a sign-out began and did not finish, and the session it ends
+    /// is still the one the device holds: a mark the count has moved past is
+    /// an earlier session's, and owes nothing.
+    var owesWipe: Bool {
+        guard let marked = marked() else { return false }
+        return marked >= serial()
+    }
+
+    /// Writes down that the sign-out of `session` (the device's own, when
+    /// none is given) has begun, and has the system put it on the disk before
+    /// anything is deleted. `false` when it could not be.
+    func markWipe(ending session: Int? = nil) -> Bool {
+        do {
+            try prepare()
+            try Data(String(session ?? serial()).utf8).write(
+                to: mark, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+            )
             let handle = try FileHandle(forWritingTo: mark)
             try handle.synchronize()
             try handle.close()
@@ -451,11 +750,37 @@ struct SessionRecord: Sendable {
         }
     }
 
-    /// Takes the mark away: the sign-out finished.
+    /// Takes the mark away: the sign-out finished, or its session is not the
+    /// one the device holds any more.
     @discardableResult
     func unmarkWipe() -> Bool {
         try? FileManager.default.removeItem(at: mark)
-        return !owesWipe
+        return !FileManager.default.fileExists(atPath: mark.path)
+    }
+
+    /// The mark of the person what is kept on the device is kept for
+    /// (``SessionKeeper/mark(name:email:)``); none when nobody was named
+    /// since the last sign-out.
+    func person() -> String? {
+        guard let data = try? Data(contentsOf: who) else { return nil }
+        let mark = String(decoding: data, as: UTF8.self)
+        return mark.isEmpty ? nil : mark
+    }
+
+    /// Writes down whose what is kept is, or with no mark that it is
+    /// nobody's. `false` when it could not be.
+    func keep(person mark: String?) -> Bool {
+        guard let mark else {
+            try? FileManager.default.removeItem(at: who)
+            return !FileManager.default.fileExists(atPath: who.path)
+        }
+        do {
+            try prepare()
+            try Data(mark.utf8).write(to: who, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// The web view stores written down; none when nothing reads.

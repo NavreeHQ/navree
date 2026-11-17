@@ -256,9 +256,9 @@ final class Session {
         effects.begins(restoring: main ? restoring : nil)
         // Each window runs a core of its own, and its place is kept under its own name.
         kept = scene.isEmpty ? Self.snapshot : Self.snapshot + "-" + scene
+        // The push token is not asked for here: a build signed for push asks
+        // once its core names somebody, never while nobody is signed in.
         client.begin(restoring: StartRules.snapshot(restoring: restoring, kept: kept, in: effects.snapshots))
-        // The token is asked for at every launch of a build signed for push.
-        if configuration.signedWith.contains(.pushNotifications) { AppEvents.registerForPush() }
         launch(configuration.launch, in: client)
     }
 

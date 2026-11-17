@@ -86,7 +86,7 @@ struct Shell {
         var list: [String] = []
     }
 
-    init(answers: [String: (status: Int, file: String)] = Shell.store) throws {
+    init(answers: [String: (status: Int, file: String)] = Shell.store, signedWith: Set<Entitlement> = []) throws {
         let configuration = ShellConfiguration(origin: "https://shop.example", appID: "com.navree.demo", appVersion: "1.0")
         let core = try #require(Core(config: CoreConfiguration.json(configuration, device: DeviceTraits())))
         transport = FakeTransport()
@@ -94,7 +94,7 @@ struct Shell {
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("navree-\(UUID().uuidString)")
         effects = SystemEffects(
             transport: transport, cache: KeptFiles(folder: folder.appendingPathComponent("cache")),
-            snapshots: KeptFiles(folder: folder.appendingPathComponent("snapshot"))
+            snapshots: KeptFiles(folder: folder.appendingPathComponent("snapshot")), signedWith: signedWith
         )
         client = NativeClient(core: core, effects: effects)
         let problems = Problems()

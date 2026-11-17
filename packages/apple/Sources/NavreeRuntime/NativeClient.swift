@@ -9,6 +9,15 @@ import os
 @MainActor
 public protocol EffectRunner: AnyObject {
     func run(_ effect: CoreEffect, for client: NativeClient)
+    /// The core said anew what the app is and who is signed in (its app part
+    /// changed): heard once the part is read, before the effects of the same
+    /// update are carried out.
+    func appChanged(for client: NativeClient)
+}
+
+extension EffectRunner {
+    /// A runner that keeps nothing of the person has nothing to do.
+    public func appChanged(for client: NativeClient) {}
 }
 
 /// One screen of the view state, observed on its own: a change to one screen
@@ -176,6 +185,8 @@ public final class NativeClient {
             apply(update.changed)
             // A core found stopped while its parts were read: nothing it asked is carried out.
             guard !stopped else { return }
+            // Who is signed in is heard before anything the update asks is carried out.
+            if update.changed.contains(where: { $0 == .app || $0 == .unknown }) { effects?.appChanged(for: self) }
             for tag in update.unread {
                 problem("an effect did not read: \(tag)")
             }

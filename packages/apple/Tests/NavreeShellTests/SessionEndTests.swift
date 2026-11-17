@@ -40,6 +40,17 @@ final class MemorySlot: SecretSlot, @unchecked Sendable {
         lock.withLock { refuses = true }
     }
 
+    /// The item can be deleted again.
+    func allowDeleting() {
+        lock.withLock { refuses = false }
+    }
+
+    /// The values of the cookies the item holds.
+    func values() -> [String] {
+        guard let data = read(), let cookies = try? JSONDecoder().decode([CookieRecord].self, from: data) else { return [] }
+        return cookies.map(\.value).sorted()
+    }
+
     func read() -> Data? {
         lock.withLock { kept }
     }
@@ -55,6 +66,16 @@ final class MemorySlot: SecretSlot, @unchecked Sendable {
             return true
         }
     }
+}
+
+/// What a test saw asked of the system's registration for push.
+@MainActor
+final class PlayedPush: PushToken {
+    var asks = 0
+    var givenUp = 0
+
+    func ask() { asks += 1 }
+    func giveUp() { givenUp += 1 }
 }
 
 /// The web view stores a test saw removed.
@@ -389,9 +410,76 @@ struct SessionEndTests {
         keeper.end(by: second)
         #expect(keeper.number == 3)
         #expect(!places.record.owesWipe)
-        // The first one's word, when it comes, ends nothing more.
+        // The first one's word, when it comes, ends nothing more: the session
+        // it speaks of ended when its core said it was ending. (It was a
+        // session's end of its own before; a core says the word once for each
+        // time it said a session was ending, also after it was told that the
+        // session ended meanwhile, so the word is that sign-out's and no other's.)
         keeper.end(by: first)
-        #expect(keeper.number == 4)
+        #expect(keeper.number == 3)
+        #expect(keeper.passedOver == 1)
+    }
+
+    @Test func aCoresWordThatTheSessionIsForgottenEndsNothingItsOwnSignOutAlreadyEnded() throws {
+        let app = try TwoWindows()
+        defer { try? FileManager.default.removeItem(at: app.folder) }
+        // Neither core is started: each effect below is said for it, as its core would say it.
+        let shell = FetchRequest(request: 9, url: Self.shell)
+        app.first.transport.answers = [:]
+        app.second.transport.answers = [:]
+
+        // The first window's core says the session is ending, and waits for
+        // the push token's removal. Before that is answered the second
+        // window's core says the session is forgotten: it ends for every window.
+        app.first.effects.run(.sessionEnding, for: app.first.client)
+        #expect(app.keeper.number == 1)
+        app.second.effects.run(.forgetSession, for: app.second.client)
+        #expect(app.keeper.number == 2)
+        let stopped = app.second.transport.stopped
+        // Somebody signs in after that.
+        app.jar.merge([Self.cookie("session", "simran")])
+        app.keeper.snapshots.write("snapshot-second", "what Simran typed")
+        // A core told that the session ended while it waited says in answer
+        // that the session is forgotten, then asks for the shell. That word
+        // is its own sign-out's: nothing is taken away twice, and nothing of
+        // whoever signed in since.
+        app.first.effects.run(.forgetSession, for: app.first.client)
+        app.first.effects.run(.fetch(shell), for: app.first.client)
+        #expect(app.keeper.number == 2)
+        #expect(app.keeper.passedOver == 1)
+        #expect(app.jar.header(for: Self.address) == "session=simran")
+        #expect(app.keeper.snapshots.read("snapshot-second") == "what Simran typed")
+        #expect(app.second.transport.stopped == stopped)
+
+        // A core that says nothing in answer to being told, and only asks for
+        // the shell, has said all it will of that sign-out: when it later
+        // says the session is forgotten, in one word, that is a sign-out of
+        // its own, and ends the session.
+        app.first.effects.run(.sessionEnding, for: app.first.client)
+        app.second.effects.run(.forgetSession, for: app.second.client)
+        #expect(app.keeper.number == 4)
+        app.first.effects.run(.fetch(shell), for: app.first.client)
+        app.jar.merge([Self.cookie("session", "harleen")])
+        app.first.effects.run(.forgetSession, for: app.first.client)
+        #expect(app.keeper.number == 5)
+        #expect(app.keeper.passedOver == 1)
+        #expect(app.jar.header(for: Self.address) == nil)
+    }
+
+    @Test func aWindowToldTheSessionEndedWhileItsOwnSignOutWaitedMovesTheSessionOnce() throws {
+        let app = try TwoWindows()
+        defer { try? FileManager.default.removeItem(at: app.folder) }
+        app.first.client.begin()
+        app.second.client.begin()
+        // The second window's core is waiting on its sign-out when the first
+        // window's ends the session and tells it. Whatever a core says in
+        // answer to being told (nothing, or that the session is forgotten),
+        // the session ends once there.
+        app.second.effects.run(.sessionEnding, for: app.second.client)
+        #expect(app.keeper.number == 1)
+        app.first.effects.run(.forgetSession, for: app.first.client)
+        #expect(app.keeper.number == 2)
+        #expect(app.second.effects.session == 2)
     }
 
     @Test func anEffectThisBuildDoesNotKnowChangesNothing() throws {
@@ -424,6 +512,234 @@ struct SessionEndTests {
         // The same person named again takes nothing away.
         shell.client.send(.foreground)
         #expect(played.signOuts == 1)
+    }
+
+    @Test func anotherPersonSigningInWithNoSignOutIsToldToEveryWindow() throws {
+        let app = try TwoWindows()
+        defer { try? FileManager.default.removeItem(at: app.folder) }
+        app.first.client.begin()
+        app.second.client.begin()
+        #expect(app.second.client.app?.user?.name == "Ravneet Kaur")
+        app.keeper.snapshots.write("snapshot-second", "what Ravneet typed in the second window")
+        let asked = app.second.transport.fetched.count
+        // Her session runs out, and Harpreet signs in in the first window:
+        // the server's shell names him now, whichever window asks.
+        app.first.transport.answers["/_navree/native/shell"] = (200, "made/shell-other.json")
+        app.second.transport.answers["/_navree/native/shell"] = (200, "made/shell-other.json")
+        app.first.client.send(.foreground)
+        #expect(app.first.client.app?.user?.name == "Harpreet Singh")
+        // The session moved on for every window, and what was kept of hers is gone.
+        #expect(app.keeper.number == 1)
+        #expect(app.first.effects.isCurrent)
+        #expect(app.keeper.snapshots.read("snapshot-second") == nil)
+        // The second window's requests were dropped and its core told: it
+        // let go of her screens and of what she typed, started again from
+        // the shell, and names him too. Nothing of hers is left to send as him.
+        #expect(app.second.transport.stopped == 1)
+        #expect(app.second.effects.session == 1)
+        #expect(app.second.transport.fetched.dropFirst(asked).map(\.url).contains(Self.shell))
+        #expect(app.second.client.app?.user?.name == "Harpreet Singh")
+        // Hearing him named there changes nothing again.
+        #expect(app.keeper.number == 1)
+    }
+
+    @Test func aPersonsMarkTellsTwoPeopleApartAndSaysNothingOfEither() {
+        let mark = SessionKeeper.mark(name: "Ravneet Kaur", email: "ravneet@charkha.example")
+        #expect(mark == SessionKeeper.mark(name: "Ravneet Kaur", email: "ravneet@charkha.example"))
+        #expect(mark.count == 64)
+        #expect(!mark.localizedCaseInsensitiveContains("ravneet"))
+        #expect(mark != SessionKeeper.mark(name: "Ravneet Kaur", email: "ravneet@example.in"))
+        #expect(mark != SessionKeeper.mark(name: "Ravneet K. Sandhu", email: "ravneet@charkha.example"))
+        // Somebody with no address and somebody whose address is empty are two.
+        #expect(SessionKeeper.mark(name: "Ravneet Kaur", email: nil) != SessionKeeper.mark(name: "Ravneet Kaur", email: ""))
+        // Where the name ends is part of the mark, so a name never runs into an address.
+        #expect(SessionKeeper.mark(name: "a+b", email: "c") != SessionKeeper.mark(name: "a", email: "b+c"))
+    }
+
+    @Test func aChangeOfPersonAcrossARelaunchIsSeenAtTheNextStartAndASignOutForgetsWhoWasNamed() throws {
+        let places = Places()
+        defer { places.remove() }
+        let slot = MemorySlot()
+        let gurpreet = SessionKeeper.mark(name: "Gurpreet Kaur", email: "gurpreet@charkha.example")
+        let simran = SessionKeeper.mark(name: "Simran Sandhu", email: "simran@charkha.example")
+        /// A start of the app: the session opened from what the device holds, and one window in it.
+        func start() -> (keeper: SessionKeeper, window: SystemEffects, played: PlayedNotifications) {
+            let keeper = SessionKeeper.open(
+                origin: "https://shop.example", slot: slot, cache: places.cache, snapshots: places.snapshots,
+                files: places.files, record: places.record, removes: { _ in true }
+            )
+            let window = SystemEffects(transport: FakeTransport(), keeper: keeper)
+            let played = PlayedNotifications()
+            window.devices.notifications = played
+            return (keeper, window, played)
+        }
+
+        // Gurpreet is named, and something is kept of her window.
+        var run = start()
+        run.keeper.hears(gurpreet, from: run.window)
+        #expect(run.played.signOuts == 0)
+        #expect(places.record.person() == gurpreet)
+        places.snapshots.write("snapshot-first", "what Gurpreet typed")
+
+        // The next start names her again: nothing changes.
+        run = start()
+        #expect(run.keeper.person == gurpreet)
+        run.keeper.hears(gurpreet, from: run.window)
+        #expect(run.played.signOuts == 0)
+        #expect(run.keeper.number == 0)
+        #expect(places.snapshots.read("snapshot-first") == "what Gurpreet typed")
+
+        // Her session runs out while the app is closed, and at the start
+        // after it Simran signs in: what was kept for Gurpreet goes, her
+        // reminders among it, and the mark written down is Simran's.
+        run = start()
+        run.keeper.hears(simran, from: run.window)
+        #expect(run.played.signOuts == 1)
+        #expect(run.keeper.number == 1)
+        #expect(places.snapshots.read("snapshot-first") == nil)
+        #expect(places.record.person() == simran)
+
+        // A sign-out forgets who was named: whoever signs in after it is
+        // compared with nobody, and loses nothing.
+        run.keeper.end(by: run.window)
+        #expect(places.record.person() == nil)
+        #expect(run.keeper.person == nil)
+        let before = (number: run.keeper.number, signOuts: run.played.signOuts)
+        run.keeper.hears(gurpreet, from: run.window)
+        #expect(run.keeper.number == before.number)
+        #expect(run.played.signOuts == before.signOuts)
+        #expect(places.record.person() == gurpreet)
+    }
+
+    // MARK: - A mark and the session after it
+
+    @Test func aSignOutsMarkNeverEndsTheSessionThatFollowsIt() throws {
+        let places = Places()
+        defer { places.remove() }
+        let slot = MemorySlot()
+        let keeper = SessionKeeper.open(
+            origin: "https://shop.example", slot: slot, cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        let jar = keeper.networkJar()
+        jar.merge([Self.cookie("session", "gurpreet")])
+        let transport = FakeTransport()
+        transport.jar = jar
+        let window = SystemEffects(transport: transport, keeper: keeper)
+        // Gurpreet signs out, and her core still waits for the push token's
+        // removal: the mark stands, and names her session.
+        keeper.ending(by: window)
+        #expect(places.record.marked() == 0)
+        #expect(places.record.owesWipe)
+        #expect(slot.read() == nil)
+        // Simran signs in before that wait is over: her cookie, and what is kept of her window.
+        jar.merge([Self.cookie("session", "simran")])
+        window.keep(snapshot: Data("what Simran typed".utf8), under: "snapshot-second")
+        // The device's session moved on before either was written, so the
+        // mark is an earlier session's now.
+        #expect(places.record.serial() == 1)
+        #expect(!places.record.owesWipe)
+        #expect(slot.values() == ["simran"])
+        // The app is ended there, and the core never says the session is
+        // forgotten. The next start ends nobody's session.
+        let next = SessionKeeper.open(
+            origin: "https://shop.example", slot: slot, cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        #expect(!next.finishedAtStart)
+        #expect(next.networkJar().header(for: Self.address) == "session=simran")
+        #expect(places.snapshots.read("snapshot-second") == "what Simran typed")
+        #expect(places.record.marked() == nil)
+    }
+
+    @Test func aSignOutThatCouldNotFinishKeepsTheNextSessionOffTheDeviceUntilItHas() throws {
+        let places = Places()
+        defer { places.remove() }
+        let slot = MemorySlot()
+        let keeper = SessionKeeper.open(
+            origin: "https://shop.example", slot: slot, cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        let jar = keeper.networkJar()
+        jar.merge([Self.cookie("session", "gurpreet")])
+        let window = SystemEffects(transport: FakeTransport(), keeper: keeper)
+        // The Keychain will not let her item go: the sign-out is not finished, and its mark stands.
+        slot.refuseDeleting()
+        keeper.end()
+        #expect(jar.header(for: Self.address) == nil)
+        #expect(places.record.owesWipe)
+        #expect(slot.values() == ["gurpreet"])
+        // Simran signs in. Her session is held in memory, and nothing of it
+        // is written while what the device holds may still be Gurpreet's:
+        // a start that found the mark would take it all for hers.
+        jar.merge([Self.cookie("session", "simran")])
+        window.keep(snapshot: Data("what Simran typed".utf8), under: "snapshot-second")
+        #expect(jar.header(for: Self.address) == "session=simran")
+        #expect(slot.values() == ["gurpreet"])
+        #expect(places.snapshots.read("snapshot-second") == nil)
+        #expect(keeper.storeIdentifier() == nil)
+        #expect(places.record.owesWipe)
+        // The item can be deleted at last: the next thing to write finishes
+        // the sign-out first, and then Simran's session is kept.
+        slot.allowDeleting()
+        jar.merge([Self.cookie("theme", "dark")])
+        #expect(!places.record.owesWipe)
+        #expect(places.record.marked() == nil)
+        #expect(slot.values() == ["dark", "simran"])
+        #expect(keeper.storeIdentifier() != nil)
+    }
+
+    // MARK: - The push token
+
+    @Test func thePushTokenIsAskedForOnlyWhileSomebodyIsSignedIn() throws {
+        let shell = try Shell(signedWith: [.pushNotifications])
+        let push = PlayedPush()
+        shell.effects.push = push
+        // The app has started and its core names nobody yet: nothing is asked of the system.
+        shell.effects.begins(restoring: false)
+        shell.effects.run(.cancel(request: 9), for: shell.client)
+        #expect(push.asks == 0)
+        // This launch's shell names Ravneet: the token is asked for, once.
+        shell.client.begin()
+        #expect(shell.client.app?.user?.name == "Ravneet Kaur")
+        #expect(push.asks == 1)
+        shell.effects.run(.cancel(request: 9), for: shell.client)
+        #expect(push.asks == 1)
+        // She signs out, in the two words of a core with a token to take
+        // back: the token is given up once, at the first of them.
+        shell.effects.run(.sessionEnding, for: shell.client)
+        #expect(push.givenUp == 1)
+        shell.effects.run(.forgetSession, for: shell.client)
+        #expect(push.givenUp == 1)
+        #expect(push.asks == 1)
+        #expect(shell.effects.pushAwaitsSignIn)
+    }
+
+    @Test func aStartThatFinishesASignOutGivesThePushTokenUpAndAsksForNone() throws {
+        let places = Places()
+        defer { places.remove() }
+        // The run before was ended in the middle of a sign-out.
+        #expect(places.record.markWipe())
+        let keeper = SessionKeeper.open(
+            origin: "https://shop.example", slot: MemorySlot(), cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        #expect(keeper.finishedAtStart)
+        let window = SystemEffects(transport: FakeTransport(), keeper: keeper, signedWith: [.pushNotifications])
+        let push = PlayedPush()
+        window.push = push
+        window.begins(restoring: false)
+        // The token that sign-out was giving up is given up, and none is asked for: nobody is signed in.
+        #expect(push.givenUp == 1)
+        #expect(push.asks == 0)
+        #expect(window.pushAwaitsSignIn)
+        // A second window of the same start gives nothing up again.
+        let other = SystemEffects(transport: FakeTransport(), keeper: keeper, signedWith: [.pushNotifications])
+        let more = PlayedPush()
+        other.push = more
+        other.begins(restoring: nil)
+        #expect(more.givenUp == 0)
+        #expect(more.asks == 0)
     }
 
     // MARK: - The web view's store
