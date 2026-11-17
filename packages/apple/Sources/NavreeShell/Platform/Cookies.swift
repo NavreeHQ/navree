@@ -163,11 +163,23 @@ public final class CookieJar {
     }
 
     /// The value an `x-xsrf-token` header carries for `url`: the `XSRF-TOKEN`
-    /// cookie, percent-decoded. `nil` when there is none.
+    /// cookie, percent-decoded. `nil` when there is none. A token that
+    /// cannot go on the wire as a header's value (one that decodes to a
+    /// letter of another script, which a page's script may set) is left out
+    /// as the cookie itself would be, so it does not stop every write under
+    /// its path: the next one that applies is taken, and with none the
+    /// request goes without the header and the server answers for it.
     public func xsrfToken(for url: URL, at now: Date = Date()) -> String? {
-        let cookie = records.filter { $0.name == "XSRF-TOKEN" && $0.applies(to: url, at: now) }
-            .max { $0.path.count < $1.path.count }
-        return cookie.map { $0.value.removingPercentEncoding ?? $0.value }
+        records.filter { $0.name == "XSRF-TOKEN" && $0.applies(to: url, at: now) && Self.isSendable($0) }
+            .sorted { $0.path.count > $1.path.count }
+            .map { $0.value.removingPercentEncoding ?? $0.value }
+            .first { Self.isHeaderValue($0) }
+    }
+
+    /// Whether text can go as a header's value as it is: printable ASCII,
+    /// spaces and tabs.
+    nonisolated static func isHeaderValue(_ text: String) -> Bool {
+        text.utf8.allSatisfy { (0x20...0x7E).contains($0) || $0 == 0x09 }
     }
 
     /// Takes the `Set-Cookie` headers of an answer, a redirect's too. With

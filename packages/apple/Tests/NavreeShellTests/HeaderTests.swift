@@ -29,13 +29,47 @@ struct HeaderTests {
         #expect(HTTPTransport.areSendable([("x-navree-region", "inbox%E0%A4%91"), ("accept", "application/json")]))
     }
 
-    @Test func aCookieWhoseValueCannotBeSentFailsTheRequestRatherThanGoingBroken() {
+    @Test func aTokenThatCannotGoAsAHeaderIsLeftOutAndNeverSentBroken() throws {
         let host = "cookie-checked.shop.example"
         let jar = CookieJar(origin: "https://\(host)", persistent: false)
+        // A token that decodes to a line break: sent as a header it would write a header of its own.
         jar.merge([CookieRecord(name: "XSRF-TOKEN", value: "a%0D%0Ab", domain: host, httpOnly: false)])
         let transport = HTTPTransport(jar: jar, configuration: StubOrigin.configuration)
-        #expect(transport.urlRequest(for: FetchRequest(request: 6, method: "post", url: "https://\(host)/x", xsrf: true)) == nil)
+        // The write goes without the header, for the server to answer; the
+        // token never goes as it decodes. (Such a token used to stop the
+        // request: with a page's script able to set one, that stopped every
+        // write under the cookie's path for as long as the cookie lived.)
+        let write = try #require(transport.urlRequest(for: FetchRequest(request: 6, method: "post", url: "https://\(host)/x", xsrf: true)))
+        #expect(write.value(forHTTPHeaderField: "x-xsrf-token") == nil)
+        #expect(write.value(forHTTPHeaderField: "Cookie") == "XSRF-TOKEN=a%0D%0Ab")
         #expect(transport.urlRequest(for: FetchRequest(request: 7, url: "https://\(host)/x")) != nil)
+    }
+
+    @Test func aTokenThatDecodesToAnotherScriptDoesNotStopTheWritesUnderItsPath() throws {
+        let host = "token-left-out.shop.example"
+        let jar = CookieJar(origin: "https://\(host)", persistent: false)
+        // The session's own token, and one a page's script set for the
+        // account's pages: its value is plain, and decodes to Gurmukhi.
+        jar.merge([
+            CookieRecord(name: "XSRF-TOKEN", value: "eyJpdiI6%3D%3D", domain: host, httpOnly: false),
+            CookieRecord(name: "XSRF-TOKEN", value: "%E0%A8%85", domain: host, path: "/account", httpOnly: false),
+        ])
+        let transport = HTTPTransport(jar: jar, configuration: StubOrigin.configuration)
+        let account = try #require(URL(string: "https://\(host)/account/name"))
+        // The nearest token that can be sent is the one that goes.
+        #expect(jar.xsrfToken(for: account) == "eyJpdiI6==")
+        let write = try #require(transport.urlRequest(for: FetchRequest(request: 8, method: "post", url: account.absoluteString, xsrf: true)))
+        #expect(write.value(forHTTPHeaderField: "x-xsrf-token") == "eyJpdiI6==")
+        // With no other token, the write goes without the header rather than not at all.
+        let alone = CookieJar(origin: "https://\(host)", persistent: false)
+        alone.merge([CookieRecord(name: "XSRF-TOKEN", value: "%E0%A8%85", domain: host, path: "/account", httpOnly: false)])
+        #expect(alone.xsrfToken(for: account) == nil)
+        let bare = try #require(
+            HTTPTransport(jar: alone, configuration: StubOrigin.configuration)
+                .urlRequest(for: FetchRequest(request: 9, method: "post", url: account.absoluteString, xsrf: true))
+        )
+        #expect(bare.value(forHTTPHeaderField: "x-xsrf-token") == nil)
+        #expect(bare.httpMethod == "POST")
     }
 
     @Test func aCookieThatCannotGoOnTheWireIsLeftOutAndEveryRequestStillGoes() async {
