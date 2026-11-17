@@ -1,0 +1,11 @@
+<Project>
+  <!-- A restore for one runtime alone, which is how the demo's package is built, asks for another set of runtimes than the lock
+       file beside the project names, and one lock file cannot agree with two sets. Such a restore has a lock file of its own
+       beside the project, named for the runtime (packages.win-x64.lock.json), and on a server it is held to that file as every
+       other restore is held to packages.lock.json. A project that names several runtimes itself and is built for one of them
+       is still restored for all it names, so it keeps packages.lock.json. This is decided here and not in Directory.Build.props
+       because the runtimes a project names are known only once the project has been read. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' and ('$(RuntimeIdentifiers)' == '' or '$(RuntimeIdentifiers)' == '$(RuntimeIdentifier)')">
+    <NuGetLockFilePath>$(MSBuildProjectDirectory)\packages.$(RuntimeIdentifier).lock.json</NuGetLockFilePath>
+  </PropertyGroup>
+</Project>
