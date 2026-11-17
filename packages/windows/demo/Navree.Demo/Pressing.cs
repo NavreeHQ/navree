@@ -165,8 +165,8 @@ internal sealed partial class Pressing(ShellHost host, ShellWindow window, strin
         await ClickAsync(filter);
         await Task.Delay(800);
         Say("popups open: " + VisualTreeHelper.GetOpenPopupsForXamlRoot(window.Surface.XamlRoot).Count + "; focus is on " + FocusedWords());
-        CheckBox? open = InPopups().OfType<CheckBox>().FirstOrDefault(box => box.Content is string text && text == "Open");
-        Check("the Filter button opens a flyout with the Status choices", open is not null, open is null ? "no box says Open in an open popup" : "found");
+        CheckBox? open = BoxOf("Open");
+        Check("the Filter button opens a flyout with the Status choices", open is not null, open is null ? "no box is for Open in an open popup; the boxes say: " + BoxesSaid() : "the box says '" + open.Content + "'");
         await ShotAsync("press-filter-open", "the flyout of the Filter button");
         if (open is null)
         {
@@ -180,10 +180,10 @@ internal sealed partial class Pressing(ShellHost host, ShellWindow window, strin
 
         // The screen is drawn again when the rows come; the flyout is there again, with the box still ticked, for the next box.
         await Task.Delay(1500);
-        CheckBox? again = InPopups().OfType<CheckBox>().FirstOrDefault(box => box.Content is string text && text == "Open");
+        CheckBox? again = BoxOf("Open");
         Check("the flyout is open again, with Open ticked, after the screen was drawn again", again is { IsChecked: true }, again is null ? "the flyout is gone" : "Open is " + again.IsChecked);
         await ShotAsync("press-filter-ticked", "Open ticked in the flyout");
-        CheckBox? packed = InPopups().OfType<CheckBox>().FirstOrDefault(box => box.Content is string text && text == "Packed");
+        CheckBox? packed = BoxOf("Packed");
         if (packed is null)
         {
             return;
@@ -288,6 +288,17 @@ internal sealed partial class Pressing(ShellHost host, ShellWindow window, strin
                 }
             }
         }
+    }
+
+    // The box of an option in an open popup, found by the option's label. A box says its option's label, and after it, in brackets, the few
+    // words the answer gives beside the label (how many orders hold a status), when it gives any: "Open (3,729)" is the box of Open.
+    private CheckBox? BoxOf(string label) =>
+        InPopups().OfType<CheckBox>().FirstOrDefault(box => box.Content is string words && (words == label || words.StartsWith(label + " (", StringComparison.Ordinal)));
+
+    private string BoxesSaid()
+    {
+        string said = string.Join(", ", InPopups().OfType<CheckBox>().Select(box => "'" + (box.Content as string) + "'"));
+        return said.Length == 0 ? "there is no box" : said;
     }
 
     private static string NameOf(DependencyObject element) => AutomationProperties.GetName(element) ?? string.Empty;
