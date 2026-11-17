@@ -108,6 +108,38 @@ public sealed class KeptStore
         }
     }
 
+    /// <summary>
+    /// Whether anything is kept for a person besides the values under the keys named: a file of the client's own part that is there and
+    /// not set aside, whether or not it can be opened here. A start asks this when it finds no mark of whom what is kept is kept for.
+    /// </summary>
+    /// <param name="except">The keys whose values do not count.</param>
+    /// <returns>Whether something is kept.</returns>
+    public bool HoldsOwn(params string[] except)
+    {
+        ArgumentNullException.ThrowIfNull(except);
+        lock (gate)
+        {
+            if (!Directory.Exists(folder))
+            {
+                return false;
+            }
+
+            string[] passed = [.. except.Select(key => Path.GetFileName(PathOf(key, OwnEnding)))];
+            try
+            {
+                return Directory.GetFiles(folder).Select(file => Path.GetFileName(file)).Any(name =>
+                    name.EndsWith(OwnEnding, StringComparison.OrdinalIgnoreCase)
+                    && !passed.Contains(name, StringComparer.OrdinalIgnoreCase)
+                    && !Aside().Contains(name));
+            }
+            catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+            {
+                // A folder that cannot be listed may hold anything: it is taken to.
+                return true;
+            }
+        }
+    }
+
     // Deletes the files of one part, but for those named, and sets aside what the system will not let go. Called with the gate held. It
     // throws only when the list of what is set aside changed and could not be written, after every file has been tried.
     private void ClearPart(string ending, string[] staying)

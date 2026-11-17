@@ -134,6 +134,46 @@ public sealed class KeptStoreTests
     }
 
     [TestMethod]
+    public void Something_is_kept_for_a_person_when_a_value_of_the_clients_own_is_there_besides_the_keys_named()
+    {
+        string folder = Folder();
+        try
+        {
+            KeptStore store = new(folder, "Navree.Tests");
+            Expect.That(!store.HoldsOwn("cookies", "person"), "a store that was never written to holds something");
+
+            // The session's cookies and the core's cache say nothing of a person the client keeps something for.
+            store.Write("cookies", "session=manpreet");
+            store.WriteCached("boot", "{\"app\":\"Charkha Supply Co.\"}");
+            store.WriteCached("pending-notifications", "what the core keeps under the same word");
+            Expect.That(!store.HoldsOwn("cookies", "person"), "the cookies, or the core's cache, are counted as something kept for a person");
+
+            // A reminder that waits is.
+            string[] before = Directory.GetFiles(folder, "*.kept");
+            store.Write("pending-notifications", "[{\"id\":\"call-simran\"}]");
+            string reminder = Directory.GetFiles(folder, "*.kept").Except(before, StringComparer.OrdinalIgnoreCase).Single();
+            Expect.That(store.HoldsOwn("cookies", "person"), "a reminder that waits is not counted as something kept for a person");
+
+            // So is one that cannot be opened here: it is there, and nothing says whose it is.
+            File.WriteAllBytes(reminder, [1, 2, 3]);
+            Assert.IsNull(store.Read("pending-notifications"));
+            Expect.That(store.HoldsOwn("cookies", "person"), "a file that cannot be opened is not counted: what is kept beside it would be taken for the next person's");
+
+            // A file that was set aside is never read again: it is nobody's any more, and does not count.
+            using (FileStream other = new(reminder, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                store.ClearOwn("cookies");
+                Expect.That(File.Exists(reminder), "the file another program holds was deleted: this test shows nothing");
+                Expect.That(!store.HoldsOwn("cookies", "person"), "a file that was set aside is counted as something kept for a person");
+            }
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void The_default_folder_is_under_the_local_application_data_and_not_the_roaming_one()
     {
         string folder = KeptStore.DefaultFolder("Charkha");

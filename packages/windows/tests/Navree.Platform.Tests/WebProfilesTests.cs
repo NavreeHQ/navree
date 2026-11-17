@@ -320,6 +320,30 @@ public sealed class WebProfilesTests
     }
 
     [TestMethod]
+    public void The_folder_of_the_session_holds_something_once_a_web_view_has_kept_something_in_it()
+    {
+        // A first start: there is no folder yet, and then an empty one.
+        FakeWebFolders disk = new();
+        WebProfiles first = new(Root, disk);
+        Assert.IsTrue(first.Choose(lastSessionEnded: false));
+        Expect.That(!first.HoldsData, "a folder that is not there holds something");
+        disk.There.Add(In("1"));
+        Expect.That(!first.HoldsData, "an empty folder holds something");
+
+        // A web view has kept a profile in it. A later start that finds no mark of whose it is asks, and is told.
+        disk.There.Add(Path.Combine(In("1"), "EBWebView"));
+        WebProfiles later = new(Root, disk);
+        Assert.IsTrue(later.Choose(lastSessionEnded: false));
+        Assert.AreEqual(In("1"), later.Folder);
+        Expect.That(later.HoldsData, "the profile a web view kept in the session's folder is not seen: it would be used for whoever is named first");
+
+        // When the folder moves on, the folder of whoever comes next holds nothing.
+        _ = later.MoveOn();
+        Assert.AreEqual(In("2"), later.Folder);
+        Expect.That(!later.HoldsData, "the new folder holds something of the person before");
+    }
+
+    [TestMethod]
     public void A_profile_cleared_through_a_web_view_is_a_finished_sign_out_though_its_folder_goes_later()
     {
         FakeWebFolders disk = new();
