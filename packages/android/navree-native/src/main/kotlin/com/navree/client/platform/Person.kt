@@ -23,21 +23,33 @@ internal enum class Heard {
  * of its own for a person is the client's to take away then, and this is how
  * it knows when.
  *
- * Two people are told apart as far as a client can tell them: by name and
- * email, which is all the app's part of the view state says of a person (it
- * comes from the shell the app's server answered; nothing a page says is
- * heard). While the core names nobody, nothing is heard: the person named
- * before may sign in again and find everything as it was. A sign-out forgets
- * who was named ([signedOut]), since it takes everything away itself, so
- * whoever is named after one is the first.
+ * Two people are told apart by the key the core gives the person it names:
+ * the same for one person and another for two accounts, whatever their names
+ * (the core makes it from the id the app's server gave the person, where it
+ * gave one). A core that gives no key leaves the client what the app's part
+ * of the view state says of a person, the name and email, and two people are
+ * then told apart only as far as those tell them. Either comes from the
+ * shell the app's server answered; nothing a page says is heard. While the
+ * core names nobody, nothing is heard: the person named before may sign in
+ * again and find everything as it was. A sign-out forgets who was named
+ * ([signedOut]), since it takes everything away itself, so whoever is named
+ * after one is the first.
  *
- * What is remembered is a mark ([markOf]): it tells two people apart and
- * neither the name nor the email is read from it. It is kept in a file no
- * backup takes, beside the origin it was heard at, and read when the client
- * starts, so a start sees a change of person that happened while the app was
- * closed. A mark kept for another origin than this run's is not compared
- * with: what a device keeps for a person it keeps at an origin, and the pages
- * and requests of another origin are given none of it.
+ * What is remembered is a mark, made from the key ([markOfKey]) or, without
+ * one, from the name and email ([markOf]): it tells two people apart and
+ * nothing of either is read from it. It is kept in a file no backup takes,
+ * beside the origin it was heard at, and read when the client starts, so a
+ * start sees a change of person that happened while the app was closed. A
+ * mark kept for another origin than this run's is not compared with: what a
+ * device keeps for a person it keeps at an origin, and the pages and requests
+ * of another origin are given none of it.
+ *
+ * A mark made from a name and email, by a run whose core gave no key, is
+ * still the mark on the disk when a core that gives one first names
+ * somebody. That person is the one remembered when their name and email make
+ * the mark that is kept: the mark of their key is then written in its place
+ * and nothing is taken away, so a new core by itself changes nothing for the
+ * person who is signed in.
  *
  * The mark on the disk is whom what is kept on the device is kept for. When
  * another person is named it stays the mark of the person before until every
@@ -74,19 +86,28 @@ internal class PersonWatch(private val file: File, private val origin: String) {
     class Word(val heard: Heard, val mark: String, internal val turn: Long, val write: Boolean)
 
     /**
-     * Hears who the core names as signed in. Another person than the one
-     * before, with no sign-out between, is a change of person: from now the
-     * mark on the disk is not replaced until [changed]. For the first person
-     * and the same one, the word says whether their mark is still to be
-     * written down, once for each mark.
+     * Hears who the core names as signed in: by [key] where the core gives
+     * one, by [name] and [email] where it gives none. Another person than the
+     * one before, with no sign-out between, is a change of person: from now
+     * the mark on the disk is not replaced until [changed]. For the first
+     * person and the same one, the word says whether their mark is still to
+     * be written down, once for each mark.
+     *
+     * Where the mark remembered was made from a name and email and this is
+     * the first key, the person is the same when their name and email make
+     * that mark, and the mark of the key is the one written down from now.
+     * Where the mark remembered was made from a key and the core now gives
+     * none, the two cannot be compared, and the person is taken for another.
      */
-    fun hear(name: String, email: String?): Word = synchronized(lock) {
-        val now = markOf(name, email)
+    fun hear(key: String?, name: String, email: String?): Word = synchronized(lock) {
+        val given = key?.takeIf { it.isNotEmpty() }
+        val now = if (given != null) markOfKey(given) else markOf(name, email)
         val before = named
         named = now
-        val heard = when (before) {
-            null -> Heard.First
-            now -> Heard.Same
+        val heard = when {
+            before == null -> Heard.First
+            before == now -> Heard.Same
+            given != null && !before.startsWith(OF_KEY) && before == markOf(name, email) -> Heard.Same
             else -> Heard.Another
         }
         if (heard == Heard.Another) {
@@ -156,9 +177,20 @@ internal class PersonWatch(private val file: File, private val origin: String) {
          * writes it: so a person with no email and one whose email is empty
          * are two, and no name can be taken for a name and an email.
          */
-        fun markOf(name: String, email: String?): String {
-            val written = name.length.toString() + ":" + name + if (email == null) "-" else "+$email"
-            return MessageDigest.getInstance("SHA-256").digest(written.encodeToByteArray()).joinToString("") { "%02X".format(it) }
-        }
+        fun markOf(name: String, email: String?): String = sha(name.length.toString() + ":" + name + if (email == null) "-" else "+$email")
+
+        /** What a mark made from a key begins with: no mark made from a name and email does, being hex digits only. */
+        private const val OF_KEY = "key:"
+
+        /**
+         * The mark of the person the core names by [key]: the same for the
+         * same key and another for any other, and the key is not read from
+         * it. It is told from a mark made of a name and email by how it
+         * begins.
+         */
+        fun markOfKey(key: String): String = OF_KEY + sha(key)
+
+        private fun sha(written: String): String =
+            MessageDigest.getInstance("SHA-256").digest(written.encodeToByteArray()).joinToString("") { "%02X".format(it) }
     }
 }

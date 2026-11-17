@@ -26,6 +26,9 @@ class PersonWatchTest {
     private val karan = "Karan Malhotra" to "karan.malhotra@example.com"
     private val pooja = "Pooja Khanna" to "pooja.khanna@example.com"
 
+    /** Two accounts have this name, and neither has an email. */
+    private val harpreet = "Harpreet Singh" to null
+
     @After
     fun clear() {
         folder.deleteRecursively()
@@ -34,10 +37,16 @@ class PersonWatchTest {
     /** The watch as one run of the app has it: what it remembers is read from the file, as a start of the app reads it. */
     private fun watch(origin: String = shop) = PersonWatch(file, origin)
 
-    private fun PersonWatch.hear(who: Pair<String, String?>) = hear(who.first, who.second)
+    /** Hears a person as a core that gives no key names them: by name and email. */
+    private fun PersonWatch.hear(who: Pair<String, String?>) = hear(null, who.first, who.second)
+
+    /** Hears a person as a core that gives a key names them. */
+    private fun PersonWatch.hear(key: String, who: Pair<String, String?>) = hear(key, who.first, who.second)
 
     /** Hears, and writes the mark down where the word says so, as the client does in the store's turn. */
     private fun PersonWatch.hearAndKeep(who: Pair<String, String?>): Heard = hear(who).also { if (it.write) keep(it) }.heard
+
+    private fun PersonWatch.hearAndKeep(key: String, who: Pair<String, String?>): Heard = hear(key, who).also { if (it.write) keep(it) }.heard
 
     /** The mark the file holds, or null when there is no file. */
     private fun kept(): String? = if (file.isFile) file.readLines()[1] else null
@@ -58,7 +67,7 @@ class PersonWatchTest {
     }
 
     @Test
-    fun two_people_with_the_same_name_and_no_email_are_one_to_the_client_and_a_person_who_is_renamed_is_another_once() {
+    fun where_the_core_gives_no_key_two_people_with_the_same_name_and_no_email_are_one_and_a_person_who_is_renamed_is_another_once() {
         val watch = watch()
         assertEquals(Heard.First, watch.hearAndKeep("Karan Malhotra" to null))
         assertEquals("what cannot be told apart is not", Heard.Same, watch.hearAndKeep("Karan Malhotra" to null))
@@ -191,5 +200,82 @@ class PersonWatchTest {
         file.delete()
         assertTrue(file.mkdir())
         assertEquals(Heard.First, watch().hear(anjali).heard)
+    }
+
+    @Test
+    fun two_people_of_one_name_and_no_email_are_told_apart_by_the_key_the_core_gives() {
+        val watch = watch()
+        assertEquals(Heard.First, watch.hearAndKeep("p1", harpreet))
+        assertEquals(PersonWatch.markOfKey("p1"), kept())
+        assertEquals(Heard.Same, watch.hearAndKeep("p1", harpreet))
+        // The other account of that name signs in, with no sign-out between.
+        val other = watch.hear("p2", harpreet)
+        assertEquals("the same name, no email, and another person", Heard.Another, other.heard)
+        assertEquals("the mark on the disk is still the first one's", PersonWatch.markOfKey("p1"), kept())
+        watch.changed(other)
+        assertEquals(PersonWatch.markOfKey("p2"), kept())
+        // And across a start of the app.
+        assertEquals(Heard.Same, watch().hear("p2", harpreet).heard)
+        assertEquals(Heard.Another, watch().hear("p1", harpreet).heard)
+    }
+
+    @Test
+    fun a_person_the_core_names_by_key_is_the_same_person_under_a_new_name_or_email() {
+        val watch = watch()
+        watch.hearAndKeep("p1", anjali)
+        assertEquals("where the core says who it is, a new name is no new person", Heard.Same, watch.hearAndKeep("p1", "Anjali V. Sharma" to "anjali.sharma@example.com"))
+        assertEquals(PersonWatch.markOfKey("p1"), kept())
+        assertEquals(Heard.Same, watch().hear("p1", "Anjali Sharma" to null).heard)
+    }
+
+    @Test
+    fun the_mark_of_a_key_is_told_from_one_made_of_a_name_and_says_nothing_of_the_key() {
+        val mark = PersonWatch.markOfKey("p1")
+        assertEquals("what it begins with, and sixty-four hex digits", "key:" + sha("p1"), mark)
+        assertNotEquals(mark, PersonWatch.markOfKey("p2"))
+        // A key that reads as the mark of a name and email is still the mark of a key.
+        assertNotEquals(mark(anjali), PersonWatch.markOfKey(mark(anjali)))
+        // And no mark made of a name and email begins as a key's does: it is hex digits only.
+        assertFalse(PersonWatch.markOf("key:", null).startsWith("key:"))
+    }
+
+    @Test
+    fun a_mark_made_from_name_and_email_is_the_same_person_when_a_key_first_arrives_so_a_new_core_takes_nothing_away() {
+        // A run whose core gave no key remembered her by name and email.
+        watch().hearAndKeep(anjali)
+        assertEquals(mark(anjali), kept())
+        // The app is updated, and its core gives a key. She is still the one signed in.
+        val watch = watch()
+        val word = watch.hear("p1", anjali)
+        assertEquals("the same person: nothing is taken away", Heard.Same, word.heard)
+        assertTrue("and from now she is remembered by her key", word.write)
+        watch.keep(word)
+        assertEquals(PersonWatch.markOfKey("p1"), kept())
+        assertEquals(Heard.Same, watch.hearAndKeep("p1", anjali))
+        // From then on the key decides: another account of her name and email is another person.
+        assertEquals(Heard.Another, watch().hear("p2", anjali).heard)
+    }
+
+    @Test
+    fun a_mark_made_from_name_and_email_is_another_person_when_the_first_key_comes_with_another_name_or_email() {
+        watch().hearAndKeep(anjali)
+        // Her session ran out while the app was being updated, and he signed in.
+        val word = watch().hear("p2", karan)
+        assertEquals(Heard.Another, word.heard)
+        assertFalse(word.write)
+        assertEquals("her mark stays until what was kept for her is gone", mark(anjali), kept())
+    }
+
+    @Test
+    fun a_core_that_gives_no_key_after_one_that_did_cannot_be_compared_with_and_the_person_is_taken_for_another() {
+        watch().hearAndKeep("p1", anjali)
+        assertEquals(Heard.Another, watch().hear(anjali).heard)
+    }
+
+    @Test
+    fun a_key_with_nothing_in_it_is_no_key() {
+        val word = watch().hear("", anjali)
+        assertEquals(Heard.First, word.heard)
+        assertEquals("she is remembered by name and email", mark(anjali), word.mark)
     }
 }

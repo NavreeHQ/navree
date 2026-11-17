@@ -108,6 +108,30 @@ class DriverTest {
     }
 
     @Test
+    fun the_person_the_app_names_carries_the_cores_key_where_the_core_gives_one_and_what_this_build_does_not_know_is_passed_over() {
+        // A core that gives a key, and says more of a person than this build knows.
+        val keyed = """{"name":"Charkha Supply Co.","home":"/","user":{"name":"Harpreet Singh","key":"p2","since":"2026-11-17","roles":["staff"]}}"""
+        val driver = Driver(Scripted(ArrayDeque(listOf("""{"changed":[{"t":"app"}],"effects":[]}""")), mapOf("app" to keyed)))
+        val problems = ArrayList<String>()
+        driver.problems = { problems += it }
+        var said: Navree.User? = null
+        driver.person = { said = it }
+        driver.send(Events.start)
+        assertEquals("p2", said?.key)
+        assertEquals("Harpreet Singh", said?.name)
+        assertNull(said?.email)
+        assertEquals("nothing failed to decode", emptyList<String>(), problems)
+
+        // A core that gives none: the field is not there, and the person is named all the same.
+        val plain = Driver(Scripted(ArrayDeque(listOf("""{"changed":[{"t":"app"}],"effects":[]}""")), mapOf("app" to """{"name":"Charkha Supply Co.","home":"/","user":{"name":"Harpreet Singh"}}""")))
+        var without: Navree.User? = null
+        plain.person = { without = it }
+        plain.send(Events.start)
+        assertEquals("Harpreet Singh", without?.name)
+        assertNull(without?.key)
+    }
+
+    @Test
     fun an_event_sent_while_one_is_handled_waits_its_turn() {
         val engine = Scripted(ArrayDeque(listOf("""{"changed":[],"effects":[{"t":"cache_read","key":"boot"}]}""")), emptyMap())
         val driver = Driver(engine)
