@@ -37,7 +37,8 @@
         ]
       },
       "check": [
-        {"at":"/app/user/name","is":"Ravneet Kaur"}
+        {"at":"/app/user/name","is":"Ravneet Kaur"},
+        {"at":"/app/user/key","is":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e"}
       ]
     },
     {
@@ -193,6 +194,7 @@
       },
       "check": [
         {"at":"/app/user/name","is":"Harpreet Singh"},
+        {"at":"/app/user/key","is":"38c9705141ffe6c8247000b823439d8248a231f176ef18db39fa1940e1e809cc"},
         {"at":"/screens/1","is":null},
         {"at":"/destinations/0/stack","is":[3]},
         {"at":"/front","is":3}

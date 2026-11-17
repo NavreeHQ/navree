@@ -2443,7 +2443,15 @@
               "type": "object"
             },
             "user": {
-              "description": "`shell::User` of the protocol: see the schema of `navree-native`.",
+              "description": "`shell::User` of the protocol: see the schema of `navree-native`. Its `key` is always there. It is the core's own name for the person: the same for one person and another for another account. When the server named the person by id it is a hash of that id, the same value as a snapshot's `person`, and never the id; otherwise it is a hash of their name and email. The core writes it: a `key` a server wrote is not kept. A client that keeps something of its own for the person keeps this beside it, and when a state carries another `key` with no sign-out between, somebody else is signed in.",
+              "properties": {
+                "key": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key"
+              ],
               "type": "object"
             }
           },

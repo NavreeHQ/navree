@@ -64,6 +64,27 @@ impl Who {
     pub(crate) fn id(&self) -> Option<&str> {
         self.id.as_deref()
     }
+
+    /// The core's own name for this person, as a client is given it in
+    /// `app.user.key`: the same for one person, another for another account,
+    /// and nothing of the person can be read from it. When the server named
+    /// them by id it is the name a snapshot is for ([`Who::id_key`]), so two
+    /// accounts of one name and one email are two. Otherwise it is a hash of
+    /// their name and email, which is all there is to tell such a person by.
+    pub(crate) fn key(&self) -> String {
+        self.id_key().unwrap_or_else(|| {
+            let named = serde_json::to_string(&(&self.name, &self.email)).unwrap_or_default();
+            crate::sign_in::fingerprint(&format!("navree-person-name\n{named}"))
+        })
+    }
+
+    /// The name for a person the server named by id: a hash of the id, never
+    /// the id. None for a person named without one.
+    pub(crate) fn id_key(&self) -> Option<String> {
+        self.id
+            .as_ref()
+            .map(|id| crate::sign_in::fingerprint(&format!("navree-person-id\n{id}")))
+    }
 }
 
 /// A person as the core compares people. `None` is a visitor, signed in as
