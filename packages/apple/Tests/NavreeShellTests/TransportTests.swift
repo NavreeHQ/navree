@@ -387,8 +387,9 @@ struct CookieTests {
 
 /// The core keeps a page only when its `cache-control` does not say `no-store`.
 @Test func anAnswersCacheControlGoesToTheCoreWithItsOwnHeadersAndNoOther() throws {
+    let orders = try #require(URL(string: "https://shop.example/orders"))
     let http = try #require(HTTPURLResponse(
-        url: try #require(URL(string: "https://shop.example/orders")), statusCode: 200, httpVersion: "HTTP/1.1",
+        url: orders, statusCode: 200, httpVersion: "HTTP/1.1",
         headerFields: [
             "Cache-Control": "private, no-store", "X-Navree-Keep": "1", "Set-Cookie": "session=s3cret; Path=/",
             "Content-Type": "application/vnd.navree.native+json",
