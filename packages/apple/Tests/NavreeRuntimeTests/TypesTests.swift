@@ -4,6 +4,26 @@ import Testing
 
 @testable import NavreeRuntime
 
+/// The core's app part names the person signed in, and gives a key for them
+/// when it has one: the same for one person, another for another account.
+@Test func theAppPartReadsThePersonsKeyWhenTheCoreGivesOneAndNoneOtherwise() throws {
+    let keyed = try JSONDecoder().decode(
+        AppPart.self,
+        from: Data(#"{"name":"Charkha","home":"/","user":{"name":"Harpreet Singh","key":"person-1f0c"}}"#.utf8)
+    )
+    #expect(keyed.user?.name == "Harpreet Singh")
+    #expect(keyed.user?.key == "person-1f0c")
+    // A core that gives no key says the person as before.
+    let plain = try JSONDecoder().decode(
+        AppPart.self, from: Data(#"{"name":"Charkha","home":"/","user":{"name":"Harpreet Singh"}}"#.utf8)
+    )
+    #expect(plain.user?.name == "Harpreet Singh")
+    #expect(plain.user?.key == nil)
+    // With nobody signed in there is no person, and no key.
+    let nobody = try JSONDecoder().decode(AppPart.self, from: Data(#"{"name":"Charkha","home":"/"}"#.utf8))
+    #expect(nobody.user == nil)
+}
+
 /// Events are written as the core's own conversations write them.
 @Test func eventsAreWrittenAsTheCoreReadsThem() throws {
     let cases: [(CoreEvent, [String: Any])] = [

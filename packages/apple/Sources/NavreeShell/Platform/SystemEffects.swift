@@ -189,10 +189,13 @@ public final class SystemEffects: EffectRunner {
         keeper.hears(Self.person(user), from: self)
     }
 
-    /// Who a core's user is to the session: the mark of their name and
-    /// address, which is all this build's models read of who is signed in.
-    static func person(_ user: Navree.User) -> SessionKeeper.Person {
-        SessionKeeper.Person(key: nil, mark: SessionKeeper.mark(name: user.name, email: user.email))
+    /// Who a core's user is to the session: the key the core gives for them
+    /// (none from a core that gives none, and an empty one is none), and the
+    /// mark of the name and address it names them by.
+    nonisolated static func person(_ user: Navree.User) -> SessionKeeper.Person {
+        SessionKeeper.Person(
+            key: user.key.flatMap { $0.isEmpty ? nil : $0 }, mark: SessionKeeper.mark(name: user.name, email: user.email)
+        )
     }
 
     /// What loads the pictures of a screen, with the session's cookies.
