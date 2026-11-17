@@ -1,5 +1,6 @@
 import Foundation
 import NavreeCoreBridge
+import NavreeProtocol
 import NavreeRuntime
 import Testing
 
@@ -614,6 +615,22 @@ struct SessionEndTests {
         #expect(run.keeper.number == before.number)
         #expect(run.played.signOuts == before.signOuts)
         #expect(places.record.person() == gurpreet)
+    }
+
+    @Test func aCoresUserIsKnownByItsKeyWhenItHasOneAndByItsNameAndAddressAlways() {
+        let mark = SessionKeeper.mark(name: "Harpreet Singh", email: nil)
+        // Two accounts of one name and no address, as a core that gives keys names them.
+        let first = SystemEffects.person(Navree.User(key: "person-1f0c", name: "Harpreet Singh"))
+        let second = SystemEffects.person(Navree.User(key: "person-77ab", name: "Harpreet Singh"))
+        #expect(first == SessionKeeper.Person(key: "person-1f0c", mark: mark))
+        #expect(!first.isSame(as: second))
+        // A core that gives no key, or an empty one: the name and the address alone.
+        let plain = SystemEffects.person(Navree.User(name: "Harpreet Singh"))
+        #expect(plain == SessionKeeper.Person(key: nil, mark: mark))
+        #expect(SystemEffects.person(Navree.User(key: "", name: "Harpreet Singh")) == plain)
+        // And then the two accounts are one, and either is whoever was written down with a key.
+        #expect(plain.isSame(as: first))
+        #expect(plain.isSame(as: second))
     }
 
     @Test func twoPeopleOfOneNameAreToldApartByTheCoresKeyAndAKeyThatFirstArrivesChangesNothing() throws {
