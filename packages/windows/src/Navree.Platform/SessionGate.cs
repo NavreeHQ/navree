@@ -20,6 +20,17 @@ namespace Navree.Platform;
 /// same update (<see cref="IsLast"/>). That request is not cancelled when the sign-out begins and its answer is told to the core, which
 /// would otherwise wait for it for ever; nothing of its answer is kept.
 /// </para>
+/// <para>
+/// The two sides move in pairs, and what the core asks is done again only when both have moved as often. The window's side moves once
+/// when a sign-out of the client's own begins, which pairs with the core being told of it, and once for each time the core says a session
+/// is ending, which pairs with the <see cref="ForgetSessionEffect"/> the core says once for each such word, whatever ends its wait. So a
+/// sign-out of the client's own and one of the core's can cross in either order. When the person signs out in the client while the core
+/// waits for its last answer, the core, told of it, drops that request and says the session is forgotten in the same update: the window's
+/// side has moved twice and the core's side twice. When the core's word that a session is ending reaches the window after a sign-out of
+/// the client's own has begun (its mark is no longer <see cref="Live"/>), no second sign-out begins and the request before the word is
+/// refused like everything else of that session, but the word is still counted (<see cref="SessionIsEnding"/>), since the core, told of
+/// the client's sign-out a moment later, says the session is forgotten for it.
+/// </para>
 /// </remarks>
 public sealed class SessionGate
 {
@@ -126,7 +137,11 @@ public sealed class SessionGate
         }
     }
 
-    /// <summary>On the window's thread, as the end of a session begins: from now on only what is asked for whoever comes next is done.</summary>
+    /// <summary>
+    /// On the window's thread, as the end of a session begins: from now on only what is asked for whoever comes next is done. Also called
+    /// for the core's word that a session is ending when that session has ended on the window's side already: nothing begins then, and the
+    /// word is counted, so that the word the core says after it finds both sides level.
+    /// </summary>
     public void SessionIsEnding()
     {
         lock (gate)

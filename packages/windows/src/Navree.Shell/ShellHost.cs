@@ -478,7 +478,19 @@ public sealed partial class ShellHost : IDisposable
                 if (coreLetsGo is null)
                 {
                     coreLetsGo = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                    _ = EndSessionAsync(coreEnded: true, coreLetsGo.Task);
+                    if (asked.Live(mark))
+                    {
+                        _ = EndSessionAsync(coreEnded: true, coreLetsGo.Task);
+                    }
+                    else
+                    {
+                        // The session the core speaks of has ended on the window's side already: the person signed out in the client, and
+                        // that sign-out, which takes everything away, began before this word reached the window and before the core was
+                        // told. No second sign-out begins. The word is counted all the same, because the core says the session is
+                        // forgotten once for each time it said one is ending, also when it is told of the client's sign-out meanwhile:
+                        // the two sides move in pairs (SessionGate), and that word then finds nothing to begin.
+                        asked.SessionIsEnding();
+                    }
                 }
 
                 break;
