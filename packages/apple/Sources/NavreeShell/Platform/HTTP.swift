@@ -59,6 +59,14 @@ public final class HTTPTransport: Transport {
         streams = URLSession(configuration: Self.prepared(configuration, timeout: 24 * 60 * 60), delegate: RedirectRefuser(), delegateQueue: nil)
     }
 
+    deinit {
+        // The system holds a session with a delegate until it is ended: a
+        // window's transport that is let go ends its two, and what they had
+        // under way with them.
+        session.invalidateAndCancel()
+        streams.invalidateAndCancel()
+    }
+
     nonisolated static func prepared(_ base: URLSessionConfiguration, timeout: TimeInterval) -> URLSessionConfiguration {
         let configuration = base.copy() as? URLSessionConfiguration ?? .ephemeral
         configuration.httpCookieStorage = nil
