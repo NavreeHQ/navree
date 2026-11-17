@@ -497,8 +497,9 @@ public sealed partial class ShellHost : IDisposable
             case ForgetSessionEffect:
                 if (coreLetsGo is { } begun)
                 {
-                    // The sign-out began when the core said the session was ending: it is done or under way, and none begins here. It is
-                    // told that the core has let go.
+                    // The sign-out began when the core said the session was ending, or, when the client's own was already under way then,
+                    // that word was only counted: either way one is done or under way, and none begins here. It is told that the core
+                    // has let go.
                     coreLetsGo = null;
                     _ = begun.TrySetResult();
                 }
