@@ -380,7 +380,7 @@ regex = "1.13.1"
 # DOCX writing and reading (zip and quick-xml, above). PDF reading, editing
 # (merge, stamp, overlay) and text extraction are navree-pdf's. Pure Rust.
 krilla = { version = "0.8.2", default-features = false, features = ["raster-images"] }
-harfrust = "0.15.0"
+harfrust = "0.16.0"
 skrifa = "0.49.0"
 unicode-bidi = "0.3.18"
 icu_segmenter = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
