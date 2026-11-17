@@ -240,19 +240,24 @@ class PersonWatchTest {
     }
 
     @Test
-    fun a_mark_made_from_name_and_email_is_the_same_person_when_a_key_first_arrives_so_a_new_core_takes_nothing_away() {
+    fun a_mark_made_from_name_and_email_is_never_the_mark_of_a_key_so_the_first_key_names_another_person_even_under_the_same_name_and_email() {
         // A run whose core gave no key remembered her by name and email.
         watch().hearAndKeep(anjali)
         assertEquals(mark(anjali), kept())
-        // The app is updated, and its core gives a key. She is still the one signed in.
+        // The next run's core gives a key, and names somebody of the very same name and email.
         val watch = watch()
         val word = watch.hear("p1", anjali)
-        assertEquals("the same person: nothing is taken away", Heard.Same, word.heard)
-        assertTrue("and from now she is remembered by her key", word.write)
+        assertEquals("a name and email say too little to be taken for the person a key names", Heard.Another, word.heard)
+        assertFalse("nothing is written for the key yet", word.write)
         watch.keep(word)
+        assertEquals("the mark on the disk stays the one made from the name and email until what was kept is gone", mark(anjali), kept())
+        // A run that ends here hears the same again, and does it over.
+        assertEquals(Heard.Another, watch().hear("p1", anjali).heard)
+        // Every step finished: from now the key is what is remembered, and it is the same person each time it is given.
+        watch.changed(word)
         assertEquals(PersonWatch.markOfKey("p1"), kept())
-        assertEquals(Heard.Same, watch.hearAndKeep("p1", anjali))
-        // From then on the key decides: another account of her name and email is another person.
+        assertEquals(Heard.Same, watch().hear("p1", anjali).heard)
+        // And the key decides from then on: another account of her name and email is another person.
         assertEquals(Heard.Another, watch().hear("p2", anjali).heard)
     }
 
@@ -267,9 +272,24 @@ class PersonWatchTest {
     }
 
     @Test
-    fun a_core_that_gives_no_key_after_one_that_did_cannot_be_compared_with_and_the_person_is_taken_for_another() {
+    fun the_mark_of_a_key_is_never_the_mark_of_a_name_and_email_so_a_person_named_with_no_key_after_one_is_another_even_under_the_same_name_and_email() {
         watch().hearAndKeep("p1", anjali)
-        assertEquals(Heard.Another, watch().hear(anjali).heard)
+        val word = watch().hear(anjali)
+        assertEquals(Heard.Another, word.heard)
+        assertEquals("what was kept under the key stays marked so until it is gone", PersonWatch.markOfKey("p1"), kept())
+    }
+
+    @Test
+    fun name_and_email_are_compared_only_where_neither_side_has_a_key() {
+        // Neither the mark kept nor the core has a key: the same name and email are the same person.
+        watch().hearAndKeep(anjali)
+        assertEquals(Heard.Same, watch().hear(anjali).heard)
+        assertEquals(Heard.Another, watch().hear(karan).heard)
+        // Both have a key: the same name and email under two keys are two people, and two names under one key are one.
+        file.delete()
+        watch().hearAndKeep("p1", anjali)
+        assertEquals(Heard.Another, watch().hear("p2", anjali).heard)
+        assertEquals(Heard.Same, watch().hear("p1", karan).heard)
     }
 
     @Test

@@ -44,12 +44,13 @@ internal enum class Heard {
  * device keeps for a person it keeps at an origin, and the pages and requests
  * of another origin are given none of it.
  *
- * A mark made from a name and email, by a run whose core gave no key, is
- * still the mark on the disk when a core that gives one first names
- * somebody. That person is the one remembered when their name and email make
- * the mark that is kept: the mark of their key is then written in its place
- * and nothing is taken away, so a new core by itself changes nothing for the
- * person who is signed in.
+ * Marks of the two kinds never match. A mark made from a name and email, by
+ * a run whose core gave no key, says too little to be taken for the person a
+ * key names: when a core that gives a key first names somebody where such a
+ * mark is kept, that is another person, whatever their name and email, and
+ * what was kept goes. So does it where a key's mark is kept and the core
+ * names somebody with no key. Name and email are compared only where neither
+ * side has a key.
  *
  * The mark on the disk is whom what is kept on the device is kept for. When
  * another person is named it stays the mark of the person before until every
@@ -93,21 +94,19 @@ internal class PersonWatch(private val file: File, private val origin: String) {
      * person and the same one, the word says whether their mark is still to
      * be written down, once for each mark.
      *
-     * Where the mark remembered was made from a name and email and this is
-     * the first key, the person is the same when their name and email make
-     * that mark, and the mark of the key is the one written down from now.
-     * Where the mark remembered was made from a key and the core now gives
-     * none, the two cannot be compared, and the person is taken for another.
+     * A mark made from a key and one made from a name and email never match
+     * ([markOfKey]): where one kind is remembered and the core names
+     * somebody by the other, that is another person, also when the name and
+     * email are the same.
      */
     fun hear(key: String?, name: String, email: String?): Word = synchronized(lock) {
         val given = key?.takeIf { it.isNotEmpty() }
         val now = if (given != null) markOfKey(given) else markOf(name, email)
         val before = named
         named = now
-        val heard = when {
-            before == null -> Heard.First
-            before == now -> Heard.Same
-            given != null && !before.startsWith(OF_KEY) && before == markOf(name, email) -> Heard.Same
+        val heard = when (before) {
+            null -> Heard.First
+            now -> Heard.Same
             else -> Heard.Another
         }
         if (heard == Heard.Another) {
