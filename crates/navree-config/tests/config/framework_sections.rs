@@ -82,6 +82,29 @@ fn hand_written_keys(src: &str) -> Vec<String> {
     keys
 }
 
+/// Where a file's inline test module starts: `#[cfg(test)]` right before
+/// `mod .. {`. A test module in a file of its own (`mod tests;`) and an item
+/// that is only compiled for tests are not one.
+fn inline_tests(src: &str) -> Option<usize> {
+    const ATTRIBUTE: &str = "#[cfg(test)]";
+    src.match_indices(ATTRIBUTE).map(|(at, _)| at).find(|at| {
+        let after = src[at + ATTRIBUTE.len()..].trim_start();
+        after.starts_with("mod ")
+            && after
+                .find(['{', ';'])
+                .is_some_and(|end| after[end..].starts_with('{'))
+    })
+}
+
+#[test]
+fn an_inline_test_module_is_where_a_files_own_tests_start() {
+    let src = "impl ConfigSection for A {}\n#[cfg(test)]\nuse x::Y;\n#[cfg(test)]\nmod tests;\n\n#[cfg(test)]\nmod tests {\n}\n";
+    let at = inline_tests(src).expect("an inline test module");
+    assert!(src[at..].starts_with("#[cfg(test)]\nmod tests {"));
+    assert_eq!(inline_tests("#[cfg(test)]\nmod tests;\n"), None);
+    assert_eq!(inline_tests("fn main() {}\n"), None);
+}
+
 #[test]
 fn the_list_covers_every_config_section_of_the_framework() {
     let mut files = Vec::new();
@@ -105,6 +128,8 @@ fn the_list_covers_every_config_section_of_the_framework() {
     let mut found = 0;
     for file in files {
         let text = std::fs::read_to_string(&file).unwrap_or_default();
+        // A file's own unit tests make up sections that no app reads.
+        let text = &text[..inline_tests(&text).unwrap_or(text.len())];
         // Skip the commented examples of rustdoc.
         let code: String = text
             .lines()
