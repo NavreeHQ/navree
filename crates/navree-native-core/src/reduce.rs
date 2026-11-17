@@ -362,7 +362,10 @@ impl Core {
                 self.drop_pending(|_| true);
                 self.wipe();
                 self.inner.hand_over = None;
-                self.inner.signing_out = false;
+                // The client ended the session while the core waited for the
+                // push token's removal: the wait is over with this, and the
+                // removal went with the rest above.
+                let waited = std::mem::take(&mut self.inner.signing_out);
                 self.push_forget();
                 self.inner.has_shell = false;
                 self.inner.user = None;
@@ -375,7 +378,14 @@ impl Core {
                 self.touch(Change::App);
                 self.touch(Change::Nav);
                 self.forget_all();
-                self.start();
+                if waited {
+                    // The client was told the session is ending, and every
+                    // `session_ending` is followed by one `forget_session`,
+                    // whoever ends the wait.
+                    self.session_forgotten();
+                } else {
+                    self.start();
+                }
             }
             Event::Timer { timer } => match self.inner.timers.remove(&timer) {
                 Some(TimerFor::Query { screen, form }) => {
@@ -2382,6 +2392,16 @@ impl Core {
         self.inner.write_may_have_run = heard.write_may_have_run();
         let response = self.same_session(&asked, heard, response);
         let response = self.keeping(&asked, response);
+        // The push token's removal is over with its first answer, whatever
+        // it is: a redirect of it is not followed. The client was told the
+        // session is ending in the update that asked for the removal, and
+        // may have taken the session's cookies away since: a second request
+        // would go without them and could not say whose device to forget,
+        // and a client that refuses what a leaving session asks would never
+        // answer it.
+        if asked.purpose == Pending::PushGone {
+            return self.push_gone_answered();
+        }
         let Some(response) = self.follow(&asked, response) else {
             return;
         };
@@ -2394,7 +2414,6 @@ impl Core {
             } => return self.sign_in_answered(screen, second_step.as_deref(), &response),
             Pending::Exchange => return self.exchange_answered(&response),
             Pending::PushPut { token } => return self.push_put_answered(token, &response),
-            Pending::PushGone => return self.push_gone_answered(),
             _ => {}
         }
         // A part of a page reads its pictures against the page it stands on.
@@ -3754,6 +3773,227 @@ mod tests {
                     .any(|effect| matches!(effect, Effect::ForgetSession)),
             "{effects:?}"
         );
+    }
+
+    /// A core whose person signed out with a push token: it has asked for
+    /// the token's removal, said the session is ending, and waits. Gives the
+    /// core and the number of the removal's request.
+    fn waiting_for_the_removal() -> (Core, u64) {
+        let mut core = started();
+        core.inner.push_route = Some("/api/notifications/push-devices".to_owned());
+        core.inner.push.registered = Some("fcm-token-2604".to_owned());
+        core.signed_out_on_purpose();
+        let effects = std::mem::take(&mut core.effects);
+        let removal = effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(request) if request.method == Verb::Delete => Some(request.request),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("the token's removal is asked for: {effects:?}"));
+        assert!(
+            effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::SessionEnding)),
+            "the session is said to be ending: {effects:?}"
+        );
+        assert!(core.inner.signing_out, "the core waits for the removal");
+        (core, removal)
+    }
+
+    /// Where the first effect `is` accepts stands among `effects`.
+    fn place_of(effects: &[Effect], what: &str, is: impl Fn(&Effect) -> bool) -> usize {
+        effects
+            .iter()
+            .position(is)
+            .unwrap_or_else(|| panic!("{what}: {effects:?}"))
+    }
+
+    fn asks_for_the_shell(effect: &Effect) -> Option<u64> {
+        match effect {
+            Effect::Fetch(request) if request.url.ends_with(SHELL_PATH) => Some(request.request),
+            _ => None,
+        }
+    }
+
+    /// The client is told the session is ending, and then ends the session
+    /// itself before the removal is answered (the person signs out in the
+    /// client too, or another window's sign-out reaches this core). The wait
+    /// is over with that, and the word that follows `session_ending` is
+    /// still said, once: a client that began its sign-out at the first word
+    /// is not left waiting for the second.
+    #[test]
+    fn a_client_that_ends_the_session_while_the_removal_is_awaited_is_still_told_to_forget_it() {
+        let (mut core, removal) = waiting_for_the_removal();
+        let update = core.send(Event::SignedOut);
+        let effects = &update.effects;
+        let dropped = place_of(
+            effects,
+            "the removal is no longer wanted",
+            |effect| matches!(effect, Effect::Cancel { request } if *request == removal),
+        );
+        let forgotten = place_of(effects, "the session is forgotten", |effect| {
+            matches!(effect, Effect::ForgetSession)
+        });
+        let shell = place_of(effects, "the shell is asked for", |effect| {
+            asks_for_the_shell(effect).is_some()
+        });
+        assert!(
+            dropped < forgotten && forgotten < shell,
+            "the removal goes, then the word, then the start: {effects:?}"
+        );
+        assert_eq!(
+            effects
+                .iter()
+                .filter(|effect| matches!(effect, Effect::ForgetSession))
+                .count(),
+            1,
+            "said once: {effects:?}"
+        );
+        assert!(!core.inner.signing_out, "the wait is over");
+
+        // The removal's answer, if it still comes, is nobody's.
+        let late = core.send(Event::Response(Response {
+            request: removal,
+            status: 204,
+            ..Response::default()
+        }));
+        assert!(
+            !late.effects.iter().any(|effect| matches!(
+                effect,
+                Effect::ForgetSession | Effect::SessionEnding | Effect::Fetch(_)
+            )),
+            "an answer nobody waits for says nothing: {late:?}"
+        );
+
+        // With nothing awaited, a client that ends the session itself is told
+        // nothing it did not ask for: it has forgotten the session already.
+        let mut core = started();
+        let update = core.send(Event::SignedOut);
+        assert!(
+            !update
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::ForgetSession)),
+            "{update:?}"
+        );
+        assert!(
+            update
+                .effects
+                .iter()
+                .any(|effect| asks_for_the_shell(effect).is_some()),
+            "the app starts again: {update:?}"
+        );
+    }
+
+    /// The removal of the push token is over with its first answer, whatever
+    /// that is. A redirect of it is not followed: the next hop would be asked
+    /// after the client was told the session is ending, so it would go
+    /// without the session's cookies, or not at all from a client that
+    /// refuses what a leaving session asks, and the core would wait for ever.
+    #[test]
+    fn a_redirect_of_the_removal_is_not_followed_and_ends_the_wait() {
+        for status in [301, 302, 303, 307, 308] {
+            let (mut core, removal) = waiting_for_the_removal();
+            let answered = core.send(Event::Response(Response {
+                request: removal,
+                status,
+                location: Some("/api/notifications/push-devices/".to_owned()),
+                ..Response::default()
+            }));
+            let effects = &answered.effects;
+            assert!(
+                !effects.iter().any(|effect| matches!(
+                    effect,
+                    Effect::Fetch(request) if asks_for_the_shell(effect).is_none()
+                        || request.method == Verb::Delete
+                )),
+                "{status}: nothing is asked but the shell: {effects:?}"
+            );
+            let forgotten = place_of(effects, "the session is forgotten", |effect| {
+                matches!(effect, Effect::ForgetSession)
+            });
+            let shell = place_of(effects, "the shell is asked for", |effect| {
+                asks_for_the_shell(effect).is_some()
+            });
+            assert!(forgotten < shell, "{status}: {effects:?}");
+            assert!(!core.inner.signing_out, "{status}: the wait is over");
+            assert!(
+                !core
+                    .inner
+                    .pending
+                    .values()
+                    .any(|asked| asked.purpose == Pending::PushGone),
+                "{status}: no removal is on its way"
+            );
+        }
+    }
+
+    /// What the core asks while it waits for the removal is asked in the
+    /// session that is ending: a client may refuse it and never answer. The
+    /// app coming to the front asks for a shell then. When the session is
+    /// forgotten that request is dropped, and the shell is asked for anew
+    /// after the word, so the app does not stay on its start screen.
+    #[test]
+    fn a_shell_asked_for_while_the_removal_is_awaited_is_asked_again_once_the_session_is_forgotten()
+    {
+        let (mut core, removal) = waiting_for_the_removal();
+        let front = core.send(Event::Foreground);
+        let meanwhile = front
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .unwrap_or_else(|| panic!("coming to the front asks for a shell: {front:?}"));
+
+        // The client refused that request, and answers only the removal.
+        let answered = core.send(Event::Response(Response {
+            request: removal,
+            status: 204,
+            ..Response::default()
+        }));
+        let effects = &answered.effects;
+        let dropped = place_of(
+            effects,
+            "the shell asked meanwhile is dropped",
+            |effect| matches!(effect, Effect::Cancel { request } if *request == meanwhile),
+        );
+        let forgotten = place_of(effects, "the session is forgotten", |effect| {
+            matches!(effect, Effect::ForgetSession)
+        });
+        let anew = place_of(effects, "the shell is asked for anew", |effect| {
+            asks_for_the_shell(effect).is_some_and(|request| request != meanwhile)
+        });
+        assert!(
+            dropped < forgotten && forgotten < anew,
+            "dropped, then the word, then asked anew: {effects:?}"
+        );
+        let anew = asks_for_the_shell(&effects[anew]).expect("a shell request");
+
+        // An answer to the one asked meanwhile, from a client that did send
+        // it, is nobody's: only the one asked anew starts the app.
+        let stale = core.send(Event::Response(Response {
+            request: meanwhile,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: include_str!("../transcripts/fixtures/made/shell-app-nobody.json").to_owned(),
+            ..Response::default()
+        }));
+        assert!(
+            !stale
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Fetch(_))),
+            "an answer nobody waits for asks nothing: {stale:?}"
+        );
+        assert_eq!(core.view.stage, Stage::Starting, "still starting");
+        core.send(Event::Response(Response {
+            request: anew,
+            status: 200,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: include_str!("../transcripts/fixtures/made/shell-app-nobody.json").to_owned(),
+            ..Response::default()
+        }));
+        assert_eq!(core.view.stage, Stage::Ready, "the app starts");
     }
 
     /// Signing out ends what a snapshot waited for, as signing out on purpose
