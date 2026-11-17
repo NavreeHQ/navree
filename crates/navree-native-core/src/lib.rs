@@ -67,8 +67,9 @@ pub use effect::{Body, Change, Effect, Part, Request, Update, Verb};
 pub use event::{Event, FieldValue, FileRef, Response, StreamState, TransportError};
 pub use snapshot::{SNAPSHOT_VERSION, Snapshot};
 pub use state::{
-    App, Content, Destination, Failure, FieldView, Focus, FormView, ListView, Message, Modal,
-    Notice, Query, Question, RegionView, ScreenId, ScreenView, Stage, ViewState, Width, Window,
+    App, AppUser, Content, Destination, Failure, FieldView, Focus, FormView, ListView, Message,
+    Modal, Notice, Query, Question, RegionView, ScreenId, ScreenView, Stage, ViewState, Width,
+    Window,
 };
 
 /// The runtime core. One per running app.

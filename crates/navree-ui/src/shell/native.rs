@@ -299,9 +299,6 @@ fn user_of(user: &UserMenu, csrf: Option<&str>) -> s::User {
         name: user.name.clone().into_owned(),
         email: (!user.email.is_empty()).then(|| user.email.clone().into_owned()),
         menu,
-        // The runtime core's to fill: a server names the person by the id in
-        // its answer's header, and the core makes the key from that.
-        key: None,
     }
 }
 
