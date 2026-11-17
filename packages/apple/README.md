@@ -113,13 +113,12 @@ A copy the server marks as a secret stays on this device and goes after a minute
 
 ## What is not done yet
 
-- The Mac client is not built or tested by the repository's workflow, which builds for an iPhone simulator: what is behind `#if os(macOS)` is compiled only on a Mac.
+- The repository's workflow builds the drawing (`NavreeDesign`) for a Mac, and everything else for an iPhone simulator only, where the tests run. The Mac's side of the shell and of the demo (what is behind `#if os(macOS)` in `NavreeShell`, `NavreeRuntime` and `Demo`) is compiled by no job, and no test runs on a Mac.
 - A form a web page posts to another site (a hosted payment page) is stopped and goes nowhere.
 - A link a page's own script activates (`click()` on a link it made) is told to the core as a link the person activated: the system gives both the same type, and says nothing of whether a touch stood behind it. What a page may load is held to the origin and the hosts the app names, so only a script from one of those can do it.
 - People are told apart by name and address (see "A change of person with no sign-out").
 - A long list costs more with every page of it, and a list inside a designed screen is not laid out lazily.
 - A chosen tab, an open disclosure and the words of a search are held by the drawing, by place, and can outlive the page they were for.
-- A picture is decoded at its full size.
+- A picture is made ready to draw on the main thread, though never larger than a screen needs (4,096 pixels along its longer side).
 - Picked files are removed only when the session ends, and are read whole into memory when sent.
-- The network's sessions are not ended when a window's transport is let go.
 - A Keychain item that cannot be read yet (before the device's first unlock) is taken for none.
