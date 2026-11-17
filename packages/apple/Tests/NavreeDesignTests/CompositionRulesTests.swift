@@ -290,7 +290,7 @@ private let navigate = Navree.Action.navigate(Navree.Action.Navigate(href: "/sle
     #expect(before == ["#a", "#b"])
     #expect(after == ["#new", "#a", "#b"])
     // Parts with no id are known by their place; the same id twice stays two parts.
-    #expect(CompositionRules.identities([text("x"), a, a]) == ["@0", "#a", "#a'"])
+    #expect(CompositionRules.identities([text("x"), a, a]) == ["@0", "#a", "#a'2"])
 }
 
 @Test func aSectionsSumsAreRowsOfItsSurfaceAndOnlyWordsStayANoteUnderIt() {
