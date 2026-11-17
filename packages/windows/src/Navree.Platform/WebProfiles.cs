@@ -132,6 +132,21 @@ public sealed class WebProfiles
         }
     }
 
+    /// <summary>
+    /// Whether the folder of the session now holds anything: a web view has kept something there, in this run or in an earlier one. A start
+    /// asks this when it finds no mark of whom what is kept is kept for.
+    /// </summary>
+    public bool HoldsData
+    {
+        get
+        {
+            lock (gate)
+            {
+                return folders.Names(PathOf(current)).Count > 0;
+            }
+        }
+    }
+
     /// <summary>The older folders that are still on disk: never used again, and tried again at the end of a session and at the next start.</summary>
     public IReadOnlyList<string> Left
     {
