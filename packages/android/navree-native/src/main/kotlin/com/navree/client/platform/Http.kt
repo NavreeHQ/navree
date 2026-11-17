@@ -220,6 +220,31 @@ class OriginGuard(private val allowed: (String) -> Boolean) : Interceptor {
  */
 internal fun writeEnded(status: Int): Boolean = status < 400 && status != 307 && status != 308
 
+/**
+ * The requests the core has asked for whose turn in the store has not come.
+ * The core may cancel a request at any time: before its turn, and it is then
+ * not sent; while it is on its way, which is the connection's to end; after
+ * it was answered; or, at the end of a session, one this client was never
+ * given. Only the first is anything to remember, and only until the turn
+ * comes: a cancel that finds nothing to cancel keeps nothing.
+ */
+internal class Unsent {
+    private val waiting = ConcurrentHashMap.newKeySet<Long>()
+
+    /** The core asked for [request]: it waits for its turn. */
+    fun asked(request: Long) {
+        waiting.add(request)
+    }
+
+    /** The turn of [request] has come: whether it is still to be sent. Its turn comes once. */
+    fun due(request: Long): Boolean = waiting.remove(request)
+
+    /** The core cancels [request]: if its turn has not come, it is not sent when it does. */
+    fun cancel(request: Long) {
+        waiting.remove(request)
+    }
+}
+
 class CoreHttp(
     val cookies: CookieJar,
     private val origins: Origins,
@@ -245,13 +270,14 @@ class CoreHttp(
 
     private val calls = ConcurrentHashMap<Long, Call>()
 
-    /** Requests the core cancelled before their turn came. */
-    private val cancelled = ConcurrentHashMap.newKeySet<Long>()
+    /** The requests asked for whose turn has not come: one the core cancels meanwhile is not sent. */
+    private val unsent = Unsent()
 
     fun fetch(effect: Effect.Fetch) {
         val session = state.generation
+        unsent.asked(effect.request)
         state.always {
-            if (!cancelled.remove(effect.request)) send(effect, session)
+            if (unsent.due(effect.request)) send(effect, session)
         }
     }
 
@@ -293,9 +319,15 @@ class CoreHttp(
         )
     }
 
+    /**
+     * The core cancels a request. One on its way is ended; one whose turn has
+     * not come is not sent. One that was answered already, or that this
+     * client was never asked for (the core cancels what it asked while a
+     * session was ending), is nothing to cancel, and nothing is kept of it.
+     */
     fun cancel(request: Long) {
         val call = calls.remove(request)
-        if (call == null) cancelled.add(request) else call.cancel()
+        if (call == null) unsent.cancel(request) else call.cancel()
     }
 
     private fun read(request: Long, response: Response): JsonObject {
