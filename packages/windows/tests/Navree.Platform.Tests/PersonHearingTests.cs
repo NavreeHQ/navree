@@ -292,6 +292,59 @@ public sealed class PersonHearingTests
     }
 
     [TestMethod]
+    public async Task A_person_the_core_names_with_no_key_is_said_once_and_is_not_the_person_a_key_was_kept_for()
+    {
+        string folder = Folder();
+        try
+        {
+            KeptStore kept = new(folder, App);
+            using SessionKeeper keeper = new(kept, new CookieStore(Shop));
+            _ = keeper.Open();
+            keeper.KeepPerson(PersonWatch.MarkOfKey(RituKey));
+            await keeper.DrainAsync().WaitAsync(Short);
+
+            // The last run kept Ritu's key. A core that gives no key stands beside the client now, and the person it names is shown with
+            // her name and her email.
+            SessionGate gate = new();
+            RecordedShell shell = new();
+            ConcurrentQueue<string> problems = new();
+            PersonChange people = new(new PersonWatch(keeper.KeptPerson(), keeper.KeepsOfAPerson()), gate, keeper, shell.Parts, problems.Enqueue);
+            _ = gate.Asked([], out long mark);
+            Assert.AreEqual(
+                PersonHeard.Another,
+                people.Hear(Naming(null, "Ritu Sharma", "ritu.sharma@example.com"), mark),
+                "a person named with no key is taken for the one whose key was kept: what was kept stays for whoever signed in");
+            CollectionAssert.AreEqual(AtOnce, shell.Did, "what must go first for a person who cannot be told to be the one before did not go");
+
+            // It is said, once, and with nothing of the person.
+            Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(null, "Ritu Sharma", "ritu.sharma@example.com"), mark));
+            Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(string.Empty, "Ritu Sharma", "ritu.sharma@example.com"), mark));
+            Assert.AreEqual(1, problems.Count, string.Join(" | ", problems));
+            Expect.That(
+                problems.TryPeek(out string? said) && said.Contains("no key", StringComparison.Ordinal) && !said.Contains("Ritu", StringComparison.Ordinal) && !said.Contains("example", StringComparison.Ordinal),
+                "what is said names a person, or does not say that no key was given");
+
+            shell.SystemTakesItAway.SetResult();
+            WipeReport report = await people.Last!.WaitAsync(Short);
+            await keeper.DrainAsync().WaitAsync(Short);
+            Expect.That(report.Complete, "the change did not finish: " + string.Join(", ", report.Failed.Select(failed => failed.Key)));
+            Assert.AreEqual(PersonWatch.MarkOf("Ritu Sharma", "ritu.sharma@example.com"), kept.Read(SessionKeeper.PersonKey), "the mark kept is still the key of the person before");
+
+            // A core that gives a key says nothing.
+            ConcurrentQueue<string> none = new();
+            SessionGate otherGate = new();
+            PersonChange keyed = new(new PersonWatch(), otherGate, keeper, new RecordedShell().Parts, none.Enqueue);
+            _ = otherGate.Asked([], out long otherMark);
+            Assert.AreEqual(PersonHeard.First, keyed.Hear(Naming(HarpreetKey, "Harpreet Kaur", null), otherMark));
+            Assert.AreEqual(0, none.Count, string.Join(" | ", none));
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
     public async Task Two_accounts_of_one_name_in_the_cores_own_conversation_are_a_change_of_person()
     {
         // The core's conversation `keep-person.json`: two people of one name and no email, one after the other on one device, whom the

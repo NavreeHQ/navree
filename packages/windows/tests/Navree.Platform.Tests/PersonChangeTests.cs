@@ -135,27 +135,56 @@ public sealed class PersonChangeTests
     }
 
     [TestMethod]
-    public void A_mark_kept_by_name_and_email_is_the_same_person_when_the_core_first_gives_a_key()
+    public void A_mark_made_from_a_name_and_email_is_another_person_when_the_core_gives_a_key_though_the_name_and_email_are_the_same()
     {
-        // The last run's core gave no key, so the mark kept for Ritu was made from her name and email. This run's core gives one.
-        string keptByName = PersonWatch.MarkOf("Ritu Sharma", "ritu.sharma@example.com");
+        // Two staff accounts at the counter in Amritsar are both shown as "Harpreet Singh", with no email. The last run's core gave no
+        // key, so the mark kept for the first of them was made from that name and no email. His session ran out overnight. This run's
+        // core gives keys, and the one who signs in is the second: the same name and the same email on both sides, and another account.
+        const string SecondAccount = "9cc5ffc2817cc3c911c721e28112cc30ae527d56ce46fbc784f9207caf606c75";
+        string keptByName = PersonWatch.MarkOf("Harpreet Singh", null);
         PersonWatch watch = new(keptByName);
-        Assert.AreEqual(PersonHeard.Same, watch.Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"), "the first key is taken for another person: everything kept for her would go");
-        Assert.AreEqual(Ritu, watch.Named, "the key did not take the place of the mark made from her name and email");
-        Assert.AreEqual(PersonHeard.Same, watch.Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"));
-
-        // From then on the key decides: a new name is the same person, and another key is another.
-        Assert.AreEqual(PersonHeard.Same, watch.Hear(RituKey, "Ritu S.", null));
-        Assert.AreEqual(PersonHeard.Another, watch.Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"));
-
-        // When the first key comes with somebody else's name and email, the mark kept says it is another person.
         Assert.AreEqual(
             PersonHeard.Another,
-            new PersonWatch(keptByName).Hear(HarpreetKey, "Harpreet Kaur", "harpreet.kaur@example.com"),
-            "another person who signs in as the first key arrives is left what was kept for the one before");
+            watch.Hear(SecondAccount, "Harpreet Singh", null),
+            "a mark made from a name is held to the name of whoever comes with the first key: the second account is left everything of the first");
+        Assert.AreEqual(PersonWatch.MarkOfKey(SecondAccount), watch.Named, "the key did not take the place of the mark made from the name");
+        Assert.AreEqual(PersonHeard.Same, watch.Hear(SecondAccount, "Harpreet Singh", null), "one change of person is said twice");
 
-        // A key was kept and the core gives none now: nothing says it is another person.
-        Assert.AreEqual(PersonHeard.Same, new PersonWatch(Ritu).Hear(null, "Ritu Sharma", "ritu.sharma@example.com"));
+        // With an email, the same on both sides, it is the same: nothing in a name and an email says which account the key is of.
+        Assert.AreEqual(
+            PersonHeard.Another,
+            new PersonWatch(PersonWatch.MarkOf("Ritu Sharma", "ritu.sharma@example.com")).Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"),
+            "a mark made from a name and an email is taken for the key of whoever has that name and email");
+
+        // And no key can be a mark made from a name: a key is kept as one that is said to be a key.
+        Assert.AreEqual(PersonHeard.Another, new PersonWatch(keptByName).Hear(keptByName, "Harpreet Singh", null), "a key that reads as a mark made from a name is taken for that mark");
+    }
+
+    [TestMethod]
+    public void A_key_kept_is_another_person_when_the_core_gives_none_though_the_name_and_email_are_the_same()
+    {
+        // The mark kept for Ritu is her key. A core that gives no key is put beside the client, her session has run out, and somebody
+        // signs in who is shown as Ritu Sharma with her email: by a name and an email it cannot be said to be her account.
+        PersonWatch watch = new(Ritu);
+        Assert.AreEqual(
+            PersonHeard.Another,
+            watch.Hear(null, "Ritu Sharma", "ritu.sharma@example.com"),
+            "a key that was kept is held to nothing when the core gives no key: whoever signs in is left everything kept for the person before");
+        Assert.AreEqual(PersonWatch.MarkOf("Ritu Sharma", "ritu.sharma@example.com"), watch.Named);
+        Assert.AreEqual(PersonHeard.Same, watch.Hear(null, "Ritu Sharma", "ritu.sharma@example.com"), "one change of person is said twice");
+
+        // An empty key is no key.
+        Assert.AreEqual(PersonHeard.Another, new PersonWatch(Ritu).Hear(string.Empty, "Ritu Sharma", "ritu.sharma@example.com"));
+
+        // In one run as well, with her session run out between: a key, and then none.
+        PersonWatch running = new();
+        Assert.AreEqual(PersonHeard.First, running.Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"));
+        Assert.AreEqual(PersonHeard.Nobody, running.Hear(null, null, null));
+        Assert.AreEqual(PersonHeard.Another, running.Hear(null, "Ritu Sharma", "ritu.sharma@example.com"), "a state with no key is taken for the person whose key was heard before");
+
+        // And when a key is given again, the mark made from her name meanwhile is not hers either: the two are never held to each other.
+        Assert.AreEqual(PersonHeard.Another, running.Hear(RituKey, "Ritu Sharma", "ritu.sharma@example.com"));
+        Assert.AreEqual(Ritu, running.Named);
     }
 
     [TestMethod]
