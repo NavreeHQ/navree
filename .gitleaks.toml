@@ -179,10 +179,13 @@ sample device token of Apple's push service as guides print it, the app
 signature of Android's own documentation for linking an app to a site (a
 signature is public: it is the hash of an app's signing certificate) with the
 two malformed copies a test refuses, the hash of nothing as a second app's
-signature, the challenge of a sample passkey answer, and a three-part token
-with an empty body and the signature "sig". None is issued by any system."""
+signature, the challenge of a sample passkey answer, a three-part token
+with an empty body and the signature "sig", and the made-up token of the
+Android client's tests of what a sign-out clears (thirty-two hex digits that
+start 7b1d). None is issued by any system."""
 regexes = [
   '''fcm-[A-Za-z0-9]{16}''',
+  '''7b1d2468ace013579bdf24680f3a9c5e''',
   '''9f2c4a7e00b1d35c(8e6a1f4b7d0c2e5a)?''',
   '''740f4707bebcf74f9b7c25d48e3358945f6aa01da5ddb387462c7eaf61bb78ad''',
   '''FG3pg8VzBlDY7rmVLzT8ZBagg0LmHb6oigSWsj[_/]PROU?''',
