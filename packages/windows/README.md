@@ -87,14 +87,18 @@ What the web view keeps is in a folder of the session's own, inside the app's we
 
 ## When another person signs in with no sign-out
 
-A session can end with no sign-out on this device: it runs out, or the server ends it and answers with a plain redirect to its sign-in page. The sign-in is then put up over the work, the work stays, and the person who signs in again finds everything as it was. When somebody else signs in instead, the core lets go of the person before and has its page cache emptied, and tells the client nothing more. So the client remembers who the core last named, by name and email, and when a state names somebody else with no sign-out between, it takes away what it keeps of its own for the person before, before the windows are given that state:
+A session can end with no sign-out on this device: it runs out, or the server ends it and answers with a plain redirect to its sign-in page. The sign-in is then put up over the work, the work stays, and the person who signs in again finds everything as it was. When somebody else signs in instead, the core lets go of the person before and has its page cache emptied, and tells the client nothing more. So the client remembers who the core last named, by name and email, and when a state names somebody else with no sign-out between, it takes away what it keeps of its own for the person before:
 
 - the web view's folder moves on, and every web view that was started in the old one is closed and what they kept is cleared or deleted, as at a sign-out;
 - the snapshot, the widths given to tables' columns and the notifications that wait are deleted;
 - the notifications shown, the count on the taskbar button and the jump list go, and the jump list is written again from the destinations of the person who is here now;
 - the copies of chosen photographs and the pictures of the pages go.
 
+It begins before the windows are given that state. By then the web view's folder has moved on, so a web page of the person who is here now is opened in the new one; the pictures are let go of; nothing waits to be notified and no count is shown; and what was kept has its turn to be deleted ahead of anything that is kept from then on. The rest (closing the old web views and clearing what they kept, what the system still shows, the copies of chosen photographs) follows at once, each part with a limit, as at a sign-out.
+
 The cookies stay: they are already those of the person who is here now, set by the sign-in that brought them. Nothing is refused or held back meanwhile, because the core has already let go of the person before: what it asks from that state on is for the person who is here now, and what is kept from then on stays.
+
+One thing happens before that state: between the answer to the sign-in and the shell's answer that names who signed in, the core fetches again the screen that was under the sign-in. When that screen is a page for the web view, it is opened in the folder as it is then, that of the person before, with the cookies the web view holds there; it is closed when the shell names another person.
 
 Who was named last is kept beside the rest as a mark made from the name and email, from which neither can be read. With it a start sees a change of person that happened across a restart: a session that ran out while the app was closed, and another person who signs in after it. The mark is replaced only when every part of the change has finished. An app that is ended in the middle, or a part that fails (which is said in a problem line), leaves the mark of the person before, and the next start, when it hears the person who is here named, does the change over; what was kept for that person meanwhile goes with it. A sign-out takes the mark with everything else, so whoever signs in after one is not compared with anybody.
 
