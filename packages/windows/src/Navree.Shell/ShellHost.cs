@@ -25,6 +25,7 @@ public sealed partial class ShellHost : IDisposable
     private readonly Dictionary<long, CancellationTokenSource> streams = [];
     private readonly SessionKeeper session;
     private readonly SessionGate asked = new();
+    private readonly PersonWatch person;
     private readonly WebProfiles webProfiles;
     private readonly List<string> startNotes = [];
     private bool started;
@@ -79,6 +80,9 @@ public sealed partial class ShellHost : IDisposable
         {
             webNamed = webProfiles.Choose(lastSessionEnded: false);
         }
+
+        // Whom what is kept was kept for, as the last run left it: when this run's core names somebody else, what is kept is not theirs.
+        person = new PersonWatch(session.KeptPerson());
 
         // Only naming the session's folder has to be done before a web view starts. The older folders are deleted off the window's thread: a
         // profile of thousands of files, or one whose browser is still ending, would otherwise keep the window from showing.
@@ -172,7 +176,8 @@ public sealed partial class ShellHost : IDisposable
 
     /// <summary>
     /// The folder the web views of the session now keep their data in; null when no web page may be shown in this run, because what the web
-    /// view kept for a person who signed out could not be taken away.
+    /// view kept for the person before (one who signed out, or one whose place another person took with no sign-out between) could not be
+    /// taken away.
     /// </summary>
     internal string? WebFolder => webProfiles.Folder;
 
@@ -337,6 +342,18 @@ public sealed partial class ShellHost : IDisposable
                     // Whose state the windows are about to show: a web page its screens ask for is loaded only when it is not the state
                     // of a person who is signing out (ShowsSomeoneLeaving).
                     shownMark = stateMark;
+
+                    // Before the windows are given it, and before any effect of its update: when it names another person than the one
+                    // before, what the client keeps of its own for that one is theirs no longer.
+                    try
+                    {
+                        HearPerson(state);
+                    }
+                    catch (Exception problem)
+                    {
+                        Problem?.Invoke("who is signed in could not be heard: " + problem.GetType().Name);
+                    }
+
                     StateChanged?.Invoke(state);
                 },
                 effect =>
@@ -616,6 +633,75 @@ public sealed partial class ShellHost : IDisposable
         }
     }
 
+    // On the UI thread, as a state is about to be shown: who it names as signed in. The state of a person who is signing out says nothing of
+    // who comes next, and a state that names nobody changes nothing (the person named before may sign in again). The person named is
+    // written down as the one what is kept is kept for (the keeper writes only a mark it has not written); another person than the one
+    // before, with no sign-out between, is a change of person the client is told of by nothing else: the core only has its cache emptied
+    // (PersonWatch).
+    private void HearPerson(ViewState state)
+    {
+        if (asked.OfSomeoneLeaving(shownMark) || state.App?.User is not Models.User user)
+        {
+            return;
+        }
+
+        PersonHeard heard = person.Hear(user.Name, user.Email);
+        if (person.Named is not string mark)
+        {
+            return;
+        }
+
+        if (heard == PersonHeard.Another)
+        {
+            _ = PersonChangedAsync(mark);
+        }
+        else
+        {
+            session.KeepPerson(mark);
+        }
+    }
+
+    // Another person is signed in than the one before, and nobody signed out between: a session ran out, or the server ended it and said
+    // nothing of it to the client, and somebody else signed in. The core has let go of the person before and has its cache emptied. What
+    // the client keeps of its own for that person goes here, as it does at a sign-out, but for the cookies, which are already those of
+    // the person who is here now. What runs before the first wait runs on the UI thread before the windows are given the state that names
+    // them, and before any effect of its update: the web view's folder has moved on, the pictures are let go of, nothing waits to be
+    // notified and no count is shown, and what was kept has its turn in the queue ahead of anything kept from now on.
+    private async Task PersonChangedAsync(string mark)
+    {
+        // A web page asked for from this line on is given the folder of the person who is here now, or none; a web view that was started
+        // in the folder of the person before is closed and never shown a page again (EndWebAsync).
+        string webEnded = webProfiles.MoveOn();
+        PictureCache.Clear();
+
+        // Off the window's thread, as at a sign-out: the copies of chosen photographs are files to delete.
+        Task files = Task.Run(Files.ClearAsync);
+        Task system = Place?.PersonChangedAsync() ?? Task.CompletedTask;
+
+        WipeReport report;
+        try
+        {
+            report = await session.PersonChangedAsync(
+                mark,
+                [
+                    new WipeStep("what the web view keeps", () => EndWebAsync(webEnded), OnUi),
+                    new WipeStep("the files chosen for forms", () => files),
+                    new WipeStep("the notifications, the count and the jump list", () => system),
+                    .. moreWipeSteps,
+                ]).ConfigureAwait(false);
+        }
+        catch (Exception problem)
+        {
+            report = new WipeReport([], [new KeyValuePair<string, string>("the change of person", problem.GetType().Name)]);
+        }
+
+        // What did not finish is done over at the next start: the mark of the person before is still the one kept (SessionKeeper).
+        if (!report.Complete)
+        {
+            ReportProblem("what was kept for the person who was signed in before was not all taken away: " + string.Join(", ", report.Failed.Select(failed => failed.Key)));
+        }
+    }
+
     // The end of a session, on the UI thread: everything that writes for the person is stopped or refused at once, then what could rebuild the
     // session goes first, then the rest, each step with a limit (SessionKeeper). The core is told when the client ended it; when the core ended it,
     // it has let go already, or (when it only said the session is ending) lets go later, and the sign-out is told when it does.
@@ -630,6 +716,9 @@ public sealed partial class ShellHost : IDisposable
         // From here on only what the core asks for whoever comes next is started or kept. When the client ends the session, the core is the
         // leaving person's until it is told: the point is marked on the core's own thread, just before it is told.
         asked.SessionIsEnding();
+
+        // The sign-out takes everything of the person away: whoever is named after it is the first, not another person with no sign-out between.
+        person.SignedOut();
 
         // Whether the core has been told (or ended the session itself). The window's side has moved on to whoever comes next; until the core's
         // side has too, everything the core asks is taken for the leaving person's and refused. The two always come in a pair.

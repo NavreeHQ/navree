@@ -8,7 +8,8 @@ namespace Navree.Platform;
 /// under the keys it names (the shell, the pages it may keep), which the core also asks to be emptied, after every write the server may have
 /// run. The other part is the client's own, for the person: the cookies, the snapshot the app starts again from, the widths a person gave a
 /// table's columns, the notifications that wait. Emptying the cache (<see cref="ClearCache"/>) touches the first part only; the end of a
-/// session (<see cref="Clear"/>, <see cref="ClearOrSetAside"/>) takes both. The part a value is in is said by who keeps it (the method
+/// session (<see cref="Clear"/>, <see cref="ClearOrSetAside"/>) takes both; another person signing in with no sign-out between takes the
+/// second, but for the cookies, which are theirs by then (<see cref="ClearOwn"/>). The part a value is in is said by who keeps it (the method
 /// called), never by what its key looks like, and shows in its file's extension: no key the core names can reach the client's own part.
 /// Each value is protected with Windows' data protection for the Windows user the app runs as
 /// (<see cref="Dpapi"/>): other people who sign in to the computer cannot read it, and any program that runs as the same
@@ -77,42 +78,73 @@ public sealed class KeptStore
     {
         lock (gate)
         {
-            if (!Directory.Exists(folder))
+            try
             {
-                return;
+                ClearPart(CacheEnding, []);
+            }
+            catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+            {
+                // The names are held for this run; the list is written again at the next change.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Throws away what the client keeps for the person, but for the values under the keys named, and nothing of the core's cache: another
+    /// person signed in with no sign-out between, and the cookies kept are already theirs. A file that cannot be deleted (another program
+    /// holds it) is set aside: never read again, and deleted when it can be.
+    /// </summary>
+    /// <param name="keep">The keys whose values stay.</param>
+    /// <exception cref="IOException">
+    /// A file was set aside and the list that names it could not be written: it is not read again in this run, and a later start would
+    /// read it, so the caller does not count what was kept for the person as gone.
+    /// </exception>
+    public void ClearOwn(params string[] keep)
+    {
+        ArgumentNullException.ThrowIfNull(keep);
+        lock (gate)
+        {
+            ClearPart(OwnEnding, [.. keep.Select(key => Path.GetFileName(PathOf(key, OwnEnding)))]);
+        }
+    }
+
+    // Deletes the files of one part, but for those named, and sets aside what the system will not let go. Called with the gate held. It
+    // throws only when the list of what is set aside changed and could not be written, after every file has been tried.
+    private void ClearPart(string ending, string[] staying)
+    {
+        if (!Directory.Exists(folder))
+        {
+            return;
+        }
+
+        bool changed = false;
+        foreach (string file in Directory.GetFiles(folder))
+        {
+            string name = Path.GetFileName(file);
+            if (!name.EndsWith(ending, StringComparison.OrdinalIgnoreCase) && !name.EndsWith(ending + ".part", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
             }
 
-            bool changed = false;
-            foreach (string file in Directory.GetFiles(folder))
+            if (staying.Contains(name, StringComparer.OrdinalIgnoreCase))
             {
-                string name = Path.GetFileName(file);
-                if (!name.EndsWith(CacheEnding, StringComparison.OrdinalIgnoreCase) && !name.EndsWith(CacheEnding + ".part", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    File.Delete(file);
-                    changed |= Aside().Remove(name);
-                }
-                catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
-                {
-                    changed |= Aside().Add(name);
-                }
+                continue;
             }
 
-            if (changed)
+            try
             {
-                try
-                {
-                    SaveAside();
-                }
-                catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
-                {
-                    // The names are held for this run; the list is written again at the next change.
-                }
+                File.Delete(file);
+                changed |= Aside().Remove(name);
             }
+            catch (Exception problem) when (problem is IOException or UnauthorizedAccessException)
+            {
+                changed |= Aside().Add(name);
+            }
+        }
+
+        if (changed)
+        {
+            SaveAside();
         }
     }
 

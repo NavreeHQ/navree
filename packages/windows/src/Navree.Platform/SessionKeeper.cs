@@ -17,11 +17,20 @@ namespace Navree.Platform;
 /// web view keeps, then (once the core has let go) everything else that is kept. The mark goes only when every step has finished and the core
 /// has let go. A start that finds the mark finishes the wipe before it reads anything (<see cref="Open"/>).
 /// </para>
+/// <para>
+/// A person can also change with no sign-out: a session runs out, or a server ends it and says nothing of it to the client, and somebody
+/// else signs in. The cookies are theirs by then, and the core has its cache emptied. Everything else kept for the person before goes
+/// then (<see cref="PersonChangedAsync"/>), and beside what is kept stands a mark of whom it is kept for (<see cref="PersonKey"/>), so a
+/// start sees such a change when it happened across a restart, or was not finished.
+/// </para>
 /// </remarks>
 public sealed class SessionKeeper : IDisposable
 {
     /// <summary>The key the cookies are kept under.</summary>
     public const string CookiesKey = "cookies";
+
+    /// <summary>The key the mark of the person is kept under, whom the rest is kept for (<see cref="PersonWatch.MarkOf"/>).</summary>
+    public const string PersonKey = "person";
 
     private readonly KeptStore kept;
     private readonly CookieStore cookies;
@@ -32,6 +41,9 @@ public sealed class SessionKeeper : IDisposable
     private int wiping;
     private int ends;
     private bool endFailed;
+    private string lastPerson = string.Empty;
+    private long personChanges;
+    private bool personOwed;
 
     /// <summary>Makes the keeper. Nothing is read until <see cref="Open"/>.</summary>
     /// <param name="kept">What is kept between launches.</param>
@@ -284,6 +296,7 @@ public sealed class SessionKeeper : IDisposable
             ending = true;
             wiping++;
             lastCookies = string.Empty;
+            ForgetPerson();
             if (ends++ == 0)
             {
                 endFailed = false;
@@ -394,6 +407,7 @@ public sealed class SessionKeeper : IDisposable
             ending = true;
             wiping++;
             lastCookies = string.Empty;
+            ForgetPerson();
             if (ends++ == 0)
             {
                 endFailed = false;
@@ -463,6 +477,123 @@ public sealed class SessionKeeper : IDisposable
         return report;
     }
 
+    /// <summary>
+    /// The mark of the person what is kept was kept for, as the last run left it; null when none is kept. Read at the start, after
+    /// <see cref="Open"/>: a start that finished a sign-out finds none.
+    /// </summary>
+    /// <returns>The mark, or null.</returns>
+    public string? KeptPerson()
+    {
+        string? mark = kept.Read(PersonKey);
+        lock (gate)
+        {
+            lastPerson = mark ?? string.Empty;
+        }
+
+        return mark;
+    }
+
+    /// <summary>
+    /// Keeps the mark of the person who is signed in, when it is not the one kept already: what is kept from now on is kept for them.
+    /// Asked each time the core names them, so a mark that could not be written (a sign-out was still under way) is written the next
+    /// time. Nothing is written while a sign-out is under way, nor while a change of person has not finished
+    /// (<see cref="PersonChangedAsync"/>): the mark kept is then still that of the person before, and stays so.
+    /// </summary>
+    /// <param name="mark">The person's mark (<see cref="PersonWatch.MarkOf"/>).</param>
+    public void KeepPerson(string mark)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(mark);
+        lock (gate)
+        {
+            if (personOwed)
+            {
+                return;
+            }
+        }
+
+        WritePerson(Stamp(), mark);
+    }
+
+    // Writes the mark of the person in its turn, when the session it was asked in is still the one now and it is not the mark last written.
+    private void WritePerson(long? stamp, string mark)
+    {
+        lock (gate)
+        {
+            if (stamp is not long asked || ending || asked != cookies.Session || mark == lastPerson)
+            {
+                return;
+            }
+
+            lastPerson = mark;
+        }
+
+        Write(stamp, PersonKey, mark);
+    }
+
+    /// <summary>
+    /// Another person is signed in than the one what is kept was kept for, and nobody signed out between. Everything the client keeps for
+    /// the person before goes: the snapshot, the widths they gave a table's columns, the notifications that wait, and whatever
+    /// <paramref name="steps"/> take away (what the web view keeps, the files chosen for forms, what the system shows). The cookies stay:
+    /// they are already those of the person who is here now. The core's cache is not touched here; the core has it emptied itself.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What is kept is deleted in its turn in the queue, and that turn is taken before this returns: whatever is asked to be kept after
+    /// the call is kept for the person who is here now, and stays.
+    /// </para>
+    /// <para>
+    /// The mark of the person before is left where it is until every step has finished, and only then is the mark of the person who is
+    /// here now written in its place. An app that is ended in the middle, or a step that fails, leaves the old mark: the next start hears
+    /// another person named than the one it remembers, and does all of this over.
+    /// </para>
+    /// </remarks>
+    /// <param name="mark">The mark of the person who is signed in now (<see cref="PersonWatch.MarkOf"/>).</param>
+    /// <param name="steps">What else takes away something of the person before, each with the limit of <see cref="Wipe"/>.</param>
+    /// <param name="limit">How long one step may take; <see cref="Wipe.StepLimit"/> when left out.</param>
+    /// <returns>What came of each step.</returns>
+    public Task<WipeReport> PersonChangedAsync(string mark, IEnumerable<WipeStep> steps, TimeSpan? limit = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(mark);
+        ArgumentNullException.ThrowIfNull(steps);
+
+        // The session the change was seen in: when it has ended by the time the steps are done, a sign-out took everything and no mark is written.
+        long? stamp = Stamp();
+        long change;
+        lock (gate)
+        {
+            change = ++personChanges;
+            personOwed = true;
+        }
+
+        Task keptGone = disk.RunAsync(() => kept.ClearOwn(CookiesKey, PersonKey));
+        return FinishPersonChangeAsync(mark, stamp, change, keptGone, steps, limit ?? Wipe.StepLimit);
+    }
+
+    private async Task<WipeReport> FinishPersonChangeAsync(string mark, long? stamp, long change, Task keptGone, IEnumerable<WipeStep> steps, TimeSpan each)
+    {
+        WipeReport report = await Wipe.RunAsync(
+            [
+                new WipeStep("what was kept for the person before", () => keptGone),
+                .. steps,
+            ],
+            each).ConfigureAwait(false);
+
+        // When yet another person signed in while the steps ran, the mark is theirs to write, when their own steps have finished. A change
+        // that did not finish leaves the mark of the person before for the rest of this run.
+        lock (gate)
+        {
+            if (!report.Complete || change != personChanges)
+            {
+                return report;
+            }
+
+            personOwed = false;
+        }
+
+        WritePerson(stamp, mark);
+        return report;
+    }
+
     /// <summary>Waits until everything given to the queue so far has run.</summary>
     /// <returns>When it has.</returns>
     public Task DrainAsync() => disk.RunAsync(static () => { });
@@ -494,6 +625,15 @@ public sealed class SessionKeeper : IDisposable
         {
             // The mark stays: the next start takes away again what is already gone.
         }
+    }
+
+    // With the gate held, as a sign-out begins: the sign-out takes the mark of the person with everything else, so none is written and none
+    // is owed, and a change of person still under way has nothing left to write.
+    private void ForgetPerson()
+    {
+        lastPerson = string.Empty;
+        personOwed = false;
+        personChanges++;
     }
 
     // One part of the start of a sign-out: what it throws is written down, and the next part runs.

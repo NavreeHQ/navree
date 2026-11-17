@@ -331,7 +331,32 @@ public sealed class SystemPlace : IDisposable
     /// takes them away again.
     /// </summary>
     /// <returns>When they are gone.</returns>
-    internal async Task EndSessionAsync()
+    internal Task EndSessionAsync() => TakeAwayAsync("the session ended");
+
+    /// <summary>
+    /// Another person signed in with no sign-out between: what the system holds or shows for the person before goes as it does at a sign-out
+    /// (what waits to be notified, the count, what the notification centre shows, the jump list), and then the jump list is written again
+    /// from the destinations of the person who is here now. When this returns nothing waits to be notified and no count is shown: what the
+    /// core asks for the person who is here now, from the next effect on, is theirs. Fails when the system could not take something away.
+    /// </summary>
+    /// <returns>When they are gone and the jump list is written again.</returns>
+    internal async Task PersonChangedAsync()
+    {
+        try
+        {
+            await TakeAwayAsync("another person signed in");
+        }
+        finally
+        {
+            // The destinations of the person who is here now were shown while the list of the person before was still being emptied: they
+            // are written again now, after it.
+            placesKey = string.Empty;
+            ShowPlaces();
+        }
+    }
+
+    // What the system holds or shows for a person goes. What runs before the first wait runs at the call, on the UI thread.
+    private async Task TakeAwayAsync(string why)
     {
         timer.Stop();
         schedule = new NotificationSchedule();
@@ -349,7 +374,7 @@ public sealed class SystemPlace : IDisposable
             throw new InvalidOperationException("the jump list could not be emptied");
         }
 
-        Say("the session ended: no notification waits, none is shown, no count, no jump list");
+        Say(why + ": no notification waits, none is shown, no count, no jump list");
     }
 
     private void Remember() => host.Remember(PendingKey, schedule.Waiting.Count == 0 ? null : schedule.Write());
@@ -627,6 +652,13 @@ public sealed class SystemPlace : IDisposable
             Open(waiting);
         }
 
+        ShowPlaces();
+    }
+
+    // The destinations the core holds now, where the system shows them: the small window by the icon, and the jump list. Nothing is done
+    // when they are the ones last shown.
+    private void ShowPlaces()
+    {
         IReadOnlyList<PlaceDestination> places = Places();
         string key = string.Join("|", places.Select(place => place.Label + "\u001f" + place.Href + "\u001f" + place.Badge));
         if (key == placesKey)
