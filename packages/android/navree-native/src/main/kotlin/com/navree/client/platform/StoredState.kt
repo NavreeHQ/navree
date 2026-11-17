@@ -32,6 +32,30 @@ fun endWithLimit(done: () -> Unit, arm: (release: () -> Unit) -> Unit, work: (do
     }
 }
 
+/**
+ * Runs one step of the end of a session that says itself when it is done, and
+ * then what follows it, so that a step that never says so cannot hold the
+ * rest: [arm] sets the time limit before the step runs, and [next] runs once,
+ * when the step has said it is done or when the limit is reached, whichever
+ * comes first, and is told which (`said`). A step that says so only after the
+ * limit is told to [late], once. A failure of any kind in [step] is the limit
+ * reached at once.
+ */
+fun stepWithLimit(arm: (release: () -> Unit) -> Unit, step: (done: () -> Unit) -> Unit, late: () -> Unit = {}, next: (said: Boolean) -> Unit) {
+    val moved = AtomicBoolean(false)
+    val said = AtomicBoolean(false)
+    arm { if (moved.compareAndSet(false, true)) next(false) }
+    try {
+        step {
+            if (said.compareAndSet(false, true)) {
+                if (moved.compareAndSet(false, true)) next(true) else late()
+            }
+        }
+    } catch (_: Throwable) {
+        if (moved.compareAndSet(false, true)) next(false)
+    }
+}
+
 class StoredState(private val executor: (Runnable) -> Unit) {
     private val lock = Any()
     private val waiting = ArrayDeque<(() -> Unit) -> Unit>()

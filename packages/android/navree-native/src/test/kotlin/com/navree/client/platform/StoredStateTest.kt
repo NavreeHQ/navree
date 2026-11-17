@@ -130,6 +130,69 @@ class StoredStateTest {
         assertTrue(limit != null)
     }
 
+    /** One step with a limit, as the end of a session runs the cookie store: what was armed, asked and followed, in order. */
+    private class Step {
+        val order = ArrayList<String>()
+        var limit: (() -> Unit)? = null
+        var says: (() -> Unit)? = null
+
+        fun run(step: (done: () -> Unit) -> Unit = { says = it }) = stepWithLimit(
+            arm = { release ->
+                order += "limit armed"
+                limit = release
+            },
+            step = { done ->
+                order += "the cookie store is asked"
+                step(done)
+            },
+            late = { order += "the cookie store answered late" },
+        ) { said -> order += if (said) "what follows, the cookies gone" else "what follows, without the cookie store's word" }
+    }
+
+    @Test
+    fun a_cookie_store_that_never_answers_does_not_hold_what_follows_it_past_the_limit() {
+        val step = Step()
+        step.run()
+        assertEquals("the limit is armed before the store is asked, and nothing follows yet", listOf("limit armed", "the cookie store is asked"), step.order)
+        step.limit!!()
+        assertEquals("what follows, without the cookie store's word", step.order.last())
+        step.limit!!()
+        assertEquals("what follows runs once", 3, step.order.size)
+    }
+
+    @Test
+    fun a_cookie_store_that_answers_lets_what_follows_run_once_and_the_limit_then_does_nothing() {
+        val step = Step()
+        step.run()
+        step.says!!()
+        assertEquals(listOf("limit armed", "the cookie store is asked", "what follows, the cookies gone"), step.order)
+        step.says!!()
+        step.limit!!()
+        assertEquals("a second word, and the limit after it, change nothing", 3, step.order.size)
+    }
+
+    @Test
+    fun a_cookie_store_that_answers_after_the_limit_is_heard_as_late_once() {
+        val step = Step()
+        step.run()
+        step.limit!!()
+        step.says!!()
+        step.says!!()
+        assertEquals(
+            listOf("limit armed", "the cookie store is asked", "what follows, without the cookie store's word", "the cookie store answered late"),
+            step.order,
+        )
+    }
+
+    @Test
+    fun a_cookie_store_that_fails_is_not_waited_for() {
+        val step = Step()
+        step.run { throw LinkageError("no web view library") }
+        assertEquals(listOf("limit armed", "the cookie store is asked", "what follows, without the cookie store's word"), step.order)
+        step.limit!!()
+        assertEquals(3, step.order.size)
+    }
+
     @Test
     fun a_piece_of_work_that_fails_does_not_stop_the_rest() {
         val thread = ByHand()
