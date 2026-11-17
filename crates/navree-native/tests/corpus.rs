@@ -1487,6 +1487,8 @@ fn shell() -> Shell {
                 ..Button::default()
             }),
         ],
+        // A server leaves the key out: the runtime core fills it.
+        key: None,
     });
     shell.routes = vec![
         Route {

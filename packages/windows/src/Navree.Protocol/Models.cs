@@ -10898,6 +10898,7 @@ public static partial class Models
     public sealed record User
     {
         public string? Email { get; init; }
+        public string? Key { get; init; }
         public IReadOnlyList<Node> Menu { get; init; } = [];
         public required string Name { get; init; }
     }
@@ -10909,6 +10910,7 @@ public static partial class Models
         return new User
         {
             Email = Reading.Opt<string>(json, "email", Reading.Text),
+            Key = Reading.Opt<string>(json, "key", Reading.Text),
             Menu = Reading.Or<IReadOnlyList<Node>>(json, "menu", static element0 => Reading.ListOf<Node>(element0, ReadNode), []),
             Name = Reading.Required<string>(json, "name", Reading.Text),
         };
@@ -10925,6 +10927,7 @@ public static partial class Models
     private static void WriteUserBody(Utf8JsonWriter w, User v)
     {
         if (v.Email is not null) { w.WritePropertyName("email"); w.WriteStringValue(v.Email); }
+        if (v.Key is not null) { w.WritePropertyName("key"); w.WriteStringValue(v.Key); }
         if (v.Menu.Count != 0) { w.WritePropertyName("menu"); w.WriteStartArray(); foreach (var item1 in v.Menu) { WriteNode(w, item1); } w.WriteEndArray(); }
         w.WritePropertyName("name"); w.WriteStringValue(v.Name);
     }
