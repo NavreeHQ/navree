@@ -5,9 +5,7 @@ use std::sync::Arc;
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_http::__private::AccessDeclarations;
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{
-    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
-};
+use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::http::{McpController, challenge_layer};
 use crate::item::McpServer;
@@ -52,13 +50,13 @@ impl McpModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: McpOptions) -> impl Module {
-        ConfiguredModule::<McpModule, _>::for_root(options, register)
+        ConfiguredMcpModule::for_root(options)
     }
 
     /// The module configured from the `mcp` section of `Config` at boot
     /// (the same as a plain `McpModule`).
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<McpModule, McpOptions>::from_config(register)
+        ConfiguredMcpModule::from_config()
     }
 }
 
@@ -68,7 +66,10 @@ impl Module for McpModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredMcpModule, McpModule, McpOptions, register);
+
 fn register(m: &mut ModuleBuilder, options: Option<McpOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<McpOptions>::new(move |_| {

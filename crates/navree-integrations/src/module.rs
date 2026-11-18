@@ -9,8 +9,8 @@ use navree_db::{Db, ModuleBuilderDbExt};
 use navree_events::{Listener, ModuleBuilderEventsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Injectable, KernelError, Module,
-    ModuleBuilder, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder,
+    ProviderKey, Resolver,
 };
 use navree_schedule::ModuleBuilderScheduleExt;
 use navree_workspace::events::{OrganizationDeleted, WorkspaceDeleted};
@@ -76,13 +76,13 @@ impl IntegrationsModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: IntegrationsOptions) -> impl Module {
-        ConfiguredModule::<IntegrationsModule, _>::for_root(options, register)
+        ConfiguredIntegrationsModule::for_root(options)
     }
 
     /// The module configured from the `integrations` section of `Config`
     /// at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<IntegrationsModule, IntegrationsOptions>::from_config(register)
+        ConfiguredIntegrationsModule::from_config()
     }
 
     /// Registers scope set `S` (import it in the feature module that needs
@@ -99,7 +99,15 @@ impl Module for IntegrationsModule {
     }
 }
 
+navree_kernel::configured_module!(
+    ConfiguredIntegrationsModule,
+    IntegrationsModule,
+    IntegrationsOptions,
+    register,
+);
+
 fn register(m: &mut ModuleBuilder, options: Option<IntegrationsOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<IntegrationsOptions>::new(move |_| {

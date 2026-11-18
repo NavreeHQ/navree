@@ -3,9 +3,7 @@
 use std::sync::Arc;
 
 use navree_config::{Config, ModuleBuilderConfigExt};
-use navree_kernel::{
-    BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
-};
+use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 use navree_telemetry::Telemetry;
 
 use crate::{HttpClient, HttpClientOptions};
@@ -43,13 +41,13 @@ pub struct HttpClientModule;
 impl HttpClientModule {
     /// The module configured with `options` (configure it once, in the app root).
     pub fn for_root(options: HttpClientOptions) -> impl Module {
-        ConfiguredModule::<HttpClientModule, _>::for_root(options, register)
+        ConfiguredHttpClientModule::for_root(options)
     }
 
     /// The module configured from section `http_client` of the app's
     /// `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<HttpClientModule, HttpClientOptions>::from_config(register)
+        ConfiguredHttpClientModule::from_config()
     }
 }
 
@@ -58,6 +56,13 @@ impl Module for HttpClientModule {
         register(m, None);
     }
 }
+
+navree_kernel::configured_module!(
+    ConfiguredHttpClientModule,
+    HttpClientModule,
+    HttpClientOptions,
+    register,
+);
 
 /// Where the options come from.
 #[derive(Clone)]
@@ -88,6 +93,7 @@ impl Source {
 /// Global; provides and exports the singleton `HttpClient`. No options: the
 /// module reads section `http_client`.
 fn register(m: &mut ModuleBuilder, options: Option<HttpClientOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     let source = match options {
         Some(options) => Source::Options(Arc::new(options)),
         None => {

@@ -7,8 +7,8 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::{GlobalLayer, LayerSlot, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Lifecycle, Module, ModuleBuilder,
-    ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ProviderKey,
+    Resolver,
 };
 use navree_notify::RecipientScope;
 use navree_validation::MessageTranslator;
@@ -81,12 +81,12 @@ impl I18nModule {
     /// root), for example with Fluent files embedded by
     /// [`embed_locales!`](crate::embed_locales).
     pub fn for_root(options: I18nOptions) -> impl Module {
-        ConfiguredModule::<I18nModule, _>::for_root(options, register)
+        ConfiguredI18nModule::for_root(options)
     }
 
     /// The module configured from the `i18n` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<I18nModule, I18nOptions>::from_config(register)
+        ConfiguredI18nModule::from_config()
     }
 }
 
@@ -96,7 +96,10 @@ impl Module for I18nModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredI18nModule, I18nModule, I18nOptions, register);
+
 fn register(m: &mut ModuleBuilder, options: Option<I18nOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<I18nOptions>::new(move |_| {

@@ -11,8 +11,8 @@ use navree_db::{
 };
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    BoxFuture, ConfiguredModule, Factory, Injectable, KernelError, Module, ModuleBuilder,
-    ProviderKey, Resolver, WeakAppContext,
+    BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
+    WeakAppContext,
 };
 use navree_storage::Storage;
 
@@ -79,12 +79,12 @@ impl MediaModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: MediaOptions) -> impl Module {
-        ConfiguredModule::<MediaModule, _>::for_root(options, register)
+        ConfiguredMediaModule::for_root(options)
     }
 
     /// The module configured from the `media` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<MediaModule, MediaOptions>::from_config(register)
+        ConfiguredMediaModule::from_config()
     }
 
     /// Registers model `M`'s collections (import it in the feature module
@@ -103,6 +103,8 @@ impl Module for MediaModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredMediaModule, MediaModule, MediaOptions, register);
+
 /// A model type registered with [`MediaModule::for_feature`].
 #[derive(Clone, Debug)]
 pub(crate) struct MediaRegistration {
@@ -111,6 +113,7 @@ pub(crate) struct MediaRegistration {
 }
 
 fn register(m: &mut ModuleBuilder, options: Option<MediaOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<MediaOptions>::new(move |_| {

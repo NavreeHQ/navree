@@ -8,7 +8,7 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_http::{AppError, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
+    AppContext, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 
 use crate::controller::HelmController;
@@ -70,12 +70,12 @@ pub struct HelmModule;
 impl HelmModule {
     /// The module with explicit options (invalid options fail the boot).
     pub fn for_root(options: HelmOptions) -> impl Module {
-        ConfiguredModule::<HelmModule, _>::for_root(options, register)
+        ConfiguredHelmModule::for_root(options)
     }
 
     /// The module configured from the `helm` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<HelmModule, HelmOptions>::from_config(register)
+        ConfiguredHelmModule::from_config()
     }
 }
 
@@ -85,7 +85,10 @@ impl Module for HelmModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredHelmModule, HelmModule, HelmOptions, register);
+
 fn register(m: &mut ModuleBuilder, options: Option<HelmOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<HelmOptions>::new(move |_| {

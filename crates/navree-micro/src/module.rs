@@ -138,6 +138,7 @@ impl Module for ConfiguredMicroModule {
 }
 
 fn register(m: &mut ModuleBuilder, options: Option<MicroOptions>, clients: &[String]) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<MicroOptions>::new(move |_| {

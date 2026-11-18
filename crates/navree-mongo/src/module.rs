@@ -7,8 +7,8 @@ use std::time::Duration;
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::{HealthCheck, HealthStatus};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, CommandSpec, ConfiguredModule, Factory, Injectable, Lifecycle,
-    Module, ModuleBuilder, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, Lifecycle, Module,
+    ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_telemetry::Telemetry;
 
@@ -49,12 +49,12 @@ impl MongoModule {
     /// The module with explicit options (configure it once, in the app
     /// root).
     pub fn for_root(options: MongoOptions) -> impl Module {
-        ConfiguredModule::<MongoModule, _>::for_root(options, register)
+        ConfiguredMongoModule::for_root(options)
     }
 
     /// The module configured from the `database.mongodb` section at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<MongoModule, MongoOptions>::from_config(register)
+        ConfiguredMongoModule::from_config()
     }
 }
 
@@ -64,7 +64,10 @@ impl Module for MongoModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredMongoModule, MongoModule, MongoOptions, register);
+
 fn register(m: &mut ModuleBuilder, options: Option<MongoOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<MongoOptions>::new(move |_| {
