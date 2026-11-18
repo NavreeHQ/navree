@@ -64,8 +64,9 @@ pub use ui::map::{MAP, MapProps, MapView, Tiles};
 /// The module of the plugin: add it to an app that has `UiModule`.
 ///
 /// It says what the plugin is (`geo`, "Maps and places"), registers the `geo` settings, serves
-/// the map component's script and stylesheet through Navree UI, asks for the tile host in the
-/// page policy, and mounts `GET /geo/tiles.json` and `POST /geo/reverse`.
+/// the map component's script and stylesheet through Navree UI, contributes the `geo.location`
+/// field control, asks for the tile host in the page policy, and mounts `GET /geo/tiles.json`
+/// and `GET /geo/reverse`.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GeoModule;
 
@@ -83,6 +84,7 @@ impl Module for GeoModule {
             Ok(Arc::new(options))
         }));
         m.contribute(ui::map::MAP);
+        m.contribute(navree::ui::form::Control::new(&ui::location::LOCATION));
         // Asking allows nothing: the app's `ui.policy` section decides.
         m.contribute(PageSources::new().ask(
             Directive::ImgSrc,

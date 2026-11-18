@@ -49,7 +49,7 @@ pub struct MapProps {
     pub attribution: String,
     /// The name of the form field the map moves, when the map is a control.
     pub pick: Option<String>,
-    /// The id of the line that names the place, which the server redraws when the pin moves.
+    /// The id of the line under the map that names the place.
     pub place_id: String,
     /// Counts the times the server moved the map: a higher number than the map had makes it fly
     /// to the new centre, and the same number leaves its view alone.
@@ -90,9 +90,7 @@ impl MapView {
     /// under which `place` names the point. The map is drawn with `tiles` when the page may load
     /// them.
     ///
-    /// The id is lower-case letters, digits, `_` and `-`, at most 58 of them: the line under the
-    /// map has that id and `-place`, and `POST /geo/reverse` redraws only a line whose id is
-    /// made so.
+    /// The line under the map carries the id `id` followed by `-place`.
     pub fn new(id: &str, center: GeoPoint, place: impl Into<String>, tiles: &Tiles) -> MapView {
         let props = MapProps {
             center: Some(center),
@@ -138,8 +136,7 @@ pub(crate) fn map_body() -> Element {
 }
 
 /// The line that names a place: `Sarabha Nagar, Ludhiana (30.8890,75.8340)`, or only the point
-/// when `name` is empty, or only the name when there is no point. It is the element with the id
-/// `id` that the server redraws when a pin moves.
+/// when `name` is empty, or only the name when there is no point.
 pub(crate) fn place_line(id: &str, name: &str, at: Option<GeoPoint>) -> Element {
     let line = match at {
         Some(at) if name.is_empty() => at.to_string(),
@@ -162,9 +159,12 @@ pub struct Tiles {
 
 impl Tiles {
     /// The tile address of `options` when `policy` allows its origin for pictures, else none. An
-    /// address starting with a slash is this app's own, and always allowed.
+    /// address starting with a single slash (not `//` or `/\`) is this app's own, and always
+    /// allowed.
     pub fn new(options: &GeoOptions, policy: &PagePolicy) -> Tiles {
-        let own = options.tiles.starts_with('/') && !options.tiles.starts_with("//");
+        let own = options.tiles.starts_with('/')
+            && !options.tiles.starts_with("//")
+            && !options.tiles.starts_with("/\\");
         let allowed = own || policy.allows(Directive::ImgSrc, &options.tiles);
         Tiles {
             address: allowed.then(|| options.tiles.clone()),

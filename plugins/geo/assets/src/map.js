@@ -1,7 +1,7 @@
 // The map of the geo plugin, for contract 1 of Navree UI's extensions: Leaflet drawn into the element's
 // owned body. When the element is a form field's control (`props.pick` names the field), a click on the
-// map, or the device's own place, becomes the field's value and the server redraws the line that names
-// the place.
+// map, or the device's own place, becomes the field's value, asks `/geo/reverse` for the nearest place,
+// and writes the place line inside this element as text.
 //
 // What it is given: the props the server wrote on the element, and `ui`, whose helpers reach only this
 // element's own parts, its own timers and listeners (they end when the element leaves) and the routes
@@ -31,6 +31,7 @@ export function mount(el, props, ui) {
   const body = ui.find("[data-slot='geo:map-body']");
   const input = props.pick ? ui.find(`input[name="${CSS.escape(props.pick)}"]`) : null;
   const locate = ui.find("[data-slot='geo:locate']");
+  const place = ui.find("[data-slot='geo:place']");
   let map = null, pin = null, last = input?.value || "";
   // Whether the field, or the page, gave the map a place of its own: an empty field's map opens on the
   // delivery area's centre with no pin on it.
@@ -59,9 +60,11 @@ export function mount(el, props, ui) {
   if (props.tiles) start(props.tiles, props.attribution);
   else if (props.pick) {
     // A control is drawn with no request: where its tiles are, and the centre of an empty map, come from the server.
+    // On a guest page `/geo/tiles.json` answers 401 and the control keeps its coordinate input and fallback text.
     ui.get("/geo/tiles.json")
-      .then((/** @type {Response} */ r) => r.json())
+      .then((/** @type {Response} */ r) => (r.ok ? r.json() : null))
       .then((/** @type {any} */ t) => {
+        if (!t) return;
         if (!props.center) props = { ...props, center: t.centre, zoom: t.zoom || props.zoom };
         start(t.tiles, t.attribution);
       })
@@ -92,7 +95,15 @@ export function mount(el, props, ui) {
     input.value = text;
     put(p);
     input.dispatchEvent(new Event("change", { bubbles: true })); // posts an inline edit; a form posts on submit
-    await ui.call("/geo/reverse", { at: text, target: props.place_id }, { quiet: true });
+    try {
+      const r = await ui.get(`/geo/reverse?at=${encodeURIComponent(text)}`);
+      if (r.ok) {
+        const d = await r.json();
+        if (place && input.value === text) {
+          place.textContent = d.place ? `${d.place} (${text})` : text;
+        }
+      }
+    } catch {}
     ui.announce("Drop point moved");
   }
 

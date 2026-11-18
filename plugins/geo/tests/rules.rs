@@ -443,30 +443,18 @@ async fn geo_boots_in_test_app_and_asks_for_the_tile_host() {
     assert_eq!(tiles["centre"], json!({ "lat": 30.901, "lng": 75.8573 }));
     assert_eq!(tiles["zoom"], 13);
 
-    // A point's place is named by a morph of the line the page named.
-    let reply = post(
-        &app,
-        "/geo/reverse",
-        "at=30.8890%2C75.8340&target=drop-place",
-        true,
-    )
-    .await
-    .assert_status(200)
-    .json_value();
-    assert_eq!(reply["ops"][0]["op"], "morph", "{reply}");
-    assert_eq!(reply["ops"][0]["target"], "drop-place");
-    let html = reply["ops"][0]["html"].as_str().expect("the new line");
-    assert!(html.contains("Sarabha Nagar, Ludhiana"), "{html}");
-    assert!(html.contains(r#"id="drop-place""#), "{html}");
-    // Only the id of a place line is redrawn.
-    let response = post(
-        &app,
-        "/geo/reverse",
-        "at=30.8890%2C75.8340&target=account",
-        true,
-    )
-    .await;
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // Reverse lookup answers JSON data on a GET and changes no element on the page.
+    let reverse = get_as_member(&app, "/geo/reverse?at=30.8890%2C75.8340")
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(reverse["place"], "Sarabha Nagar, Ludhiana", "{reverse}");
+    assert_eq!(reverse["at"], "30.8890,75.8340", "{reverse}");
+    assert_eq!(
+        reverse["line"], "Sarabha Nagar, Ludhiana (30.8890,75.8340)",
+        "{reverse}"
+    );
+    assert!(reverse.get("ops").is_none(), "{reverse}");
 
     // A page with a map keeps the toolkit's policy, and names the plugin's files.
     let map = page(&app, "/map").await;
@@ -527,5 +515,71 @@ async fn geo_boots_in_test_app_and_asks_for_the_tile_host() {
         .assert_status(200)
         .json_value();
     assert_eq!(tiles["tiles"], "/geo-test/tiles/{z}/{x}/{y}");
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_tile_address_that_starts_with_a_backslash_host_is_refused() {
+    let _one = ONE_BOOT.lock().await;
+    let app = builder()
+        .config("geo.tiles", r"/\tiles.other.example/{z}/{x}/{y}.png")
+        .build()
+        .await;
+    let policy = app.get::<PagePolicy>().await;
+    let options = app.get::<GeoOptions>().await;
+    assert_eq!(Tiles::new(&options, &policy).address(), None);
+
+    let tiles = get_as_member(&app, "/geo/tiles.json")
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(tiles["tiles"], Value::Null, "{tiles}");
+
+    let scheme_rel = GeoOptions {
+        tiles: "//tiles.other.example/{z}/{x}/{y}.png".to_owned(),
+        ..GeoOptions::default()
+    };
+    assert_eq!(Tiles::new(&scheme_rel, &policy).address(), None);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_reverse_lookup_answers_data_and_changes_no_element() {
+    let _one = ONE_BOOT.lock().await;
+    let app = builder().build().await;
+
+    // Guests are refused 401.
+    app.client()
+        .get("/geo/reverse?at=30.8890%2C75.8340")
+        .send()
+        .await
+        .assert_status(401);
+
+    // Signed-in GET returns plain JSON data (`place`, `at`, `line`) with no `ops` or `morph`.
+    let response = get_as_member(&app, "/geo/reverse?at=31.3080%2C75.5810").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let data = response.json_value();
+    assert_eq!(data["place"], "Model Town, Jalandhar", "{data}");
+    assert_eq!(data["at"], "31.3080,75.5810", "{data}");
+    assert_eq!(
+        data["line"], "Model Town, Jalandhar (31.3080,75.5810)",
+        "{data}"
+    );
+    assert!(data.get("ops").is_none(), "{data}");
+    assert!(data.get("target").is_none(), "{data}");
+
+    // POST is no longer accepted on `/geo/reverse`, and an invalid point is 400.
+    let posted = post(
+        &app,
+        "/geo/reverse",
+        "at=30.8890%2C75.8340&target=home-place",
+        true,
+    )
+    .await;
+    assert_eq!(posted.status(), StatusCode::METHOD_NOT_ALLOWED);
+
+    let bad = get_as_member(&app, "/geo/reverse?at=north").await;
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+
     app.shutdown().await.unwrap();
 }

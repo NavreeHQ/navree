@@ -20,7 +20,10 @@ What it shows, in one small crate:
   read the area from, such as `decode` in a test, every point is refused.
 - **A source the app has to allow.** The map's tiles come from OpenStreetMap. The plugin asks for
   that host, and the app allows it in `ui.policy.allow.geo.img_src`. Until it does, the map shows
-  its fallback and the page loads nothing from the host.
+  its fallback and the page loads nothing from the host. The plugin's two JSON routes under `/geo/`
+  (`GET /geo/tiles.json` and `GET /geo/reverse`) answer signed-in requests with data; on a guest
+  page `MapView` receives its `Tiles` on the server, while `LOCATION` keeps its coordinate input
+  and `"Map unavailable"` fallback.
 
 ## Use it
 
