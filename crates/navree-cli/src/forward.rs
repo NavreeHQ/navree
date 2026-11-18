@@ -77,6 +77,17 @@ pub trait Runner {
     /// error still reaches the terminal); whether it succeeded, and the
     /// output.
     fn capture(&mut self, invocation: &Invocation, dir: &Path) -> std::io::Result<(bool, String)>;
+
+    /// Runs `invocation` in `dir` capturing both streams: whether it succeeded, its
+    /// standard output and its standard error.
+    fn capture_both(
+        &mut self,
+        invocation: &Invocation,
+        dir: &Path,
+    ) -> std::io::Result<(bool, String, String)> {
+        let (ok, out) = self.capture(invocation, dir)?;
+        Ok((ok, out, String::new()))
+    }
 }
 
 /// The [`Runner`] that starts real processes.
@@ -96,6 +107,19 @@ impl Runner for ProcessRunner {
         Ok((
             output.status.success(),
             String::from_utf8_lossy(&output.stdout).into_owned(),
+        ))
+    }
+
+    fn capture_both(
+        &mut self,
+        invocation: &Invocation,
+        dir: &Path,
+    ) -> std::io::Result<(bool, String, String)> {
+        let output = invocation.command(dir).output()?;
+        Ok((
+            output.status.success(),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
         ))
     }
 }
@@ -189,5 +213,17 @@ mod tests {
             invocation.to_string(),
             "cargo run --quiet -- queue:work --queue a,b --once"
         );
+    }
+
+    #[test]
+    fn capture_both_keeps_standard_error_apart() {
+        let mut runner = ProcessRunner;
+        let invocation = Invocation::new("cargo", ["--definitely-not-an-option"]);
+        let (ok, out, err) = runner
+            .capture_both(&invocation, Path::new(env!("CARGO_MANIFEST_DIR")))
+            .expect("cargo runs");
+        assert!(!ok);
+        assert!(out.is_empty(), "expected empty stdout, got {out:?}");
+        assert!(!err.is_empty());
     }
 }
