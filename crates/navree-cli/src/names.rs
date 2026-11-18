@@ -43,7 +43,7 @@ pub enum NameError {
 
 /// Rust's strict and reserved keywords (edition 2024): none of them can name
 /// a module or a crate.
-const KEYWORDS: &[&str] = &[
+pub(crate) const KEYWORDS: &[&str] = &[
     "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "crate",
     "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl",
     "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",

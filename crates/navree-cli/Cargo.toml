@@ -59,6 +59,8 @@ syn = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
+# Edits the app's Cargo.toml and configuration in place, keeping comments and layout (plugin:add).
+toml_edit = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]

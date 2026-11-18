@@ -68,6 +68,7 @@ pub mod native_coverage;
 pub mod native_doctor;
 pub mod new_app;
 pub mod openapi_client;
+pub mod plugin;
 pub mod project;
 pub mod resource;
 pub mod scaffold;
