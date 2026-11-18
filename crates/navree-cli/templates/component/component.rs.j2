@@ -1,0 +1,151 @@
+//! The [`{{ pascal }}`] component.
+
+{% if field %}
+use navree::ui::form::{ControlCx, ControlField, FieldControl};
+{% endif %}
+{% if script and sheet %}
+use navree::ui::{Element, Node, UiExtension, el, extension_script, extension_sheet};
+{% elif script %}
+use navree::ui::{Element, Node, UiExtension, el, extension_script};
+{% elif sheet %}
+use navree::ui::{Element, Node, UiExtension, el, extension_sheet};
+{% else %}
+use navree::ui::{Element, Node, el};
+{% endif %}
+
+{% if script and sheet %}
+/// Extension files served for [`{{ pascal }}`] under the `{{ ns }}` namespace.
+pub static {{ screaming }}: UiExtension = UiExtension::new("{{ ns }}", "{{ ext }}")
+    .script(extension_script!("assets/{{ ext }}.js", 64 * 1024))
+    .sheet(extension_sheet!("assets/{{ ext }}.css", "{{ ns }}", 32 * 1024))
+    .contract(1)
+    .routes(&["/{{ ns }}/"]);
+
+{% elif script %}
+/// Extension script served for [`{{ pascal }}`] under the `{{ ns }}` namespace.
+pub static {{ screaming }}: UiExtension = UiExtension::new("{{ ns }}", "{{ ext }}")
+    .script(extension_script!("assets/{{ ext }}.js", 64 * 1024))
+    .contract(1)
+    .routes(&["/{{ ns }}/"]);
+
+{% elif sheet %}
+/// Extension stylesheet served for [`{{ pascal }}`] under the `{{ ns }}` namespace.
+pub static {{ screaming }}: UiExtension = UiExtension::new("{{ ns }}", "{{ ext }}")
+    .sheet(extension_sheet!("assets/{{ ext }}.css", "{{ ns }}", 32 * 1024));
+
+{% endif %}
+/// The {{ title | lower }} component.
+#[derive(Clone, Debug)]
+#[must_use]
+pub struct {{ pascal }} {
+    el: Element,
+    label: String,
+}
+
+navree::ui::component_methods!({{ pascal }});
+navree::ui::component_node!({{ pascal }});
+
+impl {{ pascal }} {
+    /// Creates a [`{{ pascal }}`] showing `label`.
+    pub fn new(label: impl Into<String>) -> {{ pascal }} {
+        {{ pascal }} {
+            el: el("div").slot("{{ ns }}:{{ ext }}"),
+            label: label.into(),
+        }
+    }
+
+    fn into_node(self) -> Node {
+        let text = el("p").slot("{{ ns }}:{{ ext }}-text").child(self.label);
+{% if script %}
+        let body = el("div")
+            .slot("{{ ns }}:{{ ext }}-body")
+            .flag("data-ui-keep", true);
+        self.el
+            .extension(&{{ screaming }})
+            .children((body, text))
+            .into()
+{% elif sheet %}
+        self.el.extension(&{{ screaming }}).child(text).into()
+{% else %}
+        self.el.child(text).into()
+{% endif %}
+    }
+}
+
+{% if field %}
+/// Form and inline-edit field control for [`{{ pascal }}`].
+#[derive(Clone, Copy, Debug)]
+pub struct {{ pascal }}Control;
+
+/// The [`{{ pascal }}`] control, named on a form field or an editable table cell.
+pub static {{ screaming }}_CONTROL: {{ pascal }}Control = {{ pascal }}Control;
+
+impl FieldControl for {{ pascal }}Control {
+    fn name(&self) -> &'static str {
+        "{{ ns }}.{{ ext }}"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        let input = el("input")
+            .slot("input")
+            .attr("type", "text")
+            .attr("name", field.name.to_owned())
+            .attr("autocomplete", "off")
+            .attr_opt("placeholder", field.placeholder.map(str::to_owned))
+            .attr_opt("value", field.value.map(str::to_owned))
+            .attr_opt(
+                "aria-label",
+                field.label_id.is_none().then(|| field.label.to_owned()),
+            )
+            .flag("required", field.required)
+            .flag("disabled", field.disabled);
+        let root = el("div").slot("{{ ns }}:{{ ext }}");
+{% if script %}
+        let body = el("div")
+            .slot("{{ ns }}:{{ ext }}-body")
+            .flag("data-ui-keep", true);
+        root.extension(&{{ screaming }})
+            .children((input, body))
+            .into()
+{% elif sheet %}
+        root.extension(&{{ screaming }}).child(input).into()
+{% else %}
+        root.child(input).into()
+{% endif %}
+    }
+
+    fn check(&self, value: &str, _cx: &ControlCx<'_>) -> Result<(), String> {
+        if value.trim().is_empty() {
+            Err("Enter a value".to_owned())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+{% endif %}
+/// An example [`{{ pascal }}`] for rule and browser tests.
+pub fn example() -> Node {
+    {{ pascal }}::new("Sarabha Nagar, Ludhiana")
+        .id("example-{{ ext }}")
+        .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use navree::ui::kit;
+
+    use super::*;
+
+    #[test]
+    fn the_{{ name }}_follows_the_component_rules() {
+        kit::assert_component(&example());
+    }
+{% if field %}
+
+    #[test]
+    fn the_{{ name }}_control_follows_the_control_rules() {
+        kit::assert_control(&{{ screaming }}_CONTROL);
+    }
+{% endif %}
+}

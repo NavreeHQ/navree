@@ -97,6 +97,10 @@ const TEMPLATES: &[(&str, &str)] = templates![
     "plugin/LICENSE-APACHE",
     "plugin/ci.yml",
     "plugin/client.rs",
+    "component/component.rs",
+    "component/browser_test.rs",
+    "component/script.js",
+    "component/sheet.css",
 ];
 
 /// A template failed to render (a bug in the template or its context).

@@ -1,0 +1,252 @@
+//! Browser checks for [`{{ pascal }}`]: mounts the live component beside its stored twin,
+//! checks that nothing is added outside the component root, tabs through the control in an
+//! inline-edited table cell, verifies Enter, Escape and inner change events, and checks that
+//! no policy or console violation is reported.
+//!
+//! Run with Chrome or Chromium installed:
+//!
+//! `cargo test --test browser_{{ name }} -- --ignored`
+
+use std::time::Duration;
+
+use navree::browser::{Browser, BrowserError, Page, TestServer};
+use navree::http::{HttpModule, ModuleBuilderHttpExt as _};
+use navree::testing::TestApp;
+{% if field %}
+use navree::ui::form::{Control, Language};
+{% else %}
+use navree::ui::form::{Control, ControlField, FieldControl, Language};
+{% endif %}
+use navree::ui::table::{EditCell, NoFilter};
+use navree::ui::{
+    DataTable, EditedValue, Node, Reply, TableQuery, TableRow, UiModule, View, el, kit,
+};
+use navree::{Module, ModuleBuilder, controller, injectable};
+{% if field %}
+use {{ crate_name }}::ui::{{ name }}::{ {{ screaming }}, {{ screaming }}_CONTROL, example };
+{% else %}
+use {{ crate_name }}::ui::{{ name }}::{ {{ screaming }}, example };
+{% endif %}
+
+const LIVE_MOUNTED: &str = r#"css=#example-{{ ext }}[data-ui-mounted]"#;
+const CELL_MOUNTED: &str = r#"css=[data-slot="{{ ns }}:{{ ext }}"][data-ui-mounted]"#;
+const CELL_INPUT: &str = "css=input[name=value]";
+
+{% if not field %}
+#[derive(Clone, Copy, Debug)]
+struct CellControl;
+
+static CELL_CONTROL: CellControl = CellControl;
+
+impl FieldControl for CellControl {
+    fn name(&self) -> &'static str {
+        "{{ ns }}.{{ ext }}"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        let input = el("input")
+            .slot("input")
+            .attr("type", "text")
+            .attr("name", field.name.to_owned())
+            .attr("autocomplete", "off")
+            .attr_opt("value", field.value.map(str::to_owned))
+            .attr_opt(
+                "aria-label",
+                field.label_id.is_none().then(|| field.label.to_owned()),
+            )
+            .flag("disabled", field.disabled);
+        let body = el("div")
+            .slot("{{ ns }}:{{ ext }}-body")
+            .flag("data-ui-keep", true);
+        el("div")
+            .slot("{{ ns }}:{{ ext }}")
+            .extension(&{{ screaming }})
+            .children((input, body))
+            .into()
+    }
+}
+
+{% endif %}
+#[derive(Clone, TableRow)]
+#[table(sort = "recipient", per = 25)]
+struct DeliveryRow {
+    #[col(skip)]
+    id: i64,
+    #[col(sortable, label = "Recipient")]
+    recipient: String,
+    #[col(label = "{{ title }}")]
+    cell_value: String,
+}
+
+#[injectable]
+struct Site;
+
+#[controller]
+#[public]
+impl Site {
+    #[get("!/twin")]
+    async fn twin(&self) -> View {
+        let live = example();
+        let twin = kit::stored_twin(&example());
+        View::new("{{ title }}").body(el("div").id("stage").children((live, twin)))
+    }
+
+    #[get("!/cells")]
+    async fn cells(&self) -> View {
+        let rows = vec![DeliveryRow {
+            id: 1,
+            recipient: "Harpreet Sandhu".to_owned(),
+            cell_value: "Sarabha Nagar, Ludhiana".to_owned(),
+        }];
+        let query = TableQuery::<DeliveryRow, NoFilter>::parse("/cells", "");
+        View::new("Deliveries").body(DataTable::new("deliveries", &query, &rows).cell(
+            "cell_value",
+            |row| {
+                EditCell::control(
+                    row.cell_value.clone(),
+                    format!("/deliveries/{}/cell", row.id),
+{% if field %}
+                    Control::new(&{{ screaming }}_CONTROL),
+{% else %}
+                    Control::new(&CELL_CONTROL),
+{% endif %}
+                )
+                .label("{{ title }}")
+            },
+        ))
+    }
+
+    #[post("!/deliveries/1/cell")]
+    async fn save_cell(&self, edit: EditedValue<String>) -> Reply {
+{% if field %}
+        let control = Control::new(&{{ screaming }}_CONTROL);
+{% else %}
+        let control = Control::new(&CELL_CONTROL);
+{% endif %}
+        match edit.read(control, &Language::english()) {
+            Ok(_) => Reply::ops(Vec::new()),
+            Err(refused) => refused.reply("/cells"),
+        }
+    }
+}
+
+struct SiteModule;
+
+impl Module for SiteModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute({{ screaming }});
+        m.controller::<Site>();
+    }
+}
+
+async fn cell_posts(page: &Page) -> Result<u64, BrowserError> {
+    page.script(
+        "return performance.getEntriesByType('resource').filter((e) => e.name.endsWith('/deliveries/1/cell')).length",
+    )
+    .await
+}
+
+#[tokio::test]
+#[ignore = "needs Chrome or Chromium"]
+async fn the_{{ name }}_mounts_leaves_its_twin_dormant_and_behaves_in_a_cell()
+-> Result<(), BrowserError> {
+    let app = TestApp::builder()
+        .module(HttpModule::for_root(Default::default()))
+        .module(UiModule)
+        .module(SiteModule)
+        .build()
+        .await;
+    let server = TestServer::start(app.ctx()).await?;
+    let browser = Browser::launch().await?;
+
+    let page = browser.visit(server.url("/twin")).await?;
+    page.wait_for(LIVE_MOUNTED).await?;
+
+    let mounted: u64 = page
+        .script(
+            r#"return document.querySelectorAll('[data-slot="{{ ns }}:{{ ext }}"][data-ui-mounted]').length"#,
+        )
+        .await?;
+    assert_eq!(mounted, 1, "only the live component is mounted");
+
+    let in_twin: u64 = page
+        .script(
+            r#"return document.querySelectorAll('[data-ui-stored] [data-slot="{{ ns }}:{{ ext }}"][data-ui-mounted]').length"#,
+        )
+        .await?;
+    assert_eq!(in_twin, 0, "the stored twin was mounted");
+
+    let twin_posts: u64 = page
+        .script(
+            "return performance.getEntriesByType('resource').filter((e) => e.initiatorType === 'fetch').length",
+        )
+        .await?;
+    assert_eq!(twin_posts, 0, "the stored twin posted a request");
+
+    let outside: Vec<String> = page
+        .script(
+            r#"const describe = (node) => {
+                const slot = node.getAttribute("data-slot");
+                const id = node.id ? `#${node.id}` : "";
+                const mark = slot ? `[data-slot="${slot}"]` : "";
+                return `${node.tagName.toLowerCase()}${id}${mark}`;
+            };
+            const stage = document.getElementById("stage");
+            const extraInStage = [...stage.children].filter(
+                (child) => child.id !== "example-{{ ext }}" && !child.hasAttribute("data-ui-stored")
+            );
+            const extraInBody = [...document.body.children].filter(
+                (child) =>
+                    !child.contains(stage) &&
+                    child.id !== "ui-post" &&
+                    child.getAttribute("data-slot") !== "toaster"
+            );
+            return [...extraInStage, ...extraInBody].map(describe);"#,
+        )
+        .await?;
+    assert!(
+        outside.is_empty(),
+        "elements added outside the root: {}",
+        outside.join(", ")
+    );
+
+    page.assert_no_policy_violations().await?;
+    page.assert_no_console_errors().await?;
+
+    page.visit(server.url("/cells")).await?;
+    page.wait_for(CELL_MOUNTED).await?;
+
+    // Tab through the control.
+    page.click(CELL_INPUT).await?;
+    page.keys("Tab").await?;
+
+    // Enter on an unchanged `value` field leaves it without posting the cell.
+    page.click(CELL_INPUT).await?;
+    page.keys("Enter").await?;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(cell_posts(&page).await?, 0, "Enter on an unchanged field posted the cell");
+
+    // Escape in a grid cell moves focus back to the cell without posting.
+    page.click(CELL_INPUT).await?;
+    page.keys("Escape").await?;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let focused_cell: bool = page
+        .script("return Boolean(document.activeElement?.matches?.('td[tabindex]'))")
+        .await?;
+    assert!(focused_cell, "Escape in the grid moved focus to the cell");
+    assert_eq!(cell_posts(&page).await?, 0, "Escape posted the cell");
+
+    // An inner `change` event on a part not named `value` stays inside the control.
+    page.script::<bool>(
+        r#"const inner = document.querySelector('[data-slot="{{ ns }}:{{ ext }}-body"]');
+        inner.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;"#,
+    )
+    .await?;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(cell_posts(&page).await?, 0, "an inner change posted the cell");
+
+    page.assert_no_policy_violations().await?;
+    page.assert_no_console_errors().await?;
+    Ok(())
+}

@@ -1,0 +1,25 @@
+// Contract-1 extension script for the {{ ns }}:{{ ext }} component.
+// Reach parts inside this component with `ui.find` and `ui.findAll`, attach
+// listeners with `ui.on` and timers with `ui.later`, and call allowed routes with `ui.call`.
+
+export const contract = 1;
+
+/**
+ * @param {Element} _el
+ * @param {any} props
+ * @param {any} ui
+ */
+export function mount(_el, props, ui) {
+  const body = ui.find("[data-slot='{{ ns }}:{{ ext }}-body']");
+  let current = props;
+
+  return {
+    /** @param {any} next */
+    update(next) {
+      current = next;
+      void body;
+      void current;
+    },
+    leave() {},
+  };
+}
