@@ -1,3 +1,4 @@
+import Accessibility
 import Foundation
 import NavreeDesign
 import NavreeProtocol
@@ -41,6 +42,9 @@ extension NativeClient {
         let site = pictures?.site
         let hosts = pictures?.hosts ?? []
         context.pictureAddress = { source in site?.picture(source, hosts: hosts) }
+        // What the app itself says at a field: the files it did not add, and why.
+        let notes = (effects as? SystemEffects)?.fileNotes
+        context.notes = { form, field in notes?.words(screen: id, form: form.key, field: field) ?? [] }
         return context
     }
 
@@ -97,13 +101,24 @@ extension NativeClient {
             guard self.field(form, field, on: id) != nil else {
                 return problem("a file field the core does not hold changed: \(form.key) \(field)")
             }
-            let files = urls.compactMap { url -> FileRef? in
+            var files: [FileRef] = []
+            var refused: [String] = []
+            for url in urls {
                 // A file from another app's storage is lent for as long as it is copied.
                 let lent = url.startAccessingSecurityScopedResource()
                 defer { if lent { url.stopAccessingSecurityScopedResource() } }
-                // A photo is kept without the place it was taken, unless the field asks for it.
-                return FileStore.shared.keep(url, keepLocation: keepLocation)
+                // A photo is kept without what could say where it was taken,
+                // unless the field asks for the place.
+                switch FileStore.shared.take(url, keepLocation: keepLocation) {
+                case .kept(let file): files.append(file)
+                case .refused(let why): refused.append(Words.refused(url.lastPathComponent, why))
+                }
             }
+            // A file that was not added is said at its field, by name and
+            // with why, and aloud: the field would otherwise show one file
+            // fewer, or none, as if nothing had been picked.
+            (effects as? SystemEffects)?.fileNotes.say(refused, screen: id, form: form.key, field: field)
+            if !refused.isEmpty { AccessibilityNotification.Announcement(refused.joined(separator: " ")).post() }
             send(.field(screen: id, form: Self.formID(form), field: field, value: .files(files)))
         case .choose(let table, let row, let on, let across):
             send(.choose(screen: id, table: table, row: row, on: on, across: across))

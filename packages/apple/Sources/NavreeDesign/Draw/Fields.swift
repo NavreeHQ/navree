@@ -23,6 +23,16 @@ struct FieldControl: View {
             } else if let help = field.help {
                 Text(help).font(.footnote).foregroundStyle(.secondary)
             }
+            // What the app itself says of the field: a file that was picked
+            // and not added, by its name and with why, in words like the
+            // server's own message and never by the field looking emptier alone.
+            ForEach(Array(context.notes(ref, field.key).enumerated()), id: \.offset) { _, note in
+                Label(note, systemImage: "exclamationmark.circle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("\(field.label ?? field.name): \(note)")
+            }
         }
     }
 

@@ -72,6 +72,67 @@ struct IntentTests {
         #expect(shell.problems.list.isEmpty, "\(shell.problems.list)")
     }
 
+    @Test func aPickedFileThatIsNotAddedIsSaidAtItsFieldByNameAndWithWhy() throws {
+        let shell = try Shell()
+        // An expense claim: a field that takes several receipts, and does not ask for where they were taken.
+        shell.transport.pages["/orders"] = """
+            {"build": "152bd84abf4d", "navree": 1, "vocab": 0, "screen": {"title": "Expense claim", "body":
+              {"t": "form", "id": "claim", "method": "post", "action": "/claims", "children": [
+                {"t": "field", "name": "receipts", "label": "Receipts",
+                 "input": {"t": "file", "accept": "image/*,.txt", "multiple": true}}]}}}
+            """
+        shell.client.begin()
+        shell.client.send(.select(destination: 1))
+        let claim = try #require(shell.client.nav.front)
+        let tree = try #require(shell.client.screen(claim)?.screen)
+        var receipts: Navree.Field?
+        var found: Navree.Form?
+        tree.body.walk { node in
+            if case .field(let field) = node { receipts = field }
+            if case .form(let form) = node { found = form }
+        }
+        let form = FormRef(try #require(found))
+        let field = try #require(receipts).key
+        let context = shell.client.context(for: claim, depth: 0, base: nil)
+        #expect(context.notes(form, field).isEmpty)
+
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("navree-claim-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // A receipt typed up, and a photo of one that does not read as a
+        // picture: whether it says where it was taken cannot be told.
+        let typed = folder.appendingPathComponent("taxi.txt")
+        try Data("Taxi, Ludhiana to Amritsar, 2,400".utf8).write(to: typed)
+        let photo = folder.appendingPathComponent("Kapurthala.jpg")
+        try Data("not a picture".utf8).write(to: photo)
+
+        context.send(.files(form: form, field: field, urls: [typed, photo]))
+
+        // The receipt that could be added is the field's. The other is not
+        // dropped without a word: the field says which file, and why.
+        #expect(context.values(form, field) == ["taxi.txt"])
+        #expect(context.notes(form, field) == [
+            "Kapurthala.jpg is a kind of picture this device cannot check for the place it was taken, so it was not added."
+        ])
+        // It is said at that field, and at no other.
+        #expect(context.notes(form, "another").isEmpty)
+
+        // The person picks again, only what can be added: nothing is said there any more.
+        context.send(.files(form: form, field: field, urls: [typed]))
+        #expect(context.values(form, field) == ["taxi.txt"])
+        #expect(context.notes(form, field).isEmpty)
+
+        // When every file picked is refused, the field holds none and says why for each.
+        context.send(.files(form: form, field: field, urls: [photo, folder.appendingPathComponent("gone.txt")]))
+        #expect(context.values(form, field) == [])
+        #expect(context.notes(form, field).count == 2)
+        #expect(context.notes(form, field).last == "gone.txt could not be read and was not added.")
+        // The words name a person's files: they go when the session does.
+        shell.effects.run(.forgetSession, for: shell.client)
+        #expect(context.notes(form, field).isEmpty)
+        #expect(shell.problems.list.isEmpty, "\(shell.problems.list)")
+    }
+
     @Test func aControlThatAsksFirstPutsTheQuestionOnTheScreen() throws {
         let shell = try Shell()
         let order = shell.orderOpen()
