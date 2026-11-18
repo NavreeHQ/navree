@@ -456,6 +456,36 @@ fn is_refused_attr(name: &str) -> bool {
             .is_some_and(|start| start.eq_ignore_ascii_case(b"on"))
 }
 
+/// Whether `path` holds a `.` or `..` segment, written plainly or with `%2e` in any case.
+fn has_dot_segment(path: &str) -> bool {
+    path.split('/').any(|segment| {
+        if segment == "." || segment == ".." {
+            return true;
+        }
+        if !segment.contains('%') || segment.len() > 6 {
+            return false;
+        }
+        let bytes = segment.as_bytes();
+        let mut dots = 0_usize;
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'.' {
+                dots += 1;
+                i += 1;
+            } else if bytes
+                .get(i..i + 3)
+                .is_some_and(|esc| esc.eq_ignore_ascii_case(b"%2e"))
+            {
+                dots += 1;
+                i += 3;
+            } else {
+                return false;
+            }
+        }
+        dots == 1 || dots == 2
+    })
+}
+
 impl Element {
     /// Says how the screen this link leads to is presented by a native client, when the
     /// page knows: a form to fill in is a [`Task`](crate::Presented::Task), a record to
@@ -776,7 +806,8 @@ impl Element {
     /// [`extension`](Self::extension) with props for the script: any value that serializes to
     /// JSON. They go in an attribute, escaped as every attribute is, and the script receives
     /// them parsed, so a value can't become markup or code. A value that can't be written as
-    /// JSON is written as `null`.
+    /// JSON is written as `null`. There is no size limit when the element is drawn; keep props
+    /// under 64 KB and fetch the rest from a route (`kit::problems` reports props over that).
     ///
     /// ```ignore
     /// use navree_ui::{el, render};
@@ -801,8 +832,9 @@ impl Element {
     /// Lets this element's script call exactly `href`, beside its extension's route
     /// prefixes: for an address only the server can name, such as the drop of one delivery.
     /// The query and the fragment are left out, and so is an address that is not a path of this
-    /// site, or that holds whitespace (write it percent-encoded). Call it after
-    /// [`extension`](Self::extension), which replaces the addresses an earlier call wrote.
+    /// site, holds whitespace, or has a `.` or `..` segment (write whitespace percent-encoded).
+    /// Call it after [`extension`](Self::extension), which replaces the addresses an earlier call
+    /// wrote.
     ///
     /// ```ignore
     /// use navree_ui::{el, render};
@@ -815,7 +847,11 @@ impl Element {
     pub fn extension_call(mut self, href: impl Into<LocalHref>) -> Self {
         let href = href.into();
         let path = href.as_str().split(['?', '#']).next().unwrap_or_default();
-        if !path.starts_with('/') || path.chars().any(char::is_whitespace) {
+        if !path.starts_with('/')
+            || path.contains('\\')
+            || path.chars().any(char::is_whitespace)
+            || has_dot_segment(path)
+        {
             return self;
         }
         let token = format!("={path}");
@@ -1217,12 +1253,12 @@ mod tests {
     static MAP: UiExtension = UiExtension::new("geo", "map")
         .script(ExtensionFile::__new(
             b"export const contract = 1; export function mount() {}",
-            "1a2b3c4d5e6f",
+            "e1613860bbf0",
             None,
         ))
         .sheet(ExtensionFile::__new(
             b"/* the map's stylesheet, scoped for geo */",
-            "0f9e8d7c6b5a",
+            "bbefcf02ae04",
             Some("geo"),
         ))
         .contract(1)
@@ -1230,11 +1266,11 @@ mod tests {
         .routes(&["/geo/"]);
     static BADGE: UiExtension = UiExtension::new("geo", "badge").sheet(ExtensionFile::__new(
         b"/* the badge's stylesheet, scoped for geo */",
-        "aaaaaaaaaaaa",
+        "ea46b024fa00",
         Some("geo"),
     ));
 
-    const MAP_ATTRIBUTES: &str = r#" data-ui-ext="/_navree/ui/ext/geo.map-1a2b3c4d5e6f.js" data-ui-ext-sheet="/_navree/ui/ext/geo.map-0f9e8d7c6b5a.css" data-ui-ext-routes="/geo/""#;
+    const MAP_ATTRIBUTES: &str = r#" data-ui-ext="/_navree/ui/ext/geo.map-e1613860bbf0.js" data-ui-ext-sheet="/_navree/ui/ext/geo.map-bbefcf02ae04.css" data-ui-ext-routes="/geo/""#;
 
     #[test]
     fn an_element_with_an_extension_names_its_files_and_asks_for_the_modules() {
@@ -1280,7 +1316,7 @@ mod tests {
         assert_eq!(
             replaced.get("data-ui-ext-sheet"),
             Some(&AttrValue::Text(
-                "/_navree/ui/ext/geo.badge-aaaaaaaaaaaa.css".into()
+                "/_navree/ui/ext/geo.badge-ea46b024fa00.css".into()
             ))
         );
         assert!(replaced.uses.has(Uses::EXTENSION_SHEETS));
@@ -1292,7 +1328,7 @@ mod tests {
         let element = el("span").extension(&BADGE);
         assert_eq!(
             crate::render(&element.clone().into()),
-            r#"<span data-ui-ext-sheet="/_navree/ui/ext/geo.badge-aaaaaaaaaaaa.css" data-ui-keep-attrs="data-ui-mounted data-ui-failed"></span>"#
+            r#"<span data-ui-ext-sheet="/_navree/ui/ext/geo.badge-ea46b024fa00.css" data-ui-keep-attrs="data-ui-mounted data-ui-failed"></span>"#
         );
         assert_eq!(element.uses, Uses::EXTENSION_SHEETS);
     }
@@ -1308,7 +1344,7 @@ mod tests {
         let styled = island().extension(&BADGE);
         assert_eq!(
             crate::render(&styled.clone().into()),
-            r#"<div data-ui-island="/_navree/ui/island/clock-0123456789ab.js" data-ui-props="{}" data-ui-ext-sheet="/_navree/ui/ext/geo.badge-aaaaaaaaaaaa.css"></div>"#
+            r#"<div data-ui-island="/_navree/ui/island/clock-0123456789ab.js" data-ui-props="{}" data-ui-ext-sheet="/_navree/ui/ext/geo.badge-ea46b024fa00.css"></div>"#
         );
         assert!(styled.uses.has(Uses::ISLAND));
         assert!(styled.uses.has(Uses::EXTENSION_SHEETS));

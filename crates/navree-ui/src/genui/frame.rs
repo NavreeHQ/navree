@@ -445,12 +445,12 @@ mod tests {
         static MAP: UiExtension = UiExtension::new("geo", "map")
             .script(ExtensionFile::__new(
                 b"export const contract = 1;",
-                "1a2b3c4d5e6f",
+                "300a4015e74f",
                 None,
             ))
             .sheet(ExtensionFile::__new(
                 b"/* scoped for geo */",
-                "0f9e8d7c6b5a",
+                "0e05c326041f",
                 Some("geo"),
             ))
             .contract(1)

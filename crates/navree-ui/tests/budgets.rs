@@ -596,10 +596,10 @@ fn a_page_with_a_script_extension_loads_the_core_and_extensions_modules_alone() 
     use navree_ui::{ExtensionFile, UiExtension, el};
 
     const SCRIPT: ExtensionFile =
-        ExtensionFile::__new(b"export const contract = 1;", "1a2b3c4d5e6f", None);
+        ExtensionFile::__new(b"export const contract = 1;", "300a4015e74f", None);
     const SHEET: ExtensionFile = ExtensionFile::__new(
         br#":where([data-slot^="geo:"]){.pin{color:red}}"#,
-        "0f9e8d7c6b5a",
+        "cdc93e5e5466",
         Some("geo"),
     );
     static MAP: UiExtension = UiExtension::new("geo", "map")
@@ -619,7 +619,7 @@ fn a_page_with_a_sheet_only_extension_loads_no_script() {
 
     const SHEET: ExtensionFile = ExtensionFile::__new(
         br#":where([data-slot^="geo:"]){}"#,
-        "aaaaaaaaaaaa",
+        "d93a2a64ac85",
         Some("geo"),
     );
     static BADGE: UiExtension = UiExtension::new("geo", "badge").sheet(SHEET);

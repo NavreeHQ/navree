@@ -81,12 +81,12 @@ static MARK: AppImage = AppImage::new(
 static MAP: UiExtension = UiExtension::new("geo", "map")
     .script(ExtensionFile::__new(
         b"export const contract = 1; export function mount() {}",
-        "1a2b3c4d5e6f",
+        "e1613860bbf0",
         None,
     ))
     .sheet(ExtensionFile::__new(
         br#":where([data-slot^="geo:"]){.pin{color:red}}"#,
-        "0f9e8d7c6b5a",
+        "cdc93e5e5466",
         Some("geo"),
     ))
     .contract(1)

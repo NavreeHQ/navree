@@ -44,22 +44,44 @@ pub const EXTENSION_CONTRACT: u32 = 1;
 const MOST_NAMED: usize = 8;
 
 /// Attributes an extension never keeps: the ones the runtime or the page acts on, a name or an
-/// id that could stand in for one of the page's, and every attribute that holds an address.
-/// (A name that starts with `data-ui-` or `on` is refused as well.)
-const REFUSED_KEPT: [&str; 14] = [
+/// id that could stand in for one of the page's, and every attribute that holds an address or
+/// directs a navigation or submission. (A name that starts with `data-ui-` or `on` is refused as
+/// well.)
+const REFUSED_KEPT: [&str; 35] = [
     "style",
     "id",
     "name",
     "form",
     "href",
     "src",
+    "srcset",
+    "imagesrcset",
+    "srcdoc",
     "action",
     "formaction",
+    "formtarget",
+    "formmethod",
+    "formenctype",
     "poster",
     "cite",
     "ping",
     "data",
     "background",
+    "archive",
+    "codebase",
+    "longdesc",
+    "profile",
+    "usemap",
+    "manifest",
+    "icon",
+    "itemid",
+    "itemtype",
+    "xmlns",
+    "attributionsrc",
+    "blocking",
+    "target",
+    "popovertarget",
+    "commandfor",
     "xlink:href",
 ];
 
@@ -237,6 +259,31 @@ pub struct ExtensionFile {
     namespace: Option<&'static str>,
 }
 
+/// Whether `hash` is the first 12 lower-case hex digits of the 64-bit FNV-1a hash of `bytes`.
+const fn hash_matches(bytes: &[u8], hash: &str) -> bool {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut state: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut at = 0;
+    while at < bytes.len() {
+        state ^= bytes[at] as u64;
+        state = state.wrapping_mul(0x0100_0000_01b3);
+        at += 1;
+    }
+    let given = hash.as_bytes();
+    if given.len() != 12 {
+        return false;
+    }
+    let mut i = 0;
+    while i < 12 {
+        let nibble = ((state >> (60 - i * 4)) & 0xf) as usize;
+        if given[i] != DIGITS[nibble] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
 impl ExtensionFile {
     /// What the file macros expand to. Not public API.
     #[doc(hidden)]
@@ -248,6 +295,10 @@ impl ExtensionFile {
         assert!(
             is_hash(hash),
             "an extension file's hash is 12 lower-case hex digits"
+        );
+        assert!(
+            hash_matches(bytes, hash),
+            "an extension file's hash does not match its bytes"
         );
         ExtensionFile {
             bytes,
@@ -438,8 +489,8 @@ impl UiExtension {
     /// the toolkit keeps (`data-ui-mounted` and `data-ui-failed`): at most 8, each a lower-case
     /// letter followed by up to 63 lower-case letters, digits or `-`, never `data-ui-*`,
     /// `style`, `on*`, `id`, `name`, `form` or an attribute that holds an address (`href`,
-    /// `src`, `action`, `formaction`, `poster`, `cite`, `ping`, `data`, `background`,
-    /// `xlink:href`). Anything else fails the build.
+    /// `src`, `srcset`, `imagesrcset`, `action`, `formaction`, `poster`, `cite`, `ping`, `data`,
+    /// `background`, `xlink:href` and the rest). Anything else fails the build.
     pub const fn keeps(mut self, attributes: &'static [&'static str]) -> UiExtension {
         assert!(
             attributes.len() <= MOST_NAMED && all_kept(attributes),
@@ -637,29 +688,163 @@ fn take(value: &str, is_sheet: bool, found: &mut Named) {
     }
 }
 
-/// The values of the extension attributes written in `markup`, with the attribute each follows
-/// (`data-ui-ext` or `data-ui-ext-sheet`), in the order they stand: each is what follows
-/// the name, an equals sign and a double quote, up to the next double quote. A value is not
-/// checked here.
+/// Whether `tag` is an HTML void element, which never has a closing tag.
+fn is_void_tag(tag: &str) -> bool {
+    [
+        "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source",
+        "track", "wbr",
+    ]
+    .iter()
+    .any(|void| void.eq_ignore_ascii_case(tag))
+}
+
+/// The values of the extension attributes written on elements in `markup` outside
+/// `data-ui-stored`, with the attribute each follows (`data-ui-ext` or `data-ui-ext-sheet`), in
+/// the order they stand. Text outside tags, quoted attribute values of other attributes, and
+/// elements carrying or inside `data-ui-stored` are skipped. A value is not checked here.
 pub(crate) fn markup_values(markup: &str) -> Vec<(&'static str, &str)> {
-    let mut found: Vec<(usize, &'static str, &str)> = Vec::new();
-    for attribute in ["data-ui-ext-sheet", "data-ui-ext"] {
-        let needle = format!("{attribute}=\"");
-        let mut from = 0;
-        while let Some(at) = markup[from..].find(&needle) {
-            let start = from + at + needle.len();
-            let Some(length) = markup[start..].find('"') else {
+    let bytes = markup.as_bytes();
+    let len = bytes.len();
+    let mut found: Vec<(&'static str, &str)> = Vec::new();
+    let mut stored_stack: Vec<&str> = Vec::new();
+    let mut i = 0;
+
+    while i < len {
+        let Some(rel) = markup[i..].find('<') else {
+            break;
+        };
+        i += rel;
+        if markup[i..].starts_with("<!--") {
+            match markup[i + 4..].find("-->") {
+                Some(end) => i += 4 + end + 3,
+                None => break,
+            }
+            continue;
+        }
+        if bytes.get(i + 1) == Some(&b'/') {
+            i += 2;
+            let name_start = i;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || matches!(bytes[i], b'-' | b':')) {
+                i += 1;
+            }
+            let tag = &markup[name_start..i];
+            while i < len && bytes[i] != b'>' {
+                if matches!(bytes[i], b'"' | b'\'') {
+                    let quote = bytes[i];
+                    i += 1;
+                    while i < len && bytes[i] != quote {
+                        i += 1;
+                    }
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            if !tag.is_empty()
+                && let Some(at) = stored_stack
+                    .iter()
+                    .rposition(|open| open.eq_ignore_ascii_case(tag))
+            {
+                stored_stack.truncate(at);
+            }
+            continue;
+        }
+        if !bytes.get(i + 1).is_some_and(u8::is_ascii_alphabetic) {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        let name_start = i;
+        while i < len && (bytes[i].is_ascii_alphanumeric() || matches!(bytes[i], b'-' | b':')) {
+            i += 1;
+        }
+        let tag = &markup[name_start..i];
+        let mut self_closing = false;
+        let mut has_stored = false;
+        let mut attrs_here: Vec<(&'static str, &str)> = Vec::new();
+
+        while i < len {
+            while i < len && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            if i >= len {
                 break;
-            };
-            found.push((from + at, attribute, &markup[start..start + length]));
-            from = start + length;
+            }
+            if bytes[i] == b'>' {
+                i += 1;
+                break;
+            }
+            if bytes[i] == b'/' {
+                i += 1;
+                if i < len && bytes[i] == b'>' {
+                    self_closing = true;
+                    i += 1;
+                    break;
+                }
+                continue;
+            }
+            let attr_start = i;
+            while i < len
+                && !bytes[i].is_ascii_whitespace()
+                && !matches!(bytes[i], b'=' | b'>' | b'/')
+            {
+                i += 1;
+            }
+            let attr_name = &markup[attr_start..i];
+            if attr_name.eq_ignore_ascii_case("data-ui-stored") {
+                has_stored = true;
+            }
+            while i < len && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            let mut attr_value: Option<&str> = None;
+            if i < len && bytes[i] == b'=' {
+                i += 1;
+                while i < len && bytes[i].is_ascii_whitespace() {
+                    i += 1;
+                }
+                if i < len && matches!(bytes[i], b'"' | b'\'') {
+                    let quote = bytes[i];
+                    i += 1;
+                    let val_start = i;
+                    while i < len && bytes[i] != quote {
+                        i += 1;
+                    }
+                    attr_value = Some(&markup[val_start..i]);
+                    if i < len {
+                        i += 1;
+                    }
+                } else {
+                    let val_start = i;
+                    while i < len
+                        && !bytes[i].is_ascii_whitespace()
+                        && !matches!(bytes[i], b'>' | b'/')
+                    {
+                        i += 1;
+                    }
+                    attr_value = Some(&markup[val_start..i]);
+                }
+            }
+            if let Some(value) = attr_value {
+                if attr_name == "data-ui-ext-sheet" {
+                    attrs_here.push(("data-ui-ext-sheet", value));
+                } else if attr_name == "data-ui-ext" {
+                    attrs_here.push(("data-ui-ext", value));
+                }
+            }
+        }
+
+        let in_stored = !stored_stack.is_empty() || has_stored;
+        if !in_stored {
+            found.extend(attrs_here);
+        }
+        if in_stored && !self_closing && !is_void_tag(tag) {
+            stored_stack.push(tag);
         }
     }
-    found.sort_by_key(|(at, _, _)| *at);
+
     found
-        .into_iter()
-        .map(|(_, attribute, value)| (attribute, value))
-        .collect()
 }
 
 /// The most unknown files a boot warns about: a request can name anything, so the log is
@@ -987,11 +1172,11 @@ mod tests {
     use super::*;
 
     const SCRIPT: ExtensionFile =
-        ExtensionFile::__new(b"export const contract = 1;", "1a2b3c4d5e6f", None);
+        ExtensionFile::__new(b"export const contract = 1;", "300a4015e74f", None);
     const SHEET: ExtensionFile =
-        ExtensionFile::__new(b"/* scoped for geo */", "0f9e8d7c6b5a", Some("geo"));
+        ExtensionFile::__new(b"/* scoped for geo */", "0e05c326041f", Some("geo"));
     const OTHER_SHEET: ExtensionFile =
-        ExtensionFile::__new(b"/* scoped for another */", "0f9e8d7c6b5a", Some("other"));
+        ExtensionFile::__new(b"/* scoped for another */", "3b7ebf14ca47", Some("other"));
 
     static MAP: UiExtension = UiExtension::new("geo", "map")
         .script(SCRIPT)
@@ -1021,11 +1206,11 @@ mod tests {
     fn an_extension_is_served_under_its_namespace_by_content_hash() {
         assert_eq!(
             MAP.script_url(),
-            Some("/_navree/ui/ext/geo.map-1a2b3c4d5e6f.js")
+            Some("/_navree/ui/ext/geo.map-300a4015e74f.js")
         );
         assert_eq!(
             MAP.sheet_url(),
-            Some("/_navree/ui/ext/geo.map-0f9e8d7c6b5a.css")
+            Some("/_navree/ui/ext/geo.map-0e05c326041f.css")
         );
         assert_eq!(MAP.declared_contract(), Some(1));
         assert_eq!(MAP.namespace(), "geo");
@@ -1033,7 +1218,7 @@ mod tests {
         assert_eq!(MAP.stem(), "geo.map");
         assert_eq!(
             MAP.script_file().map(|file| file.hash()),
-            Some("1a2b3c4d5e6f")
+            Some("300a4015e74f")
         );
         assert_eq!(
             MAP.sheet_file().map(|file| file.bytes()),
@@ -1045,7 +1230,7 @@ mod tests {
         assert_eq!(BADGE.script_file().map(|file| file.hash()), None);
         assert_eq!(
             BADGE.sheet_url(),
-            Some("/_navree/ui/ext/geo.badge-0f9e8d7c6b5a.css")
+            Some("/_navree/ui/ext/geo.badge-0e05c326041f.css")
         );
         assert_eq!(BADGE.declared_contract(), None);
 
@@ -1054,7 +1239,7 @@ mod tests {
         let name: &'static str = "b".repeat(64).leak();
         let longest = UiExtension::new(namespace, name).sheet(ExtensionFile::__new(
             b"x",
-            "0f9e8d7c6b5a",
+            "af63f54c8602",
             Some(namespace),
         ));
         let url = longest.sheet_url().expect("a sheet");
@@ -1350,7 +1535,7 @@ mod tests {
 
         let mut request = HeaderMap::new();
         request.insert(ACCEPT_ENCODING, HeaderValue::from_static("br"));
-        let current = respond("geo.map-1a2b3c4d5e6f.js", &request, &extensions);
+        let current = respond("geo.map-300a4015e74f.js", &request, &extensions);
         assert_eq!(current.status(), StatusCode::OK);
         assert_eq!(
             current.headers()[CONTENT_TYPE],
@@ -1362,7 +1547,7 @@ mod tests {
         );
         assert_eq!(current.headers()[CONTENT_ENCODING], "br");
 
-        let sheet = respond("geo.map-0f9e8d7c6b5a.css", &HeaderMap::new(), &extensions);
+        let sheet = respond("geo.map-0e05c326041f.css", &HeaderMap::new(), &extensions);
         assert_eq!(sheet.status(), StatusCode::OK);
         assert_eq!(sheet.headers()[CONTENT_TYPE], "text/css; charset=utf-8");
         assert!(sheet.headers().get(CONTENT_ENCODING).is_none());

@@ -76,12 +76,12 @@ fn builder() -> TestAppBuilder {
 static MAP: UiExtension = UiExtension::new("geo", "map")
     .script(ExtensionFile::__new(
         b"export const contract = 1; export function mount() {}",
-        "1a2b3c4d5e6f",
+        "e1613860bbf0",
         None,
     ))
     .sheet(ExtensionFile::__new(
         br#":where([data-slot^="geo:"]){.pin{color:red}}"#,
-        "0f9e8d7c6b5a",
+        "cdc93e5e5466",
         Some("geo"),
     ))
     .contract(1)
@@ -89,7 +89,7 @@ static MAP: UiExtension = UiExtension::new("geo", "map")
     .routes(&["/geo/"]);
 static BADGE: UiExtension = UiExtension::new("geo", "badge").sheet(ExtensionFile::__new(
     br#":where([data-slot^="geo:"]){}"#,
-    "aaaaaaaaaaaa",
+    "d93a2a64ac85",
     Some("geo"),
 ));
 
@@ -274,7 +274,7 @@ fn a_page_with_no_extension_is_written_as_before() {
 fn markdown_and_cleaned_rich_text_carry_no_extension_and_link_nothing() {
     // Markdown is stored text: whatever it says of an extension is text, and no page acts on it.
     let page = View::new("Notes").body(Markdown::new(
-        r#"<div data-ui-ext="/_navree/ui/ext/geo.map-1a2b3c4d5e6f.js" data-ui-ext-sheet="/_navree/ui/ext/geo.map-0f9e8d7c6b5a.css">Ludhiana</div>"#,
+        r#"<div data-ui-ext="/_navree/ui/ext/geo.map-e1613860bbf0.js" data-ui-ext-sheet="/_navree/ui/ext/geo.map-cdc93e5e5466.css">Ludhiana</div>"#,
     ));
     let html = page.to_html();
     assert!(!html.contains("data-ui-ext-link"), "{html}");
@@ -417,30 +417,30 @@ fn test_view_says_which_extensions_a_page_uses_including_in_table_rows() {
 /// extensions whose declarations the boot refuses.
 static PIN: UiExtension = UiExtension::new("maps", "pin").sheet(ExtensionFile::__new(
     b"/* scoped for maps */",
-    "bbbbbbbbbbbb",
+    "6753ae6aa021",
     Some("maps"),
 ));
 static RATING: UiExtension = UiExtension::new("app", "rating").sheet(ExtensionFile::__new(
     b"/* scoped for app */",
-    "cccccccccccc",
+    "39851f294d56",
     Some("app"),
 ));
 static OTHER_MAP: UiExtension = UiExtension::new("geo", "map")
     .script(ExtensionFile::__new(
         b"export const contract = 1; /* another map */",
-        "eeeeeeeeeeee",
+        "1d7c2a6f4dd3",
         None,
     ))
     .contract(1);
 static TOUR: UiExtension = UiExtension::new("geo", "tour").script(ExtensionFile::__new(
     b"export const contract = 1;",
-    "dddddddddddd",
+    "300a4015e74f",
     None,
 ));
 static NEWER_TOUR: UiExtension = UiExtension::new("geo", "tour")
     .script(ExtensionFile::__new(
         b"export const contract = 2;",
-        "dddddddddddd",
+        "30073815e74c",
         None,
     ))
     .contract(2);
@@ -616,7 +616,7 @@ async fn the_extension_route_serves_current_hashes_immutable_and_old_ones_uncach
     // A client that holds the current file is told so.
     app.client()
         .get(script)
-        .header("if-none-match", "\"1a2b3c4d5e6f\"")
+        .header("if-none-match", "\"e1613860bbf0\"")
         .send()
         .await
         .assert_status(304);
@@ -897,7 +897,7 @@ async fn a_booted_app_logs_each_extension_once_with_the_size_of_its_files() {
 static WIDE: UiExtension = UiExtension::new("geo", "wide")
     .script(ExtensionFile::__new(
         b"export const contract = 1;",
-        "ffffffffffff",
+        "300a4015e74f",
         None,
     ))
     .contract(1)
@@ -905,7 +905,7 @@ static WIDE: UiExtension = UiExtension::new("geo", "wide")
 static OWN: UiExtension = UiExtension::new("app", "own")
     .script(ExtensionFile::__new(
         b"export const contract = 1;",
-        "abababababab",
+        "300a4015e74f",
         None,
     ))
     .contract(1)
@@ -941,12 +941,12 @@ async fn a_route_prefix_without_the_namespace_is_warned_about() {
 /// `navree`.
 static DIAL: UiExtension = UiExtension::new("ui", "dial").sheet(ExtensionFile::__new(
     b"/* scoped for ui */",
-    "121212121212",
+    "a8288008f337",
     Some("ui"),
 ));
 static SEAL: UiExtension = UiExtension::new("navree", "seal").sheet(ExtensionFile::__new(
     b"/* scoped for navree */",
-    "343434343434",
+    "4c63032d35a8",
     Some("navree"),
 ));
 
@@ -1052,17 +1052,146 @@ async fn a_module_of_another_plugin_is_refused_the_plugins_namespace() {
 #[test]
 fn an_extension_prints_its_names_and_hashes_and_never_its_files() {
     let printed = format!("{MAP:?}");
-    for part in ["geo", "map", "1a2b3c4d5e6f", "0f9e8d7c6b5a"] {
+    for part in ["geo", "map", "e1613860bbf0", "cdc93e5e5466"] {
         assert!(printed.contains(part), "`{part}` in {printed}");
     }
     assert!(!printed.contains("export"), "{printed}");
     assert!(!printed.contains("data-slot"), "{printed}");
     let file = format!("{:?}", MAP.script_file().expect("a script"));
     assert!(
-        file.contains("1a2b3c4d5e6f") && file.contains("53"),
+        file.contains("e1613860bbf0") && file.contains("53"),
         "{file}"
     );
     assert!(!file.contains("mount"), "{file}");
+}
+
+#[test]
+fn an_extension_file_whose_hash_is_not_its_bytes_is_refused() {
+    let right = ExtensionFile::__new(b"export const contract = 1;", "300a4015e74f", None);
+    assert_eq!(right.hash(), "300a4015e74f");
+
+    for wrong in [
+        std::hint::black_box("1a2b3c4d5e6f"),
+        std::hint::black_box("300a4015e74e"),
+        std::hint::black_box("cbf29ce48422"),
+    ] {
+        let refused = std::panic::catch_unwind(|| {
+            ExtensionFile::__new(b"export const contract = 1;", wrong, None)
+        });
+        assert!(refused.is_err(), "{wrong} should be refused");
+    }
+}
+
+#[test]
+fn the_scoper_refuses_every_attribute_that_holds_an_address() {
+    for refused in [
+        "href",
+        "src",
+        "srcset",
+        "imagesrcset",
+        "srcdoc",
+        "action",
+        "formaction",
+        "formtarget",
+        "formmethod",
+        "formenctype",
+        "poster",
+        "cite",
+        "ping",
+        "data",
+        "background",
+        "archive",
+        "codebase",
+        "longdesc",
+        "profile",
+        "usemap",
+        "manifest",
+        "icon",
+        "itemid",
+        "itemtype",
+        "xmlns",
+        "attributionsrc",
+        "blocking",
+        "target",
+        "popovertarget",
+        "commandfor",
+        "xlink:href",
+    ] {
+        let list: &'static [&'static str] = Box::leak(Box::new([refused]));
+        let result = std::panic::catch_unwind(|| UiExtension::new("geo", "map").keeps(list));
+        assert!(result.is_err(), "`{refused}` must not be kept");
+    }
+}
+
+#[test]
+fn an_extension_call_address_holds_no_dot_segment() {
+    for refused in [
+        "/geo/./drop",
+        "/geo/../admin",
+        "/geo/.%2e/admin",
+        "/geo/%2e./admin",
+        "/geo/%2e/drop",
+        "/geo/%2E/drop",
+        "/geo/%2e%2e/admin",
+        "/geo/%2E%2e/admin",
+        "/geo/drop/.",
+        "/geo/drop/..",
+        "/geo\\admin",
+    ] {
+        let html = navree_ui::render(
+            &el("div")
+                .slot("geo:map")
+                .extension(&MAP)
+                .extension_call(refused)
+                .into(),
+        );
+        assert!(
+            html.contains(r#"data-ui-ext-routes="/geo/""#),
+            "`{refused}` changed routes in {html}"
+        );
+    }
+
+    // Names that merely start or end with a dot (`/.well-known/drop`, `/geo/v1.2/drop`) are kept.
+    let html = navree_ui::render(
+        &el("div")
+            .slot("geo:map")
+            .extension(&MAP)
+            .extension_call("/geo/v1.2/drop?pin=1")
+            .into(),
+    );
+    assert!(
+        html.contains(r#"data-ui-ext-routes="/geo/ =/geo/v1.2/drop""#),
+        "{html}"
+    );
+}
+
+#[test]
+fn the_head_walk_does_not_read_a_sheet_mark_inside_stored_text() {
+    let map_sheet = MAP.sheet_url().expect("a stylesheet");
+    let map_script = MAP.script_url().expect("a script");
+    let stored_note = format!(
+        r#"<div data-ui-ext="{map_script}" data-ui-ext-sheet="{map_sheet}">Sarabha Nagar</div>"#
+    );
+    let rows = vec![driver(1, "Harpreet Sandhu", &stored_note)];
+
+    // Plain cell text holding `data-ui-ext-sheet="..."`, Markdown rendered inside a table cell,
+    // and `kit::stored_twin` rendered inside a table cell are all stored text: none links `MAP`.
+    let page = View::new("Drivers").body((
+        DataTable::new("drivers-plain", &query(""), &rows)
+            .cell("title", |_| el("span").slot("geo:badge").extension(&BADGE)),
+        DataTable::new("drivers-md", &query(""), &drivers())
+            .cell("title", |_| el("span").slot("geo:badge").extension(&BADGE))
+            .cell("city", |_| Markdown::new(&stored_note)),
+        DataTable::new("drivers-twin", &query(""), &drivers())
+            .cell("title", |_| el("span").slot("geo:badge").extension(&BADGE))
+            .cell("city", |_| {
+                kit::stored_twin(&Node::Raw(SafeHtml::trusted(stored_note.as_str())))
+            }),
+    ));
+    let html = page.to_html();
+    assert_eq!(html.matches(&sheet_link(&BADGE)).count(), 1, "{html}");
+    assert!(!html.contains(&sheet_link(&MAP)), "{html}");
+    assert!(!html.contains(&script_preload(&MAP)), "{html}");
 }
 
 /// What `kit::problems` says of raw markup under a part of a plugin's.
