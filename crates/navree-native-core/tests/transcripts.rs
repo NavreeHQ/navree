@@ -681,6 +681,9 @@ const REQUIRED: &[&str] = &[
     "person-key-steady",
     "person-key-other-id",
     "session-ended-outside",
+    "sign-in-cover",
+    "sign-in-another-person",
+    "sign-in-shell-fails",
 ];
 
 #[test]

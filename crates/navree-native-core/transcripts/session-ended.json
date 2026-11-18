@@ -214,49 +214,65 @@
       }
     },
     {
-      "note": "Signed in: the server redirects to where the person was going. The core follows it.",
+      "note": "Signed in: the server redirects to where the person was going. Until the shell says who signed in, nothing under the cover is fetched or shown.",
       "send": {"t":"response","request":8,"status":303,"location":"/orders/1"},
       "expect": {
-        "changed": [],
-        "effects": [
-          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
-        ]
-      }
-    },
-    {
-      "note": "The answer came from the order's own address, not the sign-in's: the cover has done its work and goes. It is the very page the screen underneath was waiting for, so it is shown there. Who is signed in may have changed, so the shell is asked for again.",
-      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
-      "body": "store/order.json",
-      "expect": {
         "changed": [
-          {"t":"nav"},
-          {"t":"screen","id":3}
+          {"t":"screen","id":2},
+          {"t":"screen","id":4}
         ],
         "effects": [
-          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },
       "check": [
-        {"at":"/modals","is":[]},
-        {"at":"/front","is":3},
-        {"at":"/screens/3/content/screen/title","is":"Order CS-20481"},
-        {"at":"/screens/3/loading","is":false},
-        {"at":"/screens/4","is":null}
+        {"at":"/app/user","is":null},
+        {"at":"/modals","is":[{"locked":true,"present":"full","stack":[4]}]},
+        {"at":"/front","is":4},
+        {"at":"/screens/2/content/t","is":"blank"},
+        {"at":"/screens/3/content/t","is":"blank"},
+        {"at":"/screens/4/content/t","is":"blank"},
+        {"at":"/screens/4/loading","is":true}
       ]
     },
     {
-      "note": "The same person as before: everything stays.",
-      "send": {"t":"response","request":10,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "note": "The shell names the same person as before: the cover goes, her orders come back, and the order she was opening is fetched.",
+      "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/shell-routes.json",
       "expect": {
         "changed": [
           {"t":"app"},
-          {"t":"nav"}
+          {"t":"nav"},
+          {"t":"screen","id":2},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"fetch","request":10,"method":"get","url":"https://shop.example/orders/1","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/app/user/name","is":"Ravneet Kaur"},
+        {"at":"/modals","is":[]},
+        {"at":"/front","is":3},
+        {"at":"/screens/2/content/t","is":"native"},
+        {"at":"/screens/3/loading","is":true},
+        {"at":"/screens/4","is":null}
+      ]
+    },
+    {
+      "note": "The order arrives.",
+      "send": {"t":"response","request":10,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":3}
         ],
         "effects": []
       },
       "check": [
-        {"at":"/destinations/1/stack","is":[2,3]}
+        {"at":"/destinations/1/stack","is":[2,3]},
+        {"at":"/screens/3/content/screen/title","is":"Order CS-20481"},
+        {"at":"/screens/3/loading","is":false}
       ]
     },
     {

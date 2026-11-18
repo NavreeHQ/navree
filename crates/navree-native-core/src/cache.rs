@@ -697,6 +697,9 @@ impl Core {
     }
 
     fn show_kept(&mut self, id: ScreenId, status: u16, body: &str) {
+        if self.inner.who_unsure || self.waiting_cover().is_some() {
+            return;
+        }
         let Some(from) = self.view.screens.get(&id).map(|view| view.url.clone()) else {
             return;
         };

@@ -130,20 +130,24 @@
       }
     },
     {
-      "note": "This time the route answers with the person. Who is signed in changed: the shell and the screen are fetched again.",
+      "note": "This time the route answers with the person. Nobody is named and a locked cover holds the app until the shell answers.",
       "send": {"t":"response","request":7,"status":200,"content_type":"application/json"},
       "body": "made/signed-in-user.json",
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1},
+          {"t":"screen","id":2}
         ],
         "effects": [
-          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
-          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },
       "check": [
-        {"at":"/screens/1/loading","is":true}
+        {"at":"/app/user","is":null},
+        {"at":"/modals","is":[{"locked":true,"present":"full","stack":[2]}]},
+        {"at":"/screens/1/content/t","is":"blank"}
       ]
     },
     {
@@ -152,9 +156,12 @@
       "expect": {
         "changed": [
           {"t":"app"},
-          {"t":"nav"}
+          {"t":"nav"},
+          {"t":"screen","id":1}
         ],
-        "effects": []
+        "effects": [
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
       }
     },
     {

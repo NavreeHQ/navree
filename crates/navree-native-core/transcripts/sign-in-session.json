@@ -102,22 +102,24 @@
       }
     },
     {
-      "note": "The session comes back on the app's own scheme. Who is signed in has changed: the shell is asked for again and every screen is out of date. The address it came back with is a destination, which is selected.",
+      "note": "The session comes back on the app's own scheme. Nobody is named and a locked cover holds the app until the shell answers; where the session came back to waits for it.",
       "send": {"t":"sign_in_done","url":"charkha://orders"},
       "expect": {
         "changed": [
+          {"t":"app"},
           {"t":"nav"},
-          {"t":"screen","id":3}
+          {"t":"screen","id":1},
+          {"t":"screen","id":2}
         ],
         "effects": [
-          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
-          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },
       "check": [
-        {"at":"/modals","is":[]},
-        {"at":"/selected","is":1},
-        {"at":"/front","is":3}
+        {"at":"/app/user","is":null},
+        {"at":"/modals","is":[{"locked":true,"present":"full","stack":[2]}]},
+        {"at":"/screens/1/content/t","is":"blank"},
+        {"at":"/front","is":2}
       ]
     },
     {
@@ -126,10 +128,18 @@
       "expect": {
         "changed": [
           {"t":"app"},
-          {"t":"nav"}
+          {"t":"nav"},
+          {"t":"screen","id":3}
         ],
-        "effects": []
-      }
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/modals","is":[]},
+        {"at":"/selected","is":1},
+        {"at":"/front","is":3}
+      ]
     },
     {
       "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},

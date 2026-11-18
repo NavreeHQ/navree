@@ -457,46 +457,38 @@ impl Core {
         );
     }
 
-    /// Somebody may be signed in now: the shell says who, and everything on
-    /// screen is theirs to see again.
+    /// Somebody may be signed in now: the app stays covered and every screen
+    /// under it stays empty until the shell names who signed in.
     pub(crate) fn signed_in(&mut self) {
         self.who_may_have_changed(true);
-        for inner in self.inner.screens.values_mut() {
-            inner.stale = true;
-        }
         self.inner.epoch += 1;
         self.forget_pages();
-        // A way in that a session's end put up has done its work.
-        if let Some(cover) = self.view.modals.iter().position(|modal| modal.locked) {
-            self.take_modals_from(cover);
-            self.touch(Change::Nav);
-        }
-        if let Some(front) = self.front() {
-            self.fetch_page(front, false);
-        }
+        let from_modal = self.view.modals.iter().position(|modal| {
+            modal.locked
+                || modal
+                    .stack
+                    .first()
+                    .and_then(|first| self.view.screens.get(first))
+                    .is_some_and(|view| !view.chrome)
+        });
+        self.await_shell_cover(from_modal, false);
     }
 
     /// A way in has done its work: a write from the screen `id` led away from
-    /// it. It goes, with any way in a session's end had put up under it, and
-    /// the shell is fetched again: the shell says who is signed in now.
+    /// it. It turns into a locked waiting cover, with every screen under it
+    /// kept empty, until the shell asked here names who signed in.
     pub(crate) fn way_in_done(&mut self, id: ScreenId) {
-        match self
+        let from_modal = self
             .view
             .modals
             .iter()
-            .position(|modal| modal.locked || modal.stack.contains(&id))
-        {
-            Some(at) => {
-                self.take_modals_from(at);
-                self.touch(Change::Nav);
-            }
-            None => self.dismissed(id),
-        }
+            .position(|modal| modal.locked || modal.stack.contains(&id));
         self.who_may_have_changed(true);
+        self.await_shell_cover(from_modal, false);
     }
 
-    /// A session with no hand-over ended: where it came back to is opened
-    /// with the app's own cookies.
+    /// A session with no hand-over ended: where it came back to waits while a
+    /// locked cover holds the app until the shell names who signed in.
     fn session_returned(&mut self, url: Option<&str>) {
         if !std::mem::take(&mut self.inner.signing_in) || self.browser_is_not_the_apps() {
             return;
@@ -505,13 +497,19 @@ impl Core {
         let Some(url) = url else {
             return;
         };
+        let from_modal = self.view.modals.iter().position(|modal| {
+            modal.locked
+                || modal
+                    .stack
+                    .first()
+                    .and_then(|first| self.view.screens.get(first))
+                    .is_some_and(|view| !view.chrome)
+        });
         // Who is signed in may have changed, and with it everything on screen.
         self.who_may_have_changed(true);
-        for inner in self.inner.screens.values_mut() {
-            inner.stale = true;
-        }
         self.inner.epoch += 1;
         self.forget_pages();
+        self.await_shell_cover(from_modal, false);
         self.opened(url);
     }
 

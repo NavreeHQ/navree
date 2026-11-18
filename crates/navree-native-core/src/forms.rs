@@ -1338,14 +1338,7 @@ impl Core {
         self.mark_busy(id);
         let alive = self.view.holds(id);
         let front = self.front() == Some(id);
-        let cover = self
-            .view
-            .modals
-            .iter()
-            .find(|modal| modal.stack.contains(&id))
-            .and_then(|modal| modal.stack.first())
-            .and_then(|first| self.inner.screens.get(first))
-            .and_then(|inner| inner.cover.clone());
+        let cover = self.cover_modal_of(id);
         let mut told = false;
         // Whether the answer left the screen as it was: ops that lead nowhere.
         let mut kept = false;
@@ -1456,35 +1449,37 @@ impl Core {
                             }
                         }
                     }
-                } else if cover.as_ref().is_some_and(|route| {
+                } else if let Some((at, _)) = cover.as_ref().filter(|(_, route)| {
                     write
                         && worked
                         && leaves(&self.inner.origin, route, &url, shown.is_some(), &ops)
                 }) {
-                    // The way in the session's end put up has done its work: the
-                    // person is back where they were. Who is signed in may have
-                    // changed, so the shell is asked for again.
-                    for op in ops {
+                    // The way in has done its work: wait for the shell to name
+                    // who signed in before showing or fetching where it led.
+                    let at = *at;
+                    for op in &ops {
                         if let navree_native::Op::Toast(toast) = op {
-                            self.toast(None, toast);
+                            self.toast(None, toast.clone());
                         }
+                    }
+                    let target = ops
+                        .iter()
+                        .find_map(|op| match op {
+                            navree_native::Op::Navigate { href, .. } => {
+                                match self.resolve(href, id) {
+                                    Target::Inside(next) => Some(next),
+                                    _ => None,
+                                }
+                            }
+                            _ => None,
+                        })
+                        .or_else(|| shown.is_some().then(|| url.clone()));
+                    if let Some(target) = target
+                        && self.under_cover_url(Some(at)).as_deref() != Some(target.as_str())
+                    {
+                        self.inner.land = Some(target);
                     }
                     self.way_in_done(id);
-                    // The page the sign-in led to is often the very one they
-                    // were on: it is shown there. Otherwise that screen is
-                    // fetched again as it comes to the front.
-                    let under = self.front().filter(|under| {
-                        self.view
-                            .screens
-                            .get(under)
-                            .is_some_and(|view| view.url == url)
-                    });
-                    if let (Some(under), Some(shown)) = (under, shown) {
-                        self.show(under, &url, shown);
-                        if let Some(inner) = self.inner.screens.get_mut(&under) {
-                            inner.stale = false;
-                        }
-                    }
                 } else if let Some(route) = self.covers(asked, &url).filter(|_| shown.is_some()) {
                     self.cover(id, route, &url, shown);
                     self.apply_ops(self.front().unwrap_or(id), ops, false);

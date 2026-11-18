@@ -102,16 +102,17 @@
       }
     },
     {
-      "note": "200: signed in. The shell is fetched again, and the screen in front.",
+      "note": "200: signed in. A locked cover holds the app while the shell is asked who signed in.",
       "send": {"t":"response","request":3,"status":200,"content_type":"application/json"},
       "body": "made/exchanged.json",
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"nav"},
+          {"t":"screen","id":1},
+          {"t":"screen","id":2}
         ],
         "effects": [
-          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=windows; form=desktop; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
-          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=windows; form=desktop; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=windows; form=desktop; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
@@ -125,7 +126,7 @@
         ]
       },
       "check": [
-        {"at":"/screens/2","is":null}
+        {"at":"/screens/3","is":null}
       ]
     },
     {
@@ -136,7 +137,7 @@
         "effects": []
       },
       "check": [
-        {"at":"/screens/2","is":null}
+        {"at":"/screens/3","is":null}
       ]
     },
     {
@@ -149,7 +150,7 @@
         ]
       },
       "check": [
-        {"at":"/screens/2","is":null}
+        {"at":"/screens/3","is":null}
       ]
     }
   ]

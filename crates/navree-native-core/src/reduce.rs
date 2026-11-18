@@ -728,6 +728,26 @@ impl Core {
         match self.inner.origin.resolve(&location, &asked.url) {
             Target::Inside(url) if asked.hops < MOST_REDIRECTS => {
                 let same = matches!(response.status, 307 | 308);
+                if !same
+                    && let Pending::Send {
+                        screen,
+                        write: true,
+                        ..
+                    } = asked.purpose
+                    && self.view.holds(screen)
+                    && self.front() == Some(screen)
+                    && let Some((at, route)) = self.cover_modal_of(screen)
+                    && !self.inner.origin.on_route(&route, &url)
+                {
+                    if self.inner.write_may_have_run {
+                        self.wrote(screen);
+                    }
+                    if self.under_cover_url(Some(at)).as_deref() != Some(url.as_str()) {
+                        self.inner.land = Some(url);
+                    }
+                    self.way_in_done(screen);
+                    return None;
+                }
                 self.ask(Asked {
                     purpose: asked.purpose.clone(),
                     url,
@@ -908,8 +928,21 @@ impl Core {
         self.fetch(Pending::Shell, Method::Get, SHELL_PATH, None, PAGE_LIMIT);
     }
 
+    fn note_waiting_cover_loading(&mut self) {
+        if let Some(cover_id) = self.waiting_cover()
+            && let Some(view) = self.view.screens.get_mut(&cover_id)
+            && (!view.loading || view.failure.is_some())
+        {
+            view.loading = true;
+            view.refreshing = false;
+            view.failure = None;
+            self.touch_screen(cover_id);
+        }
+    }
+
     /// Asks for the shell even when an older request for it is on its way.
     pub(crate) fn fetch_shell_anew(&mut self) {
+        self.note_waiting_cover_loading();
         self.fetch(Pending::Shell, Method::Get, SHELL_PATH, None, PAGE_LIMIT);
     }
 
@@ -920,6 +953,7 @@ impl Core {
             .values()
             .any(|asked| asked.purpose == Pending::Shell);
         if !asking {
+            self.note_waiting_cover_loading();
             self.fetch(Pending::Shell, Method::Get, SHELL_PATH, None, PAGE_LIMIT);
         }
     }
@@ -940,7 +974,23 @@ impl Core {
         if !self.inner.has_shell {
             self.view.stage = Stage::Failed;
             self.view.failure = Some(failure);
-            self.touch(Change::Nav);
+            return self.touch(Change::Nav);
+        }
+        if (self.inner.who_unsure || self.waiting_cover().is_some())
+            && matches!(
+                failure,
+                Failure::Offline | Failure::Timeout | Failure::Server
+            )
+        {
+            self.shell_unreached();
+        }
+        if let Some(cover_id) = self.waiting_cover()
+            && let Some(view) = self.view.screens.get_mut(&cover_id)
+        {
+            view.loading = false;
+            view.refreshing = false;
+            view.failure = Some(failure);
+            self.touch_screen(cover_id);
         }
     }
 
@@ -1020,6 +1070,9 @@ impl Core {
                 );
             }
         } else if self.inner.has_shell {
+            if self.waiting_cover().is_some() {
+                self.shell_failed(Failure::Protocol);
+            }
             return;
         }
         self.install(Shell::new("", ""), false);
@@ -2141,6 +2194,13 @@ impl Core {
 
     fn refresh(&mut self, id: ScreenId) {
         self.acted_on(id);
+        if self.waiting_cover() == Some(id) {
+            if let Some(timer) = self.inner.shell_timer.take() {
+                self.cancel_timer(timer);
+            }
+            self.inner.shell_nudged = false;
+            return self.fetch_shell();
+        }
         self.shell_again();
         self.fetch_page(id, true);
     }
@@ -2167,6 +2227,57 @@ impl Core {
         // The answer to a write is still wanted: it says whether it worked.
         self.drop_pending(|purpose| purpose.screen() == Some(id) && !purpose.writes());
         self.touch(Change::Nav);
+    }
+
+    /// The modal index that turns into a waiting cover when a write on `screen`
+    /// leaves a way in, and the route of that way in.
+    pub(crate) fn cover_modal_of(&self, screen: ScreenId) -> Option<(usize, String)> {
+        let modal_at = self
+            .view
+            .modals
+            .iter()
+            .position(|modal| modal.stack.contains(&screen))?;
+        let first = *self.view.modals[modal_at].stack.first()?;
+        let route = if let Some(cover) = self
+            .inner
+            .screens
+            .get(&first)
+            .and_then(|inner| inner.cover.clone())
+        {
+            cover
+        } else {
+            let view = self.view.screens.get(&first)?;
+            if view.chrome {
+                return None;
+            }
+            self.route(&view.url)
+                .map(|route| route.matches.clone())
+                .unwrap_or_else(|| self.inner.origin.where_of(&view.url))
+        };
+        let from_modal = self
+            .view
+            .modals
+            .iter()
+            .position(|modal| modal.locked)
+            .unwrap_or(modal_at)
+            .min(modal_at);
+        Some((from_modal, route))
+    }
+
+    /// The address of the screen that will stand in front once `modals[from_modal..]` go.
+    pub(crate) fn under_cover_url(&self, from_modal: Option<usize>) -> Option<String> {
+        let limit = from_modal.unwrap_or(self.view.modals.len());
+        let under = self.view.modals[..limit]
+            .iter()
+            .rev()
+            .find_map(|modal| modal.stack.last().copied())
+            .or_else(|| {
+                self.view
+                    .destinations
+                    .get(self.view.selected)
+                    .and_then(|destination| destination.stack.last().copied())
+            })?;
+        self.view.screens.get(&under).map(|view| view.url.clone())
     }
 
     /// The blank locked cover screen while a shell is waited for.
@@ -6848,6 +6959,556 @@ mod tests {
         assert!(back.effects.iter().any(|effect| matches!(
             effect,
             Effect::Fetch(req) if req.url == "https://shop.example/orders"
+        )));
+    }
+
+    /// After a sign-in through the way in (both a form write that leads away
+    /// from the cover and a sign-in exchange), no screen under the cover is
+    /// fetched and no kept content of it is shown until a shell has named who
+    /// signed in.
+    #[test]
+    fn nothing_under_the_way_in_is_fetched_or_shown_until_the_shell_names_who_signed_in() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        let shell_routes = include_str!("../transcripts/fixtures/made/shell-routes.json");
+        let home = include_str!("../transcripts/fixtures/made/home.json");
+        let orders = include_str!("../transcripts/fixtures/store/orders.json");
+        let ended = include_str!("../transcripts/fixtures/made/session-ended.json");
+        let sign_in_page = include_str!("../transcripts/fixtures/made/sign-in.json");
+
+        // 1. A form write on a sign-in cover (`way_in_done`), with kept content in the store.
+        let mut store = Store::default();
+        let mut core = kept_core();
+        store.send(&mut core, Event::Start);
+        store.send(&mut core, native(1, shell_routes, Some(RAVNEET), false));
+        store.send(&mut core, native(2, home, Some(RAVNEET), true));
+        store.send(&mut core, Event::Select { destination: 1 });
+        store.send(&mut core, native(3, orders, Some(RAVNEET), true));
+        store.send(
+            &mut core,
+            Event::Act {
+                screen: Some(2),
+                action: navree_native::Action::navigate("/orders/1"),
+                form: None,
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            },
+        );
+        let req_order = core.inner.next.request;
+        store.send(
+            &mut core,
+            Event::Response(Response {
+                request: req_order,
+                status: 401,
+                content_type: Some(CONTENT_TYPE.to_owned()),
+                body: ended.to_owned(),
+                ..Response::default()
+            }),
+        );
+        let req_signin_page = core.inner.next.request;
+        store.send(
+            &mut core,
+            native(req_signin_page, sign_in_page, None, false),
+        );
+        let cover_id = core.front().expect("the sign-in cover");
+        let post = core.send(Event::Act {
+            screen: Some(cover_id),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),
+            form: Some("sign-in".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let post_req = post
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) if req.method == Verb::Post => Some(req.request),
+                _ => None,
+            })
+            .expect("sign-in post");
+        let signed = core.send(Event::Response(Response {
+            request: post_req,
+            status: 303,
+            location: Some("/orders/1".to_owned()),
+            ..Response::default()
+        }));
+        let shell_req = signed
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("the shell is asked");
+        assert!(
+            signed.effects.iter().all(|effect| match effect {
+                Effect::Fetch(req) => req.request == shell_req,
+                Effect::CacheRead { .. } => false,
+                _ => true,
+            }),
+            "a screen or kept page was asked for before the shell answered: {signed:?}"
+        );
+        assert!(core.view.app.as_ref().unwrap().user.is_none());
+        assert_eq!(core.waiting_cover(), Some(cover_id));
+        for (&id, view) in &core.view.screens {
+            assert!(
+                matches!(view.content, Content::Blank),
+                "screen {id} kept content visible before the shell answered"
+            );
+        }
+
+        // 2. A sign-in exchange (`signed_in`).
+        let bytes = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30";
+        let config: Config = serde_json::from_value(serde_json::json!({
+            "origin": "https://shop.example",
+            "app_id": "com.charkha.supply",
+            "client": {"platform": "ios", "form": "phone", "vocab": 0, "text_percent": 100, "caps": ["auth_session"]},
+        }))
+        .expect("config");
+        let mut core = Core::new(config);
+        core.send(Event::Start);
+        core.send(native(
+            1,
+            include_str!("../transcripts/fixtures/made/shell-app-nobody.json"),
+            None,
+            false,
+        ));
+        core.send(native(
+            2,
+            include_str!("../transcripts/fixtures/made/welcome.json"),
+            None,
+            false,
+        ));
+        core.send(Event::Act {
+            screen: Some(1),
+            action: navree_native::Action::navigate("/sign-in"),
+            form: None,
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        core.send(Event::Random {
+            request: 1,
+            bytes: bytes.to_owned(),
+        });
+        let back = core.send(Event::SignInDone {
+            url: Some(
+                "https://shop.example/app/signed-in?code=Tq7uX0b2c9&state=ISIjJCUmJygpKissLS4vMA"
+                    .to_owned(),
+            ),
+        });
+        let ex_req = back
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("exchange request");
+        let exchanged = core.send(Event::Response(Response {
+            request: ex_req,
+            status: 200,
+            content_type: Some("application/json".to_owned()),
+            body: include_str!("../transcripts/fixtures/made/exchanged.json").to_owned(),
+            ..Response::default()
+        }));
+        let shell_req = exchanged
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("the shell is asked");
+        assert!(
+            exchanged.effects.iter().all(|effect| match effect {
+                Effect::Fetch(req) => req.request == shell_req,
+                _ => true,
+            }),
+            "a page under the cover was fetched before the shell answered: {exchanged:?}"
+        );
+        assert!(core.waiting_cover().is_some());
+        assert!(matches!(core.view.screens[&1].content, Content::Blank));
+    }
+
+    /// When the shell names the same person who was signed in before, the
+    /// waiting cover goes away and they see their screens, open sheets and
+    /// typed form values again.
+    #[test]
+    fn the_same_person_signing_in_again_sees_their_work_after_the_shell_names_them() {
+        let shell_routes = include_str!("../transcripts/fixtures/made/shell-routes.json");
+        let home = include_str!("../transcripts/fixtures/made/home.json");
+        let order = include_str!("../transcripts/fixtures/store/order.json");
+        let ended = include_str!("../transcripts/fixtures/made/session-ended-post.json");
+        let sign_in_page = include_str!("../transcripts/fixtures/made/sign-in.json");
+
+        let mut core = signed_in_as(None, shell_routes);
+        let her_key = key_of(&core).expect("her key");
+        core.send(native(2, home, None, false));
+        core.send(Event::Select { destination: 1 });
+        core.send(native(3, order, None, false));
+        core.send(Event::Act {
+            screen: Some(2),
+            action: serde_json::from_value(
+                serde_json::json!({"t": "commands", "list": [{"c": "open", "id": "refund"}]}),
+            )
+            .expect("open command"),
+            form: None,
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        core.send(Event::Field {
+            screen: Some(2).unwrap(),
+            form: Some("refund".to_owned()),
+            field: "refund-amount".to_owned(),
+            value: crate::FieldValue::Text {
+                text: "10".to_owned(),
+            },
+        });
+        let sub = core.send(Event::Act {
+            screen: Some(2),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),
+            form: Some("refund".to_owned()),
+            overlay: Some("refund".to_owned()),
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let sub_req = sub
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("refund post");
+        let ended_up = core.send(Event::Response(Response {
+            request: sub_req,
+            status: 401,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: ended.to_owned(),
+            ..Response::default()
+        }));
+        let signin_get = ended_up
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("sign-in page get");
+        core.send(native(signin_get, sign_in_page, None, false));
+        let cover_id = core.front().expect("sign-in cover");
+        let post = core.send(Event::Act {
+            screen: Some(cover_id),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),
+            form: Some("sign-in".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let post_req = post
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) if req.method == Verb::Post => Some(req.request),
+                _ => None,
+            })
+            .expect("sign-in post");
+        let signed = core.send(Event::Response(Response {
+            request: post_req,
+            status: 303,
+            location: Some("/orders".to_owned()),
+            ..Response::default()
+        }));
+        // Hidden while waiting for the shell.
+        assert!(matches!(core.view.screens[&1].content, Content::Blank));
+        assert!(matches!(core.view.screens[&2].content, Content::Blank));
+        assert!(core.view.screens[&2].forms.is_empty());
+        let shell_req = signed
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("shell request");
+
+        // The shell names Ravneet again: her work and typed value are back at once.
+        let named = core.send(native(shell_req, shell_routes, None, false));
+        assert!(core.waiting_cover().is_none());
+        assert_eq!(key_of(&core), Some(her_key));
+        assert_eq!(
+            core.view.screens[&1].screen().map(|s| s.title.as_str()),
+            Some("Overview")
+        );
+        assert_eq!(
+            core.view.screens[&2].screen().map(|s| s.title.as_str()),
+            Some("Order CS-20481")
+        );
+        assert_eq!(core.view.screens[&2].overlays, vec!["refund".to_owned()]);
+        assert_eq!(
+            core.view.screens[&2].forms["refund"].fields["refund-amount"].value,
+            crate::FieldValue::Text {
+                text: "10".to_owned()
+            }
+        );
+        let refresh_req = named
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) if req.url == "https://shop.example/orders" => Some(req.request),
+                _ => None,
+            })
+            .expect("front screen refresh");
+        core.send(native(refresh_req, order, None, false));
+        assert_eq!(
+            core.view.screens[&2].forms["refund"].fields["refund-amount"].value,
+            crate::FieldValue::Text {
+                text: "10".to_owned()
+            }
+        );
+    }
+
+    /// Another person signing in through the way in never starts a request for
+    /// any screen of the person before, and gets nothing of their screens,
+    /// drafts or kept pages.
+    #[test]
+    fn another_person_signing_in_never_starts_a_request_for_the_screens_of_the_person_before() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        const HARPREET: &str = "0193a4b2-0000-7000-8000-00000000hs02";
+        let shell_routes = include_str!("../transcripts/fixtures/made/shell-routes.json");
+        let shell_other = include_str!("../transcripts/fixtures/made/shell-other.json");
+        let home = include_str!("../transcripts/fixtures/made/home.json");
+        let order = include_str!("../transcripts/fixtures/store/order.json");
+        let ended = include_str!("../transcripts/fixtures/made/session-ended.json");
+        let sign_in_page = include_str!("../transcripts/fixtures/made/sign-in.json");
+
+        let mut core = signed_in_as(Some(RAVNEET), shell_routes);
+        core.send(native(2, home, Some(RAVNEET), false));
+        core.send(Event::Select { destination: 1 });
+        core.send(native(3, order, Some(RAVNEET), false));
+        core.send(Event::Act {
+            screen: Some(2),
+            action: navree_native::Action::navigate("/orders/1"),
+            form: None,
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let req_order = core.inner.next.request;
+        let ended_up = core.send(Event::Response(Response {
+            request: req_order,
+            status: 401,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: ended.to_owned(),
+            ..Response::default()
+        }));
+        let signin_get = ended_up
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) if req.url.contains("/sign-in") => Some(req.request),
+                _ => None,
+            })
+            .expect("sign-in page");
+        core.send(native(signin_get, sign_in_page, None, false));
+        let cover_id = core.front().expect("sign-in cover");
+        let post = core.send(Event::Act {
+            screen: Some(cover_id),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),
+            form: Some("sign-in".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let post_req = post
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) if req.method == Verb::Post => Some(req.request),
+                _ => None,
+            })
+            .expect("sign-in post");
+        // Even when the server's sign-in redirects to Ravneet's `/orders/1`:
+        let signed = core.send(Event::Response(Response {
+            request: post_req,
+            status: 303,
+            location: Some("/orders/1".to_owned()),
+            ..Response::default()
+        }));
+        assert!(
+            !signed.effects.iter().any(|effect| matches!(
+                effect,
+                Effect::Fetch(req) if req.url.contains("/orders")
+            )),
+            "Ravneet's order was fetched with Harpreet's cookie before the shell answered: {signed:?}"
+        );
+        let shell_req = signed
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("shell request");
+        let switched = core.send(native(shell_req, shell_other, Some(HARPREET), false));
+        assert!(
+            !switched.effects.iter().any(|effect| matches!(
+                effect,
+                Effect::Fetch(req) if req.url.contains("/orders")
+            )),
+            "Ravneet's order was fetched after Harpreet was named: {switched:?}"
+        );
+        assert!(switched.effects.iter().any(|effect| matches!(
+            effect,
+            Effect::Fetch(req) if req.url == "https://shop.example/"
+        )));
+        assert_eq!(core.view.selected, 0);
+        assert_eq!(core.view.screens.len(), 1);
+        assert_eq!(
+            core.view
+                .app
+                .as_ref()
+                .and_then(|app| app.user.as_ref())
+                .map(|u| u.name.as_str()),
+            Some("Harpreet Singh")
+        );
+    }
+
+    /// A shell request that fails after a sign-in is asked again on a timer,
+    /// and the app stays covered with the failure on the cover so the client
+    /// shows its words and a way to try again.
+    #[test]
+    fn a_shell_request_that_fails_after_a_sign_in_is_asked_again_and_the_app_stays_covered() {
+        let shell_routes = include_str!("../transcripts/fixtures/made/shell-routes.json");
+        let home = include_str!("../transcripts/fixtures/made/home.json");
+        let ended = include_str!("../transcripts/fixtures/made/session-ended.json");
+        let sign_in_page = include_str!("../transcripts/fixtures/made/sign-in.json");
+
+        let mut core = signed_in_as(None, shell_routes);
+        core.send(native(2, home, None, false));
+        core.send(Event::Refresh { screen: 1 });
+        let ended_up = core.send(Event::Response(Response {
+            request: 3,
+            status: 401,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: ended.to_owned(),
+            ..Response::default()
+        }));
+        let signin_get = ended_up
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("sign-in page");
+        core.send(native(signin_get, sign_in_page, None, false));
+        let cover_id = core.front().expect("sign-in cover");
+        let post = core.send(Event::Act {
+            screen: Some(cover_id),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),
+            form: Some("sign-in".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let post_req = post
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("sign-in post");
+        let signed = core.send(Event::Response(Response {
+            request: post_req,
+            status: 303,
+            location: Some("/orders/1".to_owned()),
+            ..Response::default()
+        }));
+        let shell_req = signed
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("shell request");
+
+        // 1. Offline: the cover stays locked, shows `Failure::Offline`, and schedules a retry timer.
+        let offline = core.send(Event::Response(Response {
+            request: shell_req,
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        }));
+        assert_eq!(core.waiting_cover(), Some(cover_id));
+        assert!(core.view.app.as_ref().unwrap().user.is_none());
+        assert!(matches!(core.view.screens[&1].content, Content::Blank));
+        assert!(!core.view.screens[&cover_id].loading);
+        assert_eq!(core.view.screens[&cover_id].failure, Some(Failure::Offline));
+        let timer = offline
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Timer { timer, ms: 2000 } => Some(*timer),
+                _ => None,
+            })
+            .expect("retry timer scheduled");
+
+        // 2. The timer asks for the shell again, clearing the cover's failure while asking.
+        let retried = core.send(Event::Timer { timer });
+        assert!(core.view.screens[&cover_id].loading);
+        assert_eq!(core.view.screens[&cover_id].failure, None);
+        let shell_req_2 = retried
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("shell asked again by timer");
+
+        // 3. A 503 fails the cover again and schedules the next pause; tapping Try again asks at once.
+        let server_err = core.send(Event::Response(Response {
+            request: shell_req_2,
+            status: 503,
+            ..Response::default()
+        }));
+        assert!(!core.view.screens[&cover_id].loading);
+        assert_eq!(core.view.screens[&cover_id].failure, Some(Failure::Server));
+        let timer_2 = server_err
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Timer { timer, ms: 4000 } => Some(*timer),
+                _ => None,
+            })
+            .expect("next backoff timer");
+        let manual = core.send(Event::Refresh { screen: cover_id });
+        assert!(
+            manual
+                .effects
+                .contains(&Effect::CancelTimer { timer: timer_2 })
+        );
+        assert!(core.view.screens[&cover_id].loading);
+        assert_eq!(core.view.screens[&cover_id].failure, None);
+        let shell_req_3 = manual
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("Try again asks for the shell");
+
+        // 4. The shell finally answers: the cover goes away and the target page is fetched.
+        let done = core.send(native(shell_req_3, shell_routes, None, false));
+        assert!(core.waiting_cover().is_none());
+        assert!(core.view.modals.is_empty());
+        assert!(core.view.app.as_ref().unwrap().user.is_some());
+        assert!(done.effects.iter().any(|effect| matches!(
+            effect,
+            Effect::Fetch(req) if req.url == "https://shop.example/orders/1"
         )));
     }
 

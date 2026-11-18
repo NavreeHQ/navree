@@ -116,37 +116,58 @@
       }
     },
     {
-      "note": "The page leads on to where it was told. The step is done.",
+      "note": "The page leads on to where it was told. The step is done: a locked cover holds the app while the shell is asked who signed in.",
       "send": {"t":"response","request":6,"status":303,"location":"/"},
       "expect": {
-        "changed": [],
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":1},
+          {"t":"screen","id":2}
+        ],
         "effects": [
-          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":60000}
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
-      }
+      },
+      "check": [
+        {"at":"/modals","is":[{"locked":true,"present":"full","stack":[2]}]},
+        {"at":"/front","is":2},
+        {"at":"/app/user","is":null}
+      ]
     },
     {
-      "note": "The page it led to is the one underneath: it is shown there, the step's page goes, and the shell is asked who is signed in.",
+      "note": "The shell names Ravneet: the cover goes, and the screen underneath is fetched.",
       "send": {"t":"response","request":7,"status":200,"content_type":"application/vnd.navree.native+json"},
-      "body": "store/dashboard.json",
+      "body": "made/shell-app.json",
       "expect": {
         "changed": [
+          {"t":"app"},
           {"t":"nav"},
           {"t":"screen","id":1}
         ],
         "effects": [
-          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
-          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"fetch","request":8,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       },
       "check": [
         {"at":"/modals","is":[]},
         {"at":"/front","is":1},
-        {"at":"/app/user","is":null}
+        {"at":"/app/user/name","is":"Ravneet Kaur"}
       ]
     },
     {
-      "note": "The shell, asked again at once since a page went to the web view, says who: Ravneet, signed in.",
+      "note": "The page goes to the web view, so the shell is asked again at once.",
+      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/dashboard.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":9,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=platform_sign_in+auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
       "send": {"t":"response","request":9,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/shell-app.json",
       "expect": {
@@ -154,15 +175,6 @@
           {"t":"app"},
           {"t":"nav"}
         ],
-        "effects": []
-      }
-    },
-    {
-      "note": "The shell asked before that answers late: it is dropped whole.",
-      "send": {"t":"response","request":8,"status":200,"content_type":"application/vnd.navree.native+json"},
-      "body": "made/shell-app.json",
-      "expect": {
-        "changed": [],
         "effects": []
       },
       "check": [

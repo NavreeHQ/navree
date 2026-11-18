@@ -73,47 +73,41 @@
       }
     },
     {
-      "note": "Ravneet is signed in: who the shell named no longer holds.",
+      "note": "Ravneet is signed in: who the shell named no longer holds, and a locked cover holds the app until the shell answers.",
       "send": {"t":"response","request":3,"status":200,"content_type":"application/json"},
       "body": "made/exchanged.json",
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"nav"},
+          {"t":"screen","id":1},
+          {"t":"screen","id":2}
         ],
         "effects": [
           {"t":"fetch","request":4,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
           {"t":"cache_clear"},
-          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ],\\n \\\"sign_in\\\": {\\n  \\\"start\\\": \\\"/auth/app/sign-in\\\",\\n  \\\"exchange\\\": \\\"/api/auth/app/exchange\\\",\\n  \\\"callback\\\": \\\"https://shop.example/app/signed-in\\\",\\n  \\\"second_step\\\": \\\"/sign-in/two-factor\\\"\\n },\\n \\\"device\\\": {\\n  \\\"push\\\": {\\n   \\\"register\\\": \\\"/api/notifications/push-devices\\\"\\n  }\\n },\\n \\\"stamp\\\": \\\"shell-nobody\\\"\\n}\\n\",\"pages\":[],\"owner\":{\"person\":null},\"build\":\"152bd84abf4d\"}"},
-          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ],\\n \\\"sign_in\\\": {\\n  \\\"start\\\": \\\"/auth/app/sign-in\\\",\\n  \\\"exchange\\\": \\\"/api/auth/app/exchange\\\",\\n  \\\"callback\\\": \\\"https://shop.example/app/signed-in\\\",\\n  \\\"second_step\\\": \\\"/sign-in/two-factor\\\"\\n },\\n \\\"device\\\": {\\n  \\\"push\\\": {\\n   \\\"register\\\": \\\"/api/notifications/push-devices\\\"\\n  }\\n },\\n \\\"stamp\\\": \\\"shell-nobody\\\"\\n}\\n\",\"pages\":[],\"owner\":{\"person\":null},\"build\":\"152bd84abf4d\"}"}
         ]
-      }
+      },
+      "check": [
+        {"at":"/modals","is":[{"locked":true,"present":"full","stack":[2]}]},
+        {"at":"/screens/1/content/t","is":"blank"}
+      ]
     },
     {
-      "note": "The page answers before the shell does, made for Ravneet and allowed to be kept: it is not written, since no shell asked after the sign-in has named her yet.",
-      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-keep","1"],["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
-      "body": "store/orders.json",
-      "expect": {
-        "changed": [
-          {"t":"screen","id":1}
-        ],
-        "effects": [
-          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
-        ]
-      }
-    },
-    {
-      "note": "The shell names her: what was kept for the visitor is emptied, and from now on her pages may be kept.",
+      "note": "The shell names her: what was kept for the visitor is emptied, the cover goes, and only now is her first screen fetched.",
       "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
       "body": "made/shell-app.json",
       "expect": {
         "changed": [
           {"t":"app"},
-          {"t":"nav"}
+          {"t":"nav"},
+          {"t":"screen","id":1}
         ],
         "effects": [
           {"t":"cache_clear"},
           {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ],\\n \\\"sign_in\\\": {\\n  \\\"start\\\": \\\"/auth/app/sign-in\\\",\\n  \\\"exchange\\\": \\\"/api/auth/app/exchange\\\",\\n  \\\"callback\\\": \\\"https://shop.example/app/signed-in\\\",\\n  \\\"second_step\\\": \\\"/sign-in/two-factor\\\"\\n },\\n \\\"device\\\": {\\n  \\\"push\\\": {\\n   \\\"register\\\": \\\"/api/notifications/push-devices\\\"\\n  }\\n },\\n \\\"stamp\\\": \\\"shell-nobody\\\"\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"id\":\"0193a4b2-0000-7000-8000-00000000ra01\",\"name\":\"Ravneet Kaur\",\"email\":\"ravneet.kaur@example.com\"}},\"build\":\"152bd84abf4d\"}"},
-          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"label\\\": \\\"Store\\\",\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Orders\\\",\\n      \\\"href\\\": \\\"/orders\\\",\\n      \\\"badge\\\": \\\"12\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Inventory\\\",\\n      \\\"href\\\": \\\"/inventory\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ],\\n \\\"sign_in\\\": {\\n  \\\"start\\\": \\\"/auth/app/sign-in\\\",\\n  \\\"exchange\\\": \\\"/api/auth/app/exchange\\\",\\n  \\\"callback\\\": \\\"https://shop.example/app/signed-in\\\",\\n  \\\"second_step\\\": \\\"/sign-in/two-factor\\\"\\n },\\n \\\"device\\\": {\\n  \\\"push\\\": {\\n   \\\"register\\\": \\\"/api/notifications/push-devices\\\"\\n  }\\n },\\n \\\"user\\\": {\\n  \\\"name\\\": \\\"Ravneet Kaur\\\",\\n  \\\"email\\\": \\\"ravneet.kaur@example.com\\\",\\n  \\\"menu\\\": [\\n   {\\n    \\\"t\\\": \\\"link\\\",\\n    \\\"label\\\": \\\"Profile\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"navigate\\\",\\n     \\\"href\\\": \\\"/profile\\\"\\n    }\\n   },\\n   {\\n    \\\"t\\\": \\\"button\\\",\\n    \\\"label\\\": \\\"Sign out\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"request\\\",\\n     \\\"method\\\": \\\"post\\\",\\n     \\\"href\\\": \\\"/sign-out\\\"\\n    }\\n   }\\n  ]\\n },\\n \\\"stamp\\\": \\\"shell-ravneet\\\"\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"id\":\"0193a4b2-0000-7000-8000-00000000ra01\",\"name\":\"Ravneet Kaur\",\"email\":\"ravneet.kaur@example.com\"}},\"build\":\"152bd84abf4d\"}"}
+          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"label\\\": \\\"Store\\\",\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Orders\\\",\\n      \\\"href\\\": \\\"/orders\\\",\\n      \\\"badge\\\": \\\"12\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Inventory\\\",\\n      \\\"href\\\": \\\"/inventory\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ],\\n \\\"sign_in\\\": {\\n  \\\"start\\\": \\\"/auth/app/sign-in\\\",\\n  \\\"exchange\\\": \\\"/api/auth/app/exchange\\\",\\n  \\\"callback\\\": \\\"https://shop.example/app/signed-in\\\",\\n  \\\"second_step\\\": \\\"/sign-in/two-factor\\\"\\n },\\n \\\"device\\\": {\\n  \\\"push\\\": {\\n   \\\"register\\\": \\\"/api/notifications/push-devices\\\"\\n  }\\n },\\n \\\"user\\\": {\\n  \\\"name\\\": \\\"Ravneet Kaur\\\",\\n  \\\"email\\\": \\\"ravneet.kaur@example.com\\\",\\n  \\\"menu\\\": [\\n   {\\n    \\\"t\\\": \\\"link\\\",\\n    \\\"label\\\": \\\"Profile\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"navigate\\\",\\n     \\\"href\\\": \\\"/profile\\\"\\n    }\\n   },\\n   {\\n    \\\"t\\\": \\\"button\\\",\\n    \\\"label\\\": \\\"Sign out\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"request\\\",\\n     \\\"method\\\": \\\"post\\\",\\n     \\\"href\\\": \\\"/sign-out\\\"\\n    }\\n   }\\n  ]\\n },\\n \\\"stamp\\\": \\\"shell-ravneet\\\"\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"id\":\"0193a4b2-0000-7000-8000-00000000ra01\",\"name\":\"Ravneet Kaur\",\"email\":\"ravneet.kaur@example.com\"}},\"build\":\"152bd84abf4d\"}"},
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
       }
     },
@@ -198,43 +192,56 @@
       }
     },
     {
-      "note": "Signed in: the shell request asked before is dropped, and the shell is asked again.",
+      "note": "Signed in: the shell request asked before is dropped, a locked cover holds the app, and the shell is asked again.",
       "send": {"t":"response","request":4,"status":200,"content_type":"application/json"},
       "body": "made/exchanged.json",
       "expect": {
         "changed": [
-          {"t":"screen","id":1}
+          {"t":"nav"},
+          {"t":"screen","id":1},
+          {"t":"screen","id":2}
         ],
         "effects": [
           {"t":"cancel","request":3},
           {"t":"fetch","request":5,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
           {"t":"cache_clear"},
-          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ],\\n \\\"sign_in\\\": {\\n  \\\"start\\\": \\\"/auth/app/sign-in\\\",\\n  \\\"exchange\\\": \\\"/api/auth/app/exchange\\\",\\n  \\\"callback\\\": \\\"https://shop.example/app/signed-in\\\",\\n  \\\"second_step\\\": \\\"/sign-in/two-factor\\\"\\n },\\n \\\"device\\\": {\\n  \\\"push\\\": {\\n   \\\"register\\\": \\\"/api/notifications/push-devices\\\"\\n  }\\n },\\n \\\"stamp\\\": \\\"shell-nobody\\\"\\n}\\n\",\"pages\":[],\"owner\":{\"person\":null},\"build\":\"152bd84abf4d\"}"},
-          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ],\\n \\\"sign_in\\\": {\\n  \\\"start\\\": \\\"/auth/app/sign-in\\\",\\n  \\\"exchange\\\": \\\"/api/auth/app/exchange\\\",\\n  \\\"callback\\\": \\\"https://shop.example/app/signed-in\\\",\\n  \\\"second_step\\\": \\\"/sign-in/two-factor\\\"\\n },\\n \\\"device\\\": {\\n  \\\"push\\\": {\\n   \\\"register\\\": \\\"/api/notifications/push-devices\\\"\\n  }\\n },\\n \\\"stamp\\\": \\\"shell-nobody\\\"\\n}\\n\",\"pages\":[],\"owner\":{\"person\":null},\"build\":\"152bd84abf4d\"}"}
         ]
       }
     },
     {
-      "note": "The answer to the request asked before the sign-in arrives anyway: nobody waits for it, and it confirms nobody.",
+      "note": "The answer to the request asked before the sign-in arrives anyway: nobody waits for it, and the cover stays.",
       "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "made/shell-app-nobody.json",
       "expect": {
         "changed": [],
         "effects": []
-      }
+      },
+      "check": [
+        {"at":"/modals","is":[{"locked":true,"present":"full","stack":[2]}]}
+      ]
     },
     {
-      "note": "So Ravneet's page is not written under the visitor.",
-      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-keep","1"],["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
-      "body": "store/orders.json",
+      "note": "The shell asked after the sign-in names Ravneet: the cover goes, and her first screen is fetched.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "made/shell-app.json",
       "expect": {
         "changed": [
+          {"t":"app"},
+          {"t":"nav"},
           {"t":"screen","id":1}
         ],
         "effects": [
-          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+          {"t":"cache_clear"},
+          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ],\\n \\\"sign_in\\\": {\\n  \\\"start\\\": \\\"/auth/app/sign-in\\\",\\n  \\\"exchange\\\": \\\"/api/auth/app/exchange\\\",\\n  \\\"callback\\\": \\\"https://shop.example/app/signed-in\\\",\\n  \\\"second_step\\\": \\\"/sign-in/two-factor\\\"\\n },\\n \\\"device\\\": {\\n  \\\"push\\\": {\\n   \\\"register\\\": \\\"/api/notifications/push-devices\\\"\\n  }\\n },\\n \\\"stamp\\\": \\\"shell-nobody\\\"\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"id\":\"0193a4b2-0000-7000-8000-00000000ra01\",\"name\":\"Ravneet Kaur\",\"email\":\"ravneet.kaur@example.com\"}},\"build\":\"152bd84abf4d\"}"},
+          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"label\\\": \\\"Store\\\",\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Orders\\\",\\n      \\\"href\\\": \\\"/orders\\\",\\n      \\\"badge\\\": \\\"12\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Inventory\\\",\\n      \\\"href\\\": \\\"/inventory\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ],\\n \\\"sign_in\\\": {\\n  \\\"start\\\": \\\"/auth/app/sign-in\\\",\\n  \\\"exchange\\\": \\\"/api/auth/app/exchange\\\",\\n  \\\"callback\\\": \\\"https://shop.example/app/signed-in\\\",\\n  \\\"second_step\\\": \\\"/sign-in/two-factor\\\"\\n },\\n \\\"device\\\": {\\n  \\\"push\\\": {\\n   \\\"register\\\": \\\"/api/notifications/push-devices\\\"\\n  }\\n },\\n \\\"user\\\": {\\n  \\\"name\\\": \\\"Ravneet Kaur\\\",\\n  \\\"email\\\": \\\"ravneet.kaur@example.com\\\",\\n  \\\"menu\\\": [\\n   {\\n    \\\"t\\\": \\\"link\\\",\\n    \\\"label\\\": \\\"Profile\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"navigate\\\",\\n     \\\"href\\\": \\\"/profile\\\"\\n    }\\n   },\\n   {\\n    \\\"t\\\": \\\"button\\\",\\n    \\\"label\\\": \\\"Sign out\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"request\\\",\\n     \\\"method\\\": \\\"post\\\",\\n     \\\"href\\\": \\\"/sign-out\\\"\\n    }\\n   }\\n  ]\\n },\\n \\\"stamp\\\": \\\"shell-ravneet\\\"\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"id\":\"0193a4b2-0000-7000-8000-00000000ra01\",\"name\":\"Ravneet Kaur\",\"email\":\"ravneet.kaur@example.com\"}},\"build\":\"152bd84abf4d\"}"},
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=ios; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00; caps=auth_session"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
         ]
-      }
+      },
+      "check": [
+        {"at":"/app/user/name","is":"Ravneet Kaur"},
+        {"at":"/modals","is":[]}
+      ]
     },
     {
       "note": "Another launch: the shell names Ravneet, and a page answer names someone else.",
