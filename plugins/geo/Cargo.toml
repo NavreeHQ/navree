@@ -9,6 +9,14 @@ repository.workspace = true
 homepage.workspace = true
 publish = false
 
+[package.metadata.navree.plugin]
+namespace = "geo"
+title = "Maps and places"
+module = "GeoModule"
+features = ["ui"]
+config = ["geo"]
+policy = { img_src = ["https://tile.openstreetmap.org"] }
+
 # Application code: unsafe stays forbidden.
 [lints.rust]
 unsafe_code = "forbid"
@@ -17,7 +25,7 @@ unsafe_code = "forbid"
 # A path rather than `workspace = true`: on Rust 1.95, the minimum version, Cargo
 # cannot turn off default features that the workspace entry leaves on. A plugin
 # outside this repository writes
-# `navree = { version = "1.3", features = ["ui", "ui-extension-files"] }`.
+# `navree = { version = "1.4", features = ["ui", "ui-extension-files"] }`.
 navree = { path = "../../crates/navree", default-features = false, features = ["ui", "ui-extension-files"] }
 http = { workspace = true }
 serde = { workspace = true }

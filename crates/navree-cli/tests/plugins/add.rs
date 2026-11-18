@@ -4,6 +4,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use navree_cli::plugin::add::{self, AddOptions};
+use navree_cli::plugin::index::Index;
+use navree_cli::plugin::manifest::{self, AppFacts};
 
 use crate::support::{self, ScriptedCargo};
 
@@ -113,6 +115,26 @@ fn plugin_add_writes_the_lines_the_installing_page_shows() {
 Installed navree-plugin-announcements 1.0.0. It is not an official Navree package: read its code before you deploy it.
 ";
     assert_eq!(String::from_utf8(out).unwrap(), expected);
+
+    let installing_page = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/plugins/installing.mdx"),
+    )
+    .expect("read docs/plugins/installing.mdx")
+    .replace("\r\n", "\n");
+    let (_, after_heading) = installing_page
+        .split_once("\n## plugin:add\n")
+        .expect("## plugin:add heading in docs/plugins/installing.mdx");
+    let section = after_heading
+        .split("\n## ")
+        .next()
+        .expect("section under ## plugin:add");
+    let (_, after_fence) = section
+        .split_once("\n```text\n")
+        .expect("first text block under ## plugin:add");
+    let (first_text_block, _) = after_fence
+        .split_once("\n```\n")
+        .expect("closing fence of first text block");
+    assert_eq!(format!("{first_text_block}\n"), expected);
 
     let written_toml = fs::read_to_string(root.join("Cargo.toml")).unwrap();
     assert!(written_toml.contains("navree-plugin-announcements = \"1.0.0\""));
@@ -921,4 +943,47 @@ module = \"KhataModule::from_config()\"
 
         assert_eq!(runner.ran[0], "cargo add --path plugins/khata");
     }
+}
+
+#[test]
+fn the_geo_example_plugins_manifest_passes_the_grammar() {
+    let geo_toml_raw = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/geo/Cargo.toml"),
+    )
+    .expect("read plugins/geo/Cargo.toml");
+    let geo_toml: toml::Table = geo_toml_raw.parse().expect("parse plugins/geo/Cargo.toml");
+    let pkg_name = geo_toml["package"]["name"].as_str().expect("package.name");
+    let table_toml = geo_toml
+        .get("package")
+        .and_then(|p| p.get("metadata"))
+        .and_then(|m| m.get("navree"))
+        .and_then(|n| n.get("plugin"))
+        .expect("[package.metadata.navree.plugin] in plugins/geo/Cargo.toml");
+    let table_json = serde_json::to_value(table_toml).expect("plugin table as json");
+
+    let index = Index::embedded();
+    let facts = AppFacts {
+        first_party: false,
+        navree_version: "1.4.0".to_owned(),
+        navree_features: index.manifest_features.iter().cloned().collect(),
+        allowed_features: index.manifest_features.iter().cloned().collect(),
+        reserved: index.reserved.iter().cloned().collect(),
+        ..AppFacts::default()
+    };
+
+    let parsed = manifest::read(pkg_name, &table_json, &facts)
+        .expect("plugins/geo/Cargo.toml manifest passes grammar");
+    assert_eq!(parsed.namespace, "geo");
+    assert_eq!(parsed.title.as_deref(), Some("Maps and places"));
+    assert_eq!(parsed.module.as_str(), "GeoModule");
+    assert_eq!(parsed.features, ["ui"]);
+    assert_eq!(parsed.config, ["geo"]);
+    assert_eq!(
+        parsed.policy.sources,
+        [(
+            "img_src".to_owned(),
+            "https://tile.openstreetmap.org".to_owned()
+        )]
+    );
+    assert!(!parsed.policy.wasm);
 }

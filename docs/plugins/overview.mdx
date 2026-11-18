@@ -63,7 +63,7 @@ repository = "https://code.ludhiana.example/navree-plugin-announcements"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-navree = { version = "1.3", default-features = false, features = ["http"] }
+navree = { version = "1.4", default-features = false, features = ["http"] }
 ```
 
 The crate holds a controller and a module. The module names itself a plugin and registers the controller:
@@ -107,7 +107,15 @@ That is a whole plugin. Three things to know about it:
 
 ## Adding a plugin to an app
 
-An app adds a plugin in two steps. First the dependency:
+When the plugin carries a `[package.metadata.navree.plugin]` table in its `Cargo.toml`, one command adds the dependency, turns on any `navree` features it asks for, wires its module above `// navree:modules` in `src/app.rs`, and writes its environment variable names, suggested grants and page-policy sources where you can read them:
+
+```sh
+navree plugin:add navree-plugin-announcements
+```
+
+A plugin in a folder inside your app is added with `navree plugin:add --path plugins/announcements`. See [installing, listing and removing](/docs/plugins/installing/) for every option, `navree plugin:list` and `navree plugin:remove`.
+
+You can also do the two steps by hand. First add the dependency:
 
 ```sh
 cargo add navree-plugin-announcements
@@ -115,7 +123,7 @@ cargo add navree-plugin-announcements
 
 A plugin in your own repository is added by its path instead: `navree-plugin-announcements = { path = "../navree-plugin-announcements" }`.
 
-Then the module, where the app lists its modules:
+Then add the module where the app lists its modules:
 
 ```rust title="src/app.rs"
 use navree::prelude::*;
@@ -147,7 +155,7 @@ What a plugin brings beyond its code is yours to decide:
 - **The pieces only your app registers.** A layer for every request, a permission check, error pages and the like are shipped by the plugin and registered by a module of yours: see [what only your app registers](#what-only-your-app-registers).
 - **Its templates and translations.** To change them, copy them into your app with [`plugin:publish`](#publishing-a-plugins-files) and edit the copies.
 
-To take a plugin out, remove the module and the dependency. What the plugin wrote to your database stays, and so do the files you published.
+To take a plugin out, run [`navree plugin:remove`](/docs/plugins/installing/#pluginremove) (or remove the module and the dependency by hand). What the plugin wrote to your database stays, and so do the files you published.
 
 ## What a plugin can ship
 
@@ -207,7 +215,7 @@ locales/
 
 ```toml title="Cargo.toml"
 [dependencies]
-navree = { version = "1.3", default-features = false, features = ["http", "view"] }
+navree = { version = "1.4", default-features = false, features = ["http", "view"] }
 serde = { version = "1", features = ["derive"] }
 ```
 
@@ -265,7 +273,7 @@ A rule holds for every module that acts for the plugin: a module that names it, 
 A plugin whose package is `navree-plugin-mail` gets the namespace `mail`, which the framework keeps:
 
 ```text wrap
-plugin `navree-plugin-mail` uses the namespace `mail`, which the framework keeps for itself; set another with plugin_info!(namespace = "..")
+plugin `navree-plugin-mail` uses the namespace `mail`, which the framework keeps for itself; remove the plugin or update it to a version that uses another namespace
 ```
 
 The kernel makes these checks from the module graph, so `check` and `plugins` report them without starting the app. It makes four of the checks below the same way: a configured module, a provider that stands for the whole app, a hook on a model and a command's name. The other checks run as the app boots, each in the module it belongs to. Without `AccessModule`, for one, nothing checks the permissions and subjects that modules describe.
@@ -373,7 +381,7 @@ A plugin's first line is its namespace, its name and version, and its title when
 
 ```json
 {
-  "navree": "1.3.0",
+  "navree": "1.4.0",
   "plugins": [
     {
       "name": "navree-plugin-announcements",

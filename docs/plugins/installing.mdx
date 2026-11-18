@@ -1,0 +1,152 @@
+---
+title: "Installing, listing and removing"
+description: "Install a first-party or community plugin with navree plugin:add, inspect what is installed and wired with navree plugin:list and navree check, and take a plugin out with navree plugin:remove."
+---
+
+An app installs, lists and removes plugins with three CLI commands: `navree plugin:add`, `navree plugin:list` and `navree plugin:remove`. Every line they add to your repository is plain Rust, TOML or `.env.example` text in its normal file, marked with `# plugin:add <package>` where comments apply so you can inspect or edit it yourself. [Plugins](/docs/plugins/overview/) explains how plugins work and how to write one (`navree make:plugin` scaffolds a crate, and `navree make:component` adds a Navree UI component to a plugin or an app).
+
+From Navree 1.4, the `navree` command handles `plugin:add`, `plugin:remove`, `plugin:list`, `make:plugin` and `make:component` itself rather than forwarding them to the app binary. If an app defines a console command with one of those five names, run it on the compiled app binary (`cargo run -- <command>`).
+
+## plugin:add
+
+Install a community crate by package name, or a local plugin crate inside your app with `--path`:
+
+```sh
+navree plugin:add navree-plugin-announcements
+navree plugin:add navree-plugin-khata --version "^1.2"
+navree plugin:add --path plugins/khata
+```
+
+Installing `navree-plugin-announcements` prints every change and follow-up step:
+
+```text
+  added    navree-plugin-announcements 1.0.0 (Cargo.toml)
+  feature  navree: workspace, ui (Cargo.toml)
+  wired    .module(navree_plugin_announcements::AnnouncementsModule::from_config()) (src/app.rs)
+  env      APP_ANNOUNCEMENTS__SIGNING_KEY (.env.example)
+  next     navree config:publish --plugin announcements
+  grant    member: announcements.read (config/workspace.toml)
+  next     navree migrate
+  next     show plugin links in the sidebar: add .contributed() to Shell::new(..) in src/ui/shell.rs
+  next     navree plugins, to see what navree-plugin-announcements registers (it builds and runs the app)
+Installed navree-plugin-announcements 1.0.0. It is not an official Navree package: read its code before you deploy it.
+```
+
+A community crate's code runs on your machine only when you pass `--publish-config` or build the app yourself: without `--publish-config`, `plugin:add` calls only `cargo add` and `cargo metadata`, neither of which compiles crates or runs build scripts or macros. `navree plugins` builds and runs the app to show what each wired plugin registers at boot, whereas `navree plugin:list` inspects `Cargo.toml`, `cargo metadata` and `src/` without running any plugin code.
+
+| Option | What it does |
+|---|---|
+| `PACKAGE` | A first-party short name (`billing`) or a community crate name (`navree-plugin-khata`). Optional when `--path` is passed. |
+| `--version <REQ>` | Version requirement for a community crate (`^1.2`). First-party packages follow `navree`'s own version. |
+| `--path <DIR>` | Install a plugin crate from a folder inside the app (`plugins/khata`). |
+| `--no-wire` | Keep `src/app.rs` unchanged and print the `.module(..)` line as a `next` step instead. |
+| `--publish-config` | Build and run the app once during install: runs `config:publish --plugin` to write `config/<section>.toml` and `plugins --json` to print what the plugin registers. |
+
+First-party opt-in packages such as `billing` are installed by short name (`navree plugin:add billing`). `plugin:add` turns on the package's feature on `navree` in `Cargo.toml` (`browser` is turned on under `[dev-dependencies]`), wires its module in `src/app.rs`, and then runs `config:publish --plugin` and `plugins --json` automatically:
+
+```text
+  run      cargo run --quiet -- config:publish --plugin billing (builds and runs the app)
+  feature  navree: billing (Cargo.toml)
+  wired    .module(navree::billing::BillingModule::from_config()) (src/app.rs)
+  wrote    config/billing.toml
+  next     navree migrate
+
+billing  navree-billing 1.4.0
+  BillingModule  navree_billing::BillingModule
+    adds      1 SectionRegistration
+Installed billing.
+```
+
+Because a first-party install (or any install with `--publish-config`) runs `cargo run --quiet -- config:publish --plugin <ns>`, it prints that `run` line first and compiles and runs your app — along with every crate your app already depends on. If your app does not currently build, `plugin:add` of a first-party package rolls its edits back and cannot finish: fix the build first, or pass `--no-wire` so nothing runs and add the `.module(..)` line to `src/app.rs` yourself.
+
+## What plugin:add writes
+
+Before touching any file of your app, `plugin:add` reads `[package.metadata.navree.plugin]` from the resolved package's `Cargo.toml` and checks every key and value against a fixed grammar (unknown keys, reserved namespaces, disallowed `navree` features, permissions outside the plugin's namespace, or unsafe page-policy sources all stop the install). It then plans every edit in memory and writes each file atomically:
+
+| File | What `plugin:add` writes | Mark |
+|---|---|---|
+| `Cargo.toml` | Adds the crate dependency (for a community crate) and turns on any `navree` features the manifest lists that are not yet enabled (`[dev-dependencies]` for `browser`), preserving comments and formatting | none |
+| `src/app.rs` | Inserts `.module(..)` directly above `// navree:modules` unless `--no-wire` was passed or the module is already wired | none |
+| `.env.example` | Appends `APP_<NS>__<KEY>=` for each environment variable name the manifest lists that is not already in the file | `# plugin:add <package>` above the block |
+| `config/workspace.toml` | Adds each suggested role permission (`member = ["announcements.read"]`) when your roles are read from `config/workspace.toml`; prints a `next` line instead when roles are set in code, JSON or environment variables | `# plugin:add <package>` on each permission line |
+| `config/ui.policy.toml` | Writes requested page sources (`img_src`, `media_src`, `connect_src`, `font_src` under `[allow.<ns>]`, or `wasm = true` above the first table) **commented out**, so you choose whether to uncomment and allow them | `# ... (plugin:add <package>)` |
+| `config/<section>.toml` | Written by `config:publish --plugin <ns>` on a first-party install or with `--publish-config` | none |
+
+`plugin:add` either completes or changes nothing. If `cargo add`, `cargo metadata`, the manifest check, any file write, or `config:publish --plugin` fails, every file it touched — `Cargo.toml` and the Cargo workspace's `Cargo.lock` included — is restored byte for byte. It never runs database migrations; `navree migrate` is always yours to run once you have checked what the plugin adds. If a file changed on disk while Cargo was running (for example, you saved `src/app.rs` in your editor), `plugin:add` refuses to overwrite your edit and stops cleanly. If an install is interrupted mid-build during `config:publish`, run the same `navree plugin:add` command again: a second run sees what is already in place and finishes the remaining steps without duplicating any line.
+
+In a Cargo workspace app (such as the `micro` starter kit, where the service crate sits in `crates/<service>/`), run the plugin commands from inside the service crate: `Cargo.toml` and `src/` are read and written in that crate, while `config/`, `.env.example` and `Cargo.lock` are read and written at the workspace root where the app loads its configuration.
+
+## When the marker is gone
+
+`plugin:add` inserts `.module(..)` right above the `// navree:modules` comment in `src/app.rs`. If that marker has been deleted (or when you pass `--no-wire`), `plugin:add` leaves `src/app.rs` untouched, skips `config:publish`, and prints the exact line to paste into `Navree::app()`:
+
+```text
+  next     add this line to Navree::app() in src/app.rs: .module(navree_plugin_khata::KhataModule::from_config())
+```
+
+If `.module(..)` was commented out in `src/app.rs`, `plugin:add` treats it as off and inserts an active `.module(..)` line above `// navree:modules` while leaving your comment intact.
+
+## Links in an existing app's sidebar
+
+Plugins that add pages to a [Navree UI](/docs/ui/overview/) app can contribute sidebar items with `m.nav_item(..)`. Those links appear in the sidebar when the app's `Shell` opts in with `.contributed()` (see [links other modules add](/docs/ui/app-shell/#links-other-modules-add)).
+
+Apps created with `navree new` already include `.contributed()` in `src/ui/shell.rs`. When you install a plugin whose manifest lists `ui` into an existing app whose `src/ui/shell.rs` has `Shell::new(..)` without `.contributed()`, `plugin:add` prints a `next` reminder:
+
+- If `src/ui/shell.rs` already builds pages through the `AppShell` extractor, add `.contributed()` to `Shell::new(..)`.
+- If `src/ui/shell.rs` comes from an earlier template that calls `Shell::for_request`, add `.contributed()` to `Shell::new(..)` and build `Desk`'s page from the `AppShell` extractor (`.context(..)`, `.user_menu(..)`) instead of `Shell::for_request`, as shown in [AppShell](/docs/ui/app-shell/).
+
+## plugin:list
+
+`navree plugin:list` inspects `cargo metadata` and `src/` (without building or running the app) and lists every community plugin dependency and every enabled first-party module package, showing whether its module is wired:
+
+```sh
+navree plugin:list
+navree plugin:list --json
+```
+
+```text
+navree-plugin-khata  0.1.0  wired      src/app.rs
+billing              1.4.0  wired      src/platform.rs
+helm                 1.4.0  not wired  run: navree plugin:add helm
+```
+
+When no dependency of the app declares a plugin, `plugin:list` prints `No plugins: no dependency of this app declares one.` (`[]` with `--json`).
+
+`plugin:list` also checks every resolved dependency's Cargo library target name. If a crate outside `navree` sets `[lib] name` to `navree` or `navree_...` (not matching its own package name with `-` turned into `_`), `plugin:list` marks it `warning` with ``library is `<lib>` (not `<expected>`)`` (and includes `"library"` and `"warning"` fields in `--json`) so you can spot and remove it.
+
+## plugin:remove
+
+`navree plugin:remove <package>` removes the `.module(..)` line `plugin:add` wrote in `src/app.rs` and, for a community crate, runs `cargo remove <package>`:
+
+```sh
+navree plugin:remove navree-plugin-announcements
+navree plugin:remove billing
+```
+
+```text
+  unwired  .module(navree_plugin_announcements::AnnouncementsModule::from_config()) (src/app.rs)
+  removed  navree-plugin-announcements (Cargo.toml)
+  kept     config/announcements.toml, the grants in config/workspace.toml, APP_ANNOUNCEMENTS__SIGNING_KEY in .env.example, the features navree: workspace, ui, and the plugin's tables and rows
+```
+
+If you edited, rewrapped or moved the `.module(..)` line by hand, `plugin:remove` leaves `src/app.rs` untouched, prints a `next` line naming the registration to take out, and still removes the crate dependency. For a first-party package (`navree plugin:remove billing`), it unwires the module and leaves the feature on `navree` in `Cargo.toml` in case other code in your app imports types from `navree::billing`.
+
+The `kept` line lists everything left in your project that came with or for the plugin: published `config/<section>.toml` files, marked grants in `config/workspace.toml`, marked page sources in `config/ui.policy.toml`, environment variable names in `.env.example`, `navree` features in `Cargo.toml`, the local `plugins/<name>/` folder when the plugin was installed from `--path`, and the plugin's database tables and rows.
+
+Removing a plugin removes its code, not what it stored. Roles and grants its handlers, jobs or migrations wrote with `AccessService`, or with SQL against the access tables, stay after `plugin:remove`; find them with `access:explain` and the management routes, and take them away there.
+
+## navree check
+
+When you run `navree check` in plain text mode (without `--graph` or `--json`), the CLI inspects `cargo metadata` and `src/` before running the module graph and conformity checks, without changing `navree check`'s exit status:
+
+- A community plugin dependency in `Cargo.toml` that nothing under `src/` wires prints:
+
+  ```text
+  warning  navree-plugin-khata declares a plugin, but nothing under src/ wires it: run navree plugin:add navree-plugin-khata, or remove the dependency
+  ```
+
+- Any resolved dependency whose `[lib] name` starts with `navree` while differing from its own package name prints:
+
+  ```text
+  warning  khata-helper 0.2.0 names its library `navree_plugin_khata` (not `khata_helper`), like a `navree` crate: remove or replace the dependency
+  ```

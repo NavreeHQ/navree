@@ -1,6 +1,6 @@
 ---
 name: navree-cli-generators
-description: "Uses the `navree` CLI: `navree new` (Navree UI by default, `--ui`, `--kit`), every `make:*` generator with the files it writes and what it registers (including `make:page`, `make:form` and `make:table` for Navree UI), the marker comments, `navree dev`, `navree native:coverage` and `navree native:doctor` for apps that answer native clients, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, model, factory, seeder, migration, job, event, listener, mail, notification, policy, command, test, MCP server, Helm resource, Navree UI page, form or data table), running an app command such as migrate or queue:work, or adding a custom command."
+description: "Uses the `navree` CLI: `navree new` (Navree UI by default, `--ui`, `--kit`), every `make:*` generator with the files it writes and what it registers (including `make:page`, `make:form`, `make:table`, `make:plugin` and `make:component`), `plugin:add`, `plugin:list` and `plugin:remove`, the marker comments, `navree dev`, `navree native:coverage` and `navree native:doctor` for apps that answer native clients, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, model, factory, seeder, migration, job, event, listener, mail, notification, policy, command, test, MCP server, Helm resource, Navree UI page, form, data table, plugin crate or UI component), installing, listing or removing a plugin, running an app command such as migrate or queue:work, or adding a custom command."
 ---
 
 # The navree CLI and generators
@@ -12,9 +12,9 @@ Two command lines:
   `navree-dock`). It depends on no Navree runtime crate.
 - **The app's binary** owns runtime commands (`serve`, `migrate`,
   `queue:work`, ...). `navree <command>` forwards anything the CLI doesn't
-  own (`new`, `make:*`, `dev`, `check`, `gate`, `dock*`, the Harbor commands,
-  `mcp`, `skills:install`, `browser:install`, `openapi:client`,
-  `native:coverage`, `native:doctor`) as
+  own (`new`, `make:*`, `plugin:add`, `plugin:remove`, `plugin:list`, `dev`,
+  `check`, `gate`, `dock*`, the Harbor commands, `mcp`, `skills:install`,
+  `browser:install`, `openapi:client`, `native:coverage`, `native:doctor`) as
   `cargo run --quiet -- <command>`. In
   production, run the binary itself: `./my-app migrate`. When the app has
   a `dock.toml`, `navree dev` and forwarded commands get its services'
@@ -74,6 +74,8 @@ hint with the line to add. Keep the markers:
 | `make:form deal --module posts` | `forms/deal.rs`, a form struct (`Validate` + `Form`) with `page` and `store` functions | nothing; call `forms::deal::page` from a `GET` route and `forms::deal::store` from a `POST` route |
 | `make:table deal --module posts` | `tables/deal.rs`, a `TableRow` struct and `index` for the module's model (`models/deal.rs`, `entity.rs` or `entities/deal.rs`, with an `id`, a `name` and `created_at`) | nothing; call `tables::deal::index` from a `GET` route |
 | `make:mcp posts assistant` | `mcp/assistant.rs`, `AssistantMcp` with one tool `assistant_echo` (see `navree-mcp`) | `navree::mcp::ModuleBuilderMcpExt::mcp_server::<..>(m)` in `wire`; prints the `mcp` feature and `McpModule` steps |
+| `make:plugin khata` | `plugins/khata/` (`--path <dir>` sets the parent folder, default `plugins`; `--wrap <crate>` adds a `ClientModule` in `src/client.rs`): a plugin crate `navree-plugin-khata` with `[package.metadata.navree.plugin]`, `KhataModule` calling `m.plugin(navree::plugin_info!())`, `KhataOptions` and `tests/boots.rs` | nothing; prints `navree plugin:add --path plugins/khata` |
+| `make:component drop_point` | `src/ui/drop_point.rs` in the crate at `--path` (default `.`; `--field` writes a `FieldControl`; `--script` and `--sheet` add `assets/drop-point.js`, `assets/drop-point.css` and `tests/browser_drop_point.rs`; `--dry-run`, `--force`) | `pub mod drop_point;` in `src/ui/mod.rs`; with `--script` or `--sheet`, turns on `ui-extension-files` in `Cargo.toml` and wires `m.contribute(ui::drop_point::DROP_POINT)` above `// navree:wire` in `src/lib.rs` |
 
 All `make:<kind>` take `--path <dir>` (default `src/modules`). The module
 must exist (`make:module` first); `make:listener --event` needs the event
@@ -92,6 +94,10 @@ switcher beside the heading, and gives the workspace id for
 After generating: replace the placeholder logic, add columns to both the
 model and the migration, then `cargo test` (generated tests pass
 as written) and `navree routes`.
+
+## Plugins
+
+`navree plugin:add [PACKAGE] [--version <REQ>] [--path <DIR>] [--no-wire] [--publish-config]` installs a first-party package (`billing`) or a community plugin crate (`navree-plugin-khata`, or `--path plugins/khata`): it checks `[package.metadata.navree.plugin]` against a fixed grammar, adds the crate or `navree` features in `Cargo.toml`, inserts `.module(..)` above `// navree:modules` in `src/app.rs` (printing the line as a `next` step when `// navree:modules` is missing or `--no-wire` is passed), appends environment variable names to `.env.example`, and writes suggested grants in `config/workspace.toml` and commented-out page sources in `config/ui.policy.toml`; a community crate's code runs only with `--publish-config`. `navree plugin:list [--json]` lists installed plugins and whether each is wired under `src/`, and `navree plugin:remove <PACKAGE>` unwires the exact line `plugin:add` wrote and removes the crate while leaving configuration, grants and stored data.
 
 ## The dev loop
 
@@ -236,3 +242,4 @@ navree native:doctor --platform android --url https://orders.example.com --json
 
 - https://navree.com/docs/digging-deeper/cli/
 - https://navree.com/docs/getting-started/directory-structure/
+- https://navree.com/docs/plugins/installing/

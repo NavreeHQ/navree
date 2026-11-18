@@ -597,7 +597,7 @@ export const sections: DocsSection[] = [
     slug: "plugins",
     title: "Plugins",
     description: "What a plugin is, how to write one and add it to an app, what the boot checks, and how to connect existing Rust crates to an app.",
-    pages: ["overview", "existing-crates"],
+    pages: ["installing", "overview", "existing-crates"],
   },
   {
     slug: "tools",

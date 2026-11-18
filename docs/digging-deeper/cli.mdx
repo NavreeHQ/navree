@@ -253,6 +253,16 @@ A page takes `AppShell`, which reads the `Shell` the app registers, so the app n
 
 `make:table` loads the rows from the module's model when it finds one named for a row (`models/deal.rs`, the module's `entity.rs` or `entities/deal.rs`) with an `id: Uuid`, a `name: String` and a `created_at: DateTime<Utc>`, as `make:module` and `make:model` write them. It then also writes `From<Deal> for DealRow` and the `index` handler, which loads a page with `query.load_as(Deal::query(), &uow, ..)`. Without such a model it writes the row and `deals_table`, sketches the handler in a comment and says so.
 
+### Plugins
+
+Five commands install, list, remove and scaffold [plugins](/docs/plugins/installing/) and their UI components:
+
+- `navree plugin:add [PACKAGE] [--version <REQ>] [--path <DIR>] [--no-wire] [--publish-config]` — install a first-party or community plugin: add the crate (or turn on a first-party package's feature), wire its module above `// navree:modules`, and write its environment variable names, suggested grants and page sources where you can read them.
+- `navree plugin:list [--json]` — list the plugins this app depends on and whether each is wired under `src/`.
+- `navree plugin:remove <PACKAGE>` — unwire a plugin's module line and remove its crate while keeping its configuration, grants and stored data.
+- `navree make:plugin <NAME> [--path <DIR>] [--wrap <CRATE>]` — write a plugin crate under `plugins/<name>/` with its `[package.metadata.navree.plugin]` table, a module that calls `m.plugin(navree::plugin_info!())`, typed options and a boot test.
+- `navree make:component <NAME> [--path <DIR>] [--script] [--sheet] [--field] [--dry-run] [--force]` — write a [Navree UI component](/docs/ui/your-own-components/) of your own (`src/ui/<name>.rs`), with optional script, stylesheet, browser contract test and `// navree:wire` registration.
+
 ## The development server
 
 `navree dev` builds the app, runs its `serve` command, and rebuilds and restarts it when the code changes:
