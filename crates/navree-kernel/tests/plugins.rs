@@ -1344,6 +1344,54 @@ fn a_plugin_may_not_take_the_name_of_a_framework_command() {
         .expect("the plugin's own command, and the app's `plugins`");
 }
 
+#[test]
+fn a_plugins_command_may_not_take_a_framework_commands_name() {
+    use navree_plugin_khata::KhataModule;
+    use navree_plugin_khata_core::KhataCoreModule;
+    use navree_plugin_listing::Commands;
+
+    // Commands that framework modules register (`serve`, `migrate`, `config:publish`,
+    // `access:grant`, `native:coverage`, `integrations:mailboxes`, `workspace:demo-reset`, ..)
+    // are refused from a community plugin's module, just as the kernel's built-ins are.
+    for name in [
+        "serve",
+        "migrate",
+        "config:publish",
+        "access:grant",
+        "i18n:publish",
+        "micro:listen",
+        "native:coverage",
+        "integrations:mailboxes",
+        "workspace:demo-reset",
+    ] {
+        assert_eq!(
+            errors(Navree::app().module(Commands(name))),
+            format!(
+                "plugin `navree-plugin-listing` registers the command `{name}` in `Commands`, a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise"
+            )
+        );
+    }
+
+    // Refused from a plugin's second crate as well.
+    assert_eq!(
+        errors(Navree::app().module(KhataModule(|m| {
+            m.import(KhataCoreModule(|m| {
+                let serve = CommandSpec::new("serve", "The plugin's", |_, _| async { Ok(()) });
+                m.command(serve);
+            }));
+        }))),
+        "plugin `navree-plugin-khata` registers the command `serve` in `KhataCoreModule` (only the plugin's modules import it), a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise"
+    );
+
+    // An app module registers a framework command name as before, beside a plugin's own command.
+    Navree::app()
+        .module(Commands("listing:sync"))
+        .module(AppCommand("serve"))
+        .module(AppCommand("migrate"))
+        .validate()
+        .expect("the plugin's own command, and the app's commands");
+}
+
 // A module typed as a reference.
 
 /// The helper plugin: its crate is this module.

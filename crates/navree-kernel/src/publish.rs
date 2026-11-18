@@ -620,7 +620,6 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::Publishable;
 
     /// A new, empty folder `navree-kernel-<name>-<process id>` in the
     /// system's temporary folder, removed on drop.
@@ -1006,25 +1005,38 @@ mod tests {
         );
     }
 
-    /// A plugin with the namespace `announcements` and one views file,
-    /// `list.html`.
-    struct Notices;
+    mod navree_plugin_announcements {
+        use crate::{Module, ModuleBuilder, PluginInfo, PublishTag, Publishable};
 
-    impl crate::Module for Notices {
-        fn register(&self, m: &mut crate::ModuleBuilder) {
-            m.plugin(crate::plugin_info!(namespace = "announcements"))
-                .contribute(Publishable::new(PublishTag::Views).file("list.html", b"<ul></ul>"));
+        const ANNOUNCEMENTS: PluginInfo = PluginInfo::new(
+            "navree-plugin-announcements",
+            module_path!(),
+            "announcements",
+            "1.0.0",
+        );
+
+        /// A plugin with the namespace `announcements` and one views file,
+        /// `list.html`.
+        pub struct Notices;
+
+        impl Module for Notices {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(ANNOUNCEMENTS).contribute(
+                    Publishable::new(PublishTag::Views).file("list.html", b"<ul></ul>"),
+                );
+            }
+        }
+
+        /// A plugin with the namespace `announcements` and no file.
+        pub struct Empty;
+
+        impl Module for Empty {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(ANNOUNCEMENTS);
+            }
         }
     }
-
-    /// A plugin with the namespace `announcements` and no file.
-    struct Empty;
-
-    impl crate::Module for Empty {
-        fn register(&self, m: &mut crate::ModuleBuilder) {
-            m.plugin(crate::plugin_info!(namespace = "announcements"));
-        }
-    }
+    use navree_plugin_announcements::{Empty, Notices};
 
     /// A module with an offline `config:publish` command, as `ConfigModule`
     /// has.

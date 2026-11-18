@@ -93,7 +93,7 @@ impl Graph {
     ///     navree-orm ([`MODEL_HOOK_KEY`]) whose model `M` is not a type of the
     ///     plugin's crate: one `PluginHooksModel` per module and model;
     /// 13. such a module registering a command with the name of one of the
-    ///     framework's own (`plugins`, `check`, ..): `PluginCommand`.
+    ///     framework's own ([`FRAMEWORK_COMMANDS`]): `PluginCommand`.
     pub(crate) fn check_plugins(&mut self, errors: &mut Vec<KernelError>) {
         let version = env!("CARGO_PKG_VERSION");
         // Each plugin's modules, plugins in first-seen order.
@@ -371,7 +371,7 @@ impl Graph {
             }
             let module = &self.modules[m];
             for command in &module.commands {
-                if FRAMEWORK_COMMANDS.contains(&command.name) {
+                if FRAMEWORK_COMMANDS.binary_search(&command.name).is_ok() {
                     errors.push(KernelError::PluginCommand {
                         plugin: info.name,
                         command: command.name,

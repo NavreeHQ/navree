@@ -2540,3 +2540,123 @@ fn the_plugin_module_brings_the_ui_extension_names() {
         navree::ui::EditedValue<String>,
     >());
 }
+
+/// Every command name that any framework crate's non-test source passes to `CommandSpec::new`,
+/// together with the kernel's own built-in and runner names, is on the kernel's
+/// `FRAMEWORK_COMMANDS` list, and nothing else is.
+#[test]
+fn the_kernels_framework_commands_are_the_commands_the_frameworks_modules_register() {
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut commands: std::collections::BTreeSet<String> = [
+        "--help",
+        "-h",
+        "check",
+        "help",
+        "introspect",
+        "list",
+        "plugin:publish",
+        "plugins",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+
+    for entry in std::fs::read_dir(&crates).expect("the crates folder") {
+        let entry = entry.expect("a folder entry");
+        let package = entry.file_name().to_string_lossy().into_owned();
+        let left_out = ["navree-kernel", "navree-cli", "navree-macros"].contains(&package.as_str());
+        let src = entry.path().join("src");
+        if !package.starts_with("navree-") || left_out || !src.is_dir() {
+            continue;
+        }
+        let mut files = Vec::new();
+        rust_files(&src, &mut files);
+        for file in files {
+            let text = std::fs::read_to_string(&file).expect("a source file");
+            let code = before_unit_tests(&text);
+            let mut from = 0;
+            const CALL: &str = "CommandSpec::new(";
+            while let Some(found) = code[from..].find(CALL) {
+                let start = from + found + CALL.len();
+                let rest = code[start..].trim_start();
+                if let Some(after_quote) = rest.strip_prefix('"') {
+                    let end = after_quote.find('"').expect("closing quote");
+                    commands.insert(after_quote[..end].to_owned());
+                } else {
+                    let comma = rest.find(',').expect("first argument comma");
+                    let expr = rest[..comma].trim();
+                    if expr == "name" {
+                        let table = code
+                            .find("const COMMANDS:")
+                            .and_then(|at| code[at..].find("= [").map(|eq| at + eq + 3))
+                            .and_then(|body| {
+                                code[body..].find("];").map(|end| &code[body..body + end])
+                            })
+                            .unwrap_or_else(|| {
+                                panic!("{}: `name` without `const COMMANDS`", file.display())
+                            });
+                        let mut at = 0;
+                        while let Some(open) = table[at..].find('(') {
+                            let rest_after_open = &table[at + open + 1..];
+                            let trimmed = rest_after_open.trim_start();
+                            if let Some(after) = trimmed.strip_prefix('"') {
+                                let end = after.find('"').expect("closing quote");
+                                commands.insert(after[..end].to_owned());
+                                let consumed = rest_after_open.len() - after.len() + end + 1;
+                                at += open + 1 + consumed;
+                            } else {
+                                at += open + 1;
+                            }
+                        }
+                    } else if let Some((array, index)) =
+                        expr.strip_suffix(']').and_then(|s| s.split_once('['))
+                    {
+                        let index: usize = index.trim().parse().expect("array index");
+                        let values = const_str_array(code, array.trim())
+                            .unwrap_or_else(|| panic!("{}: unresolved `{expr}`", file.display()));
+                        commands.insert(values[index].clone());
+                    } else if let Some(value) = const_str_value(code, expr) {
+                        commands.insert(value);
+                    } else {
+                        panic!(
+                            "{}: unrecognized CommandSpec::new argument `{expr}`",
+                            file.display()
+                        );
+                    }
+                }
+                from = start;
+            }
+        }
+    }
+
+    let listed = navree::kernel::__private::FRAMEWORK_COMMANDS;
+    assert!(listed.windows(2).all(|pair| pair[0] < pair[1]));
+    let expected: Vec<&str> = commands.iter().map(String::as_str).collect();
+    assert_eq!(listed, expected);
+}
+
+/// The string literal assigned to a string constant named `name` in `code`.
+fn const_str_value(code: &str, name: &str) -> Option<String> {
+    let needle = format!("const {name}: &str =");
+    let at = code.find(&needle)? + needle.len();
+    let after_quote = code[at..].trim_start().strip_prefix('"')?;
+    let end = after_quote.find('"')?;
+    Some(after_quote[..end].to_owned())
+}
+
+/// The string literals assigned to a string-slice array constant named `name` in `code`.
+fn const_str_array(code: &str, name: &str) -> Option<Vec<String>> {
+    let needle = format!("const {name}: [&str;");
+    let at = code.find(&needle)? + needle.len();
+    let open = at + code[at..].find("= [")? + 3;
+    let body = &code[open..open + code[open..].find(']')?];
+    let mut out = Vec::new();
+    let mut rest = body;
+    while let Some(q) = rest.find('"') {
+        let after = &rest[q + 1..];
+        let end = after.find('"')?;
+        out.push(after[..end].to_owned());
+        rest = &after[end + 1..];
+    }
+    Some(out)
+}
