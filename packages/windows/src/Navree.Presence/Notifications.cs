@@ -22,6 +22,13 @@ public sealed record PendingNotification(
     int? Hour,
     int? Minute)
 {
+    /// <summary>
+    /// Whose it is: the mark of the person what the app keeps was kept for when it was asked for (a mark tells one person from another
+    /// and says nothing of either), or null when nobody had been signed in since the app was first started or since the last sign-out.
+    /// One that is a person's is shown only while that person is signed in. One that is nobody's is shown whoever is there.
+    /// </summary>
+    public string? Owner { get; init; }
+
     /// <summary>Whether it comes again after it is shown.</summary>
     public bool Repeats => Hour is not null && Minute is not null;
 }
@@ -113,6 +120,13 @@ public static class NotifyRules
 /// The notifications that wait for their time. Nothing in it keeps a clock or a timer: the app asks what is due and when to
 /// ask again, so each rule is the same on the runner as on a person's machine.
 /// </summary>
+/// <remarks>
+/// Each one that waits is a person's or nobody's (<see cref="PendingNotification.Owner"/>), and one that is a person's is for that
+/// person's eyes: it is given to be shown only while they are the one signed in (<see cref="Take"/>). Due while they are not (their
+/// session ran out and the sign-in is up, or the app was started and has not heard who is signed in), it goes on waiting as it is, and
+/// is given when they are signed in again. Another person signing in takes everything that waits away, which is the app's to do. A
+/// start keeps of a person's only those of the person it can say what is kept is kept for (<see cref="KeepFor"/>).
+/// </remarks>
 public sealed class NotificationSchedule
 {
     private readonly List<PendingNotification> waiting = [];
@@ -141,13 +155,30 @@ public sealed class NotificationSchedule
     /// <returns>Whether it was waiting.</returns>
     public bool Cancel(string id) => waiting.RemoveAll(held => held.Id == id) > 0;
 
-    /// <summary>Takes what is due. One that repeats waits again for its next time; the rest are gone.</summary>
+    /// <summary>
+    /// Whether one may be shown now: one that is nobody's always, and one that is a person's only while that person is the one signed
+    /// in.
+    /// </summary>
+    /// <param name="item">The notification.</param>
+    /// <param name="here">The mark of the person who is signed in now; null while nobody is.</param>
+    /// <returns>Whether it may be shown.</returns>
+    public static bool MayShow(PendingNotification item, string? here)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return item.Owner is null || string.Equals(item.Owner, here, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Takes what is due and may be shown to the person who is signed in now. One that repeats waits again for its next time; the rest
+    /// are gone. One that is due and is a person's who is not signed in now is not taken: it waits as it is, to be taken when they are.
+    /// </summary>
     /// <param name="now">The time.</param>
     /// <param name="zone">The person's time zone.</param>
+    /// <param name="here">The mark of the person who is signed in now; null while nobody is.</param>
     /// <returns>What to show now.</returns>
-    public IReadOnlyList<PendingNotification> Take(DateTimeOffset now, TimeZoneInfo zone)
+    public IReadOnlyList<PendingNotification> Take(DateTimeOffset now, TimeZoneInfo zone, string? here)
     {
-        List<PendingNotification> due = [.. waiting.Where(item => item.At <= now).OrderBy(item => item.At)];
+        List<PendingNotification> due = [.. waiting.Where(item => item.At <= now && MayShow(item, here)).OrderBy(item => item.At)];
         foreach (PendingNotification item in due)
         {
             waiting.Remove(item);
@@ -160,9 +191,37 @@ public sealed class NotificationSchedule
         return due;
     }
 
-    /// <summary>When something is next due.</summary>
-    /// <returns>The moment, or null when nothing waits.</returns>
-    public DateTimeOffset? Next() => waiting.Count == 0 ? null : waiting.Min(item => item.At);
+    /// <summary>When something that may be shown to the person who is signed in now is next due.</summary>
+    /// <param name="here">The mark of the person who is signed in now; null while nobody is.</param>
+    /// <returns>The moment, or null when nothing that may be shown waits: what is held back for somebody else asks for no timer.</returns>
+    public DateTimeOffset? Next(string? here)
+    {
+        DateTimeOffset? next = null;
+        foreach (PendingNotification item in waiting)
+        {
+            if (MayShow(item, here) && (next is not DateTimeOffset soonest || item.At < soonest))
+            {
+                next = item.At;
+            }
+        }
+
+        return next;
+    }
+
+    /// <summary>How many that are due are held back, because they are a person's who is not the one signed in now.</summary>
+    /// <param name="now">The time.</param>
+    /// <param name="here">The mark of the person who is signed in now; null while nobody is.</param>
+    /// <returns>The count.</returns>
+    public int HeldBack(DateTimeOffset now, string? here) => waiting.Count(item => item.At <= now && !MayShow(item, here));
+
+    /// <summary>
+    /// At a start, lets go of every one that is a person's unless the start can say it is that person what is kept is kept for. A start
+    /// that reads no mark of a person can say so of none, and keeps only what is nobody's.
+    /// </summary>
+    /// <param name="keptFor">The mark of the person what is kept is kept for, as the start read it; null when it read none.</param>
+    /// <returns>How many were let go of.</returns>
+    public int KeepFor(string? keptFor) =>
+        waiting.RemoveAll(item => item.Owner is not null && !string.Equals(item.Owner, keptFor, StringComparison.Ordinal));
 
     /// <summary>Writes what waits, to be kept between launches.</summary>
     /// <returns>JSON text.</returns>
@@ -199,6 +258,16 @@ public sealed class NotificationSchedule
                     w.WriteNumber("minute", minute);
                 }
 
+                // Whose it is, always said: a person's mark, or null for nobody's.
+                if (item.Owner is null)
+                {
+                    w.WriteNull("for");
+                }
+                else
+                {
+                    w.WriteString("for", item.Owner);
+                }
+
                 w.WriteEndObject();
             }
 
@@ -208,7 +277,10 @@ public sealed class NotificationSchedule
         return System.Text.Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    /// <summary>Reads what <see cref="Write"/> wrote. Anything that does not read is nothing: a damaged file never stops the app.</summary>
+    /// <summary>
+    /// Reads what <see cref="Write"/> wrote. Anything that does not read is nothing: a damaged file never stops the app. One that does
+    /// not say whose it is (a person's mark, or null for nobody's) is not read either: nothing says whom it may be shown to.
+    /// </summary>
     /// <param name="text">The text.</param>
     /// <returns>The schedule.</returns>
     public static NotificationSchedule Read(string? text)
@@ -244,6 +316,15 @@ public sealed class NotificationSchedule
                     continue;
                 }
 
+                // Whose it is: a mark, or null for nobody's. One that does not say, or says it with an empty text or with anything
+                // else, is not read.
+                if (!item.TryGetProperty("for", out JsonElement whose)
+                    || whose.ValueKind is not (JsonValueKind.String or JsonValueKind.Null)
+                    || (whose.ValueKind == JsonValueKind.String && whose.GetString()!.Length == 0))
+                {
+                    continue;
+                }
+
                 _ = schedule.Add(new PendingNotification(
                     id.GetString()!,
                     title.GetString()!,
@@ -252,7 +333,10 @@ public sealed class NotificationSchedule
                     Text(item, "thread"),
                     DateTimeOffset.FromUnixTimeSeconds(unix),
                     hour,
-                    minute));
+                    minute)
+                {
+                    Owner = whose.GetString(),
+                });
             }
         }
         catch (Exception problem) when (problem is JsonException or ArgumentOutOfRangeException or InvalidOperationException)

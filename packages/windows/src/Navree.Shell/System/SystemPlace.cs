@@ -31,6 +31,7 @@ public sealed class SystemPlace : IDisposable
     private readonly List<ScreenWindow> screens = [];
     private readonly List<string> log = [];
     private NotificationSchedule schedule = new();
+    private string? armedFor;
     private TrayIcon? tray;
     private TrayWindow? small;
     private nint appIcon;
@@ -145,7 +146,24 @@ public sealed class SystemPlace : IDisposable
             _ = EndSessionAsync().ContinueWith(done => dispatcher.TryEnqueue(() => Say(done.IsFaulted ? "what the system shows of the session could not all be taken away: " + done.Exception!.InnerException?.GetType().Name : "what the system showed of the session is gone")), TaskScheduler.Default);
         }
 
-        schedule = NotificationSchedule.Read(host.Recall(PendingKey));
+        // What waited when the last run ended. One that is a person's is kept only when this start can say that it is that person what
+        // is kept is kept for: a start that read no mark can say so of nobody, and lets go of every one that is a person's here, before
+        // anything is armed. One that does not say whose it is was not read. What stays is a person's, and held until they are named as
+        // signed in, or nobody's.
+        string? keptText = host.Recall(PendingKey);
+        schedule = NotificationSchedule.Read(keptText);
+        int letGo = schedule.KeepFor(host.KeptFor);
+        if (letGo > 0)
+        {
+            Say(letGo + " notifications that waited were let go of: this start cannot say they are for the person what is kept is kept for");
+        }
+
+        if (!string.Equals(keptText, schedule.Waiting.Count == 0 ? null : schedule.Write(), StringComparison.Ordinal))
+        {
+            // What is kept is what this start kept of it: nothing it let go of, or did not read, is left on disk to wait.
+            Remember();
+        }
+
         if (schedule.Waiting.Count > 0)
         {
             Say(schedule.Waiting.Count + " notifications were waiting from the last run");
@@ -289,8 +307,10 @@ public sealed class SystemPlace : IDisposable
             return;
         }
 
+        // It is the person's what is kept is kept for, and shown only while they are signed in; asked for while nobody has been signed in
+        // since the start or the last sign-out, it is nobody's.
         PendingNotification? plan = NotifyRules.Plan(notify, DateTimeOffset.Now, TimeZoneInfo.Local);
-        if (plan is null || !schedule.Add(plan))
+        if (plan is null || !schedule.Add(plan with { Owner = host.KeptFor }))
         {
             Say("a notification was asked for at a time this build does not schedule, or too many wait");
             return;
@@ -379,11 +399,14 @@ public sealed class SystemPlace : IDisposable
 
     private void Remember() => host.Remember(PendingKey, schedule.Waiting.Count == 0 ? null : schedule.Write());
 
-    // The timer is set for the next time something is due, and for no longer than an hour, so a changed clock is noticed.
+    // The timer is set for the next time something is due that may be shown to the person who is signed in now, and for no longer than an
+    // hour, so a changed clock is noticed. What waits for a person who is not signed in now sets no timer: it is asked about again when
+    // who is signed in changes (HearWhoIsHere).
     private void Arm()
     {
         timer.Stop();
-        if (schedule.Next() is not DateTimeOffset next)
+        armedFor = host.PersonHere;
+        if (schedule.Next(armedFor) is not DateTimeOffset next)
         {
             return;
         }
@@ -393,15 +416,36 @@ public sealed class SystemPlace : IDisposable
         timer.Start();
     }
 
+    // What is due is shown, but for what is a person's who is not the one signed in now: that waits as it is until they are.
     private void Deliver()
     {
-        foreach (PendingNotification due in schedule.Take(DateTimeOffset.Now, TimeZoneInfo.Local))
+        foreach (PendingNotification due in schedule.Take(DateTimeOffset.Now, TimeZoneInfo.Local, host.PersonHere))
         {
             bool shown = NotificationSurface.Show(due);
             Say("the notification " + due.Id + (shown ? " was shown" : " could not be shown"));
         }
 
         Remember();
+        Arm();
+    }
+
+    // Who is signed in by the state the windows were just given, which the host heard before it gave it. When that is somebody else than
+    // the timer was set for (the person's session ran out and the sign-in is up, or they signed in again), what may be shown is asked
+    // about again: what came due for a person while they were not signed in is shown now that they are.
+    private void HearWhoIsHere()
+    {
+        string? here = host.PersonHere;
+        if (string.Equals(here, armedFor, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        int held = schedule.HeldBack(DateTimeOffset.Now, here);
+        if (held > 0)
+        {
+            Say(held + " notifications that are due are held: the person they are for is not the one signed in");
+        }
+
         Arm();
     }
 
@@ -645,6 +689,7 @@ public sealed class SystemPlace : IDisposable
     private void OnState(ViewState state)
     {
         changedSinceSnapshot = true;
+        HearWhoIsHere();
         if (deferred is not null && state.Nav.Stage == Stage.Ready)
         {
             LaunchRequest waiting = deferred;

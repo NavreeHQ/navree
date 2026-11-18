@@ -86,6 +86,20 @@ public sealed class PersonChange
     public Task<WipeReport>? Last { get; private set; }
 
     /// <summary>
+    /// The mark of the person what is kept is kept for: the one named last, and still that one while a later state names nobody, since
+    /// they may sign in again and find everything as it was. Null when nobody was named since the app was first started or since the last
+    /// sign-out: what is kept then is nobody's.
+    /// </summary>
+    public string? KeptFor => watch.Named;
+
+    /// <summary>
+    /// The mark of the person who is signed in now, by the state heard last; null while that state names nobody, while it is that of a
+    /// person who is signing out, and before any state was heard. What waits for a person's eyes (a reminder) is shown only while this is
+    /// their mark.
+    /// </summary>
+    public string? Here { get; private set; }
+
+    /// <summary>
     /// Hears who a state names as signed in, as the state is about to be shown and before any window is given it. The state of a person
     /// who is signing out says nothing of who comes next, and a state that names nobody changes nothing. The person named is written down
     /// as the one what is kept is kept for (the keeper writes only a mark it has not written, and tries again one that could not be
@@ -100,6 +114,8 @@ public sealed class PersonChange
         ArgumentNullException.ThrowIfNull(state);
         if (gate.OfSomeoneLeaving(stateMark) || state.App?.User is not Models.User user)
         {
+            // Nobody is signed in by this state, though what is kept is still kept for the person named before.
+            Here = null;
             return PersonHeard.Nobody;
         }
 
@@ -111,6 +127,7 @@ public sealed class PersonChange
         }
 
         PersonHeard heard = watch.Hear(user.Key, user.Name, user.Email);
+        Here = watch.Named;
         if (watch.Named is not string mark)
         {
             return heard;
@@ -131,7 +148,11 @@ public sealed class PersonChange
     }
 
     /// <summary>Somebody signed out: the sign-out takes everything away itself, and whoever is named after it is the first.</summary>
-    public void SignedOut() => watch.SignedOut();
+    public void SignedOut()
+    {
+        watch.SignedOut();
+        Here = null;
+    }
 
     private async Task<WipeReport> ChangeAsync(string mark)
     {

@@ -292,6 +292,79 @@ public sealed class PersonHearingTests
     }
 
     [TestMethod]
+    public async Task Nobody_is_signed_in_while_the_sign_in_is_up_though_what_is_kept_is_still_kept_for_the_person_before()
+    {
+        // What waits for a person's eyes (a reminder) is shown by who is signed in now, and kept by whom what is kept is kept for. The
+        // two are not the same between a session running out and somebody signing in.
+        string folder = Folder();
+        try
+        {
+            KeptStore kept = new(folder, App);
+            using SessionKeeper keeper = new(kept, new CookieStore(Shop));
+            _ = keeper.Open();
+            keeper.KeepPerson(PersonWatch.MarkOfKey(RituKey));
+            await keeper.DrainAsync().WaitAsync(Short);
+            string ritu = PersonWatch.MarkOfKey(RituKey);
+            string harpreet = PersonWatch.MarkOfKey(HarpreetKey);
+
+            // The app is started. The last run kept Ritu's mark, and no state has been heard: nobody is known to be signed in.
+            SessionGate gate = new();
+            RecordedShell shell = new();
+            PersonChange people = new(new PersonWatch(keeper.KeptPerson(), keeper.KeepsOfAPerson()), gate, keeper, shell.Parts, _ => { });
+            Assert.AreEqual(ritu, people.KeptFor, "the start does not say whom what is kept is kept for");
+            Assert.IsNull(people.Here, "somebody is taken to be signed in before any state was heard: her reminder would be shown to whoever started the app");
+
+            // The device is offline: the shell kept from the last run is drawn, and it names nobody.
+            _ = gate.Asked([], out long mark);
+            Assert.AreEqual(PersonHeard.Nobody, people.Hear(NamingNobody(), mark));
+            Assert.IsNull(people.Here);
+            Assert.AreEqual(ritu, people.KeptFor);
+
+            // The shell answers and names her: she is the one signed in.
+            Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(RituKey, "Ritu Sharma", null), mark));
+            Assert.AreEqual(ritu, people.Here);
+
+            // Her session runs out overnight and the sign-in is up over her work. What is kept is still hers, and nobody is signed in.
+            Assert.AreEqual(PersonHeard.Nobody, people.Hear(NamingNobody(), mark));
+            Assert.IsNull(people.Here, "the person whose session ran out is still taken to be signed in: her reminder would be shown to whoever is at the counter");
+            Assert.AreEqual(ritu, people.KeptFor, "what is kept stopped being hers when her session ran out: she would not find it when she signs in again");
+
+            // She signs in again.
+            Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(RituKey, "Ritu Sharma", null), mark));
+            Assert.AreEqual(ritu, people.Here);
+
+            // It runs out again, and Harpreet signs in: from the state that names her, she is the one signed in and what is kept is hers.
+            Assert.AreEqual(PersonHeard.Nobody, people.Hear(NamingNobody(), mark));
+            Assert.AreEqual(PersonHeard.Another, people.Hear(Naming(HarpreetKey, "Harpreet Kaur", null), mark));
+            Assert.AreEqual(harpreet, people.Here);
+            Assert.AreEqual(harpreet, people.KeptFor);
+            shell.SystemTakesItAway.SetResult();
+            _ = await people.Last!.WaitAsync(Short);
+
+            // She signs out in the client. From its first moment nobody is signed in and nothing is kept for anybody, and the state that
+            // still names her while she leaves changes neither.
+            gate.SessionIsEnding();
+            people.SignedOut();
+            Assert.IsNull(people.Here);
+            Assert.IsNull(people.KeptFor);
+            _ = gate.Asked([], out long leaving);
+            Assert.AreEqual(PersonHeard.Nobody, people.Hear(Naming(HarpreetKey, "Harpreet Kaur", null), leaving));
+            Assert.IsNull(people.Here, "a person who is signing out is taken to be signed in");
+            Assert.IsNull(people.KeptFor);
+
+            // A start that read no mark, though something is kept, can say of nobody that what is kept is theirs: a reminder that is a
+            // person's is not kept by it.
+            PersonChange unknown = new(new PersonWatch(null, somethingKept: true), new SessionGate(), keeper, new RecordedShell().Parts, _ => { });
+            Assert.IsNull(unknown.KeptFor, "a start with no mark says whom what is kept is kept for");
+            Assert.IsNull(unknown.Here);
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
     public async Task A_person_the_core_names_with_no_key_is_said_once_and_is_not_the_person_a_key_was_kept_for()
     {
         string folder = Folder();
