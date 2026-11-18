@@ -7,6 +7,8 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-18
+
 ### Upgrading
 
 An app with no plugin other than the framework's own packages boots and registers as in 1.2. What to
@@ -1235,7 +1237,8 @@ Most apps upgrade with no change. These are the changes that can ask something o
 
 First release. Read what it includes in the [release notes](https://navree.com/docs/prologue/release-notes/).
 
-[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.2.4...HEAD
+[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.3.0
 [1.2.4]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.4
 [1.2.3]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.3
 [1.2.2]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.2
