@@ -465,7 +465,8 @@ pub trait ModuleBuilderWorkspaceExt {
     /// workspace entity, like [`workspace_entity`](Self::workspace_entity).
     ///
     /// A module of a plugin that is not one of the framework's own packages
-    /// scopes only the plugin's own models, and no other module scopes
+    /// scopes only the plugin's own models, named under its namespace as its
+    /// other subjects are (`notices.Notice`), and no other module scopes
     /// another model under the subject name of one of them: the boot fails
     /// otherwise. The app scopes any model from a module of its own; between
     /// two of the app's modules that scope one subject, the first decides.

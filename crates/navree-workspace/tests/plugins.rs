@@ -1,5 +1,6 @@
-//! A plugin's workspace-scoped subjects: a plugin scopes only its own models to workspaces, and
-//! no other module scopes another model under one of their names; the app scopes any model.
+//! A plugin's workspace-scoped subjects: a plugin scopes only its own models to workspaces, named
+//! under its namespace, and no other module scopes another model under one of their names; the
+//! app scopes any model.
 
 #[path = "workspace/database.rs"]
 mod database;
@@ -42,6 +43,91 @@ mod navree_plugin_notices {
 
     impl WorkspaceScoped for notice::Model {}
 
+    /// A model of the plugin's own whose subject name is the plugin's namespace itself.
+    pub mod board {
+        use serde::Serialize;
+        use uuid::Uuid;
+
+        /// A notice board of a workspace.
+        #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+        #[model(
+            table = "notice_boards",
+            subject = "notices",
+            permission_prefix = "notices.boards"
+        )]
+        pub struct Model {
+            pub id: Uuid,
+            pub workspace_id: Uuid,
+            pub title: String,
+        }
+    }
+
+    impl WorkspaceScoped for board::Model {}
+
+    /// A model of the plugin's own named outside its namespace.
+    pub mod unnamed {
+        use serde::Serialize;
+        use uuid::Uuid;
+
+        /// A notice named without the plugin's namespace.
+        #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+        #[model(
+            table = "unnamed_notices",
+            subject = "Notice",
+            permission_prefix = "notices.unnamed"
+        )]
+        pub struct Model {
+            pub id: Uuid,
+            pub workspace_id: Uuid,
+            pub title: String,
+        }
+    }
+
+    impl WorkspaceScoped for unnamed::Model {}
+
+    /// A model of the plugin's own named like every subject.
+    pub mod everything {
+        use serde::Serialize;
+        use uuid::Uuid;
+
+        /// A model whose subject name is `all`.
+        #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+        #[model(
+            table = "every_notice",
+            subject = "all",
+            permission_prefix = "notices.everything"
+        )]
+        pub struct Model {
+            pub id: Uuid,
+            pub workspace_id: Uuid,
+            pub title: String,
+        }
+    }
+
+    impl WorkspaceScoped for everything::Model {}
+
+    /// A model of the plugin's own that takes the name of the app's subject `Contact`, which the
+    /// app registers with access and does not scope to workspaces.
+    pub mod fake_contact {
+        use serde::Serialize;
+        use uuid::Uuid;
+
+        /// A contact as the plugin names it.
+        #[derive(Clone, Debug, Default, PartialEq, Eq, navree_orm::Model, Serialize)]
+        #[model(
+            table = "notice_contacts",
+            subject = "Contact",
+            permission_prefix = "notices.contacts"
+        )]
+        pub struct Model {
+            pub id: Uuid,
+            pub workspace_id: Uuid,
+            pub title: String,
+        }
+    }
+
+    impl WorkspaceScoped for fake_contact::Model {}
+
     /// A model of the plugin's own that takes the name of the app's subject `Deal`.
     pub mod fake_deal {
         use serde::Serialize;
@@ -82,6 +168,13 @@ async fn boot_error(builder: TestAppBuilder) -> String {
     }
 }
 
+/// What the boot says when the notices plugin scopes `subject`, a name outside its namespace.
+fn outside_namespace(subject: &str) -> String {
+    format!(
+        "plugin `navree-plugin-notices` scopes the subject `{subject}` to workspaces in `NoticesModule`, a name outside its namespace `notices`; a plugin's subjects are named under its namespace: remove the plugin or update it to a version that names them under `notices.`, and to scope `{subject}` to workspaces, call m.workspace_scoped from a module of the app"
+    )
+}
+
 #[tokio::test]
 async fn a_plugin_scoped_subject_of_another_subject_fails_the_boot() {
     // The app's deals, scoped by the plugin: the plugin's check would decide whether a deal of
@@ -95,18 +188,89 @@ async fn a_plugin_scoped_subject_of_another_subject_fails_the_boot() {
         error.contains(expected),
         "expected `{expected}` in:\n{error}"
     );
+}
 
-    // A model of the plugin's own under the name of the app's subject: where two modules scope
-    // one subject, the first decides.
-    let plugin = NoticesModule(|m| {
-        m.workspace_scoped::<navree_plugin_notices::fake_deal::Model>();
+/// A module of the app: it scopes the plugin's un-namespaced model on purpose.
+struct AppUnnamed;
+
+impl Module for AppUnnamed {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.workspace_scoped::<navree_plugin_notices::unnamed::Model>();
+    }
+}
+
+#[tokio::test]
+async fn a_plugins_scoped_model_is_named_under_its_namespace() {
+    // Named under the plugin's namespace (`notices.Notice`, or `notices` itself), the plugin's
+    // own models boot.
+    let named = NoticesModule(|m| {
+        m.workspace_scoped::<navree_plugin_notices::notice::Model>()
+            .workspace_scoped::<navree_plugin_notices::board::Model>();
     });
-    let error = boot_error(support::builder().module(plugin)).await;
-    let expected = "plugin `navree-plugin-notices` scopes the subject `Deal` to workspaces in `NoticesModule`, and `FixturesModule` scopes another model under that name; a plugin scopes only a subject no other module scopes: remove the plugin or update it to a version that names its subject under its namespace, such as `notices.Deal`";
-    assert!(
-        error.contains(expected),
-        "expected `{expected}` in:\n{error}"
-    );
+    let app = support::builder().module(named).build().await;
+    app.shutdown().await.unwrap();
+
+    // Named outside `notices`, or named `all`, the plugin's own models are refused.
+    let cases: [(fn(&mut ModuleBuilder), &str); 2] = [
+        (
+            |m| {
+                m.workspace_scoped::<navree_plugin_notices::unnamed::Model>();
+            },
+            "Notice",
+        ),
+        (
+            |m| {
+                m.workspace_scoped::<navree_plugin_notices::everything::Model>();
+            },
+            "all",
+        ),
+    ];
+    for (register, subject) in cases {
+        let error = boot_error(support::builder().module(NoticesModule(register))).await;
+        let expected = outside_namespace(subject);
+        assert!(
+            error.contains(&expected),
+            "expected `{expected}` in:\n{error}"
+        );
+    }
+
+    // Registered from a module of the app, the same model boots beside the plugin.
+    let app = support::builder()
+        .module(NoticesModule(|_| {}))
+        .module(AppUnnamed)
+        .build()
+        .await;
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_plugins_model_named_like_an_app_subject_is_refused() {
+    // `Contact` is an access subject of the app (`FixturesModule`) that the app does not scope
+    // to workspaces: a plugin's own model named `Contact` would stand in for it on the app's
+    // routes behind `InWorkspace`. `Deal` is one the app scopes itself. Both are outside the
+    // plugin's namespace and are refused.
+    let cases: [(fn(&mut ModuleBuilder), &str); 2] = [
+        (
+            |m| {
+                m.workspace_scoped::<navree_plugin_notices::fake_contact::Model>();
+            },
+            "Contact",
+        ),
+        (
+            |m| {
+                m.workspace_scoped::<navree_plugin_notices::fake_deal::Model>();
+            },
+            "Deal",
+        ),
+    ];
+    for (register, subject) in cases {
+        let error = boot_error(support::builder().module(NoticesModule(register))).await;
+        let expected = outside_namespace(subject);
+        assert!(
+            error.contains(&expected),
+            "expected `{expected}` in:\n{error}"
+        );
+    }
 }
 
 /// The app's own notices, a model the app names like the plugin's subject.

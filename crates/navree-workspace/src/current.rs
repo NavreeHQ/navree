@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use http::request::Parts;
 pub use navree_access::PinnedWorkspace;
-use navree_access::{Ability, PrincipalAccess};
+use navree_access::{ALL, Ability, PrincipalAccess};
 use navree_contracts::{AuthState, AuthVia, Principal, RequestId};
 use navree_db::Uow;
 use navree_http::extract::FromRequestParts;
@@ -668,11 +668,12 @@ impl ScopedSubject {
 
 /// Checks at boot what the app's modules scope to workspaces, and returns the first refusal. A
 /// module that acts for a plugin the kernel does not find first-party (the `plugins` listing
-/// lists it under the plugin) scopes only models of the plugin's crate, and no other module
-/// scopes another model under the name of a subject such a module scopes: where two modules
-/// scope one subject, the first decides whether a record belongs to the workspace. Between
-/// modules that act for no such plugin the first still decides, as before; one model scoped by
-/// two modules decides the same way whichever is first.
+/// lists it under the plugin) scopes only models of the plugin's crate whose subjects are named
+/// under the plugin's namespace (the namespace, or the namespace, `.` and a name), and no other
+/// module scopes another model under the name of a subject such a module scopes: where two
+/// modules scope one subject, the first decides whether a record belongs to the workspace.
+/// Between modules that act for no such plugin the first still decides, as before; one model
+/// scoped by two modules decides the same way whichever is first.
 pub(crate) fn check_scoped_subjects(ctx: &AppContext) -> Result<(), String> {
     let scoped = ctx.contributions::<ScopedSubject>();
     if scoped.is_empty() {
@@ -683,16 +684,22 @@ pub(crate) fn check_scoped_subjects(ctx: &AppContext) -> Result<(), String> {
         let Some(plugin) = community_plugin(&plugins, contributed.module.id) else {
             continue;
         };
+        let (name, namespace) = (plugin.info.name, plugin.info.namespace);
+        let subject = contributed.value.subject;
+        let module = contributed.module.name;
         let own = contributed
             .value
             .type_name
             .strip_prefix(plugin.info.crate_name)
             .is_some_and(|rest| rest.starts_with("::"));
         if !own {
-            let (name, subject) = (plugin.info.name, contributed.value.subject);
-            let module = contributed.module.name;
             return Err(format!(
                 "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`, a model of another crate; only a module of the app scopes it: remove the plugin or update it to a version that leaves it to the app, and to scope `{subject}` to workspaces, call m.workspace_scoped from a module of the app"
+            ));
+        }
+        if subject == ALL || !is_under(subject, namespace) {
+            return Err(format!(
+                "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`, a name outside its namespace `{namespace}`; a plugin's subjects are named under its namespace: remove the plugin or update it to a version that names them under `{namespace}.`, and to scope `{subject}` to workspaces, call m.workspace_scoped from a module of the app"
             ));
         }
     }
@@ -703,27 +710,24 @@ pub(crate) fn check_scoped_subjects(ctx: &AppContext) -> Result<(), String> {
             {
                 continue;
             }
-            let (plugin, module, other) = match (
+            let (plugin, module, other, both_plugins) = match (
                 community_plugin(&plugins, second.module.id),
                 community_plugin(&plugins, first.module.id),
             ) {
-                (Some(plugin), _) => (plugin, second.module.name, first.module.name),
-                (None, Some(plugin)) => (plugin, first.module.name, second.module.name),
+                (Some(plugin), Some(_)) => (plugin, first.module.name, second.module.name, true),
+                (Some(plugin), None) => (plugin, second.module.name, first.module.name, false),
+                (None, Some(plugin)) => (plugin, first.module.name, second.module.name, false),
                 (None, None) => continue,
             };
             let (name, namespace) = (plugin.info.name, plugin.info.namespace);
             let subject = first.value.subject;
-            // A name under the plugin's namespace is the plugin's: the other module renames.
-            let under = subject
-                .strip_prefix(namespace)
-                .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'));
-            let advice = if under {
-                format!(
-                    "the names under `{namespace}` are the plugin's, so name the subject of the model `{other}` scopes outside `{namespace}.`, or remove the plugin"
-                )
+            // Every subject a plugin's module scopes is already under its namespace.
+            let advice = if both_plugins {
+                "remove the plugin or update it to a version that gives each model its own subject name"
+                    .to_owned()
             } else {
                 format!(
-                    "remove the plugin or update it to a version that names its subject under its namespace, such as `{namespace}.{subject}`"
+                    "the names under `{namespace}` are the plugin's, so name the subject of the model `{other}` scopes outside `{namespace}.`, or remove the plugin"
                 )
             };
             return Err(format!(
@@ -732,6 +736,12 @@ pub(crate) fn check_scoped_subjects(ctx: &AppContext) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Whether `name` is under `namespace`: the namespace itself, or the namespace, `.` and more.
+fn is_under(name: &str, namespace: &str) -> bool {
+    name.strip_prefix(namespace)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
 }
 
 /// The plugin the kernel does not find first-party that `module` acts for, if any: the plugin
