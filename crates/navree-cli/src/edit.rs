@@ -46,10 +46,30 @@ fn squeeze(s: &str) -> String {
 /// dedents such a comment). `None` when there is no marker; `Unchanged`
 /// when the code is already in the file, whatever its layout.
 pub fn insert_above_marker(src: &str, marker: &str, block: &str) -> Option<Edit> {
+    insert_above_marker_inner(src, marker, block, false)
+}
+
+/// Like [`insert_above_marker`], except that `block` counts as already there
+/// (`Unchanged`) only when non-comment code holds it.
+pub fn insert_code_above_marker(src: &str, marker: &str, block: &str) -> Option<Edit> {
+    insert_above_marker_inner(src, marker, block, true)
+}
+
+fn insert_above_marker_inner(
+    src: &str,
+    marker: &str,
+    block: &str,
+    code_only: bool,
+) -> Option<Edit> {
     let (lines, trailing) = split(src);
     let comment = format!("// {marker}");
     let at = lines.iter().position(|l| l.trim() == comment)?;
-    if squeeze(src).contains(&squeeze(block)) {
+    let haystack = if code_only {
+        strip_comments(src)
+    } else {
+        src.to_owned()
+    };
+    if squeeze(&haystack).contains(&squeeze(block)) {
         return Some(Edit::Unchanged);
     }
     let chain = lines[..at]
@@ -71,6 +91,134 @@ pub fn insert_above_marker(src: &str, marker: &str, block: &str) -> Option<Edit>
     let mut out: Vec<String> = lines.iter().map(|l| (*l).to_owned()).collect();
     out.splice(at..at, new);
     Some(Edit::Changed(join(&out, newline(src), trailing)))
+}
+
+/// Returns `src` with line (`//`) and nested block (`/* ... */`) comments removed
+/// while keeping string literals and line breaks intact.
+pub(crate) fn strip_comments(src: &str) -> String {
+    let bytes = src.as_bytes();
+    let mut out = String::with_capacity(src.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i..].starts_with(b"//") {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if bytes[i..].starts_with(b"/*") {
+            let mut depth = 1usize;
+            i += 2;
+            while i < bytes.len() && depth > 0 {
+                if bytes[i..].starts_with(b"/*") {
+                    depth += 1;
+                    i += 2;
+                } else if bytes[i..].starts_with(b"*/") {
+                    depth -= 1;
+                    i += 2;
+                } else {
+                    if bytes[i] == b'\n' {
+                        out.push('\n');
+                    }
+                    i += 1;
+                }
+            }
+            out.push(' ');
+            continue;
+        }
+        if let Some(raw_end) = raw_string_end(bytes, i) {
+            out.push_str(&src[i..raw_end]);
+            i = raw_end;
+            continue;
+        }
+        if bytes[i] == b'"' {
+            let start = i;
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\\' {
+                    i = (i + 2).min(bytes.len());
+                } else if bytes[i] == b'"' {
+                    i += 1;
+                    break;
+                } else {
+                    i += 1;
+                }
+            }
+            out.push_str(&src[start..i]);
+            continue;
+        }
+        if let Some(char_end) = char_literal_end(src, i) {
+            out.push_str(&src[i..char_end]);
+            i = char_end;
+            continue;
+        }
+        let ch = src[i..].chars().next().expect("non-empty slice");
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+fn is_ident_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+fn raw_string_end(bytes: &[u8], at: usize) -> Option<usize> {
+    if at > 0 && is_ident_byte(bytes[at - 1]) {
+        return None;
+    }
+    let prefix_len = if bytes[at..].starts_with(b"br") || bytes[at..].starts_with(b"cr") {
+        2
+    } else if bytes[at] == b'r' {
+        1
+    } else {
+        return None;
+    };
+    let mut pos = at + prefix_len;
+    let mut hashes = 0usize;
+    while pos < bytes.len() && bytes[pos] == b'#' {
+        hashes += 1;
+        pos += 1;
+    }
+    if pos >= bytes.len() || bytes[pos] != b'"' {
+        return None;
+    }
+    pos += 1;
+    while pos < bytes.len() {
+        if bytes[pos] == b'"'
+            && pos + 1 + hashes <= bytes.len()
+            && bytes[pos + 1..pos + 1 + hashes]
+                .iter()
+                .all(|&byte| byte == b'#')
+        {
+            return Some(pos + 1 + hashes);
+        }
+        pos += 1;
+    }
+    Some(bytes.len())
+}
+
+fn char_literal_end(src: &str, at: usize) -> Option<usize> {
+    let bytes = src.as_bytes();
+    if bytes.get(at) != Some(&b'\'') {
+        return None;
+    }
+    let rest = &src[at + 1..];
+    let mut chars = rest.char_indices();
+    let (_, first) = chars.next()?;
+    if first == '\'' || first == '\n' || first == '\r' {
+        return None;
+    }
+    if first == '\\' {
+        let (_, _) = chars.next()?;
+        let (close_idx, close_ch) = chars.next()?;
+        if close_ch == '\'' {
+            return Some(at + 1 + close_idx + 1);
+        }
+        return None;
+    }
+    let (close_idx, close_ch) = chars.next()?;
+    (close_ch == '\'').then_some(at + 1 + close_idx + 1)
 }
 
 /// Whether `line` declares a module at the top level (`mod x;`, `pub mod x;`,
@@ -371,5 +519,23 @@ mod tests {
             ))
         );
         assert_eq!(add_migration("fn x() {}\n", "b"), None);
+    }
+
+    #[test]
+    fn insert_code_above_marker_adds_a_line_whose_only_copy_is_commented_out() {
+        let commented = "    Navree::app()\n        .module(A)\n        // .module(B)\n    // navree:modules\n}\n";
+        let expected = "    Navree::app()\n        .module(A)\n        // .module(B)\n        .module(B)\n    // navree:modules\n}\n";
+        assert_eq!(
+            insert_code_above_marker(commented, "navree:modules", ".module(B)"),
+            Some(Edit::Changed(expected.to_owned()))
+        );
+        assert_eq!(
+            insert_code_above_marker(expected, "navree:modules", ".module(B)"),
+            Some(Edit::Unchanged)
+        );
+        assert_eq!(
+            insert_code_above_marker("fn x() {}\n", "navree:modules", ".module(B)"),
+            None
+        );
     }
 }
