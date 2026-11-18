@@ -343,10 +343,10 @@ internal class WipeGo(
  * screen, for the seconds a go at the origins an earlier go left takes.
  *
  * This is one of two guards, and neither stands for the other. The other is
- * that a worker's request to an origin whose pages are held back is refused
- * whether a go runs or not ([SiteWipe.stops]): it covers the time from a
- * go's end until what is owed is called over, and an origin a go could not
- * clear.
+ * that a worker's request to an origin whose pages are held back, or from a
+ * worker of such an origin, is refused whether a go runs or not
+ * ([SiteWipe.stops]): it covers the time from a go's end until what is owed
+ * is called over, and a worker left at an origin a go could not clear.
  *
  * Every call is on the one thread the surfaces call back on, but for [going]
  * and [stops], which are asked on the thread a service worker's requests are
@@ -906,14 +906,18 @@ object SiteWipe {
      *   goes, since a worker the go starts at one origin may write to
      *   another;
      * - the address is on an origin whose pages are held back ([held]), go or
-     *   no go.
+     *   no go;
+     * - the request says it is from a worker of such an origin ([from]: the
+     *   address its `Referer` or `Origin` header names, where it has one):
+     *   a worker left at an origin a go could not clear writes to no origin
+     *   of the app, not only not to its own.
      *
      * A worker a go's document started is the worker of the person who left,
      * and nothing it sends on its own goes out with the cookies of whoever is
      * signed in by then. Asked where a service worker's requests are asked,
      * after [document]. Any thread.
      */
-    internal fun stops(url: String): Boolean = goes.stops(url) || held(url)
+    internal fun stops(url: String, from: String? = null): Boolean = goes.stops(url) || held(url) || (from != null && held(from))
 
     /**
      * Shows each origin to clear the client's own document, one after the

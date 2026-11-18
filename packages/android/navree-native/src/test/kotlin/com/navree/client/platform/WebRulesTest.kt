@@ -209,6 +209,18 @@ class WebRulesTest {
     }
 
     @Test
+    fun a_service_workers_request_says_where_it_is_from_by_its_referer_or_else_its_origin() {
+        assertEquals("https://shop.example/sw.js", WebRules.workerFrom(mapOf("Referer" to "https://shop.example/sw.js", "Origin" to "https://shop.example")))
+        assertEquals("however the web view writes the name", "https://shop.example/sw.js", WebRules.workerFrom(mapOf("referer" to "https://shop.example/sw.js")))
+        assertEquals("https://shop.example", WebRules.workerFrom(mapOf("Accept" to "*/*", "Origin" to "https://shop.example")))
+        assertEquals("an empty one says nothing", "https://shop.example", WebRules.workerFrom(mapOf("Referer" to " ", "Origin" to "https://shop.example")))
+        assertNull("nor does an origin of null", WebRules.workerFrom(mapOf("Origin" to "null")))
+        assertNull(WebRules.workerFrom(mapOf("Accept" to "*/*")))
+        assertNull(WebRules.workerFrom(emptyMap()))
+        assertNull(WebRules.workerFrom(null))
+    }
+
+    @Test
     fun a_web_page_is_shown_only_with_both_guards_in_force() {
         assertTrue(WebRules.guardsInForce(workers = true, documents = true))
         assertFalse("no rules for a service worker's requests", WebRules.guardsInForce(workers = false, documents = true))
