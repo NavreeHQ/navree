@@ -631,8 +631,18 @@ fn join_lexically(base: &Path, relative: &str) -> PathBuf {
     parts.iter().collect()
 }
 
-/// Every plain `include_str!("..")` / `include_bytes!("..")` in `file`, outside comments.
-fn embedded_paths(file: &Path) -> Vec<String> {
+/// A file or folder embedded by a source file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum EmbeddedPath {
+    /// `include_str!("..")` or `include_bytes!("..")`, relative to the source file's folder.
+    File(String),
+    /// `embed_templates!("..")` or `embed_locales!("..")`, relative to the crate's folder.
+    Folder(String),
+}
+
+/// Every plain `include_str!("..")` / `include_bytes!("..")` and `embed_templates!("..")` /
+/// `embed_locales!("..")` in `file`, outside comments.
+fn embedded_paths(file: &Path) -> Vec<EmbeddedPath> {
     let Ok(text) = std::fs::read_to_string(file) else {
         return Vec::new();
     };
@@ -641,7 +651,12 @@ fn embedded_paths(file: &Path) -> Vec<String> {
         if line.trim_start().starts_with("//") {
             continue;
         }
-        for macro_name in ["include_str!(", "include_bytes!("] {
+        for (macro_name, folder) in [
+            ("include_str!(", false),
+            ("include_bytes!(", false),
+            ("embed_templates!(", true),
+            ("embed_locales!(", true),
+        ] {
             let mut rest = line;
             while let Some(at) = rest.find(macro_name) {
                 rest = &rest[at + macro_name.len()..];
@@ -649,12 +664,38 @@ fn embedded_paths(file: &Path) -> Vec<String> {
                 if let Some(quoted) = argument.strip_prefix('"')
                     && let Some(end) = quoted.find('"')
                 {
-                    found.push(quoted[..end].to_owned());
+                    let value = quoted[..end].to_owned();
+                    found.push(if folder {
+                        EmbeddedPath::Folder(value)
+                    } else {
+                        EmbeddedPath::File(value)
+                    });
                 }
             }
         }
     }
     found
+}
+
+/// Every regular file below `dir`, in sorted order.
+fn files_below(dir: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.is_file() {
+                out.push(path);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, &mut out);
+    out.sort();
+    out
 }
 
 /// The `.rs` files below `dir` that a build of the package compiles.
@@ -682,35 +723,99 @@ fn compiled_sources(dir: &Path) -> Vec<PathBuf> {
 }
 
 #[test]
+fn embedded_paths_read_the_folders_of_embed_templates_and_embed_locales() {
+    let dir = tempfile::tempdir().expect("a temporary folder");
+    let source = dir.path().join("lib.rs");
+    std::fs::write(
+        &source,
+        "// embed_templates!(\"commented-views\") and embed_locales!(\"commented-locales\")\n\
+         /// Doc example: `navree::embed_templates!(\"doc-views\")`.\n\
+         fn register() {\n\
+             let _ = navree::embed_templates!(\"views\");\n\
+             let _ = navree::embed_locales!(\"locales\");\n\
+             let _ = include_bytes!(\"../assets/board.css\");\n\
+         }\n",
+    )
+    .expect("the source file");
+    assert_eq!(
+        embedded_paths(&source),
+        vec![
+            EmbeddedPath::Folder("views".to_owned()),
+            EmbeddedPath::Folder("locales".to_owned()),
+            EmbeddedPath::File("../assets/board.css".to_owned()),
+        ]
+    );
+}
+
+#[test]
 fn every_file_the_code_embeds_is_in_the_package() {
     let mut problems = Vec::new();
     for package in published() {
         let name = package.name();
         let dir = package.dir();
+        let crate_root = join_lexically(&dir, "");
         let Some(files) = package_lists().get(name) else {
             continue;
         };
         for source in compiled_sources(&dir) {
             let source_dir = source.parent().expect("a source folder");
-            for path in embedded_paths(&source) {
-                let target = join_lexically(source_dir, &path);
-                let Ok(relative) = target.strip_prefix(join_lexically(&dir, "")) else {
-                    problems.push(format!(
-                        "{name}: {} embeds {path}, which is outside the crate folder",
-                        source.display()
-                    ));
-                    continue;
-                };
-                let relative = relative.to_string_lossy().replace('\\', "/");
-                // Test modules embed their fixtures and the browser runtime's sources;
-                // a build of the published package leaves those modules out.
-                if relative.starts_with("tests/") || relative.starts_with("runtime/") {
-                    continue;
-                }
-                if !files.contains(&relative) {
-                    problems.push(format!(
-                        "{name}: the code embeds {relative}, which the package leaves out"
-                    ));
+            for embedded in embedded_paths(&source) {
+                match embedded {
+                    EmbeddedPath::File(path) => {
+                        let target = join_lexically(source_dir, &path);
+                        let Ok(relative) = target.strip_prefix(&crate_root) else {
+                            problems.push(format!(
+                                "{name}: {} embeds {path}, which is outside the crate folder",
+                                source.display()
+                            ));
+                            continue;
+                        };
+                        let relative = relative.to_string_lossy().replace('\\', "/");
+                        // Test modules embed their fixtures and the browser runtime's sources;
+                        // a build of the published package leaves those modules out.
+                        if relative.starts_with("tests/") || relative.starts_with("runtime/") {
+                            continue;
+                        }
+                        if !files.contains(&relative) {
+                            problems.push(format!(
+                                "{name}: the code embeds {relative}, which the package leaves out"
+                            ));
+                        }
+                    }
+                    EmbeddedPath::Folder(folder) => {
+                        let target = join_lexically(&dir, &folder);
+                        let Ok(folder_relative) = target.strip_prefix(&crate_root) else {
+                            problems.push(format!(
+                                "{name}: {} embeds folder {folder}, which is outside the crate folder",
+                                source.display()
+                            ));
+                            continue;
+                        };
+                        let folder_shown = folder_relative.to_string_lossy().replace('\\', "/");
+                        if folder_shown.starts_with("tests/")
+                            || folder_shown.starts_with("runtime/")
+                        {
+                            continue;
+                        }
+                        if !target.is_dir() {
+                            problems.push(format!(
+                                "{name}: {} embeds folder {folder_shown}, which does not exist",
+                                source.display()
+                            ));
+                            continue;
+                        }
+                        for entry in files_below(&target) {
+                            let Ok(relative) = entry.strip_prefix(&crate_root) else {
+                                continue;
+                            };
+                            let relative = relative.to_string_lossy().replace('\\', "/");
+                            if !files.contains(&relative) {
+                                problems.push(format!(
+                                    "{name}: the code embeds {relative} (in {folder_shown}), which the package leaves out"
+                                ));
+                            }
+                        }
+                    }
                 }
             }
         }

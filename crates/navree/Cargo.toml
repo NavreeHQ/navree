@@ -987,6 +987,14 @@ name = "plugin_collisions"
 required-features = ["http", "queue", "testing", "time", "ui", "view"]
 
 [[test]]
+name = "plugin_conversion"
+required-features = ["access", "audit", "auth", "cache", "crypto", "db", "events", "flags", "http", "http-client", "i18n", "queue", "realtime", "redis", "social", "sqlite", "sso", "testing", "ui", "workspace"]
+
+[[test]]
+name = "plugin_first_party"
+required-features = ["access", "auth", "crypto", "db", "flags", "http", "i18n", "mail", "notify", "queue", "sqlite", "testing", "time", "ui", "view"]
+
+[[test]]
 name = "plugin_grants"
 required-features = ["full", "sqlite"]
 

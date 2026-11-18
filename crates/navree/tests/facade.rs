@@ -1894,6 +1894,587 @@ fn every_framework_module_passes_the_plugin_checks_and_names_only_first_party_pl
     }
 }
 
+// Conversion.
+
+#[test]
+fn every_first_party_package_that_has_a_module_names_itself_a_plugin_under_its_default_namespace() {
+    use navree::kernel::__private::{FIRST_PARTY, default_namespace, is_namespace};
+
+    /// Core non-plugin platform modules so every first-party module's provider dependencies
+    /// validate when `plugin_report()` builds the graph.
+    fn base() -> AppBuilder {
+        Navree::app()
+            .module(ConfigModule::for_root(ConfigSources::new()))
+            .module(CryptoModule::from_config())
+            .module(HttpModule::from_config())
+            .module(DatabaseModule::from_config())
+            .module(CacheModule::from_config())
+            .module(EventsModule::for_root())
+            .module(QueueModule::from_config())
+            .module(AuthModule::from_config())
+            .module(AccessModule::for_root(AccessOptions::default()))
+    }
+
+    /// Checks one form (`plain`, `from_config` or `for_root`) of a first-party package.
+    fn check_form(package: &str, krate: &str, form: &str, app: AppBuilder) {
+        let report = app
+            .plugin_report()
+            .unwrap_or_else(|errors| panic!("{package} ({form}): {errors}"));
+        let matching: Vec<_> = report
+            .plugins
+            .iter()
+            .filter(|plugin| plugin.info.name == package)
+            .collect();
+        let [plugin] = matching.as_slice() else {
+            panic!("{package} ({form}): expected one plugin `{package}` in {report:?}");
+        };
+        assert!(
+            plugin.first_party,
+            "{package} ({form}) was not found first-party"
+        );
+        let (bytes, len) = default_namespace::<64>(package);
+        let expected_namespace = std::str::from_utf8(&bytes[..len]).expect("UTF-8");
+        assert!(is_namespace(plugin.info.namespace));
+        assert_eq!(
+            plugin.info.namespace, expected_namespace,
+            "{package} ({form})"
+        );
+        assert_eq!(plugin.info.crate_name, krate, "{package} ({form})");
+        assert_eq!(
+            plugin.info.version,
+            env!("CARGO_PKG_VERSION"),
+            "{package} ({form})"
+        );
+        let prefix = format!("{krate}::");
+        for member in &plugin.modules {
+            assert!(
+                member.id.type_name().starts_with(&prefix),
+                "{package} ({form}): module `{}` is not under `{prefix}`",
+                member.id.type_name()
+            );
+        }
+    }
+
+    let mut checked: Vec<(&str, &str)> = Vec::new();
+    macro_rules! check_package {
+        ($pkg:literal, $krate:literal, $plain:expr, $from_config:expr, $for_root:expr $(, $extra:expr)*) => {{
+            checked.push(($pkg, $krate));
+            check_form($pkg, $krate, "plain", base() $(.module($extra))* .module($plain));
+            check_form($pkg, $krate, "from_config", base() $(.module($extra))* .module($from_config));
+            check_form($pkg, $krate, "for_root", base() $(.module($extra))* .module($for_root));
+        }};
+    }
+
+    check_package!(
+        "navree-audit",
+        "navree_audit",
+        AuditModule,
+        AuditModule::from_config(),
+        AuditModule::for_root(navree::audit::AuditOptions::default())
+    );
+    check_package!(
+        "navree-directory",
+        "navree_directory",
+        DirectoryModule,
+        DirectoryModule::from_config(),
+        DirectoryModule::for_root(navree::directory::DirectoryOptions::default())
+    );
+    check_package!(
+        "navree-domains",
+        "navree_domains",
+        DomainsModule,
+        DomainsModule::from_config(),
+        DomainsModule::for_root(navree::domains::DomainsOptions::default())
+    );
+    check_package!(
+        "navree-fleet",
+        "navree_fleet",
+        FleetModule,
+        FleetModule::from_config(),
+        FleetModule::for_root(navree::fleet::FleetOptions::default())
+    );
+    check_package!(
+        "navree-helm",
+        "navree_helm",
+        HelmModule,
+        HelmModule::from_config(),
+        HelmModule::for_root(navree::helm::HelmOptions::default())
+    );
+    check_package!(
+        "navree-http-client",
+        "navree_http_client",
+        HttpClientModule,
+        HttpClientModule::from_config(),
+        HttpClientModule::for_root(navree::http_client::HttpClientOptions::default())
+    );
+    check_package!(
+        "navree-integrations",
+        "navree_integrations",
+        IntegrationsModule,
+        IntegrationsModule::from_config(),
+        IntegrationsModule::for_root(navree::integrations::IntegrationsOptions::default())
+    );
+    check_package!(
+        "navree-notify",
+        "navree_notify",
+        NotifyModule,
+        NotifyModule::from_config(),
+        NotifyModule::for_root(navree::notify::NotifyOptions::default())
+    );
+    check_package!(
+        "navree-realtime",
+        "navree_realtime",
+        RealtimeModule,
+        RealtimeModule::from_config(),
+        RealtimeModule::for_root(navree::realtime::RealtimeOptions::default())
+    );
+    check_package!(
+        "navree-settings",
+        "navree_settings",
+        SettingsModule,
+        SettingsModule::from_config(),
+        SettingsModule::for_root(navree::settings::SettingsOptions::default())
+    );
+    check_package!(
+        "navree-sheets",
+        "navree_sheets",
+        SheetsModule,
+        SheetsModule::from_config(),
+        SheetsModule::for_root(navree::sheets::SheetsOptions::default())
+    );
+    check_package!(
+        "navree-sso",
+        "navree_sso",
+        SsoModule,
+        SsoModule::from_config(),
+        SsoModule::for_root(navree::sso::SsoOptions::default())
+    );
+    check_package!(
+        "navree-storage",
+        "navree_storage",
+        StorageModule,
+        StorageModule::from_config(),
+        StorageModule::for_root(navree::storage::StorageOptions::default())
+    );
+    check_package!(
+        "navree-time",
+        "navree_time",
+        TimeModule,
+        TimeModule::from_config(),
+        TimeModule::for_root(navree::time::TimeOptions::default())
+    );
+    check_package!(
+        "navree-webhooks",
+        "navree_webhooks",
+        WebhooksModule,
+        WebhooksModule::from_config(),
+        WebhooksModule::for_root(navree::webhooks::WebhooksOptions::default())
+    );
+    check_package!(
+        "navree-workflows",
+        "navree_workflows",
+        WorkflowsModule,
+        WorkflowsModule::from_config(),
+        WorkflowsModule::for_root(navree::workflows::WorkflowsOptions::default())
+    );
+    #[cfg(feature = "ai")]
+    check_package!(
+        "navree-ai",
+        "navree_ai",
+        AiModule,
+        AiModule::from_config(),
+        AiModule::for_root(navree::ai::AiOptions::default())
+    );
+    #[cfg(feature = "billing")]
+    check_package!(
+        "navree-billing",
+        "navree_billing",
+        BillingModule,
+        BillingModule::from_config(),
+        BillingModule::for_root(navree::billing::BillingOptions::default())
+    );
+    #[cfg(feature = "documents")]
+    check_package!(
+        "navree-documents",
+        "navree_documents",
+        DocumentsModule,
+        DocumentsModule::from_config(),
+        DocumentsModule::for_root(navree::documents::DocumentsOptions::default())
+    );
+    #[cfg(feature = "flags")]
+    check_package!(
+        "navree-flags",
+        "navree_flags",
+        FlagsModule,
+        FlagsModule::from_config(),
+        FlagsModule::for_root(navree::flags::FlagsOptions::default())
+    );
+    #[cfg(feature = "graphql")]
+    check_package!(
+        "navree-graphql",
+        "navree_graphql",
+        GraphqlModule,
+        GraphqlModule::from_config(),
+        GraphqlModule::for_root(navree::graphql::GraphqlOptions::default())
+    );
+    #[cfg(feature = "grpc")]
+    check_package!(
+        "navree-grpc",
+        "navree_grpc",
+        GrpcModule,
+        GrpcModule::from_config(),
+        GrpcModule::for_root(navree::grpc::GrpcOptions::default())
+    );
+    #[cfg(feature = "i18n")]
+    check_package!(
+        "navree-i18n",
+        "navree_i18n",
+        I18nModule,
+        I18nModule::from_config(),
+        I18nModule::for_root(navree::i18n::I18nOptions::default())
+    );
+    #[cfg(feature = "mcp")]
+    check_package!(
+        "navree-mcp",
+        "navree_mcp",
+        McpModule,
+        McpModule::from_config(),
+        McpModule::for_root(navree::mcp::McpOptions::default())
+    );
+    #[cfg(feature = "media")]
+    check_package!(
+        "navree-media",
+        "navree_media",
+        MediaModule,
+        MediaModule::from_config(),
+        MediaModule::for_root(navree::media::MediaOptions::default()),
+        StorageModule::from_config()
+    );
+    #[cfg(feature = "micro")]
+    check_package!(
+        "navree-micro",
+        "navree_micro",
+        MicroModule,
+        MicroModule::from_config(),
+        MicroModule::for_root(navree::micro::MicroOptions::default())
+    );
+    #[cfg(feature = "mongo")]
+    check_package!(
+        "navree-mongo",
+        "navree_mongo",
+        MongoModule,
+        MongoModule::from_config(),
+        MongoModule::for_root(navree::mongo::MongoOptions::default())
+    );
+    #[cfg(feature = "oauth")]
+    check_package!(
+        "navree-oauth",
+        "navree_oauth",
+        OAuthServerModule,
+        OAuthServerModule::from_config(),
+        OAuthServerModule::for_root(navree::oauth::OAuthOptions::default())
+    );
+    #[cfg(feature = "redis")]
+    check_package!(
+        "navree-redis",
+        "navree_redis",
+        RedisModule,
+        RedisModule::from_config(),
+        RedisModule::for_root(navree::redis::RedisOptions::default())
+    );
+    #[cfg(feature = "search")]
+    check_package!(
+        "navree-search",
+        "navree_search",
+        SearchModule,
+        SearchModule::from_config(),
+        SearchModule::for_root(navree::search::SearchOptions::default())
+    );
+    #[cfg(feature = "social")]
+    check_package!(
+        "navree-social",
+        "navree_social",
+        SocialModule,
+        SocialModule::from_config(),
+        SocialModule::for_root(navree::social::SocialOptions::default())
+    );
+
+    checked.sort();
+    if cfg!(all(
+        feature = "ai",
+        feature = "billing",
+        feature = "documents",
+        feature = "flags",
+        feature = "graphql",
+        feature = "grpc",
+        feature = "i18n",
+        feature = "mcp",
+        feature = "media",
+        feature = "micro",
+        feature = "mongo",
+        feature = "oauth",
+        feature = "redis",
+        feature = "search",
+        feature = "social",
+    )) {
+        assert_eq!(checked.as_slice(), FIRST_PARTY);
+    }
+}
+
+#[test]
+fn the_configured_form_of_each_package_is_a_type_of_its_own_crate() {
+    use navree::kernel::__private::FIRST_PARTY;
+
+    fn assert_own_crate<A: Module, B: Module>(
+        package: &str,
+        krate: &str,
+        from_config: A,
+        for_root: B,
+    ) {
+        let prefix = format!("{krate}::");
+        for (form, name) in [
+            ("from_config", std::any::type_name_of_val(&from_config)),
+            ("for_root", std::any::type_name_of_val(&for_root)),
+        ] {
+            assert!(
+                name.starts_with(&prefix) && !name.contains('<'),
+                "{package}::{form} returned `{name}`, not a concrete type of `{krate}`"
+            );
+        }
+    }
+
+    let mut checked: Vec<(&str, &str)> = Vec::new();
+    macro_rules! check_types {
+        ($pkg:literal, $krate:literal, $from_config:expr, $for_root:expr) => {{
+            checked.push(($pkg, $krate));
+            assert_own_crate($pkg, $krate, $from_config, $for_root);
+        }};
+    }
+
+    check_types!(
+        "navree-audit",
+        "navree_audit",
+        AuditModule::from_config(),
+        AuditModule::for_root(navree::audit::AuditOptions::default())
+    );
+    check_types!(
+        "navree-directory",
+        "navree_directory",
+        DirectoryModule::from_config(),
+        DirectoryModule::for_root(navree::directory::DirectoryOptions::default())
+    );
+    check_types!(
+        "navree-domains",
+        "navree_domains",
+        DomainsModule::from_config(),
+        DomainsModule::for_root(navree::domains::DomainsOptions::default())
+    );
+    check_types!(
+        "navree-fleet",
+        "navree_fleet",
+        FleetModule::from_config(),
+        FleetModule::for_root(navree::fleet::FleetOptions::default())
+    );
+    check_types!(
+        "navree-helm",
+        "navree_helm",
+        HelmModule::from_config(),
+        HelmModule::for_root(navree::helm::HelmOptions::default())
+    );
+    check_types!(
+        "navree-http-client",
+        "navree_http_client",
+        HttpClientModule::from_config(),
+        HttpClientModule::for_root(navree::http_client::HttpClientOptions::default())
+    );
+    check_types!(
+        "navree-integrations",
+        "navree_integrations",
+        IntegrationsModule::from_config(),
+        IntegrationsModule::for_root(navree::integrations::IntegrationsOptions::default())
+    );
+    check_types!(
+        "navree-notify",
+        "navree_notify",
+        NotifyModule::from_config(),
+        NotifyModule::for_root(navree::notify::NotifyOptions::default())
+    );
+    check_types!(
+        "navree-realtime",
+        "navree_realtime",
+        RealtimeModule::from_config(),
+        RealtimeModule::for_root(navree::realtime::RealtimeOptions::default())
+    );
+    check_types!(
+        "navree-settings",
+        "navree_settings",
+        SettingsModule::from_config(),
+        SettingsModule::for_root(navree::settings::SettingsOptions::default())
+    );
+    check_types!(
+        "navree-sheets",
+        "navree_sheets",
+        SheetsModule::from_config(),
+        SheetsModule::for_root(navree::sheets::SheetsOptions::default())
+    );
+    check_types!(
+        "navree-sso",
+        "navree_sso",
+        SsoModule::from_config(),
+        SsoModule::for_root(navree::sso::SsoOptions::default())
+    );
+    check_types!(
+        "navree-storage",
+        "navree_storage",
+        StorageModule::from_config(),
+        StorageModule::for_root(navree::storage::StorageOptions::default())
+    );
+    check_types!(
+        "navree-time",
+        "navree_time",
+        TimeModule::from_config(),
+        TimeModule::for_root(navree::time::TimeOptions::default())
+    );
+    check_types!(
+        "navree-webhooks",
+        "navree_webhooks",
+        WebhooksModule::from_config(),
+        WebhooksModule::for_root(navree::webhooks::WebhooksOptions::default())
+    );
+    check_types!(
+        "navree-workflows",
+        "navree_workflows",
+        WorkflowsModule::from_config(),
+        WorkflowsModule::for_root(navree::workflows::WorkflowsOptions::default())
+    );
+    #[cfg(feature = "ai")]
+    check_types!(
+        "navree-ai",
+        "navree_ai",
+        AiModule::from_config(),
+        AiModule::for_root(navree::ai::AiOptions::default())
+    );
+    #[cfg(feature = "billing")]
+    check_types!(
+        "navree-billing",
+        "navree_billing",
+        BillingModule::from_config(),
+        BillingModule::for_root(navree::billing::BillingOptions::default())
+    );
+    #[cfg(feature = "documents")]
+    check_types!(
+        "navree-documents",
+        "navree_documents",
+        DocumentsModule::from_config(),
+        DocumentsModule::for_root(navree::documents::DocumentsOptions::default())
+    );
+    #[cfg(feature = "flags")]
+    check_types!(
+        "navree-flags",
+        "navree_flags",
+        FlagsModule::from_config(),
+        FlagsModule::for_root(navree::flags::FlagsOptions::default())
+    );
+    #[cfg(feature = "graphql")]
+    check_types!(
+        "navree-graphql",
+        "navree_graphql",
+        GraphqlModule::from_config(),
+        GraphqlModule::for_root(navree::graphql::GraphqlOptions::default())
+    );
+    #[cfg(feature = "grpc")]
+    check_types!(
+        "navree-grpc",
+        "navree_grpc",
+        GrpcModule::from_config(),
+        GrpcModule::for_root(navree::grpc::GrpcOptions::default())
+    );
+    #[cfg(feature = "i18n")]
+    check_types!(
+        "navree-i18n",
+        "navree_i18n",
+        I18nModule::from_config(),
+        I18nModule::for_root(navree::i18n::I18nOptions::default())
+    );
+    #[cfg(feature = "mcp")]
+    check_types!(
+        "navree-mcp",
+        "navree_mcp",
+        McpModule::from_config(),
+        McpModule::for_root(navree::mcp::McpOptions::default())
+    );
+    #[cfg(feature = "media")]
+    check_types!(
+        "navree-media",
+        "navree_media",
+        MediaModule::from_config(),
+        MediaModule::for_root(navree::media::MediaOptions::default())
+    );
+    #[cfg(feature = "micro")]
+    check_types!(
+        "navree-micro",
+        "navree_micro",
+        MicroModule::from_config(),
+        MicroModule::for_root(navree::micro::MicroOptions::default())
+    );
+    #[cfg(feature = "mongo")]
+    check_types!(
+        "navree-mongo",
+        "navree_mongo",
+        MongoModule::from_config(),
+        MongoModule::for_root(navree::mongo::MongoOptions::default())
+    );
+    #[cfg(feature = "oauth")]
+    check_types!(
+        "navree-oauth",
+        "navree_oauth",
+        OAuthServerModule::from_config(),
+        OAuthServerModule::for_root(navree::oauth::OAuthOptions::default())
+    );
+    #[cfg(feature = "redis")]
+    check_types!(
+        "navree-redis",
+        "navree_redis",
+        RedisModule::from_config(),
+        RedisModule::for_root(navree::redis::RedisOptions::default())
+    );
+    #[cfg(feature = "search")]
+    check_types!(
+        "navree-search",
+        "navree_search",
+        SearchModule::from_config(),
+        SearchModule::for_root(navree::search::SearchOptions::default())
+    );
+    #[cfg(feature = "social")]
+    check_types!(
+        "navree-social",
+        "navree_social",
+        SocialModule::from_config(),
+        SocialModule::for_root(navree::social::SocialOptions::default())
+    );
+
+    checked.sort();
+    if cfg!(all(
+        feature = "ai",
+        feature = "billing",
+        feature = "documents",
+        feature = "flags",
+        feature = "graphql",
+        feature = "grpc",
+        feature = "i18n",
+        feature = "mcp",
+        feature = "media",
+        feature = "micro",
+        feature = "mongo",
+        feature = "oauth",
+        feature = "redis",
+        feature = "search",
+        feature = "social",
+    )) {
+        assert_eq!(checked.as_slice(), FIRST_PARTY);
+    }
+}
+
 /// Only the packages on the kernel's first-party list name themselves plugins, and each from
 /// a module type of its own crate, never through a `ClientModule` (whose type is another
 /// crate's, so the plugin would not be first-party). Read from the source of every
@@ -1933,7 +2514,7 @@ fn only_first_party_packages_name_themselves_plugins_and_from_their_own_module_t
                     file.display()
                 ));
             }
-            if text.contains("ClientModule") {
+            if mentions_client_module(&text) {
                 problems.push(format!(
                     "{}: a first-party package names itself a plugin from a module type of its own crate, not through ClientModule",
                     file.display()
@@ -1942,6 +2523,53 @@ fn only_first_party_packages_name_themselves_plugins_and_from_their_own_module_t
         }
     }
     assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// Whether `text` names `ClientModule` as a whole word in code (before unit tests, outside
+/// comment lines and string literals): `HttpClientModule` and doc comments do not count.
+fn mentions_client_module(text: &str) -> bool {
+    before_unit_tests(text)
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .map(without_strings)
+        .any(|line| {
+            let code = line.split("//").next().unwrap_or_default();
+            code.split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .any(|word| word == "ClientModule")
+        })
+}
+
+#[test]
+fn the_guard_reads_client_module_as_a_whole_word_outside_comments() {
+    // Doc comments and line comments naming HttpClientModule or ClientModule do not count.
+    assert!(!mentions_client_module(
+        "/// Uses `HttpClientModule` when present.\n\
+         /// A first-party package never names a plugin through `ClientModule`.\n\
+         // ClientModule in a comment\n\
+         pub struct SocialModule;\n"
+    ));
+    // Compound identifiers such as HttpClientModule and ConfiguredHttpClientModule do not count.
+    assert!(!mentions_client_module(
+        "use navree_http_client::HttpClientModule;\n\
+         pub struct HttpClientModule;\n\
+         let x = 1; // ClientModule at the end of a line\n"
+    ));
+    // String literals and unit test modules do not count.
+    assert!(!mentions_client_module(
+        "const MESSAGE: &str = \"not through ClientModule\";\n\
+         #[cfg(test)]\n\
+         mod tests {\n\
+             use navree_config::ClientModule;\n\
+         }\n"
+    ));
+    // Whole-word uses of ClientModule in non-test code are caught.
+    assert!(mentions_client_module("use navree_config::ClientModule;\n"));
+    assert!(mentions_client_module(
+        "pub fn from_config() -> ClientModule<Client, Options> { todo!() }\n"
+    ));
+    assert!(mentions_client_module(
+        "navree_config::ClientModule::<Client, Options>::from_config()\n"
+    ));
 }
 
 /// A source file up to its unit tests: the text before the first `#[cfg(test)]` that marks a
