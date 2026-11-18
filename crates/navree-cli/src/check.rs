@@ -9,6 +9,10 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::forward::{Invocation, Runner, forward};
+use crate::plugin::files::read_src;
+use crate::plugin::index::Index;
+use crate::plugin::list::{listed, navree_library_warnings, unwired_warnings};
+use crate::plugin::metadata::{self, Metadata};
 
 /// The app command that runs the conformity checks.
 pub const CONFORMITY_COMMAND: &str = "conformity:check";
@@ -32,6 +36,31 @@ impl CheckOptions {
     }
 }
 
+fn write_plugin_warnings(
+    root: &Path,
+    runner: &mut dyn Runner,
+    out: &mut dyn Write,
+) -> std::io::Result<()> {
+    let Ok((true, json)) = runner.capture(&metadata::invocation(), root) else {
+        return Ok(());
+    };
+    let Ok(meta) = Metadata::parse(&json) else {
+        return Ok(());
+    };
+    let Some(pkg_dir) = meta.root_dir() else {
+        return Ok(());
+    };
+    let src = read_src(pkg_dir).unwrap_or_default();
+    for line in navree_library_warnings(&meta) {
+        writeln!(out, "{line}")?;
+    }
+    let rows = listed(&meta, Index::embedded(), &src);
+    for line in unwired_warnings(&rows) {
+        writeln!(out, "{line}")?;
+    }
+    Ok(())
+}
+
 /// Runs `navree check` for the app in `root`; whether everything passed.
 /// Status lines go to `out`; the app's own output reaches the terminal.
 pub fn run_check(
@@ -42,6 +71,9 @@ pub fn run_check(
 ) -> anyhow::Result<bool> {
     if options.graph {
         return Ok(runner.run(&options.app("check", vec!["--graph".into()]), root)?);
+    }
+    if !options.json {
+        write_plugin_warnings(root, runner, out)?;
     }
     let graph = options.app("check", Vec::new());
     let graph_ok = if options.json {
@@ -160,6 +192,7 @@ pub(crate) mod tests {
         assert_eq!(
             runner.ran,
             [
+                "cargo metadata --format-version 1",
                 "cargo run --quiet -- check",
                 "cargo run --quiet -- help",
                 "cargo run --quiet -- conformity:check --root app",
@@ -197,7 +230,13 @@ pub(crate) mod tests {
         let (ok, out) = check(&CheckOptions::default(), &mut runner);
         assert!(!ok);
         assert_eq!(out, "navree check: the module graph has errors\n");
-        assert_eq!(runner.ran, ["cargo run --quiet -- check"]);
+        assert_eq!(
+            runner.ran,
+            [
+                "cargo metadata --format-version 1",
+                "cargo run --quiet -- check",
+            ]
+        );
     }
 
     #[test]
@@ -207,7 +246,46 @@ pub(crate) mod tests {
         let (ok, out) = check(&CheckOptions::default(), &mut runner);
         assert!(ok);
         assert!(out.starts_with("No conformity checks"), "{out}");
-        assert_eq!(runner.ran.len(), 2);
+        assert_eq!(runner.ran.len(), 3);
+    }
+
+    #[test]
+    fn a_workspace_without_a_root_package_gives_no_warning_and_no_failure() {
+        let virtual_metadata = r#"{
+            "packages": [
+                {
+                    "id": "svc#0.1.0",
+                    "name": "svc",
+                    "version": "0.1.0",
+                    "source": null,
+                    "manifest_path": "/ws/crates/svc/Cargo.toml",
+                    "targets": [{ "kind": ["bin"], "name": "svc" }],
+                    "features": {},
+                    "metadata": null
+                }
+            ],
+            "resolve": {
+                "root": null,
+                "nodes": [
+                    { "id": "svc#0.1.0", "deps": [], "features": [] }
+                ]
+            }
+        }"#;
+        let mut runner = FakeRunner::default()
+            .answer("cargo metadata --format-version 1", true, virtual_metadata)
+            .answer("cargo run --quiet -- help", true, HELP);
+        let (ok, out) = check(&CheckOptions::default(), &mut runner);
+        assert!(ok);
+        assert_eq!(out, "");
+        assert_eq!(
+            runner.ran,
+            [
+                "cargo metadata --format-version 1",
+                "cargo run --quiet -- check",
+                "cargo run --quiet -- help",
+                "cargo run --quiet -- conformity:check --root app",
+            ]
+        );
     }
 
     #[test]
