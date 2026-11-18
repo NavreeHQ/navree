@@ -97,6 +97,18 @@ object WebRules {
     fun workerRequest(ours: Boolean, webHost: Boolean, wiping: Boolean = false): WebRequest = if ((ours || webHost) && !wiping) WebRequest.Send else WebRequest.Refuse
 
     /**
+     * The address a service worker's request says it is from, where it says:
+     * its `Referer`, which for a worker's own request is the worker's script
+     * or the page it works for, else its `Origin`. Null when it carries
+     * neither, or `null` for one. It is the web view that writes these, not
+     * the worker's script, which cannot set either.
+     */
+    fun workerFrom(headers: Map<String, String>?): String? {
+        fun header(name: String) = headers?.entries?.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value?.trim()?.takeIf { it.isNotEmpty() && it != "null" }
+        return header("referer") ?: header("origin")
+    }
+
+    /**
      * What a web page is missing before it may be shown: the rules for a service
      * worker's requests, the script at the start of every document, and a web
      * view that holds nothing of a session that ended on the page's origin
@@ -297,7 +309,7 @@ internal fun guardDocuments(view: WebView, origins: Origins, told: Told): Boolea
  * pages ask for hands the client's document on and the address is not sent.
  * Every other request of a worker that this callback is asked about is
  * answered 403 for as long as a go runs, and, go or no go, one to an origin
- * whose pages are held back
+ * whose pages are held back or from a worker of such an origin
  * ([SiteWipe.stops]): the go's document starts the workers of the person who
  * left, and nothing they send this way leaves with the cookies of whoever is
  * signed in by then. A socket a worker opens is not a request this callback
@@ -313,7 +325,7 @@ internal fun setServiceWorkerRules(origins: Origins) {
             override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
                 SiteWipe.document(url)?.let { return it }
-                return when (WebRules.workerRequest(origins.ours(url), origins.webHost(url), wiping = SiteWipe.stops(url))) {
+                return when (WebRules.workerRequest(origins.ours(url), origins.webHost(url), wiping = SiteWipe.stops(url, WebRules.workerFrom(request.requestHeaders)))) {
                     WebRequest.Send -> null
                     else -> WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
                 }
