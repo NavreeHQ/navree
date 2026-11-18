@@ -6,6 +6,7 @@ mod flow;
 mod linking;
 mod native;
 mod orm;
+mod plugin;
 mod policy;
 mod providers;
 mod servers;

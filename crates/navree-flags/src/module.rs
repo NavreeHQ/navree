@@ -8,9 +8,7 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::{Clock, SystemClock};
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{
-    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
-};
+use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::commands::commands;
 use crate::controller::{FlagsAdminController, FlagsController};
@@ -47,6 +45,11 @@ use crate::{
 /// change emits `flag.changed`; with `WorkspaceModule`, requests resolve
 /// flags for their workspace too.
 ///
+/// `FlagsModule` names itself the plugin `navree-flags` (namespace `flags`):
+/// `navree plugins` lists it with what it adds, and `navree plugin:add flags`
+/// turns the feature on and wires the module. Nothing else about the module
+/// changes.
+///
 /// ```no_run
 /// use navree_config::{ConfigModule, ConfigSources};
 /// use navree_db::DatabaseModule;
@@ -71,12 +74,12 @@ impl FlagsModule {
     /// The module with explicit options (configure it once, in the app
     /// root).
     pub fn for_root(options: FlagsOptions) -> impl Module {
-        ConfiguredModule::<FlagsModule, _>::for_root(options, register)
+        ConfiguredFlagsModule::for_root(options)
     }
 
     /// The module configured from the `flags` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<FlagsModule, FlagsOptions>::from_config(register)
+        ConfiguredFlagsModule::from_config()
     }
 
     /// Registers flag `F`. Import it in the module that owns the flag:
@@ -98,6 +101,8 @@ impl Module for FlagsModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredFlagsModule, FlagsModule, FlagsOptions, register);
+
 /// `FlagsModule::for_feature::<F>()`.
 struct FlagFeature<F>(PhantomData<fn() -> F>);
 
@@ -108,6 +113,7 @@ impl<F: Flag> Module for FlagFeature<F> {
 }
 
 fn register(m: &mut ModuleBuilder, options: Option<FlagsOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<FlagsOptions>::new(move |_| {

@@ -9,9 +9,7 @@ use navree_contracts::ModuleBuilderRevocationExt;
 use navree_crypto::{Encrypter, Hasher};
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{
-    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
-};
+use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::controller::SocialController;
 use crate::error::map_social_error;
@@ -47,6 +45,11 @@ use crate::{Social, SocialError, SocialOptions, SocialProvider};
 /// cache otherwise), `EventsModule` receives the events and a
 /// `dyn AuditSink` the audit entries.
 ///
+/// `SocialModule` names itself the plugin `navree-social` (namespace `social`):
+/// `navree plugins` lists it with what it adds, and `navree plugin:add social`
+/// turns the feature on and wires the module. Nothing else about the module
+/// changes.
+///
 /// ```no_run
 /// use navree_auth::AuthModule;
 /// use navree_config::{ConfigModule, ConfigSources};
@@ -76,12 +79,12 @@ impl SocialModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: SocialOptions) -> impl Module {
-        ConfiguredModule::<SocialModule, _>::for_root(options, register)
+        ConfiguredSocialModule::for_root(options)
     }
 
     /// The module configured from the `social` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<SocialModule, SocialOptions>::from_config(register)
+        ConfiguredSocialModule::from_config()
     }
 
     /// Registers the provider `P` (configured as
@@ -97,7 +100,15 @@ impl Module for SocialModule {
     }
 }
 
+navree_kernel::configured_module!(
+    ConfiguredSocialModule,
+    SocialModule,
+    SocialOptions,
+    register,
+);
+
 fn register(m: &mut ModuleBuilder, options: Option<SocialOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<SocialOptions>::new(move |_| {

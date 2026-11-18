@@ -11,6 +11,7 @@ mod fake;
 mod http;
 mod module;
 mod orm;
+mod plugin;
 mod resolution;
 mod rollout;
 mod store;
