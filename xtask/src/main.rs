@@ -9,14 +9,22 @@ use xtask::metadata::Workspace;
 use xtask::publish::{Flags, Outcome};
 use xtask::{check, native_models, order, prepare, publish, stage, time};
 
+mod tz;
+
 const USAGE: &str = "\
 cargo xtask release <command>
 cargo xtask native-models [--check]
+cargo xtask tz-tables <dir> [--check]
 
 native-models [--check]
     Writes the Kotlin, Swift and C# models of Navree Native's protocol from
     crates/navree-native/schema/navree-native.schema.json; with --check,
     writes nothing and fails when a written model is stale.
+
+tz-tables <dir> [--check]
+    Writes crates/navree-time/src/tables.rs from an unpacked IANA tzdata
+    release folder; with --check, writes nothing and fails when the tables
+    differ from that release.
 
 Release commands:
   prepare <version> [--date YYYY-MM-DD]
@@ -62,6 +70,7 @@ fn main() -> ExitCode {
         ["release", "publish", rest @ ..] => cmd_publish(rest),
         ["native-models"] => cmd_native_models(false),
         ["native-models", "--check"] => cmd_native_models(true),
+        ["tz-tables", rest @ ..] => tz::cmd(&root(), rest),
         ["help" | "--help" | "-h"] | ["release"] | ["release", "help" | "--help" | "-h"] | [] => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
