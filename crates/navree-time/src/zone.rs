@@ -8,24 +8,15 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 use chrono::{DateTime, FixedOffset, LocalResult, NaiveDateTime, Offset, TimeDelta, TimeZone, Utc};
-use chrono_tz::{TZ_VARIANTS, Tz};
 use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize, Serializer};
 
 use crate::LocalDay;
 use crate::tables::{ALIASES, COUNTRY_ZONES, TZDATA_VERSION};
+use crate::tz::Tz;
 
 /// Names in the tz database that are not places: never accepted.
 const NOT_ZONES: &[&str] = &["Factory"];
-
-/// Every name chrono-tz knows (zones and links), by lower-cased name.
-static BY_LOWER_NAME: LazyLock<HashMap<String, Tz>> = LazyLock::new(|| {
-    TZ_VARIANTS
-        .iter()
-        .filter(|tz| !NOT_ZONES.contains(&tz.name()))
-        .map(|tz| (tz.name().to_ascii_lowercase(), *tz))
-        .collect()
-});
 
 /// Legacy names, lower-cased, with the zone each stands for.
 static ALIAS_TARGETS: LazyLock<HashMap<String, Tz>> = LazyLock::new(|| {
@@ -40,13 +31,12 @@ static ALIAS_TARGETS: LazyLock<HashMap<String, Tz>> = LazyLock::new(|| {
 
 /// Every canonical zone, sorted by name.
 static ALL: LazyLock<Vec<Zone>> = LazyLock::new(|| {
-    let mut zones: Vec<Zone> = TZ_VARIANTS
-        .iter()
+    let mut zones: Vec<Zone> = Tz::all()
         .filter(|tz| {
             !NOT_ZONES.contains(&tz.name())
                 && !ALIAS_TARGETS.contains_key(&tz.name().to_ascii_lowercase())
         })
-        .map(|tz| Zone(*tz))
+        .map(Zone)
         .collect();
     zones.sort();
     zones.dedup();
@@ -103,6 +93,10 @@ pub struct Zone(Tz);
 pub struct ZoneError(String);
 
 impl ZoneError {
+    pub(crate) fn new(name: &str) -> Self {
+        ZoneError(name.to_owned())
+    }
+
     /// The rejected name.
     pub fn name(&self) -> &str {
         &self.0
@@ -131,7 +125,7 @@ impl Zone {
         self.0.name()
     }
 
-    /// The chrono-tz zone, for chrono's own conversions.
+    /// The [`Tz`], for chrono's own conversions.
     pub fn tz(&self) -> Tz {
         self.0
     }
@@ -243,14 +237,16 @@ pub(crate) fn is_country(country: &str) -> bool {
 }
 
 fn lookup(name: &str) -> Option<Zone> {
-    let lower = name.trim().to_ascii_lowercase();
-    if lower.is_empty() {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
         return None;
     }
-    ALIAS_TARGETS
-        .get(&lower)
-        .or_else(|| BY_LOWER_NAME.get(&lower))
-        .map(|tz| Zone(*tz))
+    let lower = trimmed.to_ascii_lowercase();
+    if let Some(&tz) = ALIAS_TARGETS.get(&lower) {
+        return Some(Zone(tz));
+    }
+    let tz = Tz::parse(trimmed).ok()?;
+    (!NOT_ZONES.contains(&tz.name())).then_some(Zone(tz))
 }
 
 impl Default for Zone {

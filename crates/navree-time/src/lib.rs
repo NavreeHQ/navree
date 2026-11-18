@@ -8,6 +8,8 @@
 //!   case and replaces legacy aliases with current names
 //!   (`Asia/Calcutta` is `Asia/Kolkata`), so every PostgreSQL accepts what
 //!   it stores. [`Zone::for_country`] gives a country's primary zone.
+//!   [`Tz`] is the underlying `chrono::TimeZone` over every zone and link of
+//!   the compiled IANA release.
 //! - **The request's zone.** [`CurrentZone`] resolves the signed-in
 //!   user's zone, else the workspace's, else the organization's, else
 //!   `time.default_zone`, through the `dyn ZoneSource` multi-bindings of
@@ -27,6 +29,12 @@
 //! - **Responses.** [`WithZone`] adds `timeZone` to a response body.
 //! - **Routes and commands.** `GET /api/time/zones` (public reference data
 //!   for zone pickers, unless `time.routes` is false) and `time:zones`.
+//!
+//! Time zone transitions, standing rules, links, legacy aliases and country
+//! zones come from the public-domain IANA time zone database (release
+//! [`tzdata_version`]), compiled into `src/tables.rs` by
+//! `cargo xtask tz-tables DIR` from an unpacked IANA `tzdata` release
+//! folder, with weekend days from Unicode CLDR.
 //!
 //! ```no_run
 //! use navree_config::{ConfigModule, ConfigSources};
@@ -56,6 +64,7 @@ mod options;
 pub mod rules;
 mod sql;
 mod tables;
+mod tz;
 mod window;
 mod zone;
 mod zones;
@@ -72,6 +81,7 @@ pub use module::{ModuleBuilderTimeExt, TimeModule};
 pub use navree_contracts::{ZoneLevel, ZoneOwner, ZoneRequest, ZoneSource};
 pub use options::{HolidayOptions, TimeOptions};
 pub use sql::ZoneSql;
+pub use tz::{Tz, TzOffset};
 pub use window::{SendWindow, WindowError, weekend_days};
 pub use zone::{Zone, ZoneError, tzdata_version};
 pub use zones::Zones;

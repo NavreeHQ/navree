@@ -230,3 +230,300 @@ fn the_tz_database_version_is_known() {
     let version = tzdata_version();
     assert!(version.starts_with("20"), "{version}");
 }
+
+#[test]
+fn every_zone_and_link_of_the_tz_database_release_is_known_by_name() {
+    use chrono::Offset as _;
+    use navree_time::Tz;
+
+    let all: Vec<Tz> = Tz::all().collect();
+    assert_eq!(all.len(), 598);
+    assert!(all.windows(2).all(|w| w[0].name() < w[1].name()));
+
+    for tz in &all {
+        assert_eq!(Tz::parse(tz.name()), Ok(*tz));
+        assert_eq!(Tz::parse(&tz.name().to_ascii_lowercase()), Ok(*tz));
+        assert_eq!(tz.name().parse::<Tz>(), Ok(*tz));
+    }
+
+    // Both canonical zones and backward/etcetera/factory entries are present under their own names.
+    for (link, target) in [
+        ("Asia/Calcutta", "Asia/Kolkata"),
+        ("US/Eastern", "America/New_York"),
+        ("Europe/Oslo", "Europe/Berlin"),
+        ("UTC", "Etc/UTC"),
+        ("GMT", "Etc/GMT"),
+        ("Zulu", "Etc/UTC"),
+    ] {
+        let link_tz = Tz::parse(link).unwrap();
+        let target_tz = Tz::parse(target).unwrap();
+        assert_eq!(link_tz.name(), link);
+        assert_eq!(target_tz.name(), target);
+        for stamp in [
+            "1970-01-01T00:00:00Z",
+            "2026-01-15T12:00:00Z",
+            "2026-07-15T12:00:00Z",
+        ] {
+            let at = utc(stamp);
+            assert_eq!(
+                at.with_timezone(&link_tz).offset().fix(),
+                at.with_timezone(&target_tz).offset().fix(),
+                "{link} vs {target} at {stamp}"
+            );
+            assert_eq!(link_tz.abbreviation(at), target_tz.abbreviation(at));
+        }
+    }
+    let factory = Tz::parse("Factory").unwrap();
+    assert_eq!(factory.name(), "Factory");
+    assert_eq!(factory.abbreviation(utc("2026-01-15T12:00:00Z")), "-00");
+}
+
+#[test]
+fn the_offset_at_each_recorded_instant_is_the_one_written_down() {
+    use std::collections::HashMap;
+
+    use chrono::{DateTime, Offset as _, TimeZone as _, Utc};
+    use navree_time::Tz;
+
+    const FIXTURE: &str = include_str!("fixtures/offsets.txt");
+
+    let mut curves: HashMap<&str, Vec<(i64, i32)>> = HashMap::new();
+    let mut links: Vec<(&str, &str)> = Vec::new();
+    let mut current: Option<&str> = None;
+
+    for line in FIXTURE.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(zone_name) = line.strip_prefix("@ ") {
+            current = Some(zone_name);
+            curves.insert(zone_name, Vec::new());
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("= ") {
+            let (link_name, target_name) = rest.split_once(' ').unwrap();
+            links.push((link_name, target_name));
+            current = None;
+            continue;
+        }
+        let samples = curves.get_mut(current.expect("active zone")).unwrap();
+        for token in line.split_whitespace() {
+            let (ts, off) = token.split_once(':').unwrap();
+            samples.push((ts.parse().unwrap(), off.parse().unwrap()));
+        }
+    }
+
+    assert_eq!(curves.len() + links.len(), Tz::all().len());
+
+    let check_curve = |tz: Tz, samples: &[(i64, i32)]| {
+        assert!(
+            samples.len() >= 201,
+            "{}: {} samples",
+            tz.name(),
+            samples.len()
+        );
+        for &(ts, expected) in samples {
+            let dt = DateTime::<Utc>::from_timestamp(ts, 0).unwrap().naive_utc();
+            let got = tz.offset_from_utc_datetime(&dt).fix().local_minus_utc();
+            assert_eq!(got, expected, "{} at {ts} ({dt}Z)", tz.name());
+        }
+    };
+
+    for (&zone_name, samples) in &curves {
+        let tz = Tz::parse(zone_name).unwrap();
+        check_curve(tz, samples);
+    }
+    for (link_name, target_name) in links {
+        let tz = Tz::parse(link_name).unwrap();
+        let samples = &curves[target_name];
+        // Check first, middle, last, and every transition boundary on links too.
+        check_curve(tz, samples);
+    }
+}
+
+#[test]
+fn a_wall_clock_time_in_a_gap_is_none_and_in_an_overlap_is_both() {
+    use chrono::{LocalResult, Offset as _, TimeZone as _};
+    use navree_time::Tz;
+
+    let ny: Tz = "America/New_York".parse().unwrap();
+    // Spring-forward gap: 2026-03-08 02:00 jumps to 03:00.
+    assert_eq!(
+        ny.from_local_datetime(&local("2026-03-08T02:30")),
+        LocalResult::None
+    );
+    assert!(matches!(
+        ny.from_local_datetime(&local("2026-03-08T01:59")),
+        LocalResult::Single(_)
+    ));
+    assert!(matches!(
+        ny.from_local_datetime(&local("2026-03-08T03:00")),
+        LocalResult::Single(_)
+    ));
+
+    // Fall-back overlap: 2026-11-01 02:00 falls back to 01:00.
+    match ny.from_local_datetime(&local("2026-11-01T01:30")) {
+        LocalResult::Ambiguous(earliest, latest) => {
+            assert_eq!(earliest.to_utc(), utc("2026-11-01T05:30:00Z"));
+            assert_eq!(latest.to_utc(), utc("2026-11-01T06:30:00Z"));
+            assert_eq!(earliest.offset().abbreviation(), "EDT");
+            assert_eq!(latest.offset().abbreviation(), "EST");
+            assert_eq!(earliest.offset().fix().local_minus_utc(), -4 * 3600);
+            assert_eq!(latest.offset().fix().local_minus_utc(), -5 * 3600);
+        }
+        other => panic!("expected Ambiguous, got {other:?}"),
+    }
+
+    // Samoa skipped the whole local day 2011-12-30.
+    let apia: Tz = "Pacific/Apia".parse().unwrap();
+    assert_eq!(
+        apia.from_local_datetime(&local("2011-12-30T12:00")),
+        LocalResult::None
+    );
+}
+
+#[test]
+fn a_zone_far_past_its_last_change_follows_its_standing_rule() {
+    use chrono::{LocalResult, TimeZone as _};
+    use navree_time::Tz;
+
+    // Year 2400 is centuries past every explicit historical change.
+    let ny = zone("America/New_York");
+    assert_eq!(ny.offset_label(utc("2400-01-15T12:00:00Z")), "-05:00");
+    assert_eq!(ny.offset_label(utc("2400-07-15T12:00:00Z")), "-04:00");
+    // In 2400, 1 March is Wednesday, so the second Sunday of March is 12 March.
+    let ny_tz: Tz = ny.tz();
+    assert_eq!(
+        ny_tz.from_local_datetime(&local("2400-03-12T02:30")),
+        LocalResult::None
+    );
+    assert!(matches!(
+        ny_tz.from_local_datetime(&local("2400-11-05T01:30")),
+        LocalResult::Ambiguous(_, _)
+    ));
+
+    // Ireland uses negative winter offset relative to its summer standard time.
+    let dublin: Tz = "Europe/Dublin".parse().unwrap();
+    assert_eq!(dublin.abbreviation(utc("2400-01-15T12:00:00Z")), "GMT");
+    assert_eq!(dublin.abbreviation(utc("2400-07-15T12:00:00Z")), "IST");
+
+    // Non-Mm.w.d standing rules: Jerusalem (`Fri>=23`), Hebron (`Sat<=30`), Cairo (`24:00`), Troll (`+02`).
+    assert_eq!(
+        zone("Asia/Jerusalem").offset_label(utc("2400-01-15T12:00:00Z")),
+        "+02:00"
+    );
+    assert_eq!(
+        zone("Asia/Jerusalem").offset_label(utc("2400-07-15T12:00:00Z")),
+        "+03:00"
+    );
+    assert_eq!(
+        zone("Asia/Hebron").offset_label(utc("2400-01-15T12:00:00Z")),
+        "+02:00"
+    );
+    assert_eq!(
+        zone("Asia/Hebron").offset_label(utc("2400-07-15T12:00:00Z")),
+        "+03:00"
+    );
+    assert_eq!(
+        zone("Africa/Cairo").offset_label(utc("2400-01-15T12:00:00Z")),
+        "+02:00"
+    );
+    assert_eq!(
+        zone("Africa/Cairo").offset_label(utc("2400-07-15T12:00:00Z")),
+        "+03:00"
+    );
+    assert_eq!(
+        zone("Antarctica/Troll").offset_label(utc("2400-01-15T12:00:00Z")),
+        "+00:00"
+    );
+    assert_eq!(
+        zone("Antarctica/Troll").offset_label(utc("2400-07-15T12:00:00Z")),
+        "+02:00"
+    );
+}
+
+#[test]
+fn lord_howe_moves_by_half_an_hour_and_kolkata_never_moves() {
+    use chrono::{LocalResult, TimeZone as _};
+
+    let lord_howe = zone("Australia/Lord_Howe");
+    // Southern summer (+11:00) vs southern winter (+10:30): a 30-minute shift.
+    assert_eq!(
+        lord_howe
+            .offset_at(utc("2026-01-15T12:00:00Z"))
+            .local_minus_utc(),
+        11 * 3600
+    );
+    assert_eq!(
+        lord_howe.offset_label(utc("2026-01-15T12:00:00Z")),
+        "+11:00"
+    );
+    assert_eq!(
+        lord_howe
+            .offset_at(utc("2026-07-15T12:00:00Z"))
+            .local_minus_utc(),
+        10 * 3600 + 1800
+    );
+    assert_eq!(
+        lord_howe.offset_label(utc("2026-07-15T12:00:00Z")),
+        "+10:30"
+    );
+    assert_eq!(
+        lord_howe
+            .tz()
+            .from_local_datetime(&local("2026-10-04T02:15")),
+        LocalResult::None
+    );
+    assert!(matches!(
+        lord_howe
+            .tz()
+            .from_local_datetime(&local("2026-04-05T01:45")),
+        LocalResult::Ambiguous(_, _)
+    ));
+
+    let kolkata = zone("Asia/Kolkata");
+    for stamp in [
+        "1950-01-15T00:00:00Z",
+        "1950-07-15T00:00:00Z",
+        "2026-01-15T00:00:00Z",
+        "2026-07-15T00:00:00Z",
+        "2100-01-15T00:00:00Z",
+        "2400-07-15T00:00:00Z",
+    ] {
+        let at = utc(stamp);
+        assert_eq!(
+            kolkata.offset_at(at).local_minus_utc(),
+            5 * 3600 + 1800,
+            "{stamp}"
+        );
+        assert_eq!(kolkata.tz().abbreviation(at), "IST", "{stamp}");
+    }
+}
+
+#[test]
+fn a_zone_is_a_time_zone_for_chronos_own_conversions() {
+    use chrono::{Offset as _, TimeZone as _, Utc};
+    use navree_time::Tz;
+
+    let kolkata = zone("Asia/Kolkata");
+    let tz: Tz = kolkata.into();
+    assert_eq!(tz, kolkata.tz());
+    assert_eq!(tz.name(), "Asia/Kolkata");
+
+    let instant = utc("2026-11-18T16:30:00Z");
+    let on_clock = instant.with_timezone(&tz);
+    assert_eq!(on_clock, kolkata.local(instant));
+    assert_eq!(Tz::from_offset(on_clock.offset()), tz);
+    assert_eq!(on_clock.offset().fix().local_minus_utc(), 5 * 3600 + 1800);
+    assert_eq!(
+        on_clock.format("%Y-%m-%d %H:%M:%S %Z %:z").to_string(),
+        "2026-11-18 22:00:00 IST +05:30"
+    );
+
+    let built = tz
+        .with_ymd_and_hms(2026, 11, 18, 22, 0, 0)
+        .single()
+        .unwrap();
+    assert_eq!(built.with_timezone(&Utc), instant);
+}

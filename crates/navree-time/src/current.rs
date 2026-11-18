@@ -6,7 +6,6 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use chrono::DateTime;
-use chrono_tz::Tz;
 use http::request::Parts;
 use navree_contracts::{AuthState, Clock, ZoneLevel, ZoneRequest};
 use navree_http::extract::FromRequestParts;
@@ -17,7 +16,7 @@ use serde::ser::Error as _;
 use serde::{Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::{LocalDay, Zone, Zones};
+use crate::{LocalDay, Tz, Zone, Zones};
 
 /// The zone of the current request: the signed-in user's, else the
 /// request's workspace's, else its organization's, else the app's default
