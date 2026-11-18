@@ -313,6 +313,102 @@ async fn the_apps_channels_under_words_no_plugin_holds_boot_beside_a_plugin() {
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
 }
 
+/// A module of the app whose pattern `{team}.support` starts with a parameter: for a team
+/// named `chat`, `private-chat.support` matches both `{team}.support` and the chat plugin's
+/// `chat.{room}`.
+struct TeamSupport(Uuid);
+
+impl Module for TeamSupport {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let lead = self.0;
+        m.channel("{team}.support", move |principal, params, _ctx| {
+            let allowed = principal.user_id == lead && params.get("team").is_some();
+            Box::pin(async move {
+                Ok(if allowed {
+                    ChannelDecision::Allow
+                } else {
+                    ChannelDecision::Deny
+                })
+            })
+        });
+    }
+}
+
+/// A module of the app that imports the chat plugin's module first in dependency order and
+/// registers `{team}.support` for its support lead.
+struct TeamSupportWithChat(Uuid);
+
+impl Module for TeamSupportWithChat {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let lead = self.0;
+        m.import(ChatModule)
+            .channel("{team}.support", move |principal, params, _ctx| {
+                let allowed = principal.user_id == lead && params.get("team").is_some();
+                Box::pin(async move {
+                    Ok(if allowed {
+                        ChannelDecision::Allow
+                    } else {
+                        ChannelDecision::Deny
+                    })
+                })
+            });
+    }
+}
+
+#[tokio::test]
+async fn an_app_pattern_that_starts_with_a_parameter_is_decided_before_a_plugins_pattern_in_either_module_order()
+ {
+    let simran = Uuid::now_v7();
+    let gurpreet = Uuid::now_v7();
+    let orders = [
+        support::app(support::options())
+            .module(TeamSupport(simran))
+            .module(ChatModule),
+        support::app(support::options())
+            .module(ChatModule)
+            .module(TeamSupport(simran)),
+        support::app(support::options()).module(TeamSupportWithChat(simran)),
+    ];
+    for builder in orders {
+        let server = Server::serve(builder).await;
+        let denied = server
+            .auth(Some(gurpreet), SOCKET, "private-chat.support")
+            .await;
+        assert_eq!(denied.status, StatusCode::FORBIDDEN, "{}", denied.json);
+
+        let allowed = server
+            .auth(Some(simran), SOCKET, "private-chat.support")
+            .await;
+        assert_eq!(allowed.status, StatusCode::OK, "{}", allowed.json);
+        assert_eq!(
+            allowed.json["auth"],
+            signature(SOCKET, "private-chat.support", None)
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_plugins_pattern_still_decides_the_channels_under_its_namespace() {
+    let simran = Uuid::now_v7();
+    let gurpreet = Uuid::now_v7();
+    let orders = [
+        support::app(support::options())
+            .module(TeamSupport(simran))
+            .module(ChatModule),
+        support::app(support::options())
+            .module(ChatModule)
+            .module(TeamSupport(simran)),
+        support::app(support::options()).module(TeamSupportWithChat(simran)),
+    ];
+    for builder in orders {
+        let server = Server::serve(builder).await;
+        let channel = "private-chat.ludhiana";
+        let reply = server.auth(Some(gurpreet), SOCKET, channel).await;
+        assert_eq!(reply.status, StatusCode::OK, "{}", reply.json);
+        assert_eq!(reply.json["auth"], signature(SOCKET, channel, None));
+    }
+}
+
 /// A module of the app: it registers the chat plugin's backplane as the app's.
 struct AppBackplane;
 

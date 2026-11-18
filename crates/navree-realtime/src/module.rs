@@ -118,9 +118,10 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
             r.get::<CheckedBackplanes>().await?;
             let app = r.app();
             let channels = app.contributions::<ChannelRegistration>();
-            // A plugin's module authorizes channels under the plugin's namespace only, and
-            // only a plugin's modules authorize channels there.
-            channels_of_plugins(&app, &channels)?;
+            // A plugin's module authorizes channels under the plugin's namespace only, only a
+            // plugin's modules authorize channels there, and patterns of modules acting for no
+            // community plugin are tried before a plugin's.
+            let channels = channels_of_plugins(&app, channels)?;
             let cors_origins = match app.try_get::<HttpOptions>().await {
                 Some(http) => http.cors.allowed_origins.clone(),
                 None => Vec::new(),
@@ -174,25 +175,30 @@ fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
 ///
 /// It refuses too each pattern whose first segment is such a plugin's
 /// namespace that a module not acting for that plugin registers
-/// (`chat.support` beside a plugin whose namespace is `chat`): the first
-/// matching pattern decides a channel, in module order, so the plugin's
-/// `chat.{room}` would otherwise decide the app's channel, or the app's the
-/// plugin's. The app keeps two ways: a channel named outside the namespace,
-/// which its own authorizer decides, or no pattern of its own, which leaves
-/// the channel to the plugin's.
+/// (`chat.support` beside a plugin whose namespace is `chat`): the channels
+/// under the namespace are the plugin's, so the app keeps two ways: a channel
+/// named outside the namespace, which its own authorizer decides, or no
+/// pattern of its own, which leaves the channel to the plugin's.
+///
+/// Patterns of modules that act for no such plugin are returned ahead of the
+/// patterns of modules that act for one, keeping module order within each
+/// group, so an app pattern that starts with a parameter (`{team}.support`) is
+/// tried before a plugin's (`chat.{room}`) whatever the module order.
 ///
 /// The refusals are joined with `; `, as `Realtime::new` joins its own. A
 /// first-party plugin's module is not held to a namespace, and the app's
 /// patterns under words no such plugin holds are not refused.
 fn channels_of_plugins(
     app: &AppContext,
-    channels: &[Contributed<ChannelRegistration>],
-) -> Result<(), BoxError> {
+    channels: Vec<Contributed<ChannelRegistration>>,
+) -> Result<Vec<Contributed<ChannelRegistration>>, BoxError> {
     if channels.is_empty() {
-        return Ok(());
+        return Ok(channels);
     }
     let plugins = app.plugins().plugins;
     let mut refusals: Vec<String> = Vec::new();
+    let mut non_plugin = Vec::with_capacity(channels.len());
+    let mut from_plugin = Vec::new();
     for registration in channels {
         let pattern = registration.value.pattern;
         let module = registration.module.name;
@@ -207,6 +213,7 @@ fn channels_of_plugins(
                     plugin.info.name
                 ));
             }
+            from_plugin.push(registration);
             continue;
         }
         // The first segment, a literal when it is a namespace: the channels under a
@@ -221,9 +228,11 @@ fn channels_of_plugins(
                 owner.info.name
             ));
         }
+        non_plugin.push(registration);
     }
     if refusals.is_empty() {
-        Ok(())
+        non_plugin.extend(from_plugin);
+        Ok(non_plugin)
     } else {
         Err(refusals.join("; ").into())
     }
@@ -353,8 +362,10 @@ pub trait ModuleBuilderRealtimeExt {
     /// Authorizes private and presence channels whose name, without the
     /// `private-` / `presence-` prefix, matches `pattern`: literal text and
     /// `{name}` parameters, each matching one or more characters other than
-    /// `.` (`"crm.deals"`, `"users.{id}"`). The first matching pattern, in
-    /// module dependency order, decides; no match means 403. The same
+    /// `.` (`"crm.deals"`, `"users.{id}"`). Patterns of modules that act for
+    /// none of the app's community plugins are tried before a community
+    /// plugin's patterns, in module dependency order within each group, and
+    /// the first matching pattern decides; no match means 403. The same
     /// authorizer decides whether a page's live stream may listen to the
     /// channel. Patterns under `navree-live.` are reserved for live topics
     /// and fail the boot.
