@@ -206,6 +206,17 @@ class InputFieldsTest {
         return node
     }
 
+    /**
+     * What the form says of a file that was chosen, once it says it: the file
+     * is copied and read off the main thread, and what comes of that is drawn
+     * when it is done, so the words are waited for and not looked for at once.
+     */
+    private fun said(words: String): SemanticsNodeInteraction {
+        val says = hasText(words, substring = true)
+        waitFor("the form to say \"$words\"") { compose.onAllNodes(says).fetchSemanticsNodes().isNotEmpty() }
+        return reveal(compose.onNode(says))
+    }
+
     private fun chooseButton(label: String, named: String) = compose.onNode(hasContentDescription("$named, $label"))
 
     private fun pick(label: String, button: String, vararg documents: Uri) {
@@ -533,13 +544,13 @@ class InputFieldsTest {
         startOnTheClaimsForm()
         PickedFiles.of(context).mostBytes = 1_000
         pick("Papers", "Choose files", document("Pariwar tasveer.pdf", pdf, randomBytes(5_000)))
-        reveal(compose.onNode(hasText("larger than", substring = true))).assertExists()
+        said("larger than").assertExists()
         compose.onNode(hasText("Pariwar tasveer.pdf is larger than", substring = true)).assertExists()
         assertTrue("a file that is too large is not held", heldFiles("f-papers").isEmpty())
         Shots.take("inputs-file-too-large")
         PickedFiles.of(context).mostBytes = com.navree.client.design.FileRules.MOST_BYTES
         pick("Papers", "Choose files", document("notes.txt", "text/plain", "Dukaan di sooch".toByteArray()))
-        reveal(compose.onNode(hasText("not a kind of file this field takes", substring = true))).assertExists()
+        said("not a kind of file this field takes").assertExists()
         compose.onNode(hasText("image/*, .pdf", substring = true)).assertExists()
         assertTrue("a file of another kind is not held", heldFiles("f-papers").isEmpty())
         // The next good choice takes the words away.
@@ -549,7 +560,7 @@ class InputFieldsTest {
         // A field that takes several holds them to the most together: the 3 000 bytes held and 8 000 more are over 10 000.
         PickedFiles.of(context).mostBytes = 10_000
         pick("Papers", "Add files", document("Bill Jalandhar.pdf", pdf, randomBytes(8_000, seed = 13)))
-        reveal(compose.onNode(hasText("would take the files of this field over", substring = true))).assertExists()
+        said("would take the files of this field over").assertExists()
         assertEquals("the file that would be over together is not added", 1, heldFiles("f-papers").size)
         pick("Papers", "Add files", document("Bill Moga.pdf", pdf, randomBytes(6_000, seed = 14)))
         waitFor("the file that fits to be added") { heldFiles("f-papers").size == 2 }
@@ -736,10 +747,10 @@ class InputFieldsTest {
         startOnTheClaimsForm()
         val heic = byteArrayOf(0, 0, 0, 24) + "ftypheic\u0000\u0000\u0000\u0000mif1heic".toByteArray(Charsets.ISO_8859_1) + ByteArray(2_000) + xmpWithPlace.toByteArray(Charsets.ISO_8859_1)
         pick("Photo", "Choose a file", document("Kapurthala.heic", "image/heic", heic))
-        reveal(compose.onNode(hasText("Kapurthala.heic has the place it was taken in it", substring = true))).assertExists()
+        said("Kapurthala.heic has the place it was taken in it").assertExists()
         assertTrue("a HEIC that names a place is not held", heldFiles("f-photo").isEmpty())
         pick("Photo", "Choose a file", document("Firozpur.tiff", "image/tiff", "MM\u0000*\u0000\u0000\u0000\u0008".toByteArray(Charsets.ISO_8859_1) + ByteArray(500)))
-        reveal(compose.onNode(hasText("Firozpur.tiff is a kind of picture this device cannot check", substring = true))).assertExists()
+        said("Firozpur.tiff is a kind of picture this device cannot check").assertExists()
         assertTrue("a TIFF is not held", heldFiles("f-photo").isEmpty())
         Shots.take("inputs-file-place-refused")
         // A field that keeps the place takes both as they are.
@@ -831,13 +842,13 @@ class InputFieldsTest {
         val folder = File(context.cacheDir, "navree-picked")
         val before = folder.list()?.toSet().orEmpty()
         pick("Papers", "Choose files", document("Rasid Moga.pdf", pdf, randomBytes(5_000), claimedSize = 10))
-        reveal(compose.onNode(hasText("Rasid Moga.pdf is larger than", substring = true))).assertExists()
+        said("Rasid Moga.pdf is larger than").assertExists()
         assertTrue("a document larger than it says is not held", heldFiles("f-papers").isEmpty())
         pick("Papers", "Choose files", TestDocuments.addEndless("Rasid Faridkot.pdf", pdf, randomBytes(4_096), claimedSize = 100))
-        reveal(compose.onNode(hasText("Rasid Faridkot.pdf is larger than", substring = true))).assertExists()
+        said("Rasid Faridkot.pdf is larger than").assertExists()
         assertTrue("a document that never ends is not held", heldFiles("f-papers").isEmpty())
         pick("Papers", "Choose files", TestDocuments.addEndless("Rasid Mansa.pdf", pdf, randomBytes(4_096)))
-        reveal(compose.onNode(hasText("Rasid Mansa.pdf is larger than", substring = true))).assertExists()
+        said("Rasid Mansa.pdf is larger than").assertExists()
         assertEquals("no copy of any of them is left", before, folder.list()?.toSet().orEmpty())
     }
 
