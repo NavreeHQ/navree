@@ -9,7 +9,13 @@ import WebKit
 /// the address the runtime core gives, loaded again whenever its serial moves.
 ///
 /// What a page in it can do is what a browser tab on the same site can do, and
-/// nothing more: there is no script bridge to the app, no pop-up, no file. A
+/// nothing more: there is no script bridge to the app, no pop-up, and no way
+/// to the app's files. A file field of the page's own is the web engine's:
+/// on iPhone and iPad it shows its own menu (the Photo Library, the camera,
+/// Files) and takes a file dropped on an iPad, as Safari does, and what is
+/// picked there goes to the page as it is, past the app's care for a photo's
+/// place (``PhotoPlace``) and its words for a file not added; on a Mac no
+/// file panel is opened, so such a field does nothing. A
 /// link the person taps is the core's to follow (a native screen, the system
 /// browser, or nothing): the web view's own navigation is cancelled. What a
 /// page does by itself (its script, a redirect) stays on the origin or goes

@@ -12,11 +12,21 @@ import UniformTypeIdentifiers
 /// names or a maker's own (a drone's `GpsLatitude`); in a maker's notes; in
 /// the record of caption fields, as the name of a town. No list of names
 /// covers them all. So a picture is not searched for the names known to say
-/// a place: everything that could hold one is left out, whole. What is kept
-/// of a picture is its pixels, which way up it is, and a short list of what a
+/// a place: what could hold one is left out whole, as far as Image I/O, the
+/// system's own way of reading a picture, shows it. What is kept of a
+/// picture is its pixels, which way up it is, and a short list of what a
 /// camera says of the shot (when, with what, at which exposure). The GPS
-/// data, the whole XMP packet, every maker's notes, the caption record and
-/// every other field go.
+/// data, the whole XMP packet, the notes of every maker Image I/O shows a
+/// group for, the caption record and every other field it shows go.
+///
+/// The check sees what Image I/O reads, and the marks of an XMP packet in
+/// the file's bytes. A place hidden where Image I/O does not look is not
+/// seen, and is not taken out: a PNG's compressed text, a maker's bytes after
+/// the picture's end, content credentials, a maker's notes it does not show.
+/// A picture the check finds nothing in is copied as it is, with whatever
+/// else it holds. And since anything of what is left out makes a picture one
+/// to write again, a picture in a format the system reads and cannot write
+/// is refused whether or not a place is in it.
 ///
 /// It is done as the picked file is copied for the form, so the bytes the app
 /// keeps to send never hold it:
