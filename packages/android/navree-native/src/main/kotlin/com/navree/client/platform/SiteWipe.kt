@@ -343,10 +343,11 @@ internal class WipeGo(
  * screen, for the seconds a go at the origins an earlier go left takes.
  *
  * This is one of two guards, and neither stands for the other. The other is
- * that a worker's request to an origin whose pages are held back, or from a
- * worker of such an origin, is refused whether a go runs or not
- * ([SiteWipe.stops]): it covers the time from a go's end until what is owed
- * is called over, and a worker left at an origin a go could not clear.
+ * that a worker's request to an origin whose pages are held back, or one
+ * that says it is from a worker of such an origin, is refused whether a go
+ * runs or not ([SiteWipe.stops]): it covers the time from a go's end until
+ * what is owed is called over, and a worker left at an origin a go could not
+ * clear.
  *
  * Every call is on the one thread the surfaces call back on, but for [going]
  * and [stops], which are asked on the thread a service worker's requests are
@@ -579,6 +580,17 @@ internal class WipeDebt(private val folder: () -> File?) {
 
     /** Whether a page on [origin] is held back ([WipeRules.held]): something is owed, and no go has ended yet or the origin is one it left. */
     fun held(origin: String?): Boolean = owed && WipeRules.held(left, origin)
+
+    /**
+     * Whether a request a service worker makes is refused for what is owed,
+     * go or no go: one to an origin whose pages are held back ([to]), and one
+     * from a worker of such an origin, wherever it is sent. [from] is the
+     * origin the request says it is from, and [said] whether it says at all:
+     * a request that does not say is not known to be from such a worker, and
+     * only where it goes decides. An origin that cannot be told (null) is
+     * held back while anything is owed ([held]).
+     */
+    fun refuses(to: String?, from: String?, said: Boolean): Boolean = held(to) || (said && held(from))
 
     /**
      * The origins a go is at now: those an earlier go left, or, while none
@@ -909,15 +921,17 @@ object SiteWipe {
      *   no go;
      * - the request says it is from a worker of such an origin ([from]: the
      *   address its `Referer` or `Origin` header names, where it has one):
-     *   a worker left at an origin a go could not clear writes to no origin
-     *   of the app, not only not to its own.
+     *   a worker left at an origin a go could not clear is refused the app's
+     *   other origins too. A request that carries neither header does not
+     *   say, and only where it goes decides ([WipeDebt.refuses]).
      *
      * A worker a go's document started is the worker of the person who left,
      * and nothing it sends on its own goes out with the cookies of whoever is
      * signed in by then. Asked where a service worker's requests are asked,
      * after [document]. Any thread.
      */
-    internal fun stops(url: String, from: String? = null): Boolean = goes.stops(url) || held(url) || (from != null && held(from))
+    internal fun stops(url: String, from: String? = null): Boolean =
+        goes.stops(url) || synchronized(lock) { debt.refuses(origins?.originOf(url), from?.let { origins?.originOf(it) }, said = from != null) }
 
     /**
      * Shows each origin to clear the client's own document, one after the

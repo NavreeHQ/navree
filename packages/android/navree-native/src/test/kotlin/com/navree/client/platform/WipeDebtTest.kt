@@ -55,6 +55,30 @@ class WipeDebtTest {
     }
 
     @Test
+    fun a_worker_of_an_origin_that_is_held_back_is_refused_wherever_it_writes_where_its_request_says_where_it_is_from() {
+        val debt = debt()
+        assertFalse("with nothing owed nothing is refused, whoever asks", debt.refuses(to = shop, from = null, said = true))
+        val end = debt.owe()
+        assertTrue("until a go has ended every origin is held back", debt.refuses(to = shop, from = shop, said = true))
+        debt.narrow(end)
+        // The go cleared the shop and left the payments host: the worker of the person before may still be registered there.
+        debt.over(setOf(pay), end)
+        assertTrue("to the origin that was left", debt.refuses(to = pay, from = shop, said = true))
+        assertTrue("and from its worker to an origin that was cleared", debt.refuses(to = shop, from = pay, said = true))
+        assertTrue("or to a host of the app no document was ever on", debt.refuses(to = patiala, from = pay, said = true))
+        assertFalse("a worker of a cleared origin asks for its own pages", debt.refuses(to = shop, from = shop, said = true))
+        assertTrue("a request from what is no origin of the app is not known to be from a cleared one", debt.refuses(to = shop, from = null, said = true))
+        // The limit: a request that does not say where it is from goes by its address alone.
+        assertFalse(debt.refuses(to = shop, from = null, said = false))
+        assertTrue(debt.refuses(to = pay, from = null, said = false))
+        // A later go clears the origin that was left: nothing is refused any more.
+        val go = debt.begin()!!
+        debt.over(emptySet(), go)
+        assertFalse(debt.refuses(to = shop, from = pay, said = true))
+        assertFalse(debt.refuses(to = pay, from = pay, said = true))
+    }
+
+    @Test
     fun asking_whether_a_page_is_held_back_begins_nothing_however_often_it_is_asked() {
         val debt = debt()
         val end = debt.owe()
