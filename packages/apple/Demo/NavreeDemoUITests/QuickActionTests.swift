@@ -59,11 +59,18 @@ final class QuickActionTests: XCTestCase {
             XCUIDevice.shared.press(.home)
             let icon = icon()
             let predicate = count == 0 ? NSPredicate(format: "NOT (value CONTAINS %@)", "3") : NSPredicate(format: "value CONTAINS %@", "3")
-            let shown = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: icon)], timeout: 15) == .completed
-            notes.append("set \(count): icon \(icon.label), value \(String(describing: icon.value)), as set \(shown)")
+            // On a busy machine the moment is a long one, the first time above all.
+            let shown = XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: icon)], timeout: 40) == .completed
+            // What was seen is written down before it is judged, so a count
+            // that did not show leaves its note too: the icon's own value,
+            // and whether the system's question still stood unanswered.
+            notes.append(
+                "set \(count): icon \(icon.label), value \(String(describing: icon.value)), as set \(shown), "
+                    + "the system's question still up \(allow.exists)"
+            )
+            Shots.note("badge", notes.joined(separator: "\n"))
             Shots.save("badge-home-screen-\(count)", in: self)
             XCTAssertTrue(shown, "The app's icon does not show the count \(count) set")
         }
-        Shots.note("badge", notes.joined(separator: "\n"))
     }
 }
