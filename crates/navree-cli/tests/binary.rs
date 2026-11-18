@@ -502,3 +502,37 @@ fn native_doctor_outside_an_app_says_so() {
         stderr(&output)
     );
 }
+
+#[test]
+fn plugin_add_outside_an_app_fails_with_the_app_root_text() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let output = navree(dir.path(), &["plugin:add", "navree-plugin-khata"]);
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    let err = stderr(&output);
+    let trimmed = err.trim_end();
+    assert!(
+        trimmed
+            .starts_with("error: no Navree app here (no Cargo.toml with a navree dependency in "),
+        "{err}"
+    );
+    assert!(trimmed.ends_with(" or above)"), "{err}");
+}
+
+#[test]
+fn make_plugin_from_the_binary_prints_what_it_created() {
+    let dir = tempfile::Builder::new()
+        .prefix("navree-test-")
+        .tempdir()
+        .unwrap();
+    let output = navree(dir.path(), &["make:plugin", "khata"]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let out = stdout(&output);
+    assert!(out.contains("  created  plugins/khata/Cargo.toml"), "{out}");
+    assert!(
+        out.contains("  next     navree plugin:add --path plugins/khata"),
+        "{out}"
+    );
+}

@@ -101,6 +101,12 @@ pub enum Command {
     /// Generate a data table in a module (tables/NAME.rs): a row with sortable, searchable and filterable columns, and its handler.
     #[command(name = "make:table")]
     MakeTable(MakeUiArgs),
+    /// Write a plugin crate: its manifest, a module that names itself, its options and a test that boots it.
+    #[command(name = "make:plugin")]
+    MakePlugin(MakePluginArgs),
+    /// Write a Navree UI component of your own: its Rust side, its script and stylesheet, and its tests.
+    #[command(name = "make:component")]
+    MakeComponent(MakeComponentArgs),
     /// Serve the app, rebuilding and restarting it when the code changes.
     Dev(DevArgs),
     /// Check the app: its module graph, then the conformity checks (routes documented, entities classified, workspace isolation, translations, migrations).
@@ -138,6 +144,15 @@ pub enum Command {
     /// Check what a native build needs, without changing anything: the native preview feature, the settings for links, passkeys, push and sign-in, the Android and Apple toolchains.
     #[command(name = "native:doctor")]
     NativeDoctor(NativeDoctorArgs),
+    /// Install a plugin: add the crate (or turn on a first-party package's feature), wire its module, and write what it suggests where you can read it.
+    #[command(name = "plugin:add")]
+    PluginAdd(PluginAddArgs),
+    /// Unwire a plugin and remove its crate; its configuration, grants and data stay.
+    #[command(name = "plugin:remove")]
+    PluginRemove(PluginRemoveArgs),
+    /// List the plugins this app depends on and whether each is wired.
+    #[command(name = "plugin:list")]
+    PluginList(PluginListArgs),
     /// A command of the app binary.
     #[command(external_subcommand)]
     Forward(Vec<String>),
@@ -289,6 +304,81 @@ pub struct MakeUiArgs {
     /// Replace the files that exist.
     #[arg(long)]
     pub force: bool,
+}
+
+/// `navree make:plugin NAME [--path DIR] [--wrap CRATE]`.
+#[derive(Debug, Args)]
+pub struct MakePluginArgs {
+    /// The plugin name in snake_case (`khata`, `announcements`), without `navree-plugin-`.
+    pub name: String,
+    /// Parent folder for the new plugin crate, relative to the current directory.
+    #[arg(long, default_value = "plugins", value_name = "DIR")]
+    pub path: String,
+    /// Wrap an existing client crate (`reqwest`) in a `ClientModule` in `src/client.rs`.
+    #[arg(long, value_name = "CRATE")]
+    pub wrap: Option<String>,
+}
+
+/// `navree make:component NAME [--path DIR] [--script] [--sheet] [--field] [--dry-run] [--force]`.
+#[derive(Debug, Args)]
+pub struct MakeComponentArgs {
+    /// The component name in snake_case (`drop_point`).
+    pub name: String,
+    /// The crate's folder (default `.`).
+    #[arg(long, default_value = ".", value_name = "DIR")]
+    pub path: String,
+    /// Add a contract-1 script (`assets/EXT.js`) and browser test (`tests/browser_NAME.rs`).
+    #[arg(long)]
+    pub script: bool,
+    /// Add a scoped stylesheet (`assets/EXT.css`).
+    #[arg(long)]
+    pub sheet: bool,
+    /// Also write a `FieldControl` (`NAME_CONTROL`) and its test.
+    #[arg(long)]
+    pub field: bool,
+    /// Say what would be created and edited, and write nothing.
+    #[arg(long)]
+    pub dry_run: bool,
+    /// Replace the files that exist.
+    #[arg(long)]
+    pub force: bool,
+}
+
+/// `navree plugin:add [PACKAGE] [--version REQ] [--path DIR] [--no-wire] [--publish-config]`.
+#[derive(Debug, Args)]
+#[command(disable_version_flag = true)]
+pub struct PluginAddArgs {
+    /// Package to install (`navree-plugin-khata` or `billing`), optional when `--path` is given.
+    #[arg(value_name = "PACKAGE", required_unless_present = "path")]
+    pub package: Option<String>,
+    /// Cargo version requirement for a registry crate (`1.2`, `^0.4`).
+    #[arg(long = "version", value_name = "REQ")]
+    pub version: Option<String>,
+    /// Install the plugin crate at this local folder.
+    #[arg(long, value_name = "DIR")]
+    pub path: Option<PathBuf>,
+    /// Add the crate and its features without editing `src/app.rs` or running the app.
+    #[arg(long)]
+    pub no_wire: bool,
+    /// Also run the app once: publish the plugin's configuration and show what it registers (a community crate's code runs on this machine). A first-party install builds and runs the app, and every crate it already depends on.
+    #[arg(long)]
+    pub publish_config: bool,
+}
+
+/// `navree plugin:remove PACKAGE`.
+#[derive(Debug, Args)]
+pub struct PluginRemoveArgs {
+    /// Installed plugin package (`navree-plugin-khata` or `billing`).
+    #[arg(value_name = "PACKAGE")]
+    pub package: String,
+}
+
+/// `navree plugin:list [--json]`.
+#[derive(Debug, Args)]
+pub struct PluginListArgs {
+    /// Print the plugin list as JSON.
+    #[arg(long)]
+    pub json: bool,
 }
 
 /// `navree make:page <Name> [--module <module>] [--public] [--path src/modules]
@@ -1181,6 +1271,136 @@ mod tests {
                 panic!("{args:?} must be forwarded");
             };
             assert_eq!(forwarded, expected);
+        }
+    }
+
+    #[test]
+    fn plugin_commands_parse_their_options() {
+        let Command::PluginAdd(args) = parse(&[
+            "plugin:add",
+            "navree-plugin-khata",
+            "--version",
+            "^0.2",
+            "--no-wire",
+            "--publish-config",
+        ]) else {
+            panic!("expected plugin:add");
+        };
+        assert_eq!(args.package.as_deref(), Some("navree-plugin-khata"));
+        assert_eq!(args.version.as_deref(), Some("^0.2"));
+        assert_eq!(args.path, None);
+        assert!(args.no_wire && args.publish_config);
+
+        let Command::PluginAdd(args) = parse(&["plugin:add", "--path", "plugins/khata"]) else {
+            panic!("expected plugin:add --path");
+        };
+        assert_eq!(args.package, None);
+        assert_eq!(args.path, Some(PathBuf::from("plugins/khata")));
+        assert!(!args.no_wire && !args.publish_config && args.version.is_none());
+
+        let missing = Cli::try_parse_from(["navree", "plugin:add"]).unwrap_err();
+        assert_eq!(
+            missing.kind(),
+            clap::error::ErrorKind::MissingRequiredArgument
+        );
+        assert_eq!(missing.exit_code(), 2);
+
+        let Command::PluginRemove(args) = parse(&["plugin:remove", "navree-plugin-khata"]) else {
+            panic!("expected plugin:remove");
+        };
+        assert_eq!(args.package, "navree-plugin-khata");
+
+        let Command::PluginList(args) = parse(&["plugin:list"]) else {
+            panic!("expected plugin:list");
+        };
+        assert!(!args.json);
+        let Command::PluginList(args) = parse(&["plugin:list", "--json"]) else {
+            panic!("expected plugin:list --json");
+        };
+        assert!(args.json);
+
+        let Command::MakePlugin(args) = parse(&["make:plugin", "khata"]) else {
+            panic!("expected make:plugin");
+        };
+        assert_eq!(
+            (args.name.as_str(), args.path.as_str(), args.wrap),
+            ("khata", "plugins", None)
+        );
+        let Command::MakePlugin(args) = parse(&[
+            "make:plugin",
+            "notices",
+            "--path",
+            "crates",
+            "--wrap",
+            "reqwest",
+        ]) else {
+            panic!("expected make:plugin with flags");
+        };
+        assert_eq!(args.name, "notices");
+        assert_eq!(args.path, "crates");
+        assert_eq!(args.wrap.as_deref(), Some("reqwest"));
+
+        let Command::MakeComponent(args) = parse(&["make:component", "drop_point"]) else {
+            panic!("expected make:component");
+        };
+        assert_eq!(
+            (args.name.as_str(), args.path.as_str()),
+            ("drop_point", ".")
+        );
+        assert!(!args.script && !args.sheet && !args.field && !args.dry_run && !args.force);
+
+        let Command::MakeComponent(args) = parse(&[
+            "make:component",
+            "drop_point",
+            "--path",
+            "plugins/geo",
+            "--script",
+            "--sheet",
+            "--field",
+            "--dry-run",
+            "--force",
+        ]) else {
+            panic!("expected make:component with flags");
+        };
+        assert_eq!(
+            (args.name.as_str(), args.path.as_str()),
+            ("drop_point", "plugins/geo")
+        );
+        assert!(args.script && args.sheet && args.field && args.dry_run && args.force);
+    }
+
+    #[test]
+    fn the_plugin_app_commands_are_still_forwarded() {
+        for (args, expected) in [
+            (&["plugins", "--json"][..], &["plugins", "--json"][..]),
+            (
+                &["plugin:publish", "announcements", "--tag", "views"],
+                &["plugin:publish", "announcements", "--tag", "views"],
+            ),
+        ] {
+            let Command::Forward(forwarded) = parse(args) else {
+                panic!("{args:?} must be forwarded");
+            };
+            assert_eq!(forwarded, expected);
+        }
+    }
+
+    #[test]
+    fn the_help_lists_the_plugin_commands() {
+        let help = Cli::try_parse_from(["navree", "--help"])
+            .unwrap_err()
+            .to_string();
+        for command in [
+            "plugin:add",
+            "plugin:remove",
+            "plugin:list",
+            "make:plugin",
+            "make:component",
+        ] {
+            assert!(
+                help.contains(command),
+                "{command} missing from help:\n{help}"
+            );
         }
     }
 }

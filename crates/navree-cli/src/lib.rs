@@ -23,6 +23,8 @@
 //! | `navree make:model <module> <Name> [--migration --factory --seeder --controller --policy \| --all]` | An ORM model with the companions asked for, which refer to each other ([`make::make_model`]) |
 //! | `navree make:resource <module> <Model> [--path src/modules]` | A Helm admin-panel resource for a navree-orm model, registered with its module ([`resource::make_resource`]) |
 //! | `navree make:page <Name> [--module <module>] [--public]`, `make:form <Name>`, `make:table <Name>` (each with `--dry-run` and `--force`) | A Navree UI page (a controller and its test), a form struct with its handlers, or a data table row with its handler ([`make_ui::make_ui_item`]) |
+//! | `navree make:plugin NAME [--path DIR] [--wrap CRATE]` | A community plugin crate with its manifest, a module that names itself, its options and a boot test ([`plugin::make::make_plugin`]) |
+//! | `navree make:component NAME [--path DIR] [--script] [--sheet] [--field] [--dry-run] [--force]` | A Navree UI component of your own, with its script, stylesheet and tests ([`plugin::component::make_component`]) |
 //! | `navree dev [-- <serve args>]` | Build, serve, rebuild and restart on change ([`dev`]) |
 //! | `navree check [--graph] [--json] [--only <checks>]` | The module graph, then the app's conformity checks ([`check`]) |
 //! | `navree gate [--only <steps>] [--skip <steps>] [--keep-going] [--no-lock]` | fmt, clippy, tests, `navree check`, `config:check` and the front end's typecheck, tests and build, under a machine lock with per-step times ([`gate`]) |
@@ -35,6 +37,9 @@
 //! | `navree openapi:client [--out web/src/lib/api] [--input <file>]` | The OpenAPI document and the front end's `schema.d.ts` for `@navree/client` ([`openapi_client`]) |
 //! | `navree native:coverage [--platform <p>] [--form <f>] [--json] [--fail-on web\|layout] [--features <f>] [--file <path>]` | Each page route of the app asked as a native client: its grade and what is missing, with totals; a gate for a store build (the app needs the native preview; [`native_coverage`]) |
 //! | `navree native:doctor [--platform ios\|android\|all] [--url <site>] [--json]` | What a native build needs, each item ready, missing or not applicable, with the next step for what is missing: the preview feature, the `auth.apps`, passkey, push and sign-in settings, the Android and Apple toolchains ([`native_doctor`]) |
+//! | `navree plugin:add [PACKAGE] [--version REQ] [--path DIR] [--no-wire] [--publish-config]` | Install a plugin, wire its module, and write its suggested grants and page sources ([`plugin::add::run`]) |
+//! | `navree plugin:remove PACKAGE` | Unwire a plugin and remove its crate, keeping its configuration, grants and data ([`plugin::remove::run`]) |
+//! | `navree plugin:list [--json]` | List the plugins this app depends on and whether each is wired ([`plugin::list::run`]) |
 //! | `navree <anything else> [args...]` | `cargo run --quiet -- <command> [args...]` in the app ([`forward`]) |
 //!
 //! When the app has a `dock.toml`, `navree dev` and forwarded commands pass

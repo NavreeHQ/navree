@@ -25,6 +25,12 @@ use crate::new_app::{
     write_harbor_key,
 };
 use crate::openapi_client;
+use crate::plugin::add::{self, AddOptions};
+use crate::plugin::component::{ComponentOptions, ComponentReport, make_component};
+use crate::plugin::files::find_app;
+use crate::plugin::list::{self, ListOptions};
+use crate::plugin::make::{MakePluginOptions, make_plugin};
+use crate::plugin::remove::{self, RemoveOptions};
 use crate::project::{project_root, run_root};
 use crate::resource::make_resource;
 
@@ -72,6 +78,31 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
         Command::MakePage(args) => make_ui(cwd, MakeKind::Page, &args.item, args.public),
         Command::MakeForm(args) => make_ui(cwd, MakeKind::Form, args, false),
         Command::MakeTable(args) => make_ui(cwd, MakeKind::Table, args, false),
+        Command::MakePlugin(args) => {
+            let name = Name::parse("plugin", &args.name)?;
+            let options = MakePluginOptions {
+                name,
+                path: args.path.clone(),
+                wrap: args.wrap.clone(),
+            };
+            let report = make_plugin(cwd, &options)?;
+            finish(cwd, &report);
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::MakeComponent(args) => {
+            let options = ComponentOptions {
+                name: args.name.clone(),
+                path: args.path.clone(),
+                script: args.script,
+                sheet: args.sheet,
+                field: args.field,
+                dry_run: args.dry_run,
+                force: args.force,
+            };
+            let report = make_component(cwd, &options)?;
+            finish_component(&report);
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Dev(args) => {
             let root = run_root_of(cwd)?;
             dev::run(
@@ -236,6 +267,35 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             };
             let ready = run_doctor(&root, &options, &SystemMachine, &mut std::io::stdout())?;
             Ok(exit_code(ready))
+        }
+        Command::PluginAdd(args) => {
+            let app_env = match find_app(cwd) {
+                Ok(roots) => dock::app_env(&roots.config)?,
+                Err(_) => Vec::new(),
+            };
+            let options = AddOptions {
+                package: args.package.clone(),
+                version: args.version.clone(),
+                path: args.path.clone(),
+                no_wire: args.no_wire,
+                publish_config: args.publish_config,
+                app_env,
+                process_env: std::env::vars().collect(),
+            };
+            add::run(cwd, &options, &mut ProcessRunner, &mut std::io::stdout())?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::PluginRemove(args) => {
+            let options = RemoveOptions {
+                package: args.package.clone(),
+            };
+            remove::run(cwd, &options, &mut ProcessRunner, &mut std::io::stdout())?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::PluginList(args) => {
+            let options = ListOptions { json: args.json };
+            list::run(cwd, &options, &mut ProcessRunner, &mut std::io::stdout())?;
+            Ok(ExitCode::SUCCESS)
         }
         Command::Forward(words) => {
             let Some((command, args)) = words.split_first() else {
@@ -451,6 +511,19 @@ fn finish_ui(root: &Path, report: &UiReport) {
     }
     for hint in &made.hints {
         println!("  next     {hint}");
+    }
+}
+
+/// Formats the generated Rust files of `make:component` and prints its lines,
+/// or with `--dry-run` prints the planned lines and file contents.
+fn finish_component(report: &ComponentReport) {
+    format_rust(&report.rust_files);
+    for line in &report.lines {
+        println!("{line}");
+    }
+    if let Some(files) = &report.dry_run_files {
+        println!("\nNothing was written (--dry-run). The files would be:\n");
+        print!("{files}");
     }
 }
 
