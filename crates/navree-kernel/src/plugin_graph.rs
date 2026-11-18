@@ -8,8 +8,8 @@ use crate::command::FRAMEWORK_COMMANDS;
 use crate::graph::{Graph, ModuleNode, ROOT};
 use crate::plugin::{
     APP_ONLY_PROVIDERS, FIRST_PARTY, MODEL_HOOK_KEY, PluginInfo, PublishTag, Publishable,
-    RESERVED_NAMESPACES, app_only_role, destination, is_first_party, is_namespace, module_path,
-    names_crate,
+    RESERVED_NAMESPACES, app_only_role, destination, is_first_party, is_framework_crate,
+    is_namespace, module_path, names_crate,
 };
 use crate::publish::{
     first_case_collision, first_file_and_folder, is_locale_path, is_safe_relative_path,
@@ -75,8 +75,10 @@ impl Graph {
     /// 9. which plugin each module acts for (the plugin it names; else the
     ///    plugin of its type's crate; else, for a generic module that only
     ///    modules acting for plugins import, one of their plugins, one that is
-    ///    not first-party before one that is), recorded for `acts_for` and
-    ///    `plugins`;
+    ///    not first-party before one that is; else, for a plain module of no
+    ///    plugin's crate and of no framework crate that only modules acting for
+    ///    plugins that are not first-party import, the first of their plugins),
+    ///    recorded for `acts_for` and `plugins`;
     /// 10. a configured instance (`for_root`, `from_config`) imported by a
     ///     module that acts for a plugin that is not first-party, of a module
     ///     whose type does not name the plugin's crate:
@@ -434,9 +436,13 @@ impl Graph {
     /// it is the one its id gives. Else, for a module with generic arguments
     /// whose direct importers all act for plugins: the one of theirs whose
     /// crate its arguments name, else the first of them in import order that is
-    /// not first-party, else the first. When its type path gives a first-party
-    /// plugin and its importers one that is not, it acts for the one that is
-    /// not. The root acts for nothing.
+    /// not first-party, else the first. Else, for a module that names no
+    /// plugin, has no generic arguments, whose own type is in no plugin's crate
+    /// and in no framework crate, and whose direct importers all act for
+    /// plugins that are not first-party: the first of those plugins in import
+    /// order. When its type path gives a first-party plugin and its importers
+    /// one that is not, it acts for the one that is not. The root acts for
+    /// nothing.
     fn attribution(&self, groups: &[PluginGroup]) -> Vec<Option<usize>> {
         let mut acts_for: Vec<Option<usize>> = vec![None; self.modules.len()];
         if groups.is_empty() {
@@ -470,26 +476,37 @@ impl Graph {
             let own = self.modules[m].type_name;
             let id = self.modules[m].id.type_name();
             let by_type = plugin_by_type(own, id, &plugins).map(|index| groups[index].first);
-            // Some only when every direct importer acts for a plugin.
-            let generic = own.contains('<') || id.contains('<');
-            let importing: Option<Vec<usize>> = if generic && !importers[m].is_empty() {
-                importers[m].iter().map(|&i| acts_for[i]).collect()
+            let generic = module_path(own).contains('<') || module_path(id).contains('<');
+            let by_importers = if generic && !importers[m].is_empty() {
+                // Some only when every direct importer acts for a plugin.
+                let importing: Option<Vec<usize>> =
+                    importers[m].iter().map(|&i| acts_for[i]).collect();
+                importing.and_then(|firsts| {
+                    firsts
+                        .iter()
+                        .copied()
+                        .find(|&f| {
+                            group(f).is_some_and(|group| {
+                                names_crate(own, group.crate_name)
+                                    || (!group.first_party && names_crate(id, group.crate_name))
+                            })
+                        })
+                        .or_else(|| firsts.iter().copied().find(|&f| !first_party(f)))
+                        .or_else(|| firsts.first().copied())
+                })
+            } else if !generic
+                && self.modules[m].plugin.is_none()
+                && by_type.is_none()
+                && !is_framework_crate(own)
+                && !importers[m].is_empty()
+                && importers[m]
+                    .iter()
+                    .all(|&i| acts_for[i].is_some_and(|f| !first_party(f)))
+            {
+                acts_for[importers[m][0]]
             } else {
                 None
             };
-            let by_importers = importing.and_then(|firsts| {
-                firsts
-                    .iter()
-                    .copied()
-                    .find(|&f| {
-                        group(f).is_some_and(|group| {
-                            names_crate(own, group.crate_name)
-                                || (!group.first_party && names_crate(id, group.crate_name))
-                        })
-                    })
-                    .or_else(|| firsts.iter().copied().find(|&f| !first_party(f)))
-                    .or_else(|| firsts.first().copied())
-            });
             acts_for[m] = match (by_type, by_importers) {
                 (Some(by_type), Some(by_importers))
                     if first_party(by_type) && !first_party(by_importers) =>

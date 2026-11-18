@@ -1456,3 +1456,221 @@ fn a_module_typed_as_a_trait_object_acts_for_the_plugin_of_the_traits_crate() {
         "plugin `navree-plugin-parts` registers the command `check` in `part` (a module of the plugin's crate `plugins::navree_plugin_parts`), a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise"
     );
 }
+
+// A plugin's second crate.
+
+/// A second crate that names no plugin, such as a plugin's `-core` crate.
+mod navree_plugin_khata_core {
+    use navree_kernel::{CommandSpec, Module, ModuleBuilder};
+
+    /// A note contributed by the second crate's module.
+    pub struct CoreEntry;
+
+    /// A plain module of the second crate: it names no plugin and registers what its function
+    /// adds.
+    pub struct KhataCoreModule(pub fn(&mut ModuleBuilder));
+
+    impl Module for KhataCoreModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            (self.0)(m);
+        }
+    }
+
+    /// A deeper plain module of the second crate, imported only by `KhataCoreModule`.
+    pub struct KhataStoreModule;
+
+    impl Module for KhataStoreModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            let sync = CommandSpec::new("khata:sync", "Sync ledgers", |_, _| async { Ok(()) });
+            m.contribute(CoreEntry).command(sync);
+        }
+    }
+}
+
+/// A module of the app that imports the second crate's module.
+struct ShopImportsCore;
+
+impl Module for ShopImportsCore {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.import(navree_plugin_khata_core::KhataCoreModule(|_| {}));
+    }
+}
+
+#[tokio::test]
+async fn a_module_of_a_second_crate_that_only_a_plugins_modules_import_acts_for_that_plugin() {
+    use navree_kernel::__private::{is_app_module, is_community_plugin};
+    use navree_plugin_khata::KhataModule;
+    use navree_plugin_khata_core::{KhataCoreModule, KhataStoreModule};
+
+    let app = Navree::app()
+        .module(KhataModule(|m| {
+            m.import(KhataCoreModule(|m| {
+                m.import(KhataStoreModule);
+            }));
+        }))
+        .module(Outside)
+        .boot()
+        .await
+        .expect("boots");
+
+    let core = ModuleId::of::<KhataCoreModule>();
+    let store = ModuleId::of::<KhataStoreModule>();
+    assert_eq!(acting_for(&app, core), Some("navree-plugin-khata"));
+    assert_eq!(
+        acting_for(&app, store),
+        Some("navree-plugin-khata"),
+        "imported through the second crate's own module"
+    );
+    assert!(!is_app_module(app.ctx(), core));
+    assert!(!is_app_module(app.ctx(), store));
+    assert!(
+        !is_community_plugin(app.ctx(), core),
+        "it names no plugin itself"
+    );
+}
+
+#[tokio::test]
+async fn a_module_of_a_second_crate_that_the_app_imports_too_stays_the_apps() {
+    use navree_kernel::__private::is_app_module;
+    use navree_plugin_khata::KhataModule;
+    use navree_plugin_khata_core::KhataCoreModule;
+
+    let core = ModuleId::of::<KhataCoreModule>();
+    let khata = || {
+        KhataModule(|m| {
+            m.import(KhataCoreModule(|_| {}));
+        })
+    };
+
+    // Imported directly by the app's root module beside the plugin.
+    let app = Navree::app()
+        .module(khata())
+        .module(KhataCoreModule(|_| {}))
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, core), None);
+    assert!(is_app_module(app.ctx(), core));
+
+    // Imported by a module of the app, whether listed after or before the plugin.
+    for app in [
+        Navree::app().module(khata()).module(ShopImportsCore),
+        Navree::app().module(ShopImportsCore).module(khata()),
+    ] {
+        let app = app.boot().await.expect("boots");
+        assert_eq!(acting_for(&app, core), None);
+        assert!(is_app_module(app.ctx(), core));
+    }
+}
+
+#[tokio::test]
+async fn a_module_of_a_second_crate_imported_by_two_plugins_acts_for_the_first_of_them() {
+    use navree_plugin_khata::KhataModule;
+    use navree_plugin_khata_core::KhataCoreModule;
+    use navree_plugin_notices::NoticesModule;
+
+    let core = ModuleId::of::<KhataCoreModule>();
+    let notices = || {
+        NoticesModule(|m| {
+            m.import(KhataCoreModule(|_| {}));
+        })
+    };
+    let khata = || {
+        KhataModule(|m| {
+            m.import(KhataCoreModule(|_| {}));
+        })
+    };
+
+    let app = Navree::app()
+        .module(notices())
+        .module(khata())
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, core), Some("navree-plugin-notices"));
+
+    let app = Navree::app()
+        .module(khata())
+        .module(notices())
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(acting_for(&app, core), Some("navree-plugin-khata"));
+}
+
+#[test]
+fn a_second_crates_module_is_listed_under_its_plugin_and_held_to_its_rules() {
+    use navree_plugin_khata::KhataModule;
+    use navree_plugin_khata_core::{CoreEntry, KhataCoreModule, KhataStoreModule};
+
+    // Listed under the plugin in dependency order, with what it adds and registers.
+    let report = Navree::app()
+        .module(KhataModule(|m| {
+            m.import(KhataCoreModule(|m| {
+                m.import(KhataStoreModule).contribute(CoreEntry);
+            }));
+        }))
+        .plugin_report()
+        .expect("valid");
+    let [plugin] = report.plugins.as_slice() else {
+        panic!("one plugin: {report:?}")
+    };
+    assert_eq!(plugin.info.name, "navree-plugin-khata");
+    let ids: Vec<ModuleId> = plugin.modules.iter().map(|module| module.id).collect();
+    assert_eq!(
+        ids,
+        [
+            ModuleId::of::<KhataStoreModule>(),
+            ModuleId::of::<KhataCoreModule>(),
+            ModuleId::of::<KhataModule>(),
+        ]
+    );
+    assert_eq!(plugin.modules[0].commands, ["khata:sync"]);
+    assert_eq!(
+        plugin.modules[0].contributions,
+        [("plugins::navree_plugin_khata_core::CoreEntry", 1)]
+    );
+
+    // Held to the rules: configuring another crate's module, or taking a framework command's
+    // name, from the second crate is refused naming why it acts for the plugin.
+    assert_eq!(
+        errors(Navree::app().module(KhataModule(|m| {
+            m.import(KhataCoreModule(|m| {
+                m.import(Ledger::from_config());
+            }));
+        }))),
+        "plugin `navree-plugin-khata` configures the module `Ledger` in `KhataCoreModule` (only the plugin's modules import it) (for_root or from_config); only a module of the app configures a module of another crate: remove the plugin or update it to a version that imports `Ledger` without configuring it, and configure `Ledger` in a module of the app"
+    );
+    assert_eq!(
+        errors(Navree::app().module(KhataModule(|m| {
+            m.import(KhataCoreModule(|m| {
+                let check = CommandSpec::new("check", "The plugin's", |_, _| async { Ok(()) });
+                m.command(check);
+            }));
+        }))),
+        "plugin `navree-plugin-khata` registers the command `check` in `KhataCoreModule` (only the plugin's modules import it), a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise"
+    );
+}
+
+#[tokio::test]
+async fn a_framework_module_that_only_a_plugin_imports_acts_for_no_plugin() {
+    use navree_kernel::__private::{PlainModule, is_app_module};
+    use navree_plugin_khata::KhataModule;
+
+    let app = Navree::app()
+        .module(KhataModule(|m| {
+            m.import(PlainModule);
+        }))
+        .boot()
+        .await
+        .expect("boots");
+    let plain = ModuleId::of::<PlainModule>();
+    assert_eq!(acting_for(&app, plain), None);
+    assert!(is_app_module(app.ctx(), plain));
+    let report = app.ctx().plugins();
+    let [plugin] = report.plugins.as_slice() else {
+        panic!("one plugin")
+    };
+    let ids: Vec<ModuleId> = plugin.modules.iter().map(|module| module.id).collect();
+    assert_eq!(ids, [ModuleId::of::<KhataModule>()]);
+}

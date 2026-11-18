@@ -428,6 +428,99 @@ pub const FIRST_PARTY: &[(&str, &str)] = &[
     ("navree-workflows", "navree_workflows"),
 ];
 
+/// The library names of the framework's workspace crates, sorted: a module
+/// whose own type is in one of them and that names no plugin is a framework
+/// module, not a module of a plugin's second crate. Not public API; Navree's
+/// own crates and tests use it.
+pub const FRAMEWORK_CRATES: &[&str] = &[
+    "navree",
+    "navree_access",
+    "navree_ai",
+    "navree_api",
+    "navree_audit",
+    "navree_auth",
+    "navree_billing",
+    "navree_bounded",
+    "navree_browser",
+    "navree_cache",
+    "navree_cli",
+    "navree_config",
+    "navree_contracts",
+    "navree_crypto",
+    "navree_db",
+    "navree_directory",
+    "navree_dock",
+    "navree_documents",
+    "navree_domains",
+    "navree_events",
+    "navree_flags",
+    "navree_fleet",
+    "navree_glob",
+    "navree_graphql",
+    "navree_grpc",
+    "navree_harbor",
+    "navree_helm",
+    "navree_http",
+    "navree_http_client",
+    "navree_i18n",
+    "navree_integrations",
+    "navree_kernel",
+    "navree_lighthouse",
+    "navree_log",
+    "navree_logbook",
+    "navree_mail",
+    "navree_markdown",
+    "navree_mcp",
+    "navree_media",
+    "navree_micro",
+    "navree_mongo",
+    "navree_native",
+    "navree_native_core",
+    "navree_navigator",
+    "navree_notify",
+    "navree_oauth",
+    "navree_observe",
+    "navree_openapi",
+    "navree_orm",
+    "navree_pdf",
+    "navree_phone",
+    "navree_queue",
+    "navree_realtime",
+    "navree_redis",
+    "navree_schedule",
+    "navree_schema",
+    "navree_search",
+    "navree_session",
+    "navree_settings",
+    "navree_sheets",
+    "navree_social",
+    "navree_sso",
+    "navree_storage",
+    "navree_telemetry",
+    "navree_template",
+    "navree_template_peak",
+    "navree_testing",
+    "navree_time",
+    "navree_ui",
+    "navree_validation",
+    "navree_view",
+    "navree_webhooks",
+    "navree_workflows",
+    "navree_workspace",
+];
+
+/// Whether `type_name`, read through wrappers and trait objects
+/// ([`module_path`]) and up to its first angle bracket, is a path of one of
+/// [`FRAMEWORK_CRATES`].
+pub(crate) fn is_framework_crate(type_name: &str) -> bool {
+    let read = module_path(type_name);
+    let outer = read.split_once('<').map_or(read, |(outer, _)| outer);
+    let Some((krate, _)) = outer.split_once("::") else {
+        return false;
+    };
+    FRAMEWORK_CRATES.binary_search(&krate).is_ok()
+}
+
 /// The namespaces the framework keeps for itself, sorted: a plugin that is
 /// not first-party may not use one. They are the first words of the
 /// framework's configuration sections, of its permission prefixes and of the
@@ -910,7 +1003,21 @@ mod tests {
         assert!(FIRST_PARTY.windows(2).all(|w| w[0].0 < w[1].0));
         for (package, krate) in FIRST_PARTY {
             assert_eq!(package.replace('-', "_"), *krate);
+            assert!(FRAMEWORK_CRATES.binary_search(krate).is_ok(), "{krate}");
         }
+        assert_eq!(FRAMEWORK_CRATES.len(), 74);
+        assert!(FRAMEWORK_CRATES.windows(2).all(|w| w[0] < w[1]));
+        assert!(is_framework_crate("navree_kernel::__private::PlainModule"));
+        assert!(is_framework_crate("&navree_ui::module::UiModule"));
+        assert!(is_framework_crate(
+            "alloc::boxed::Box<navree_events::EventsModule>"
+        ));
+        assert!(!is_framework_crate(
+            "alloc::boxed::Box<dyn navree_kernel::module::Module>"
+        ));
+        assert!(!is_framework_crate(
+            "navree_plugin_khata_core::KhataCoreModule"
+        ));
         assert_eq!(RESERVED_NAMESPACES.len(), 87);
         assert!(RESERVED_NAMESPACES.windows(2).all(|w| w[0] < w[1]));
         assert!(RESERVED_NAMESPACES.iter().all(|ns| is_namespace(ns)));

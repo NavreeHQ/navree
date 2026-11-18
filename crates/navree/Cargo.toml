@@ -991,6 +991,10 @@ name = "plugin_grants"
 required-features = ["full", "sqlite"]
 
 [[test]]
+name = "plugin_second_crate"
+required-features = ["access", "db", "http", "sqlite", "testing", "ui"]
+
+[[test]]
 name = "plugins_docs"
 required-features = ["access", "cache", "db", "helm", "http", "queue", "sqlite", "storage", "testing", "ui", "view", "workspace"]
 

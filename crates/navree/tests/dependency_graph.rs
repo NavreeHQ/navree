@@ -1502,3 +1502,41 @@ fn unknown_navree_crates_are_reported() {
         "{found:?}"
     );
 }
+
+#[test]
+fn the_kernels_framework_crates_are_the_workspaces_library_names() {
+    let metadata = workspace_metadata();
+    let mut libraries: Vec<String> = Vec::new();
+    for package in packages(&metadata) {
+        let name = str_field(package, "name");
+        let Some(rule) = find_rule(name) else {
+            continue;
+        };
+        if rule.layer > 8 {
+            continue;
+        }
+        let targets = package["targets"]
+            .as_array()
+            .expect("cargo metadata package has `targets`");
+        for target in targets {
+            let kinds = target["kind"]
+                .as_array()
+                .expect("cargo metadata target has `kind`");
+            if kinds
+                .iter()
+                .any(|kind| matches!(kind.as_str(), Some("lib" | "rlib")))
+            {
+                libraries.push(str_field(target, "name").replace('-', "_"));
+            }
+        }
+    }
+    libraries.sort();
+    libraries.dedup();
+    let listed = navree::kernel::__private::FRAMEWORK_CRATES;
+    assert!(listed.windows(2).all(|pair| pair[0] < pair[1]));
+    assert!(!listed.contains(&"navree_plugin_geo"));
+    assert_eq!(
+        listed,
+        libraries.iter().map(String::as_str).collect::<Vec<_>>()
+    );
+}
