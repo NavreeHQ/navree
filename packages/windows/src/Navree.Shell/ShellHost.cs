@@ -101,8 +101,8 @@ public sealed partial class ShellHost : IDisposable
                 OnWindow: OnUi,
                 More: () => moreWipeSteps,
 
-                // The first person named since a sign-out, or since a start that kept nothing of a person: a reminder that waits and
-                // is nobody's is theirs from here on.
+                // A person became the one signed in with no change of person (the first since a sign-out, or the one from before after
+                // nobody was): a reminder that waits and is nobody's is theirs from here on.
                 GiveWaitingTo: mark => Place?.GiveWaitingTo(mark)),
             ReportProblem);
 

@@ -18,8 +18,9 @@ namespace Navree.Platform;
 /// <param name="OnWindow">Runs a step on the window's thread and completes when it has run there.</param>
 /// <param name="More">What else the shell keeps of a person, as steps: asked for when a change begins.</param>
 /// <param name="GiveWaitingTo">
-/// No part of a change: gives what waits and is nobody's (a reminder asked for while nobody had been named) to the person whose mark it
-/// is given, here and now. It is called when the first person since a sign-out, or since a start that kept nothing of a person, is named.
+/// No part of a change: gives what waits and is nobody's (a reminder asked for while nobody was signed in) to the person whose mark it
+/// is given, here and now. It is called when a person becomes the one signed in with no change of person: the first person since a
+/// sign-out or since a start that kept nothing of a person, and the person named before when they are signed in again after nobody was.
 /// </param>
 public sealed record PersonChangeParts(
     Func<string> MoveWebOn,
@@ -105,7 +106,8 @@ public sealed class PersonChange
     /// The mark of the person who is signed in now, by the state heard last; null while that state names nobody, while it is that of a
     /// person who is signing out, while a cover is up over the app (<see cref="WayInIsUp"/>), after a cover until the core has given the
     /// app's part anew, and before any state was heard. What waits for a person's eyes (a reminder) is shown only while this is their
-    /// mark.
+    /// mark, and what is asked for is theirs only while it is: asked for while this is null, it is nobody's, until a person becomes
+    /// the one signed in with no change of person and is given it.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -151,6 +153,7 @@ public sealed class PersonChange
     {
         ArgumentNullException.ThrowIfNull(state);
         bool covered = Covered(state);
+        bool nobodyWasHere = Here is null;
         if (gate.OfSomeoneLeaving(stateMark) || state.App?.User is not Models.User user)
         {
             // Nobody is signed in by this state, though what is kept is still kept for the person named before.
@@ -184,11 +187,13 @@ public sealed class PersonChange
         }
         else
         {
-            if (heard == PersonHeard.First)
+            if (heard == PersonHeard.First || (nobodyWasHere && Here is not null))
             {
-                // What waits and is nobody's was asked for since the last sign-out, or since a start that kept nothing of a person: by
-                // this person, between their sign-in and the shell's answer that names them, or by a visitor before them. It is
-                // theirs from here on, and shown to nobody else.
+                // This person is the first named, or is the one signed in from this state on and nobody was before it. What waits and
+                // is nobody's was asked for while nobody was signed in: since the last sign-out or a start that kept nothing of a
+                // person; or under a cover, after one before the shell had answered, or while the state named nobody. Most often it
+                // was this person who asked, between their sign-in and the shell's answer that names them. It is theirs from here
+                // on, and shown to nobody else. (When the state names another person instead, the change takes it away with the rest.)
                 try
                 {
                     parts.GiveWaitingTo(mark);

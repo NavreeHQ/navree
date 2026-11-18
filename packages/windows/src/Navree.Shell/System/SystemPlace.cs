@@ -314,10 +314,12 @@ public sealed class SystemPlace : IDisposable
             return;
         }
 
-        // It is the person's what is kept is kept for, and shown only while they are signed in; asked for while nobody has been named
-        // since the start or the last sign-out, it is nobody's, until the first person is named and it becomes theirs (GiveWaitingTo).
+        // It is the person's who is signed in now, and shown only while they are. Asked for while nobody is signed in, it is nobody's:
+        // not the person's what is kept is kept for, since whoever asks under the sign-in, or after it before the shell has said who
+        // signed in, may be somebody else. It is nobody's until a person becomes the one signed in with no change of person, and is
+        // given it (GiveWaitingTo); a change of person takes it away with the rest.
         PendingNotification? plan = NotifyRules.Plan(notify, DateTimeOffset.Now, TimeZoneInfo.Local);
-        if (plan is null || !schedule.Add(plan with { Owner = host.KeptFor }))
+        if (plan is null || !schedule.Add(plan with { Owner = host.PersonHere }))
         {
             Say("a notification was asked for at a time this build does not schedule, or too many wait");
             return;
@@ -328,9 +330,10 @@ public sealed class SystemPlace : IDisposable
     }
 
     /// <summary>
-    /// The first person since a sign-out, or since a start that kept nothing of a person, was named as signed in: every notification that
-    /// waits and is nobody's is theirs from now on (one they asked for between their sign-in and the shell's answer that names them, or a
-    /// visitor's before them). It is shown only while they are signed in, and no longer to whoever is there.
+    /// A person became the one signed in with no change of person: the first since a sign-out or since a start that kept nothing of a
+    /// person, or the person named before, signed in again after nobody was. Every notification that waits and is nobody's is theirs from
+    /// now on (one they asked for between their sign-in and the shell's answer that names them, or a visitor's before them). It is shown
+    /// only while they are signed in, and no longer to whoever is there.
     /// </summary>
     /// <remarks>
     /// A host that makes its place only after the first person was named misses this call, and loses nothing by it: <see cref="Start"/>
