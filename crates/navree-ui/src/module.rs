@@ -134,6 +134,9 @@ pub(crate) struct UiGate(
 fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     m.global();
     m.error_pages(Renderer);
+    m.contribute(navree_http::__private::AccessDeclarations::new(
+        crate::shell::links::declared_access,
+    ));
     // The `ui` section is read by the factory below (an app need not have
     // `ConfigModule`), so it is registered here without a provider.
     m.config_section::<UiOptions>();

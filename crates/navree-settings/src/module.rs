@@ -137,6 +137,9 @@ fn register(m: &mut ModuleBuilder, options: Option<SettingsOptions>) {
         None => m.config::<SettingsOptions>(),
     };
     m.exports::<SettingsOptions>()
+        .contribute(navree_http::__private::AccessDeclarations::new(
+            declared_settings_access,
+        ))
         .factory(Factory::<SettingsRegistry>::new(|r: Resolver| async move {
             let registrations = r.app().contributions::<SettingsRegistration>();
             let registry = SettingsRegistry::new(
@@ -226,6 +229,33 @@ impl ModuleBuilderSettingsExt for ModuleBuilder {
     fn settings<T: SettingsGroup>(&mut self) -> &mut Self {
         self.contribute(SettingsRegistration(SettingsDefinition::of::<T>()))
     }
+}
+
+/// The permissions declared by every settings group in `ctx`, for the boot
+/// check against plugin namespaces.
+async fn declared_settings_access(
+    ctx: AppContext,
+) -> Result<Vec<navree_http::__private::DeclaredAccess>, BoxError> {
+    let mut declared = Vec::new();
+    for contributed in ctx.contributions::<SettingsRegistration>() {
+        let def = &contributed.value.0;
+        let required: Vec<&'static str> = def
+            .permission
+            .into_iter()
+            .chain(def.read_permission)
+            .collect();
+        if !required.is_empty() {
+            declared.push(
+                navree_http::__private::DeclaredAccess::value_permissions(
+                    "settings group",
+                    def.key,
+                    required,
+                )
+                .in_module(contributed.module.id, contributed.module.name),
+            );
+        }
+    }
+    Ok(declared)
 }
 
 /// Keeps stored values in step with workspaces and organizations: deletes

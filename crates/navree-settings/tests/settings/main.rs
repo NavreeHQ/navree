@@ -11,6 +11,7 @@ mod fake;
 mod http;
 mod module;
 mod notify;
+mod plugins;
 mod resolution;
 mod servers;
 mod store;

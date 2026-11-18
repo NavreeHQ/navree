@@ -9,6 +9,7 @@ mod flow;
 #[cfg(feature = "i18n")]
 mod i18n;
 mod imports;
+mod plugins;
 mod servers;
 mod support;
 mod xlsx;

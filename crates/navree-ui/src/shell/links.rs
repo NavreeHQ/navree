@@ -108,6 +108,27 @@ pub(crate) fn check(ctx: &AppContext) -> Result<Links, String> {
     Ok(Links(links))
 }
 
+/// The access declarations of every sidebar link added with `m.nav_item`, for
+/// the boot check against plugin namespaces.
+pub(crate) async fn declared_access(
+    ctx: AppContext,
+) -> Result<Vec<navree_http::__private::DeclaredAccess>, navree_kernel::BoxError> {
+    let mut declared = Vec::new();
+    for contributed in ctx.contributions::<ShellNavItem>() {
+        if let Some(permission) = contributed.value.permission {
+            declared.push(
+                navree_http::__private::DeclaredAccess::value_permission(
+                    "sidebar link",
+                    contributed.value.label.as_ref(),
+                    permission,
+                )
+                .in_module(contributed.module.id, contributed.module.name),
+            );
+        }
+    }
+    Ok(declared)
+}
+
 /// What [`visible`] decided for a request, kept in that request's extensions only.
 #[derive(Clone)]
 struct Visible(Arc<[usize]>);

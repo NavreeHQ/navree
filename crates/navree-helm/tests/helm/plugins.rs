@@ -788,3 +788,103 @@ async fn a_plugins_template_hook_cannot_turn_escaping_off_beside_a_card() {
     );
     assert!(!html.contains("<script>alert(1)"), "{html}");
 }
+
+#[tokio::test]
+async fn a_helm_link_or_card_that_requires_such_a_permission_fails_the_boot() {
+    use navree_access::{AccessModule, Subject};
+
+    struct PrettyBanner;
+
+    impl Subject for PrettyBanner {
+        const SUBJECT: &'static str = "pretty.Banner";
+        const PERMISSION_PREFIX: &'static str = "pretty.banners";
+    }
+
+    struct AppHelmLink;
+
+    impl Module for AppHelmLink {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.helm_nav(HelmLink::new("Pretty banners", "/banners").can("read", "pretty.Banner"));
+        }
+    }
+
+    struct AppHelmCard;
+
+    impl Module for AppHelmCard {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.templates(&[("admin/widgets/banners.html", "<p>Banners</p>")])
+                .helm_widget(
+                    HelmWidget::new("pretty-banners", "Pretty banners")
+                        .template("admin/widgets/banners")
+                        .can("read", "pretty.Banner"),
+                );
+        }
+    }
+
+    struct AppHelmPage;
+
+    impl Module for AppHelmPage {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.templates(&[("admin/banners.html", "<p>Banners</p>")])
+                .helm_page(
+                    HelmPage::new("pretty-banners", "Pretty banners")
+                        .template("admin/banners")
+                        .can("read", "pretty.Banner"),
+                );
+        }
+    }
+
+    // Link, card and custom page checking `pretty.Banner` when `navree-plugin-pretty` registers
+    // no such subject: each fails the boot naming the Helm item and its module.
+    let link_error = boot_error(
+        builder()
+            .module(ViewModule::for_root(ViewOptions::default()))
+            .module(PrettyPanel(|_| {}))
+            .module(AppHelmLink),
+    )
+    .await;
+    let expected_link = "plugin `navree-plugin-pretty` uses the namespace `pretty`, the first word of the subject `pretty.Banner` that the Helm link `Pretty banners` of `AppHelmLink` checks, and the plugin registers no subject of that name; a plugin's policies decide the names under its namespace, so they would decide who may use it: check a subject the plugin registers, or name the app's subject under another word";
+    assert!(
+        link_error.contains(expected_link),
+        "expected `{expected_link}` in:\n{link_error}"
+    );
+
+    let card_error = boot_error(
+        builder()
+            .module(ViewModule::for_root(ViewOptions::default()))
+            .module(PrettyPanel(|_| {}))
+            .module(AppHelmCard),
+    )
+    .await;
+    let expected_card = "plugin `navree-plugin-pretty` uses the namespace `pretty`, the first word of the subject `pretty.Banner` that the Helm card `pretty-banners` of `AppHelmCard` checks, and the plugin registers no subject of that name; a plugin's policies decide the names under its namespace, so they would decide who may use it: check a subject the plugin registers, or name the app's subject under another word";
+    assert!(
+        card_error.contains(expected_card),
+        "expected `{expected_card}` in:\n{card_error}"
+    );
+
+    let page_error = boot_error(
+        builder()
+            .module(ViewModule::for_root(ViewOptions::default()))
+            .module(PrettyPanel(|_| {}))
+            .module(AppHelmPage),
+    )
+    .await;
+    let expected_page = "plugin `navree-plugin-pretty` uses the namespace `pretty`, the first word of the subject `pretty.Banner` that the Helm page `pretty-banners` of `AppHelmPage` checks, and the plugin registers no subject of that name; a plugin's policies decide the names under its namespace, so they would decide who may use it: check a subject the plugin registers, or name the app's subject under another word";
+    assert!(
+        page_error.contains(expected_page),
+        "expected `{expected_page}` in:\n{page_error}"
+    );
+
+    // Once the plugin registers `pretty.Banner`, all three boot cleanly.
+    let app = builder()
+        .module(ViewModule::for_root(ViewOptions::default()))
+        .module(PrettyPanel(|m| {
+            m.import(AccessModule::for_subject::<PrettyBanner>());
+        }))
+        .module(AppHelmLink)
+        .module(AppHelmCard)
+        .module(AppHelmPage)
+        .build()
+        .await;
+    app.shutdown().await.unwrap();
+}

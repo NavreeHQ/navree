@@ -828,3 +828,43 @@ async fn a_plugins_error_shell_fails_the_boot() {
         panic!("{error}");
     }
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_sidebar_link_declares_the_permission_it_requires_with_its_module() {
+    struct KhataNav;
+
+    impl Module for KhataNav {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.permissions(&[Permission::new("khata.view", "View Ludhiana ledgers")])
+                .nav_item(ShellNavItem::new("Ledgers", "/ledgers").permission("khata.view"))
+                .nav_item(ShellNavItem::new("Open notice", "/open-notice"));
+        }
+    }
+
+    let app = builder(Shell::new("Kesar").contributed())
+        .module(KhataNav)
+        .build()
+        .await;
+    let declared = navree_http::__private::declared_access(app.ctx())
+        .await
+        .expect("declared access");
+    let links: Vec<(&str, &str, &[String])> = declared
+        .iter()
+        .filter(|entry| entry.what.starts_with("the sidebar link "))
+        .map(|entry| {
+            (
+                entry.what.as_str(),
+                entry.module_name,
+                entry.access.permissions.as_slice(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        links,
+        vec![(
+            "the sidebar link `Ledgers`",
+            "KhataNav",
+            &["khata.view".to_owned()][..],
+        )]
+    );
+}

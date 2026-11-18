@@ -110,6 +110,9 @@ fn register(m: &mut ModuleBuilder, options: Option<HelmOptions>) {
         .contribute(navree_ui::UiNeed::when(
             |_ctx: AppContext| async move { true },
         ))
+        .contribute(navree_http::__private::AccessDeclarations::new(
+            crate::plugin::declared_access,
+        ))
         .factory(
             Factory::<Core>::new(|r: Resolver| async move {
                 let options = r.get::<HelmOptions>().await?;

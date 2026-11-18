@@ -195,7 +195,35 @@ pub trait ModuleBuilderAiExt {
 
 impl ModuleBuilderAiExt for ModuleBuilder {
     fn agent<A: Agent>(&mut self) -> &mut Self {
-        self.provider::<A>()
+        self.provider::<A>();
+        for tool in A::tool_specs() {
+            let owner = format!("{}.{}", A::NAME, tool.name);
+            let mut required = Vec::new();
+            for rule in tool.access {
+                match rule {
+                    crate::agent::ToolAccess::Permissions(list) => {
+                        required.extend(list.into_iter().map(str::to_owned));
+                    }
+                    crate::agent::ToolAccess::Can { action, subject } => {
+                        self.contribute(navree_http::__private::DeclaredAccess::value_can(
+                            "agent tool",
+                            &owner,
+                            action,
+                            subject,
+                        ));
+                    }
+                    crate::agent::ToolAccess::Roles(_) => {}
+                }
+            }
+            if !required.is_empty() {
+                self.contribute(navree_http::__private::DeclaredAccess::value_permissions(
+                    "agent tool",
+                    owner,
+                    required,
+                ));
+            }
+        }
+        self
     }
 
     fn vector_collection(&mut self, collection: VectorCollection) -> &mut Self {

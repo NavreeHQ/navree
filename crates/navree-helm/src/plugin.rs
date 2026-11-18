@@ -225,6 +225,54 @@ pub(crate) struct WidgetRegistration {
     pub(crate) module: ModuleId,
 }
 
+/// The `can` checks declared by every Helm link, card and custom page in `ctx`,
+/// for the boot check against plugin namespaces.
+pub(crate) async fn declared_access(
+    ctx: navree_kernel::AppContext,
+) -> Result<Vec<navree_http::__private::DeclaredAccess>, navree_kernel::BoxError> {
+    let mut declared = Vec::new();
+    for contributed in ctx.contributions::<LinkRegistration>() {
+        if let Some((action, subject)) = &contributed.value.link.can {
+            declared.push(
+                navree_http::__private::DeclaredAccess::value_can(
+                    "Helm link",
+                    &contributed.value.link.label,
+                    action,
+                    subject,
+                )
+                .in_module(contributed.module.id, contributed.module.name),
+            );
+        }
+    }
+    for contributed in ctx.contributions::<WidgetRegistration>() {
+        if let Some((action, subject)) = &contributed.value.widget.can {
+            declared.push(
+                navree_http::__private::DeclaredAccess::value_can(
+                    "Helm card",
+                    &contributed.value.widget.key,
+                    action,
+                    subject,
+                )
+                .in_module(contributed.module.id, contributed.module.name),
+            );
+        }
+    }
+    for contributed in ctx.contributions::<crate::page::PageRegistration>() {
+        if let Some((action, subject)) = &contributed.value.page.can {
+            declared.push(
+                navree_http::__private::DeclaredAccess::value_can(
+                    "Helm page",
+                    &contributed.value.page.slug,
+                    action,
+                    subject,
+                )
+                .in_module(contributed.module.id, contributed.module.name),
+            );
+        }
+    }
+    Ok(declared)
+}
+
 /// The name a card's template `name` is rendered under, one navree-view always escapes as
 /// HTML: `name` when its last segment ends in `.html`, `name` with `.html` added when its
 /// last segment has no extension (so navree-view never picks a `.txt` file of that name),

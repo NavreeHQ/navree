@@ -489,3 +489,52 @@ async fn a_plugins_sink_added_by_the_app_receives_records_beside_the_audit_log()
 
     app.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_sidebar_link_that_requires_such_a_permission_fails_the_boot() {
+    use navree::plugin::Permission;
+    use navree::plugin::prelude::*;
+    use navree::ui::{Shell, ShellNavItem, UiModule};
+    use navree_plugin_roster::RosterModule;
+
+    struct AppRosterLink;
+
+    impl Module for AppRosterLink {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.value(Shell::new("Kesar").contributed())
+                .exports::<Shell>()
+                .nav_item(
+                    ShellNavItem::new("Roster audit", "/roster/audit").permission("roster.audit"),
+                );
+        }
+    }
+
+    // `roster.audit` is under `roster`, the namespace of `navree-plugin-roster`, and the plugin
+    // does not describe it: boot fails naming the sidebar link and its module.
+    let error = boot_error(
+        workspace_app()
+            .module(UiModule)
+            .module(RosterModule(|_| {}))
+            .module(AppRosterLink),
+    )
+    .await;
+    let expected = "plugin `navree-plugin-roster` uses the namespace `roster`, the first word of the permission `roster.audit` that the sidebar link `Roster audit` of `AppRosterLink` requires, and the plugin describes no permission of that name; a plugin's policies decide the names under its namespace, so they would decide who may use it: require a permission the plugin describes, or name the app's permission under another word";
+    assert!(
+        error.contains(expected),
+        "expected `{expected}` in:\n{error}"
+    );
+
+    // When the plugin describes `roster.audit`, the app's sidebar link may require it.
+    let app = workspace_app()
+        .module(UiModule)
+        .module(RosterModule(|m| {
+            m.permissions(&[Permission::new(
+                "roster.audit",
+                "Inspect the Ludhiana workspace roster",
+            )]);
+        }))
+        .module(AppRosterLink)
+        .build()
+        .await;
+    app.shutdown().await.unwrap();
+}

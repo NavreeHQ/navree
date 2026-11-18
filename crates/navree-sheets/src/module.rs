@@ -107,6 +107,9 @@ fn register(m: &mut ModuleBuilder, options: Option<SheetsOptions>) {
         None => m.config::<SheetsOptions>(),
     };
     m.exports::<SheetsOptions>()
+        .contribute(navree_http::__private::AccessDeclarations::new(
+            declared_sheets_access,
+        ))
         .factory(
             Factory::<Exports>::new(|r: Resolver| async move {
                 let options = r.get::<SheetsOptions>().await?;
@@ -174,4 +177,37 @@ impl ModuleBuilderSheetsExt for ModuleBuilder {
         }))
         .exports::<dyn HeaderTranslator>()
     }
+}
+
+/// The permissions declared by every sheet export and import in `ctx`, for the
+/// boot check against plugin namespaces.
+async fn declared_sheets_access(
+    ctx: navree_kernel::AppContext,
+) -> Result<Vec<navree_http::__private::DeclaredAccess>, navree_contracts::BoxError> {
+    let mut declared = Vec::new();
+    for contributed in ctx.contributions::<ExportRegistration>() {
+        if let Some(permission) = &contributed.value.permission {
+            declared.push(
+                navree_http::__private::DeclaredAccess::value_permission(
+                    "sheet export",
+                    contributed.value.name,
+                    permission.clone(),
+                )
+                .in_module(contributed.module.id, contributed.module.name),
+            );
+        }
+    }
+    for contributed in ctx.contributions::<ImporterRegistration>() {
+        if let Some(permission) = &contributed.value.permission {
+            declared.push(
+                navree_http::__private::DeclaredAccess::value_permission(
+                    "sheet import",
+                    contributed.value.name,
+                    permission.clone(),
+                )
+                .in_module(contributed.module.id, contributed.module.name),
+            );
+        }
+    }
+    Ok(declared)
 }

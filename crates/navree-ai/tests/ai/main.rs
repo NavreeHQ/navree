@@ -5,6 +5,7 @@ mod budget;
 mod docs_surface;
 mod failover;
 mod module;
+mod plugins;
 mod rag;
 mod redteam;
 mod retrieval;
