@@ -1,0 +1,184 @@
+{
+  "about": "One person keeps one key while the core takes them for the same person: made when their id was first seen and kept across an answer that lost it, or made from their name and email when first named without an id and kept once their id arrives.",
+  "steps": [
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "Ravneet is named by id: her key is made from it.",
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/app/user/key","is":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e"}
+      ]
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "store/orders.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"stream_open","stream":1,"url":"https://shop.example/broadcasting/stream?topics=orders,activity,stats,inventory","headers":[["accept","text/event-stream"],["x-navree-native","1"]]}
+        ]
+      }
+    },
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "An answer loses her id and still names Ravneet by name and email: her key and her screens stay.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/app/user/key","is":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e"},
+        {"at":"/screens/2/content/t","is":"native"}
+      ]
+    },
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "Her id comes back: her key is still the one.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/app/user/key","is":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e"},
+        {"at":"/screens/2/content/t","is":"native"}
+      ]
+    },
+    {
+      "note": "Another launch: she is first named without an id.",
+      "restart": true,
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/app/user/key","is":"46d4b2163f821b3c7b88c8ed419fa034677cc3588a21b4b4f0edf831f55b5d79"}
+      ]
+    },
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "The server starts sending her id: she keeps that key while taken for the same person.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "store/shell.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/app/user/key","is":"46d4b2163f821b3c7b88c8ed419fa034677cc3588a21b4b4f0edf831f55b5d79"},
+        {"at":"/destinations/0/stack","is":[1]}
+      ]
+    },
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "A rename under that id is still the same person, with the same key.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "made/shell-other.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/app/user/key","is":"46d4b2163f821b3c7b88c8ed419fa034677cc3588a21b4b4f0edf831f55b5d79"},
+        {"at":"/destinations/0/stack","is":[1]}
+      ]
+    }
+  ]
+}

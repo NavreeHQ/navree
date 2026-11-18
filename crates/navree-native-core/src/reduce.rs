@@ -369,6 +369,7 @@ impl Core {
                 self.push_forget();
                 self.inner.has_shell = false;
                 self.inner.user = None;
+                self.inner.person = None;
                 self.shell_settled();
                 // A snapshot that waited for the shell was the one who left's.
                 self.inner.restore = None;
@@ -1185,30 +1186,39 @@ impl Core {
             .device
             .and_then(|device| device.push)
             .map(|push| push.register.as_str().to_owned());
-        if self.inner.user != user {
+        let another_person = self.inner.has_shell
+            && matches!(
+                (&user, &self.inner.person),
+                (Some(new), Some(last)) if !last.same_as(new)
+            );
+        let left = self.inner.has_shell && self.inner.user.is_some() && user.is_none();
+        if another_person || self.inner.user != user {
             // What the server held of the device's token was the session's before.
             self.push_forget();
         }
-        if self.inner.has_shell && self.inner.user != user {
-            match (&user, &self.inner.person) {
-                // Another person: nothing of the one before stays, not even where they were.
-                (Some(new), Some(last)) if new != last => {
-                    self.wipe();
-                    self.forget_all();
+        if another_person {
+            // Another person: nothing of the one before stays, not even where they were.
+            self.wipe();
+            self.forget_all();
+        } else if left {
+            // Nobody is signed in any more: what the screens showed is
+            // thrown away. Their addresses stay, so whoever signs in as
+            // the same person is back where they were.
+            self.blank_all();
+            self.forget_all();
+        }
+        if let Some(who) = &user {
+            match &mut self.inner.person {
+                Some(last) if !another_person && last.same_as(who) => {
+                    if !from_device {
+                        last.note(who);
+                    }
                 }
-                // The same person again, or the first to sign in.
-                (Some(_), _) => {}
-                // Nobody is signed in any more: what the screens showed is
-                // thrown away. Their addresses stay, so whoever signs in as
-                // the same person is back where they were.
-                (None, _) => {
-                    self.blank_all();
-                    self.forget_all();
+                _ => {
+                    self.inner.person =
+                        Some(crate::cache::HeldPerson::from_shell(who, from_device));
                 }
             }
-        }
-        if user.is_some() {
-            self.inner.person.clone_from(&user);
         }
         self.inner.user = user;
         self.inner.has_shell = true;
@@ -1281,7 +1291,11 @@ impl Core {
         // them, by which a client tells one person from another. It is the
         // core's alone to write: the protocol's own type has no such field,
         // so whatever a server wrote there was not read.
-        let key = self.inner.user.as_ref().map(Who::key);
+        let key = self
+            .inner
+            .user
+            .as_ref()
+            .and_then(|_| self.inner.person.as_ref().map(|held| held.key.clone()));
         let signed_in = shell.user.zip(key).map(|(user, key)| AppUser { user, key });
         self.view.app = Some(App {
             name: shell.name,
@@ -6112,6 +6126,165 @@ mod tests {
         )
         .expect("the view state reads");
         assert_eq!(&read, core.view());
+    }
+
+    /// One person keeps the key made when their id was first seen, across an
+    /// answer that loses their id and when the id comes back.
+    #[test]
+    fn a_person_keeps_one_key_when_an_answer_loses_their_id_and_when_it_comes_back() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        let hers = include_str!("../transcripts/fixtures/store/shell.json");
+        let renamed = include_str!("../transcripts/fixtures/made/shell-other.json");
+        let mut core = signed_in_as(Some(RAVNEET), hers);
+        let key = key_of(&core).expect("the person signed in has a key");
+
+        // An answer that lost her id still names Ravneet by name and email: the key stays.
+        let asked = core
+            .send(Event::Start)
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("the shell is asked for");
+        core.send(native(asked, hers, None, false));
+        assert_eq!(
+            key_of(&core),
+            Some(key.clone()),
+            "losing the id flipped the key"
+        );
+        assert_eq!(
+            core.view.destinations[0].stack,
+            vec![1],
+            "her screen stayed"
+        );
+
+        // Her id comes back, even with a changed name and email: still one key.
+        let asked = core
+            .send(Event::Start)
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("the shell is asked for");
+        core.send(native(asked, renamed, Some(RAVNEET), false));
+        assert_eq!(
+            key_of(&core),
+            Some(key),
+            "the returning id gave another key"
+        );
+        assert_eq!(
+            core.view.destinations[0].stack,
+            vec![1],
+            "her screen stayed"
+        );
+    }
+
+    /// A person first named without an id keeps the key made then for as long
+    /// as the core takes them for the same person, including once the server
+    /// starts sending their id and when their name changes under that id.
+    #[test]
+    fn a_person_first_named_without_an_id_keeps_that_key_while_they_are_taken_for_the_same() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        const MEERA: &str = "0193a4b2-0000-7000-8000-00000000ms03";
+        let hers = include_str!("../transcripts/fixtures/store/shell.json");
+        let renamed = include_str!("../transcripts/fixtures/made/shell-other.json");
+        let mut core = signed_in_as(None, hers);
+        let key = key_of(&core).expect("a person named without an id has a key");
+
+        // The server begins sending her id: the core takes her for the same, and keeps her key.
+        let asked = core
+            .send(Event::Start)
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("the shell is asked for");
+        core.send(native(asked, hers, Some(RAVNEET), false));
+        assert_eq!(
+            key_of(&core),
+            Some(key.clone()),
+            "adding the id changed the key of the same person"
+        );
+        assert_eq!(
+            core.view.destinations[0].stack,
+            vec![1],
+            "her screen stayed"
+        );
+
+        // A rename under that id is still the same person, with the same key.
+        let asked = core
+            .send(Event::Start)
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("the shell is asked for");
+        core.send(native(asked, renamed, Some(RAVNEET), false));
+        assert_eq!(
+            key_of(&core),
+            Some(key.clone()),
+            "renaming under that id changed the key"
+        );
+
+        // Another id is another person, and gets its own key.
+        let asked = core
+            .send(Event::Start)
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("the shell is asked for");
+        core.send(native(asked, renamed, Some(MEERA), false));
+        assert_ne!(
+            key_of(&core),
+            Some(key),
+            "another id kept the first person's key"
+        );
+    }
+
+    /// An answer without an id standing between two distinct ids of one name
+    /// and no email never joins the two accounts: the second wipes the first
+    /// and gets its own key.
+    #[test]
+    fn an_answer_without_an_id_between_two_ids_does_not_join_two_accounts_of_one_name() {
+        const FIRST: &str = "7f1c2a90-0001-4000-8000-00000000a001";
+        const SECOND: &str = "7f1c2a90-0002-4000-8000-00000000b002";
+        let harpreet = include_str!("../transcripts/fixtures/made/shell-harpreet-no-email.json");
+        let orders = include_str!("../transcripts/fixtures/store/orders.json");
+        let mut core = signed_in_as(Some(FIRST), harpreet);
+        let first_key = key_of(&core).expect("the first account has a key");
+        core.send(Event::Select { destination: 1 });
+        core.send(native(3, orders, Some(FIRST), false));
+        assert!(
+            core.view
+                .screens
+                .get(&2)
+                .is_some_and(|s| s.screen().is_some())
+        );
+
+        // An answer in between loses the id.
+        let asked = core
+            .send(Event::Start)
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("the shell is asked for");
+        core.send(native(asked, harpreet, None, false));
+        assert_eq!(key_of(&core), Some(first_key.clone()));
+
+        // Now the second Harpreet Singh signs in with another id: everything of the first goes.
+        let asked = core
+            .send(Event::Start)
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("the shell is asked for");
+        core.send(native(asked, harpreet, Some(SECOND), false));
+        let second_key = key_of(&core).expect("the second account has a key");
+        assert_ne!(
+            second_key, first_key,
+            "the second account got the first account's key"
+        );
+        assert!(
+            !core.view.screens.contains_key(&2),
+            "the first account's orders stayed for the second"
+        );
+        assert_eq!(core.view.selected, 0);
     }
 
     /// The app's part is said to have changed where a shell is drawn, at a

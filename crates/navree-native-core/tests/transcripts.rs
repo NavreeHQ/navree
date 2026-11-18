@@ -678,6 +678,8 @@ const REQUIRED: &[&str] = &[
     "changed-own-form",
     "snapshot-no-id",
     "shell-retry",
+    "person-key-steady",
+    "person-key-other-id",
 ];
 
 #[test]

@@ -1083,7 +1083,7 @@ pub(crate) struct Inner {
     /// Who the shell is for now, and who was last signed in. When the person
     /// changes, nothing of the one before may show.
     pub user: Option<crate::cache::Who>,
-    pub person: Option<crate::cache::Who>,
+    pub person: Option<crate::cache::HeldPerson>,
     /// Who the shell about to be installed names, when its answer said it by
     /// id: taken by the install.
     pub naming: Option<String>,
