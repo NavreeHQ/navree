@@ -64,6 +64,10 @@ pub struct McpRegistry {
 impl McpRegistry {
     /// Collects the servers registered by the modules of `ctx`.
     pub(crate) async fn collect(ctx: &AppContext) -> Result<Self, String> {
+        let refused = navree_http::__private::mappers_of_plugins(ctx);
+        if !refused.is_empty() {
+            return Err(refused.join("\n"));
+        }
         let mut items = Vec::new();
         for contributed in ctx.contributions::<ServerRegistration>() {
             let registration = &contributed.value;

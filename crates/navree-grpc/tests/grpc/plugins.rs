@@ -190,3 +190,87 @@ async fn a_wrapped_tonic_server_under_a_plugins_namespace_is_read_as_a_route_is(
         .map(drop)
         .expect("a wrapped server's method may require a permission the plugin describes");
 }
+
+#[tokio::test]
+async fn a_plugins_mapping_of_another_crates_error_is_refused_in_an_app_with_no_http_module() {
+    use std::any::type_name;
+
+    use navree_grpc::{GrpcModule, GrpcOptions};
+    use navree_http::HttpOptions;
+    use navree_kernel::Navree;
+
+    mod navree_plugin_mapper {
+        use navree_http::{AppError, ModuleBuilderHttpExt};
+        use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+        const MAPPER: PluginInfo =
+            PluginInfo::new("navree-plugin-mapper", module_path!(), "mapper", "1.0.0");
+
+        pub struct MapperPlugin;
+
+        impl Module for MapperPlugin {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(MAPPER)
+                    .map_error::<std::io::Error>(|_| Some(AppError::forbidden()));
+            }
+        }
+    }
+
+    // Plain `GrpcModule` with neither `HttpModule` nor `HttpOptions` refuses to boot at once.
+    let no_http = Navree::app()
+        .module(GrpcModule::for_root(GrpcOptions {
+            health: false,
+            reflection: false,
+            ..GrpcOptions::default()
+        }))
+        .boot()
+        .await
+        .expect_err("GrpcModule needs HttpOptions")
+        .to_string();
+    assert!(
+        no_http.contains("GrpcModule needs HttpModule in the app"),
+        "{no_http}"
+    );
+
+    // Even when `HttpOptions` is supplied without `HttpModule` (so `HttpServer`'s bootstrap
+    // never runs), `GrpcServer` still checks plugin error mappers at boot.
+    struct StandaloneHttpOptions;
+    impl Module for StandaloneHttpOptions {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.value(HttpOptions::default()).exports::<HttpOptions>();
+        }
+    }
+
+    let app = Navree::app()
+        .module(StandaloneHttpOptions)
+        .module(GrpcModule::for_root(GrpcOptions {
+            health: false,
+            reflection: false,
+            ..GrpcOptions::default()
+        }))
+        .boot()
+        .await
+        .expect("boots with HttpOptions and no plugin mapper");
+    app.shutdown().await.unwrap();
+
+    let error = Navree::app()
+        .module(StandaloneHttpOptions)
+        .module(GrpcModule::for_root(GrpcOptions {
+            health: false,
+            reflection: false,
+            ..GrpcOptions::default()
+        }))
+        .module(navree_plugin_mapper::MapperPlugin)
+        .boot()
+        .await
+        .expect_err("foreign error mapper from a plugin must fail the boot")
+        .to_string();
+    let io_error = type_name::<std::io::Error>();
+    let expected = format!(
+        "plugin `navree-plugin-mapper` answers the app's errors of type `{io_error}` (m.map_error in `MapperPlugin`), a type of another crate; only a module of the app maps another crate's errors: remove the plugin or update it to a version that maps only its own errors, and to use the plugin's mapping, register it from a module of the app (m.map_error)"
+    );
+    assert!(
+        error.contains(&expected),
+        "expected `{expected}` in:\n{error}"
+    );
+}

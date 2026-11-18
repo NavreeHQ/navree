@@ -128,3 +128,75 @@ async fn a_graphql_field_under_a_plugins_namespace_is_read_as_a_route_is() {
     assert!(app.ctx().plugins().plugins.is_empty());
     app.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_plugins_mapping_of_another_crates_error_is_refused_in_an_app_with_no_http_module() {
+    use std::any::type_name;
+
+    use navree_graphql::{GraphqlModule, GraphqlOptions};
+    use navree_kernel::Navree;
+
+    #[injectable]
+    struct PublicHealthResolver;
+
+    #[resolver]
+    impl PublicHealthResolver {
+        #[query]
+        #[public]
+        async fn city(&self) -> &'static str {
+            "Ludhiana"
+        }
+    }
+
+    struct PublicGraphql;
+
+    impl Module for PublicGraphql {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.resolver::<PublicHealthResolver>();
+        }
+    }
+
+    mod navree_plugin_mapper {
+        use navree_http::{AppError, ModuleBuilderHttpExt};
+        use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+        const MAPPER: PluginInfo =
+            PluginInfo::new("navree-plugin-mapper", module_path!(), "mapper", "1.0.0");
+
+        pub struct MapperPlugin;
+
+        impl Module for MapperPlugin {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(MAPPER)
+                    .map_error::<std::io::Error>(|_| Some(AppError::forbidden()));
+            }
+        }
+    }
+
+    // Without the plugin mapper, a GraphQL app with no `HttpModule` boots cleanly.
+    let app = Navree::app()
+        .module(GraphqlModule::for_root(GraphqlOptions::default()))
+        .module(PublicGraphql)
+        .boot()
+        .await
+        .expect("GraphQL boots without HttpModule");
+    app.shutdown().await.unwrap();
+
+    // With the plugin mapping `std::io::Error`, the boot fails with no `HttpModule` in the app.
+    let error = Navree::app()
+        .module(GraphqlModule::for_root(GraphqlOptions::default()))
+        .module(PublicGraphql)
+        .module(navree_plugin_mapper::MapperPlugin)
+        .boot()
+        .await
+        .expect_err("foreign error mapper from a plugin must fail the boot")
+        .to_string();
+    let io_error = type_name::<std::io::Error>();
+    let expected = format!(
+        "plugin `navree-plugin-mapper` answers the app's errors of type `{io_error}` (m.map_error in `MapperPlugin`), a type of another crate; only a module of the app maps another crate's errors: remove the plugin or update it to a version that maps only its own errors, and to use the plugin's mapping, register it from a module of the app (m.map_error)"
+    );
+    assert!(
+        error.contains(&expected),
+        "expected `{expected}` in:\n{error}"
+    );
+}

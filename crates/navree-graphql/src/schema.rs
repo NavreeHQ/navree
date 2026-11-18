@@ -131,6 +131,10 @@ impl GraphqlSchema {
         app: AppContext,
         options: Arc<GraphqlOptions>,
     ) -> Result<Self, BoxError> {
+        let refused = navree_http::__private::mappers_of_plugins(&app);
+        if !refused.is_empty() {
+            return Err(refused.join("\n").into());
+        }
         let authorizer = app.try_get::<dyn RouteAuthorizer>().await;
         let authenticator = app.try_get::<dyn Authenticator>().await;
 

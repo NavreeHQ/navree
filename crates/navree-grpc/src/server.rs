@@ -203,7 +203,7 @@ async fn build(
         max_message_bytes: options.max_message_bytes,
     };
 
-    let mut problems = Vec::new();
+    let mut problems = navree_http::__private::mappers_of_plugins(ctx);
     let mut routes = Routes::default();
     let mut services: HashMap<&'static str, Arc<ServiceRuntime>> = HashMap::new();
     let mut owners: HashMap<&'static str, &'static str> = HashMap::new();
