@@ -51,14 +51,14 @@ A script that draws, or a library the script bundles, writes markup the server n
 
 Each owned body is sealed when the module begins to mount its element, before it imports the script. The seal has four steps:
 
-1. **Scrub.** Every `data-ui-*` attribute already inside the body is removed, and so is every `meta`, `link` and `base` element.
+1. **Scrub.** Every `data-ui-*` attribute already inside the body is removed, and so is every `meta`, `link`, `base`, `iframe`, `frame`, `object` and `embed` element.
 2. **Mark.** The body gets `data-ui-stored`, so the runtime treats it as stored content.
 3. **Detach from forms.** Every `input`, `select`, `textarea`, `button`, `fieldset`, `output` and `object` inside gets `form="ui-sealed"`. A field's form is the page's first element with the id the field names, and the first element with this id is one the runtime puts at the start of the head, which is no form. So none of these fields joins a form, whatever a library writes with that id.
-4. **Watch.** A `MutationObserver` on the body keeps the first three true for whatever is written later, however. It removes `data-ui-*` from every element added or changed inside, takes out every `meta`, `link` and `base` added, and sets `form="ui-sealed"` on every form field added, and on one whose `form` attribute is changed. It puts `data-ui-stored` back whenever it is removed, and removes any other `data-ui-*` from the body itself but `data-ui-keep`.
+4. **Watch.** A `MutationObserver` on the body keeps the first three true for whatever is written later, however. It removes `data-ui-*` from every element added or changed inside, takes out every `meta`, `link`, `base`, `iframe`, `frame`, `object` and `embed` added, and sets `form="ui-sealed"` on every form field added, and on one whose `form` attribute is changed. It puts `data-ui-stored` back whenever it is removed, and removes any other `data-ui-*` from the body itself but `data-ui-keep`.
 
 The observer runs once the task that wrote to the body is over. From then on, what was written inside an owned body drives no hook of the runtime, stands in for none of the page's ids in the runtime's lookups or in a morph, mounts no extension, and joins no form around the component. A command, a hotkey, a region, a form marker or an island written there does nothing. Within the task that wrote it, a script, or a library it bundles, can still use a hook it has just written, by clicking it, submitting it or focusing it at once. That is the script's own doing, with the authority every script has (see [what a script may and may not do](#what-a-script-may-and-may-not-do)).
 
-The seal stays for the life of the body. A body stays sealed when its script fails, so put server hooks outside it. A control's posted form field is drawn outside its owned bodies for the same reason (see [a form field of your own](/docs/ui/your-own-components/#a-form-field-of-your-own-and-its-check)). The module seals the bodies of every element it has mounted, or is mounting, each time it scans the page. So a body that a later morph adds to a mounted element, or puts in place of its body, is sealed before the script's `update` is called, and also while the script is still loading. `ui.find` searches it from then on.
+The seal stays for the life of the body. A body stays sealed when its script fails, so put server hooks outside it. A control's posted form field is drawn outside its owned bodies for the same reason (see [a form field of your own](/docs/ui/your-own-components/#a-form-field-of-your-own-and-its-check)). The module seals the bodies of every element it has mounted, or is mounting, each time it scans the page, and when `mount` finishes. So a body that a later morph adds to a mounted element, or puts in place of its body, is sealed before the script's `update` is called, while the script is still loading, and when an async `mount` is done. `ui.find` searches it from then on.
 
 The observer judges a change to an attribute by its name first, so the styles and classes a library moves on every frame cost a comparison each. It looks inside a node only when one was added.
 
@@ -164,12 +164,12 @@ It resolves `{ ok, status, data }`, never rejects, and answers by what the serve
 - **JSON:** parsed into `data`, with `ok` for the status.
 - **HTML:** a failure, unless `options.page` is true. Then the page at the answer's address is loaded in full.
 - **A redirect off the site, or an answer of a page that starts clean:** a failure, and nothing is applied.
-- **An answer that arrives once the element has left the page:** nothing of it is applied, no page is loaded and no toast is shown. The call resolves `ok: false`, with the answer's status. A call made once the element has left is not sent: it takes no turn of the page's and shows no toast, and resolves `ok: false` with status `0`.
+- **An answer that arrives once the element has left the page, or after the page has moved on:** nothing of it is applied, no page is loaded and no toast is shown. The call resolves `ok: false`, with the answer's status. A call made once the element has left is not sent: it takes no turn of the page's and shows no toast, and resolves `ok: false` with status `0`.
 - **Any other failure** shows the toast "That didn't work. Try again." unless `options.quiet` is true.
 
 `options` may be left out, or be `null`.
 
-`ui.get` sends a `GET` with `x-navree-ui: 1` and the headers you give, less any named `x-navree-*`. It takes no turn of the page's: a navigation or a region's fetch on its way is shown. It resolves the `Response`. It rejects when the address is outside the routes, refuses the answer of a page that starts clean, and is ended, and rejects, when the element leaves the page.
+`ui.get` sends a `GET` with `x-navree-ui: 1` and the headers you give, less any named `x-navree-*`. It takes no turn of the page's: a navigation or a region's fetch on its way is shown. It resolves the `Response`. It rejects when the address is outside the routes, refuses the answer of a page that starts clean, and is ended, and rejects, when the element leaves the page. A read in flight when its element leaves (or begun once it has left, which sends nothing) rejects, and a script catches it.
 
 ## Errors on a hidden field
 
