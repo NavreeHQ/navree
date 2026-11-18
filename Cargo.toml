@@ -262,7 +262,7 @@ sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio
 # not re-export it).
 sqlx-core = { version = "0.9.0", default-features = false }
 # Navigator's read-only query guard: parses a statement before it is sent.
-sqlparser = { version = "0.63.0", features = ["visitor"] }
+sqlparser = { version = "0.64.0", features = ["visitor"] }
 # Navigator's SQLite queries: SQLite itself prepares exactly one statement,
 # says whether it writes, and authorizes each thing it reads (`hooks`), with a
 # cap on how long a value may grow (`limits`). The same libsqlite3-sys as
@@ -366,7 +366,7 @@ async-trait = "0.1.92"
 # navree-validation's HTML sanitizer).
 image = { version = "0.25.10", default-features = false, features = ["bmp", "gif", "jpeg", "png", "webp"] }
 fast_image_resize = { version = "6.1.0", features = ["image"] }
-resvg = { version = "0.49.0", default-features = false, features = ["raster-images", "system-fonts", "text"] }
+resvg = { version = "0.50.0", default-features = false, features = ["raster-images", "system-fonts", "text"] }
 html5ever = "0.40.1"
 # Helm: Markdown fields (rendered without raw HTML) and field patterns.
 pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
@@ -377,8 +377,8 @@ regex = "1.13.1"
 # DOCX writing and reading (zip and quick-xml, above). PDF reading, editing
 # (merge, stamp, overlay) and text extraction are navree-pdf's. Pure Rust.
 krilla = { version = "0.8.2", default-features = false, features = ["raster-images"] }
-harfrust = "0.15.0"
-skrifa = "0.49.0"
+harfrust = "0.16.0"
+skrifa = "0.50.0"
 unicode-bidi = "0.3.18"
 icu_segmenter = { version = "2.4.0", default-features = false, features = ["compiled_data"] }
 # PDF reading and writing (navree-pdf): the filters (flate2, already in the
