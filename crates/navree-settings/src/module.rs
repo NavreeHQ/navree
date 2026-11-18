@@ -10,8 +10,8 @@ use navree_db::{Db, ModuleBuilderDbExt};
 use navree_events::{Listener, ModuleBuilderEventsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Injectable, KernelError, Module,
-    ModuleBuilder, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder,
+    ProviderKey, Resolver,
 };
 use navree_workspace::events::{
     OrganizationDeleted, WorkspaceAttached, WorkspaceDeleted, WorkspaceDetached,
@@ -79,13 +79,13 @@ impl SettingsModule {
     /// The module with explicit options (configure it once, in the app
     /// root).
     pub fn for_root(options: SettingsOptions) -> impl Module {
-        ConfiguredModule::<SettingsModule, _>::for_root(options, register)
+        ConfiguredSettingsModule::for_root(options)
     }
 
     /// The module configured from the `settings` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<SettingsModule, SettingsOptions>::from_config(register)
+        ConfiguredSettingsModule::from_config()
     }
 
     /// Registers settings type `T`. Import it in the module that owns the
@@ -110,6 +110,13 @@ impl Module for SettingsModule {
     }
 }
 
+navree_kernel::configured_module!(
+    ConfiguredSettingsModule,
+    SettingsModule,
+    SettingsOptions,
+    register,
+);
+
 /// `SettingsModule::for_feature::<T>()`.
 struct SettingsFeature<T>(PhantomData<fn() -> T>);
 
@@ -120,6 +127,7 @@ impl<T: SettingsGroup> Module for SettingsFeature<T> {
 }
 
 fn register(m: &mut ModuleBuilder, options: Option<SettingsOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<SettingsOptions>::new(move |_| {

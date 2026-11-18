@@ -8,7 +8,7 @@ use navree_config::{ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
+use navree_kernel::{Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::commands::commands;
 use crate::drivers::{CheckedEngines, SLOT};
@@ -60,13 +60,13 @@ impl SearchModule {
     /// The module with an engine, or full [`SearchOptions`] (configure it
     /// once, in the app root).
     pub fn for_root(options: impl Into<SearchOptions>) -> impl Module {
-        ConfiguredModule::<SearchModule, _>::for_root(options.into(), register)
+        ConfiguredSearchModule::for_root(options.into())
     }
 
     /// The module configured from section `search` of the app
     /// configuration.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<SearchModule, SearchOptions>::from_config(register)
+        ConfiguredSearchModule::from_config()
     }
 
     /// Registers model `M`: its index is added to the commands, its
@@ -82,7 +82,15 @@ impl Module for SearchModule {
     }
 }
 
+navree_kernel::configured_module!(
+    ConfiguredSearchModule,
+    SearchModule,
+    SearchOptions,
+    register
+);
+
 fn register(m: &mut ModuleBuilder, options: Option<SearchOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     contribute_slot(m, SLOT);
     match options {

@@ -8,7 +8,7 @@ use navree_crypto::{Encrypter, Hasher};
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_http_client::{HttpClient, HttpClientOptions};
-use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
+use navree_kernel::{Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::controller::SsoController;
 use crate::error::map_sso_error;
@@ -70,12 +70,12 @@ impl SsoModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: SsoOptions) -> impl Module {
-        ConfiguredModule::<SsoModule, _>::for_root(options, register)
+        ConfiguredSsoModule::for_root(options)
     }
 
     /// The module configured from the `sso` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<SsoModule, SsoOptions>::from_config(register)
+        ConfiguredSsoModule::from_config()
     }
 }
 
@@ -85,7 +85,10 @@ impl Module for SsoModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredSsoModule, SsoModule, SsoOptions, register);
+
 fn register(m: &mut ModuleBuilder, options: Option<SsoOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<SsoOptions>::new(move |_| {

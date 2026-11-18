@@ -8,9 +8,7 @@ use navree_contracts::ModuleBuilderRevocationExt;
 use navree_crypto::Encrypter;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{
-    BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
-};
+use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::api::OAuthApiController;
 use crate::commands::commands;
@@ -81,12 +79,12 @@ impl OAuthServerModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: OAuthOptions) -> impl Module {
-        ConfiguredModule::<OAuthServerModule, _>::for_root(options, register)
+        ConfiguredOAuthServerModule::for_root(options)
     }
 
     /// The module configured from the `oauth` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<OAuthServerModule, OAuthOptions>::from_config(register)
+        ConfiguredOAuthServerModule::from_config()
     }
 }
 
@@ -96,7 +94,15 @@ impl Module for OAuthServerModule {
     }
 }
 
+navree_kernel::configured_module!(
+    ConfiguredOAuthServerModule,
+    OAuthServerModule,
+    OAuthOptions,
+    register,
+);
+
 fn register(m: &mut ModuleBuilder, options: Option<OAuthOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<OAuthOptions>::new(move |_| {

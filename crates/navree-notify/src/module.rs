@@ -9,8 +9,7 @@ use navree_contracts::{ModuleBuilderJobsExt, ModuleBuilderRevocationExt};
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ModuleId, ProviderKey,
-    Resolver,
+    AppContext, BoxError, Factory, Module, ModuleBuilder, ModuleId, ProviderKey, Resolver,
 };
 use navree_schedule::ModuleBuilderScheduleExt;
 use navree_telemetry::Telemetry;
@@ -65,13 +64,13 @@ pub struct NotifyModule;
 impl NotifyModule {
     /// The module configured with `options` (configure it once, in the app root).
     pub fn for_root(options: NotifyOptions) -> impl Module {
-        ConfiguredModule::<NotifyModule, _>::for_root(options, register)
+        ConfiguredNotifyModule::for_root(options)
     }
 
     /// The module configured from section `notify` of the app's `Config`
     /// at boot (see [`NotifyOptions`]).
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<NotifyModule, NotifyOptions>::from_config(register)
+        ConfiguredNotifyModule::from_config()
     }
 
     /// Registers notification type `N` (import it in the module that owns
@@ -83,6 +82,13 @@ impl NotifyModule {
         NotificationFeature::<N>(PhantomData)
     }
 }
+
+navree_kernel::configured_module!(
+    ConfiguredNotifyModule,
+    NotifyModule,
+    NotifyOptions,
+    register
+);
 
 /// `NotifyModule::for_feature::<N>()`.
 struct NotificationFeature<N>(PhantomData<fn() -> N>);
@@ -138,6 +144,7 @@ impl Source {
 /// job, the migrations, the routes and `notify:vapid`. `Some` options come
 /// from code; `None` reads section `notify` of the configuration at boot.
 fn register(m: &mut ModuleBuilder, options: Option<NotifyOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     let source = match options {
         Some(options) => Source::Options(Arc::new(options)),
         None => Source::Config,

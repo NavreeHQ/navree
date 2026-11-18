@@ -7,7 +7,7 @@ use navree_cache::{CacheStore, LockStore};
 use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::{BoxFuture, Clock, HealthCheck, HealthStatus, SessionStore};
 use navree_http::RateLimitStore;
-use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
+use navree_kernel::{Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 use navree_queue::QueueStore;
 use navree_realtime::Backplane;
 
@@ -62,12 +62,12 @@ pub struct RedisModule;
 impl RedisModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: RedisOptions) -> impl Module {
-        ConfiguredModule::<RedisModule, _>::for_root(options, register)
+        ConfiguredRedisModule::for_root(options)
     }
 
     /// The module configured from the `redis` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<RedisModule, RedisOptions>::from_config(register)
+        ConfiguredRedisModule::from_config()
     }
 }
 
@@ -77,7 +77,10 @@ impl Module for RedisModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredRedisModule, RedisModule, RedisOptions, register);
+
 fn register(m: &mut ModuleBuilder, options: Option<RedisOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<RedisOptions>::new(move |_| {

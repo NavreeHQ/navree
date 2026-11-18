@@ -6,9 +6,7 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::ModuleBuilderJobsExt;
 use navree_db::ModuleBuilderDbExt;
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{
-    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
-};
+use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::commands::commands;
 use crate::error::map_sheets_error;
@@ -72,12 +70,12 @@ impl SheetsModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: SheetsOptions) -> impl Module {
-        ConfiguredModule::<SheetsModule, _>::for_root(options, register)
+        ConfiguredSheetsModule::for_root(options)
     }
 
     /// The module configured from the `sheets` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<SheetsModule, SheetsOptions>::from_config(register)
+        ConfiguredSheetsModule::from_config()
     }
 }
 
@@ -87,7 +85,15 @@ impl Module for SheetsModule {
     }
 }
 
+navree_kernel::configured_module!(
+    ConfiguredSheetsModule,
+    SheetsModule,
+    SheetsOptions,
+    register
+);
+
 fn register(m: &mut ModuleBuilder, options: Option<SheetsOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<SheetsOptions>::new(move |_| {

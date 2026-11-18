@@ -11,8 +11,8 @@ use navree_contracts::{Broadcaster, Principal};
 use navree_crypto::Encrypter;
 use navree_http::{HttpOptions, HttpServer, ModuleBuilderHttpExt};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, ConfiguredModule, Contributed, Factory, Module, ModuleBuilder,
-    ModuleId, PluginReport, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, Contributed, Factory, Module, ModuleBuilder, ModuleId,
+    PluginReport, ProviderKey, Resolver,
 };
 use serde_json::Value;
 
@@ -74,12 +74,12 @@ pub struct RealtimeModule;
 impl RealtimeModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: RealtimeOptions) -> impl Module {
-        ConfiguredModule::<RealtimeModule, _>::for_root(options, register)
+        ConfiguredRealtimeModule::for_root(options)
     }
 
     /// The module configured from the `realtime` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<RealtimeModule, RealtimeOptions>::from_config(register)
+        ConfiguredRealtimeModule::from_config()
     }
 }
 
@@ -89,7 +89,15 @@ impl Module for RealtimeModule {
     }
 }
 
+navree_kernel::configured_module!(
+    ConfiguredRealtimeModule,
+    RealtimeModule,
+    RealtimeOptions,
+    register,
+);
+
 fn register(m: &mut ModuleBuilder, options: Option<RealtimeOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     contribute_slot(m, SLOT);
     match options {
