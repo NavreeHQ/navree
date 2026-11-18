@@ -1,0 +1,33 @@
+[package]
+name = "navree-plugin-dakiya"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+description = "Dakiya mail transport for Navree apps. Not an official Navree package."
+license = "MIT OR Apache-2.0"
+keywords = ["navree-plugin", "navree"]
+readme = "README.md"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[package.metadata.navree.plugin]
+title = "Dakiya mail"
+module = "DakiyaModule"
+features = ["http-client", "mail"]
+config = ["dakiya"]
+env = ["APP_DAKIYA__API_KEY"]
+
+[dependencies]
+navree = { path = "../../crates/navree", default-features = false, features = ["http-client", "mail"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+url = "2.5.8"
+
+[dev-dependencies]
+http = "1.5.0"
+navree = { path = "../../crates/navree", default-features = false, features = ["http-client", "mail", "testing", "sqlite", "view"] }
+tokio = { version = "1.54.1", features = ["full"] }
+tracing = "0.1.44"
