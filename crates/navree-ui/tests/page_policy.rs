@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use http::Method;
 use http::header::CONTENT_SECURITY_POLICY;
 use navree_config::{Config, ConfigSection, ConfigSources, FRAMEWORK_SECTIONS};
+use navree_http::response::{IntoResponse, Response};
 use navree_http::{AppError, Controller, HttpModule, ModuleBuilderHttpExt, Path, RouteDef};
 use navree_kernel::{
     BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
@@ -14,12 +15,14 @@ use navree_kernel::{
 use navree_plugin_geo::{Geo, GeoAskingForAnything, GeoWithClock, GeoWithMap, GeoWithScanner};
 use navree_testing::{TestApp, TestAppBuilder, TestResponse};
 use navree_ui::app_files::IMAGE_CSP;
+use navree_ui::form::Rejected;
 use navree_ui::pages::region_answer;
 use navree_ui::{
-    AppImage, AppShell, Directive, ExtensionFile, IslandScript, LazyItem, LazyPage, Node, PAGE_CSP,
-    PagePolicy, PagePolicyOptions, PageSources, Reply, SafeHtml, Shell, Text, UiExtension,
-    UiModule, View, assets, el,
+    AppImage, AppShell, Directive, ExtensionFile, Form, IslandScript, LazyItem, LazyPage, Node,
+    PAGE_CSP, PagePolicy, PagePolicyOptions, PageSources, Reply, SafeHtml, Shell, Submit, Text,
+    UiExtension, UiModule, Validate, View, assets, el,
 };
+use serde::Deserialize;
 use serde_json::json;
 
 /// Captures formatted tracing output written while the guard is alive (on this thread: use a
@@ -330,7 +333,50 @@ impl Controller for Pages {
                 )
             })
             .public(),
+            RouteDef::on(
+                Method::GET,
+                "!/credentials",
+                |parts: http::request::Parts| async move {
+                    if parts.uri.query() == Some("expired=1") {
+                        Err(AppError::bad_request("Sign-in link expired."))
+                    } else {
+                        Ok(sign_in(true))
+                    }
+                },
+            )
+            .public()
+            .page(),
+            RouteDef::on(Method::POST, "!/credentials", credentials_submit)
+                .public()
+                .page(),
+            RouteDef::on(Method::GET, "!/credentials-plain", || async {
+                sign_in(false)
+            })
+            .public()
+            .page(),
+            RouteDef::on(Method::POST, "!/credentials-plain", credentials_submit)
+                .public()
+                .page(),
         ]
+    }
+}
+
+#[derive(Debug, Deserialize, Validate, Form)]
+struct CredentialsForm {
+    /// Work email
+    #[validate(email)]
+    email: String,
+    /// Password
+    #[validate(length(min = 8))]
+    password: String,
+}
+
+async fn credentials_submit(
+    submit: Result<Submit<CredentialsForm>, Rejected<CredentialsForm>>,
+) -> Response {
+    match submit {
+        Ok(Submit(_)) => "signed in".into_response(),
+        Err(rejected) => rejected.into_response(),
     }
 }
 
@@ -1098,5 +1144,125 @@ async fn a_plugins_island_script_turns_fresh_pages_on() {
         sign_in.text()
     );
     assert!(sign_in.header("x-navree-fresh").is_none());
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn an_error_page_at_a_fresh_pages_address_is_fresh() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let app = with_tiles().module(GeoWithMap).build().await;
+
+    // A 405 at `/account` before any GET ran, and a 400 from `/credentials?expired=1`, both sit
+    // at fresh addresses: their error pages carry the fresh mark, header and toolkit policy.
+    let method_refused = app
+        .client()
+        .post("/account")
+        .header("accept", BROWSER)
+        .send()
+        .await
+        .assert_status(405);
+    assert_eq!(method_refused.header("x-navree-fresh"), Some("1"));
+    assert_eq!(
+        method_refused.header("content-security-policy"),
+        Some(PAGE_CSP)
+    );
+    let html = method_refused.text();
+    assert!(root_tag(&html).ends_with(" data-ui-fresh-page"), "{html}");
+
+    let expired = app
+        .client()
+        .get("/credentials?expired=1")
+        .header("accept", BROWSER)
+        .send()
+        .await
+        .assert_status(400);
+    assert_eq!(expired.header("x-navree-fresh"), Some("1"));
+    assert_eq!(expired.header("content-security-policy"), Some(PAGE_CSP));
+    let html = expired.text();
+    assert!(root_tag(&html).ends_with(" data-ui-fresh-page"), "{html}");
+
+    let region_err = app
+        .client()
+        .get("/credentials?expired=1")
+        .header("accept", BROWSER)
+        .header("x-navree-ui", "1")
+        .header("x-navree-region", "security")
+        .send()
+        .await
+        .assert_status(400);
+    assert_eq!(region_err.header("x-navree-fresh"), Some("1"));
+    assert_eq!(region_err.header("content-security-policy"), Some(PAGE_CSP));
+
+    // Error pages at plain or unmatched addresses stay plain and carry the composed policy.
+    let plain_err = app
+        .client()
+        .post("/deliveries")
+        .header("accept", BROWSER)
+        .send()
+        .await
+        .assert_status(405);
+    assert!(plain_err.header("x-navree-fresh").is_none());
+    assert_eq!(
+        plain_err.header("content-security-policy"),
+        Some(WITH_TILES)
+    );
+    assert!(!root_tag(&plain_err.text()).contains("data-ui-fresh"));
+
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_page_a_refused_form_draws_at_a_fresh_address_is_fresh() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let app = with_tiles().module(GeoWithMap).build().await;
+
+    let refused = app
+        .client()
+        .post("/credentials")
+        .header("accept", BROWSER)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("email=not-an-email&password=short")
+        .send()
+        .await
+        .assert_status(422);
+    assert_eq!(refused.header("x-navree-fresh"), Some("1"));
+    assert_eq!(refused.header("content-security-policy"), Some(PAGE_CSP));
+    let html = refused.text();
+    assert!(root_tag(&html).ends_with(" data-ui-fresh-page"), "{html}");
+    assert_eq!(
+        warnings(
+            &capture,
+            "page /credentials holds a password field and is not fresh"
+        ),
+        0
+    );
+
+    // At a plain address the fallback page stays plain, carries the composed policy, and warns
+    // when it holds a password field.
+    let plain_refused = app
+        .client()
+        .post("/credentials-plain")
+        .header("accept", BROWSER)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("email=not-an-email&password=short")
+        .send()
+        .await
+        .assert_status(422);
+    assert!(plain_refused.header("x-navree-fresh").is_none());
+    assert_eq!(
+        plain_refused.header("content-security-policy"),
+        Some(WITH_TILES)
+    );
+    assert!(!root_tag(&plain_refused.text()).contains("data-ui-fresh"));
+    assert_eq!(
+        warnings(
+            &capture,
+            "page /credentials-plain holds a password field and is not fresh"
+        ),
+        1
+    );
+
     app.shutdown().await.unwrap();
 }

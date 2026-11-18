@@ -3570,6 +3570,8 @@ pub struct Rejected<T> {
     shell: Option<AppShell>,
     /// The reader's words, for the heading of the page of its own.
     reader: ReaderWords,
+    /// Whether the page this refusal draws on its own is at a fresh page's address.
+    fresh: bool,
     /// What goes before the form's ids, when it was drawn with [`FormView::id_prefix`].
     id_scope: Option<String>,
     marker: PhantomData<fn() -> T>,
@@ -3614,10 +3616,24 @@ impl<T: Form> Rejected<T> {
             .collect();
         let hidden = hidden_values(T::FIELDS, &values);
         let errors = mask_errors(errors, &hidden);
+        let from_runtime = crate::asked::who_asked(&parts.headers).is_runtime();
+        let fresh = if !from_runtime {
+            let route_path = parts
+                .extensions
+                .get::<Arc<navree_http::RouteMeta>>()
+                .map(|route| route.full_path.as_str());
+            parts
+                .extensions
+                .get::<Arc<crate::policy::FreshRoutes>>()
+                .and_then(|routes| routes.is_known_fresh(route_path, parts.uri.path()))
+                .unwrap_or(false)
+        } else {
+            false
+        };
         Self {
             values: echo::<T>(values),
             errors,
-            from_runtime: crate::asked::who_asked(&parts.headers).is_runtime(),
+            from_runtime,
             action: parts.uri.path_and_query().map_or_else(
                 || parts.uri.path().to_owned(),
                 |path| path.as_str().to_owned(),
@@ -3628,6 +3644,7 @@ impl<T: Form> Rejected<T> {
             rich: BTreeMap::new(),
             shell: None,
             reader: ReaderWords::english(),
+            fresh,
             id_scope: None,
             marker: PhantomData,
         }
@@ -3687,6 +3704,12 @@ impl<T: Form> Rejected<T> {
         let ctx = parts.extensions.get::<AppContext>().cloned();
         self.reader = ReaderWords::of(ctx.as_ref()).await;
         self.shell = shell_of_request(parts).await;
+        if !self.from_runtime
+            && let Some(ctx) = ctx.as_ref()
+            && let Some(routes) = parts.extensions.get::<Arc<crate::policy::FreshRoutes>>()
+        {
+            self.fresh = routes.check_parts(ctx, parts).await;
+        }
         self
     }
 
@@ -3829,14 +3852,21 @@ impl<T: Form> IntoResponse for Rejected<T> {
     fn into_response(self) -> Response {
         let title = self.reader.check_form.clone();
         let shell = self.shell.clone();
+        let fresh = self.fresh;
         self.respond(move |form| match shell {
-            Some(shell) => shell.page(title).body(Node::from(form)).into_response(),
-            None => View::new(title.clone())
-                .body(el("main").slot("page").children((
+            Some(shell) => {
+                let page = shell.page(title).body(Node::from(form));
+                let page = if fresh { page.fresh() } else { page };
+                page.into_response()
+            }
+            None => {
+                let view = View::new(title.clone()).body(el("main").slot("page").children((
                     el("h1").slot("page-title").child(title.to_string()),
                     Node::from(form),
-                )))
-                .into_response(),
+                )));
+                let view = if fresh { view.fresh() } else { view };
+                view.into_response()
+            }
         })
     }
 }
@@ -3885,6 +3915,7 @@ where
             rich: BTreeMap::new(),
             shell: None,
             reader: ReaderWords::english(),
+            fresh: false,
             id_scope: None,
             marker: PhantomData,
         };
@@ -3950,9 +3981,19 @@ where
                 rich: BTreeMap::new(),
                 shell: None,
                 reader: language.words.clone(),
+                fresh: false,
                 id_scope: None,
                 marker: PhantomData,
             };
+        let fresh_for_parts = || async {
+            match (
+                ctx.as_ref(),
+                parts.extensions.get::<Arc<crate::policy::FreshRoutes>>(),
+            ) {
+                (Some(ctx), Some(routes)) => routes.check_parts(ctx, &parts).await,
+                _ => false,
+            }
+        };
         let decoded = match decode_for::<T>(&values, &language) {
             Ok(value) if file_errors.is_empty() => Ok(value),
             Ok(_) => Err(file_errors),
@@ -3967,9 +4008,10 @@ where
             Err(errors) => {
                 let shown = echoed.unwrap_or(values);
                 let mut refused = rejected(shown, errors, action);
-                // Only a post that gets its page back needs the shell.
+                // Only a post that gets its page back needs the shell and fresh-route check.
                 if !from_runtime {
                     refused.shell = shell_of_request(&parts).await;
+                    refused.fresh = fresh_for_parts().await;
                 }
                 return Err(refused);
             }
@@ -3988,6 +4030,7 @@ where
                 let mut refused = rejected(echoed.unwrap_or(values), errors, action);
                 if !from_runtime {
                     refused.shell = shell_of_request(&parts).await;
+                    refused.fresh = fresh_for_parts().await;
                 }
                 Err(refused)
             }

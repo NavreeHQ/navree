@@ -275,13 +275,48 @@ async fn render(request: &ErrorContext, error: &AppError) -> Option<Response> {
         return None;
     }
     let options = request.ctx.try_get::<PagesOptions>().await?;
+    let fresh_routes = request
+        .ctx
+        .try_get::<crate::module::UiGate>()
+        .await
+        .and_then(|gate| gate.2.clone());
+    let fresh = match &fresh_routes {
+        Some(routes) if matches!(form, Form::Document | Form::Region) => {
+            routes.check_error(request).await
+        }
+        #[cfg(feature = "native-preview")]
+        Some(routes) if form == Form::Native => routes.check_error(request).await,
+        _ => false,
+    };
     let mut response = match form {
         Form::Json => return None,
-        Form::Document => document(request, error, &options).await,
-        Form::Region => region(request, error, &options),
+        Form::Document => {
+            if fresh_routes.is_some() {
+                crate::policy::in_fresh_scope(document(request, error, &options, fresh)).await
+            } else {
+                document(request, error, &options, false).await
+            }
+        }
+        Form::Region => {
+            let mut res = region(request, error, &options);
+            if fresh {
+                crate::policy::mark_fresh(&mut res);
+            }
+            res
+        }
         Form::Action => action(request, error, &options),
         #[cfg(feature = "native-preview")]
-        Form::Native => native(request, error, &options).await,
+        Form::Native => {
+            let mut res = if fresh_routes.is_some() {
+                crate::policy::in_fresh_scope(native(request, error, &options)).await
+            } else {
+                native(request, error, &options).await
+            };
+            if fresh && res.headers().contains_key(CONTENT_SECURITY_POLICY) {
+                crate::policy::mark_fresh(&mut res);
+            }
+            res
+        }
     };
     let headers = response.headers_mut();
     // `Retry-After`, `Allow`, `WWW-Authenticate`: the error's own headers belong to the answer.
@@ -454,7 +489,12 @@ fn debug_details(request: &ErrorContext, error: &AppError) -> Node {
 }
 
 /// A page: in the shell for a signed-in user, on its own for anyone else.
-async fn document(request: &ErrorContext, error: &AppError, options: &PagesOptions) -> Response {
+async fn document(
+    request: &ErrorContext,
+    error: &AppError,
+    options: &PagesOptions,
+    fresh: bool,
+) -> Response {
     let page = page_of(request, error, options);
     let kind = StateKind::of(error.status, &error.code);
     // Not from the sign-in page itself, or from below it: when it answers a guest with a 401 the
@@ -487,9 +527,13 @@ async fn document(request: &ErrorContext, error: &AppError, options: &PagesOptio
     let wants_shell = wants_shell && !crate::asked::in_web_view(&request.headers);
     if wants_shell && let Some(shell) = shell_of(request).await {
         let app = shell.for_request(request.uri.path(), &request.headers);
-        return page.in_shell(&app).into_response();
+        let in_shell = page.in_shell(&app);
+        let in_shell = if fresh { in_shell.fresh() } else { in_shell };
+        return in_shell.into_response();
     }
-    page.into_view().into_response()
+    let view = page.into_view();
+    let view = if fresh { view.fresh() } else { view };
+    view.into_response()
 }
 
 /// How long the app's shell gets to be built. The page on its own is the answer when it takes

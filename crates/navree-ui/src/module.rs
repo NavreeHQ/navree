@@ -129,6 +129,7 @@ pub(crate) struct UiAlways;
 pub(crate) struct UiGate(
     pub(crate) Arc<OnceLock<bool>>,
     pub(crate) Arc<crate::shell::links::Links>,
+    pub(crate) Option<Arc<crate::policy::FreshRoutes>>,
 );
 
 fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
@@ -170,15 +171,18 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
     // Whether pages that start clean are on in this app: it has a UI extension, a plugin's
     // island script, or a policy other than the toolkit's.
     let fresh: Arc<OnceLock<bool>> = Arc::new(OnceLock::new());
+    let fresh_routes = Arc::new(crate::policy::FreshRoutes::default());
     let for_gate = slot.clone();
     let compressing_for_gate = compressing.clone();
     let policy_for_gate = policy.clone();
     let fresh_for_gate = fresh.clone();
+    let routes_for_gate = fresh_routes.clone();
     m.factory(Factory::<UiGate>::new(move |r: Resolver| {
         let slot = for_gate.clone();
         let compressing = compressing_for_gate.clone();
         let policy = policy_for_gate.clone();
         let fresh = fresh_for_gate.clone();
+        let fresh_routes = routes_for_gate.clone();
         async move {
             let ctx = r.app();
             let on = ctx
@@ -222,7 +226,8 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             let _ = policy.set(page_policy);
             let _ = fresh.set(starts_clean);
             let _ = slot.set(wanted);
-            Ok(Arc::new(UiGate(slot, Arc::new(links))))
+            let gate_routes = (wanted && starts_clean).then_some(fresh_routes);
+            Ok(Arc::new(UiGate(slot, Arc::new(links), gate_routes)))
         }
     }));
     #[cfg(feature = "native-preview")]
@@ -275,9 +280,15 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
         move |_, router| {
             if for_fresh.get().copied().unwrap_or(false) && fresh.get().copied().unwrap_or(false) {
                 let warned = warned.clone();
+                let fresh_routes = fresh_routes.clone();
                 Ok(
                     router.layer(middleware::from_fn(move |request: Request, next: Next| {
-                        crate::policy::fresh_layer(warned.clone(), request, next)
+                        crate::policy::fresh_layer(
+                            warned.clone(),
+                            fresh_routes.clone(),
+                            request,
+                            next,
+                        )
                     })),
                 )
             } else {

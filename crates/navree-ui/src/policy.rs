@@ -832,6 +832,180 @@ const MAX_DEPTH: u32 = 512;
 tokio::task_local! {
     /// What the handlers of the request in hand say of the password fields they send.
     static FRESH: Arc<Scope>;
+    /// Marks an internal `GET` probe that classifies whether a route's page is fresh.
+    static PROBING: ();
+}
+
+/// Runs `future` inside a fresh-page request scope, for paths such as `ErrorPages::render` that
+/// execute outside [`fresh_layer`].
+pub(crate) async fn in_fresh_scope<F: std::future::Future>(future: F) -> F::Output {
+    let scope = Arc::new(Scope::default());
+    FRESH.scope(scope, future).await
+}
+
+/// Remembers which route patterns answer with a fresh page in an app where pages that start clean
+/// are on, and probes `GET` once when an error page or refused form runs at an address whose
+/// `GET` handler has not run yet.
+#[derive(Default)]
+pub(crate) struct FreshRoutes {
+    fresh: Mutex<BTreeSet<String>>,
+    plain: Mutex<BTreeSet<String>>,
+    router: tokio::sync::OnceCell<navree_http::AppRouter>,
+}
+
+impl FreshRoutes {
+    /// Records whether `response` answered a fresh page or a plain page on its route pattern.
+    pub(crate) fn note_response(&self, response: &Response) {
+        let Some(route) = response.extensions().get::<Arc<RouteMeta>>() else {
+            return;
+        };
+        let path = route.full_path.as_str();
+        if is_fresh_answer(response) {
+            self.plain
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(path);
+            self.fresh
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(path.to_owned());
+        } else if response.status().is_success()
+            && response
+                .extensions()
+                .get::<crate::view::ViewAnswer>()
+                .is_some()
+        {
+            let already_fresh = self
+                .fresh
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .contains(path);
+            if !already_fresh {
+                self.plain
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .insert(path.to_owned());
+            }
+        }
+    }
+
+    /// Synchronous lookup against routes already classified.
+    pub(crate) fn is_known_fresh(&self, route_path: Option<&str>, uri_path: &str) -> Option<bool> {
+        let fresh = self.fresh.lock().unwrap_or_else(PoisonError::into_inner);
+        let plain = self.plain.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(route_path) = route_path {
+            if fresh.contains(route_path) {
+                return Some(true);
+            }
+            if plain.contains(route_path) {
+                return Some(false);
+            }
+        }
+        if fresh.contains(uri_path) {
+            return Some(true);
+        }
+        if plain.contains(uri_path) {
+            return Some(false);
+        }
+        None
+    }
+
+    async fn probe(&self, ctx: &AppContext, request: Request) -> bool {
+        use std::time::Duration;
+        use tower::ServiceExt;
+
+        if PROBING.try_with(|_| ()).is_ok() {
+            return false;
+        }
+        let Ok(router) = self
+            .router
+            .get_or_try_init(|| navree_http::build_router(ctx))
+            .await
+        else {
+            return false;
+        };
+        let router = router.clone();
+        let attempt = PROBING.scope((), router.oneshot(request));
+        match tokio::time::timeout(Duration::from_millis(500), attempt).await {
+            Ok(Ok(response)) => {
+                self.note_response(&response);
+                is_fresh_answer(&response)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether the address of `parts` belongs to a fresh page, probing `GET` once if needed.
+    pub(crate) async fn check_parts(&self, ctx: &AppContext, parts: &http::request::Parts) -> bool {
+        let route_path = parts
+            .extensions
+            .get::<Arc<RouteMeta>>()
+            .map(|route| route.full_path.as_str());
+        if let Some(known) = self.is_known_fresh(route_path, parts.uri.path()) {
+            return known;
+        }
+        let Ok(uri) = http::Uri::try_from(parts.uri.path()) else {
+            return false;
+        };
+        let mut probe_parts = parts.clone();
+        probe_parts.method = http::Method::GET;
+        probe_parts.uri = uri;
+        let mut headers = http::HeaderMap::new();
+        headers.insert(
+            http::header::ACCEPT,
+            HeaderValue::from_static("text/html,application/xhtml+xml"),
+        );
+        for kept in [
+            http::header::COOKIE,
+            http::header::HOST,
+            http::header::USER_AGENT,
+        ] {
+            for value in parts.headers.get_all(&kept) {
+                headers.append(kept.clone(), value.clone());
+            }
+        }
+        probe_parts.headers = headers;
+        let request = Request::from_parts(probe_parts, navree_http::body::Body::empty());
+        self.probe(ctx, request).await
+    }
+
+    /// Whether the address of `error_ctx` belongs to a fresh page, probing `GET` once if needed.
+    pub(crate) async fn check_error(&self, error_ctx: &navree_http::ErrorContext) -> bool {
+        let Some(route) = error_ctx.route.as_ref() else {
+            return false;
+        };
+        if let Some(known) =
+            self.is_known_fresh(Some(route.full_path.as_str()), error_ctx.uri.path())
+        {
+            return known;
+        }
+        let Ok(mut builder) = http::Request::builder()
+            .method(http::Method::GET)
+            .uri(error_ctx.uri.path())
+            .header(
+                http::header::ACCEPT,
+                HeaderValue::from_static("text/html,application/xhtml+xml"),
+            )
+            .body(navree_http::body::Body::empty())
+        else {
+            return false;
+        };
+        for kept in [
+            http::header::COOKIE,
+            http::header::HOST,
+            http::header::USER_AGENT,
+        ] {
+            for value in error_ctx.headers.get_all(&kept) {
+                builder.headers_mut().append(kept.clone(), value.clone());
+            }
+        }
+        let peer =
+            std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 49152);
+        builder
+            .extensions_mut()
+            .insert(navree_http::serve::ConnectInfo(peer));
+        self.probe(&error_ctx.ctx, builder).await
+    }
 }
 
 /// What the handlers of one request noted: a page that holds a password field and is not fresh,
@@ -916,9 +1090,19 @@ impl Warned {
 /// request's scope current for them, and when a page that is not fresh held a password field, or
 /// a reply sent one as operations, names the route in the log, once. The route is the pattern the
 /// request matched, never the address asked for.
-pub(crate) async fn fresh_layer(warned: Arc<Warned>, request: Request, next: Next) -> Response {
+pub(crate) async fn fresh_layer(
+    warned: Arc<Warned>,
+    routes: Arc<FreshRoutes>,
+    mut request: Request,
+    next: Next,
+) -> Response {
+    request.extensions_mut().insert(routes.clone());
     let scope = Arc::new(Scope::default());
     let response = FRESH.scope(scope.clone(), next.run(request)).await;
+    routes.note_response(&response);
+    if PROBING.try_with(|_| ()).is_ok() {
+        return response;
+    }
     let page = scope.page_password.load(Ordering::Relaxed);
     let ops = scope.ops_password.load(Ordering::Relaxed);
     if (page || ops)
