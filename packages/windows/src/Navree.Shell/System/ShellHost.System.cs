@@ -52,6 +52,16 @@ public sealed partial class ShellHost
     internal void Remember(string key, string? value) => session.Write(key, value);
 
     /// <summary>
+    /// The mark of the person what is kept is kept for: the one named last, also while nobody is signed in; null when nobody was named
+    /// since the app was first started or since the last sign-out (<see cref="PersonChange.KeptFor"/>). Before any state is heard it is
+    /// the mark this start read, and null when it read none.
+    /// </summary>
+    internal string? KeptFor => people.KeptFor;
+
+    /// <summary>The mark of the person who is signed in now, by the state shown last; null while nobody is (<see cref="PersonChange.Here"/>).</summary>
+    internal string? PersonHere => people.Here;
+
+    /// <summary>
     /// Keeps what the core says it needs to start again where the person was. A snapshot that says it holds nobody (<c>person_unknown</c>) is not
     /// kept, so a visitor's blank one never replaces a person's; nor is one asked for while a sign-out is under way, or one whose session ended
     /// while it was being made.
