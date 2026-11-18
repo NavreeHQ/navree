@@ -9,6 +9,7 @@ mod http;
 mod impersonation;
 mod module;
 mod orm;
+mod plugins;
 mod prune;
 mod sink;
 mod skip;

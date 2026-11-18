@@ -161,7 +161,7 @@ async fn a_plugin_in_two_crates_cannot_write_rules_on_all_add_an_app_wide_layer_
 
     // 3. Registering the app's audit sink from the second crate's module fails validation and
     // boot.
-    let expected_sink = "plugin `navree-plugin-khata` provides `dyn navree_contracts::audit::AuditSink` in `KhataCoreModule` (only the plugin's modules import it), which receives the app's audit records; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and an app has one audit sink: to use the plugin's, register it from a module of an app that has no other (it cannot be used beside navree-audit's AuditModule)";
+    let expected_sink = "plugin `navree-plugin-khata` provides `dyn navree_contracts::audit::AuditSink` in `KhataCoreModule` (only the plugin's modules import it), which receives the app's audit records; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and to use the plugin's sink, add it from a module of the app (m.audit_sink, m.audit_sink_value or m.audit_sink_factory)";
     let error = boot_error(khata_app().module(KhataPlugin(takes_audit_sink))).await;
     assert!(
         error.contains(expected_sink),
@@ -179,12 +179,11 @@ async fn a_plugin_in_two_crates_cannot_write_rules_on_all_add_an_app_wide_layer_
     struct AppOptsIn;
     impl Module for AppOptsIn {
         fn register(&self, m: &mut ModuleBuilder) {
+            use navree::audit::ModuleBuilderAuditExt;
+
             m.import(AccessModule::for_policy::<EverySubject>())
                 .http_layer(trace_layer())
-                .factory(Factory::<dyn AuditSink>::new(|_| async {
-                    Ok(Arc::new(navree_plugin_khata_core::KhataSink) as Arc<dyn AuditSink>)
-                }))
-                .exports::<dyn AuditSink>();
+                .audit_sink_value(navree_plugin_khata_core::KhataSink);
         }
     }
     let app = khata_app()

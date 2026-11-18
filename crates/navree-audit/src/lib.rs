@@ -30,6 +30,11 @@
 //!   reads the trail with the query builder (`AuditRecord::query()`, or an
 //!   [`AuditFilter`]'s [`query`](AuditFilter::query)).
 //!
+//! - **Extra sinks:** a module of the app adds further [`navree_contracts::AuditSink`]s
+//!   beside the database log with [`ModuleBuilderAuditExt`] (`m.audit_sink`,
+//!   `m.audit_sink_value`, `m.audit_sink_factory`), and every recorded entry
+//!   reaches each of them with skipped fields stripped.
+//!
 //! ```no_run
 //! use navree_audit::AuditModule;
 //! use navree_config::{ConfigModule, ConfigSources};
@@ -72,7 +77,7 @@ mod schema;
 pub use controller::AUDIT_READ_PERMISSION;
 pub use filter::{AuditFilter, AuditList};
 pub use log::{AuditError, AuditLog};
-pub use module::AuditModule;
+pub use module::{AuditModule, ModuleBuilderAuditExt};
 pub use naming::subject_type_of;
 pub use options::{AuditOptions, DEFAULT_SKIP_FIELDS};
 pub use policy::AUDIT_TABLE;

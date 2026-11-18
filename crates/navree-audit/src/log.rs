@@ -69,6 +69,7 @@ pub struct AuditLog {
     policy: Arc<Policy>,
     clock: Arc<dyn Clock>,
     queue: mpsc::Sender<Message>,
+    sinks: Vec<Arc<dyn AuditSink>>,
 }
 
 /// What the background writer receives.
@@ -91,6 +92,7 @@ impl AuditLog {
             db,
             Arc::new(options),
             Arc::new(SystemClock),
+            Vec::new(),
             std::future::pending(),
             |writer| {
                 tokio::spawn(writer);
@@ -100,12 +102,14 @@ impl AuditLog {
 
     /// An audit log whose background writer is started by `spawn` and
     /// stops (after writing what is queued) when `stop` resolves; later
-    /// entries are written directly. The module spawns it on the app's
-    /// task tracker and stops it at shutdown.
+    /// entries are written directly, and every recorded entry is forwarded to
+    /// `sinks` as well. The module spawns it on the app's task tracker and
+    /// stops it at shutdown.
     pub(crate) fn start(
         db: Db,
         options: Arc<AuditOptions>,
         clock: Arc<dyn Clock>,
+        sinks: Vec<Arc<dyn AuditSink>>,
         stop: impl Future<Output = ()> + Send + 'static,
         spawn: impl FnOnce(BoxFuture<'static, ()>),
     ) -> AuditLog {
@@ -117,6 +121,7 @@ impl AuditLog {
             options,
             clock,
             queue,
+            sinks,
         }
     }
 
@@ -126,10 +131,10 @@ impl AuditLog {
     }
 
     /// Records `entry` on the log's own connection, outside any unit of
-    /// work (queued; see [`flush`](AuditLog::flush)). The time and id are
-    /// taken now, and an entry without an impersonator gets the one of the
-    /// task's unit of work ([`Uow::current`]), if any. Fails only when the
-    /// queue is full.
+    /// work (queued; see [`flush`](AuditLog::flush)), and forwards it to any
+    /// added audit sinks. The time and id are taken now, and an entry without
+    /// an impersonator gets the one of the task's unit of work
+    /// ([`Uow::current`]), if any. Fails only when the queue is full.
     pub async fn record(&self, mut entry: AuditEntry) -> Result<(), AuditError> {
         if !self.policy.enabled {
             return Ok(());
@@ -137,8 +142,10 @@ impl AuditLog {
         if entry.impersonator_id.is_none() {
             entry.impersonator_id = Uow::current().and_then(|uow| uow.impersonator());
         }
+        let entry = self.clean_entry(entry);
+        let forwarded = (!self.sinks.is_empty()).then(|| entry.clone());
         let row = self.row(entry);
-        match self.queue.try_send(Message::Entry(Box::new(row))) {
+        let written = match self.queue.try_send(Message::Entry(Box::new(row))) {
             Ok(()) => Ok(()),
             Err(mpsc::error::TrySendError::Full(Message::Entry(row))) => {
                 let action = row.action;
@@ -151,12 +158,17 @@ impl AuditLog {
                 Ok(())
             }
             Err(_) => Ok(()),
+        };
+        if let Some(entry) = forwarded {
+            deliver_to_sinks(&self.sinks, entry).await;
         }
+        written
     }
 
     /// Records `entry` inside the transaction of `uow`, so it commits or
-    /// rolls back with the work. The actor, impersonator and request id
-    /// default to those of the unit of work.
+    /// rolls back with the work, and forwards it to any added audit sinks once
+    /// `uow` commits. The actor, impersonator and request id default to those
+    /// of the unit of work.
     pub async fn record_in(&self, uow: &Uow, mut entry: AuditEntry) -> Result<(), DbError> {
         if !self.policy.enabled {
             return Ok(());
@@ -170,8 +182,17 @@ impl AuditLog {
         if entry.request_id.is_none() {
             entry.request_id = uow.request_id().map(str::to_owned);
         }
+        let entry = self.clean_entry(entry);
+        let forwarded = (!self.sinks.is_empty()).then(|| entry.clone());
         let row = self.row(entry);
-        insert(uow, &[row]).await
+        insert(uow, &[row]).await?;
+        if let Some(entry) = forwarded {
+            let sinks = self.sinks.clone();
+            uow.after_commit(move || {
+                Box::pin(async move { deliver_to_sinks(&sinks, entry).await })
+            });
+        }
+        Ok(())
     }
 
     /// Waits until every entry queued by [`record`](AuditLog::record) so far
@@ -243,10 +264,19 @@ impl AuditLog {
         }
     }
 
-    /// The row for `entry`, without skipped fields, stamped now.
-    fn row(&self, entry: AuditEntry) -> AuditRecord {
+    /// `entry` with skipped fields stripped from `old_values`, `new_values` and
+    /// `metadata`.
+    fn clean_entry(&self, mut entry: AuditEntry) -> AuditEntry {
         let owner = entry.subject_type.clone();
         let strip = |v: Value| self.policy.strip(owner.as_deref(), v);
+        entry.old_values = entry.old_values.map(strip);
+        entry.new_values = entry.new_values.map(strip);
+        entry.metadata = strip(entry.metadata);
+        entry
+    }
+
+    /// The row for a cleaned `entry`, stamped now.
+    fn row(&self, entry: AuditEntry) -> AuditRecord {
         AuditRecord {
             id: Uuid::now_v7(),
             kind: kind_str(entry.kind).to_owned(),
@@ -255,18 +285,25 @@ impl AuditLog {
             impersonator_id: entry.impersonator_id,
             subject_type: entry.subject_type,
             subject_id: entry.subject_id,
-            old_values: entry.old_values.map(strip),
-            new_values: entry.new_values.map(strip),
+            old_values: entry.old_values,
+            new_values: entry.new_values,
             request_id: entry.request_id,
             ip: entry.ip,
             user_agent: entry.user_agent,
-            metadata: strip(entry.metadata),
+            metadata: entry.metadata,
             created_at: self.clock.now(),
         }
     }
 
-    /// The `data` row for one change, or `None` when it is not audited.
-    fn data_row(&self, change: &ChangeEvent, uow: &Uow) -> Option<AuditRecord> {
+    /// The `data` row (and, when `with_entry` is `true`, the matching
+    /// [`AuditEntry`] for added sinks) for one change, or `None` when it is not
+    /// audited.
+    fn data_row(
+        &self,
+        change: &ChangeEvent,
+        uow: &Uow,
+        with_entry: bool,
+    ) -> Option<(AuditRecord, Option<AuditEntry>)> {
         let table = change.entity.as_str();
         if self.policy.skips_entity(table) {
             return None;
@@ -286,26 +323,51 @@ impl AuditLog {
         };
         let strip = |v: Value| self.policy.strip(Some(table), v);
         let subject_type = self.policy.subject_type(table);
-        Some(AuditRecord {
-            id: Uuid::now_v7(),
-            kind: kind_str(AuditKind::Data).to_owned(),
-            action: format!("{}.{}", snake_case(&subject_type), change.op),
-            actor_id: uow.actor(),
-            impersonator_id: uow.impersonator(),
-            subject_type: Some(subject_type),
-            subject_id: Some(change.id.clone()),
-            old_values: old.map(strip),
-            new_values: new.map(strip),
-            request_id: uow.request_id().map(str::to_owned),
+        let action = format!("{}.{}", snake_case(&subject_type), change.op);
+        let actor_id = uow.actor();
+        let impersonator_id = uow.impersonator();
+        let subject_id = Some(change.id.clone());
+        let old_values = old.map(strip);
+        let new_values = new.map(strip);
+        let request_id = uow.request_id().map(str::to_owned);
+        let entry = with_entry.then(|| AuditEntry {
+            kind: AuditKind::Data,
+            action: action.clone(),
+            actor_id,
+            impersonator_id,
+            subject_type: Some(subject_type.clone()),
+            subject_id: subject_id.clone(),
+            old_values: old_values.clone(),
+            new_values: new_values.clone(),
+            request_id: request_id.clone(),
             ip: None,
             user_agent: None,
             metadata: Value::Object(Default::default()),
-            created_at: self.clock.now(),
-        })
+        });
+        Some((
+            AuditRecord {
+                id: Uuid::now_v7(),
+                kind: kind_str(AuditKind::Data).to_owned(),
+                action,
+                actor_id,
+                impersonator_id,
+                subject_type: Some(subject_type),
+                subject_id,
+                old_values,
+                new_values,
+                request_id,
+                ip: None,
+                user_agent: None,
+                metadata: Value::Object(Default::default()),
+                created_at: self.clock.now(),
+            },
+            entry,
+        ))
     }
 }
 
-/// Writes the `data` entries through the unit of work being committed.
+/// Writes the `data` entries through the unit of work being committed, and
+/// forwards them to any added audit sinks once it commits.
 impl ChangeObserver for AuditLog {
     fn observe<'a>(
         &'a self,
@@ -316,12 +378,48 @@ impl ChangeObserver for AuditLog {
             if !self.policy.enabled {
                 return Ok(());
             }
-            let rows: Vec<AuditRecord> = changes
-                .iter()
-                .filter_map(|change| self.data_row(change, uow))
-                .collect();
-            insert(uow, &rows).await
+            let with_entries = !self.sinks.is_empty();
+            let mut rows = Vec::with_capacity(changes.len());
+            let mut entries = Vec::new();
+            for change in changes {
+                if let Some((row, entry)) = self.data_row(change, uow, with_entries) {
+                    rows.push(row);
+                    if let Some(entry) = entry {
+                        entries.push(entry);
+                    }
+                }
+            }
+            insert(uow, &rows).await?;
+            if !entries.is_empty() {
+                let sinks = self.sinks.clone();
+                uow.after_commit(move || {
+                    Box::pin(async move {
+                        for entry in entries {
+                            deliver_to_sinks(&sinks, entry).await;
+                        }
+                    })
+                });
+            }
+            Ok(())
         })
+    }
+}
+
+/// Forwards `entry` to every added audit sink, warning on any failure so one
+/// sink never silences the audit trail or the sinks after it.
+pub(crate) async fn deliver_to_sinks(sinks: &[Arc<dyn AuditSink>], entry: AuditEntry) {
+    let Some((last, init)) = sinks.split_last() else {
+        return;
+    };
+    for sink in init {
+        let action = entry.action.clone();
+        if let Err(error) = sink.record(entry.clone()).await {
+            tracing::warn!(target: "navree::audit", %action, %error, "an added audit sink failed");
+        }
+    }
+    let action = entry.action.clone();
+    if let Err(error) = last.record(entry).await {
+        tracing::warn!(target: "navree::audit", %action, %error, "an added audit sink failed");
     }
 }
 

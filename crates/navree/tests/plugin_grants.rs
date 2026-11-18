@@ -304,11 +304,13 @@ mod navree_plugin_roster {
         query.without_global_scopes()
     }
 
-    /// The plugin's audit sink, for a module of the app to register: it keeps nothing.
-    pub struct RosterSink;
+    /// The plugin's audit sink, for a module of the app to add beside the audit log.
+    #[derive(Clone, Default)]
+    pub struct RosterSink(pub Arc<std::sync::Mutex<Vec<String>>>);
 
     impl AuditSink for RosterSink {
-        fn record(&self, _entry: AuditEntry) -> BoxFuture<'_, Result<(), BoxError>> {
+        fn record(&self, entry: AuditEntry) -> BoxFuture<'_, Result<(), BoxError>> {
+            self.0.lock().unwrap().push(entry.action);
             Box::pin(async { Ok(()) })
         }
     }
@@ -430,52 +432,60 @@ async fn the_frameworks_audit_module_keeps_the_apps_audit_sink_beside_a_plugin()
     app.shutdown().await.unwrap();
 }
 
-/// A module of the app that registers the roster plugin's audit sink, and exports it when `.0`
-/// says so.
-struct RosterAudit(bool);
+/// A module of the app that adds the roster plugin's audit sink beside the audit log.
+struct RosterAudit(navree_plugin_roster::RosterSink);
 
 impl Module for RosterAudit {
     fn register(&self, m: &mut ModuleBuilder) {
-        use navree::contracts::AuditSink;
+        use navree::audit::ModuleBuilderAuditExt;
 
-        m.factory(Factory::<dyn AuditSink>::new(|_| async {
-            Ok(Arc::new(navree_plugin_roster::RosterSink) as Arc<dyn AuditSink>)
-        }));
-        if self.0 {
-            m.exports::<dyn AuditSink>();
-        }
+        m.audit_sink_value(self.0.clone());
     }
 }
 
 #[tokio::test]
-async fn an_app_has_one_audit_sink_so_a_plugins_is_not_used_beside_the_audit_module() {
-    use navree::audit::{AuditLog, AuditModule};
-    use navree::contracts::AuditSink;
-    use navree_plugin_roster::RosterModule;
+async fn a_plugins_sink_added_by_the_app_receives_records_beside_the_audit_log() {
+    use navree::audit::{AuditFilter, AuditLog, AuditModule};
+    use navree::contracts::{AuditEntry, AuditKind, AuditSink};
+    use navree::db::PageQuery;
+    use navree_plugin_roster::{RosterModule, RosterSink};
 
-    // The audit module beside the roster plugin, as above.
-    let audited = || {
-        workspace_app()
-            .config("audit.routes", false)
-            .module(AuditModule::from_config())
-            .module(RosterModule(|_| {}))
-    };
+    let roster_sink = RosterSink::default();
+    let app = workspace_app()
+        .config("audit.routes", false)
+        .module(AuditModule::from_config())
+        .module(RosterModule(|_| {}))
+        .module(RosterAudit(roster_sink.clone()))
+        .build()
+        .await;
 
-    // A module of the app registers the plugin's sink without exporting it: the sink the app's
-    // modules find is still the audit module's log, and the plugin's receives no record.
-    let app = audited().module(RosterAudit(false)).build().await;
-    let found = app.ctx().try_get::<dyn AuditSink>().await;
-    let found = found.expect("the app's audit sink");
+    let found = app
+        .ctx()
+        .try_get::<dyn AuditSink>()
+        .await
+        .expect("the app's audit sink");
     let log = app.get::<AuditLog>().await;
     assert!(
         std::ptr::addr_eq(Arc::as_ptr(&found), Arc::as_ptr(&log)),
-        "the audit module's log is the app's sink"
+        "the audit module's log remains the app's sink and forwards to added sinks"
     );
-    app.shutdown().await.unwrap();
 
-    // Exported, as the audit module exports its own: two sinks answer a lookup, so none is
-    // found, and no audit record would be written.
-    let app = audited().module(RosterAudit(true)).build().await;
-    assert!(app.ctx().try_get::<dyn AuditSink>().await.is_none());
+    found
+        .record(AuditEntry::new(AuditKind::Security, "access.denied"))
+        .await
+        .unwrap();
+    log.flush().await;
+
+    let page = log
+        .list(&AuditFilter::default(), PageQuery::default())
+        .await
+        .unwrap();
+    assert_eq!(page.data.len(), 1);
+    assert_eq!(page.data[0].action, "access.denied");
+    assert_eq!(
+        *roster_sink.0.lock().unwrap(),
+        vec!["access.denied".to_owned()]
+    );
+
     app.shutdown().await.unwrap();
 }

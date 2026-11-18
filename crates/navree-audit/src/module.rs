@@ -1,16 +1,18 @@
-//! [`AuditModule`] and the `audit:prune` command.
+//! [`AuditModule`], [`ModuleBuilderAuditExt`] and the `audit:prune` command.
 
 use std::sync::Arc;
 
 use navree_config::ModuleBuilderConfigExt;
-use navree_contracts::{AuditSink, Clock, SystemClock};
+use navree_contracts::{AuditEntry, AuditSink, Clock, SystemClock};
 use navree_db::{ChangeObserver, Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, CommandSpec, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, Module, ModuleBuilder,
+    ProviderKey, Resolver,
 };
 
 use crate::controller::AuditController;
+use crate::log::deliver_to_sinks;
 use crate::migration::migrations;
 use crate::{AuditLog, AuditOptions};
 
@@ -88,6 +90,7 @@ fn register(m: &mut ModuleBuilder, options: Option<AuditOptions>) {
             Factory::<AuditLog>::new(|r: Resolver| async move {
                 let options = r.get::<AuditOptions>().await?;
                 let db = r.get::<Db>().await?;
+                let sinks = r.get_all::<dyn AuditSink>().await?;
                 let ctx = r.app();
                 let clock = match ctx.try_get::<dyn Clock>().await {
                     Some(clock) => clock,
@@ -99,6 +102,7 @@ fn register(m: &mut ModuleBuilder, options: Option<AuditOptions>) {
                     (*db).clone(),
                     options,
                     clock,
+                    sinks,
                     async move { shutdown.cancelled().await },
                     |writer| {
                         tracker.spawn(writer);
@@ -131,6 +135,82 @@ fn register(m: &mut ModuleBuilder, options: Option<AuditOptions>) {
             "Delete audit entries older than the retention period ([--days N])",
             prune_command,
         ));
+}
+
+/// Provides a fan-out `dyn AuditSink` when an app adds sinks with
+/// [`ModuleBuilderAuditExt`] without [`AuditModule`]. Not exported, so
+/// [`AuditModule`]'s exported [`AuditLog`] wins when both are in the app and
+/// forwards every record to the added sinks itself.
+#[derive(Clone, Copy, Debug, Default)]
+struct AuditSinksModule;
+
+impl Module for AuditSinksModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(navree_kernel::plugin_info!());
+        m.global()
+            .factory(Factory::<dyn AuditSink>::new(|r: Resolver| async move {
+                let sinks = r.get_all::<dyn AuditSink>().await?;
+                Ok(Arc::new(FanoutAuditSink(sinks)) as Arc<dyn AuditSink>)
+            }));
+    }
+}
+
+/// Delivers each entry to every registered `dyn AuditSink` multi-binding in an
+/// app that has no [`AuditModule`].
+struct FanoutAuditSink(Vec<Arc<dyn AuditSink>>);
+
+impl AuditSink for FanoutAuditSink {
+    fn record(&self, entry: AuditEntry) -> BoxFuture<'_, Result<(), BoxError>> {
+        Box::pin(async move {
+            deliver_to_sinks(&self.0, entry).await;
+            Ok(())
+        })
+    }
+}
+
+/// Adds extra audit sinks on a [`ModuleBuilder`].
+///
+/// Only a module of the app registers an audit sink: a community plugin's own
+/// registration fails validation and boot. With [`AuditModule`] in the app,
+/// every recorded entry (`AuditLog::record`, `AuditSink::record`, and once
+/// committed `AuditLog::record_in` and `Uow` data changes) reaches both the
+/// database audit log and each sink added here, with skipped fields stripped.
+/// Without [`AuditModule`], the added sinks form the app's `dyn AuditSink` and
+/// every `AuditSink::record` entry reaches each of them.
+pub trait ModuleBuilderAuditExt {
+    /// Registers provider `S` (built by the container) and adds it as an audit
+    /// sink.
+    fn audit_sink<S: AuditSink + Injectable>(&mut self) -> &mut Self;
+
+    /// Adds an already-built audit sink.
+    fn audit_sink_value<S: AuditSink>(&mut self, sink: S) -> &mut Self;
+
+    /// Adds an audit sink built by `factory` (such as a sink a plugin ships).
+    fn audit_sink_factory(&mut self, factory: Factory<dyn AuditSink>) -> &mut Self;
+}
+
+impl ModuleBuilderAuditExt for ModuleBuilder {
+    fn audit_sink<S: AuditSink + Injectable>(&mut self) -> &mut Self {
+        self.provider::<S>();
+        self.audit_sink_factory(
+            Factory::<dyn AuditSink>::new(|r: Resolver| async move {
+                Ok(r.get::<S>().await? as Arc<dyn AuditSink>)
+            })
+            .deps(vec![ProviderKey::of::<S>()]),
+        )
+    }
+
+    fn audit_sink_value<S: AuditSink>(&mut self, sink: S) -> &mut Self {
+        let sink: Arc<dyn AuditSink> = Arc::new(sink);
+        self.audit_sink_factory(Factory::<dyn AuditSink>::new(move |_| {
+            let sink = sink.clone();
+            async move { Ok(sink) }
+        }))
+    }
+
+    fn audit_sink_factory(&mut self, factory: Factory<dyn AuditSink>) -> &mut Self {
+        self.import(AuditSinksModule).multi(factory)
+    }
 }
 
 async fn prune_command(ctx: AppContext, args: Vec<String>) -> Result<(), BoxError> {

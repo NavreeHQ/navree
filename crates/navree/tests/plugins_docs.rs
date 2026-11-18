@@ -1044,9 +1044,8 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
             .to_string();
         assert_eq!(refused, guard_provides("`Provides`", provider, role));
     }
-    // A sink of the app's audit records, exported: beside navree-audit's, neither would be the
-    // one the app's modules find, and every record would be lost. An app has one sink, so the
-    // refusal sends the plugin's to an app that has no other.
+    // A sink of the app's audit records: a plugin's own registration is refused, and the
+    // refusal says how a module of the app adds it beside the audit log.
     let sink = type_name::<dyn AuditSink>();
     let refused = Navree::app()
         .module(Provides(|m| {
@@ -1059,7 +1058,7 @@ fn a_plugin_that_provides_an_access_provider_fails_the_boot() {
     assert_eq!(
         refused,
         format!(
-            "plugin `navree-plugin-guard` provides `{sink}` in `Provides`, which receives the app's audit records; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and an app has one audit sink: to use the plugin's, register it from a module of an app that has no other (it cannot be used beside navree-audit's AuditModule)"
+            "plugin `navree-plugin-guard` provides `{sink}` in `Provides`, which receives the app's audit records; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and to use the plugin's sink, add it from a module of the app (m.audit_sink, m.audit_sink_value or m.audit_sink_factory)"
         )
     );
     // A sign-in policy may only refuse a sign-in: a plugin registers its own.
@@ -1271,30 +1270,89 @@ async fn the_app_may_register_a_plugins_change_observer() {
     app.shutdown().await.unwrap();
 }
 
-/// A module of the app: it registers the guard plugin's audit sink as the app's.
+/// A module of the app: it adds the guard plugin's audit sink.
 struct GuardAudit;
 
 impl Module for GuardAudit {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.factory(navree_plugin_guard::audit_sink());
+        use navree::audit::ModuleBuilderAuditExt;
+
+        m.audit_sink_factory(navree_plugin_guard::audit_sink());
     }
 }
 
 #[tokio::test]
 async fn the_app_may_register_a_plugins_audit_sink() {
-    use navree::contracts::AuditSink;
+    use navree::audit::{AuditLog, AuditModule, AuditOptions};
+    use navree::contracts::{AuditEntry, AuditKind, AuditSink};
 
+    // Alone, without AuditModule: the added sink forms the app's audit sink.
     let app = TestApp::builder()
         .module(navree_plugin_guard::Provides(|_| {}))
         .module(GuardAudit)
         .build()
         .await;
-    assert!(
-        app.ctx().try_get::<dyn AuditSink>().await.is_some(),
-        "the app's module registered the plugin's sink"
-    );
+    let standalone = app
+        .ctx()
+        .try_get::<dyn AuditSink>()
+        .await
+        .expect("the app's module added the plugin's sink");
+    standalone
+        .record(AuditEntry::new(AuditKind::Security, "access.denied"))
+        .await
+        .unwrap();
+    app.shutdown().await.unwrap();
+
+    // Beside AuditModule: AuditLog remains the app's sink and forwards to the added sink.
+    let app = TestApp::builder()
+        .temp_database()
+        .config("http.per_ip_rate_limit", Value::Null)
+        .module(DatabaseModule::from_config())
+        .module(AuditModule::for_root(AuditOptions {
+            routes: false,
+            ..AuditOptions::default()
+        }))
+        .module(navree_plugin_guard::Provides(|_| {}))
+        .module(GuardAudit)
+        .build()
+        .await;
+    let sink = app
+        .ctx()
+        .try_get::<dyn AuditSink>()
+        .await
+        .expect("the app's audit sink");
+    let log = app.get::<AuditLog>().await;
+    assert!(std::ptr::addr_eq(Arc::as_ptr(&sink), Arc::as_ptr(&log)));
+    sink.record(AuditEntry::new(AuditKind::Security, "access.denied"))
+        .await
+        .unwrap();
+    log.flush().await;
 
     app.shutdown().await.unwrap();
+}
+
+#[test]
+fn a_plugins_own_registration_of_a_sink_is_still_refused_and_the_text_says_how_the_app_adds_it() {
+    use std::any::type_name;
+
+    use navree::audit::ModuleBuilderAuditExt;
+    use navree::contracts::AuditSink;
+    use navree_plugin_guard::Provides;
+
+    let sink = type_name::<dyn AuditSink>();
+    let refused = Navree::app()
+        .module(Provides(|m| {
+            m.audit_sink_factory(navree_plugin_guard::audit_sink());
+        }))
+        .validate()
+        .expect_err(sink)
+        .to_string();
+    assert_eq!(
+        refused,
+        format!(
+            "plugin `navree-plugin-guard` provides `{sink}` in `Provides`, which receives the app's audit records; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, and to use the plugin's sink, add it from a module of the app (m.audit_sink, m.audit_sink_value or m.audit_sink_factory)"
+        )
+    );
 }
 
 #[test]

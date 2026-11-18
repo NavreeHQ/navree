@@ -258,10 +258,10 @@ pub enum KernelError {
     },
     /// A module that acts for a plugin that is not first-party registers a
     /// provider that only the app registers: one that decides who may do what
-    /// in the app, the options of such a module, the app's shell, its clock, or
-    /// an observer of every commit. The text ends with how the app uses the
-    /// plugin's: a module of the app registers it, and for the audit sink, of
-    /// which an app has one, a module of an app that has no other.
+    /// in the app, the options of such a module, the app's shell, its clock,
+    /// its audit sink, or an observer of every commit. The text ends with how
+    /// the app uses the plugin's: a module of the app registers it (or adds the
+    /// audit sink with `ModuleBuilderAuditExt`).
     #[error(
         "plugin `{plugin}` provides `{provider}` in `{module}`{reason}, {role}; only a module of the app registers it: remove the plugin or update it to a version that leaves it to the app, {}",
         crate::plugin::app_only_advice(.provider)
