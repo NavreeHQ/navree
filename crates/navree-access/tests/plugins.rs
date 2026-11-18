@@ -1045,7 +1045,10 @@ async fn a_plugin_subject_with_a_permission_prefix_outside_its_namespace_fails_t
 /// The types the CRM plugin keeps outside its own crate, as a `crm-core` crate would. A test
 /// binary is one crate, so that crate is this module, beside the plugin's.
 mod crm_core {
-    use navree_access::Subject;
+    use navree_access::{AbilityCtx, Policy, READ, Rules, Subject, SubjectRecords};
+    use navree_db::Uow;
+    use navree_kernel::{BoxError, BoxFuture};
+    use serde_json::Value;
 
     /// A pipeline of the CRM plugin, named under its namespace, whose permissions would be the
     /// app's `deals.*`.
@@ -1062,6 +1065,73 @@ mod crm_core {
     impl Subject for Stage {
         const SUBJECT: &'static str = "crm.Stage";
         const PERMISSION_PREFIX: &'static str = "crm";
+    }
+
+    /// A subject and policy in a shared crate: for `night-shift` it writes rules on both the
+    /// announcements plugin's subject and the CRM plugin's subject.
+    pub struct SharedNotice;
+
+    impl Subject for SharedNotice {
+        const SUBJECT: &'static str = "announcements.Shared";
+        const PERMISSION_PREFIX: &'static str = "announcements.shared";
+    }
+
+    impl Policy for SharedNotice {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.has_role("night-shift") {
+                rules.can(READ, "announcements.Shared");
+                rules.can(READ, "crm.Stage");
+            }
+        }
+    }
+
+    impl SubjectRecords for SharedNotice {
+        type Record = ();
+
+        fn load<'a>(_: &'a Uow, _: &'a str) -> BoxFuture<'a, Result<Option<()>, BoxError>> {
+            Box::pin(async { Ok(None) })
+        }
+
+        fn record_json(_: &()) -> Value {
+            Value::Null
+        }
+
+        fn policy() -> Option<fn(&AbilityCtx, &mut Rules)> {
+            Some(Self::define)
+        }
+    }
+
+    /// Like [`SharedNotice`], written for every signed-in user so the boot probe sees it.
+    pub struct SharedStage;
+
+    impl Subject for SharedStage {
+        const SUBJECT: &'static str = "announcements.Shared";
+        const PERMISSION_PREFIX: &'static str = "announcements.shared";
+    }
+
+    impl Policy for SharedStage {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.user.is_some() {
+                rules.can(READ, "announcements.Shared");
+                rules.can(READ, "crm.Stage");
+            }
+        }
+    }
+
+    impl SubjectRecords for SharedStage {
+        type Record = ();
+
+        fn load<'a>(_: &'a Uow, _: &'a str) -> BoxFuture<'a, Result<Option<()>, BoxError>> {
+            Box::pin(async { Ok(None) })
+        }
+
+        fn record_json(_: &()) -> Value {
+            Value::Null
+        }
+
+        fn policy() -> Option<fn(&AbilityCtx, &mut Rules)> {
+            Some(Self::define)
+        }
     }
 }
 
@@ -1599,5 +1669,154 @@ async fn a_kept_rule_keeps_the_policys_own_words_beside_the_plugins_name() {
             "reason": attribution,
         }),
         "{abilities}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn one_policy_registered_by_modules_of_two_plugins_applies_the_first_plugins_subjects_only() {
+    use navree_plugin_crm::CrmModule;
+
+    // Announcements registers `SharedNotice` first (through `for_feature`), and CRM registers
+    // the same policy name second (through `for_policy`). Both modules act for their own
+    // community plugins, and only the first plugin's subjects apply.
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    let notices = NoticeSubjects(|m| {
+        m.import(AccessModule::for_feature::<crm_core::SharedNotice>());
+    });
+    let crm = CrmModule(|m| {
+        m.import(AccessModule::for_subject::<crm_core::Stage>())
+            .import(AccessModule::for_policy::<crm_core::SharedNotice>());
+    });
+    let app = builder()
+        .module(notices)
+        .module(crm)
+        .try_build()
+        .await
+        .expect("boots when the probes do not hold night-shift");
+
+    // Each plugin lists a module that contributed a `PolicyRegistration` of that name.
+    for plugin_name in ["navree-plugin-announcements", "navree-plugin-crm"] {
+        let report = app
+            .ctx()
+            .plugins()
+            .plugins
+            .into_iter()
+            .find(|plugin| plugin.info.name == plugin_name)
+            .expect("the plugin is listed");
+        let registers_policy = report.modules.iter().any(|module| {
+            module
+                .contributions
+                .contains(&("navree_access::records::PolicyRegistration", 1))
+        });
+        assert!(registers_policy, "{plugin_name}: {:?}", report.modules);
+    }
+
+    let kuldeep = Uuid::now_v7();
+    give_role(&app, kuldeep, "night-shift", &[]).await;
+    let abilities = app
+        .acting_as(principal(kuldeep))
+        .get("/api/me/abilities")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    let rules = abilities.as_array().expect("a list of rules");
+    let first_reason =
+        "policy `plugins::crm_core::SharedNotice` of plugin `navree-plugin-announcements`";
+    let kept = json!({
+        "action": "read",
+        "subject": "announcements.Shared",
+        "reason": first_reason,
+    });
+    let from_policy: Vec<&Value> = rules
+        .iter()
+        .filter(|rule| {
+            rule["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.contains("SharedNotice"))
+        })
+        .collect();
+    assert_eq!(from_policy, [&kept], "{abilities}");
+    assert!(
+        !rules.iter().any(|rule| rule["subject"] == "crm.Stage"),
+        "{abilities}"
+    );
+    let left_out: Vec<String> = warnings
+        .at("navree::security")
+        .into_iter()
+        .filter(|message| message.starts_with("left out a rule"))
+        .collect();
+    assert_eq!(
+        left_out,
+        [
+            "left out a rule of plugin `navree-plugin-announcements`'s policy `plugins::crm_core::SharedNotice` on `crm.Stage`, not one of its own subjects"
+        ]
+    );
+    drop(_guard);
+
+    // In the opposite module order, CRM comes first: only `crm.Stage` applies, and the
+    // announcements subject is left out.
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    let crm = CrmModule(|m| {
+        m.import(AccessModule::for_subject::<crm_core::Stage>())
+            .import(AccessModule::for_policy::<crm_core::SharedNotice>());
+    });
+    let notices = NoticeSubjects(|m| {
+        m.import(AccessModule::for_feature::<crm_core::SharedNotice>());
+    });
+    let app = builder()
+        .module(crm)
+        .module(notices)
+        .try_build()
+        .await
+        .expect("boots in the opposite order");
+    let simran = Uuid::now_v7();
+    give_role(&app, simran, "night-shift", &[]).await;
+    let abilities = app
+        .acting_as(principal(simran))
+        .get("/api/me/abilities")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    let rules = abilities.as_array().expect("a list of rules");
+    let crm_reason = "policy `plugins::crm_core::SharedNotice` of plugin `navree-plugin-crm`";
+    let kept = json!({
+        "action": "read",
+        "subject": "crm.Stage",
+        "reason": crm_reason,
+    });
+    let from_policy: Vec<&Value> = rules
+        .iter()
+        .filter(|rule| {
+            rule["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.contains("SharedNotice"))
+        })
+        .collect();
+    assert_eq!(from_policy, [&kept], "{abilities}");
+    assert!(
+        !rules
+            .iter()
+            .any(|rule| rule["subject"] == "announcements.Shared"),
+        "{abilities}"
+    );
+
+    // When the boot probes see the rule on the second plugin's subject, the boot stops on it.
+    let notices = NoticeSubjects(|m| {
+        m.import(AccessModule::for_feature::<crm_core::SharedStage>());
+    });
+    let crm = CrmModule(|m| {
+        m.import(AccessModule::for_subject::<crm_core::Stage>())
+            .import(AccessModule::for_policy::<crm_core::SharedStage>());
+    });
+    let error = boot_error(builder().module(notices).module(crm)).await;
+    assert!(
+        error.contains(
+            "plugin `navree-plugin-announcements` registers the policy `plugins::crm_core::SharedStage` in `AccessFeature<plugins::crm_core::SharedStage>`, which writes a rule on `crm.Stage`; a plugin's policy writes rules on its own subjects only"
+        ),
+        "{error}"
     );
 }

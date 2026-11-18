@@ -243,7 +243,14 @@ impl OwnSubjects {
 }
 
 impl Subjects {
-    /// Collects the subjects contributed by the modules of `ctx`.
+    /// Collects the subjects and policies contributed by the modules of `ctx`.
+    ///
+    /// A policy name registered by more than one module is added once, in the
+    /// order it is first seen. When any module that registers it acts for no
+    /// community plugin, it is the app's policy and every rule of it applies;
+    /// when every module that registers it acts for a community plugin, the
+    /// first plugin's own subjects apply, even when a module of another
+    /// community plugin registers the same policy name later.
     pub(crate) fn collect(ctx: &AppContext) -> Result<Subjects, AccessError> {
         let mut prefixes: BTreeMap<String, String> = BTreeMap::new();
         // Subject → its registered type.
@@ -294,8 +301,10 @@ impl Subjects {
             let registration = &contributed.value;
             let plugin = community_plugin(&plugins, contributed.module.id);
             match seen.get(registration.name) {
-                // A policy registered by two modules applies once; it is the
-                // app's as soon as one of them acts for no community plugin.
+                // A policy registered by two modules applies once: it becomes
+                // the app's as soon as one of them acts for no community
+                // plugin, and between two community plugins keeps the first
+                // plugin's subjects.
                 Some(&index) => {
                     if plugin.is_none() {
                         policies[index].plugin = None;
