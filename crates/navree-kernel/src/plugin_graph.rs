@@ -410,7 +410,9 @@ impl Graph {
                 .strip_prefix(info.crate_name)
                 .is_some_and(|rest| rest.starts_with("::"))
         };
-        if in_crate(module.type_name) || in_crate(module.id.type_name()) {
+        if in_crate(module.type_name)
+            || (!self.first_party.contains(info.name) && in_crate(module.id.type_name()))
+        {
             format!(" (a module of the plugin's crate `{}`)", info.crate_name)
         } else {
             String::from(" (only the plugin's modules import it)")
@@ -423,18 +425,18 @@ impl Graph {
     /// A module acts for the plugin it names. Else, for the plugin of the
     /// crate its type path is in, up to its first `<` and read through a
     /// reference, a `Box` or a `Pin` (`&'static Helper` is `Helper`), a trait
-    /// object as its trait (`&'static dyn Part` is `Part`): the type
-    /// of the module value the app or its importer passed, else the type its
-    /// id names. For each type, among plugins whose crates hold it, the
-    /// longest crate name wins, then the plugin first in import order. When
-    /// its own type gives a
-    /// first-party plugin and its id one that is not, it is the one its id
-    /// gives. Else, for a module with generic arguments whose direct importers
-    /// all act for plugins: the one of theirs whose crate its arguments name,
-    /// else the first of them in import order that is not first-party, else the
-    /// first. When its type path gives a first-party plugin and its importers
-    /// one that is not, it acts for the one that is not. The root acts for
-    /// nothing.
+    /// object as its trait (`&'static dyn Part` is `Part`): the type of the
+    /// module value the app or its importer passed, else, for a plugin that is
+    /// not first-party, the type its id names (a first-party plugin is never
+    /// matched by an id alone). For each type, among plugins whose crates hold
+    /// it, the longest crate name wins, then the plugin first in import order.
+    /// When its own type gives a first-party plugin and its id one that is not,
+    /// it is the one its id gives. Else, for a module with generic arguments
+    /// whose direct importers all act for plugins: the one of theirs whose
+    /// crate its arguments name, else the first of them in import order that is
+    /// not first-party, else the first. When its type path gives a first-party
+    /// plugin and its importers one that is not, it acts for the one that is
+    /// not. The root acts for nothing.
     fn attribution(&self, groups: &[PluginGroup]) -> Vec<Option<usize>> {
         let mut acts_for: Vec<Option<usize>> = vec![None; self.modules.len()];
         if groups.is_empty() {
@@ -448,26 +450,12 @@ impl Graph {
                 importers[import].push(m);
             }
         }
-        // The plugins by crate: the longest crate name first, then in the
-        // order of `groups` (the sort is stable).
-        let mut by_crate: Vec<&PluginGroup> = groups.iter().collect();
-        by_crate.sort_by_key(|group| std::cmp::Reverse(group.crate_name.len()));
+        let plugins: Vec<(&str, bool)> = groups
+            .iter()
+            .map(|group| (group.crate_name, group.first_party))
+            .collect();
         let group = |first: usize| groups.iter().find(|group| group.first == first);
         let first_party = |first: usize| group(first).is_some_and(|group| group.first_party);
-        // The plugin of the crate `type_name` is in, up to its first `<`, read through a
-        // reference, a `Box` or a `Pin`.
-        let of_crate = |type_name: &str| {
-            let read = module_path(type_name);
-            let outer = read.split_once('<').map_or(read, |(outer, _)| outer);
-            by_crate
-                .iter()
-                .find(|group| {
-                    outer
-                        .strip_prefix(group.crate_name)
-                        .is_some_and(|rest| rest.starts_with("::"))
-                })
-                .map(|group| group.first)
-        };
         // Reverse import order is a topological order (the graph has no
         // import cycle by now): every importer is decided before the modules
         // it imports.
@@ -481,13 +469,7 @@ impl Graph {
             }
             let own = self.modules[m].type_name;
             let id = self.modules[m].id.type_name();
-            let by_type = match (of_crate(own), of_crate(id)) {
-                (Some(by_own), Some(by_id)) if first_party(by_own) && !first_party(by_id) => {
-                    Some(by_id)
-                }
-                (Some(by_own), _) => Some(by_own),
-                (None, by_id) => by_id,
-            };
+            let by_type = plugin_by_type(own, id, &plugins).map(|index| groups[index].first);
             // Some only when every direct importer acts for a plugin.
             let generic = own.contains('<') || id.contains('<');
             let importing: Option<Vec<usize>> = if generic && !importers[m].is_empty() {
@@ -501,7 +483,8 @@ impl Graph {
                     .copied()
                     .find(|&f| {
                         group(f).is_some_and(|group| {
-                            names_crate(own, group.crate_name) || names_crate(id, group.crate_name)
+                            names_crate(own, group.crate_name)
+                                || (!group.first_party && names_crate(id, group.crate_name))
                         })
                     })
                     .or_else(|| firsts.iter().copied().find(|&f| !first_party(f)))
@@ -554,6 +537,38 @@ impl Graph {
         }
         plugins.sort_by_key(|plugin| plugin.info.name);
         PluginsReport { plugins }
+    }
+}
+
+/// Which plugin of `plugins` a module's type paths place it in (step 9 of
+/// [`Graph::check_plugins`]): `plugins` lists `(crate_name, first_party)` in
+/// first-seen plugin order, and the index returned is into `plugins`.
+///
+/// For each type path (read through wrappers and trait objects by
+/// [`module_path`], up to its first `<`), among plugins whose crates hold it,
+/// the longest crate name wins, then the plugin first in `plugins`. The
+/// module's own type `own` decides before the type its `id` names, unless
+/// `own` gives a first-party plugin and `id` one that is not. When `own` is in
+/// no plugin's crate, `id` may place the module in a plugin that is not
+/// first-party, never in a first-party one.
+fn plugin_by_type(own: &str, id: &str, plugins: &[(&str, bool)]) -> Option<usize> {
+    let mut order: Vec<usize> = (0..plugins.len()).collect();
+    order.sort_by_key(|&index| std::cmp::Reverse(plugins[index].0.len()));
+    let of_crate = |type_name: &str| {
+        let read = module_path(type_name);
+        let outer = read.split_once('<').map_or(read, |(outer, _)| outer);
+        order.iter().copied().find(|&index| {
+            outer
+                .strip_prefix(plugins[index].0)
+                .is_some_and(|rest| rest.starts_with("::"))
+        })
+    };
+    let first_party = |index: usize| plugins[index].1;
+    match (of_crate(own), of_crate(id)) {
+        (Some(by_own), Some(by_id)) if first_party(by_own) && !first_party(by_id) => Some(by_id),
+        (Some(by_own), _) => Some(by_own),
+        (None, Some(by_id)) if !first_party(by_id) => Some(by_id),
+        (None, _) => None,
     }
 }
 
@@ -720,5 +735,178 @@ mod tests {
         assert!(errors.is_empty(), "{errors:?}");
         assert!(graph.first_party.contains("navree-flags"));
         assert_eq!(graph.acts_for[m], Some(m));
+    }
+
+    #[test]
+    fn a_module_acts_for_a_first_party_plugin_by_its_own_type_and_never_by_its_id_alone() {
+        use crate::builder::PassedModule;
+
+        let plugins = [
+            ("navree_flags", true),
+            ("navree_plugin_khata", false),
+            ("navree_plugin_khata::ledger", false),
+        ];
+
+        // A module whose own type is in the first-party plugin's crate acts for it (plain,
+        // configured in its crate, or behind a reference or box).
+        for own in [
+            "navree_flags::module::FlagsModule",
+            "navree_flags::module::ConfiguredFlagsModule",
+            "&navree_flags::module::FlagsModule",
+            "alloc::boxed::Box<navree_flags::module::FlagsModule>",
+        ] {
+            assert_eq!(
+                plugin_by_type(own, "alloc::string::String", &plugins),
+                Some(0),
+                "{own}"
+            );
+        }
+
+        // When its own type is in no plugin's crate, an id in the first-party plugin's crate
+        // never gives it to the first-party plugin.
+        for own in [
+            "khata_extra::Sneak",
+            "alloc::boxed::Box<dyn navree_kernel::module::Module>",
+            "navree_kernel::module::ConfiguredModule<navree_flags::module::FlagsModule, ()>",
+        ] {
+            assert_eq!(
+                plugin_by_type(own, "navree_flags::module::FlagsModule", &plugins),
+                None,
+                "{own}"
+            );
+        }
+
+        // For a community plugin, an id still places a boxed or kernel-configured module in
+        // that plugin, and the longest crate name wins.
+        assert_eq!(
+            plugin_by_type(
+                "navree_kernel::module::ConfiguredModule<navree_plugin_khata::Store, ()>",
+                "navree_plugin_khata::Store",
+                &plugins
+            ),
+            Some(1)
+        );
+        assert_eq!(
+            plugin_by_type(
+                "alloc::boxed::Box<dyn navree_kernel::module::Module>",
+                "navree_plugin_khata::ledger::Books",
+                &plugins
+            ),
+            Some(2)
+        );
+
+        // When its own type is first-party and its id is a community plugin's, the community
+        // plugin wins; when its own type is a community plugin's, a first-party id changes
+        // nothing.
+        assert_eq!(
+            plugin_by_type("navree_flags::Wrap", "navree_plugin_khata::Store", &plugins),
+            Some(1)
+        );
+        assert_eq!(
+            plugin_by_type(
+                "navree_plugin_khata::Sneak",
+                "navree_flags::module::FlagsModule",
+                &plugins
+            ),
+            Some(1)
+        );
+
+        // Two plugins of one crate break ties by first-seen plugin order.
+        let same_crate = [
+            ("navree_plugin_khata", false),
+            ("navree_plugin_khata", false),
+        ];
+        assert_eq!(
+            plugin_by_type(
+                "navree_plugin_khata::Store",
+                "navree_plugin_khata::Store",
+                &same_crate
+            ),
+            Some(0)
+        );
+
+        // In a module graph: a boxed module with a first-party module's id is never given to
+        // the first-party plugin; imported by the app it stays the app's, and imported only by
+        // a community plugin it acts for that community plugin.
+        mod other_crate {
+            use super::{FirstPartyModule, Module, ModuleBuilder, ModuleId};
+
+            pub struct TakesFirstPartyId;
+
+            impl Module for TakesFirstPartyId {
+                fn id(&self) -> ModuleId {
+                    ModuleId::named::<FirstPartyModule>("sneak")
+                }
+
+                fn register(&self, _: &mut ModuleBuilder) {}
+            }
+        }
+
+        struct CommunityBoxed;
+        impl Module for CommunityBoxed {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.imports(vec![
+                    Box::new(other_crate::TakesFirstPartyId) as Box<dyn Module>
+                ]);
+            }
+        }
+
+        let sneak_id = ModuleId::named::<FirstPartyModule>("sneak");
+        let graph = Graph::build_passed(
+            &[
+                PassedModule::of(FirstPartyModule),
+                PassedModule::of(CommunityBoxed),
+            ],
+            &[],
+        )
+        .expect("valid");
+        let first_party = graph
+            .module_of(ModuleId::of::<FirstPartyModule>())
+            .expect("in the graph");
+        let community = graph
+            .module_of(ModuleId::of::<CommunityBoxed>())
+            .expect("in the graph");
+        let sneak = graph.module_of(sneak_id).expect("in the graph");
+        let groups = [
+            PluginGroup {
+                first: first_party,
+                crate_name: module_path!(),
+                first_party: true,
+                members: vec![first_party],
+            },
+            PluginGroup {
+                first: community,
+                crate_name: "navree_plugin_khata",
+                first_party: false,
+                members: vec![community],
+            },
+        ];
+        assert_eq!(
+            graph.modules[sneak].type_name,
+            std::any::type_name::<Box<dyn Module>>()
+        );
+        let acts_for = graph.attribution(&groups);
+        assert_eq!(acts_for[sneak], Some(community));
+
+        let mut app_graph = Graph::build_passed(
+            &[
+                PassedModule::of(FirstPartyModule),
+                PassedModule::boxed(Box::new(other_crate::TakesFirstPartyId)),
+            ],
+            &[],
+        )
+        .expect("valid");
+        let first_party = app_graph
+            .module_of(ModuleId::of::<FirstPartyModule>())
+            .expect("in the graph");
+        let sneak = app_graph.module_of(sneak_id).expect("in the graph");
+        app_graph.modules[sneak].type_name = "khata_extra::TakesFirstPartyId";
+        let only_first = [PluginGroup {
+            first: first_party,
+            crate_name: module_path!(),
+            first_party: true,
+            members: vec![first_party],
+        }];
+        assert_eq!(app_graph.attribution(&only_first)[sneak], None);
     }
 }
