@@ -1,5 +1,6 @@
 # Findings the scanner reports for versions that already carry the fix (a
-# patched release).
+# patched release), and one with no fixed release yet, kept for a month (picomatch,
+# at the end).
 # Reviewed 2026-10-28 and 2026-11-16; each entry expires so it gets looked at again.
 
 [[IgnoredVulns]]
@@ -21,3 +22,8 @@ reason = "nuxt and @nuxt/nitro-server 4.6.4 (@navree/nuxt's development and test
 id = "GHSA-96x6-fvhx-49hg"
 ignoreUntil = 2027-01-31
 reason = "nuxt 4.6.4 (@navree/nuxt's development and test install) is patched (the advisory: fixed in 4.6.4). Its OSV record also lists the Nuxt 3 line, which gets no fix, as a range with only an 'introduced' event (the '< 4.0.0' bound is only in database_specific), so the scanner matches every later version, the fixed ones included. Drop this entry once the record closes that range."
+
+[[IgnoredVulns]]
+id = "GHSA-fc5q-39xc-vjpf"
+ignoreUntil = 2026-12-18
+reason = "picomatch 4.0.7 and earlier can take a very long time on a glob of a single-branch repeated extglob, and no fixed version is published. Here it is only part of the build and test tools (Vite, Vitest, Rollup and their file finders, and Nuxt's own kit for @navree/nuxt), which match the project's own glob patterns, never a pattern from outside. Move to the fixed picomatch the day it is published, and drop this entry."
