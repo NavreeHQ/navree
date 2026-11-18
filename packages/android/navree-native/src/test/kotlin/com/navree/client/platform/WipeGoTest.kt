@@ -252,4 +252,51 @@ class WipeGoTest {
         assertEquals("a go whose web view cannot be made leaves its origins", setOf(pay), secondLeft)
         assertNull("and its address is answered no longer", goes.going)
     }
+
+    @Test
+    fun while_a_go_is_at_every_origin_whatever_a_service_worker_asks_for_is_refused_but_the_gos_own_address() {
+        val goes = WipeGoes()
+        val surface = Surface()
+        assertFalse("with no go on its way nothing is refused for one", goes.stops("$shop/expenses"))
+        goes.start(listOf(shop, pay), token, word, surface) {}
+        // The go's document starts the worker of the person who left, and the worker sends its queue of writes again.
+        assertTrue(goes.stops("$shop/expenses"))
+        assertTrue("on whichever origin the go is at, whichever is in turn", goes.stops("$pay/api/charges?after=7"))
+        assertTrue("and at a host nobody wrote down, which a worker reaches all the same", goes.stops("$patiala/sync"))
+        assertFalse("the go's own address is answered with the client's document", goes.stops(address(shop)))
+        assertFalse(goes.stops(address(pay)))
+        assertTrue("an address that only begins like the go's is another address", goes.stops(address(shop) + "/more"))
+        assertTrue(goes.stops(address(shop) + "?next=/expenses"))
+
+        surface.says(clean(), shop)
+        assertTrue("for as long as the go runs", goes.stops("$shop/expenses"))
+        surface.says(clean(), pay)
+        assertFalse("once the go is over, a worker's requests are held to the usual rules and no more", goes.stops("$shop/expenses"))
+    }
+
+    @Test
+    fun while_a_go_is_only_at_the_origins_an_earlier_go_left_a_workers_requests_to_the_other_origins_are_sent() {
+        val goes = WipeGoes()
+        val surface = Surface()
+        goes.start(listOf(pay), token, word, surface, everywhere = false) {}
+        assertTrue(goes.stops("$pay/api/charges"))
+        assertTrue("however the origin is written", goes.stops("https://pay.example:443/api/charges"))
+        assertFalse("the pages of the other origins are on the screen again, and their workers ask for them", goes.stops("$shop/orders"))
+        assertFalse(goes.stops(address(pay)))
+        surface.lose()
+        assertFalse("a go that is lost holds nothing back any more", goes.stops("$pay/api/charges"))
+    }
+
+    @Test
+    fun a_go_that_takes_anothers_place_is_the_one_a_workers_requests_are_held_against() {
+        val goes = WipeGoes()
+        goes.start(listOf(pay), token, word, Surface(), everywhere = false) {}
+        assertFalse(goes.stops("$shop/orders"))
+        // Another person is signed in: every origin is owed again, and the go at all of them takes the first one's place.
+        val second = Surface()
+        goes.start(listOf(shop, pay), laterPath, laterWord, second) {}
+        assertTrue("every origin is held now", goes.stops("$shop/orders"))
+        assertTrue("the first go's address is no longer anybody's own document", goes.stops(address(pay)))
+        assertFalse(goes.stops(WipeRules.address(pay, laterPath)))
+    }
 }

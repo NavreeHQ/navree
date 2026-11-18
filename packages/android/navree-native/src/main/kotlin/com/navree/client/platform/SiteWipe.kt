@@ -326,36 +326,77 @@ internal class WipeGo(
  * the origins it had not cleared ([WipeGo.broke]), and its web view goes with
  * it. So the one address answered as the client's own document ([going]) is
  * always that of the only go there is, and no go's address is left to reach a
- * server because another go's took its place. Every call is on the one thread
- * the surfaces call back on.
+ * server because another go's took its place.
+ *
+ * A go clears an origin by loading a document there, and that starts the
+ * service workers the origin's pages registered: the workers of the person
+ * who left. What such a worker then asks for on its own (a queue of writes it
+ * sends again when it starts, a sync, a refresh of its caches) would leave
+ * with the cookies the store holds at that moment, which after a change of
+ * person, or once the next person has signed in, are somebody else's. So
+ * while a go is on its way, a service worker's requests are refused ([stops]),
+ * all but the go's own address: every one of them while the go is at every
+ * origin, when no page of the app is shown and a worker has nobody to ask
+ * for; and, while the go is only at the origins an earlier go left, those to
+ * the origins it is at, since the pages of the others are on the screen again
+ * and their workers with them.
+ *
+ * Every call is on the one thread the surfaces call back on, but for [going]
+ * and [stops], which are asked on the thread a service worker's requests are
+ * asked on.
  */
 internal class WipeGoes {
-    /** The path of the address the go on its way loads. Read on the thread a service worker's requests are asked on. */
+    /** What a service worker's request is held against: the path of the go's address, the origins the go is at, and whether those are every origin. */
+    private class Way(val token: String, val targets: Set<String>, val everywhere: Boolean)
+
     @Volatile
-    var going: String? = null
-        private set
+    private var way: Way? = null
 
     private var live: WipeGo? = null
+
+    /** The path of the address the go on its way loads; null when no go is on its way. */
+    val going: String? get() = way?.token
+
+    /**
+     * Whether a request a service worker makes to [url] is refused because a
+     * go is on its way. Never the go's own address, which is answered with
+     * the client's document. While the go is at every origin, any other
+     * address; while it is at the origins an earlier go left, an address on
+     * one of those.
+     */
+    fun stops(url: String): Boolean {
+        val now = way ?: return false
+        if (WipeRules.own(url, now.token)) return false
+        if (now.everywhere) return true
+        val origin = Site.read(url)?.origin() ?: return false
+        return now.targets.any { WipeRules.same(it, origin) }
+    }
 
     /**
      * Begins a go at [targets] in [surface], whose address is the path
      * [token] and whose document answers with [word], after ending the go on
-     * its way, if there is one. [done] is told, once, which origins the new
-     * go left.
+     * its way, if there is one. [everywhere] says the targets are every
+     * origin there is to clear, and not only those an earlier go left. [done]
+     * is told, once, which origins the new go left.
      */
-    fun start(targets: List<String>, token: String, word: String, surface: WipeSurface, done: (left: Set<String>) -> Unit) {
+    fun start(targets: List<String>, token: String, word: String, surface: WipeSurface, everywhere: Boolean = true, done: (left: Set<String>) -> Unit) {
         // The older go says what it left before the new one's address becomes the one that is answered.
         live?.broke()
-        going = token
+        way = Way(token, targets.toSet(), everywhere)
         val go = WipeGo(targets, token, word, surface) { left ->
-            if (going == token) {
-                going = null
+            if (way?.token == token) {
+                way = null
                 live = null
             }
             done(left)
         }
         live = go
         go.start()
+    }
+
+    /** Ends the go on its way, if there is one, as a web view that is lost ends it: what it had not cleared is left. */
+    fun stop() {
+        live?.broke()
     }
 }
 
@@ -694,6 +735,8 @@ object SiteWipe {
             debt.forget()
             changed.intValue++
         }
+        // A go the test left on its way ends too: while one runs, a service worker's requests are refused, the next test's among them.
+        main.post { goes.stop() }
     }
 
     /**
@@ -755,6 +798,19 @@ object SiteWipe {
         goes.going?.takeIf { WipeRules.own(url, it) }?.let { answer(200, "OK", "text/html", WipeRules.DOCUMENT) }
 
     /**
+     * Whether a request a service worker makes to [url] is refused because of
+     * what is owed: a go is on its way ([WipeGoes.stops]), or the address is
+     * on an origin whose pages are held back ([held]), go or no go. A worker
+     * the go's document started is the worker of the person who left, and it
+     * may outlive the go at an origin the go could not clear: it sends
+     * nothing of its own to an origin for as long as that origin's pages are
+     * not shown, so nothing of the person who left goes out with the cookies
+     * of whoever is signed in by then. Asked where a service worker's
+     * requests are asked, after [document]. Any thread.
+     */
+    internal fun stops(url: String): Boolean = goes.stops(url) || held(url)
+
+    /**
      * Shows each origin to clear the client's own document, one after the
      * other in one web view that is never drawn, and waits for each to say its
      * workers are unregistered and its caches deleted ([WipeGo]). The origins
@@ -768,12 +824,14 @@ object SiteWipe {
      */
     fun documents(context: Context, origins: Origins, done: (left: Set<String>?) -> Unit) {
         val application = context.applicationContext
-        val targets = synchronized(lock) { debt.targets(origins.ownOrigins(), origins.webHostOrigins()) }
+        // Every origin, while no go has ended and every page is held back; after that, the origins a go left.
+        val (targets, everywhere) = synchronized(lock) { debt.targets(origins.ownOrigins(), origins.webHostOrigins()) to (debt.left == null) }
         if (targets.isEmpty()) return done(emptySet())
-        // The go's address is answered where a service worker's requests are asked as well, so those rules have to be in force.
+        // The go's address is answered where a service worker's requests are asked as well, and a worker's other requests are
+        // refused there while the go runs, so those rules have to be in force.
         if (!able() || !guardWorkers(origins)) return done(null)
         val token = hex()
-        goes.start(targets, token, hex(), WebSurface(application, token)) { left -> done(left) }
+        goes.start(targets, token, hex(), WebSurface(application, token), everywhere) { left -> done(left) }
     }
 
     /** Sixteen bytes from the system's source of random numbers, as hex digits. */

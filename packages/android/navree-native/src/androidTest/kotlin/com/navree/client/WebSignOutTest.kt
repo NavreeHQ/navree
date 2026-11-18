@@ -178,6 +178,24 @@ class WebSignOutTest {
         self.addEventListener('fetch', function(e){ e.respondWith(fetch(e.request)) });
     """.trimIndent()
 
+    /**
+     * A worker that takes its origin's pages over at once and, each time a
+     * page of the origin is asked for, sends a write of its own to the app's
+     * server and says which page it was for: as a worker does that sends a
+     * queue of writes again whenever it is started. The page itself it leaves
+     * to the network.
+     */
+    private val replaying = """
+        self.addEventListener('install', function(){ self.skipWaiting() });
+        self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim()) });
+        self.addEventListener('fetch', function(e){
+          if (e.request.mode === 'navigate') fetch('/replayed?for=' + encodeURIComponent(new URL(e.request.url).pathname), {method: 'POST', credentials: 'include'});
+        });
+    """.trimIndent()
+
+    /** The page each write of the [replaying] worker that reached the app's server was for, in order. */
+    private val replayed = CopyOnWriteArrayList<String>()
+
     private fun serve() {
         app.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when (request.url.encodedPath.also { asked += it }) {
@@ -191,6 +209,10 @@ class WebSignOutTest {
                 "/look" -> page(looks)
                 "/sw.js" -> MockResponse.Builder().code(200).addHeader("Content-Type", "text/javascript").body(worker).build()
                 "/sign-in" -> page("")
+                "/replayed" -> {
+                    replayed += request.url.queryParameter("for") ?: ""
+                    MockResponse.Builder().code(204).build()
+                }
                 removal -> {
                     removalCookie = request.headers["Cookie"]
                     unanswered.await(30, TimeUnit.SECONDS)
@@ -299,9 +321,17 @@ class WebSignOutTest {
      * no end of a session: a page shown after that finds nothing of what the
      * pages of the person before stored, and still finds the cookie, since
      * the one store's cookies are the new person's and are not deleted.
+     *
+     * The worker here sends a write of its own to the app's server each time
+     * a page of its origin is asked for. It does so for the page that looks,
+     * while nobody's things are being taken away. The deletion's own
+     * document is a page of that origin too, and it starts the worker of the
+     * person before: what the worker sends then never reaches the server,
+     * where it would have arrived with the new person's cookie.
      */
     @Test
     fun aPageShownAfterAnotherFindsWhatItStoredWhenNobodySignedOutAndAllButTheCookieIsGoneOnceAnotherPersonIsSignedIn() {
+        worker = replaying
         start()
         val found = looked("web-storage-kept.txt", "no sign-out between the two pages")
         assertTrue("the cookie: $found", found.getValue("cookie").jsonPrimitive.content.contains("city=Amritsar"))
@@ -309,6 +339,8 @@ class WebSignOutTest {
         assertTrue("IndexedDB: $found", found.getValue("indexeddb").jsonArray.any { it.jsonPrimitive.content == "orders" })
         assertTrue("Cache Storage: $found", found.getValue("caches").jsonArray.any { it.jsonPrimitive.content == "pages" })
         assertEquals("a service worker: $found", 1, found.getValue("workers").jsonPrimitive.int)
+        // The control for the worker: with nothing being taken away, what it sends for the page that looked reaches the server.
+        assertTrue("the worker's own write for the page that looked reached the server: $replayed", waitFor(15) { replayed.contains("/look") })
 
         // The page that looked is left; then the core names one person, and after her another, with no word of a sign-out.
         compose.runOnUiThread { shown = null }
@@ -323,6 +355,7 @@ class WebSignOutTest {
         assertEquals("no IndexedDB database: $after", 0, after.getValue("indexeddb").jsonArray.size)
         assertEquals("nothing in Cache Storage: $after", 0, after.getValue("caches").jsonArray.size)
         assertEquals("no service worker: $after", 0, after.getValue("workers").jsonPrimitive.int)
+        assertEquals("what the worker sent while its origin was being cleared never reached the server: $replayed", listOf("/look"), replayed.distinct())
     }
 
     /**

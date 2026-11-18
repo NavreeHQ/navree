@@ -86,8 +86,15 @@ object WebRules {
         else -> WebRequest.Refuse
     }
 
-    /** Whether a service worker's own request is sent: only to the app's origins and the hosts it names for the web view. */
-    fun workerRequest(ours: Boolean, webHost: Boolean): WebRequest = if (ours || webHost) WebRequest.Send else WebRequest.Refuse
+    /**
+     * Whether a service worker's own request is sent: only to the app's
+     * origins and the hosts it names for the web view, and to none of them
+     * while what a session's pages left is being taken away at that origin
+     * ([wiping]: [SiteWipe.stops]). A worker which that deletion started is
+     * the worker of the person who left; what it sends would go with the
+     * cookies of whoever is signed in now.
+     */
+    fun workerRequest(ours: Boolean, webHost: Boolean, wiping: Boolean = false): WebRequest = if ((ours || webHost) && !wiping) WebRequest.Send else WebRequest.Refuse
 
     /**
      * What a web page is missing before it may be shown: the rules for a service
@@ -288,6 +295,11 @@ internal fun guardDocuments(view: WebView, origins: Origins, told: Told): Boolea
  * reference for this callback says that where an answer is returned, "the
  * return response and data will be used", so a worker that fetches what its
  * pages ask for hands the client's document on and the address is not sent.
+ * Every other request a worker makes is answered 403 for as long as the go
+ * runs, and after it to an origin whose pages are still held back
+ * ([SiteWipe.stops]): the go's document starts the workers of the person who
+ * left, and nothing they send on their own leaves with the cookies of
+ * whoever is signed in by then.
  * The setting is the process's: other code that sets a client of its own
  * replaces this one, and nothing tells. Throws when the system's web view
  * cannot take it.
@@ -298,7 +310,7 @@ internal fun setServiceWorkerRules(origins: Origins) {
             override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
                 SiteWipe.document(url)?.let { return it }
-                return when (WebRules.workerRequest(origins.ours(url), origins.webHost(url))) {
+                return when (WebRules.workerRequest(origins.ours(url), origins.webHost(url), wiping = SiteWipe.stops(url))) {
                     WebRequest.Send -> null
                     else -> WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
                 }

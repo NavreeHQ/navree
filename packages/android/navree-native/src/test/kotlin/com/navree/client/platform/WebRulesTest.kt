@@ -200,6 +200,15 @@ class WebRulesTest {
     }
 
     @Test
+    fun a_service_workers_request_is_not_sent_while_what_a_sessions_pages_left_is_being_taken_away_there() {
+        // The deletion's own document started the worker of the person who left: what it sends would carry the cookies of whoever is signed in now.
+        assertEquals(WebRequest.Refuse, WebRules.workerRequest(ours = true, webHost = false, wiping = true))
+        assertEquals(WebRequest.Refuse, WebRules.workerRequest(ours = false, webHost = true, wiping = true))
+        assertEquals(WebRequest.Refuse, WebRules.workerRequest(ours = false, webHost = false, wiping = true))
+        assertEquals("and is sent again when it is over", WebRequest.Send, WebRules.workerRequest(ours = true, webHost = false, wiping = false))
+    }
+
+    @Test
     fun a_web_page_is_shown_only_with_both_guards_in_force() {
         assertTrue(WebRules.guardsInForce(workers = true, documents = true))
         assertFalse("no rules for a service worker's requests", WebRules.guardsInForce(workers = false, documents = true))
