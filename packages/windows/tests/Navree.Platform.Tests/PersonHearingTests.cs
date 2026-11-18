@@ -11,12 +11,28 @@ internal sealed class RecordedShell
 {
     private readonly object gate = new();
     private readonly List<string> did = [];
+    private readonly List<string> givenTo = [];
 
     /// <summary>Completes when the system has taken away what it showed: the test says when.</summary>
     internal TaskCompletionSource SystemTakesItAway { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>When given, moving the web view's folder on throws it.</summary>
     internal Exception? MovingThrows { get; set; }
+
+    /// <summary>When given, giving what waits for nobody to a person throws it.</summary>
+    internal Exception? GivingThrows { get; set; }
+
+    /// <summary>The marks of the people what waited for nobody was given to, in their order. It is no part of a change, so it is not in <see cref="Did"/>.</summary>
+    internal string[] GivenTo
+    {
+        get
+        {
+            lock (gate)
+            {
+                return [.. givenTo];
+            }
+        }
+    }
 
     /// <summary>What was done so far, in its order.</summary>
     internal string[] Did
@@ -60,7 +76,19 @@ internal sealed class RecordedShell
                 Do("the pictures of the pages go");
                 return Task.CompletedTask;
             }),
-        ]);
+        ],
+        GiveWaitingTo: mark =>
+        {
+            lock (gate)
+            {
+                givenTo.Add(mark);
+            }
+
+            if (GivingThrows is { } failure)
+            {
+                throw failure;
+            }
+        });
 
     private void Do(string what)
     {
@@ -466,6 +494,89 @@ public sealed class PersonHearingTests
             Assert.IsNull(people.Last, "the end of her session was taken for a change of person");
             Assert.AreEqual(0, shell.Did.Length);
             Assert.AreEqual(her, people.KeptFor);
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
+    public async Task The_first_person_named_is_given_what_waited_for_nobody_before_the_windows_are_given_the_state()
+    {
+        string folder = Folder();
+        try
+        {
+            KeptStore kept = new(folder, App);
+            using SessionKeeper keeper = new(kept, new CookieStore(Shop));
+            _ = keeper.Open();
+            string ritu = PersonWatch.MarkOfKey(RituKey);
+            string harpreet = PersonWatch.MarkOfKey(HarpreetKey);
+            SessionGate gate = new();
+            RecordedShell shell = new();
+            ConcurrentQueue<string> problems = new();
+            PersonChange people = new(new PersonWatch(keeper.KeptPerson(), keeper.KeepsOfAPerson()), gate, keeper, shell.Parts, problems.Enqueue);
+            _ = gate.Asked([], out long mark);
+
+            // Ritu signs in at the counter after somebody signed out. Her orders page is on screen before the shell's answer names her,
+            // and she asks to be reminded of a call at five: nobody has been named, so the reminder is nobody's.
+            Assert.AreEqual(PersonHeard.Nobody, people.Hear(NamingNobody(), mark));
+            Assert.IsNull(people.KeptFor, "somebody is named before the shell said so: this test shows nothing");
+            Assert.AreEqual(0, shell.GivenTo.Length, "what waits for nobody was given away though nobody was named");
+
+            // The shell names her, the first since the sign-out: what waited for nobody is hers, and it is given before the windows are
+            // given the state that names her.
+            List<string> order = [];
+            Delivery.Show(
+                Naming(RituKey, "Ritu Sharma", null),
+                heard => order.Add("heard " + people.Hear(heard, mark) + " and given to " + shell.GivenTo.Length),
+                shown => order.Add("shown " + shown.App?.User?.Name + " with " + shell.GivenTo.Length + " given"),
+                problems.Enqueue);
+            CollectionAssert.AreEqual(new[] { "heard First and given to 1", "shown Ritu Sharma with 1 given" }, order, "what waited for nobody was not given to the first person named before the windows were given the state");
+            CollectionAssert.AreEqual(new[] { ritu }, shell.GivenTo, "what waited for nobody stays nobody's after the first person was named: it would be shown to whoever is there, at every later start");
+
+            // It is done once. Named again, with her session run out and the way in up, and signed in again: nothing more is given.
+            Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(RituKey, "Ritu Sharma", null), mark));
+            Assert.AreEqual(PersonHeard.Same, people.Hear(WithTheWayInUp(Naming(RituKey, "Ritu Sharma", null)), mark));
+            Assert.AreEqual(PersonHeard.Nobody, people.Hear(NamingNobody(), mark));
+            Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(RituKey, "Ritu Sharma", null), mark));
+            Assert.AreEqual(1, shell.GivenTo.Length, "what waits for nobody was given again to a person named before");
+
+            // Another person with no sign-out between is given nothing: everything that waits goes with the person before.
+            Assert.AreEqual(PersonHeard.Another, people.Hear(Naming(HarpreetKey, "Harpreet Kaur", null), mark));
+            Assert.AreEqual(1, shell.GivenTo.Length, "a person who signed in with no sign-out between was given what waited: a change of person takes it away");
+            shell.SystemTakesItAway.SetResult();
+            _ = await people.Last!.WaitAsync(Short);
+
+            // She signs out, and Ritu signs in after her: Ritu is the first again, and is given what waited for nobody since.
+            gate.SessionIsEnding();
+            people.SignedOut();
+            gate.CoreIsToldTheSessionEnded();
+            _ = gate.Asked([], out long next);
+            Assert.AreEqual(PersonHeard.First, people.Hear(Naming(RituKey, "Ritu Sharma", null), next));
+            CollectionAssert.AreEqual(new[] { ritu, ritu }, shell.GivenTo);
+            Assert.AreEqual(0, problems.Count, string.Join(" | ", problems));
+
+            // A start that read her mark hears her as the same person, and one that read no mark though something is kept hears whoever
+            // is named as another: neither is the first, and neither is given anything here (the start itself sees to what it read).
+            RecordedShell known = new();
+            Assert.AreEqual(PersonHeard.Same, new PersonChange(new PersonWatch(ritu), gate, keeper, known.Parts, _ => { }).Hear(Naming(RituKey, "Ritu Sharma", null), next));
+            Assert.AreEqual(0, known.GivenTo.Length);
+
+            // When the giving fails, it is said with nothing of the person, and she is still written down as the one what is kept is
+            // kept for.
+            KeptStore otherKept = new(Path.Combine(folder, "other"), App);
+            using SessionKeeper other = new(otherKept, new CookieStore(Shop));
+            _ = other.Open();
+            RecordedShell failing = new() { GivingThrows = new IOException("Harpreet Kaur's reminders could not be written") };
+            ConcurrentQueue<string> said = new();
+            SessionGate otherGate = new();
+            _ = otherGate.Asked([], out long otherMark);
+            Assert.AreEqual(PersonHeard.First, new PersonChange(new PersonWatch(), otherGate, other, failing.Parts, said.Enqueue).Hear(Naming(HarpreetKey, "Harpreet Kaur", null), otherMark));
+            await other.DrainAsync().WaitAsync(Short);
+            Assert.AreEqual(1, said.Count, string.Join(" | ", said));
+            Expect.That(said.TryPeek(out string? line) && line.Contains("could not be given", StringComparison.Ordinal) && !line.Contains("Harpreet", StringComparison.Ordinal), "what is said names a person, or not what failed");
+            Assert.AreEqual(harpreet, otherKept.Read(SessionKeeper.PersonKey), "the mark of the first person named was not written because giving them what waited failed");
         }
         finally
         {

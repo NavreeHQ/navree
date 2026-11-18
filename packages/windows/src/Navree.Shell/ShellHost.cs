@@ -99,7 +99,11 @@ public sealed partial class ShellHost : IDisposable
                 TakeFromSystem: () => Place?.PersonChangedAsync() ?? Task.CompletedTask,
                 EmptyWeb: EndWebAsync,
                 OnWindow: OnUi,
-                More: () => moreWipeSteps),
+                More: () => moreWipeSteps,
+
+                // The first person named since a sign-out, or since a start that kept nothing of a person: a reminder that waits and
+                // is nobody's is theirs from here on.
+                GiveWaitingTo: mark => Place?.GiveWaitingTo(mark)),
             ReportProblem);
 
         // Only naming the session's folder has to be done before a web view starts. The older folders are deleted off the window's thread: a

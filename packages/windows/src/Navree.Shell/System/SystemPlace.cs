@@ -148,14 +148,21 @@ public sealed class SystemPlace : IDisposable
 
         // What waited when the last run ended. One that is a person's is kept only when this start can say that it is that person what
         // is kept is kept for: a start that read no mark can say so of nobody, and lets go of every one that is a person's here, before
-        // anything is armed. One that does not say whose it is was not read. What stays is a person's, and held until they are named as
-        // signed in, or nobody's.
+        // anything is armed. One that does not say whose it is was not read. When the start read a person's mark, what is kept is kept
+        // for them, so one that is nobody's is theirs too. What stays is a person's, and held until they are named as signed in; or it is
+        // nobody's, and no mark of a person is kept.
         string? keptText = host.Recall(PendingKey);
         schedule = NotificationSchedule.Read(keptText);
         int letGo = schedule.KeepFor(host.KeptFor);
         if (letGo > 0)
         {
             Say(letGo + " notifications that waited were let go of: this start cannot say they are for the person what is kept is kept for");
+        }
+
+        int given = host.KeptFor is string keptFor ? schedule.GiveTo(keptFor) : 0;
+        if (given > 0)
+        {
+            Say(given + " notifications that waited for nobody are for the person what is kept is kept for");
         }
 
         if (!string.Equals(keptText, schedule.Waiting.Count == 0 ? null : schedule.Write(), StringComparison.Ordinal))
@@ -307,8 +314,8 @@ public sealed class SystemPlace : IDisposable
             return;
         }
 
-        // It is the person's what is kept is kept for, and shown only while they are signed in; asked for while nobody has been signed in
-        // since the start or the last sign-out, it is nobody's.
+        // It is the person's what is kept is kept for, and shown only while they are signed in; asked for while nobody has been named
+        // since the start or the last sign-out, it is nobody's, until the first person is named and it becomes theirs (GiveWaitingTo).
         PendingNotification? plan = NotifyRules.Plan(notify, DateTimeOffset.Now, TimeZoneInfo.Local);
         if (plan is null || !schedule.Add(plan with { Owner = host.KeptFor }))
         {
@@ -318,6 +325,25 @@ public sealed class SystemPlace : IDisposable
 
         Remember();
         Arm();
+    }
+
+    /// <summary>
+    /// The first person since a sign-out, or since a start that kept nothing of a person, was named as signed in: every notification that
+    /// waits and is nobody's is theirs from now on (one they asked for between their sign-in and the shell's answer that names them, or a
+    /// visitor's before them). It is shown only while they are signed in, and no longer to whoever is there.
+    /// </summary>
+    /// <param name="owner">The person's mark.</param>
+    internal void GiveWaitingTo(string owner)
+    {
+        int given = schedule.GiveTo(owner);
+        if (given == 0)
+        {
+            return;
+        }
+
+        Remember();
+        Arm();
+        Say(given + " notifications that waited for nobody are for the person who signed in");
     }
 
     /// <summary>The core took a notification back.</summary>

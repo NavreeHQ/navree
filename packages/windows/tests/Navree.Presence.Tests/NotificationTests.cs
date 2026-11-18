@@ -281,6 +281,56 @@ public sealed class NotificationTests
     }
 
     [TestMethod]
+    public void OneAskedForBeforeThePersonWasNamedIsTheirsOnceTheyAreAndIsNotShownToWhoeverIsThereAfter()
+    {
+        // Simran signs in at the counter after somebody signed out. Her orders are on screen before the answer that names her, and she
+        // asks to be reminded at five to call Mrs. Bedi about the refund: nobody has been named, so it is nobody's.
+        NotificationSchedule schedule = new();
+        DateTimeOffset five = new(2026, 11, 15, 17, 0, 0, TimeSpan.FromHours(5.5));
+        _ = schedule.Add(new PendingNotification("bedi", "Call Mrs. Bedi about the refund", null, null, null, five, null, null));
+        Assert.AreEqual(five, schedule.Next(null), "this test shows nothing: what is nobody's does not wait to be shown to whoever is there");
+
+        // The answer names her, the first since the sign-out: what waits for nobody is hers.
+        Assert.AreEqual(1, schedule.GiveTo(Simran));
+        Assert.AreEqual(Simran, schedule.Waiting.Single().Owner);
+        Assert.AreEqual(0, schedule.GiveTo(Simran), "what was given once was given again");
+        Assert.AreEqual(five, schedule.Next(Simran), "what was given to her does not wait for her any more");
+
+        // She leaves at half past four and the computer is shut down. Next morning Manpreet starts the app: the start read her mark,
+        // and nobody is named yet. Her reminder, long due, is not shown to him.
+        NotificationSchedule nextMorning = NotificationSchedule.Read(schedule.Write());
+        Assert.AreEqual(0, nextMorning.KeepFor(Simran));
+        DateTimeOffset morning = five.AddHours(16);
+        Assert.IsNull(nextMorning.Next(null), "a reminder she asked for before she was named sets the timer for whoever is there");
+        Assert.AreEqual(0, nextMorning.Take(morning, India, null).Count, "a reminder she asked for before she was named is shown to whoever starts the app");
+        Assert.AreEqual(0, nextMorning.Take(morning, India, Manpreet).Count);
+        Assert.AreEqual(1, nextMorning.HeldBack(morning, null));
+
+        // A start that read no mark cannot say it is hers, and lets go of it.
+        NotificationSchedule noMark = NotificationSchedule.Read(schedule.Write());
+        Assert.AreEqual(1, noMark.KeepFor(null));
+
+        // When she is back and signed in, it is shown to her.
+        Assert.AreEqual("bedi", nextMorning.Take(morning, India, Simran).Single().Id);
+
+        // What is a person's already is not given to another, and an app nobody signs in to never gives: its reminders stay nobody's.
+        NotificationSchedule mixed = new();
+        _ = mixed.Add(new PendingNotification("hers", "Hers", null, null, null, five, null, null) { Owner = Simran });
+        _ = mixed.Add(new PendingNotification("nobodys", "Nobody's", null, null, null, five, 9, 0));
+        Assert.AreEqual(1, mixed.GiveTo(Manpreet));
+        Assert.AreEqual(Simran, mixed.Waiting.Single(item => item.Id == "hers").Owner, "a person's reminder was given to somebody else");
+        PendingNotification given = mixed.Waiting.Single(item => item.Id == "nobodys");
+        Assert.AreEqual(Manpreet, given.Owner);
+        Assert.AreEqual((five, 9, 0), (given.At, given.Hour!.Value, given.Minute!.Value), "giving a reminder to a person changed when it is due");
+
+        // A start that read a person's mark gives what is nobody's to that person: what is kept is kept for them.
+        NotificationSchedule leftOver = NotificationSchedule.Read("[{\"id\":\"bedi\",\"title\":\"Call Mrs. Bedi about the refund\",\"at\":1,\"for\":null}]");
+        Assert.AreEqual(0, leftOver.KeepFor(Simran));
+        Assert.AreEqual(1, leftOver.GiveTo(Simran));
+        Assert.AreEqual(0, leftOver.Take(morning, India, null).Count, "what was nobody's at a start that read a person's mark is still shown to whoever is there");
+    }
+
+    [TestMethod]
     public void ASnapshotThatHoldsNobodyIsNotKept()
     {
         Assert.IsFalse(SnapshotRules.ShouldKeep("{\"version\":1,\"person_unknown\":true}"));

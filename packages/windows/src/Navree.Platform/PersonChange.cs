@@ -17,6 +17,10 @@ namespace Navree.Platform;
 /// <param name="EmptyWeb">Closes the web views that were started in a folder that ended, and clears or deletes what they kept.</param>
 /// <param name="OnWindow">Runs a step on the window's thread and completes when it has run there.</param>
 /// <param name="More">What else the shell keeps of a person, as steps: asked for when a change begins.</param>
+/// <param name="GiveWaitingTo">
+/// No part of a change: gives what waits and is nobody's (a reminder asked for while nobody had been named) to the person whose mark it
+/// is given, here and now. It is called when the first person since a sign-out, or since a start that kept nothing of a person, is named.
+/// </param>
 public sealed record PersonChangeParts(
     Func<string> MoveWebOn,
     Action DropPictures,
@@ -24,7 +28,8 @@ public sealed record PersonChangeParts(
     Func<Task> TakeFromSystem,
     Func<string, Task> EmptyWeb,
     Func<Func<Task>, Task> OnWindow,
-    Func<IEnumerable<WipeStep>> More);
+    Func<IEnumerable<WipeStep>> More,
+    Action<string> GiveWaitingTo);
 
 /// <summary>
 /// Another person signed in than the one before, and nobody signed out between: a session ran out, or the server ended it and said nothing
@@ -162,6 +167,21 @@ public sealed class PersonChange
         }
         else
         {
+            if (heard == PersonHeard.First)
+            {
+                // What waits and is nobody's was asked for since the last sign-out, or since a start that kept nothing of a person: by
+                // this person, between their sign-in and the shell's answer that names them, or by a visitor before them. It is
+                // theirs from here on, and shown to nobody else.
+                try
+                {
+                    parts.GiveWaitingTo(mark);
+                }
+                catch (Exception failure)
+                {
+                    Say("what waited for nobody could not be given to the person who signed in: " + failure.GetType().Name);
+                }
+            }
+
             keeper.KeepPerson(mark);
         }
 
