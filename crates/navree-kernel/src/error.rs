@@ -311,6 +311,26 @@ pub enum KernelError {
         /// parentheses after a space; empty when it names it.
         reason: String,
     },
+    /// A module that acts for a plugin that is not first-party exports a
+    /// non-multi provider key that another module also registers and exports,
+    /// which leaves the key out of the service locator so app-wide lookups of
+    /// it fail or answer `None`.
+    #[error(
+        "plugin `{plugin}` exports `{provider}` in `{module}`{reason}, which `{other}` also exports; two exports of one provider make app-wide lookups of `{provider}` answer nothing: remove the plugin or update it to a version that keeps `{provider}` private to `{module}` or registers it under a name"
+    )]
+    PluginExportsProvider {
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The exported provider key.
+        provider: String,
+        /// The plugin's module that exports it.
+        module: &'static str,
+        /// Why `module` acts for the plugin when it does not name it, in
+        /// parentheses after a space; empty when it names it.
+        reason: String,
+        /// Another module that registers and exports the same key.
+        other: &'static str,
+    },
 }
 
 /// Every error found while booting or validating an app.

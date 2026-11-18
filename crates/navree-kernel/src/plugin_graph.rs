@@ -3,7 +3,6 @@
 use std::any::TypeId;
 use std::collections::BTreeMap;
 
-use crate::KernelError;
 use crate::command::FRAMEWORK_COMMANDS;
 use crate::graph::{Graph, ModuleNode, ROOT};
 use crate::plugin::{
@@ -15,6 +14,7 @@ use crate::publish::{
     first_case_collision, first_file_and_folder, is_locale_path, is_safe_relative_path,
 };
 use crate::report::{PluginModuleReport, PluginReport, PluginsReport};
+use crate::{KernelError, ProviderKey};
 
 /// A module that names a plugin and passed the checks of its own plugin info.
 struct Member<'g> {
@@ -84,7 +84,7 @@ impl Graph {
     ///     whose type does not name the plugin's crate:
     ///     `PluginConfiguresModule` (a second configured instance of a module
     ///     reads the same way, see `configured_twice`), and that module is left
-    ///     out of steps 11 to 13;
+    ///     out of steps 11 to 14;
     /// 11. a module that acts for a plugin that is not first-party and
     ///     registers a provider (value, factory or multi-binding) whose key is
     ///     on [`APP_ONLY_PROVIDERS`]: one `PluginProvidesAppOnly` per module and
@@ -93,7 +93,10 @@ impl Graph {
     ///     navree-orm ([`MODEL_HOOK_KEY`]) whose model `M` is not a type of the
     ///     plugin's crate: one `PluginHooksModel` per module and model;
     /// 13. such a module registering a command with the name of one of the
-    ///     framework's own ([`FRAMEWORK_COMMANDS`]): `PluginCommand`.
+    ///     framework's own ([`FRAMEWORK_COMMANDS`]): `PluginCommand`;
+    /// 14. two modules each registering and exporting one non-multi provider
+    ///     key (not on [`APP_ONLY_PROVIDERS`]), when at least one of them acts
+    ///     for a plugin that is not first-party: `PluginExportsProvider`.
     pub(crate) fn check_plugins(&mut self, errors: &mut Vec<KernelError>) {
         let version = env!("CARGO_PKG_VERSION");
         // Each plugin's modules, plugins in first-seen order.
@@ -279,7 +282,7 @@ impl Graph {
         self.first_party.extend(first_party);
 
         // Step 10. A module whose configured instance it refuses is left out of
-        // steps 11 to 13: what it registers is the configured module's, and the
+        // steps 11 to 14: what it registers is the configured module's, and the
         // refusal already names it.
         let mut configured_refused: Vec<usize> = Vec::new();
         for m in self.import_order() {
@@ -378,6 +381,62 @@ impl Graph {
                         module: module.name,
                         reason: self.acts_for_reason(m, info),
                     });
+                }
+            }
+        }
+
+        // Step 14. Two modules each registering and exporting one non-multi
+        // provider key leave that key out of `locator_map`, so `get` fails and
+        // `try_get` answers `None`.
+        let mut exported_by: Vec<(ProviderKey, Vec<usize>)> = Vec::new();
+        for m in self.import_order() {
+            if configured_refused.contains(&m) {
+                continue;
+            }
+            let module = &self.modules[m];
+            for &p in &module.providers {
+                let def = &self.providers[p].def;
+                if def.multi || APP_ONLY_PROVIDERS.contains(&def.key.type_name()) {
+                    continue;
+                }
+                if !module.exports.contains(&def.key) {
+                    continue;
+                }
+                match exported_by.iter_mut().find(|(key, _)| *key == def.key) {
+                    Some((_, owners)) => {
+                        if !owners.contains(&m) {
+                            owners.push(m);
+                        }
+                    }
+                    None => exported_by.push((def.key.clone(), vec![m])),
+                }
+            }
+        }
+        for (key, owners) in exported_by {
+            let Some((&first, rest)) = owners.split_first() else {
+                continue;
+            };
+            let mut first_reported = false;
+            for &later in rest {
+                match (self.community_plugin(later), self.community_plugin(first)) {
+                    (Some(info), _) => errors.push(KernelError::PluginExportsProvider {
+                        plugin: info.name,
+                        provider: key.to_string(),
+                        module: self.modules[later].name,
+                        reason: self.acts_for_reason(later, info),
+                        other: self.modules[first].name,
+                    }),
+                    (None, Some(info)) if !first_reported => {
+                        first_reported = true;
+                        errors.push(KernelError::PluginExportsProvider {
+                            plugin: info.name,
+                            provider: key.to_string(),
+                            module: self.modules[first].name,
+                            reason: self.acts_for_reason(first, info),
+                            other: self.modules[later].name,
+                        });
+                    }
+                    _ => {}
                 }
             }
         }

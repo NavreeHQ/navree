@@ -1722,3 +1722,122 @@ async fn a_framework_module_that_only_a_plugin_imports_acts_for_no_plugin() {
     let ids: Vec<ModuleId> = plugin.modules.iter().map(|module| module.id).collect();
     assert_eq!(ids, [ModuleId::of::<KhataModule>()]);
 }
+
+// Two modules exporting one provider.
+
+/// A shared setting that an app module exports and looks up through the service locator.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ShopBanner(&'static str);
+
+/// A module of the app that provides and exports `ShopBanner`.
+struct ShopBannerModule(&'static str);
+
+impl Module for ShopBannerModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.value(ShopBanner(self.0)).exports::<ShopBanner>();
+    }
+}
+
+/// A second module of the app that also provides and exports `ShopBanner`.
+struct BranchBannerModule(&'static str);
+
+impl Module for BranchBannerModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.value(ShopBanner(self.0)).exports::<ShopBanner>();
+    }
+}
+
+#[tokio::test]
+async fn a_plugin_may_not_export_a_provider_another_module_exports() {
+    use navree_kernel::ProviderKey;
+    use navree_plugin_khata::KhataModule;
+    use navree_plugin_khata_core::KhataCoreModule;
+    use navree_plugin_notices::NoticesModule;
+
+    let banner = std::any::type_name::<ShopBanner>();
+    let expected = format!(
+        "plugin `navree-plugin-khata` exports `{banner}` in `KhataModule`, which `ShopBannerModule` also exports; two exports of one provider make app-wide lookups of `{banner}` answer nothing: remove the plugin or update it to a version that keeps `{banner}` private to `KhataModule` or registers it under a name"
+    );
+
+    // Refused whether the plugin comes after or before the app's module.
+    for app in [
+        Navree::app()
+            .module(ShopBannerModule("Ludhiana"))
+            .module(KhataModule(|m| {
+                m.value(ShopBanner("Amritsar")).exports::<ShopBanner>();
+            })),
+        Navree::app()
+            .module(KhataModule(|m| {
+                m.value(ShopBanner("Amritsar")).exports::<ShopBanner>();
+            }))
+            .module(ShopBannerModule("Ludhiana")),
+    ] {
+        assert_eq!(errors(app), expected);
+    }
+
+    // Refused from a plugin's second crate, naming why the module acts for the plugin.
+    assert_eq!(
+        errors(
+            Navree::app()
+                .module(ShopBannerModule("Ludhiana"))
+                .module(KhataModule(|m| {
+                    m.import(KhataCoreModule(|m| {
+                        m.value(ShopBanner("Amritsar")).exports::<ShopBanner>();
+                    }));
+                }))
+        ),
+        format!(
+            "plugin `navree-plugin-khata` exports `{banner}` in `KhataCoreModule` (only the plugin's modules import it), which `ShopBannerModule` also exports; two exports of one provider make app-wide lookups of `{banner}` answer nothing: remove the plugin or update it to a version that keeps `{banner}` private to `KhataCoreModule` or registers it under a name"
+        )
+    );
+
+    // Refused when two community plugins export the same provider key.
+    assert_eq!(
+        errors(
+            Navree::app()
+                .module(NoticesModule(|m| {
+                    m.value(ShopBanner("Ludhiana")).exports::<ShopBanner>();
+                }))
+                .module(KhataModule(|m| {
+                    m.value(ShopBanner("Amritsar")).exports::<ShopBanner>();
+                }))
+        ),
+        format!(
+            "plugin `navree-plugin-khata` exports `{banner}` in `KhataModule`, which `NoticesModule` also exports; two exports of one provider make app-wide lookups of `{banner}` answer nothing: remove the plugin or update it to a version that keeps `{banner}` private to `KhataModule` or registers it under a name"
+        )
+    );
+
+    // Keeping the plugin's provider private, registering it under a name, or re-exporting the
+    // app module's own provider keeps `try_get::<ShopBanner>()` answering the app's value.
+    let app = Navree::app()
+        .module(ShopBannerModule("Ludhiana"))
+        .module(KhataModule(|m| {
+            m.value(ShopBanner("private"))
+                .factory(
+                    Factory::<ShopBanner>::new(|_| async { Ok(Arc::new(ShopBanner("named"))) })
+                        .named("khata"),
+                )
+                .export_key(ProviderKey::named::<ShopBanner>("khata"));
+        }))
+        .module(NoticesModule(|m| {
+            m.import(ShopBannerModule("Ludhiana"))
+                .exports::<ShopBanner>();
+        }))
+        .boot()
+        .await
+        .expect("boots");
+    assert_eq!(
+        app.ctx().try_get::<ShopBanner>().await.as_deref(),
+        Some(&ShopBanner("Ludhiana"))
+    );
+
+    // Two modules of the app exporting one provider still validate as before (and `try_get`
+    // answers `None` on the ambiguous lookup).
+    let app = Navree::app()
+        .module(ShopBannerModule("Ludhiana"))
+        .module(BranchBannerModule("Pune"))
+        .boot()
+        .await
+        .expect("two app modules validate");
+    assert_eq!(app.ctx().try_get::<ShopBanner>().await, None);
+}
