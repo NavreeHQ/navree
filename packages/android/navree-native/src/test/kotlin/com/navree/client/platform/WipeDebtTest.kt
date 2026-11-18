@@ -218,6 +218,63 @@ class WipeDebtTest {
     }
 
     @Test
+    fun a_cookie_store_that_does_not_answer_in_time_leaves_the_whole_of_an_end_of_a_session_owed() {
+        val debt = debt()
+        // Another person is signed in: what pages stored is owed at every origin, and a go is run for it.
+        assertTrue(debt.owePages())
+        assertTrue("every origin, and no more than what pages stored", debt.every)
+        val go = debt.begin()!!
+        assertFalse("while a go runs nothing more is begun for it", debt.begin() != null)
+        // The store did not say its cookies are gone: what it holds is not known to be the new person's alone.
+        debt.widen(go)
+        assertTrue("the whole is owed", debt.owed && debt.all)
+        assertFalse("and it is not what pages stored alone any more", debt.every)
+        assertFalse(debt.running)
+        assertEquals("on the disk, for the next start to do all of it", WipeRules.EVERYTHING + "\n", mark.readText())
+        assertTrue("no web page is shown", debt.held(shop))
+        assertNull("and no go ends that: \"Try again\" begins none for the rest of this run", debt.begin())
+        assertFalse("what the go says after that changes nothing", debt.over(emptySet(), go))
+        assertTrue(debt.owed && debt.all)
+        assertTrue(debt().let { it.owed && it.all })
+    }
+
+    @Test
+    fun the_whole_is_owed_again_only_for_what_is_owed_now() {
+        val debt = debt()
+        debt.widen(null)
+        assertFalse("with nothing owed there is nothing to owe the whole of", debt.owed)
+        assertFalse(mark.exists())
+
+        val first = debt.owe()
+        debt.narrow(first)
+        debt.over(setOf(pay), first)
+        val second = debt.owe()
+        debt.narrow(second)
+        // A late step of the first end says the store did not answer: the second end's own steps say how that one stands.
+        debt.widen(first)
+        assertFalse(debt.all)
+        // Where the step names no end, it is whatever is owed now.
+        debt.widen(null)
+        assertTrue(debt.all)
+        assertEquals(WipeRules.EVERYTHING + "\n", mark.readText())
+    }
+
+    @Test
+    fun every_origin_is_owed_only_until_a_go_has_ended() {
+        val debt = debt()
+        assertFalse(debt.every)
+        val end = debt.owe()
+        assertFalse("the whole of an end of a session is more than what pages stored", debt.every)
+        debt.narrow(end)
+        assertTrue(debt.every)
+        // A run that ends here leaves the mark saying so: the next start does the go over, with the cookie store emptied.
+        assertTrue(debt().every)
+        debt.over(setOf(pay), end)
+        assertFalse("after a go only the origins it left are owed", debt.every)
+        assertFalse(debt().every)
+    }
+
+    @Test
     fun a_mark_that_names_no_origin_owes_every_origin_and_one_that_cannot_be_read_owes_the_whole() {
         mark.writeText("https:/\n")
         assertTrue("a line that does not read names no origin: every origin is owed", debt().let { it.owed && !it.all && it.left == null })

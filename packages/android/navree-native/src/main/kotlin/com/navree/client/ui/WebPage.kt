@@ -54,7 +54,7 @@ internal class WebGuards(
     val workers: () -> Boolean = { WorkerGuard.ensure() },
     val documents: (WebView, Origins) -> Boolean = { view, origins -> guardDocuments(view, origins) },
     val clean: (address: String) -> Boolean = { address -> SiteWipe.shows(address) },
-    val again: () -> Unit = { SiteWipe.finish() },
+    val again: () -> Unit = { SiteWipe.again() },
 )
 
 /** The guards [WebPage] asks: the real ones unless a test provides others. */

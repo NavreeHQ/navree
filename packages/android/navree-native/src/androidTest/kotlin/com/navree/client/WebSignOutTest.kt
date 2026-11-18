@@ -182,19 +182,28 @@ class WebSignOutTest {
      * A worker that takes its origin's pages over at once and, each time a
      * page of the origin is asked for, sends a write of its own to the app's
      * server and says which page it was for: as a worker does that sends a
-     * queue of writes again whenever it is started. The page itself it leaves
-     * to the network.
+     * queue of writes again whenever it is started. It also opens a socket to
+     * the app's server, which is no request the web view asks the client
+     * about, and writes a cookie of its own, where the web view lets a worker
+     * do either. The page itself it leaves to the network.
      */
     private val replaying = """
         self.addEventListener('install', function(){ self.skipWaiting() });
         self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim()) });
         self.addEventListener('fetch', function(e){
-          if (e.request.mode === 'navigate') fetch('/replayed?for=' + encodeURIComponent(new URL(e.request.url).pathname), {method: 'POST', credentials: 'include'});
+          if (e.request.mode !== 'navigate') return;
+          var page = encodeURIComponent(new URL(e.request.url).pathname);
+          fetch('/replayed?for=' + page, {method: 'POST', credentials: 'include'}).catch(function(){});
+          try { new WebSocket('ws://' + self.location.host + '/socket?for=' + page).onerror = function(){} } catch (x) {}
+          try { if (self.cookieStore) self.cookieStore.set('worker', 'wrote').catch(function(){}) } catch (x) {}
         });
     """.trimIndent()
 
     /** The page each write of the [replaying] worker that reached the app's server was for, in order. */
     private val replayed = CopyOnWriteArrayList<String>()
+
+    /** The page each socket of the [replaying] worker that reached the app's server was opened for, with the cookies it came with. */
+    private val sockets = CopyOnWriteArrayList<Pair<String, String?>>()
 
     private fun serve() {
         app.dispatcher = object : Dispatcher() {
@@ -212,6 +221,11 @@ class WebSignOutTest {
                 "/replayed" -> {
                     replayed += request.url.queryParameter("for") ?: ""
                     MockResponse.Builder().code(204).build()
+                }
+                // A socket's first request: it is refused, after what it came with is written down.
+                "/socket" -> {
+                    sockets += (request.url.queryParameter("for") ?: "") to request.headers["Cookie"]
+                    MockResponse.Builder().code(404).build()
                 }
                 // What a sign-in's answer does: it sets the cookie of the session of the person who signed in.
                 "/session" -> MockResponse.Builder().code(204).addHeader("Set-Cookie", "session=Karan; Path=/").build()
@@ -332,7 +346,16 @@ class WebSignOutTest {
      * while nobody's things are being taken away. The deletion's own
      * document is a page of that origin too, and it starts the worker of the
      * person before: what the worker sends then never reaches the server,
-     * where it would have arrived with the new person's cookie.
+     * where it would have arrived with the new person's cookie. A socket the
+     * worker opens is not a request the client is asked about, so it does
+     * reach the server where the web view lets a worker open one: it comes
+     * with no cookie, since the store is emptied for as long as the deletion
+     * runs. And a cookie the worker writes while it runs is gone afterwards,
+     * with the store's second emptying.
+     *
+     * The store's queue is held busy when the core names the second person:
+     * for as long as it is, nothing of the cookies has been done, and what
+     * pages stored stays owed, so no page is shown.
      */
     @Test
     fun aPageShownAfterAnotherFindsWhatItStoredWhenNobodySignedOutAndOnlyTheCookiesOfTheClientsOwnAnswersOnceAnotherPersonIsSignedIn() {
@@ -365,22 +388,37 @@ class WebSignOutTest {
         val cookies = CookieManager.getInstance()
         assertTrue("the answer's cookie reached the store: ${cookies.getCookie(base)}", waitFor(15) { cookies.getCookie(base).orEmpty().contains("session=Karan") })
         assertTrue("beside the one the page's script set: ${cookies.getCookie(base)}", cookies.getCookie(base).orEmpty().contains("city=Amritsar"))
-        compose.runOnUiThread { effects.hears(Navree.User(name = "Karan Malhotra", email = "karan.malhotra@example.com")) }
+        // The store's queue is busy with what was asked of it before, for as long as the test holds it.
+        val busy = CountDownLatch(1)
+        effects.state.always { busy.await(40, TimeUnit.SECONDS) }
+        try {
+            compose.runOnUiThread { effects.hears(Navree.User(name = "Karan Malhotra", email = "karan.malhotra@example.com")) }
+            assertTrue("what the pages of the person before stored is owed the moment the core names another person", SiteWipe.owes)
+            assertFalse("and stays owed while the store's queue is busy: no page is shown before the cookies have had their turn", waitFor(2) { !SiteWipe.owes })
+            assertTrue("whose turn has not come: ${cookies.getCookie(base)}", cookies.getCookie(base).orEmpty().contains("city=Amritsar"))
+        } finally {
+            busy.countDown()
+        }
         val turned = AtomicBoolean(false)
         effects.state.always { turned.set(true) }
         assertTrue("the change of person had its turn in the store", waitFor(30) { turned.get() })
         assertTrue("what the pages of the person before stored is gone, so nothing is owed any more", waitFor(60) { !SiteWipe.owes })
         compose.runOnUiThread { effects.close() }
 
-        val after = looked("web-storage-after-another-person.txt", "another person was signed in, with no sign-out between")
+        val after = looked("web-storage-after-another-person.txt", "another person was signed in, with no sign-out between\nthe sockets the worker opened, and the cookies each came with: $sockets")
         val left = after.getValue("cookie").jsonPrimitive.content
         assertFalse("the cookie the page's script set for the person before is gone: $after", left.contains("city=Amritsar"))
         assertTrue("the cookie the client's own answer set was given back: $after", left.contains("session=Karan"))
+        assertFalse("a cookie the worker wrote while its origin was being cleared is gone: $after", left.contains("worker="))
         assertEquals("nothing in local storage: $after", 0, after.getValue("local").jsonPrimitive.int)
         assertEquals("no IndexedDB database: $after", 0, after.getValue("indexeddb").jsonArray.size)
         assertEquals("nothing in Cache Storage: $after", 0, after.getValue("caches").jsonArray.size)
         assertEquals("no service worker: $after", 0, after.getValue("workers").jsonPrimitive.int)
         assertEquals("what the worker sent while its origin was being cleared never reached the server: $replayed", listOf("/look"), replayed.distinct())
+        // A socket is no request the client is asked about. One the worker opened while its origin was being cleared came with
+        // nobody's session and nothing a page had kept: at most with the cookie the worker itself had just written.
+        val carried = sockets.filter { it.first != "/look" }.mapNotNull { it.second }.filter { it.contains("session=") || it.contains("city=") }
+        assertEquals("a socket opened while the origin was being cleared carried no session and no cookie of a page: $sockets", emptyList<String>(), carried)
     }
 
     /**
