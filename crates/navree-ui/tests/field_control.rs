@@ -381,6 +381,7 @@ impl Controller for Pages {
             RouteDef::on(Method::POST, "!/parcels", parcels).public(),
             RouteDef::on(Method::POST, "!/sign-ups", sign_ups).public(),
             RouteDef::on(Method::POST, "!/sign-ups/values", sign_up_values).public(),
+            RouteDef::on(Method::POST, "!/vault-keys", vault_keys).public(),
             RouteDef::on(Method::POST, "!/deliveries/{id}/pin", pin_edit).public(),
             RouteDef::on(Method::POST, "!/deliveries/{id}/note", note_edit).public(),
             RouteDef::on(Method::POST, "!/deliveries/{id}/seats", seats_edit).public(),
@@ -1607,4 +1608,280 @@ async fn a_controls_check_can_say_why_a_value_did_not_parse() {
         .read(Control::new(&CRATE_COUNT), &Language::english())
         .unwrap_err();
     assert_eq!(refused.message(), "Enter digits only for crates");
+}
+
+struct AllSecretWidgets;
+
+impl navree_ui::form::Form for AllSecretWidgets {
+    const ID: &'static str = "all-secret-widgets";
+    const FIELDS: &'static [FormField] = &[
+        FormField::new(
+            "holder",
+            "Account holder",
+            Widget::Input(navree_ui::InputKind::Text),
+        ),
+        FormField::new(
+            "password",
+            "Password",
+            Widget::Input(navree_ui::InputKind::Password),
+        ),
+        FormField::new(
+            "api_key",
+            "API key",
+            Widget::Input(navree_ui::InputKind::Text),
+        )
+        .secret(true),
+        FormField::new("recovery", "Recovery phrase", Widget::Textarea { rows: 3 }).secret(true),
+        FormField::new("tier", "Tier", Widget::Select)
+            .options(&[("gold-vault", "Gold vault")])
+            .secret(true),
+        FormField::new("branch", "Branch", Widget::Listbox)
+            .options(&[("ludhiana-vault", "Ludhiana vault")])
+            .secret(true),
+        FormField::new("locker", "Locker", Widget::Combobox)
+            .options(&[("locker-77", "Locker 77")])
+            .secret(true),
+        FormField::new("scopes", "Scopes", Widget::Multi)
+            .options(&[("scope-secret-alpha", "Alpha")])
+            .secret(true),
+        FormField::new("channel", "Channel", Widget::Radio)
+            .options(&[("sms-vault", "SMS")])
+            .secret(true),
+        FormField::new("armed", "Armed", Widget::Checkbox).secret(true),
+        FormField::new("sealed", "Sealed", Widget::Switch).secret(true),
+        FormField::new("expires_on", "Expires on", Widget::DatePicker).secret(true),
+        FormField::new("opens_at", "Opens at", Widget::TimePicker).secret(true),
+        FormField::new("reserve", "Reserve", Widget::Money).secret(true),
+        FormField::new("backup_phone", "Backup phone", Widget::Phone).secret(true),
+        FormField::new("threshold", "Threshold", Widget::Slider).secret(true),
+        FormField::new(
+            "code",
+            "One-time code",
+            Widget::Control(Control::new(&ONE_TIME_CODE)),
+        ),
+    ];
+    const RULES: &'static [navree_validation::FieldRules] = &[];
+
+    fn values(&self) -> Vec<(&'static str, String)> {
+        Vec::new()
+    }
+}
+
+#[test]
+fn a_field_marked_secret_is_drawn_with_no_value_whatever_draws_it() {
+    let secrets = [
+        ("password", "hunter-ludhiana-91"),
+        ("api_key", "sk-live-amritsar-88"),
+        ("recovery", "kesar mango monsoon river"),
+        ("tier", "gold-vault"),
+        ("branch", "ludhiana-vault"),
+        ("locker", "locker-77"),
+        ("scopes", "scope-secret-alpha"),
+        ("channel", "sms-vault"),
+        ("armed", "true"),
+        ("sealed", "true"),
+        ("expires_on", "2027-08-15"),
+        ("opens_at", "14:45"),
+        ("reserve", "100000"),
+        ("backup_phone", "+919876543210"),
+        ("backup_phone_country", "US"),
+        ("threshold", "73"),
+        ("code", "482915"),
+    ];
+    let mut given = vec![("holder".to_owned(), "Simran Kaur".to_owned())];
+    given.extend(
+        secrets
+            .iter()
+            .map(|(name, value)| ((*name).to_owned(), (*value).to_owned())),
+    );
+
+    let html = render(
+        &FormView::<AllSecretWidgets>::new()
+            .post("/vault")
+            .with_values(given)
+            .into(),
+    );
+    assert!(html.contains("Simran Kaur"), "{html}");
+    for secret in [
+        "hunter-ludhiana-91",
+        "sk-live-amritsar-88",
+        "kesar mango monsoon river",
+        "2027-08-15",
+        "14:45",
+        "100000",
+        "9876543210",
+        "482915",
+        r#"value="73""#,
+        r#"name="branch" value="ludhiana-vault""#,
+        r#"name="locker" value="locker-77""#,
+        r#"name="scopes" value="scope-secret-alpha""#,
+        " selected>",
+        " selected ",
+        r#"aria-selected="true""#,
+        r#"data-selected="true""#,
+        " checked>",
+        " checked ",
+        r#"aria-checked="true""#,
+    ] {
+        assert!(!html.contains(secret), "`{secret}` leaked into {html}");
+    }
+
+    let cell_html =
+        render(&EditCell::control("482915", "/vault/42/code", Control::new(&ONE_TIME_CODE)).into());
+    assert!(!cell_html.contains("482915"), "{cell_html}");
+}
+
+/// Echoes the posted value in its error so tests prove the refusal masks it.
+struct EchoingSecretControl;
+
+impl FieldControl for EchoingSecretControl {
+    fn name(&self) -> &'static str {
+        "app.echoing-secret"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("input")
+            .attr("type", "password")
+            .attr("name", field.name.to_owned())
+            .attr_opt("value", field.value.map(str::to_owned))
+            .flag("disabled", field.disabled)
+            .into()
+    }
+
+    fn check(&self, value: &str, _cx: &ControlCx<'_>) -> Result<(), String> {
+        if value.starts_with("bad-") {
+            Err(format!("Key {value} was revoked"))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn secret(&self) -> bool {
+        true
+    }
+}
+
+static ECHOING_SECRET: EchoingSecretControl = EchoingSecretControl;
+
+#[derive(Debug, Deserialize, Validate, Form)]
+struct VaultKeyForm {
+    /// Owner
+    #[validate(skip)]
+    owner: String,
+    /// Passphrase
+    #[validate(custom(check_passphrase))]
+    password: String,
+    /// Vault key
+    #[validate(skip)]
+    #[form(control = ECHOING_SECRET)]
+    vault_key: String,
+}
+
+fn check_passphrase(value: &str) -> Result<(), navree_validation::Violation> {
+    if value.starts_with("weak-") {
+        Err(navree_validation::Violation::text(format!(
+            "Passphrase {value} is too short"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+async fn vault_keys(
+    parts: http::request::Parts,
+    submit: Result<Submit<VaultKeyForm>, Rejected<VaultKeyForm>>,
+) -> Response {
+    match submit {
+        Ok(Submit(form)) => {
+            let errors = navree_ui::form::FieldErrors::from([(
+                "vault_key".to_owned(),
+                vec![format!(
+                    "Key {} and passphrase {} were already used",
+                    form.vault_key, form.password
+                )],
+            )]);
+            Rejected::after_decode(&form, errors, &parts).into_response()
+        }
+        Err(rejected) => rejected.into_response(),
+    }
+}
+
+#[tokio::test]
+async fn a_refusal_never_repeats_a_secret_fields_value_in_its_words() {
+    let app = boot().await;
+    let pass = "weak-kesar-9912";
+    let key = "bad-vault-7741";
+    let body = format!("owner=Gurpreet+Singh&password={pass}&vault_key={key}");
+
+    // 1. The `errors` op (runtime request) masks both the password rule and the secret control.
+    let ops_res = post(&app, "/vault-keys", &body, true).await;
+    assert_eq!(ops_res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let raw_json = ops_res.text();
+    assert!(!raw_json.contains(pass), "{raw_json}");
+    assert!(!raw_json.contains(key), "{raw_json}");
+    let fields = &ops_res.json_value()["ops"][0]["fields"];
+    assert_eq!(fields["password"], json!(["Passphrase •••• is too short"]));
+    assert_eq!(fields["vault_key"], json!(["Key •••• was revoked"]));
+
+    // 2. The refused HTML page (JS off) neither draws the secrets nor repeats them in error text.
+    let page_res = post(&app, "/vault-keys", &body, false).await;
+    assert_eq!(page_res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let html = page_res.text();
+    assert!(!html.contains(pass), "{html}");
+    assert!(!html.contains(key), "{html}");
+    assert!(html.contains("Passphrase •••• is too short"), "{html}");
+    assert!(html.contains("Key •••• was revoked"), "{html}");
+
+    // 3. `Rejected::after_decode` masks secret field values on both the `errors` op and the
+    //    refused HTML page.
+    let ok_pass = "strong-amritsar-8821";
+    let ok_key = "live-jalandhar-5530";
+    let after_body = format!("owner=Gurpreet+Singh&password={ok_pass}&vault_key={ok_key}");
+
+    let after_ops = post(&app, "/vault-keys", &after_body, true).await;
+    assert_eq!(after_ops.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let after_json = after_ops.text();
+    assert!(!after_json.contains(ok_pass), "{after_json}");
+    assert!(!after_json.contains(ok_key), "{after_json}");
+    assert_eq!(
+        after_ops.json_value()["ops"][0]["fields"]["vault_key"],
+        json!(["Key •••• and passphrase •••• were already used"])
+    );
+
+    let after_page = post(&app, "/vault-keys", &after_body, false).await;
+    assert_eq!(after_page.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let after_html = after_page.text();
+    assert!(!after_html.contains(ok_pass), "{after_html}");
+    assert!(!after_html.contains(ok_key), "{after_html}");
+    assert!(
+        after_html.contains("Key •••• and passphrase •••• were already used"),
+        "{after_html}"
+    );
+
+    // 4. `check_controls` and `EditedValue::read` mask secret control values too.
+    let described = [FormField::new(
+        "vault_key",
+        "Vault key",
+        Widget::Control(Control::new(&ECHOING_SECRET)),
+    )];
+    let ctrl_errors = check_controls(
+        &described,
+        &pairs(&[("vault_key", key)]),
+        &Language::english(),
+    );
+    assert_eq!(ctrl_errors["vault_key"], ["Key •••• was revoked"]);
+
+    let cell_req = http::Request::builder()
+        .method(Method::POST)
+        .uri("/deliveries/42/vault")
+        .header("content-type", FORM)
+        .body(Body::from(format!("value={key}")))
+        .expect("a post");
+    let cell_edit = EditedValue::<String>::from_request(cell_req)
+        .await
+        .expect("a posted edit");
+    let cell_refused = cell_edit
+        .read(Control::new(&ECHOING_SECRET), &Language::english())
+        .unwrap_err();
+    assert_eq!(cell_refused.message(), "Key •••• was revoked");
 }

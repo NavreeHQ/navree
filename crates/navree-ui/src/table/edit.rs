@@ -322,12 +322,23 @@ impl<T: DeserializeOwned> EditedValue<T> {
     /// `Some`, else the form's own words for a value that is not valid.
     pub fn read(self, control: Control, language: &Language) -> Result<T, EditRefused> {
         let cx = language.control_cx();
+        let mask = |mut message: String, raw: &str| {
+            if control.get().secret() && !raw.is_empty() && message.contains(raw) {
+                message = message.replace(raw, "\u{2022}\u{2022}\u{2022}\u{2022}");
+            }
+            message
+        };
         if let Err(message) = control.check(&self.text, &cx) {
-            return Err(EditRefused { message });
+            return Err(EditRefused {
+                message: mask(message, &self.text),
+            });
         }
         let raw = self.text.clone();
         self.parsed(language).map_err(|default| EditRefused {
-            message: control.parse_error(&raw, &cx).unwrap_or(default.message),
+            message: mask(
+                control.parse_error(&raw, &cx).unwrap_or(default.message),
+                &raw,
+            ),
         })
     }
 

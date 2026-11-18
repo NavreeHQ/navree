@@ -1552,7 +1552,12 @@ impl<T: Form> FormView<T> {
 
     fn control(&self, field: &FormField) -> Node {
         let rules = native_in(self.shape.rules, field);
-        let value = self.value_of(field.name);
+        // A field marked secret is drawn with no value, whatever widget draws it.
+        let value = if field.is_secret() {
+            None
+        } else {
+            self.value_of(field.name)
+        };
         let invalid = self.errors.contains_key(field.name);
         match field.widget {
             Widget::Input(kind) => {
@@ -1677,12 +1682,17 @@ impl<T: Form> FormView<T> {
                 combo.into()
             }
             Widget::Multi => {
+                let selected = if field.is_secret() {
+                    Vec::new()
+                } else {
+                    self.values_of(field.name)
+                };
                 let mut multi = crate::select::MultiSelect::new(field.name)
                     .id(self.picker_id(field))
                     .options(self.choices_of(field))
                     .required_if(rules.required)
                     .invalid(invalid)
-                    .selected_values(self.values_of(field.name));
+                    .selected_values(selected);
                 if let Some(prompt) = field.placeholder.or(field.prompt) {
                     multi = multi.placeholder(prompt);
                 }
@@ -1785,10 +1795,13 @@ impl<T: Form> FormView<T> {
 
     #[cfg(feature = "phone")]
     fn phone(&self, field: &FormField, rules: &Native, value: Option<&str>, invalid: bool) -> Node {
-        let country = self
-            .value_of(&format!("{}{}", field.name, crate::phone::COUNTRY_SUFFIX))
-            .and_then(navree_phone::Region::parse)
-            .or(self.phone_region);
+        let country = if field.is_secret() {
+            None
+        } else {
+            self.value_of(&format!("{}{}", field.name, crate::phone::COUNTRY_SUFFIX))
+                .and_then(navree_phone::Region::parse)
+        }
+        .or(self.phone_region);
         let mut input = crate::phone::PhoneInput::new(field.name)
             .region(country)
             .invalid(invalid);
@@ -2745,6 +2758,41 @@ fn echo<T: Form>(values: Vec<(String, String)>) -> Vec<(String, String)> {
         .collect()
 }
 
+/// Non-empty values posted for secret fields in `fields`, longest first so a value containing
+/// another is masked whole.
+fn hidden_values<'a>(fields: &[FormField], pairs: &'a [(String, String)]) -> Vec<&'a str> {
+    let mut hidden: Vec<&str> = pairs
+        .iter()
+        .filter(|(name, value)| {
+            !value.is_empty()
+                && fields
+                    .iter()
+                    .any(|field| field.name == name && field.is_secret())
+        })
+        .map(|(_, value)| value.as_str())
+        .collect();
+    hidden.sort_by_key(|value| std::cmp::Reverse(value.len()));
+    hidden.dedup();
+    hidden
+}
+
+/// Replaces every secret value in `errors` with four dots, as a wizard masks its step errors.
+fn mask_errors(mut errors: FieldErrors, hidden: &[&str]) -> FieldErrors {
+    if hidden.is_empty() {
+        return errors;
+    }
+    for list in errors.values_mut() {
+        for message in list.iter_mut() {
+            for secret in hidden {
+                if message.contains(secret) {
+                    *message = message.replace(secret, "\u{2022}\u{2022}\u{2022}\u{2022}");
+                }
+            }
+        }
+    }
+    errors
+}
+
 /// Whether `bytes` is `HH:MM`.
 fn is_hour_minute(bytes: &[u8]) -> bool {
     bytes.len() == 5
@@ -3045,13 +3093,14 @@ pub fn check_controls(
             }
         }
     }
-    errors
+    let hidden = hidden_values(fields, pairs);
+    mask_errors(errors, &hidden)
 }
 
 fn decode_in<T>(
     pairs: &[(String, String)],
     messages: &AppMessages,
-    reader: &ReaderWords,
+    local_words: &ReaderWords,
     app: Option<&AppContext>,
     config: Option<&Config>,
 ) -> Result<T, FieldErrors>
@@ -3060,16 +3109,25 @@ where
 {
     let words = words::<T>(messages);
     let over = over_limit::<T>(pairs, &words);
-    match decode_values::<T>(pairs, &words, reader, app, config) {
-        Ok(value) if over.is_empty() => Ok(value),
-        Ok(_) => Err(over),
+    let outcome = match decode_values::<T>(pairs, &words, local_words, app, config) {
+        Ok(value) if over.is_empty() => return Ok(value),
+        Ok(_) => over,
         Err(mut errors) => {
             for (name, texts) in over {
                 errors.entry(name).or_insert(texts);
             }
-            Err(errors)
+            errors
+        }
+    };
+    let mut secret_pairs: Vec<(String, String)> = pairs.to_vec();
+    for (name, value) in pairs {
+        let normalized = browser_text::<T>(name, value);
+        if normalized != *value {
+            secret_pairs.push((name.clone(), normalized));
         }
     }
+    let hidden = hidden_values(T::FIELDS, &secret_pairs);
+    Err(mask_errors(outcome, &hidden))
 }
 
 /// The values a list field holds in a post: not empty, and none that holds the
@@ -3549,11 +3607,13 @@ impl<T: Form> Rejected<T> {
     /// }
     /// ```
     pub fn after_decode(value: &T, errors: FieldErrors, parts: &Parts) -> Self {
-        let values = value
+        let values: Vec<(String, String)> = value
             .values()
             .into_iter()
             .map(|(name, text)| (name.to_owned(), text))
             .collect();
+        let hidden = hidden_values(T::FIELDS, &values);
+        let errors = mask_errors(errors, &hidden);
         Self {
             values: echo::<T>(values),
             errors,
@@ -3923,6 +3983,8 @@ where
             Ok(violations) if violations.is_empty() => Ok(Self(value)),
             Ok(violations) => {
                 let errors = rule_errors::<T>(&violations, &words::<T>(&language.messages));
+                let hidden = hidden_values(T::FIELDS, &values);
+                let errors = mask_errors(errors, &hidden);
                 let mut refused = rejected(echoed.unwrap_or(values), errors, action);
                 if !from_runtime {
                     refused.shell = shell_of_request(&parts).await;
