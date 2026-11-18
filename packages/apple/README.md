@@ -70,7 +70,9 @@ A build signed for push asks the system for its token only while somebody is sig
 
 ### The web view
 
-A page shown in the web view is always on the app's origin, in the session's own store, with no script bridge to the app, no pop-up and no file access.
+A page shown in the web view is always on the app's origin, in the session's own store, with no script bridge to the app and no pop-up, and it cannot read the app's files.
+
+A file field of the page's own is another matter. On iPhone and iPad the web engine answers one with its own menu (the Photo Library, the camera, Files) and takes a file dropped on it on an iPad, as Safari does. A file picked there goes to the page as it is: the app does not take the place a photo was taken out of it, and says nothing of it. "Files a form sends", below, is about the app's own file fields only. On a Mac the web view opens no file panel, so a page's file field does nothing there.
 
 - **Links.** The core is told of a link (`web_link`) only when the system says the person activated one (`WKNavigationType.linkActivated`). What a page does by itself, a script that sets the address or a redirect or a form sent, stays on the origin or goes nowhere, and is never told to the core as a tap: a page cannot open the dialler, messages, mail, maps or another site that way. One case is left, and is at the end of this page.
 - **What a page loads.** Scripts, styles, fonts, pictures, frames and a page's own requests come only from the origin and from the hosts the app names in `webHosts`. Two layers say it: content rules the web engine applies to every load, and a script at the start of every document, in every frame, that empties a document of another origin. A page that cannot be held to the rules is not loaded.
@@ -84,7 +86,11 @@ A page shown in the web view is always on the app's origin, in the session's own
 
 ### Files a form sends
 
-**A photo is sent without what could say where it was taken**, unless its field asks for the place (`keep_location`). A place is written into a picture in more ways than one: as its GPS data; in its XMP packet, at the top or inside a structure, under the standard names or a maker's own (a drone's `GpsLatitude`); in a maker's notes; in the caption record, as the name of a town. No list of names covers them all, so the picture is not searched for names: everything that could hold a place is left out, whole. What is kept beside the pixels is which way up the picture is and a short list of what a camera says of the shot (when it was taken, with what camera and lens, at which exposure). The GPS data, the whole XMP packet, every maker's notes, the caption record, the owner's own words and every other field go.
+**A photo is sent without what could say where it was taken**, unless its field asks for the place (`keep_location`). A place is written into a picture in more ways than one: as its GPS data; in its XMP packet, at the top or inside a structure, under the standard names or a maker's own (a drone's `GpsLatitude`); in a maker's notes; in the caption record, as the name of a town. No list of names covers them all, so the picture is not searched for names: what could hold a place is left out whole, as far as Image I/O, the system's own way of reading a picture, shows it. What is kept beside the pixels is which way up the picture is and a short list of what a camera says of the shot (when it was taken, with what camera and lens, at which exposure). What goes is the GPS data, the whole XMP packet, the notes of every maker Image I/O shows a group for, the caption record, the owner's own words, and every other field Image I/O shows.
+
+**What that does not reach.** The check sees what Image I/O reads, and the marks of an XMP packet in the file's bytes. A place hidden where Image I/O does not look is not seen, and is not taken out: a PNG's compressed text (the `Raw profile type exif` some tools write), a maker's bytes after the picture's end, content credentials, a maker's notes Image I/O does not show, and free text in parts it passes over. A picture the check finds nothing in is sent as it is, with whatever else it holds.
+
+**More pictures are refused than hold a place.** A picture that holds anything of what is left out, in a format the system reads and cannot write, is not added, whether or not a place is in it: Photoshop files, camera raws, and WebP or AVIF pictures with any metadata. A field meant for such files says so with `keep_location`.
 
 It is done as the picked file is copied for the form, so the bytes the app keeps to send never hold any of it. The file is read once, and what is looked into is what is written from:
 
