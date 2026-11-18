@@ -190,6 +190,10 @@ public struct DrawingContext: Sendable {
     /// `src`), or `nil` when the app may not ask for it: then its place
     /// shows the placeholder.
     public var pictureAddress: @Sendable (String) -> URL? = { _ in nil }
+    /// What the app itself says at a form's field, by the field's key,
+    /// beside what the server says of its value: each file the person picked
+    /// for it that was not added, by name and with why.
+    public var notes: @MainActor @Sendable (FormRef, String) -> [String] = { _, _ in [] }
 
     public init(
         send: @escaping @MainActor @Sendable (Intent) -> Void,

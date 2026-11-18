@@ -53,6 +53,9 @@ public final class SystemEffects: EffectRunner {
     /// Whether this window has asked the system for the push token since
     /// its core last named somebody.
     private var askedPush = false
+    /// What the app says at this window's file fields of the files it did
+    /// not add. The words name a person's files: they go with the session.
+    let fileNotes = FileNotes()
     private var timers: [Int: Task<Void, Never>] = [:]
 
     static let log = Logger(subsystem: "com.navree.native", category: "effects")
@@ -141,6 +144,7 @@ public final class SystemEffects: EffectRunner {
         session = keeper.number
         heard = false
         askedPush = false
+        fileNotes.clear()
         if let client, client.began { client.send(.signedOut) }
     }
 
@@ -149,12 +153,14 @@ public final class SystemEffects: EffectRunner {
         session = keeper.number
         heard = false
         askedPush = false
+        fileNotes.clear()
     }
 
     /// This window's core named the person the session is now: it goes on
     /// in the session as it is.
     func follows() {
         session = keeper.number
+        fileNotes.clear()
     }
 
     /// This install's push token goes with the person, once for a sign-out;
@@ -444,6 +450,19 @@ public enum Words {
             tone == .danger
                 ? String(localized: "That didn't work.")
                 : String(localized: "Something happened that this version of the app can't describe.")
+        }
+    }
+
+    /// What is said at a file field of a file the person picked and the app
+    /// did not add: the file by its name, why, and that it was not added.
+    public static func refused(_ name: String, _ why: FileRefusal) -> String {
+        switch why {
+        case .unreadable:
+            String(localized: "\(name) could not be read and was not added.")
+        case .placeUnchecked:
+            String(localized: "\(name) is a kind of picture this device cannot check for the place it was taken, so it was not added.")
+        case .placeStays:
+            String(localized: "\(name) holds details that can say where it was taken, and they cannot be taken out of this kind of file, so it was not added.")
         }
     }
 
