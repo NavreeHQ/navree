@@ -1180,61 +1180,33 @@ fn embed_locales_works_through_the_facade_without_i18n() {
 /// each behind a facade feature of its own name.
 #[test]
 fn the_kernels_first_party_list_matches_the_cli_index() {
-    assert!(
-        !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../navree-cli/src/plugin/index.toml")
-            .exists(),
-        "index.toml exists: compare FIRST_PARTY and RESERVED_NAMESPACES with it instead of the pinned rows"
-    );
-    // The `kind = "module"` packages of the first-party index, pinned until
-    // crates/navree-cli/src/plugin/index.toml exists.
-    const INDEXED: [&str; 31] = [
-        "ai",
-        "audit",
-        "billing",
-        "directory",
-        "documents",
-        "domains",
-        "flags",
-        "fleet",
-        "graphql",
-        "grpc",
-        "helm",
-        "http-client",
-        "i18n",
-        "integrations",
-        "mcp",
-        "media",
-        "micro",
-        "mongo",
-        "notify",
-        "oauth",
-        "realtime",
-        "redis",
-        "search",
-        "settings",
-        "sheets",
-        "social",
-        "sso",
-        "storage",
-        "time",
-        "webhooks",
-        "workflows",
-    ];
+    let index_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../navree-cli/src/plugin/index.toml");
+    let index_text = std::fs::read_to_string(&index_path).expect("index.toml exists");
+    let index_doc: toml::Value = toml::from_str(&index_text).expect("index.toml parses");
+    let packages = index_doc["package"]
+        .as_array()
+        .expect("index.toml has [[package]] entries");
+
     let listed: Vec<(String, String)> = navree::kernel::__private::FIRST_PARTY
         .iter()
         .map(|(package, krate)| ((*package).to_owned(), (*krate).to_owned()))
         .collect();
-    let expected: Vec<(String, String)> = INDEXED
+    let listed_set: BTreeSet<(String, String)> = listed.iter().cloned().collect();
+    assert_eq!(listed.len(), listed_set.len());
+
+    let indexed: Vec<(String, String)> = packages
         .iter()
-        .map(|name| {
-            (
-                format!("navree-{name}"),
-                format!("navree_{}", name.replace('-', "_")),
-            )
+        .filter(|entry| entry["kind"].as_str() == Some("module"))
+        .map(|entry| {
+            let krate = entry["crate"].as_str().expect("package entry has crate");
+            (krate.to_owned(), krate.replace('-', "_"))
         })
         .collect();
-    assert_eq!(listed, expected);
+    let indexed_set: BTreeSet<(String, String)> = indexed.iter().cloned().collect();
+    assert_eq!(indexed.len(), indexed_set.len());
+    assert_eq!(listed_set, indexed_set);
+
     let features = Features::read();
     for (package, _) in &listed {
         assert_eq!(
@@ -1251,12 +1223,17 @@ fn the_kernels_first_party_list_matches_the_cli_index() {
 /// framework crate declares.
 #[test]
 fn the_reserved_namespaces_match_the_framework_sections_and_permission_prefixes() {
-    assert!(
-        !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../navree-cli/src/plugin/index.toml")
-            .exists(),
-        "index.toml exists: compare FIRST_PARTY and RESERVED_NAMESPACES with it instead of the pinned rows"
-    );
+    let index_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../navree-cli/src/plugin/index.toml");
+    let index_text = std::fs::read_to_string(&index_path).expect("index.toml exists");
+    let index_doc: toml::Value = toml::from_str(&index_text).expect("index.toml parses");
+    let indexed_reserved: BTreeSet<String> = index_doc["reserved"]["namespaces"]
+        .as_array()
+        .expect("index.toml has [reserved] namespaces")
+        .iter()
+        .map(|word| word.as_str().expect("reserved word is a string").to_owned())
+        .collect();
+
     let reserved: BTreeSet<&str> = navree::kernel::__private::RESERVED_NAMESPACES
         .iter()
         .copied()
@@ -1286,6 +1263,8 @@ fn the_reserved_namespaces_match_the_framework_sections_and_permission_prefixes(
         "lpt0", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
     ]);
     assert_eq!(reserved, expected);
+    let reserved_owned: BTreeSet<String> = reserved.iter().map(|&word| word.to_owned()).collect();
+    assert_eq!(reserved_owned, indexed_reserved);
     // Every permission prefix a framework crate declares in its source is reserved.
     for (file, prefix) in permission_prefixes() {
         let word = prefix.split('.').next().unwrap();

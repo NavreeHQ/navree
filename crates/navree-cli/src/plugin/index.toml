@@ -1,0 +1,400 @@
+# First-party packages, reserved namespaces, and allowed manifest features
+# read by `navree plugin:add`, `navree plugin:remove`, and `navree plugin:list`.
+
+[[package]]
+name = "ai"
+crate = "navree-ai"
+feature = "ai"
+module = "navree::ai::AiModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "audit"
+crate = "navree-audit"
+feature = "audit"
+module = "navree::audit::AuditModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "billing"
+crate = "navree-billing"
+feature = "billing"
+module = "navree::billing::BillingModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "directory"
+crate = "navree-directory"
+feature = "directory"
+module = "navree::directory::DirectoryModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "documents"
+crate = "navree-documents"
+feature = "documents"
+module = "navree::documents::DocumentsModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "domains"
+crate = "navree-domains"
+feature = "domains"
+module = "navree::domains::DomainsModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "flags"
+crate = "navree-flags"
+feature = "flags"
+module = "navree::flags::FlagsModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "fleet"
+crate = "navree-fleet"
+feature = "fleet"
+module = "navree::fleet::FleetModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "graphql"
+crate = "navree-graphql"
+feature = "graphql"
+module = "navree::graphql::GraphqlModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "grpc"
+crate = "navree-grpc"
+feature = "grpc"
+module = "navree::grpc::GrpcModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "helm"
+crate = "navree-helm"
+feature = "helm"
+module = "navree::helm::HelmModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "http-client"
+crate = "navree-http-client"
+feature = "http-client"
+module = "navree::http_client::HttpClientModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "i18n"
+crate = "navree-i18n"
+feature = "i18n"
+module = "navree::i18n::I18nModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "integrations"
+crate = "navree-integrations"
+feature = "integrations"
+module = "navree::integrations::IntegrationsModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "mcp"
+crate = "navree-mcp"
+feature = "mcp"
+module = "navree::mcp::McpModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "media"
+crate = "navree-media"
+feature = "media"
+module = "navree::media::MediaModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "micro"
+crate = "navree-micro"
+feature = "micro"
+module = "navree::micro::MicroModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "mongo"
+crate = "navree-mongo"
+feature = "mongo"
+module = "navree::mongo::MongoModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "notify"
+crate = "navree-notify"
+feature = "notify"
+module = "navree::notify::NotifyModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "oauth"
+crate = "navree-oauth"
+feature = "oauth"
+module = "navree::oauth::OAuthServerModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "realtime"
+crate = "navree-realtime"
+feature = "realtime"
+module = "navree::realtime::RealtimeModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "redis"
+crate = "navree-redis"
+feature = "redis"
+module = "navree::redis::RedisModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "search"
+crate = "navree-search"
+feature = "search"
+module = "navree::search::SearchModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "settings"
+crate = "navree-settings"
+feature = "settings"
+module = "navree::settings::SettingsModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "sheets"
+crate = "navree-sheets"
+feature = "sheets"
+module = "navree::sheets::SheetsModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "social"
+crate = "navree-social"
+feature = "social"
+module = "navree::social::SocialModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "sso"
+crate = "navree-sso"
+feature = "sso"
+module = "navree::sso::SsoModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "storage"
+crate = "navree-storage"
+feature = "storage"
+module = "navree::storage::StorageModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "time"
+crate = "navree-time"
+feature = "time"
+module = "navree::time::TimeModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "webhooks"
+crate = "navree-webhooks"
+feature = "webhooks"
+module = "navree::webhooks::WebhooksModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "workflows"
+crate = "navree-workflows"
+feature = "workflows"
+module = "navree::workflows::WorkflowsModule::from_config()"
+kind = "module"
+
+[[package]]
+name = "browser"
+crate = "navree-browser"
+feature = "browser"
+kind = "dev"
+
+[[package]]
+name = "dock"
+crate = "navree-dock"
+feature = "dock"
+kind = "tool"
+use = "navree dock"
+
+[[package]]
+name = "harbor"
+crate = "navree-harbor"
+feature = "harbor"
+kind = "tool"
+use = "navree harbor:init"
+
+[[package]]
+name = "navigator"
+crate = "navree-navigator"
+feature = "navigator"
+kind = "tool"
+use = "navree mcp"
+
+[[package]]
+name = "otel"
+crate = "navree-observe"
+feature = "otel"
+kind = "feature"
+
+[reserved]
+namespaces = [
+    "ai",
+    "all",
+    "api",
+    "app",
+    "audit",
+    "auth",
+    "automations",
+    "aux",
+    "billing",
+    "cache",
+    "com0",
+    "com1",
+    "com2",
+    "com3",
+    "com4",
+    "com5",
+    "com6",
+    "com7",
+    "com8",
+    "com9",
+    "con",
+    "database",
+    "directory",
+    "documents",
+    "domains",
+    "env",
+    "flags",
+    "fleet",
+    "fonts",
+    "graphql",
+    "grpc",
+    "hashing",
+    "helm",
+    "http",
+    "http_client",
+    "i18n",
+    "integrations",
+    "layouts",
+    "lighthouse",
+    "log",
+    "logbook",
+    "lpt0",
+    "lpt1",
+    "lpt2",
+    "lpt3",
+    "lpt4",
+    "lpt5",
+    "lpt6",
+    "lpt7",
+    "lpt8",
+    "lpt9",
+    "mail",
+    "mcp",
+    "media",
+    "micro",
+    "navree",
+    "notify",
+    "nul",
+    "oauth",
+    "observe",
+    "operations",
+    "organization",
+    "orm",
+    "plugins",
+    "prn",
+    "queue",
+    "realtime",
+    "redis",
+    "roles",
+    "schema",
+    "search",
+    "session",
+    "settings",
+    "sheets",
+    "social",
+    "sso",
+    "storage",
+    "subscriptions",
+    "time",
+    "ui",
+    "users",
+    "validation",
+    "view",
+    "views",
+    "webhooks",
+    "workflows",
+    "workspace",
+]
+
+[manifest]
+features = [
+    "access",
+    "ai",
+    "api",
+    "audit",
+    "auth",
+    "billing",
+    "cache",
+    "crypto",
+    "db",
+    "directory",
+    "documents-docx",
+    "documents-native",
+    "domains",
+    "events",
+    "flags",
+    "fleet",
+    "graphql",
+    "grpc",
+    "helm",
+    "http",
+    "http-client",
+    "i18n",
+    "integrations",
+    "lighthouse",
+    "log",
+    "logbook",
+    "mail",
+    "mcp",
+    "media",
+    "micro",
+    "notify",
+    "oauth",
+    "observe",
+    "orm",
+    "queue",
+    "realtime",
+    "redis",
+    "schedule",
+    "search",
+    "session",
+    "settings",
+    "sheets",
+    "social",
+    "sso",
+    "storage",
+    "telemetry",
+    "time",
+    "ui",
+    "validation",
+    "view",
+    "webhooks",
+    "workflows",
+    "workspace",
+]

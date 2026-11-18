@@ -16,6 +16,10 @@ include = ["src/**", "README.md", "LICENSE-*"]
 features = ["notify"]
 targets = ["x86_64-unknown-linux-gnu"]
 
+# What `navree plugin:add webhooks` reads; the CLI's index holds the same line.
+[package.metadata.navree.plugin]
+module = "WebhooksModule::from_config()"
+
 [lints]
 workspace = true
 

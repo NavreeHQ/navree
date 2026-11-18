@@ -15,6 +15,10 @@ include = ["src/**", "README.md", "LICENSE-*"]
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 
+# What `navree plugin:add realtime` reads; the CLI's index holds the same line.
+[package.metadata.navree.plugin]
+module = "RealtimeModule::from_config()"
+
 # `BackplaneKind` gained `Registered`, which names a driver a plugin
 # registers. The enum is `#[non_exhaustive]`, so a new variant is not a
 # breaking change (docs/prologue/versioning-and-support.mdx). What stops

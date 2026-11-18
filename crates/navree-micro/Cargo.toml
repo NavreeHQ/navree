@@ -16,6 +16,10 @@ include = ["src/**", "README.md", "LICENSE-*"]
 features = ["kafka", "mqtt", "nats", "rabbitmq", "redis", "testing"]
 targets = ["x86_64-unknown-linux-gnu"]
 
+# What `navree plugin:add micro` reads; the CLI's index holds the same line.
+[package.metadata.navree.plugin]
+module = "MicroModule::from_config()"
+
 [lints]
 workspace = true
 

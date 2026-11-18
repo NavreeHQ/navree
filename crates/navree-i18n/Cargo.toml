@@ -16,6 +16,10 @@ include = ["src/**", "resources/**", "README.md", "LICENSE-*"]
 features = ["phone", "ui"]
 targets = ["x86_64-unknown-linux-gnu"]
 
+# What `navree plugin:add i18n` reads; the CLI's index holds the same line.
+[package.metadata.navree.plugin]
+module = "I18nModule::from_config()"
+
 [lints]
 workspace = true
 

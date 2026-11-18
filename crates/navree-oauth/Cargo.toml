@@ -16,6 +16,10 @@ include = ["src/**", "README.md", "LICENSE-*"]
 features = ["testing", "ui"]
 targets = ["x86_64-unknown-linux-gnu"]
 
+# What `navree plugin:add oauth` reads; the CLI's index holds the same line.
+[package.metadata.navree.plugin]
+module = "OAuthServerModule::from_config()"
+
 [lints]
 workspace = true
 

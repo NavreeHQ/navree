@@ -16,6 +16,10 @@ include = ["src/**", "README.md", "LICENSE-*"]
 features = ["auth"]
 targets = ["x86_64-unknown-linux-gnu"]
 
+# What `navree plugin:add flags` reads; the CLI's index holds the same line.
+[package.metadata.navree.plugin]
+module = "FlagsModule::from_config()"
+
 [lints]
 workspace = true
 

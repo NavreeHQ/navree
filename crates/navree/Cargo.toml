@@ -824,6 +824,7 @@ metrics = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
+toml = { workspace = true }
 # `tests/workspace_library_docs.rs`: an error type of the app's own, as the
 # ORM's events page writes it.
 thiserror = { workspace = true }

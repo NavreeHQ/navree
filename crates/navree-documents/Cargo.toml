@@ -16,6 +16,10 @@ include = ["src/**", "fonts/**", "README.md", "LICENSE-*"]
 features = ["chrome", "docx", "native", "operations"]
 targets = ["x86_64-unknown-linux-gnu"]
 
+# What `navree plugin:add documents` reads; the CLI's index holds the same line.
+[package.metadata.navree.plugin]
+module = "DocumentsModule::from_config()"
+
 [lints]
 workspace = true
 

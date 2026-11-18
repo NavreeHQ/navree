@@ -16,6 +16,10 @@ include = ["src/**", "README.md", "LICENSE-*"]
 features = ["all-icons", "settings"]
 targets = ["x86_64-unknown-linux-gnu"]
 
+# What `navree plugin:add helm` reads; the CLI's index holds the same line.
+[package.metadata.navree.plugin]
+module = "HelmModule::from_config()"
+
 [lints]
 workspace = true
 
