@@ -23,9 +23,9 @@ public sealed record PendingNotification(
     int? Minute)
 {
     /// <summary>
-    /// Whose it is: the mark of the person what the app keeps was kept for when it was asked for (a mark tells one person from another
-    /// and says nothing of either), or null when nobody had been signed in since the app was first started or since the last sign-out.
-    /// One that is a person's is shown only while that person is signed in. One that is nobody's is shown whoever is there.
+    /// Whose it is: the mark of the person who was signed in when it was asked for (a mark tells one person from another and says
+    /// nothing of either), or null when nobody was. One that is a person's is shown only while that person is signed in. One that is
+    /// nobody's is shown whoever is there, and is nobody's only until a person becomes the one signed in and is given it.
     /// </summary>
     public string? Owner { get; init; }
 
@@ -125,8 +125,9 @@ public static class NotifyRules
 /// person's eyes: it is given to be shown only while they are the one signed in (<see cref="Take"/>). Due while they are not (their
 /// session ran out and the sign-in is up, or the app was started and has not heard who is signed in), it goes on waiting as it is, and
 /// is given when they are signed in again. Another person signing in takes everything that waits away, which is the app's to do. A
-/// start keeps of a person's only those of the person it can say what is kept is kept for (<see cref="KeepFor"/>). One that is
-/// nobody's stays so only until a person is named: it is theirs from then on (<see cref="GiveTo"/>).
+/// start keeps of a person's only those of the person it can say what is kept is kept for (<see cref="KeepFor"/>). One asked for
+/// while nobody is signed in is nobody's, and stays so only until a person becomes the one signed in: it is theirs from then on
+/// (<see cref="GiveTo"/>).
 /// </remarks>
 public sealed class NotificationSchedule
 {
@@ -225,10 +226,11 @@ public sealed class NotificationSchedule
         waiting.RemoveAll(item => item.Owner is not null && !string.Equals(item.Owner, keptFor, StringComparison.Ordinal));
 
     /// <summary>
-    /// Gives every one that is nobody's to a person. It is done when the first person is named as signed in since the app was first
-    /// started or since the last sign-out: what waits then was asked for by them, between their sign-in and the answer that named
-    /// them, or by a visitor before them. And it is done at a start that read a person's mark: what is kept is kept for that person.
-    /// Either way it is theirs from then on, shown only while they are signed in, and never again to whoever is there.
+    /// Gives every one that is nobody's to a person. It is done when a person becomes the one signed in with no change of person: the
+    /// first since the app was first started or since the last sign-out, or the person from before, signed in again after nobody was.
+    /// What waits for nobody then was asked for while nobody was signed in: most often by them, between their sign-in and the answer
+    /// that named them, or by a visitor before them. And it is done at a start that read a person's mark: what is kept is kept for
+    /// that person. Either way it is theirs from then on, shown only while they are signed in, and never again to whoever is there.
     /// </summary>
     /// <param name="owner">The person's mark.</param>
     /// <returns>How many were given.</returns>

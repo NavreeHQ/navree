@@ -331,6 +331,39 @@ public sealed class NotificationTests
     }
 
     [TestMethod]
+    public void OneAskedForWhileNobodyIsSignedInIsNobodysAndNotThePersonsWhoWasSignedInBefore()
+    {
+        // Simran's session ran out at the counter in Model Town, and the sign-in went up over her work. Her reminder of nine is hers,
+        // and held.
+        NotificationSchedule schedule = new();
+        DateTimeOffset nine = new(2026, 11, 16, 9, 0, 0, TimeSpan.FromHours(5.5));
+        DateTimeOffset eleven = nine.AddHours(2);
+        _ = schedule.Add(new PendingNotification("insulin", "Call Mr. Arora about the insulin refill", null, null, null, nine, null, null) { Owner = Simran });
+
+        // At twenty past nine somebody signs in at it, and the shop's line drops before the shell has said who. On the orders page they
+        // ask to be reminded at eleven. Nobody is signed in that the app knows of, so it is kept by who is signed in: nobody. It is
+        // not kept as Simran's, though what is kept is still kept for her.
+        string? signedIn = null;
+        _ = schedule.Add(new PendingNotification("daughter", "Call Mr. Arora's daughter about the refill", null, null, null, eleven, null, null) { Owner = signedIn });
+        Assert.IsNull(schedule.Waiting.Single(item => item.Id == "daughter").Owner);
+
+        // At eleven it is shown to whoever is there, who asked for it. Simran's is still held: it is not theirs to see.
+        Assert.AreEqual(eleven, schedule.Next(null), "a reminder asked for while nobody is signed in waits for the person who was signed in before");
+        Assert.AreEqual("daughter", schedule.Take(eleven.AddMinutes(1), India, null).Single().Id, "a reminder asked for while nobody is signed in is held with those of the person who was signed in before");
+        Assert.AreEqual("insulin", schedule.Waiting.Single().Id);
+        Assert.AreEqual(1, schedule.HeldBack(eleven.AddMinutes(1), null));
+
+        // When it was Simran herself who signed in again, and the shell then names her, what she asked for meanwhile is given to her
+        // with no change of person: it is hers from there on, shown to her and no longer to whoever is there.
+        NotificationSchedule hers = new();
+        _ = hers.Add(new PendingNotification("insulin", "Call Mr. Arora about the insulin refill", null, null, null, nine, null, null) { Owner = Simran });
+        _ = hers.Add(new PendingNotification("lunch", "Order lunch for the counter", null, null, null, eleven, null, null) { Owner = signedIn });
+        Assert.AreEqual(1, hers.GiveTo(Simran));
+        Assert.AreEqual(0, hers.Take(eleven.AddMinutes(1), India, null).Count, "what the same person asked for before the shell named her is shown to whoever is there after it has");
+        CollectionAssert.AreEqual(new[] { "insulin", "lunch" }, hers.Take(eleven.AddMinutes(1), India, Simran).Select(item => item.Id).ToArray());
+    }
+
+    [TestMethod]
     public void ASnapshotThatHoldsNobodyIsNotKept()
     {
         Assert.IsFalse(SnapshotRules.ShouldKeep("{\"version\":1,\"person_unknown\":true}"));
