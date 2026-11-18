@@ -176,6 +176,11 @@ fn control_problems(control: &dyn FieldControl) -> Vec<String> {
             found.push(line);
         }
     };
+    if !crate::extension::is_control_name(name) {
+        say(format!(
+            "control {name}: name is not <namespace>.<name> (a lower-case namespace, a dot, and 1 to 64 lower-case letters, digits or `-`)"
+        ));
+    }
     for field in &draws {
         let node = control.draw(field);
         let mut parts = Vec::new();

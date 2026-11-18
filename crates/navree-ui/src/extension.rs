@@ -1069,18 +1069,19 @@ pub(crate) fn checked(ctx: &AppContext) -> Result<Extensions, String> {
         ..
     } in &firsts
     {
-        // A plugin's script may call the routes its extension names. One outside the plugin's
-        // namespace is said once, so the app's owner sees how far the script reaches.
+        // A plugin's script may call the routes its extension names. One whose first segment is
+        // outside the plugin's namespace is said once, so the app's owner sees how far the script
+        // reaches.
         let namespace = extension.namespace();
         if *of_plugin
             && let Some(prefix) = extension
                 .routes
                 .iter()
-                .find(|prefix| !prefix.split('/').any(|segment| segment == namespace))
+                .find(|prefix| prefix.split('/').nth(1) != Some(namespace))
         {
             tracing::warn!(
                 target: "navree::ui",
-                "UI extension `{stem}` may call routes under `{prefix}`, which has no segment named `{namespace}`: keep a plugin's routes under its own namespace, such as .routes(&[\"/{namespace}/\"])"
+                "UI extension `{stem}` may call routes under `{prefix}`, which is not under `/{namespace}/`: keep a plugin's routes under its own namespace, such as .routes(&[\"/{namespace}/\"])"
             );
         }
         let mut said = Vec::new();
@@ -1116,6 +1117,117 @@ pub(crate) fn checked(ctx: &AppContext) -> Result<Extensions, String> {
         watched,
         warned: Mutex::new(BTreeSet::new()),
     })
+}
+
+/// Whether `full` is a valid control name (`namespace.name`, with a plugin namespace and a
+/// 1-to-64-byte extension name).
+pub(crate) fn is_control_name(full: &str) -> bool {
+    full.split_once('.').is_some_and(|(namespace, name)| {
+        navree_kernel::__private::is_namespace(namespace) && is_extension_name(name)
+    })
+}
+
+/// Checks every contributed [`Control`](crate::form::Control) at boot: its name follows the
+/// `namespace.name` grammar, its namespace belongs to the contributing plugin or app module under
+/// the same rules as [`UiExtension`], and two controls sharing one name have the same concrete
+/// type.
+pub(crate) fn checked_controls(ctx: &AppContext) -> Result<(), String> {
+    let contributed = ctx.contributions::<crate::form::Control>();
+    if contributed.is_empty() {
+        return Ok(());
+    }
+    let plugins = ctx.plugins().plugins;
+    let mut errors: Vec<String> = Vec::new();
+    let mut firsts: Vec<(String, std::any::TypeId, &'static str)> = Vec::new();
+
+    for entry in &contributed {
+        let control = *entry.value;
+        let module = &entry.module;
+        let full = control.name();
+        let acting = plugin_of(&plugins, module.id);
+        let plugin = acting.map(|report| &report.info);
+        let first_party = acting.is_some_and(|report| report.first_party);
+        let who = match plugin {
+            Some(info) => format!("plugin `{}`", info.name),
+            None => format!("module `{}`", module.name),
+        };
+
+        let Some((namespace, name)) = full
+            .split_once('.')
+            .filter(|(ns, nm)| navree_kernel::__private::is_namespace(ns) && is_extension_name(nm))
+        else {
+            note(
+                &mut errors,
+                format!(
+                    "{who} contributes the field control `{full}`, whose name is not <namespace>.<name> (a lower-case namespace, a dot, and 1 to 64 lower-case letters, digits or `-`)"
+                ),
+            );
+            continue;
+        };
+
+        match plugin {
+            Some(info) if !first_party => {
+                if info.namespace != namespace {
+                    note(
+                        &mut errors,
+                        format!(
+                            "plugin `{}` contributes the field control `{full}`, which is not under its namespace: name it \"{}.{name}\"",
+                            info.name, info.namespace
+                        ),
+                    );
+                }
+            }
+            _ => {
+                let owner = plugins
+                    .iter()
+                    .find(|owner| owner.info.namespace == namespace);
+                if let Some(owner) = owner
+                    && plugin.map(|info| info.namespace) != Some(namespace)
+                {
+                    note(
+                        &mut errors,
+                        format!(
+                            "module `{}` contributes the field control `{full}` under `{namespace}`, the namespace of plugin `{}`; an app's own controls use a namespace no plugin has, such as app",
+                            module.name, owner.info.name
+                        ),
+                    );
+                } else if plugin.is_none()
+                    && namespace != "app"
+                    && RESERVED_NAMESPACES.contains(&namespace)
+                {
+                    note(
+                        &mut errors,
+                        format!(
+                            "module `{}` contributes the field control `{full}` under `{namespace}`, which the framework keeps for itself; name it \"app.{name}\", or under a namespace no plugin has",
+                            module.name
+                        ),
+                    );
+                }
+            }
+        }
+
+        if let Some((_, earlier_type, earlier_module)) =
+            firsts.iter().find(|(earlier, _, _)| earlier == full)
+        {
+            if *earlier_type != control.type_id() {
+                note(
+                    &mut errors,
+                    format!(
+                        "field control `{full}` is contributed by both `{earlier_module}` and `{}` with different types; give one another name",
+                        module.name
+                    ),
+                );
+            }
+            continue;
+        }
+        firsts.push((full.to_owned(), control.type_id(), module.name));
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("\n"))
+    }
 }
 
 /// Answers `GET /_navree/ui/ext/{file}`: the script or stylesheet named in `file`, `immutable`

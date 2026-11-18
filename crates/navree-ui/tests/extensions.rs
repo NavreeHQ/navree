@@ -11,8 +11,8 @@ use navree_kernel::{
     BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 use navree_plugin_geo::{
-    BadgeModule, EmptyModule, GeoHelperModule, GeoMapModule, GeoModule, MapsModule,
-    NewerContractModule, NoContractModule, WideModule,
+    BadgeModule, EmptyModule, GeoHelperModule, GeoMapModule, GeoModule, GeoPluginControl,
+    GeoPluginExtension, MapsModule, NewerContractModule, NoContractModule, WideModule,
 };
 use navree_plugin_maps::{MapsHelper, MapsPlugin};
 use navree_testing::{TestApp, TestAppBuilder};
@@ -504,6 +504,24 @@ mod navree_plugin_geo {
             m.contribute(self.0);
         }
     }
+
+    /// A module of the plugin `geo` that contributes the extension it holds.
+    pub struct GeoPluginExtension(pub UiExtension);
+
+    impl Module for GeoPluginExtension {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(geo()).contribute(self.0);
+        }
+    }
+
+    /// A module of the plugin `geo` that contributes the field control it holds.
+    pub struct GeoPluginControl(pub navree_ui::form::Control);
+
+    impl Module for GeoPluginControl {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(geo()).contribute(self.0);
+        }
+    }
 }
 
 /// The plugin `maps`, another plugin of the app: its crate is this module.
@@ -930,10 +948,225 @@ async fn a_route_prefix_without_the_namespace_is_warned_about() {
     assert_eq!(warned.len(), 1, "{said:?}");
     assert!(
         warned[0].contains(
-            "UI extension `geo.wide` may call routes under `/api/`, which has no segment named `geo`: keep a plugin's routes under its own namespace, such as .routes(&[\"/geo/\"])"
+            "UI extension `geo.wide` may call routes under `/api/`, which is not under `/geo/`: keep a plugin's routes under its own namespace, such as .routes(&[\"/geo/\"])"
         ),
         "{said:?}"
     );
+    app.shutdown().await.unwrap();
+}
+
+static LATER_SEGMENT: UiExtension = UiExtension::new("geo", "nested")
+    .script(ExtensionFile::__new(
+        b"export const contract = 1;",
+        "300a4015e74f",
+        None,
+    ))
+    .contract(1)
+    .routes(&["/api/geo/"]);
+
+static DEEPER_OWN: UiExtension = UiExtension::new("geo", "places")
+    .script(ExtensionFile::__new(
+        b"export const contract = 1;",
+        "300a4015e74f",
+        None,
+    ))
+    .contract(1)
+    .routes(&["/geo/places/"]);
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_route_warning_reads_the_namespace_segment_only() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let app = builder()
+        .module(UiModule)
+        .module(GeoPluginExtension(LATER_SEGMENT))
+        .module(GeoPluginExtension(DEEPER_OWN))
+        .build()
+        .await;
+    let said = said_about_extensions(&capture);
+    let warned: Vec<&String> = said.iter().filter(|line| line.contains("WARN")).collect();
+    assert_eq!(warned.len(), 1, "{said:?}");
+    assert!(
+        warned[0].contains(
+            "UI extension `geo.nested` may call routes under `/api/geo/`, which is not under `/geo/`: keep a plugin's routes under its own namespace, such as .routes(&[\"/geo/\"])"
+        ),
+        "{said:?}"
+    );
+    app.shutdown().await.unwrap();
+}
+
+struct NamedControl(&'static str);
+
+impl navree_ui::form::FieldControl for NamedControl {
+    fn name(&self) -> &'static str {
+        self.0
+    }
+
+    fn draw(&self, field: &navree_ui::form::ControlField<'_>) -> Node {
+        el("input")
+            .attr("type", "text")
+            .attr("name", field.name.to_owned())
+            .flag("disabled", field.disabled)
+            .into()
+    }
+}
+
+struct FirstPinControl;
+
+impl navree_ui::form::FieldControl for FirstPinControl {
+    fn name(&self) -> &'static str {
+        "app.pin-code"
+    }
+
+    fn draw(&self, field: &navree_ui::form::ControlField<'_>) -> Node {
+        el("input")
+            .attr("name", field.name.to_owned())
+            .flag("disabled", field.disabled)
+            .into()
+    }
+}
+
+struct SecondPinControl;
+
+impl navree_ui::form::FieldControl for SecondPinControl {
+    fn name(&self) -> &'static str {
+        "app.pin-code"
+    }
+
+    fn draw(&self, field: &navree_ui::form::ControlField<'_>) -> Node {
+        el("input")
+            .attr("name", field.name.to_owned())
+            .flag("disabled", field.disabled)
+            .into()
+    }
+}
+
+static BAD_NO_DOT: NamedControl = NamedControl("pin-code");
+static BAD_UPPER_NS: NamedControl = NamedControl("Geo.pin");
+static BAD_UPPER_NAME: NamedControl = NamedControl("geo.Pin");
+static BAD_UNDERSCORE_NAME: NamedControl = NamedControl("geo.pin_code");
+static BAD_EMPTY_NAME: NamedControl = NamedControl("geo.");
+static BAD_EMPTY_NS: NamedControl = NamedControl(".pin");
+static WRONG_PLUGIN_NS: NamedControl = NamedControl("maps.pin");
+static RESERVED_CTRL: NamedControl = NamedControl("ui.pin");
+static GOOD_GEO_CTRL: NamedControl = NamedControl("geo.location");
+static FIRST_PIN_CTRL: FirstPinControl = FirstPinControl;
+static SECOND_PIN_CTRL: SecondPinControl = SecondPinControl;
+
+struct AppControlModule(navree_ui::form::Control);
+
+impl Module for AppControlModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(self.0);
+    }
+}
+
+struct SecondAppControlModule(navree_ui::form::Control);
+
+impl Module for SecondAppControlModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute(self.0);
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_controls_name_is_held_to_the_name_grammar() {
+    for bad in [
+        &BAD_NO_DOT,
+        &BAD_UPPER_NS,
+        &BAD_UPPER_NAME,
+        &BAD_UNDERSCORE_NAME,
+        &BAD_EMPTY_NAME,
+        &BAD_EMPTY_NS,
+    ] {
+        let error = boot_error(
+            builder()
+                .module(UiModule)
+                .module(AppControlModule(navree_ui::form::Control::new(bad))),
+        )
+        .await;
+        assert!(
+            error.contains(&format!(
+                "contributes the field control `{}`, whose name is not <namespace>.<name>",
+                bad.0
+            )),
+            "{error}"
+        );
+        let kit_failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            kit::assert_control(bad);
+        }));
+        assert!(
+            kit_failed.is_err(),
+            "`{}` should fail assert_control",
+            bad.0
+        );
+    }
+
+    let wrong_ns = boot_error(builder().module(UiModule).module(GeoPluginControl(
+        navree_ui::form::Control::new(&WRONG_PLUGIN_NS),
+    )))
+    .await;
+    assert!(
+        wrong_ns.contains(
+            "plugin `navree-plugin-geo` contributes the field control `maps.pin`, which is not under its namespace: name it \"geo.pin\""
+        ),
+        "{wrong_ns}"
+    );
+
+    let reserved = boot_error(builder().module(UiModule).module(AppControlModule(
+        navree_ui::form::Control::new(&RESERVED_CTRL),
+    )))
+    .await;
+    assert!(
+        reserved.contains(
+            "contributes the field control `ui.pin` under `ui`, which the framework keeps for itself"
+        ),
+        "{reserved}"
+    );
+
+    let app = builder()
+        .module(UiModule)
+        .module(GeoPluginControl(navree_ui::form::Control::new(
+            &GOOD_GEO_CTRL,
+        )))
+        .module(AppControlModule(navree_ui::form::Control::new(
+            &FIRST_PIN_CTRL,
+        )))
+        .build()
+        .await;
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn two_controls_of_one_name_and_different_types_fail_the_boot() {
+    let first = navree_ui::form::Control::new(&FIRST_PIN_CTRL);
+    let second = navree_ui::form::Control::new(&SECOND_PIN_CTRL);
+    assert_ne!(first, second);
+    assert_eq!(first, navree_ui::form::Control::new(&FIRST_PIN_CTRL));
+
+    let error = boot_error(
+        builder()
+            .module(UiModule)
+            .module(AppControlModule(first))
+            .module(SecondAppControlModule(second)),
+    )
+    .await;
+    for part in [
+        "field control `app.pin-code` is contributed by both `",
+        "AppControlModule",
+        "SecondAppControlModule",
+        "` with different types; give one another name",
+    ] {
+        assert!(error.contains(part), "{part}: {error}");
+    }
+
+    // Contributing the same concrete control twice is allowed.
+    let app = builder()
+        .module(UiModule)
+        .module(AppControlModule(first))
+        .module(SecondAppControlModule(first))
+        .build()
+        .await;
     app.shutdown().await.unwrap();
 }
 

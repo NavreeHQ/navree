@@ -317,13 +317,18 @@ impl<T: DeserializeOwned> EditedValue<T> {
 
     /// Holds the value to `control`'s check, with the language's app and configuration
     /// (`Language::of` finds them), and then reads it as `T`. A value the control refuses is
-    /// refused with the control's message; one that is not a `T` is refused with the form's own
-    /// words for a value that is not valid.
+    /// refused with the control's message; one that is not a `T` is refused with
+    /// [`FieldControl::parse_error`](crate::form::FieldControl::parse_error) when it returns
+    /// `Some`, else the form's own words for a value that is not valid.
     pub fn read(self, control: Control, language: &Language) -> Result<T, EditRefused> {
-        if let Err(message) = control.check(&self.text, &language.control_cx()) {
+        let cx = language.control_cx();
+        if let Err(message) = control.check(&self.text, &cx) {
             return Err(EditRefused { message });
         }
-        self.parsed(language)
+        let raw = self.text.clone();
+        self.parsed(language).map_err(|default| EditRefused {
+            message: control.parse_error(&raw, &cx).unwrap_or(default.message),
+        })
     }
 
     /// Reads the value as `T`, with no check of a control's. For the four built-in editors only
@@ -338,14 +343,18 @@ impl<T: DeserializeOwned> EditedValue<T> {
         let encoded = crate::form::encode(&[("value", self.text.as_str())]);
         match One::<T>::deserialize(urlencoded::Deserializer::new(encoded.as_bytes())) {
             Ok(one) => Ok(one.value),
-            Err(_) => Err(EditRefused {
-                message: language
-                    .messages()
-                    .clone()
-                    .with_attributes([("value", "Value")])
-                    .with_default_messages(crate::form::FORM_MESSAGES.iter().copied())
-                    .render("value", "form.invalid", &[]),
-            }),
+            Err(_) => {
+                let mut messages = language.messages().clone();
+                if messages.attribute("value") == "value" {
+                    messages =
+                        messages.with_attributes([("value", language.words().value_label())]);
+                }
+                Err(EditRefused {
+                    message: messages
+                        .with_default_messages(crate::form::FORM_MESSAGES.iter().copied())
+                        .render("value", "form.invalid", &[]),
+                })
+            }
         }
     }
 }

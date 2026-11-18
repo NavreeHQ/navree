@@ -1442,3 +1442,169 @@ fn an_edit_cell_control_gets_an_id_of_its_own_no_label_id_and_its_disabled() {
         r#"<form data-slot="edit-cell" method="post" action="/deals/1/title" data-ui-form data-ui-edit><input data-slot="input" data-size="sm" type="text" name="value" value="Kesar" aria-label="Edit"><noscript><button data-slot="button" data-variant="outline" data-size="xs" type="submit">Save</button></noscript></form>"#
     );
 }
+
+#[tokio::test]
+async fn a_refused_cell_value_is_said_in_the_language_of_the_page() {
+    let invalid_request = || {
+        http::Request::builder()
+            .method(Method::POST)
+            .uri("/deliveries/42/seats")
+            .header("content-type", FORM)
+            .body(Body::from("value=x"))
+            .expect("a post")
+    };
+
+    // Hindi via DateLocale tag (`hi`) and Hindi template.
+    let hindi_messages = AppMessages::new(
+        Arc::new(
+            navree_validation::Messages::default()
+                .with_message("form.invalid", ":attribute सही नहीं है।"),
+        ),
+        None,
+    );
+    let mut hindi_words = navree_ui::localize::ReaderWords::english();
+    hindi_words.dates = navree_ui::dates::DateLocale::of("hi");
+    let hindi = Language::new(hindi_messages.clone(), hindi_words);
+
+    let edit = EditedValue::<u8>::from_request(invalid_request())
+        .await
+        .expect("a posted edit");
+    let refused = edit.read(Control::new(&STARS), &hindi).unwrap_err();
+    assert_eq!(refused.message(), "मान सही नहीं है।");
+
+    // An explicit `words.value` set by a localizer overrides the tag fallback.
+    let mut custom_words = navree_ui::localize::ReaderWords::english();
+    custom_words.value = "सीट संख्या".into();
+    let custom = Language::new(hindi_messages.clone(), custom_words);
+    let edit = EditedValue::<u8>::from_request(invalid_request())
+        .await
+        .expect("a posted edit");
+    let refused = edit.read_built_in(&custom).unwrap_err();
+    assert_eq!(refused.message(), "सीट संख्या सही नहीं है।");
+
+    // A configured `validation.attributes` display name for `value` wins first.
+    let named = Language::new(
+        hindi_messages.with_attributes([("value", "कुल सीटें")]),
+        navree_ui::localize::ReaderWords::english(),
+    );
+    let edit = EditedValue::<u8>::from_request(invalid_request())
+        .await
+        .expect("a posted edit");
+    let refused = edit.read(Control::new(&STARS), &named).unwrap_err();
+    assert_eq!(refused.message(), "कुल सीटें सही नहीं है।");
+}
+
+#[test]
+fn a_control_field_takes_an_id_a_label_a_placeholder_and_a_description() {
+    let field = ControlField::new("drop_at")
+        .id("parcel-drop-42")
+        .label("Drop point in Ludhiana")
+        .label_id(Some("parcel-drop-42-label"))
+        .value("30.9010, 75.8573")
+        .placeholder("30.9010, 75.8573")
+        .described_by("parcel-drop-42-help parcel-drop-42-error")
+        .required(true)
+        .invalid(true)
+        .disabled(false);
+
+    assert_eq!(field.name, "drop_at");
+    assert_eq!(field.id, "parcel-drop-42");
+    assert_eq!(field.label, "Drop point in Ludhiana");
+    assert_eq!(field.label_id, Some("parcel-drop-42-label"));
+    assert_eq!(field.value, Some("30.9010, 75.8573"));
+    assert_eq!(field.placeholder, Some("30.9010, 75.8573"));
+    assert_eq!(
+        field.described_by,
+        Some("parcel-drop-42-help parcel-drop-42-error")
+    );
+    assert!(field.required);
+    assert!(field.invalid);
+    assert!(!field.disabled);
+}
+
+/// Accepts only digits in `check`, and explains in `parse_error` why digits outside `u8` failed
+/// to parse.
+struct CrateCount;
+
+impl FieldControl for CrateCount {
+    fn name(&self) -> &'static str {
+        "app.crate-count"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("input")
+            .attr("name", field.name.to_owned())
+            .flag("disabled", field.disabled)
+            .into()
+    }
+
+    fn check(&self, value: &str, _cx: &ControlCx<'_>) -> Result<(), String> {
+        if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) {
+            Ok(())
+        } else {
+            Err("Enter digits only for crates".to_owned())
+        }
+    }
+
+    fn parse_error(&self, value: &str, _cx: &ControlCx<'_>) -> Option<String> {
+        Some(format!("{value} is above the 255-crate limit"))
+    }
+}
+
+static CRATE_COUNT: CrateCount = CrateCount;
+
+#[derive(Debug, Deserialize, Validate, Form)]
+struct ShipmentCrates {
+    /// Crates
+    #[validate(skip)]
+    #[form(control = CRATE_COUNT)]
+    crates: u8,
+    /// Spare crates
+    #[validate(skip)]
+    #[form(control = CRATE_COUNT, error = "Enter 0 to 255 spare crates")]
+    spare: Option<u8>,
+}
+
+#[tokio::test]
+async fn a_controls_check_can_say_why_a_value_did_not_parse() {
+    // When `check` refuses, its message is the field's one error and `parse_error` is not used.
+    let refused_by_check =
+        decode_for::<ShipmentCrates>(&pairs(&[("crates", "dozen")]), &Language::english())
+            .unwrap_err();
+    assert_eq!(refused_by_check["crates"], ["Enter digits only for crates"]);
+
+    // When `check` accepts `"400"` and `u8` cannot parse it, `parse_error` supplies the words,
+    // while a field with its own `error` keeps that override.
+    let parse_failed = decode_for::<ShipmentCrates>(
+        &pairs(&[("crates", "400"), ("spare", "300")]),
+        &Language::english(),
+    )
+    .unwrap_err();
+    assert_eq!(parse_failed["crates"], ["400 is above the 255-crate limit"]);
+    assert_eq!(parse_failed["spare"], ["Enter 0 to 255 spare crates"]);
+
+    // `EditedValue::read` uses `parse_error` on a cell too.
+    let post_body = |body: &'static str| {
+        http::Request::builder()
+            .method(Method::POST)
+            .uri("/deliveries/42/crates")
+            .header("content-type", FORM)
+            .body(Body::from(body))
+            .expect("a post")
+    };
+    let edit = EditedValue::<u8>::from_request(post_body("value=400"))
+        .await
+        .expect("a posted edit");
+    let refused = edit
+        .read(Control::new(&CRATE_COUNT), &Language::english())
+        .unwrap_err();
+    assert_eq!(refused.message(), "400 is above the 255-crate limit");
+
+    let edit = EditedValue::<u8>::from_request(post_body("value=dozen"))
+        .await
+        .expect("a posted edit");
+    let refused = edit
+        .read(Control::new(&CRATE_COUNT), &Language::english())
+        .unwrap_err();
+    assert_eq!(refused.message(), "Enter digits only for crates");
+}

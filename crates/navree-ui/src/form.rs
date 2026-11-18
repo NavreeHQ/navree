@@ -211,9 +211,11 @@ pub trait FieldControl: Send + Sync + RefUnwindSafe + 'static {
 
     /// The server's check of a posted value, before the field's type reads it: `Err` is the
     /// message shown. It is called only through [`Control::check`], where the trait's own docs
-    /// say and nowhere else. In a form, when the check refuses a text that the field's
-    /// type cannot read either, the check's message is the field's one error; a text the check
-    /// accepts and the type cannot read gets the form's own words for a value that is not valid.
+    /// say and nowhere else, and runs once for each posted pair of the field (or once on empty
+    /// text when a required field is left out). In a form, when the check refuses a text that the
+    /// field's type cannot read either, the check's message is the field's one error; a text the
+    /// check accepts and the type cannot read gets [`parse_error`](Self::parse_error) when it
+    /// returns `Some`, else the form's own words for a value that is not valid.
     ///
     /// A check that cannot do its work without the app or the configuration (`cx.app()` or
     /// `cx.config()` is `None`) refuses the value: a value that could not be checked is not
@@ -226,6 +228,15 @@ pub trait FieldControl: Send + Sync + RefUnwindSafe + 'static {
         Ok(())
     }
 
+    /// What to say when [`check`](Self::check) accepted `value` and the field's type could not
+    /// read it, in a form or in a table cell (`EditedValue::read`): `Some` is the message shown
+    /// in place of the form's own words for a value that is not valid, unless the field sets its
+    /// own `error`. `None` keeps the form's words.
+    fn parse_error(&self, value: &str, cx: &ControlCx<'_>) -> Option<String> {
+        let _ = (value, cx);
+        None
+    }
+
     /// Whether the value is a secret, such as a password or a one-time code. A secret is kept as
     /// a password input's is: a refused form never shows it again, [`Rejected::values`] never
     /// gives it back, a [`Wizard`](crate::Wizard) never keeps it in its draft, and `draw` is
@@ -234,6 +245,12 @@ pub trait FieldControl: Send + Sync + RefUnwindSafe + 'static {
     /// it is not one.
     fn secret(&self) -> bool {
         false
+    }
+
+    /// Concrete type identity for duplicate-name checks. Not public API.
+    #[doc(hidden)]
+    fn __type_id(&self) -> std::any::TypeId {
+        std::any::TypeId::of::<Self>()
     }
 }
 
@@ -348,12 +365,23 @@ impl Control {
     pub fn check(&self, value: &str, cx: &ControlCx<'_>) -> Result<(), String> {
         self.0.check(value, cx)
     }
+
+    /// What the control says when [`check`](Self::check) accepted `value` and the field's type
+    /// could not read it (`None` keeps the form's own words).
+    pub fn parse_error(&self, value: &str, cx: &ControlCx<'_>) -> Option<String> {
+        self.0.parse_error(value, cx)
+    }
+
+    /// The concrete type of the control behind the reference.
+    pub(crate) fn type_id(&self) -> std::any::TypeId {
+        self.0.__type_id()
+    }
 }
 
-/// Two controls are the same when their names are.
+/// Two controls are the same when their names and concrete types are.
 impl PartialEq for Control {
     fn eq(&self, other: &Self) -> bool {
-        self.name() == other.name()
+        self.name() == other.name() && self.type_id() == other.type_id()
     }
 }
 
@@ -426,6 +454,18 @@ impl<'a> ControlField<'a> {
         }
     }
 
+    /// Sets the id the field gives the part it ties.
+    pub fn id(mut self, id: &'a str) -> Self {
+        self.id = id;
+        self
+    }
+
+    /// Sets the field's label.
+    pub fn label(mut self, label: &'a str) -> Self {
+        self.label = label;
+        self
+    }
+
     /// Sets the value the field holds.
     pub fn value(mut self, value: &'a str) -> Self {
         self.value = Some(value);
@@ -453,6 +493,18 @@ impl<'a> ControlField<'a> {
     /// Sets the id of the label element.
     pub fn label_id(mut self, label_id: Option<&'a str>) -> Self {
         self.label_id = label_id;
+        self
+    }
+
+    /// Sets the hint while the field is empty.
+    pub fn placeholder(mut self, placeholder: &'a str) -> Self {
+        self.placeholder = Some(placeholder);
+        self
+    }
+
+    /// Sets the ids of the field's help and error.
+    pub fn described_by(mut self, described_by: &'a str) -> Self {
+        self.described_by = Some(described_by);
         self
     }
 }
@@ -3067,7 +3119,7 @@ where
         .collect();
     let cx = ControlCx::new(words, app, config);
     let refused = refused_by_pickers::<T>(&pairs, words, reader, &cx);
-    let outcome = read::<T>(&pairs, words);
+    let outcome = read::<T>(&pairs, words, &cx, &refused);
     if refused.is_empty() {
         return outcome;
     }
@@ -3101,7 +3153,12 @@ where
 }
 
 /// The value the pairs say, and the rules of its type.
-fn read<T>(pairs: &[(String, String)], words: &AppMessages) -> Result<T, FieldErrors>
+fn read<T>(
+    pairs: &[(String, String)],
+    words: &AppMessages,
+    cx: &ControlCx<'_>,
+    refused: &FieldErrors,
+) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
@@ -3188,7 +3245,7 @@ where
             Ok(value) if wrong.is_empty() => break value,
             Ok(_) => return Err(wrong),
             Err(error) => {
-                let more = type_error::<T>(&error, words);
+                let more = type_error::<T>(&error, &kept, words, cx, refused);
                 let before = kept.len();
                 let mut known = false;
                 for name in more.keys() {
@@ -3215,11 +3272,15 @@ where
     }
 }
 
-/// What a value of the wrong type says: the field's own `error`, else the app's words for
-/// its kind of field ([`FORM_MESSAGES`]).
+/// What a value of the wrong type says: the field's own `error`, else the control's
+/// [`parse_error`](FieldControl::parse_error) when its check accepted the text, else the app's
+/// words for its kind of field ([`FORM_MESSAGES`]).
 fn type_error<T: Form>(
     error: &serde_path_to_error::Error<urlencoded::Error>,
+    kept: &[(&str, &str)],
     words: &AppMessages,
+    cx: &ControlCx<'_>,
+    refused: &FieldErrors,
 ) -> FieldErrors {
     let path = error.path().to_string();
     let field = T::FIELDS.iter().find(|field| field.name == path);
@@ -3227,6 +3288,21 @@ fn type_error<T: Form>(
         Some(FormField {
             error: Some(text), ..
         }) => (*text).to_owned(),
+        Some(
+            field @ FormField {
+                widget: Widget::Control(control),
+                ..
+            },
+        ) if !refused.contains_key(field.name) => {
+            let raw = kept
+                .iter()
+                .find(|(name, _)| *name == field.name)
+                .map(|(_, value)| *value)
+                .unwrap_or_default();
+            control
+                .parse_error(raw, cx)
+                .unwrap_or_else(|| words.render(field.name, type_error_key(field), &[]))
+        }
         Some(field) => words.render(field.name, type_error_key(field), &[]),
         None => words.render("_form", "form.unreadable", &[]),
     };

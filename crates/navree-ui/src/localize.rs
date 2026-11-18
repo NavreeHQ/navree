@@ -39,6 +39,8 @@ pub struct ReaderWords {
     pub check_form: Cow<'static, str>,
     /// The text of a form's submit button when the page does not set its own.
     pub save: Cow<'static, str>,
+    /// The field name shown when a table cell's inline edit cannot be read as its type.
+    pub value: Cow<'static, str>,
 }
 
 impl ReaderWords {
@@ -49,6 +51,38 @@ impl ReaderWords {
             slider: SliderLabels::default(),
             check_form: Cow::Borrowed("Check this form"),
             save: Cow::Borrowed("Save"),
+            value: Cow::Borrowed("Value"),
+        }
+    }
+
+    /// The display name for a table cell's `value` field in this language.
+    pub(crate) fn value_label(&self) -> &str {
+        if self.value != "Value" {
+            return &self.value;
+        }
+        let primary = self.dates.tag.split(['-', '_']).next().unwrap_or_default();
+        match primary.to_ascii_lowercase().as_str() {
+            "hi" => "मान",
+            "pa" => "ਮੁੱਲ",
+            "bn" => "মান",
+            "ta" => "மதிப்பு",
+            "te" => "విలువ",
+            "mr" => "मूल्य",
+            "gu" => "કિંમત",
+            "kn" => "ಮೌಲ್ಯ",
+            "ml" => "മൂല്യം",
+            "ur" => "قدر",
+            "ar" => "القيمة",
+            "de" => "Wert",
+            "fr" => "Valeur",
+            "es" | "pt" => "Valor",
+            "it" => "Valore",
+            "nl" => "Waarde",
+            "ru" => "Значение",
+            "ja" => "値",
+            "ko" => "값",
+            "zh" => "值",
+            _ => "Value",
         }
     }
 

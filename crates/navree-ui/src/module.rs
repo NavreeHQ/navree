@@ -198,6 +198,14 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             // Only the app chooses the shell of its error pages: one from a module of a
             // plugin the kernel does not find first-party stops the boot.
             error_shells_of_plugins(&ctx)?;
+            // Contributed field controls are held to the name grammar, namespace ownership, and
+            // one concrete type per name.
+            crate::extension::checked_controls(&ctx).map_err(|message| {
+                KernelError::Construction {
+                    provider: std::any::type_name::<UiGate>().to_owned(),
+                    source: message.into(),
+                }
+            })?;
             // The links modules add with `m.nav_item`, checked once: an address that is not
             // a path of this app stops the boot.
             let links = crate::shell::links::check(&ctx)?;
