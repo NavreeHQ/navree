@@ -13,6 +13,8 @@ import androidx.webkit.WebViewFeature
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.io.InputStream
 
 /** What becomes of a navigation the web view is about to make. */
 enum class WebNavigation {
@@ -36,6 +38,22 @@ enum class WebRequest {
 
     /** It is not sent; the page is told it failed. */
     Refuse,
+}
+
+/** What becomes of a request a service worker makes. */
+enum class WorkerRequest {
+    /** It is sent. */
+    Send,
+
+    /** It is not sent, and the worker is answered that it is refused (403). */
+    Refuse,
+
+    /**
+     * It is not sent and not answered either: to the worker it is a request
+     * that could not be made, as when there is no network. A worker that
+     * keeps what it could not send, to send it again, keeps it.
+     */
+    Fail,
 }
 
 /**
@@ -87,25 +105,36 @@ object WebRules {
     }
 
     /**
-     * Whether a service worker's own request is sent: only to the app's
-     * origins and the hosts it names for the web view, and to none of them
-     * while what a session's pages left is being taken away ([wiping]:
-     * [SiteWipe.stops]). A worker which that deletion started is the worker
+     * What becomes of a service worker's own request: it goes only to the
+     * app's origins and the hosts it names for the web view, and there only
+     * as what is owed of what a session's pages left allows ([owed]:
+     * [SiteWipe.worker]). A worker which that deletion started is the worker
      * of the person who left; what it sends would go with the cookies of
      * whoever is signed in now.
      */
-    fun workerRequest(ours: Boolean, webHost: Boolean, wiping: Boolean = false): WebRequest = if ((ours || webHost) && !wiping) WebRequest.Send else WebRequest.Refuse
+    fun workerRequest(ours: Boolean, webHost: Boolean, owed: WorkerRequest = WorkerRequest.Send): WorkerRequest = if (ours || webHost) owed else WorkerRequest.Refuse
 
     /**
-     * The address a service worker's request says it is from, where it says:
-     * its `Referer`, which for a worker's own request is the worker's script
-     * or the page it works for, else its `Origin`. Null when it carries
-     * neither, or `null` for one. It is the web view that writes these, not
-     * the worker's script, which cannot set either.
+     * Where a service worker's request says it is from. [said] is whether it
+     * says at all, and [address] what it names: null where it says so and
+     * names no address, which is an `Origin` of `null` (what the web engine
+     * writes for a request whose referrer was withheld) and so no origin of
+     * the app.
      */
-    fun workerFrom(headers: Map<String, String>?): String? {
-        fun header(name: String) = headers?.entries?.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value?.trim()?.takeIf { it.isNotEmpty() && it != "null" }
-        return header("referer") ?: header("origin")
+    data class From(val said: Boolean, val address: String?)
+
+    /**
+     * Where a service worker's request says it is from ([From]): by its
+     * `Referer`, which for a worker's own request is the worker's script or
+     * the page it works for, else by its `Origin`. A request that carries
+     * neither says nothing. It is the web view that writes these, not the
+     * worker's script; the script can only have them left out.
+     */
+    fun workerFrom(headers: Map<String, String>?): From {
+        fun header(name: String) = headers?.entries?.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value?.trim()?.takeIf { it.isNotEmpty() }
+        header("referer")?.let { return From(true, it) }
+        val origin = header("origin") ?: return From(false, null)
+        return From(true, origin.takeIf { it != "null" })
     }
 
     /**
@@ -307,14 +336,18 @@ internal fun guardDocuments(view: WebView, origins: Origins, told: Told): Boolea
  * reference for this callback says that where an answer is returned, "the
  * return response and data will be used", so a worker that fetches what its
  * pages ask for hands the client's document on and the address is not sent.
- * Every other request of a worker that this callback is asked about is
- * answered 403 for as long as a go runs, and, go or no go, one to an origin
- * whose pages are held back or from a worker of such an origin
- * ([SiteWipe.stops]): the go's document starts the workers of the person who
- * left, and nothing they send this way leaves with the cookies of whoever is
- * signed in by then. A socket a worker opens is not a request this callback
- * is asked about; that is why a go at every origin runs with no cookie in the
- * store ([WebViewCookies.takeOut]).
+ * Every other request of a worker that this callback is asked about goes by
+ * what is owed ([SiteWipe.worker]). One to an origin that still holds what a
+ * session's pages left, or from a worker of such an origin, is answered 403,
+ * go or no go: the go's document starts the workers of the person who left,
+ * and nothing they send this way leaves with the cookies of whoever is
+ * signed in by then. While the cookie store stands empty for a go, one that
+ * says nothing of where it is from is answered 403 too, and the rest, the
+ * requests of the workers of pages that were on the screen, are neither
+ * sent nor answered ([WorkerRequest.Fail]): sent, they would go without the
+ * session of the person who is signed in. A socket a worker opens is not a
+ * request this callback is asked about; that is why every go runs with no
+ * cookie in the store ([WebViewCookies.takeOut]).
  * The setting is the process's: other code that sets a client of its own
  * replaces this one, and nothing tells. Throws when the system's web view
  * cannot take it.
@@ -325,14 +358,36 @@ internal fun setServiceWorkerRules(origins: Origins) {
             override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
                 val url = request.url.toString()
                 SiteWipe.document(url)?.let { return it }
-                return when (WebRules.workerRequest(origins.ours(url), origins.webHost(url), wiping = SiteWipe.stops(url, WebRules.workerFrom(request.requestHeaders)))) {
-                    WebRequest.Send -> null
-                    else -> WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                val what = WebRules.workerRequest(origins.ours(url), origins.webHost(url), SiteWipe.worker(url, WebRules.workerFrom(request.requestHeaders)))
+                workerAsked?.invoke(url, request.requestHeaders.orEmpty(), what)
+                return when (what) {
+                    WorkerRequest.Send -> null
+                    WorkerRequest.Refuse -> WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                    // No answer can be made out of this one: the web view ends the request as one that failed. Where a web view
+                    // hands the worker an answer all the same, it is one that says to come again.
+                    WorkerRequest.Fail -> WebResourceResponse("text/plain", "utf-8", 503, "Service Unavailable", mapOf("Retry-After" to "5", "Cache-Control" to "no-store"), Unreadable())
                 }
             }
         },
     )
 }
+
+/** A body that cannot be read, nor its length asked: what the web view is handed for a request that is to end as one that failed. */
+private class Unreadable : InputStream() {
+    override fun read(): Int = throw IOException("not sent")
+
+    override fun read(bytes: ByteArray, offset: Int, length: Int): Int = throw IOException("not sent")
+
+    override fun available(): Int = throw IOException("not sent")
+}
+
+/**
+ * For a test only: told each request of a service worker the client is asked
+ * about, the headers the web view handed over with it, and what became of
+ * it. Called on a thread of the web view's own.
+ */
+@Volatile
+internal var workerAsked: ((url: String, headers: Map<String, String>, what: WorkerRequest) -> Unit)? = null
 
 /** [setServiceWorkerRules], answering whether it was made. */
 fun guardWorkers(origins: Origins): Boolean = try {

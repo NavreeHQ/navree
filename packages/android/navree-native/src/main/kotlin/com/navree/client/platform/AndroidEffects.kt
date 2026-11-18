@@ -112,12 +112,7 @@ class AndroidEffects(
 ) : EffectRunner {
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
-    val cookies = WebViewCookies()
-
-    init {
-        // Read here what an earlier run of the app still owes of the end of a session; it is done below, once everything it needs is made.
-        SiteWipe.arm(app, origins, again = ::clearPages)
-    }
+    val cookies = WebViewCookies(kept = File(app.noBackupFilesDir, OwnCookies.FILE))
 
     /** Everything that touches what is kept on the device runs here, in order, one piece at a time. */
     private val storeThread = Executors.newSingleThreadExecutor { work -> Thread(work, "navree-store").apply { isDaemon = true } }
@@ -175,6 +170,9 @@ class AndroidEffects(
 
     init {
         cookies.onOwn = ::cookieComing
+        // Read here what an earlier run of the app still owes of the end of a session, and said here how a go that is asked for is
+        // run: once everything that needs is made.
+        SiteWipe.arm(app, origins, again = ::clearPages)
         if (SiteWipe.owesAll) {
             // A run of the app was told that the session ended and did not get as far as the cookies. What the app reads at
             // its start goes here and now; then all of the end of a session is done again, in the store's turn, before
@@ -187,13 +185,12 @@ class AndroidEffects(
                 // The same three go again in the store's turn.
             }
             ends.forgotten()
-        } else if (SiteWipe.owesEvery) {
-            // What pages stored is owed at every origin: a run of the app ended in the middle of taking it away. It is done
-            // over with the cookie store emptied, and that has its turn in the store before anything this run asks for.
+        } else if (SiteWipe.owesPages && !SiteWipe.tried) {
+            // What pages stored is owed: at every origin, where a run of the app ended in the middle of taking it away, or at the
+            // origins a go left. It is gone at with the cookie store emptied, and that has its turn in the store before anything
+            // this run asks for. Not where a go at the origins that were left has left them again: an origin that cannot be
+            // cleared does not hold every start of the app up, and "Try again" on a page of it has another go.
             clearPages()
-        } else if (SiteWipe.owes) {
-            // Only what pages stored at the origins an earlier go left is owed: no page of theirs is shown before it is gone.
-            main.post { clearPages() }
         }
         // The token of a session a run before this one was told had ended, where the push service had not said it is deleted:
         // asked for again now, whatever else is owed or not.
@@ -294,23 +291,20 @@ class AndroidEffects(
      * A go at what pages stored is asked for: at a start of the app that
      * finds it owed, by "Try again" on a page that is held back, and when the
      * cookie store says late that its cookies are gone ([SiteWipe.again]).
-     * Where every origin is owed, the go is run with no session in the cookie
-     * store ([clearEvery]), in the store's turn: so it is at a start after a
-     * run that ended in the middle of one, when the store is emptied with
-     * nothing remembered to give back, and whoever was signed in signs in
-     * again. Where only the origins an earlier go left are owed, the go runs
-     * with the store as it is ([SiteWipe.finish]): the pages of the other
-     * origins are on the screen, and the person signed in stays so, however
-     * often an origin that cannot be cleared is gone at again. Call on the
-     * main thread.
+     * Every go is run with no session in the cookie store ([clearEvery]), in
+     * the store's turn, whether it is at every origin or at the origins an
+     * earlier go left: an origin that was left still holds the worker of the
+     * person before, and the go's document starts it. The cookies the
+     * answers to the client's own requests set go back in afterwards, at a
+     * start of the app too, which knows them from the disk ([OwnCookies]): so
+     * the person signed in stays so. Call on the main thread.
      */
     private fun clearPages() {
-        if (!SiteWipe.owesEvery) return SiteWipe.finish()
-        if (!clearing.compareAndSet(false, true)) return
+        if (!SiteWipe.awaitsGo || !clearing.compareAndSet(false, true)) return
         val work = {
             try {
                 // Asked again in its turn: a go that ended meanwhile, or the end of a session, has seen to it.
-                if (SiteWipe.owesEvery) clearEvery()
+                if (SiteWipe.awaitsGo) clearEvery()
             } finally {
                 clearing.set(false)
             }
@@ -348,19 +342,23 @@ class AndroidEffects(
     }
 
     /**
-     * Takes away what pages stored at every origin with no session in the
-     * cookie store while it is done. On the store's thread and in its turn,
-     * so the queue waits and no fetch or stream of the client's own reads
-     * the store meanwhile:
-     * 1. Every cookie goes out of the store, and the ones the answers to the
-     *    client's own requests set are remembered as taken out
-     *    ([WebViewCookies.takeOut]). The go's document on each origin starts
-     *    the service workers of the person before; whatever such a worker
-     *    sends, by a request the client is asked about or by one it is not (a
-     *    socket), it sends with no session to carry.
-     * 2. The go runs ([SiteWipe.go]), for no longer than [GO_WAIT_MS]; one
+     * Takes away what pages stored, at every origin or at the origins an
+     * earlier go left, with no session in the cookie store while it is done.
+     * On the store's thread and in its turn, so the queue waits and no fetch
+     * or stream of the client's own reads the store meanwhile:
+     * 1. From here on the store is said to stand empty ([SiteWipe.storeEmpty]):
+     *    no web page is shown at any origin until its own cookies are back,
+     *    since a page shown meanwhile would ask for everything as somebody
+     *    who is not signed in. Every cookie goes out of the store, and the
+     *    ones the answers to the client's own requests set are remembered as
+     *    taken out ([WebViewCookies.takeOut]). The go's document on each
+     *    origin starts the service workers of the person before; whatever
+     *    such a worker sends, by a request the client is asked about or by
+     *    one it is not (a socket), it sends with no session to carry.
+     * 2. The go runs ([SiteWipe.go]), for no longer than its origins have for
+     *    their tries and twenty seconds at the most ([SiteWipe.goWait]); one
      *    that is still at its origins then ends there, and what it had not
-     *    cleared is left for a later go.
+     *    cleared is left for a later go, which is run the same way.
      * 3. The store is emptied again, of whatever a worker the go started
      *    wrote there, and its own cookies go back in
      *    ([WebViewCookies.keepOwn]): the sign-in of the person who is here
@@ -372,56 +370,66 @@ class AndroidEffects(
      * cookies are gone leaves the whole of an end of a session owed
      * ([SiteWipe.widen]): no go is begun without its word at step 1, no web
      * page is shown for the rest of this run, and the next start does all of
-     * it. Answers whether the store said so both times.
+     * it. So does a go that has not said it ended a second after it was told
+     * to, and a main thread that has not come to asking for one. Answers
+     * whether the store said so both times.
      */
     private fun clearEvery(): Boolean {
         val onLooper = { work: () -> Unit ->
             main.post { work() }
             Unit
         }
-        val out = cookies.takeOut(onLooper, COOKIES_WAIT_MS)
-        val went = Went()
-        // Whether the main thread has done with asking for the go, or never came to it.
-        var asked = true
-        if (out) {
-            main.post {
-                // The store's thread waited no longer for this to have its turn: no go begins behind it.
-                if (!went.taken.compareAndSet(false, true)) return@post
-                try {
-                    val began = SiteWipe.go { left, of ->
-                        went.number = of
-                        went.left = left
-                        went.ended = true
+        SiteWipe.storeEmpty(true)
+        try {
+            val out = cookies.takeOut(onLooper, COOKIES_WAIT_MS)
+            val went = Went()
+            // Whether the main thread has done with asking for the go, or never came to it.
+            var asked = true
+            if (out) {
+                // By the number of origins the go is at: none is left only because one before it was slow.
+                val wait = SiteWipe.goWait()
+                main.post {
+                    // The store's thread waited no longer for this to have its turn: no go begins behind it.
+                    if (!went.taken.compareAndSet(false, true)) return@post
+                    try {
+                        val began = SiteWipe.go { left, of ->
+                            went.number = of
+                            went.left = left
+                            went.ended = true
+                            went.over.countDown()
+                        }
+                        if (began == null) went.over.countDown() else if (went.number == null) went.number = began
+                        // Begun too late: the store has its cookies back, or is about to.
+                        if (went.gone) SiteWipe.stopGo()
+                    } catch (_: Throwable) {
                         went.over.countDown()
+                    } finally {
+                        went.asked.countDown()
                     }
-                    if (began == null) went.over.countDown() else if (went.number == null) went.number = began
-                    // Begun too late: the store has its cookies back, or is about to.
-                    if (went.gone) SiteWipe.stopGo()
-                } catch (_: Throwable) {
-                    went.over.countDown()
-                } finally {
-                    went.asked.countDown()
                 }
+                if (!went.over.await(wait, TimeUnit.MILLISECONDS)) {
+                    // The queue waits no longer: the go ends here, and says at once what it had not cleared.
+                    main.post { SiteWipe.stopGo() }
+                    went.over.await(STOP_WAIT_MS, TimeUnit.MILLISECONDS)
+                }
+                asked = went.taken.compareAndSet(false, true) || went.asked.await(STOP_WAIT_MS, TimeUnit.MILLISECONDS)
+                went.gone = true
             }
-            if (!went.over.await(GO_WAIT_MS, TimeUnit.MILLISECONDS)) {
-                // The queue waits no longer: the go ends here, and says at once what it had not cleared.
-                main.post { SiteWipe.stopGo() }
-                went.over.await(STOP_WAIT_MS, TimeUnit.MILLISECONDS)
+            val back = cookies.keepOwn(onLooper, COOKIES_WAIT_MS)
+            val emptied = out && back
+            val number = went.number
+            when {
+                number != null && went.ended && emptied -> SiteWipe.over(went.left, number)
+                // A go that never said it ended, or a store that never said it is empty: nothing is called gone.
+                number != null -> SiteWipe.widen(number)
+                // And so where the main thread is still asking for the go: what it begins ends at once, and nothing is known of it.
+                !emptied || !asked -> SiteWipe.widen(null)
             }
-            asked = went.taken.compareAndSet(false, true) || went.asked.await(STOP_WAIT_MS, TimeUnit.MILLISECONDS)
-            went.gone = true
+            return emptied
+        } finally {
+            // Its own cookies are back, or the whole is owed and every page is held back for that.
+            SiteWipe.storeEmpty(false)
         }
-        val back = cookies.keepOwn(onLooper, COOKIES_WAIT_MS)
-        val emptied = out && back
-        val number = went.number
-        when {
-            number != null && went.ended && emptied -> SiteWipe.over(went.left, number)
-            // A go that never said it ended, or a store that never said it is empty: nothing is called gone.
-            number != null -> SiteWipe.widen(number)
-            // And so where the main thread is still asking for the go: what it begins ends at once, and nothing is known of it.
-            !emptied || !asked -> SiteWipe.widen(null)
-        }
-        return emptied
     }
 
     /**
@@ -915,12 +923,6 @@ class AndroidEffects(
 
         /** The longest the cookie store is waited for to say its cookies are gone, before what follows goes on without its word. */
         const val COOKIES_WAIT_MS = 4_000L
-
-        /**
-         * The longest the store's queue waits for a go begun in its turn: long enough for one origin to be shown the client's
-         * document its two times ([WipeRules.TRIES], [WipeRules.ORIGIN_MS]) and to be left, so a go at one origin ends by itself.
-         */
-        const val GO_WAIT_MS = WipeRules.TRIES * WipeRules.ORIGIN_MS + 500L
 
         /** The longest a go that was told to end is waited for to say so. */
         const val STOP_WAIT_MS = 1_000L

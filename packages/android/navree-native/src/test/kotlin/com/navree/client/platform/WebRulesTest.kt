@@ -194,30 +194,41 @@ class WebRulesTest {
 
     @Test
     fun a_service_workers_request_goes_only_where_a_pages_loads_do() {
-        assertEquals(WebRequest.Send, WebRules.workerRequest(ours = true, webHost = false))
-        assertEquals(WebRequest.Send, WebRules.workerRequest(ours = false, webHost = true))
-        assertEquals(WebRequest.Refuse, WebRules.workerRequest(ours = false, webHost = false))
+        assertEquals(WorkerRequest.Send, WebRules.workerRequest(ours = true, webHost = false))
+        assertEquals(WorkerRequest.Send, WebRules.workerRequest(ours = false, webHost = true))
+        assertEquals(WorkerRequest.Refuse, WebRules.workerRequest(ours = false, webHost = false))
     }
 
     @Test
-    fun a_service_workers_request_is_not_sent_while_what_a_sessions_pages_left_is_being_taken_away_there() {
+    fun a_service_workers_request_to_the_apps_origins_goes_by_what_is_owed_there_and_one_to_anywhere_else_is_refused_whatever_is_owed() {
         // The deletion's own document started the worker of the person who left: what it sends would carry the cookies of whoever is signed in now.
-        assertEquals(WebRequest.Refuse, WebRules.workerRequest(ours = true, webHost = false, wiping = true))
-        assertEquals(WebRequest.Refuse, WebRules.workerRequest(ours = false, webHost = true, wiping = true))
-        assertEquals(WebRequest.Refuse, WebRules.workerRequest(ours = false, webHost = false, wiping = true))
-        assertEquals("and is sent again when it is over", WebRequest.Send, WebRules.workerRequest(ours = true, webHost = false, wiping = false))
+        assertEquals(WorkerRequest.Refuse, WebRules.workerRequest(ours = true, webHost = false, owed = WorkerRequest.Refuse))
+        assertEquals(WorkerRequest.Refuse, WebRules.workerRequest(ours = false, webHost = true, owed = WorkerRequest.Refuse))
+        assertEquals("the worker of a page that was on the screen, while the cookie store stands empty", WorkerRequest.Fail, WebRules.workerRequest(ours = true, webHost = false, owed = WorkerRequest.Fail))
+        assertEquals(WorkerRequest.Fail, WebRules.workerRequest(ours = false, webHost = true, owed = WorkerRequest.Fail))
+        assertEquals("another origin is refused, never left unanswered", WorkerRequest.Refuse, WebRules.workerRequest(ours = false, webHost = false, owed = WorkerRequest.Fail))
+        assertEquals(WorkerRequest.Refuse, WebRules.workerRequest(ours = false, webHost = false, owed = WorkerRequest.Send))
+        assertEquals("and is sent again when it is over", WorkerRequest.Send, WebRules.workerRequest(ours = true, webHost = false, owed = WorkerRequest.Send))
     }
 
     @Test
     fun a_service_workers_request_says_where_it_is_from_by_its_referer_or_else_its_origin() {
-        assertEquals("https://shop.example/sw.js", WebRules.workerFrom(mapOf("Referer" to "https://shop.example/sw.js", "Origin" to "https://shop.example")))
-        assertEquals("however the web view writes the name", "https://shop.example/sw.js", WebRules.workerFrom(mapOf("referer" to "https://shop.example/sw.js")))
-        assertEquals("https://shop.example", WebRules.workerFrom(mapOf("Accept" to "*/*", "Origin" to "https://shop.example")))
-        assertEquals("an empty one says nothing", "https://shop.example", WebRules.workerFrom(mapOf("Referer" to " ", "Origin" to "https://shop.example")))
-        assertNull("nor does an origin of null", WebRules.workerFrom(mapOf("Origin" to "null")))
-        assertNull(WebRules.workerFrom(mapOf("Accept" to "*/*")))
-        assertNull(WebRules.workerFrom(emptyMap()))
-        assertNull(WebRules.workerFrom(null))
+        assertEquals(WebRules.From(true, "https://shop.example/sw.js"), WebRules.workerFrom(mapOf("Referer" to "https://shop.example/sw.js", "Origin" to "https://shop.example")))
+        assertEquals("however the web view writes the name", WebRules.From(true, "https://shop.example/sw.js"), WebRules.workerFrom(mapOf("referer" to "https://shop.example/sw.js")))
+        assertEquals(WebRules.From(true, "https://shop.example"), WebRules.workerFrom(mapOf("Accept" to "*/*", "Origin" to "https://shop.example")))
+        assertEquals("an empty one says nothing", WebRules.From(true, "https://shop.example"), WebRules.workerFrom(mapOf("Referer" to " ", "Origin" to "https://shop.example")))
+        assertEquals("the referer is the word where both are there", WebRules.From(true, "https://shop.example/"), WebRules.workerFrom(mapOf("Referer" to "https://shop.example/", "Origin" to "null")))
+    }
+
+    @Test
+    fun an_origin_of_null_says_the_request_is_from_no_origin_of_the_app_and_a_request_with_neither_header_says_nothing() {
+        // What the web engine writes where the referrer was withheld: the request says where it is from, and it is nowhere of the app's.
+        assertEquals(WebRules.From(said = true, address = null), WebRules.workerFrom(mapOf("Origin" to "null")))
+        assertEquals(WebRules.From(said = true, address = null), WebRules.workerFrom(mapOf("origin" to " null ", "Accept" to "*/*")))
+        assertEquals(WebRules.From(said = false, address = null), WebRules.workerFrom(mapOf("Accept" to "*/*")))
+        assertEquals(WebRules.From(said = false, address = null), WebRules.workerFrom(mapOf("Referer" to "", "Origin" to " ")))
+        assertEquals(WebRules.From(said = false, address = null), WebRules.workerFrom(emptyMap()))
+        assertEquals(WebRules.From(said = false, address = null), WebRules.workerFrom(null))
     }
 
     @Test
