@@ -61,6 +61,26 @@ pub fn acts_for(ctx: &AppContext, module: ModuleId) -> Option<&PluginInfo> {
     graph.modules[first].plugin.as_ref()
 }
 
+/// Why `module` acts for the plugin [`acts_for`] gives, as the clause the
+/// kernel's own refusals carry after the module's name: empty when `module`
+/// names the plugin itself or acts for no plugin, ` (a module of the plugin's
+/// crate ..)` when its type path places it in the plugin's crate, or ` (only
+/// the plugin's modules import it)` when its importers place it there. Not
+/// public API; Navree's own crates use it.
+pub fn acts_for_reason(ctx: &AppContext, module: ModuleId) -> String {
+    let graph = &ctx.inner.graph;
+    let Some(index) = graph.module_of(module) else {
+        return String::new();
+    };
+    let Some(first) = graph.acts_for.get(index).copied().flatten() else {
+        return String::new();
+    };
+    let Some(info) = graph.modules[first].plugin.as_ref() else {
+        return String::new();
+    };
+    graph.acts_for_reason(index, info)
+}
+
 /// Whether `module` is a module of the app: it is in the app and acts for no
 /// plugin (`acts_for`). Not public API; Navree's own crates use it.
 pub fn is_app_module(ctx: &AppContext, module: ModuleId) -> bool {
@@ -68,4 +88,138 @@ pub fn is_app_module(ctx: &AppContext, module: ModuleId) -> bool {
     graph
         .module_of(module)
         .is_some_and(|index| graph.acts_for.get(index).copied().flatten().is_none())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{CommandSpec, Module, ModuleBuilder, Navree};
+
+    mod navree_plugin_khata {
+        use crate::{CommandSpec, Module, ModuleBuilder, PluginInfo};
+
+        pub const KHATA: PluginInfo =
+            PluginInfo::new("navree-plugin-khata", module_path!(), "khata", "1.0.0");
+
+        pub struct KhataModule(pub fn(&mut ModuleBuilder));
+
+        impl Module for KhataModule {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(KHATA);
+                (self.0)(m);
+            }
+        }
+
+        pub struct KhataHelper(pub Option<&'static str>);
+
+        impl Module for KhataHelper {
+            fn register(&self, m: &mut ModuleBuilder) {
+                if let Some(name) = self.0 {
+                    m.command(CommandSpec::new(name, "Helper", |_, _| async { Ok(()) }));
+                }
+            }
+        }
+    }
+
+    mod navree_plugin_khata_core {
+        use crate::{CommandSpec, Module, ModuleBuilder};
+
+        pub struct KhataCoreModule(pub Option<&'static str>);
+
+        impl Module for KhataCoreModule {
+            fn register(&self, m: &mut ModuleBuilder) {
+                if let Some(name) = self.0 {
+                    m.command(CommandSpec::new(name, "Core", |_, _| async { Ok(()) }));
+                }
+            }
+        }
+    }
+
+    struct AppModule;
+    impl Module for AppModule {
+        fn register(&self, _: &mut ModuleBuilder) {}
+    }
+
+    struct Unwired;
+
+    #[tokio::test]
+    async fn the_reason_a_module_acts_for_a_plugin_is_the_clause_the_kernels_refusals_give() {
+        use navree_plugin_khata::{KHATA, KhataHelper, KhataModule};
+        use navree_plugin_khata_core::KhataCoreModule;
+
+        let app = Navree::app()
+            .module(KhataModule(|m| {
+                m.import(KhataHelper(None)).import(KhataCoreModule(None));
+            }))
+            .module(AppModule)
+            .boot()
+            .await
+            .expect("boots");
+        let ctx = app.ctx();
+
+        let naming = ModuleId::of::<KhataModule>();
+        let helper = ModuleId::of::<KhataHelper>();
+        let second = ModuleId::of::<KhataCoreModule>();
+        let app_mod = ModuleId::of::<AppModule>();
+        let missing = ModuleId::of::<Unwired>();
+
+        assert_eq!(acts_for_reason(ctx, naming), "");
+        assert_eq!(
+            acts_for_reason(ctx, helper),
+            format!(" (a module of the plugin's crate `{}`)", KHATA.crate_name)
+        );
+        assert_eq!(
+            acts_for_reason(ctx, second),
+            " (only the plugin's modules import it)"
+        );
+        assert_eq!(acts_for_reason(ctx, app_mod), "");
+        assert_eq!(acts_for_reason(ctx, missing), "");
+
+        // Each non-empty or empty clause matches byte for byte what the kernel's refusals put
+        // after `in \`<module>\``.
+        let direct = Navree::app()
+            .module(KhataModule(|m| {
+                m.command(CommandSpec::new("check", "Plugin", |_, _| async { Ok(()) }));
+            }))
+            .validate()
+            .expect_err("refused")
+            .to_string();
+        assert!(
+            direct.contains(&format!(
+                "in `KhataModule`{},",
+                acts_for_reason(ctx, naming)
+            )),
+            "{direct}"
+        );
+
+        let in_crate = Navree::app()
+            .module(KhataModule(|m| {
+                m.import(KhataHelper(Some("check")));
+            }))
+            .validate()
+            .expect_err("refused")
+            .to_string();
+        assert!(
+            in_crate.contains(&format!(
+                "in `KhataHelper`{},",
+                acts_for_reason(ctx, helper)
+            )),
+            "{in_crate}"
+        );
+
+        let by_import = Navree::app()
+            .module(KhataModule(|m| {
+                m.import(KhataCoreModule(Some("check")));
+            }))
+            .validate()
+            .expect_err("refused")
+            .to_string();
+        assert!(
+            by_import.contains(&format!(
+                "in `KhataCoreModule`{},",
+                acts_for_reason(ctx, second)
+            )),
+            "{by_import}"
+        );
+    }
 }

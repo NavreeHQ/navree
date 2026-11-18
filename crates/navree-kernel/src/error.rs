@@ -172,7 +172,7 @@ pub enum KernelError {
     },
     /// A plugin that is not first-party uses a namespace the framework keeps.
     #[error(
-        "plugin `{plugin}` uses the namespace `{namespace}`, which the framework keeps for itself; set another with plugin_info!(namespace = \"..\")"
+        "plugin `{plugin}` uses the namespace `{namespace}`, which the framework keeps for itself; remove the plugin or update it to a version that uses another namespace"
     )]
     NamespaceReserved {
         /// The plugin's name.
@@ -210,7 +210,7 @@ pub enum KernelError {
     },
     /// Two plugins use one namespace.
     #[error(
-        "plugins `{first}` and `{second}` both use the namespace `{namespace}`; set another with plugin_info!(namespace = \"..\") in one of them"
+        "plugins `{first}` and `{second}` both use the namespace `{namespace}`; remove one of the plugins or update one to a version that uses another namespace"
     )]
     NamespaceTaken {
         /// The namespace.

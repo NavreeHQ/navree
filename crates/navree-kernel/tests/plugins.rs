@@ -232,7 +232,7 @@ fn a_plugin_in_a_reserved_namespace_fails_the_boot() {
         assert_eq!(
             errors(Navree::app().module(Claims("LedgerModule", ledger))),
             format!(
-                "plugin `navree-plugin-ledger` uses the namespace `{namespace}`, which the framework keeps for itself; set another with plugin_info!(namespace = \"..\")"
+                "plugin `navree-plugin-ledger` uses the namespace `{namespace}`, which the framework keeps for itself; remove the plugin or update it to a version that uses another namespace"
             )
         );
     }
@@ -250,7 +250,7 @@ fn a_plugin_named_after_a_folder_the_framework_reads_or_a_device_fails_the_boot(
         assert_eq!(
             errors(Navree::app().module(Claims("LedgerModule", ledger))),
             format!(
-                "plugin `navree-plugin-ledger` uses the namespace `{namespace}`, which the framework keeps for itself; set another with plugin_info!(namespace = \"..\")"
+                "plugin `navree-plugin-ledger` uses the namespace `{namespace}`, which the framework keeps for itself; remove the plugin or update it to a version that uses another namespace"
             )
         );
     }
@@ -267,7 +267,7 @@ fn a_first_party_name_in_another_crate_is_a_community_plugin() {
     );
     assert_eq!(
         errors(Navree::app().module(Claims("FlagsModule", flags))),
-        "plugin `navree-flags` uses the namespace `flags`, which the framework keeps for itself; set another with plugin_info!(namespace = \"..\")"
+        "plugin `navree-flags` uses the namespace `flags`, which the framework keeps for itself; remove the plugin or update it to a version that uses another namespace"
     );
 }
 
@@ -320,8 +320,37 @@ fn two_plugins_with_one_namespace_fail_the_boot() {
         .module(Claims("ForecastModule", forecast));
     assert_eq!(
         errors(app),
-        "plugins `navree-plugin-weather` and `navree-plugin-forecast` both use the namespace `weather`; set another with plugin_info!(namespace = \"..\") in one of them"
+        "plugins `navree-plugin-weather` and `navree-plugin-forecast` both use the namespace `weather`; remove one of the plugins or update one to a version that uses another namespace"
     );
+}
+
+#[test]
+fn the_namespace_refusals_tell_the_apps_owner_what_to_do() {
+    let automations = PluginInfo::new(
+        "navree-plugin-automations",
+        "plugins",
+        "automations",
+        "1.0.0",
+    );
+    let reserved = errors(Navree::app().module(Claims("AutomationsModule", automations)));
+    assert_eq!(
+        reserved,
+        "plugin `navree-plugin-automations` uses the namespace `automations`, which the framework keeps for itself; remove the plugin or update it to a version that uses another namespace"
+    );
+    assert!(!reserved.contains("plugin_info!"));
+
+    let khata_first = PluginInfo::new("navree-plugin-khata", "plugins", "khata", "1.0.0");
+    let khata_second = PluginInfo::new("navree-plugin-bahi", "plugins", "khata", "1.0.0");
+    let taken = errors(
+        Navree::app()
+            .module(Claims("KhataModule", khata_first))
+            .module(Claims("BahiModule", khata_second)),
+    );
+    assert_eq!(
+        taken,
+        "plugins `navree-plugin-khata` and `navree-plugin-bahi` both use the namespace `khata`; remove one of the plugins or update one to a version that uses another namespace"
+    );
+    assert!(!taken.contains("plugin_info!"));
 }
 
 struct LooseFiles;
