@@ -15,14 +15,16 @@ use navree_access::{
     AbilityCtx, AbilityFactory, AccessModule, AccessService, DELETE, Policy, READ, Rule, Rules,
     Subject, UPDATE,
 };
+use navree_config::{ConfigModule, ConfigSources};
 use navree_contracts::{ModuleBuilderPermissionsExt, Permission, permission_catalog, permitted};
+use navree_http::__private::DeclaredAccess;
 use navree_http::{
     AppRouter, Controller, HttpOptions, ModuleBuilderHttpExt, ModuleBuilderMountExt, Mount,
     RouteDef,
 };
 use navree_kernel::{
-    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ModuleId, PluginInfo, ProviderKey,
-    Resolver,
+    BoxFuture, Injectable, KernelError, Module, ModuleBuilder, ModuleId, Navree, PluginInfo,
+    ProviderKey, Resolver,
 };
 use navree_testing::{TestApp, TestAppBuilder, TestResponse, principal};
 use serde_json::{Value, json};
@@ -1015,6 +1017,112 @@ async fn a_mount_of_the_app_is_read_as_a_route_is() {
         .try_build()
         .await
         .expect("a mount of the app under another word boots beside the plugin");
+}
+
+/// A module of the app that contributes the value-carried declaration `.0` builds.
+struct BoardLinks(fn() -> DeclaredAccess);
+
+impl Module for BoardLinks {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.contribute((self.0)());
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_value_carried_permission_under_a_plugins_namespace_the_plugin_does_not_describe_fails_the_boot()
+ {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+
+    // A sidebar link of the app asks for `announcements.archive`, which the plugin does not
+    // describe: the plugin's policies would decide who sees or uses it.
+    let link = BoardLinks(|| {
+        DeclaredAccess::value_permission("sidebar link", "/announcements", "announcements.archive")
+    });
+    let error = boot_error(builder().module(ANNOUNCEMENTS).module(link)).await;
+    let expected = format!(
+        "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the permission `announcements.archive` that the sidebar link `/announcements` of `BoardLinks` requires{NOT_DESCRIBED}"
+    );
+    assert!(error.contains(&expected), "{error}");
+
+    // A dashboard card of the app checks an unregistered subject under the plugin's namespace.
+    let card = BoardLinks(|| {
+        DeclaredAccess::value_can("Helm card", "latest-notices", READ, "announcements.Draft")
+    });
+    let error = boot_error(builder().module(ANNOUNCEMENTS).module(card)).await;
+    let expected = format!(
+        "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the subject `announcements.Draft` that the Helm card `latest-notices` of `BoardLinks` checks{NOT_REGISTERED}"
+    );
+    assert!(error.contains(&expected), "{error}");
+
+    // Without `HttpModule` in the app, an agent tool's value-carried permission is still read.
+    let (url, _keep) = database::scratch();
+    let tool = BoardLinks(|| {
+        DeclaredAccess::value_permission("agent tool", "draft_notice", "announcements.archive")
+    });
+    let without_http = Navree::app()
+        .module(ConfigModule::for_root(
+            ConfigSources::new().set("database.url", url),
+        ))
+        .module(navree_db::DatabaseModule)
+        .module(AccessModule)
+        .module(ANNOUNCEMENTS)
+        .module(tool)
+        .boot()
+        .await;
+    let error = match without_http {
+        Ok(_) => panic!("the app without HttpModule booted"),
+        Err(error) => error.to_string(),
+    };
+    let expected = format!(
+        "plugin `navree-plugin-announcements` uses the namespace `announcements`, the first word of the permission `announcements.archive` that the agent tool `draft_notice` of `BoardLinks` requires{NOT_DESCRIBED}"
+    );
+    assert!(error.contains(&expected), "{error}");
+
+    // When the plugin describes the permission or registers the subject, the app's value-carried
+    // declaration boots; and so does the plugin's own declaration under its namespace, and the
+    // app's under another word.
+    builder()
+        .module(ANNOUNCEMENTS)
+        .module(NoticeSubjects(subject_of::<Announcement>))
+        .module(BoardLinks(|| {
+            DeclaredAccess::value_permission("sidebar link", "/announcements", "announcements.read")
+        }))
+        .try_build()
+        .await
+        .expect("a value-carried permission the plugin describes boots");
+    builder()
+        .module(NoticeSubjects(subject_of::<Announcement>))
+        .module(BoardLinks(|| {
+            DeclaredAccess::value_can(
+                "Helm card",
+                "latest-notices",
+                READ,
+                "announcements.Announcement",
+            )
+        }))
+        .try_build()
+        .await
+        .expect("a value-carried subject registered as the plugin's boots");
+    builder()
+        .module(NoticeSubjects(|m| {
+            m.contribute(DeclaredAccess::value_permission(
+                "sidebar link",
+                "/announcements",
+                "announcements.archive",
+            ));
+        }))
+        .try_build()
+        .await
+        .expect("the plugin's own value-carried permission under its namespace boots");
+    builder()
+        .module(ANNOUNCEMENTS)
+        .module(BoardLinks(|| {
+            DeclaredAccess::value_permission("settings group", "portal", "posts.publish")
+        }))
+        .try_build()
+        .await
+        .expect("the app's value-carried permission under another word boots");
 }
 
 #[tokio::test(flavor = "current_thread")]

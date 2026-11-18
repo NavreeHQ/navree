@@ -9,10 +9,11 @@
 //! community plugin what it writes, as each principal it knows, and, once
 //! every handler is built, reads what the app's handlers of every kind (a
 //! route, a mount, a message pattern, a gRPC method, an MCP item, a GraphQL
-//! field) require under a community plugin's namespace: a permission the
-//! plugin describes and a subject registered as the plugin's are the plugin's
-//! own names, which the app may require, and any other name under the
-//! namespace is refused.
+//! field) and its value-carried declarations (a link's, a card's, a tool's, a
+//! settings group's, an import's) require under a community plugin's
+//! namespace: a permission the plugin describes and a subject registered as
+//! the plugin's are the plugin's own names, which the app may require, and
+//! any other name under the namespace is refused.
 
 use std::collections::BTreeSet;
 
@@ -310,13 +311,14 @@ pub(crate) fn is_under(name: &str, namespace: &str) -> bool {
 /// itself), and the plugin's policies, which decide the names under its
 /// namespace, would decide who may call the handler: it is refused.
 ///
-/// The handlers are those of every kind whose module contributes its
-/// declarations (navree-http's `AccessDeclarations`): the routes and mounts
-/// of `HttpModule`, the message patterns of navree-micro, the gRPC methods of
-/// navree-grpc, the items of navree-mcp and the fields of navree-graphql.
-/// Each kind is read where its module is in the app, with or without
-/// `HttpModule`, and a kind that cannot be read stops the boot. An app with
-/// no community plugin has nothing to check.
+/// The declarations are those of every handler kind whose module contributes
+/// an `AccessDeclarations` (the routes and mounts of `HttpModule`, the
+/// message patterns of navree-micro, the gRPC methods of navree-grpc, the
+/// items of navree-mcp and the fields of navree-graphql) and every value
+/// declaration (`DeclaredAccess`) modules contribute directly. Each kind is
+/// read where its module is in the app, with or without `HttpModule`, and a
+/// kind that cannot be read stops the boot. An app with no community plugin
+/// has nothing to check.
 pub(crate) async fn check_declared(ctx: &AppContext) -> Result<(), AccessError> {
     let plugins = ctx.plugins().plugins;
     if plugins.iter().all(|plugin| plugin.first_party) {

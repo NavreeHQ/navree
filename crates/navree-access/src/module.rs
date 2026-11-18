@@ -202,9 +202,10 @@ fn register(m: &mut ModuleBuilder, options: AccessOptions) {
 }
 
 /// Checks at boot, once every handler is built, the permissions and subjects
-/// that the app's handlers of every kind declare (routes, mounts, message
-/// patterns, gRPC methods, MCP items, GraphQL fields) against the namespaces
-/// of community plugins (`catalog::check_declared`).
+/// that the app's handlers of every kind (routes, mounts, message patterns,
+/// gRPC methods, MCP items, GraphQL fields) and its value-carried
+/// declarations declare against the namespaces of community plugins
+/// (`catalog::check_declared`).
 struct DeclaredNamespaces;
 
 impl Lifecycle for DeclaredNamespaces {
