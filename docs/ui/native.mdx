@@ -1,9 +1,9 @@
 ---
 title: "Native apps (preview)"
-description: "The same Navree UI pages answer an iPhone, an iPad or an Android phone with native parts that each system draws its own way: turning it on, saying what a page's parts are, and reading the coverage report."
+description: "The same Navree UI pages answer an iPhone, an iPad, a Mac, an Android phone or tablet and a Windows PC with native parts that each system draws its own way: turning it on, saying what a page's parts are, and reading the coverage report."
 ---
 
-A native client asks for the same URL a browser does and gets the page as a tree of parts: a screen, a list, a form, a button with a role. The client for each system draws that tree with the system's own components (SwiftUI on Apple systems, Jetpack Compose with Material 3 on Android) and puts each part where that system's design guidelines put it. The server says what a thing is. The client decides where it goes and how it looks.
+A native client asks for the same URL a browser does and gets the page as a tree of parts: a screen, a list, a form, a button with a role. The client for each system draws that tree with the system's own components (SwiftUI on Apple systems, Jetpack Compose with Material 3 on Android, WinUI 3 on Windows) and puts each part where that system's design guidelines put it. The server says what a thing is. The client decides where it goes and how it looks.
 
 <Callout type="warning" title="A preview">
 
@@ -137,6 +137,12 @@ A screen written for native clients says the same on its answer: `native::Answer
 What is kept belongs to a visitor or to the signed-in person's id. Every native answer names that person in `X-Navree-Person`, which the framework's own sign-in gives it; an app that signs people in its own way makes `CurrentPrincipal` its principal, or nothing is kept for its signed-in people.
 
 A kept page is a head start, never the answer: it is shown at once, marked as kept, nothing is sent from it, and the fresh answer takes its place as soon as it arrives. So a kept page can be on the screen for a moment after the session it was answered for has ended, until the app learns that. A page that must never be on the screen after its session ended, even for a moment, is not marked as keepable: leave it `no-store`, the default. At the next launch it is drawn only after the shell has answered over the network and named the same person as the shell that was kept. Until then the screen shows that it is loading; with another person, or nobody signed in, everything kept is thrown away; with no network the kept page is not drawn at all, and the screen shows what any page that could not load shows. The fresh answer always takes the kept page's place.
+
+## When a session ends, or somebody else signs in
+
+A sign-out that removes the device's push token is told to the client at once, while the removal is still on its way: the client begins taking away what it kept for the person and writes down that a sign-out is owed, so an app closed half way through finishes it at the next launch, before anything kept is read. The removal goes out with the session's cookie; nothing of the person is used after it.
+
+A session can also end with no sign-out on the device: it runs out, or the server ends it, and somebody signs in again. The runtime core then empties what it kept, and each client takes away what it keeps of its own for the person before, such as notifications and chosen files, before the new person sees anything, also when the app was closed in between. To tell one person from another, the core gives each signed-in person a key (`app.user.key` in what it hands the client), made from the id that `X-Navree-Person` names. The framework's own sign-in names every person by id. An app that signs people in its own way and names nobody by id is told apart by name and email instead, so two accounts with the same name and no email look like one person to the device: make `CurrentPrincipal` its principal so each answer names the person by id.
 
 ## Grades and coverage
 

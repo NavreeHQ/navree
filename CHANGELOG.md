@@ -243,9 +243,14 @@ look at when you update:
   and is built with the `dotnet` command alone. It is a preview. Sign-in through the browser is not
   available on Windows yet: an app signs people in with its own sign-in page inside the app.
 - Navree Native: the Android, Apple and Windows clients draw a form's file field and colour field
-  themselves, so a form that holds one is a native screen and no longer a web page. The Android and
-  Windows clients take a chosen picture's place out before it is sent unless the field keeps it; a
-  picture that cannot be cleaned is refused with words.
+  themselves, so a form that holds one is a native screen and no longer a web page. The Android,
+  Apple and Windows clients take a chosen picture's place out before it is sent unless the field
+  keeps it; a picture that cannot be cleaned is refused with words.
+- Navree Native: the runtime core gives the person signed in a key (`app.user.key`), made from the
+  id `X-Navree-Person` names, or from the person's name and email when no id is named. When
+  somebody else signs in with no sign-out between (a session ran out, or the server ended it), the
+  Android, Apple and Windows clients take away what they kept for the person before, before the new
+  person sees anything, also when the app was closed in between.
 - Navree Native: the Android client lays a list whose rows can be moved lazily. Only the cards near
   the window are drawn, whatever a lane holds, and a card can be moved by dragging, from its
   handle's menu, by a keyboard and by a screen reader's actions.
@@ -485,6 +490,17 @@ look at when you update:
   the app has not been told. The core says the session is ending at once
   (`{"t":"session_ending"}`), so a client can write down that a sign-out is owed and begin removing
   what it kept before the token's removal is answered.
+- Navree Native: when a session ends, an Android app has the push service delete its token at once
+  and keeps that deletion owed until the push service says the token is gone, also across a
+  restart. A message that arrives meanwhile is not shown, and the notifications are taken away
+  again when the removal is answered and when the token is gone.
+- Navree Native: a client that signs out while the runtime core waits for the push token's removal
+  is still told to forget the session, and an answer that redirects the removal ends the wait
+  instead of being followed.
+- Navree Native: on Android, the end of a session waits for the cookie store at most four seconds
+  and stays owed until the store says its cookies are gone; a web page held back after a sign-out
+  starts no new deletion when it is drawn again; and a deletion that begins while another runs
+  takes its place, so the first to finish never calls the later one done.
 - Navree Native: the device tests' job sees a skipped test. A skip that is not on the job's list
   fails it.
 
