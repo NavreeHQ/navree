@@ -1,0 +1,34 @@
+//! The `{{ package }}` community plugin for Navree.
+
+use navree::prelude::*;
+#[allow(unused_imports)]
+use navree::plugin::prelude::*;
+
+{% if wrap %}
+pub mod client;
+{% endif %}
+pub mod options;
+
+pub use options::{{ pascal }}Options;
+
+/// Registers the `{{ name }}` plugin and its `[{{ name }}]` settings.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct {{ pascal }}Module;
+
+impl {{ pascal }}Module {
+    /// Builds the module reading its `[{{ name }}]` settings from the app configuration.
+    pub fn from_config() -> {{ pascal }}Module {
+        {{ pascal }}Module
+    }
+}
+
+impl Module for {{ pascal }}Module {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(navree::plugin_info!());
+        m.config_section::<{{ pascal }}Options>();
+        {% if wrap %}
+        m.import(client::client());
+        {% endif %}
+        // navree:wire
+    }
+}

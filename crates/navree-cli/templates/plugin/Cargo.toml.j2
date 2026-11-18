@@ -1,0 +1,26 @@
+[package]
+name = "{{ package }}"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "{{ title }} for Navree apps. Not an official Navree package."
+license = "MIT OR Apache-2.0"
+keywords = ["navree-plugin", "navree"]
+readme = "README.md"
+
+[package.metadata.navree.plugin]
+title = "{{ title }}"
+module = "{{ pascal }}Module::from_config()"
+config = ["{{ name }}"]
+
+[dependencies]
+navree = {{ navree_dependency }}
+serde = { version = "1", features = ["derive"] }
+{% if wrap %}
+# Set the version of {{ wrap }} this plugin wraps.
+{{ wrap }} = "*"
+{% endif %}
+
+[dev-dependencies]
+navree = {{ navree_dev_dependency }}
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

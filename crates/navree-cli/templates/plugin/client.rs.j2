@@ -1,0 +1,15 @@
+//! Wrapped `{{ wrap }}` client module for the `{{ name }}` plugin.
+
+use navree::plugin::ClientModule;
+
+use crate::options::{{ pascal }}Options;
+
+/// Builds the [`ClientModule`] around `{{ wrap_ident }}::Client`, configured by [`{{ pascal }}Options`].
+pub fn client() -> ClientModule<{{ wrap_ident }}::Client, {{ pascal }}Options> {
+    ClientModule::<{{ wrap_ident }}::Client>::new("{{ name }}")
+        .options::<{{ pascal }}Options>()
+        .connect(|_options, _resolver| async move {
+            Err("connect {{ wrap_ident }}::Client in src/client.rs".into())
+        })
+        .plugin(navree::plugin_info!())
+}

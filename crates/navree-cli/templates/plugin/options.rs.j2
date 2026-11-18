@@ -1,0 +1,19 @@
+//! Configuration for the `{{ name }}` plugin (`[{{ name }}]`).
+
+use navree::config::ConfigSection;
+use serde::{Deserialize, Serialize};
+
+/// Settings read from the `[{{ name }}]` table of the app configuration.
+#[derive(Clone, Debug, Deserialize, Serialize, ConfigSection)]
+#[config(key = "{{ name }}")]
+#[serde(default)]
+pub struct {{ pascal }}Options {
+    /// Whether the `{{ name }}` plugin is active.
+    pub enabled: bool,
+}
+
+impl Default for {{ pascal }}Options {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}

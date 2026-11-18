@@ -88,6 +88,15 @@ const TEMPLATES: &[(&str, &str)] = templates![
     "make/page_test.rs",
     "make/form.rs",
     "make/table.rs",
+    "plugin/Cargo.toml",
+    "plugin/lib.rs",
+    "plugin/options.rs",
+    "plugin/boots.rs",
+    "plugin/README.md",
+    "plugin/LICENSE-MIT",
+    "plugin/LICENSE-APACHE",
+    "plugin/ci.yml",
+    "plugin/client.rs",
 ];
 
 /// A template failed to render (a bug in the template or its context).
