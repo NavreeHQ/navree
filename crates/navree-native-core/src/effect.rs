@@ -266,7 +266,21 @@ pub enum Effect {
 #[serde(tag = "t", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Change {
-    /// The app's name, theme or user.
+    /// The app's part: its name, its theme and the person signed in. It is
+    /// said to have changed at three moments and no other: when a shell is
+    /// drawn (from an answer, from the one kept on the device, or a blank
+    /// one), at a sign-out, and when the session is forgotten. It is not said
+    /// for a theme, a menu or a name by itself.
+    ///
+    /// A client relies on this. A shell asked for before a sign-in is never
+    /// drawn after it, so an app's part that changed after a sign-in is the
+    /// word of a shell asked for since, and says who is signed in now. A
+    /// client that held back what belongs to the person before (a reminder
+    /// that waits) lets go of the hold at that change, and at no other. A new
+    /// moment that says so would end such a hold with the person before
+    /// still named, so the clients are looked at before one is added
+    /// (`the_apps_part_is_said_to_have_changed_at_a_shell_a_sign_out_and_a_forgotten_session_only`
+    /// in `src/reduce.rs`).
     App,
     /// Anything about where the person is: the stage, the destinations and
     /// their stacks, what is presented over them, the screen in front, the window.
