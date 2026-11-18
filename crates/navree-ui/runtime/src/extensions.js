@@ -259,10 +259,11 @@ function helpers(el, src, signal) {
     },
     /**
      * A read of one of the element's routes. It takes no turn of the page's, and ends when the element
-     * leaves. Headers of the runtime's own are not the script's to send.
+     * leaves; one begun after it left is not sent. Headers of the runtime's own are not the script's to send.
      * @param {string} url @param {Record<string, string>} [headers]
      */
     async get(url, headers = {}) {
+      signal.throwIfAborted();
       /** @type {Record<string, string>} */
       const sent = { "x-navree-ui": "1" };
       for (const name in headers) if (!/^x-navree-/i.test(name)) sent[name] = headers[name];
@@ -301,6 +302,14 @@ let paged = false;
  * @type {WeakMap<Element, string | null>}
  */
 const islands = new WeakMap();
+/** Seals the body a noted plugin island has now, while it names the same script outside stored content. @param {Element} el */
+const sealIsland = (el) => {
+  if (islands.get(el) === attr(el, "data-ui-island") && !stored(el)) all(el, ":scope > [data-slot=island-body]").forEach(seal);
+};
+/** Watches noted plugin islands so a body put in place while `mount` runs is sealed as soon as it is there or `mount` ends. */
+const islandWatch = new MutationObserver((records) => {
+  for (const { target } of records) if (isEl(target)) sealIsland(target);
+});
 
 /**
  * Gives a mounted element its props as they are now: to its `update`, or, when they changed and it has
@@ -342,6 +351,7 @@ async function mount(el, at, props) {
     const back = await module.mount(el, parse(given), helpers(el, src, stop.signal));
     const done = typeof back === "function" ? back : typeof back?.leave === "function" ? () => back.leave() : null;
     if (mounted.get(el) !== m) return done?.();
+    if (!stored(el)) bodiesOf(el).forEach(seal);
     m.done = done;
     m.update = typeof back?.update === "function" ? (next) => back.update(next) : null;
     m.ready = true;
@@ -350,6 +360,7 @@ async function mount(el, at, props) {
     if (m.props !== given) renew(el, m, true);
   } catch {
     if (mounted.get(el) === m) {
+      if (!stored(el)) bodiesOf(el).forEach(seal);
       set(el, "data-ui-failed", "");
       console.error(`navree-ui: ${src} ${why}`);
     }
@@ -376,7 +387,7 @@ function leave(el) {
  * put another in its place. An island that never asked, an app's own or one not mounted yet, is left as it is.
  */
 function scan() {
-  for (const el of every("[data-ui-island]")) if (islands.get(el) === attr(el, "data-ui-island")) all(el, ":scope > [data-slot=island-body]").forEach(seal);
+  for (const el of every("[data-ui-island]")) sealIsland(el);
   for (const [el, m] of mounted) if (!holds(document, el) || stored(el) || attr(el, "data-ui-ext") !== m.at) leave(el);
   for (const el of every("[data-ui-ext]:not([data-ui-island])")) {
     const m = mounted.get(el), props = attr(el, "data-ui-props") || "";
@@ -439,6 +450,7 @@ if (!fresh()) {
         seal(b);
         const el = /** @type {Element} */ (up.call(b));
         islands.set(el, attr(el, "data-ui-island"));
+        islandWatch.observe(el, { childList: true, attributes: true, attributeFilter: ["data-ui-mounted", "data-ui-failed"] });
         e.preventDefault();
       }
     },

@@ -151,3 +151,103 @@ test("a plugin's island that is not mounted yet is left as the server drew it by
   // Noted before the islands module came: the scan sealed nothing, and the fallback kept its command.
   assert.deepEqual(unmounted, { stored: false, hooks: ["data-ui-click"] });
 });
+
+test("a body put in place while a mount is still running is sealed when the mount is done", async () => {
+  /** @type {() => void} */
+  let finishIsland = () => {};
+  /** @type {() => void} */
+  let finishExt = () => {};
+  g.slowIslandGate = new Promise((/** @type {any} */ go) => (finishIsland = go));
+  g.slowExtGate = new Promise((/** @type {any} */ go) => (finishExt = go));
+
+  const added = document.createElement("div");
+  added.innerHTML =
+    island("slow-notice", "proof.slow", `{"city":"Patiala"}`, "menu", "Patiala") +
+    `<div id="slow-ext" data-slot="proof:async" data-ui-ext="/_navree/ui/ext/proof.async-0123456789ab.js" data-ui-props="{}">` +
+    `<div data-slot="proof:async-body" data-ui-keep></div></div>`;
+  $("order").append(...added.childNodes);
+  document.dispatchEvent(new Event("ui:swap"));
+  await settle();
+
+  // Both mounts finish after putting another body in place, and no `ui:swap` follows.
+  finishIsland();
+  finishExt();
+  await until(
+    () => $("slow-notice").hasAttribute("data-ui-mounted") && $("slow-ext").hasAttribute("data-ui-mounted"),
+    "both async mounts to finish",
+  );
+  await settle();
+
+  for (const [bodyId, buttonId, fieldId] of [
+    ["slow-island-next", "slow-island-button", "slow-island-field"],
+    ["slow-ext-next", "slow-ext-button", "slow-ext-field"],
+  ]) {
+    assert.equal($(bodyId).hasAttribute("data-ui-stored"), true, bodyId);
+    assert.deepEqual(hooks($(bodyId)), [], bodyId);
+    $(buttonId).click();
+    assert.equal($("menu").hasAttribute("hidden"), true, buttonId);
+    assert.equal($(fieldId).getAttribute("form"), "ui-sealed", fieldId);
+    assert.equal($(fieldId).form, null, fieldId);
+    const later = document.createElement("button");
+    later.setAttribute("data-ui-click", '[["toggle","menu"]]');
+    $(bodyId).append(later);
+    await settle();
+    assert.deepEqual(hooks($(bodyId)), [], bodyId);
+  }
+  assert.deepEqual([...new FormData($("order"))], [["charge", "40"], ["zone", "Asia/Kolkata"]]);
+});
+
+test("the body is sealed whichever of the two modules hears ui:swap first", async () => {
+  // First: the extensions module ahead of the islands module, as the server links them.
+  g.updatingSeen = [];
+  const firstWrap = document.createElement("div");
+  firstWrap.innerHTML = island("updating", "proof.updating", `{"city":"Ludhiana"}`, "menu", "Ludhiana");
+  $("order").append(...firstWrap.childNodes);
+  document.dispatchEvent(new Event("ui:swap"));
+  await until(() => $("updating").hasAttribute("data-ui-mounted"), "the updating island to mount");
+  await settle();
+
+  bodyOf("updating").setAttribute("id", "updating-drawn");
+  morph($("updating"), server(island("updating", "proof.updating", `{"city":"Amritsar"}`, "menu", "Amritsar")));
+  await settle();
+  assert.deepEqual(g.updatingSeen, [{ city: "Amritsar", sealedAtUpdate: true }]);
+  assert.equal(bodyOf("updating").hasAttribute("data-ui-stored"), true);
+  assert.deepEqual(hooks(bodyOf("updating")), []);
+  assert.equal($("updating-field").getAttribute("form"), "ui-sealed");
+  assert.equal($("updating-field").form, null);
+  $("updating-button").click();
+  assert.equal($("menu").hasAttribute("hidden"), true);
+
+  // Second: the islands module ahead of the extensions module, as a navigation can bring them.
+  g.updatingSeen = [];
+  install({
+    url: "https://app.test/orders/new",
+    observe: true,
+    html: `<!doctype html><html data-build="b1"><head></head><body data-ui-boost>
+      <main id="main">
+        <form id="order" data-ui-form method="post" action="/orders">
+          <input id="charge" name="charge" value="40">
+          ${island("updating", "proof.updating", `{"city":"Ludhiana"}`, "menu", "Ludhiana")}
+        </form>
+        <div id="menu" hidden>Zones</div>
+      </main>
+    </body></html>`,
+  });
+  await import("../src/core.js?islands-first");
+  await import("../src/islands.js?islands-first");
+  await import("../src/extensions.js?islands-first");
+  await until(() => $("updating").hasAttribute("data-ui-mounted"), "the updating island to mount when islands came first");
+  await settle();
+
+  bodyOf("updating").setAttribute("id", "updating-drawn");
+  morph($("updating"), server(island("updating", "proof.updating", `{"city":"Jalandhar"}`, "menu", "Jalandhar")));
+  await settle();
+  assert.deepEqual(g.updatingSeen, [{ city: "Jalandhar", sealedAtUpdate: false }]);
+  assert.equal(bodyOf("updating").hasAttribute("data-ui-stored"), true);
+  assert.deepEqual(hooks(bodyOf("updating")), []);
+  assert.equal($("updating-field").getAttribute("form"), "ui-sealed");
+  assert.equal($("updating-field").form, null);
+  assert.deepEqual([...new FormData($("order"))], [["charge", "40"]]);
+  $("updating-button").click();
+  assert.equal($("menu").hasAttribute("hidden"), true);
+});

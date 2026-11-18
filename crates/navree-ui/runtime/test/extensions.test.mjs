@@ -627,6 +627,14 @@ test("a ui.call begun once its element has left is not sent, and takes no turn o
   assert.deepEqual(toasts().slice(before), [], "a call that was not sent showed a toast");
 });
 
+test("a ui.get begun once its element has left is not sent", async () => {
+  const ui = g.uis.away;
+  assert.equal(ui.signal.aborted, true);
+  page.fetched.length = 0;
+  await assert.rejects(ui.get("/proof/tiles.json"));
+  assert.deepEqual(page.fetched, [], "a read begun after its element left was sent");
+});
+
 test("ui.on listeners and ui.later timers end when the element leaves", async () => {
   const ui = g.uis.timers;
   let clicks = 0, kept = 0, ticks = 0;
