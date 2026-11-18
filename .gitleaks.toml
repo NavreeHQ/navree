@@ -180,11 +180,19 @@ signature of Android's own documentation for linking an app to a site (a
 signature is public: it is the hash of an app's signing certificate) with the
 two malformed copies a test refuses, the hash of nothing as a second app's
 signature, the challenge of a sample passkey answer, a three-part token
-with an empty body and the signature "sig", and the made-up token of the
+with an empty body and the signature "sig", the made-up token of the
 Android client's tests of what a sign-out clears (thirty-two hex digits that
-start 7b1d). None is issued by any system."""
+start 7b1d), and the person keys of the Windows client's tests (sixty-four hex
+digits: two are the keys the runtime core's own conversations write for their
+sample people, starting 1c54 and 38c9, and two are made up, starting 6b1f and
+0a9b; a key only tells one person from another and opens nothing). None is
+issued by any system."""
 regexes = [
   '''fcm-[A-Za-z0-9]{16}''',
+  '''1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e''',
+  '''38c9705141ffe6c8247000b823439d8248a231f176ef18db39fa1940e1e809cc''',
+  '''6b1f0d2c9a7e4853b1c6d0e2f4a8975c3e2d1b0a9f8e7d6c5b4a39281706f5e4''',
+  '''0a9b8c7d6e5f40312233445566778899aabbccddeeff00112233445566778899''',
   '''7b1d2468ace013579bdf24680f3a9c5e''',
   '''9f2c4a7e00b1d35c(8e6a1f4b7d0c2e5a)?''',
   '''740f4707bebcf74f9b7c25d48e3358945f6aa01da5ddb387462c7eaf61bb78ad''',
