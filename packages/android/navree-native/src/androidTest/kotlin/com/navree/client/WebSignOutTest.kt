@@ -213,6 +213,8 @@ class WebSignOutTest {
                     replayed += request.url.queryParameter("for") ?: ""
                     MockResponse.Builder().code(204).build()
                 }
+                // What a sign-in's answer does: it sets the cookie of the session of the person who signed in.
+                "/session" -> MockResponse.Builder().code(204).addHeader("Set-Cookie", "session=Karan; Path=/").build()
                 removal -> {
                     removalCookie = request.headers["Cookie"]
                     unanswered.await(30, TimeUnit.SECONDS)
@@ -318,9 +320,12 @@ class WebSignOutTest {
      * another finds all five while nobody signed out and the same person is
      * signed in. Then the core names another person, as it does when a
      * session ran out and somebody else signed in, and the client is told of
-     * no end of a session: a page shown after that finds nothing of what the
-     * pages of the person before stored, and still finds the cookie, since
-     * the one store's cookies are the new person's and are not deleted.
+     * no end of a session. A page shown after that finds nothing of what the
+     * pages of the person before stored, and not the cookie their page's
+     * script set either: the one cookie store was emptied. What it does find
+     * is the cookie an answer to one of the client's own requests set, as a
+     * sign-in's answer does, which was given back, so the person who is here
+     * now is still signed in.
      *
      * The worker here sends a write of its own to the app's server each time
      * a page of its origin is asked for. It does so for the page that looks,
@@ -330,7 +335,7 @@ class WebSignOutTest {
      * where it would have arrived with the new person's cookie.
      */
     @Test
-    fun aPageShownAfterAnotherFindsWhatItStoredWhenNobodySignedOutAndAllButTheCookieIsGoneOnceAnotherPersonIsSignedIn() {
+    fun aPageShownAfterAnotherFindsWhatItStoredWhenNobodySignedOutAndOnlyTheCookiesOfTheClientsOwnAnswersOnceAnotherPersonIsSignedIn() {
         worker = replaying
         start()
         val found = looked("web-storage-kept.txt", "no sign-out between the two pages")
@@ -342,15 +347,35 @@ class WebSignOutTest {
         // The control for the worker: with nothing being taken away, what it sends for the page that looked reaches the server.
         assertTrue("the worker's own write for the page that looked reached the server: $replayed", waitFor(15) { replayed.contains("/look") })
 
-        // The page that looked is left; then the core names one person, and after her another, with no word of a sign-out.
+        // The page that looked is left. The core names one person; then an answer to one of the client's own requests sets a
+        // session's cookie, as the sign-in of the next person does; then the core names that person, with no word of a sign-out.
         compose.runOnUiThread { shown = null }
         compose.waitForIdle()
-        client {
-            it.hears(Navree.User(name = "Anjali Verma", email = "anjali.verma@example.com"))
-            it.hears(Navree.User(name = "Karan Malhotra", email = "karan.malhotra@example.com"))
+        val driver = Driver(object : Engine {
+            override fun send(event: ByteArray): ByteArray = "{}".encodeToByteArray()
+
+            override fun view(query: ByteArray): ByteArray = "{}".encodeToByteArray()
+        })
+        lateinit var effects: AndroidEffects
+        compose.runOnUiThread {
+            effects = AndroidEffects(compose.activity, driver, "$base/".toHttpUrl(), null, null, Origins(base, loopbackHttp = true), loopbackHttp = true)
+            effects.hears(Navree.User(name = "Anjali Verma", email = "anjali.verma@example.com"))
+            effects.run(Effect.Fetch(2, "get", "$base/session", emptyList(), null, 5_000, false))
         }
+        val cookies = CookieManager.getInstance()
+        assertTrue("the answer's cookie reached the store: ${cookies.getCookie(base)}", waitFor(15) { cookies.getCookie(base).orEmpty().contains("session=Karan") })
+        assertTrue("beside the one the page's script set: ${cookies.getCookie(base)}", cookies.getCookie(base).orEmpty().contains("city=Amritsar"))
+        compose.runOnUiThread { effects.hears(Navree.User(name = "Karan Malhotra", email = "karan.malhotra@example.com")) }
+        val turned = AtomicBoolean(false)
+        effects.state.always { turned.set(true) }
+        assertTrue("the change of person had its turn in the store", waitFor(30) { turned.get() })
+        assertTrue("what the pages of the person before stored is gone, so nothing is owed any more", waitFor(60) { !SiteWipe.owes })
+        compose.runOnUiThread { effects.close() }
+
         val after = looked("web-storage-after-another-person.txt", "another person was signed in, with no sign-out between")
-        assertTrue("the cookie stays, in the one store that holds the new person's session: $after", after.getValue("cookie").jsonPrimitive.content.contains("city=Amritsar"))
+        val left = after.getValue("cookie").jsonPrimitive.content
+        assertFalse("the cookie the page's script set for the person before is gone: $after", left.contains("city=Amritsar"))
+        assertTrue("the cookie the client's own answer set was given back: $after", left.contains("session=Karan"))
         assertEquals("nothing in local storage: $after", 0, after.getValue("local").jsonPrimitive.int)
         assertEquals("no IndexedDB database: $after", 0, after.getValue("indexeddb").jsonArray.size)
         assertEquals("nothing in Cache Storage: $after", 0, after.getValue("caches").jsonArray.size)

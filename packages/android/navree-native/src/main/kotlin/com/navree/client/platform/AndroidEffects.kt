@@ -74,7 +74,8 @@ fun clearWebViews(context: Context, done: (everyKind: Boolean) -> Unit = {}): Bo
  * stored and the cookies: the resource cache on disk, the back and forward
  * list, the form data, and the saved sign-ins for sites. No cookie goes by
  * this, so it is also what is done when another person is signed in with no
- * sign-out between, whose cookies the one store already holds. Call on the
+ * sign-out between: the one store holds their session's cookies by then, and
+ * what goes from it is decided apart ([WebViewCookies.keepOwn]). Call on the
  * main thread.
  */
 fun clearWebViewKept(context: Context) {
@@ -238,23 +239,33 @@ class AndroidEffects(
      *   written down ([SiteWipe.owePages]), so no web page is shown until it
      *   is gone and a start of the app goes on with what a run did not
      *   finish;
-     * - in the store's turn, ahead of anything kept from now on: the copies
-     *   of the files chosen for forms, and the snapshot of the launch.
+     * - in the store's turn, ahead of anything kept from now on and of any
+     *   request of the client's own: the copies of the files chosen for
+     *   forms, the snapshot of the launch, and the cookies.
      *
-     * No cookie goes. The one store is the native requests' as well as the
-     * web view's, and the session in it is already the new person's, set by
-     * the sign-in that brought them; a cookie of the person before that the
-     * sign-in did not replace stays with it. Nor does the client keep
-     * anything else for a person: pictures are held only by the screens that
-     * draw them, which the core has taken down, and the client schedules no
-     * notification and writes no count or shortcut of its own.
+     * The one cookie store is the native requests' as well as the web
+     * view's, and the session in it is already the new person's, set by the
+     * sign-in that brought them. So the store is emptied, and the cookies
+     * the answers to the client's own requests set are given back, each as
+     * it was set ([WebViewCookies.keepOwn]): the sign-in's among them. What
+     * the web view's side put there goes: a cookie a page's script set, one
+     * an answer inside a page set, the cookies of the hosts named for the
+     * web view. The client keeps nothing else for a person: pictures are
+     * held only by the screens that draw them, which the core has taken
+     * down, and the client schedules no notification and writes no count or
+     * shortcut of its own.
+     *
+     * While the go at the origins runs, a service worker's requests are
+     * refused ([SiteWipe.stops]): the go's document starts the workers of
+     * the person before, and what they send on their own would otherwise
+     * leave with the new person's cookies.
      *
      * The mark of the person before stays on the disk until the store's turn
-     * has deleted the files, and only then is the new person's written in its
-     * place ([PersonWatch.changed]). An app that ends before that, or a file
-     * that could not be deleted, leaves the old mark, and the next start
-     * hears another person than the one it remembers and does all of this
-     * over.
+     * has done its part, and only then is the new person's written in its
+     * place ([PersonWatch.changed]). An app that ends before that, or a
+     * cookie store that does not say in time that its cookies are gone,
+     * leaves the old mark, and the next start hears another person than the
+     * one it remembers and does all of this over.
      */
     private fun personChanged(word: PersonWatch.Word) {
         emptyShade()
@@ -265,11 +276,12 @@ class AndroidEffects(
             // No web view on this device: nothing of it to clear, and no page of it to show.
         }
         SiteWipe.finish()
-        // Dropped when a session ends before its turn: the sign-out deletes both itself, and forgets the mark.
+        // Dropped when a session ends before its turn: the sign-out deletes all of it itself, and forgets the mark.
         state.write {
             picked.clear()
             snapshots.clear()
-            person.changed(word)
+            // Without the cookie store's word in time the change is not finished: the mark of the person before stays.
+            if (cookies.keepOwn(onLooper = { work -> main.post { work() } }, waitMs = COOKIES_WAIT_MS)) person.changed(word)
         }
     }
 
