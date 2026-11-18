@@ -7,6 +7,18 @@ criteria = "safe-to-deploy"
 delta = "0.3.1 -> 0.6.1"
 notes = "Diff reviewed. The new build.rs only prints cfg flags chosen from the rustc version, the target arch and the COUNT_INSTRUCTIONS_TEST variable (rustversion is its only build dependency). New SSE2, NEON and word-at-a-time comparisons; the inline asm only hides values from the optimizer or sets the aarch64 DIT bit, which a guard restores. Unsafe blocks are commented and bounded by length asserts. No I/O. Same publisher as 0.3.1; the repository moved to Codeberg, as CHANGES for 0.6.0 says."
 
+[[audits.email-encoding]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.4.2 -> 0.4.3"
+notes = "Diff reviewed. Body encoding no longer picks 7bit or 8bit for input with a NUL, or a CR or LF outside a CRLF (a bare LF in a str is still taken as a line ending), so such bytes go out as quoted-printable or base64. RFC 2231 parameter encoding writes at least one character per line, so a 62-character key can no longer stall it or underflow. Header folding never leaves a line of white space only. Tests added. No new dependencies, no build script, no unsafe (forbid(unsafe_code)), no I/O. Published from github:lettre/email-encoding."
+
+[[audits.lettre]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.11.23 -> 0.11.24"
+notes = "Diff reviewed. SMTP client: the connection is closed if bytes are already buffered after the STARTTLS reply; dot-stuffing also applies after a bare CR or LF; replies are read under a 100,000-byte cap and parsed once per line, only CRLF ending a line; a white-space EHLO line no longer panics; DATA and message replies must have the expected class. A quoted local part is kept as written and addresses reject non-ASCII white space. Debug hides DKIM keys and AUTH credentials. No new dependencies or build script, forbid(unsafe_code), I/O only on the SMTP socket. Published from github:lettre/lettre."
+
 [[audits.rc4]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
