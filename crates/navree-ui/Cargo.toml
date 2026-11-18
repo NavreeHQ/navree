@@ -45,8 +45,9 @@ phone = ["dep:navree-phone", "navree-validation/phone"]
 ## from chunks. The facade turns it on when both `ui` and `storage` are on.
 storage = ["dep:navree-storage"]
 ## The reader's zone from navree-time: `today_in(&CurrentZone)` on the date pickers and the
-## calendar, `zone(&CurrentZone)` on a timeline and an activity feed, `FormView::dates_in`. The
-## facade turns it on when both `ui` and `time` are on.
+## calendar, `zone(&CurrentZone)` on a timeline and an activity feed, `FormView::dates_in`, and
+## `ReportZone` for `navree_time::Tz` on `charts::Report`. The facade turns it on when both `ui`
+## and `time` are on.
 time = ["dep:navree-time"]
 ## Show or hide what a reader may not use, by navree-access's abilities
 ## (`navree_ui::ability`). The facade turns it on when both `ui` and `access` are on.
@@ -71,8 +72,6 @@ base64 = { workspace = true, optional = true }
 navree-db = { workspace = true, optional = true }
 navree-access = { workspace = true, optional = true }
 navree-time = { workspace = true, optional = true }
-# A report names its zone to the database from the zone itself.
-chrono-tz = { workspace = true }
 navree-orm = { workspace = true, optional = true }
 navree-phone = { workspace = true, optional = true }
 navree-storage = { workspace = true, optional = true }

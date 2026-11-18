@@ -11,17 +11,17 @@
 #![no_main]
 
 use chrono::{DateTime, FixedOffset, TimeDelta, Utc};
-use chrono_tz::Tz;
 use libfuzzer_sys::fuzz_target;
 use navree_schedule::CronExpression;
+use navree_time::Tz;
 
-const ZONES: [Tz; 6] = [
-    Tz::America__New_York,
-    Tz::Europe__London,
-    Tz::Australia__Lord_Howe,
-    Tz::Asia__Kolkata,
-    Tz::America__St_Johns,
-    Tz::Pacific__Apia,
+const ZONES: [&str; 6] = [
+    "America/New_York",
+    "Europe/London",
+    "Australia/Lord_Howe",
+    "Asia/Kolkata",
+    "America/St_Johns",
+    "Pacific/Apia",
 ];
 
 fuzz_target!(|data: &[u8]| {
@@ -31,7 +31,9 @@ fuzz_target!(|data: &[u8]| {
     let Ok(text) = std::str::from_utf8(text) else {
         return;
     };
-    let zone = ZONES[usize::from(header[0]) % ZONES.len()];
+    let zone: Tz = ZONES[usize::from(header[0]) % ZONES.len()]
+        .parse()
+        .expect("known zone");
     let near = u32::from_le_bytes([header[1], header[2], header[3], header[4]]);
     let far = i64::from_le_bytes([
         header[5], header[6], header[7], header[8], header[9], header[10], header[11], header[12],

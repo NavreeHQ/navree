@@ -1,8 +1,8 @@
 //! Properties of the parser and the next-run search.
 
 use chrono::{DateTime, TimeDelta, Utc};
-use chrono_tz::Tz;
 use navree_schedule::{CronExpression, MAX_EXPRESSION_LEN};
+use navree_time::Tz;
 use proptest::prelude::*;
 
 const ZONES: &[&str] = &[

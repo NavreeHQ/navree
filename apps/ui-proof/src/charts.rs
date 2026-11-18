@@ -12,11 +12,11 @@
 use std::sync::{Arc, LazyLock};
 
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc};
-use chrono_tz::Tz;
 use http::Method;
 use navree::http::extract::Query;
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree::time::Tz;
 use navree::ui::charts::*;
 use navree::ui::dates::{DatePreset, DateRules, RangeRules};
 use navree::ui::*;

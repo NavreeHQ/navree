@@ -17,12 +17,11 @@ unsafe_code = "forbid"
 
 [dependencies]
 chrono = { workspace = true }
-chrono-tz = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
 # A path rather than `workspace = true`: on Rust 1.95, the minimum version, Cargo
 # cannot turn off default features that the workspace entry leaves on.
-navree = { path = "../../crates/navree", default-features = false, features = ["ui", "ui-extension-files", "ui-image", "validation-phone", "storage"] }
+navree = { path = "../../crates/navree", default-features = false, features = ["ui", "ui-extension-files", "ui-image", "validation-phone", "storage", "time"] }
 # The worked example of a plugin's own UI components: the extensions page draws its map and its drop-point field.
 navree-plugin-geo = { path = "../../plugins/geo" }
 serde = { workspace = true }

@@ -7,7 +7,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::time::Instant;
 
 use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, NaiveTime, Utc, Weekday};
-use chrono_tz::Tz;
+use navree_time::Tz;
 use navree_ui::dates::grid::month_grid;
 use navree_ui::dates::zoned::{Resolved, resolve};
 use navree_ui::dates::{

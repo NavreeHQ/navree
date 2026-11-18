@@ -23,7 +23,3 @@ navree = { path = "../../crates/navree", default-features = false, features = ["
 serde = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }
-
-[dev-dependencies]
-# Report periods in zones with clock changes, in the report tests.
-chrono-tz = { workspace = true }

@@ -1,6 +1,10 @@
-use chrono_tz::{America::New_York, Asia::Kolkata, Europe::London, Tz};
+use navree_time::Tz;
 
 use super::*;
+
+fn tz(name: &str) -> Tz {
+    name.parse().unwrap()
+}
 
 fn cron(text: &str) -> CronExpression {
     text.parse().unwrap_or_else(|e| panic!("`{text}`: {e}"))
@@ -135,7 +139,7 @@ fn long_expressions_are_rejected() {
 
 #[test]
 fn next_runs_in_utc() {
-    let utc = chrono_tz::UTC;
+    let utc = Tz::UTC;
     assert_eq!(
         next("*/15 * * * *", "2026-10-26T09:07:30Z", utc).unwrap(),
         "2026-10-26T09:15:00+00:00"
@@ -161,7 +165,7 @@ fn next_runs_in_utc() {
 
 #[test]
 fn day_of_month_and_week_combine_as_or_unless_plus() {
-    let utc = chrono_tz::UTC;
+    let utc = Tz::UTC;
     // 2026-11-01 is a Sunday. "1st or any Monday".
     assert_eq!(
         next("0 0 1 * MON", "2026-10-31T00:00:00Z", utc).unwrap(),
@@ -180,7 +184,7 @@ fn day_of_month_and_week_combine_as_or_unless_plus() {
 
 #[test]
 fn last_nth_and_nearest_weekday() {
-    let utc = chrono_tz::UTC;
+    let utc = Tz::UTC;
     assert_eq!(
         next("0 0 L * *", "2026-02-01T00:00:00Z", utc).unwrap(),
         "2026-02-28T00:00:00+00:00"
@@ -223,7 +227,7 @@ fn last_nth_and_nearest_weekday() {
 
 #[test]
 fn never_matching_expressions_have_no_next_run() {
-    let utc = chrono_tz::UTC;
+    let utc = Tz::UTC;
     for text in ["0 0 30 2 *", "0 0 31 4,6,9,11 *", "0 0 30 FEB *"] {
         assert_eq!(
             cron(text).next_after(at("2026-01-01T00:00:00Z"), &utc),
@@ -241,30 +245,31 @@ fn never_matching_expressions_have_no_next_run() {
 
 #[test]
 fn spring_forward_runs_a_skipped_time_once_after_the_gap() {
+    let new_york = tz("America/New_York");
     // New York, 2026-03-08: 02:00 EST jumps to 03:00 EDT (07:00Z).
     assert_eq!(
-        next("30 2 * * *", "2026-03-07T12:00:00Z", New_York).unwrap(),
+        next("30 2 * * *", "2026-03-07T12:00:00Z", new_york).unwrap(),
         "2026-03-08T07:00:00+00:00"
     );
     // The skipped 02:30 runs at 03:00 EDT; the next day's at 02:30 EDT.
     assert_eq!(
-        next("30 2 * * *", "2026-03-08T07:00:00Z", New_York).unwrap(),
+        next("30 2 * * *", "2026-03-08T07:00:00Z", new_york).unwrap(),
         "2026-03-09T06:30:00+00:00"
     );
     // Several skipped fixed times run once.
     let fixed = cron("0,15,30,45 2 * * *");
     let first = fixed
-        .next_after(at("2026-03-08T06:59:00Z"), &New_York)
+        .next_after(at("2026-03-08T06:59:00Z"), &new_york)
         .unwrap();
     assert_eq!(first.to_rfc3339(), "2026-03-08T07:00:00+00:00");
-    let second = fixed.next_after(first, &New_York).unwrap();
+    let second = fixed.next_after(first, &new_york).unwrap();
     assert_eq!(second.to_rfc3339(), "2026-03-09T06:00:00+00:00");
     // A wildcard expression catches nothing up: `*/15` in the hour 2 does
     // not exist on that night.
     let every_15 = cron("*/15 2 * * *");
     assert_eq!(
         every_15
-            .next_after(at("2026-03-08T06:59:00Z"), &New_York)
+            .next_after(at("2026-03-08T06:59:00Z"), &new_york)
             .unwrap()
             .to_rfc3339(),
         "2026-03-09T06:00:00+00:00"
@@ -272,56 +277,62 @@ fn spring_forward_runs_a_skipped_time_once_after_the_gap() {
     // A time at the end of the gap and one inside it still run once there.
     let both = cron("0,30 2,3 * * *");
     let first = both
-        .next_after(at("2026-03-08T06:30:00Z"), &New_York)
+        .next_after(at("2026-03-08T06:30:00Z"), &new_york)
         .unwrap();
     assert_eq!(first.to_rfc3339(), "2026-03-08T07:00:00+00:00");
     assert_eq!(
-        both.next_after(first, &New_York).unwrap().to_rfc3339(),
+        both.next_after(first, &new_york).unwrap().to_rfc3339(),
         "2026-03-08T07:30:00+00:00"
     );
 }
 
 #[test]
 fn fall_back_runs_a_repeated_time_once_the_first_time() {
+    let new_york = tz("America/New_York");
     // New York, 2026-11-01: 02:00 EDT falls back to 01:00 EST (06:00Z).
     // 01:30 happens at 05:30Z (EDT) and 06:30Z (EST): only the first runs.
     assert_eq!(
-        next("30 1 * * *", "2026-11-01T04:00:00Z", New_York).unwrap(),
+        next("30 1 * * *", "2026-11-01T04:00:00Z", new_york).unwrap(),
         "2026-11-01T05:30:00+00:00"
     );
     assert_eq!(
-        next("30 1 * * *", "2026-11-01T05:30:00Z", New_York).unwrap(),
+        next("30 1 * * *", "2026-11-01T05:30:00Z", new_york).unwrap(),
         "2026-11-02T06:30:00+00:00"
     );
     // A start inside the second pass.
     assert_eq!(
-        next("10 1 * * *", "2026-11-01T06:05:00Z", New_York).unwrap(),
+        next("10 1 * * *", "2026-11-01T06:05:00Z", new_york).unwrap(),
         "2026-11-02T06:10:00+00:00"
     );
 }
 
 #[test]
 fn zones_without_dst_and_london() {
+    let kolkata = tz("Asia/Kolkata");
+    let london = tz("Europe/London");
     assert_eq!(
-        next("0 9 * * *", "2026-10-26T02:00:00Z", Kolkata).unwrap(),
+        next("0 9 * * *", "2026-10-26T02:00:00Z", kolkata).unwrap(),
         "2026-10-26T03:30:00+00:00"
     );
     // London 2026-03-29: 01:00 GMT jumps to 02:00 BST (01:00Z); 01:30 is skipped.
     assert_eq!(
-        next("30 1 * * *", "2026-03-28T12:00:00Z", London).unwrap(),
+        next("30 1 * * *", "2026-03-28T12:00:00Z", london).unwrap(),
         "2026-03-29T01:00:00+00:00"
     );
 }
 
 #[test]
 fn is_due_agrees_with_next_after() {
+    let new_york = tz("America/New_York");
+    let london = tz("Europe/London");
+    let kolkata = tz("Asia/Kolkata");
     for (text, zone, start) in [
-        ("*/15 0-4 * * *", New_York, "2026-03-07T20:00:00Z"),
-        ("30 2 * * *", New_York, "2026-03-07T20:00:00Z"),
-        ("30 1 * * *", New_York, "2026-10-31T20:00:00Z"),
-        ("*/20 0-3 * * *", London, "2026-10-24T20:00:00Z"),
-        ("30 1 * * *", London, "2026-03-28T20:00:00Z"),
-        ("0 9 * * *", Kolkata, "2026-10-24T20:00:00Z"),
+        ("*/15 0-4 * * *", new_york, "2026-03-07T20:00:00Z"),
+        ("30 2 * * *", new_york, "2026-03-07T20:00:00Z"),
+        ("30 1 * * *", new_york, "2026-10-31T20:00:00Z"),
+        ("*/20 0-3 * * *", london, "2026-10-24T20:00:00Z"),
+        ("30 1 * * *", london, "2026-03-28T20:00:00Z"),
+        ("0 9 * * *", kolkata, "2026-10-24T20:00:00Z"),
     ] {
         let expr = cron(text);
         let start = at(start);
@@ -379,17 +390,16 @@ fn runs(cron: &CronExpression, zone: Tz, from: &str, to: &str) -> Vec<DateTime<U
 /// Clock changes: (zone, window around the spring-forward change, window
 /// around the fall-back change), each six real hours.
 fn changes() -> Vec<(Tz, [(&'static str, &'static str); 2])> {
-    use chrono_tz::Australia::Lord_Howe;
     vec![
         (
-            New_York,
+            tz("America/New_York"),
             [
                 ("2026-03-08T04:00:00Z", "2026-03-08T10:00:00Z"),
                 ("2026-11-01T03:00:00Z", "2026-11-01T09:00:00Z"),
             ],
         ),
         (
-            London,
+            tz("Europe/London"),
             [
                 ("2026-03-28T22:00:00Z", "2026-03-29T04:00:00Z"),
                 ("2026-10-24T22:00:00Z", "2026-10-25T04:00:00Z"),
@@ -398,7 +408,7 @@ fn changes() -> Vec<(Tz, [(&'static str, &'static str); 2])> {
         // Lord Howe shifts by 30 minutes: forward 02:00 -> 02:30 (2026-10-04
         // 15:30Z), back 02:00 -> 01:30 (2026-04-04 15:00Z).
         (
-            Lord_Howe,
+            tz("Australia/Lord_Howe"),
             [
                 ("2026-10-04T12:30:00Z", "2026-10-04T18:30:00Z"),
                 ("2026-04-04T12:00:00Z", "2026-04-04T18:00:00Z"),
@@ -465,9 +475,11 @@ fn every_minute_never_pauses_and_hourly_runs_every_real_hour() {
         }
     }
     // New York, fall back: 01:00 happens twice, and hourly runs both.
+    let new_york = tz("America/New_York");
+    let london = tz("Europe/London");
     let hourly = runs(
         &cron("0 * * * *"),
-        New_York,
+        new_york,
         "2026-11-01T03:00:00Z",
         "2026-11-01T09:00:00Z",
     );
@@ -476,7 +488,7 @@ fn every_minute_never_pauses_and_hourly_runs_every_real_hour() {
     // London, fall back: 01:00 BST (00:00Z) and 01:00 GMT (01:00Z).
     let hourly = runs(
         &cron("0 * * * *"),
-        London,
+        london,
         "2026-10-24T22:00:00Z",
         "2026-10-25T04:00:00Z",
     );
@@ -486,61 +498,65 @@ fn every_minute_never_pauses_and_hourly_runs_every_real_hour() {
 
 #[test]
 fn wildcard_expressions_do_not_catch_up_a_gap() {
+    let new_york = tz("America/New_York");
     // New York, spring forward: 02:00-03:00 does not exist.
     let half = runs(
         &cron("30 * * * *"),
-        New_York,
+        new_york,
         "2026-03-08T05:00:00Z",
         "2026-03-08T09:00:00Z",
     );
     let at_local: Vec<_> = half
         .iter()
-        .map(|t| t.with_timezone(&New_York).format("%H:%M").to_string())
+        .map(|t| t.with_timezone(&new_york).format("%H:%M").to_string())
         .collect();
     // 00:30 EST, 01:30 EST, then 03:30 EDT (not 03:00).
     assert_eq!(at_local, ["00:30", "01:30", "03:30", "04:30"]);
     let hourly = runs(
         &cron("0 * * * *"),
-        New_York,
+        new_york,
         "2026-03-08T05:00:00Z",
         "2026-03-08T09:00:00Z",
     );
     let at_local: Vec<_> = hourly
         .iter()
-        .map(|t| t.with_timezone(&New_York).format("%H:%M").to_string())
+        .map(|t| t.with_timezone(&new_york).format("%H:%M").to_string())
         .collect();
     assert_eq!(at_local, ["00:00", "01:00", "03:00", "04:00"]);
 }
 
 #[test]
 fn fixed_time_expressions_run_once_at_a_skipped_and_at_a_repeated_time() {
+    let new_york = tz("America/New_York");
+    let london = tz("Europe/London");
+    let lord_howe = tz("Australia/Lord_Howe");
     for (zone, text, spring, fall) in [
         (
-            New_York,
+            new_york,
             "30 2 * * *",
             ("2026-03-08T04:00:00Z", "2026-03-08T12:00:00Z"),
             ("2026-11-01T03:00:00Z", "2026-11-01T12:00:00Z"),
         ),
         (
-            New_York,
+            new_york,
             "30 1 * * *",
             ("2026-03-08T04:00:00Z", "2026-03-08T12:00:00Z"),
             ("2026-11-01T03:00:00Z", "2026-11-01T12:00:00Z"),
         ),
         (
-            London,
+            london,
             "30 1 * * *",
             ("2026-03-28T22:00:00Z", "2026-03-29T04:00:00Z"),
             ("2026-10-24T22:00:00Z", "2026-10-25T04:00:00Z"),
         ),
         (
-            chrono_tz::Australia::Lord_Howe,
+            lord_howe,
             "15 2 * * *",
             ("2026-10-04T12:30:00Z", "2026-10-04T18:30:00Z"),
             ("2026-04-04T12:00:00Z", "2026-04-04T18:00:00Z"),
         ),
         (
-            chrono_tz::Australia::Lord_Howe,
+            lord_howe,
             "45 1 * * *",
             ("2026-10-04T12:30:00Z", "2026-10-04T18:30:00Z"),
             ("2026-04-04T12:00:00Z", "2026-04-04T18:00:00Z"),

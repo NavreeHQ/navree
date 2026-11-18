@@ -836,7 +836,7 @@ fn two_charts_titled_in_other_scripts_never_share_an_id() {
 #[test]
 fn the_hour_the_clocks_repeat_has_its_own_name() {
     use chrono::Utc;
-    let ny: chrono_tz::Tz = "America/New_York".parse().unwrap();
+    let ny: navree_time::Tz = "America/New_York".parse().unwrap();
     let report = Report::new(
         navree_ui::dates::DateRange::single(day(1)),
         Grain::Hour,

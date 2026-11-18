@@ -115,7 +115,7 @@ fn gap<Tz: TimeZone>(local: NaiveDateTime, tz: &Tz) -> Resolved {
 
 #[cfg(test)]
 mod tests {
-    use chrono_tz::Tz;
+    use navree_time::Tz;
 
     use super::*;
 

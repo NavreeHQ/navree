@@ -9,8 +9,8 @@
 use std::str::FromStr;
 
 use chrono::{DateTime, LocalResult, TimeDelta, TimeZone, Utc};
-use chrono_tz::Tz;
 use navree_schedule::CronExpression;
+use navree_time::Tz;
 
 const TABLE: &str = include_str!("../data/croner_next_runs.txt");
 

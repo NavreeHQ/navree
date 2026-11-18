@@ -306,14 +306,14 @@ fn merged_bars_have_no_links_because_a_bar_stands_for_several_rows() {
 
 #[test]
 fn the_period_before_has_as_many_days_across_a_clock_change() {
-    use chrono_tz::Europe::London;
+    let london: navree_time::Tz = "Europe/London".parse().unwrap();
     // London's clocks went back on Sunday 25 October 2026: that day is 25 hours long.
     let now = Report::new(
         DateRange::new(day(2026, 10, 26), day(2026, 11, 1)),
         Grain::Day,
-        &London,
+        &london,
     );
-    let before = now.previous(&London);
+    let before = now.previous(&london);
     assert_eq!(
         before.range(),
         DateRange::new(day(2026, 10, 19), day(2026, 10, 25))
@@ -336,10 +336,10 @@ fn the_period_before_has_as_many_days_across_a_clock_change() {
     let across = Report::new(
         DateRange::new(day(2026, 10, 23), day(2026, 10, 29)),
         Grain::Day,
-        &London,
+        &london,
     );
     assert_eq!(
-        across.previous(&London).range(),
+        across.previous(&london).range(),
         DateRange::new(day(2026, 10, 16), day(2026, 10, 22))
     );
 

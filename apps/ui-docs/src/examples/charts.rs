@@ -4,7 +4,7 @@
 #![allow(clippy::inconsistent_digit_grouping)]
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
-use chrono_tz::Asia::Kolkata;
+use navree::time::Tz;
 use navree::ui::charts::*;
 use navree::ui::dates::{DateLocale, DatePreset, DateRules, RangeRules};
 use navree::ui::*;
@@ -1036,13 +1036,14 @@ fn funnel_states() -> Grid {
 
 fn reports_thumb() -> Row {
     let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
+    let zone: Tz = "Asia/Kolkata".parse().unwrap_or(Tz::UTC);
     let limits = RangeRules::new(DateRules::new().max(today)).max_days(400);
     let report = Report::from_query(
         &ReportQuery::default(),
         &limits,
         today,
         DatePreset::Last30Days,
-        &Kolkata,
+        &zone,
     );
     Row::gap(3).wrap().children((
         report
@@ -1055,6 +1056,7 @@ fn reports_thumb() -> Row {
 
 fn reports_default() -> Stack {
     let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
+    let zone: Tz = "Asia/Kolkata".parse().unwrap_or(Tz::UTC);
     let limits = RangeRules::new(DateRules::new().max(today)).max_days(400);
     // What the request asked for: `/reports?from=2026-10-28&to=2026-11-03`.
     let query = ReportQuery {
@@ -1062,7 +1064,7 @@ fn reports_default() -> Stack {
         to: Some("2026-11-03".into()),
         grain: None,
     };
-    let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &Kolkata);
+    let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &zone);
     // Stand-ins for a query's rows: the instant of each event.
     let start = report.bounds().0;
     let orders: Vec<DateTime<Utc>> = (0..7)
@@ -1108,6 +1110,7 @@ fn reports_default() -> Stack {
 
 fn reports_refused() -> Stack {
     let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
+    let zone: Tz = "Asia/Kolkata".parse().unwrap_or(Tz::UTC);
     // The limits allow at most 90 days.
     let limits = RangeRules::new(DateRules::new().max(today)).max_days(90);
     let query = ReportQuery {
@@ -1115,7 +1118,7 @@ fn reports_refused() -> Stack {
         to: Some("2026-11-03".into()),
         grain: None,
     };
-    let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &Kolkata);
+    let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &zone);
     // The report shows its default window, and says why it is not the one asked for.
     let refused = report.refused().map(|error| {
         Alert::new(AlertTone::Warning)
@@ -1151,13 +1154,14 @@ fn reports_refused() -> Stack {
 
 fn reports_live() -> Card {
     let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
+    let zone: Tz = "Asia/Kolkata".parse().unwrap_or(Tz::UTC);
     let limits = RangeRules::new(DateRules::new().max(today)).max_days(400);
     let query = ReportQuery {
         from: Some("2026-10-28".into()),
         to: Some("2026-11-03".into()),
         grain: None,
     };
-    let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &Kolkata);
+    let report = Report::from_query(&query, &limits, today, DatePreset::Last30Days, &zone);
     let start = report.bounds().0;
     let orders: Vec<DateTime<Utc>> = (0..7)
         .flat_map(|day| {
@@ -1183,6 +1187,7 @@ fn reports_live() -> Card {
 
 fn reports_grains() -> impl IntoIterator<Item = (&'static str, Node)> {
     let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();
+    let zone: Tz = "Asia/Kolkata".parse().unwrap_or(Tz::UTC);
     let limits = RangeRules::new(DateRules::new().max(today)).max_days(4000);
     let window = |from: &str| {
         let query = ReportQuery {
@@ -1190,7 +1195,7 @@ fn reports_grains() -> impl IntoIterator<Item = (&'static str, Node)> {
             to: Some("2026-11-03".into()),
             grain: None,
         };
-        Report::from_query(&query, &limits, today, DatePreset::Last30Days, &Kolkata)
+        Report::from_query(&query, &limits, today, DatePreset::Last30Days, &zone)
     };
     [
         ("1 day: hours", window("2026-11-03")),

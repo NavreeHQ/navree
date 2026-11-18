@@ -9,12 +9,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{Datelike, NaiveDate, NaiveTime, Weekday};
-use chrono_tz::Tz;
 use http::Method;
 use navree::http::extract::Query;
 use navree::http::response::{IntoResponse, Response};
 use navree::http::{Controller, RouteDef};
 use navree::kernel::{BoxFuture, Injectable, KernelError, ProviderKey, Resolver};
+use navree::time::Tz;
 use navree::ui::dates::{
     Calendar, CalendarMode, CaptionLayout, DateLocale, DatePicker, DatePreset, DateRange,
     DateRangePicker, DateRangeQuery, DateRules, DateTimePicker, PickerStyle, RangeRules,

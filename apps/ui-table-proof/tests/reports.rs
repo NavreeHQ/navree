@@ -6,11 +6,11 @@
 //! uses its own database, dropped afterwards.
 
 use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
-use chrono_tz::Tz;
 use navree::db::Executor as _;
 use navree::db::{Db, DbOptions};
 use navree::mongo::{MongoDb, MongoOptions};
 use navree::orm::{Builder, Executor, Model, Value, col};
+use navree::time::Tz;
 use navree::ui::charts::{Bucketing, Grain, Metric, Report, TimeColumn};
 use navree::ui::dates::DateRange;
 

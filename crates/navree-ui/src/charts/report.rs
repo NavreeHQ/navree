@@ -20,10 +20,11 @@ pub const MAX_BUCKETS: usize = 400;
 /// A time zone a report counts in, and its name in the IANA database when it has one.
 ///
 /// The name comes from the zone itself, so what a database is told can never differ
-/// from the zone the periods were cut in. `Utc` is `UTC`, a `chrono_tz::Tz` is its own
-/// name (`Asia/Kolkata`), and a fixed offset other than zero has none: TimescaleDB
-/// can't be given it, and the report buckets with bound comparisons instead, which are
-/// as exact.
+/// from the zone the periods were cut in. `Utc` is `UTC`, a `navree_time::Tz` (with the
+/// `time` feature) is its normalized IANA name (`Asia/Kolkata` for both `Asia/Kolkata`
+/// and `Asia/Calcutta`, and none for `Factory`), and a fixed offset other than zero
+/// has none: TimescaleDB can't be given it, and the report buckets with bound comparisons
+/// instead, which are as exact.
 pub trait ReportZone: TimeZone {
     /// The zone's IANA name, when it has one.
     fn iana_name(&self) -> Option<&'static str>;
@@ -41,9 +42,11 @@ impl ReportZone for FixedOffset {
     }
 }
 
-impl ReportZone for chrono_tz::Tz {
+#[cfg(feature = "time")]
+#[cfg_attr(docsrs, doc(cfg(feature = "time")))]
+impl ReportZone for navree_time::Tz {
     fn iana_name(&self) -> Option<&'static str> {
-        Some(self.name())
+        navree_time::Zone::canonical_name(self.name())
     }
 }
 
@@ -619,7 +622,7 @@ pub(crate) fn wall(at: NaiveDateTime) -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use chrono_tz::Tz;
+    use navree_time::Tz;
 
     use super::*;
 
@@ -906,5 +909,24 @@ mod tests {
         );
         let zero = chrono::FixedOffset::east_opt(0).unwrap();
         assert_eq!(Report::new(range, Grain::Day, &zero).zone(), Some("UTC"));
+    }
+
+    #[test]
+    fn legacy_zone_names_are_normalized_and_factory_has_no_database_name() {
+        let range = DateRange::single(day(2026, 11, 1));
+        for (raw, canonical) in [
+            ("Asia/Calcutta", Some("Asia/Kolkata")),
+            ("Asia/Chungking", Some("Asia/Shanghai")),
+            ("Etc/UCT", Some("UTC")),
+            ("Factory", None),
+        ] {
+            let tz: Tz = raw.parse().unwrap();
+            assert_eq!(tz.iana_name(), canonical, "{raw}");
+            assert_eq!(
+                Report::new(range, Grain::Day, &tz).zone(),
+                canonical,
+                "{raw}"
+            );
+        }
     }
 }
