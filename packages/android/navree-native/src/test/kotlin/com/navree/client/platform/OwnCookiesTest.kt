@@ -1,27 +1,51 @@
 package com.navree.client.platform
 
+import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
 
 /**
  * The cookies the answers to the client's own requests set, and which of
  * them go back into the one store when it is emptied and the person who is
  * signed in is to stay so. The store here is the test's own: what it holds
- * for an address, as it would send it.
+ * for an address, as it would send it. And what a start of the app knows of
+ * them from the disk, in a folder of the test's own.
  */
 class OwnCookiesTest {
     private var clock = 1_000_000L
     private val own = OwnCookies { clock }
     private val later = 9_000_000L
 
+    private val folder = Files.createTempDirectory("navree-own").toFile()
+    private val file = File(folder, OwnCookies.FILE)
+
+    @After
+    fun clear() {
+        folder.deleteRecursively()
+    }
+
+    /** The cookies as a run of the app remembers them that keeps which they are on the disk: made anew, it is the next start of the app. */
+    private fun kept() = OwnCookies(file) { clock }
+
     /** What the one store holds, by address: the web view writes here too, and nothing of that passes through [own]. */
     private val store = HashMap<String, String>()
 
     /** An answer of the app's server to one of the client's own requests sets a cookie: it goes into the store and is remembered. */
-    private fun answerSets(name: String, value: String, path: String = "/", host: String = "shop.example", attributes: String = "; secure; httponly", expiresAt: Long = later) {
-        val address = "https://$host/sign-in"
+    private fun answerSets(
+        name: String,
+        value: String,
+        path: String = "/",
+        host: String = "shop.example",
+        attributes: String = "; secure; httponly",
+        expiresAt: Long = later,
+        into: OwnCookies = own,
+    ) {
         val probe = "https://$host$path"
-        own.set(OwnCookies.Given(address, probe, "$name=$value; path=$path$attributes", name, value, host, path, expiresAt)) {
+        into.set(OwnCookies.Given(probe, "$name=$value; path=$path$attributes", name, value, host, path, expiresAt)) {
             if (expiresAt > clock) hold(probe, name, value) else drop(probe, name)
         }
     }
@@ -37,10 +61,13 @@ class OwnCookiesTest {
     }
 
     /** The store is emptied and given its own cookies back, as it is when another person is signed in: the headers that went back in. */
-    private fun emptiedAndGivenBack(): List<String> {
-        val back = own.giving { store[it] }
+    private fun emptiedAndGivenBack(of: OwnCookies = own): List<String> {
+        val back = of.giving { store[it] }
         store.clear()
-        return own.giveBack(back) { hold(it.probe, it.name, it.value) }.map { it.header }
+        val given = of.giveBack(back) { hold(it.probe, it.name, it.value!!) }.map { it.header!! }
+        // As the client does once the store has its own back: what is remembered now is written down.
+        of.save()
+        return given
     }
 
     @Test
@@ -123,7 +150,7 @@ class OwnCookiesTest {
         answerSets("flash", "", expiresAt = 0)
         // Now the store says it is empty: the emptying took the later cookies with the rest.
         store.clear()
-        val given = own.giveBack(back) { hold(it.probe, it.name, it.value) }.map { it.header }
+        val given = own.giveBack(back) { hold(it.probe, it.name, it.value!!) }.map { it.header!! }
         assertEquals("the later cookie and not the one it took the place of, the new one, and not the one an answer took away", listOf("session=s-second; path=/; secure; httponly", "workspace=w-7; path=/; secure; httponly"), given)
         assertEquals(mapOf("https://shop.example/" to "session=s-second; workspace=w-7"), store)
     }
@@ -154,5 +181,92 @@ class OwnCookiesTest {
         assertEquals(200, back.size)
         assertEquals("c50=v50; path=/; secure; httponly", back.first())
         assertEquals("c249=v249; path=/; secure; httponly", back.last())
+    }
+
+    @Test
+    fun a_start_of_the_app_knows_which_cookies_are_the_clients_own_and_gives_them_back_as_the_store_holds_them() {
+        val first = kept()
+        answerSets("session", "s-karan", into = first)
+        answerSets("XSRF-TOKEN", "x-karan", attributes = "; secure", into = first)
+        hold("https://shop.example/", "chat", "c-anjali")
+        // The app is closed and opened again: the store holds what it held, and nothing of it is known in memory.
+        val next = kept()
+        assertEquals(listOf("session=s-karan; path=/; secure; httponly", "XSRF-TOKEN=x-karan; path=/; secure"), emptiedAndGivenBack(next))
+        assertEquals("what the web view's side put there is gone", mapOf("https://shop.example/" to "session=s-karan; XSRF-TOKEN=x-karan"), store)
+        // And the start after that knows them still.
+        assertEquals(listOf("session=s-karan; path=/; secure; httponly", "XSRF-TOKEN=x-karan; path=/; secure"), emptiedAndGivenBack(kept()))
+    }
+
+    @Test
+    fun the_file_names_each_cookie_and_holds_no_value() {
+        answerSets("session", "s-karan-7f3a", into = kept())
+        val text = file.readText()
+        assertTrue("the name, the host and the attributes are there: $text", text.contains("session") && text.contains("shop.example") && text.contains("httponly"))
+        assertFalse("the value is not: $text", text.contains("s-karan-7f3a"))
+        assertTrue("a SHA-256 of it is: $text", text.contains(OwnCookies.markOf("s-karan-7f3a")))
+        assertEquals("one line to a cookie", 1, text.lines().count { it.isNotEmpty() })
+    }
+
+    @Test
+    fun a_cookie_the_store_holds_with_another_value_than_the_one_remembered_is_not_given_back_after_a_start() {
+        val first = kept()
+        answerSets("session", "s-karan", into = first)
+        answerSets("theme", "dark", attributes = "", into = first)
+        // Before the next start a page's script wrote over one, and the web view deleted the other.
+        hold("https://shop.example/", "theme", "light")
+        drop("https://shop.example/", "session")
+        assertEquals(emptyList<String>(), emptiedAndGivenBack(kept()))
+        // What was not given back is not remembered by the start after that either, whatever the store says then.
+        hold("https://shop.example/", "theme", "dark")
+        assertEquals(emptyList<String>(), emptiedAndGivenBack(kept()))
+        assertFalse("with nothing to remember there is no file", file.exists())
+    }
+
+    @Test
+    fun what_a_later_run_of_the_app_remembers_takes_the_place_of_what_the_file_held() {
+        answerSets("session", "s-anjali", into = kept())
+        // The next run: the sign-in of the person who is here now, and a cookie that was not there before.
+        val next = kept()
+        answerSets("session", "s-karan", into = next)
+        answerSets("workspace", "w-7", into = next)
+        assertEquals(listOf("session=s-karan; path=/; secure; httponly", "workspace=w-7; path=/; secure; httponly"), emptiedAndGivenBack(kept()))
+    }
+
+    @Test
+    fun a_sign_out_deletes_the_file_with_everything_else() {
+        val first = kept()
+        answerSets("session", "s-karan", into = first)
+        assertTrue(file.isFile)
+        first.forget()
+        assertFalse(file.exists())
+        // The cookie is in the store again, set by nobody the client knows of: the next start does not take it for its own.
+        hold("https://shop.example/", "session", "s-karan")
+        assertEquals(emptyList<String>(), emptiedAndGivenBack(kept()))
+    }
+
+    @Test
+    fun a_line_of_the_file_that_does_not_read_is_left_out_and_the_others_are_kept() {
+        val first = kept()
+        answerSets("session", "s-karan", into = first)
+        answerSets("workspace", "w-7", into = first)
+        val lines = file.readText()
+        // A line cut short, one with no number where the time is, and one whose mark is no SHA-256.
+        file.writeText("https://shop.example/\tses\n" + lines + "seven\tfields\tbut\tno\tnumber\tfor\twhen\n" + "https://shop.example/\tflash\t\tshop.example\t/\t9000000\tnot-a-mark\n")
+        assertEquals(listOf("session=s-karan; path=/; secure; httponly", "workspace=w-7; path=/; secure; httponly"), emptiedAndGivenBack(kept()))
+    }
+
+    @Test
+    fun a_cookie_that_has_run_out_by_the_next_start_is_not_read() {
+        answerSets("flash", "saved", expiresAt = clock + 60_000, into = kept())
+        assertTrue(file.isFile)
+        clock += 120_000
+        assertEquals("a minute's cookie is not one to give back two minutes on, whatever the store still says", emptyList<String>(), emptiedAndGivenBack(kept()))
+    }
+
+    @Test
+    fun what_follows_the_name_and_value_in_the_header_that_set_a_cookie_is_its_attributes() {
+        assertEquals("; path=/; secure", OwnCookies.restOf("session=s-karan; path=/; secure", "session", "s-karan"))
+        assertEquals("", OwnCookies.restOf("session=s-karan", "session", "s-karan"))
+        assertEquals("a header written another way is cut at its first attribute", "; path=/", OwnCookies.restOf("session = s-karan; path=/", "session", "s-karan"))
     }
 }

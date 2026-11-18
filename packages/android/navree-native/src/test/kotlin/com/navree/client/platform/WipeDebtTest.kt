@@ -55,27 +55,105 @@ class WipeDebtTest {
     }
 
     @Test
-    fun a_worker_of_an_origin_that_is_held_back_is_refused_wherever_it_writes_where_its_request_says_where_it_is_from() {
+    fun a_workers_request_goes_by_what_the_origin_it_is_sent_to_and_the_one_it_says_it_is_from_still_hold() {
         val debt = debt()
-        assertFalse("with nothing owed nothing is refused, whoever asks", debt.refuses(to = shop, from = null, said = true))
+        assertEquals("with nothing owed everything is sent, whoever asks", WorkerRequest.Send, debt.worker(to = shop, from = null, said = true, emptied = false))
         val end = debt.owe()
-        assertTrue("until a go has ended every origin is held back", debt.refuses(to = shop, from = shop, said = true))
+        assertEquals("until a go has ended every origin still holds something", WorkerRequest.Refuse, debt.worker(to = shop, from = shop, said = true, emptied = false))
         debt.narrow(end)
         // The go cleared the shop and left the payments host: the worker of the person before may still be registered there.
         debt.over(setOf(pay), end)
-        assertTrue("to the origin that was left", debt.refuses(to = pay, from = shop, said = true))
-        assertTrue("and from its worker to an origin that was cleared", debt.refuses(to = shop, from = pay, said = true))
-        assertTrue("or to a host of the app no document was ever on", debt.refuses(to = patiala, from = pay, said = true))
-        assertFalse("a worker of a cleared origin asks for its own pages", debt.refuses(to = shop, from = shop, said = true))
-        assertTrue("a request from what is no origin of the app is not known to be from a cleared one", debt.refuses(to = shop, from = null, said = true))
-        // The limit: a request that does not say where it is from goes by its address alone.
-        assertFalse(debt.refuses(to = shop, from = null, said = false))
-        assertTrue(debt.refuses(to = pay, from = null, said = false))
+        assertEquals("to the origin that was left", WorkerRequest.Refuse, debt.worker(to = pay, from = shop, said = true, emptied = false))
+        assertEquals("and from its worker to an origin that was cleared", WorkerRequest.Refuse, debt.worker(to = shop, from = pay, said = true, emptied = false))
+        assertEquals("or to a host of the app no document was ever on", WorkerRequest.Refuse, debt.worker(to = patiala, from = pay, said = true, emptied = false))
+        assertEquals("a worker of a cleared origin asks for its own pages", WorkerRequest.Send, debt.worker(to = shop, from = shop, said = true, emptied = false))
+        assertEquals(
+            "one that says it is from no origin of the app, as an origin of null says, is not known to be from a cleared one",
+            WorkerRequest.Refuse,
+            debt.worker(to = shop, from = null, said = true, emptied = false),
+        )
+        // The limit: with no go on its way, a request that says nothing of where it is from goes by its address alone.
+        assertEquals(WorkerRequest.Send, debt.worker(to = shop, from = null, said = false, emptied = false))
+        assertEquals(WorkerRequest.Refuse, debt.worker(to = pay, from = null, said = false, emptied = false))
         // A later go clears the origin that was left: nothing is refused any more.
         val go = debt.begin()!!
         debt.over(emptySet(), go)
-        assertFalse(debt.refuses(to = shop, from = pay, said = true))
-        assertFalse(debt.refuses(to = pay, from = pay, said = true))
+        assertEquals(WorkerRequest.Send, debt.worker(to = shop, from = pay, said = true, emptied = false))
+        assertEquals(WorkerRequest.Send, debt.worker(to = pay, from = pay, said = true, emptied = false))
+    }
+
+    @Test
+    fun while_the_cookie_store_stands_empty_a_shown_pages_worker_is_neither_sent_nor_answered_and_one_that_says_nothing_is_refused() {
+        val debt = debt()
+        val end = debt.owe()
+        debt.narrow(end)
+        debt.over(setOf(pay), end)
+        // "Try again" has a go at the origin that was left, and the store is emptied for it.
+        debt.begin()!!
+        assertEquals("the worker of the person before, which the go started", WorkerRequest.Refuse, debt.worker(to = pay, from = pay, said = true, emptied = true))
+        assertEquals("what it writes to another origin of the app", WorkerRequest.Refuse, debt.worker(to = shop, from = pay, said = true, emptied = true))
+        assertEquals("and what says nothing of where it is from, which may be its", WorkerRequest.Refuse, debt.worker(to = shop, from = null, said = false, emptied = true))
+        assertEquals("with an origin of null, too", WorkerRequest.Refuse, debt.worker(to = shop, from = null, said = true, emptied = true))
+        assertEquals(
+            "a write of the worker of a page that was on the screen is not sent without its session, and not answered either",
+            WorkerRequest.Fail,
+            debt.worker(to = shop, from = shop, said = true, emptied = true),
+        )
+        assertEquals(WorkerRequest.Fail, debt.worker(to = patiala, from = shop, said = true, emptied = true))
+        // The store has its own cookies back.
+        assertEquals(WorkerRequest.Send, debt.worker(to = shop, from = shop, said = true, emptied = false))
+        assertEquals("with no go on its way, what says nothing goes by its address again", WorkerRequest.Send, debt.worker(to = shop, from = null, said = false, emptied = false))
+    }
+
+    @Test
+    fun a_go_only_at_the_origins_that_were_left_which_leaves_one_again_is_not_had_again_by_a_start() {
+        val debt = debt()
+        val end = debt.owe()
+        debt.narrow(end)
+        debt.over(setOf(pay, patiala), end)
+        assertFalse("what the first go left is the next start's to go at, once", debt.tried)
+        assertFalse(debt().tried)
+        assertTrue(debt.pages && debt.ready)
+        // The next start's go clears one and leaves the other again.
+        val go = debt.begin()!!
+        assertFalse("while a go runs none is asked for", debt.ready)
+        assertTrue(debt.over(setOf(pay), go))
+        assertTrue(debt.tried)
+        assertEquals(WipeRules.TRIED + "\n" + WipeRules.lines(setOf(pay)), mark.readText())
+        // The start after that reads it so and has no go by itself. The origin is still held back, and a go's to take when the person asks.
+        val next = debt()
+        assertTrue(next.tried)
+        assertEquals(setOf(pay), next.left)
+        assertTrue(next.held(pay))
+        assertFalse(next.held(shop))
+        assertTrue(next.pages && next.ready)
+        assertEquals(listOf(pay), next.targets(own = listOf(shop), hosts = listOf(pay)))
+        // "Try again" clears it at last.
+        val asked = next.begin()!!
+        assertTrue(next.over(emptySet(), asked))
+        assertFalse(next.owed || next.tried)
+        assertFalse(mark.exists())
+    }
+
+    @Test
+    fun what_is_owed_anew_is_a_starts_to_go_at_again() {
+        val debt = debt()
+        val end = debt.owe()
+        debt.narrow(end)
+        debt.over(setOf(pay), end)
+        debt.over(setOf(pay), debt.begin()!!)
+        assertTrue(debt.tried)
+        // Another person is signed in: every origin is owed again, and no go has been at that yet.
+        debt.owePages()
+        assertFalse(debt.tried)
+        debt.over(setOf(pay), debt.begin()!!)
+        assertFalse("the first go for it left an origin: the next start has one more", debt.tried)
+        debt.over(setOf(pay), debt.begin()!!)
+        assertTrue(debt.tried)
+        // A session ends: the whole is owed, and what was tried before says nothing of it.
+        debt.owe()
+        assertFalse(debt.tried)
+        assertFalse("the cookies are not a go's to take", debt.pages || debt.ready)
     }
 
     @Test
@@ -246,13 +324,13 @@ class WipeDebtTest {
         val debt = debt()
         // Another person is signed in: what pages stored is owed at every origin, and a go is run for it.
         assertTrue(debt.owePages())
-        assertTrue("every origin, and no more than what pages stored", debt.every)
+        assertTrue("every origin, and no more than what pages stored", debt.pages && debt.left == null)
         val go = debt.begin()!!
         assertFalse("while a go runs nothing more is begun for it", debt.begin() != null)
         // The store did not say its cookies are gone: what it holds is not known to be the new person's alone.
         debt.widen(go)
         assertTrue("the whole is owed", debt.owed && debt.all)
-        assertFalse("and it is not what pages stored alone any more", debt.every)
+        assertFalse("and it is not what pages stored alone any more", debt.pages)
         assertFalse(debt.running)
         assertEquals("on the disk, for the next start to do all of it", WipeRules.EVERYTHING + "\n", mark.readText())
         assertTrue("no web page is shown", debt.held(shop))
@@ -284,18 +362,19 @@ class WipeDebtTest {
     }
 
     @Test
-    fun every_origin_is_owed_only_until_a_go_has_ended() {
+    fun what_pages_stored_is_a_gos_to_take_once_the_cookies_are_gone_and_while_none_is_on_its_way() {
         val debt = debt()
-        assertFalse(debt.every)
+        assertFalse(debt.pages || debt.ready)
         val end = debt.owe()
-        assertFalse("the whole of an end of a session is more than what pages stored", debt.every)
+        assertFalse("the whole of an end of a session is more than what pages stored", debt.pages || debt.ready)
         debt.narrow(end)
-        assertTrue(debt.every)
-        // A run that ends here leaves the mark saying so: the next start does the go over, with the cookie store emptied.
-        assertTrue(debt().every)
+        assertTrue(debt.pages)
+        assertFalse("the end of the session's own deletion is still on its way", debt.ready)
+        // A run that ends here leaves the mark saying so: the next start has the go, with the cookie store emptied around it.
+        assertTrue(debt().let { it.pages && it.ready && it.left == null })
         debt.over(setOf(pay), end)
-        assertFalse("after a go only the origins it left are owed", debt.every)
-        assertFalse(debt().every)
+        assertTrue("after a go, what it left is the next one's to take", debt.pages && debt.ready)
+        assertTrue(debt().let { it.pages && it.ready && it.left == setOf(pay) })
     }
 
     @Test

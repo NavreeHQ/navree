@@ -69,6 +69,19 @@ class SiteWipeRulesTest {
     }
 
     @Test
+    fun the_mark_says_whether_a_go_at_the_origins_it_names_has_left_them_again() {
+        val left = WipeRules.lines(setOf("https://pay.example", "https://patiala.shop.example"))
+        assertFalse("what the first go left is the next start's to go at", WipeRules.tried(left))
+        val again = WipeRules.TRIED + "\n" + left
+        assertTrue(WipeRules.tried(again))
+        assertEquals("the word names no origin: the origins are the lines after it", listOf("https://pay.example", "https://patiala.shop.example"), WipeRules.listed(again))
+        assertFalse("and it does not say the whole is owed", WipeRules.everything(again))
+        assertFalse(WipeRules.tried(""))
+        assertFalse(WipeRules.tried(WipeRules.EVERYTHING + "\n"))
+        assertFalse("only the first line says it", WipeRules.tried(left + WipeRules.TRIED + "\n"))
+    }
+
+    @Test
     fun a_go_that_cannot_go_on_leaves_every_origin_not_yet_cleared() {
         val turns = WipeRules.Turns(listOf("https://shop.example", "https://pay.example", "https://patiala.shop.example"))
         turns.cleared()

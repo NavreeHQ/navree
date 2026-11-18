@@ -24,7 +24,6 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.concurrent.thread
 
 /**
  * How the service workers and the caches of an origin are taken away on a
@@ -63,6 +62,27 @@ object WipeRules {
     /** Whether a mark's text says the whole of the end of a session is owed. */
     fun everything(mark: String): Boolean = mark.lineSequence().firstOrNull()?.trim() == EVERYTHING
 
+    /**
+     * The first line of a mark that names origins which a go at them alone
+     * has left again: a start of the app has no go at those by itself, and
+     * only the person's asking has another.
+     */
+    const val TRIED = "tried"
+
+    /** Whether a mark's text says a go at the origins it names has left them again. */
+    fun tried(mark: String): Boolean = mark.lineSequence().firstOrNull()?.trim() == TRIED
+
+    /** The longest the store's queue waits for one go, however many origins it is at. */
+    const val GO_MOST_MS = 20_000L
+
+    /**
+     * How long the store's queue waits for a go at [targets] origins: the
+     * time every one of them has for its tries, and half a second for the web
+     * view to be made, so that no origin is left only because one before it
+     * was slow; and never longer than [GO_MOST_MS].
+     */
+    fun goWait(targets: Int): Long = minOf(maxOf(targets, 1) * TRIES * ORIGIN_MS + 500L, GO_MOST_MS)
+
     /** The one document the web view is answered with: nothing in it. */
     const val DOCUMENT = "<!doctype html><html><head><meta charset=\"utf-8\"><title></title></head><body></body></html>"
 
@@ -99,14 +119,15 @@ object WipeRules {
      * Writes [text] as the whole of [file], so that the file is at every
      * moment the text it held before or the new one and never a part of
      * either: under another name beside it, forced to the disk, then put in
-     * its place in one step.
+     * its place in one step. Without [sync] it is not forced to the disk
+     * first: for a file whose loss costs little, written often.
      */
-    fun put(file: File, text: String) {
+    fun put(file: File, text: String, sync: Boolean = true) {
         val fresh = File(file.parentFile, file.name + ".new")
         try {
             FileOutputStream(fresh).use { out ->
                 out.write(text.encodeToByteArray())
-                out.fd.sync()
+                if (sync) out.fd.sync()
             }
             Files.move(fresh.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE)
         } finally {
@@ -331,27 +352,14 @@ internal class WipeGo(
  *
  * A go clears an origin by loading a document there, and that starts the
  * service workers the origin's pages registered: the workers of the person
- * who left. What such a worker then asks for on its own (a queue of writes it
- * sends again when it starts, a sync, a refresh of its caches) would leave
- * with the cookies the store holds at that moment, which after a change of
- * person, or once the next person has signed in, are somebody else's. So
- * while a go is on its way, whichever origins it is at, every request a
- * service worker makes that the client is asked about is refused ([stops]),
- * all but the one for the go's own address. A worker a go starts at one origin
- * may write to another, so the refusal does not go by where a request is
- * sent. The cost is the network of the workers of pages that are on the
- * screen, for the seconds a go at the origins an earlier go left takes.
+ * who left. What becomes of what such a worker then asks for on its own is
+ * not decided here: by where it is sent and where it says it is from
+ * ([WipeDebt.worker]), and every go runs with the cookie store emptied
+ * around it ([SiteWipe.storeEmpty]), since a socket a worker opens is asked
+ * of nobody.
  *
- * This is one of two guards, and neither stands for the other. The other is
- * that a worker's request to an origin whose pages are held back, or one
- * that says it is from a worker of such an origin, is refused whether a go
- * runs or not ([SiteWipe.stops]): it covers the time from a go's end until
- * what is owed is called over, and a worker left at an origin a go could not
- * clear.
- *
- * Every call is on the one thread the surfaces call back on, but for [going]
- * and [stops], which are asked on the thread a service worker's requests are
- * asked on.
+ * Every call is on the one thread the surfaces call back on, but for [going],
+ * which is asked on the thread a service worker's requests are asked on.
  */
 internal class WipeGoes {
     /** The path of the address the go on its way loads. Read on the thread a service worker's requests are asked on. */
@@ -360,16 +368,6 @@ internal class WipeGoes {
         private set
 
     private var live: WipeGo? = null
-
-    /**
-     * Whether a request a service worker makes to [url] is refused because a
-     * go is on its way: every one, wherever it goes, but the one for the go's
-     * own address, which is answered with the client's document.
-     */
-    fun stops(url: String): Boolean {
-        val token = going ?: return false
-        return !WipeRules.own(url, token)
-    }
 
     /**
      * Begins a go at [targets] in [surface], whose address is the path
@@ -432,6 +430,15 @@ internal class WipeDebt(private val folder: () -> File?) {
     var left: Set<String>? = null
         private set
 
+    /**
+     * While origins a go left are owed: whether a go at them alone has left
+     * some of them again. A start of the app then has no go at them by
+     * itself, so an origin that cannot be cleared does not hold every start
+     * of the app up; the person's asking has another go.
+     */
+    var tried = false
+        private set
+
     /** The number of the last end of a session. It grows with every deletion that becomes owed, so that what was begun for an earlier one says nothing about this one. */
     var number = 0L
         private set
@@ -449,6 +456,7 @@ internal class WipeDebt(private val folder: () -> File?) {
         all = WipeRules.everything(text)
         // The origins an earlier go left, where the mark names them; a mark that names none owes every origin.
         left = WipeRules.listed(text).toSet().ifEmpty { null }
+        tried = left != null && WipeRules.tried(text)
     }
 
     /** A document of the app is on [origin]: it is one to clear, written to the file before this returns. */
@@ -473,6 +481,7 @@ internal class WipeDebt(private val folder: () -> File?) {
         all = true
         running = true
         left = null
+        tried = false
         number++
         folder()?.let { runCatching { WipeRules.put(File(it, OWED), WipeRules.EVERYTHING + "\n") } }
         return number
@@ -495,6 +504,7 @@ internal class WipeDebt(private val folder: () -> File?) {
         all = false
         running = false
         left = null
+        tried = false
         number++
         folder()?.let { runCatching { WipeRules.put(File(it, OWED), "") } }
         return true
@@ -527,11 +537,15 @@ internal class WipeDebt(private val folder: () -> File?) {
         all = true
         running = false
         left = null
+        tried = false
         folder()?.let { runCatching { WipeRules.put(File(it, OWED), WipeRules.EVERYTHING + "\n") } }
     }
 
-    /** Whether what pages stored is owed at every origin and no more than that: no go has ended since it became owed, and the cookies are not owed. */
-    val every: Boolean get() = owed && !all && left == null
+    /** Whether what pages stored is owed and no more than that, at every origin or at those a go left: what a go can take. */
+    val pages: Boolean get() = owed && !all
+
+    /** Whether a go that is asked for now would begin ([begin]): what pages stored is owed, and nothing is being done about it. */
+    val ready: Boolean get() = owed && !all && !running
 
     /**
      * The deletion begun for the end of a session numbered [of] ended. [left]
@@ -557,10 +571,13 @@ internal class WipeDebt(private val folder: () -> File?) {
         if (left.isEmpty()) {
             owed = false
             this.left = null
+            tried = false
             folder?.let { runCatching { File(it, OWED).delete() } }
         } else {
+            // A go that was only at the origins an earlier go left, and has left some again: the next start has no go at them by itself.
+            tried = this.left != null
             this.left = left
-            folder?.let { runCatching { WipeRules.put(File(it, OWED), WipeRules.lines(left)) } }
+            folder?.let { runCatching { WipeRules.put(File(it, OWED), (if (tried) WipeRules.TRIED + "\n" else "") + WipeRules.lines(left)) } }
         }
         return true
     }
@@ -582,15 +599,33 @@ internal class WipeDebt(private val folder: () -> File?) {
     fun held(origin: String?): Boolean = owed && WipeRules.held(left, origin)
 
     /**
-     * Whether a request a service worker makes is refused for what is owed,
-     * go or no go: one to an origin whose pages are held back ([to]), and one
-     * from a worker of such an origin, wherever it is sent. [from] is the
-     * origin the request says it is from, and [said] whether it says at all:
-     * a request that does not say is not known to be from such a worker, and
-     * only where it goes decides. An origin that cannot be told (null) is
-     * held back while anything is owed ([held]).
+     * What becomes of a request a service worker makes, for what is owed.
+     * [to] is the origin it is sent to. [from] is the origin it says it is
+     * from, and [said] whether it says at all; an origin that cannot be told
+     * (null: no origin of the app, or an `Origin` of `null`) counts as one
+     * that still holds something for as long as anything is owed ([held]).
+     * [emptied] is whether the cookie store stands empty for a go.
+     *
+     * - Refused, go or no go: a request to an origin that still holds what a
+     *   session's pages left, and one that says it is from a worker of such
+     *   an origin, wherever it is sent. Those are the workers of the person
+     *   who left.
+     * - Refused while the store stands empty: one that says nothing of where
+     *   it is from, since it may be from such a worker. With no go on its
+     *   way such a request goes by its address alone.
+     * - Neither sent nor answered while the store stands empty: every other
+     *   one, which is a request of a worker of a page that was on the
+     *   screen. Sent, it would go without the session of the person who is
+     *   signed in; refused, a worker that sends a queue of writes again
+     *   would take the refusal for the server's answer and let the write go.
+     * - Sent otherwise.
      */
-    fun refuses(to: String?, from: String?, said: Boolean): Boolean = held(to) || (said && held(from))
+    fun worker(to: String?, from: String?, said: Boolean, emptied: Boolean): WorkerRequest = when {
+        held(to) || (said && held(from)) -> WorkerRequest.Refuse
+        emptied && !said -> WorkerRequest.Refuse
+        emptied -> WorkerRequest.Fail
+        else -> WorkerRequest.Send
+    }
 
     /**
      * The origins a go is at now: those an earlier go left, or, while none
@@ -608,6 +643,7 @@ internal class WipeDebt(private val folder: () -> File?) {
         all = false
         running = false
         left = null
+        tried = false
         number++
         seen = LinkedHashSet()
         folder()?.let { for (name in listOf(OWED, SEEN)) runCatching { File(it, name).delete() } }
@@ -631,7 +667,7 @@ internal class WipeDebt(private val folder: () -> File?) {
  * outlives the process, and it says how much is owed: the whole of the end of
  * a session ([owesAll]), until the cookies and everything else that is not a
  * page's own storage are gone and on the disk ([narrow]); after that only
- * what pages stored at the origins ([finish]). What is owed and what the mark
+ * what pages stored at the origins ([go]). What is owed and what the mark
  * says of it is plain state ([WipeDebt]), kept here under a lock.
  *
  * Where the system's web view deletes every kind of site data itself
@@ -643,22 +679,20 @@ internal class WipeDebt(private val folder: () -> File?) {
  * ([saw]), kept in a second file until a deletion finished.
  *
  * An origin that does not say it is clean does not hold the others: it is
- * left, the mark stays and names it, its pages stay held back, and every
- * later go (one the person asks for with "Try again", and the next start's)
- * is at the origins that were left. A go begins only there: when a session
- * ends, when another person is signed in with no sign-out between
- * ([owePages]), when the app starts, and when the person asks. Asking whether
- * a page may be shown begins none.
+ * left, the mark stays and names it, its pages stay held back, and a later go
+ * is at the origins that were left: the next start's, once, and after that
+ * one the person asks for with "Try again" ([WipeDebt.tried]). A go begins
+ * only there: when a session ends, when another person is signed in with no
+ * sign-out between ([owePages]), when the app starts, and when the person
+ * asks. Asking whether a page may be shown begins none.
  *
  * A go starts the service workers of the person who left, and what the cookie
- * store holds while it runs is the client's to see to: a go at every origin is
- * run with the store emptied around it, by the client that keeps the store
- * ([arm], [again], [go]), and the pages are shown again only when the store
- * has been emptied once more after it and given its own cookies back
- * ([over] is called then, and not before). A go only at the origins an
- * earlier go left runs with the store as it is ([finish]): the pages of the
- * other origins are on the screen by then, and the person signed in stays
- * so.
+ * store holds while it runs is the client's to see to: every go is run with
+ * the store emptied around it, by the client that keeps the store ([arm],
+ * [again], [go], [storeEmpty]), and the pages are shown again only when the
+ * store has been emptied once more after it and given its own cookies back
+ * ([over] is called then, and not before). No go runs with the store as it
+ * is: where no client has said how a go is run, none begins.
  */
 object SiteWipe {
     private val lock = Any()
@@ -673,9 +707,13 @@ object SiteWipe {
     /** The go on its way: one at a time. */
     private val goes = WipeGoes()
 
-    /** How a go that is asked for is run by the client that keeps the cookie store ([arm]); without one, as [finish] runs it. */
+    /** How a go that is asked for is run by the client that keeps the cookie store ([arm]); without one, none is begun. */
     @Volatile
     private var runner: (() -> Unit)? = null
+
+    /** The cookie store stands empty for a go ([storeEmpty]). */
+    @Volatile
+    private var empty = false
 
     /**
      * Says which app and which origins this is for, and reads whether an
@@ -715,13 +753,38 @@ object SiteWipe {
     val owesAll: Boolean get() = synchronized(lock) { debt.owed && debt.all }
 
     /**
-     * Whether what pages stored is owed at every origin, and no more than
-     * that: no go has ended since it became owed. A go at every origin is run
-     * with the cookie store emptied around it; a run of the app that ended in
-     * the middle of one leaves the mark saying this, and the next start does
-     * it over.
+     * Whether what pages stored is owed and no more than that, at every
+     * origin or at those a go left: what a go can take ([WipeDebt.pages]).
      */
-    val owesEvery: Boolean get() = synchronized(lock) { debt.every }
+    val owesPages: Boolean get() = synchronized(lock) { debt.pages }
+
+    /**
+     * Whether a go that was only at the origins an earlier go left has left
+     * some of them again ([WipeDebt.tried]): a start of the app then has no
+     * go at them by itself.
+     */
+    val tried: Boolean get() = synchronized(lock) { debt.tried }
+
+    /** Whether a go that is asked for now would begin: what pages stored is owed, and nothing is being done about it ([WipeDebt.ready]). */
+    val awaitsGo: Boolean get() = synchronized(lock) { debt.ready }
+
+    /**
+     * The client says that the cookie store stands empty for a go ([now]), or
+     * that its own cookies are back in it. While it stands empty, no web page
+     * is shown at any origin ([held]): a page shown then would ask the app's
+     * server for everything with no session, as somebody who is not signed
+     * in. And a service worker's requests go by [worker]. Any thread.
+     */
+    fun storeEmpty(now: Boolean) {
+        empty = now
+        synchronized(lock) { changed.intValue++ }
+    }
+
+    /**
+     * How long the store's queue waits for a go at what is owed now: by the
+     * number of origins the go is at ([WipeRules.goWait]). Any thread.
+     */
+    fun goWait(): Long = synchronized(lock) { WipeRules.goWait(origins?.let { debt.targets(it.ownOrigins(), it.webHostOrigins()).size } ?: 0) }
 
     /**
      * A document of the app is, or is about to be, at this address or on this
@@ -807,13 +870,15 @@ object SiteWipe {
             debt.forget()
             changed.intValue++
         }
-        // A go the test left on its way ends too: while one runs, a service worker's requests are refused, the next test's among them.
+        // A go the test left on its way ends too, and the store is no longer said to stand empty for one.
+        empty = false
         main.post { goes.stop() }
     }
 
     /**
      * Whether a web page at [address] may be shown: nothing is owed, or a go
-     * has ended and the page's origin is not one it left ([WipeRules.held]).
+     * has ended and the page's origin is not one it left ([WipeRules.held]);
+     * and the cookie store does not stand empty for a go ([storeEmpty]).
      * Asking changes nothing and begins nothing, however often a screen that
      * is drawn again asks: for a page that is held back, "Try again" is what
      * has another go ([again]). Any thread.
@@ -825,7 +890,7 @@ object SiteWipe {
      * is: what the web view's client asks for a frame, and for where a
      * redirect leads. Any thread.
      */
-    fun held(address: String): Boolean = synchronized(lock) { debt.held(origins?.originOf(address)) }
+    fun held(address: String): Boolean = empty || synchronized(lock) { debt.held(origins?.originOf(address)) }
 
     /**
      * Begins a go at what pages stored, for what is owed now: what the older
@@ -842,7 +907,9 @@ object SiteWipe {
      * made. It is the caller's to say then that the deletion is over ([over])
      * or that the whole is owed ([widen]), with that number: until one is
      * said, something is on its way and no page of those origins is shown.
-     * Call on the main thread.
+     * The cookie store is the caller's to have emptied before, and to give
+     * its own cookies back after ([storeEmpty]): no go runs with the store
+     * as it is. Call on the main thread.
      */
     fun go(done: (left: Set<String>?, of: Long) -> Unit): Long? {
         val (context, them, began) = synchronized(lock) {
@@ -865,27 +932,15 @@ object SiteWipe {
     }
 
     /**
-     * Has a go at what is still owed of what pages stored and calls it over
-     * when it ends, with the cookie store as it is. This is how a go at the
-     * origins an earlier go left is run: the pages of the other origins are
-     * shown by then, and whoever is signed in stays so. A go at every origin
-     * is the client's to run, with the store emptied around it ([again]).
-     * Call on the main thread.
-     */
-    fun finish() {
-        go { left, of -> thread(name = "navree-web-wipe", isDaemon = true) { over(left, of) } }
-    }
-
-    /**
      * Another go is asked for: by "Try again" on a page that is held back, at
      * a start of the app that finds something owed, and when the cookie store
      * says late that its cookies are gone. The client that keeps the cookie
-     * store runs it ([arm]), so that a go at every origin has no session in
-     * the store; where no client has said how, it is run as it is
-     * ([finish]). Call on the main thread.
+     * store runs it ([arm]), with the store emptied around it. Where no
+     * client has said how, none begins: no go runs with the store as it is.
+     * Call on the main thread.
      */
     fun again() {
-        (runner ?: ::finish)()
+        runner?.invoke()
     }
 
     /**
@@ -912,26 +967,17 @@ object SiteWipe {
         goes.going?.takeIf { WipeRules.own(url, it) }?.let { answer(200, "OK", "text/html", WipeRules.DOCUMENT) }
 
     /**
-     * Whether a request a service worker makes to [url] is refused because of
-     * what is owed. One of these is enough:
-     * - a go is on its way ([WipeGoes.stops]): every request, wherever it
-     *   goes, since a worker the go starts at one origin may write to
-     *   another;
-     * - the address is on an origin whose pages are held back ([held]), go or
-     *   no go;
-     * - the request says it is from a worker of such an origin ([from]: the
-     *   address its `Referer` or `Origin` header names, where it has one):
-     *   a worker left at an origin a go could not clear is refused the app's
-     *   other origins too. A request that carries neither header does not
-     *   say, and only where it goes decides ([WipeDebt.refuses]).
-     *
-     * A worker a go's document started is the worker of the person who left,
-     * and nothing it sends on its own goes out with the cookies of whoever is
-     * signed in by then. Asked where a service worker's requests are asked,
-     * after [document]. Any thread.
+     * What becomes of a request a service worker makes to [url], for what is
+     * owed ([WipeDebt.worker]): by the origin it is sent to, the origin it
+     * says it is from ([from]: [WebRules.workerFrom]), and whether the cookie
+     * store stands empty for a go. A worker a go's document started is the
+     * worker of the person who left, and nothing it sends this way goes out
+     * with the cookies of whoever is signed in by then. Asked where a service
+     * worker's requests are asked, after [document]. Any thread.
      */
-    internal fun stops(url: String, from: String? = null): Boolean =
-        goes.stops(url) || synchronized(lock) { debt.refuses(origins?.originOf(url), from?.let { origins?.originOf(it) }, said = from != null) }
+    internal fun worker(url: String, from: WebRules.From): WorkerRequest = synchronized(lock) {
+        debt.worker(origins?.originOf(url), from.address?.let { origins?.originOf(it) }, from.said, empty)
+    }
 
     /**
      * Shows each origin to clear the client's own document, one after the
@@ -949,8 +995,8 @@ object SiteWipe {
         val application = context.applicationContext
         val targets = synchronized(lock) { debt.targets(origins.ownOrigins(), origins.webHostOrigins()) }
         if (targets.isEmpty()) return done(emptySet())
-        // The go's address is answered where a service worker's requests are asked as well, and a worker's other requests are
-        // refused while the go runs, so those rules have to be in force.
+        // The go's address is answered where a service worker's requests are asked as well, and what else a worker asks for while
+        // the go runs goes by what is owed there, so those rules have to be in force.
         if (!able() || !guardWorkers(origins)) return done(null)
         val token = hex()
         goes.start(targets, token, hex(), WebSurface(application, token)) { left -> done(left) }
