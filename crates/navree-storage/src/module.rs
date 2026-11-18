@@ -11,9 +11,7 @@ use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::{BoxFuture, HealthCheck, HealthStatus};
 use navree_crypto::{AppKey, Encrypter};
 use navree_http::{AppError, ModuleBuilderHttpExt};
-use navree_kernel::{
-    BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
-};
+use navree_kernel::{BoxError, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::options::SLOT;
 use crate::serve::StorageController;
@@ -71,12 +69,12 @@ pub struct StorageModule;
 impl StorageModule {
     /// The module configured with `options` (configure it once, in the app root).
     pub fn for_root(options: StorageOptions) -> impl Module {
-        ConfiguredModule::<StorageModule, _>::for_root(options, register)
+        ConfiguredStorageModule::for_root(options)
     }
 
     /// The module configured from section `storage` of the app configuration.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<StorageModule, StorageOptions>::from_config(register)
+        ConfiguredStorageModule::from_config()
     }
 }
 
@@ -86,7 +84,15 @@ impl Module for StorageModule {
     }
 }
 
+navree_kernel::configured_module!(
+    ConfiguredStorageModule,
+    StorageModule,
+    StorageOptions,
+    register,
+);
+
 fn register(m: &mut ModuleBuilder, options: Option<StorageOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     contribute_slot(m, SLOT);
     match options {

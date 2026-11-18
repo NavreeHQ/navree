@@ -5,7 +5,7 @@ use std::sync::Arc;
 use navree_config::ModuleBuilderConfigExt;
 use navree_contracts::{Clock, SystemClock, ZoneSource};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
+use navree_kernel::{Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::commands::commands;
 use crate::controller::TimeController;
@@ -48,12 +48,12 @@ impl TimeModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: TimeOptions) -> impl Module {
-        ConfiguredModule::<TimeModule, _>::for_root(options, register)
+        ConfiguredTimeModule::for_root(options)
     }
 
     /// The module configured from the `time` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<TimeModule, TimeOptions>::from_config(register)
+        ConfiguredTimeModule::from_config()
     }
 }
 
@@ -63,7 +63,10 @@ impl Module for TimeModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredTimeModule, TimeModule, TimeOptions, register);
+
 fn register(m: &mut ModuleBuilder, options: Option<TimeOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<TimeOptions>::new(move |_| {

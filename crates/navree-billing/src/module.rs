@@ -10,9 +10,7 @@ use navree_db::{Db, ModuleBuilderDbExt};
 use navree_events::ModuleBuilderEventsExt;
 use navree_http::ModuleBuilderHttpExt;
 use navree_http_client::{HttpClient, HttpClientOptions};
-use navree_kernel::{
-    AppContext, BoxError, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
-};
+use navree_kernel::{AppContext, BoxError, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 use navree_schedule::ModuleBuilderScheduleExt;
 use navree_workspace::events::{MemberAdded, MemberRemoved};
 
@@ -69,13 +67,13 @@ impl BillingModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: BillingOptions) -> impl Module {
-        ConfiguredModule::<BillingModule, _>::for_root(options, register)
+        ConfiguredBillingModule::for_root(options)
     }
 
     /// The module configured from the `billing` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<BillingModule, BillingOptions>::from_config(register)
+        ConfiguredBillingModule::from_config()
     }
 
     /// Registers `B` as a billable type: the routes and the `Subscribed`
@@ -173,7 +171,15 @@ impl<B: Billable + 'static> Module for BillableFeature<B> {
     }
 }
 
+navree_kernel::configured_module!(
+    ConfiguredBillingModule,
+    BillingModule,
+    BillingOptions,
+    register,
+);
+
 fn register(m: &mut ModuleBuilder, options: Option<BillingOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<BillingOptions>::new(move |_| {

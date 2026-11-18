@@ -11,8 +11,8 @@ use navree_events::{Listener, ModuleBuilderEventsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_http_client::{HttpClient, HttpClientOptions};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Injectable, KernelError, Module,
-    ModuleBuilder, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder,
+    ProviderKey, Resolver,
 };
 use navree_workspace::events::WorkspaceDeleted;
 
@@ -79,13 +79,13 @@ impl WebhooksModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: WebhooksOptions) -> impl Module {
-        ConfiguredModule::<WebhooksModule, _>::for_root(options, register)
+        ConfiguredWebhooksModule::for_root(options)
     }
 
     /// The module configured from the `webhooks` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<WebhooksModule, WebhooksOptions>::from_config(register)
+        ConfiguredWebhooksModule::from_config()
     }
 
     /// Makes event `E` a webhook: import it in the module that owns the
@@ -104,7 +104,15 @@ impl Module for WebhooksModule {
     }
 }
 
+navree_kernel::configured_module!(
+    ConfiguredWebhooksModule,
+    WebhooksModule,
+    WebhooksOptions,
+    register,
+);
+
 fn register(m: &mut ModuleBuilder, options: Option<WebhooksOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<WebhooksOptions>::new(move |_| {
