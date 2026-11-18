@@ -38,8 +38,25 @@ const SEALED = "ui-sealed";
 const FIELDS = "input,select,textarea,button,fieldset,output,object";
 const MARK = "data-ui-stored";
 const OPS = "application/vnd.navree.ops+json";
-/** Read through the prototype: a named element can't stand in for it. */
+/** Read through the prototype: a named element can't stand in for it, and a node of another document answers too. */
 const up = /** @type {(this: Node) => Element | null} */ (Object.getOwnPropertyDescriptor(Node.prototype, "parentNode")?.get);
+const typeOf = /** @type {(this: Node) => number} */ (Object.getOwnPropertyDescriptor(Node.prototype, "nodeType")?.get);
+/** @param {any} n @returns {n is Element} */
+const isEl = (n) => {
+  try {
+    return typeOf.call(n) === 1;
+  } catch {
+    return false;
+  }
+};
+/** @param {any} n @returns {n is Node} */
+const isNode = (n) => {
+  try {
+    return !!typeOf.call(n);
+  } catch {
+    return false;
+  }
+};
 
 /**
  * The path of a file named on an element, when it is an extension's script (`js`) or stylesheet
@@ -85,12 +102,13 @@ const detach = (el) => E.matches.call(el, FIELDS) && attr(el, "form") !== SEALED
 
 /**
  * Takes every runtime hook off `el`, and takes it out of any form. What acts by being in a page (a base that
- * repoints every link, a meta that refreshes the page or sets its referrer policy, a link the browser follows)
- * is taken out. What the browser did as it was inserted, before this runs, is not undone.
+ * repoints every link, a meta that refreshes the page or sets its referrer policy, a link the browser follows,
+ * a frame, an object or an embed with content of its own) is taken out. What the browser did as it was
+ * inserted, before this runs, is not undone.
  * @param {Element} el
  */
 const scrub = (el) => {
-  if (E.matches.call(el, "meta,link,base")) el.remove();
+  if (E.matches.call(el, "meta,link,base,iframe,frame,object,embed")) el.remove();
   for (const name of E.getAttributeNames.call(el)) if (name.startsWith("data-ui-")) unset(el, name);
   detach(el);
 };
@@ -98,18 +116,18 @@ const scrub = (el) => {
 /**
  * Seals a body before its script is imported: scrubs what it holds, marks it stored content, and
  * keeps both so for whatever is written in it later. A change to an attribute is judged by its name
- * first, so the styles and classes a library moves on every frame cost a comparison.
+ * first, so the styles and classes a library moves on every frame cost a comparison. The body is noted
+ * once its observer is on, so a seal that failed is tried again.
  * @param {Element} b
  */
 function seal(b) {
   if (sealed.has(b)) return;
-  sealed.add(b);
   all(b, "*").forEach(scrub);
   set(b, MARK, "");
   new MutationObserver((records) => {
     for (const { target, attributeName: name, addedNodes } of records) {
       if (!name) {
-        for (const node of addedNodes) if (node instanceof Element) [node, ...all(node, "*")].forEach(scrub);
+        for (const node of addedNodes) if (isEl(node)) [node, ...all(node, "*")].forEach(scrub);
       } else if (target !== b) {
         if (name.startsWith("data-ui-")) unset(/** @type {Element} */ (target), name);
         else if (name === "form") detach(/** @type {Element} */ (target));
@@ -119,6 +137,7 @@ function seal(b) {
       } else if (name.startsWith("data-ui-") && name !== "data-ui-keep") unset(b, name);
     }
   }).observe(b, { subtree: true, childList: true, attributes: true });
+  sealed.add(b);
 }
 
 /**
@@ -171,12 +190,12 @@ function helpers(el, src, signal) {
     findAll: (selector) => [...all(el, selector)].filter(ours),
     /** From `node` up to the element: an event's target may be the window, which is none of it. @param {Node} node @param {string} selector */
     closest(node, selector) {
-      for (let at = node instanceof Node && holds(el, node) ? node : null; at; at = at === el ? null : up.call(at)) if (at instanceof Element && E.matches.call(at, selector) && ours(at)) return at;
+      for (let at = isNode(node) && holds(el, node) ? node : null; at; at = at === el ? null : up.call(at)) if (isEl(at) && E.matches.call(at, selector) && ours(at)) return at;
       return null;
     },
     /** A text node is judged by its parent; what is no node, or a node in none, is no stored content. @param {Node} node */
     stored(node) {
-      const at = node instanceof Element ? node : node instanceof Node ? up.call(node) : null;
+      const at = isEl(node) ? node : isNode(node) ? up.call(node) : null;
       return !!at && !ours(at);
     },
     /** @param {EventTarget} target @param {string} type @param {(event: Event) => void} listener @param {AddEventListenerOptions | boolean} [options] */
@@ -414,7 +433,7 @@ if (!fresh()) {
     "ui:seal",
     (e) => {
       const b = e.target;
-      if (b instanceof Element && E.matches.call(b, "[data-ui-island] > [data-slot=island-body]")) {
+      if (isEl(b) && E.matches.call(b, "[data-ui-island] > [data-slot=island-body]")) {
         seal(b);
         const el = /** @type {Element} */ (up.call(b));
         islands.set(el, attr(el, "data-ui-island"));

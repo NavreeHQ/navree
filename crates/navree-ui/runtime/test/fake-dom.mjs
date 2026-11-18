@@ -261,9 +261,9 @@ function matchSteps(el, steps, i, scope) {
   const comb = steps[i].comb;
   if (comb === ">") {
     const parent = el.parentNode;
-    return parent instanceof FakeElement && matchSteps(parent, steps, i - 1, scope);
+    return anyEl(parent) && matchSteps(parent, steps, i - 1, scope);
   }
-  for (let at = el.parentNode; at instanceof FakeElement; at = at.parentNode) if (matchSteps(at, steps, i - 1, scope)) return true;
+  for (let at = el.parentNode; anyEl(at); at = at.parentNode) if (matchSteps(at, steps, i - 1, scope)) return true;
   return false;
 }
 
@@ -277,18 +277,30 @@ function matches(el, selector, scope) {
 
 /* Nodes */
 
+const hasInstance = Function.prototype[Symbol.hasInstance];
+/** @param {any} v */
+const anyNode = (v) => hasInstance.call(FakeNode, v);
+/** @param {any} v */
+const anyEl = (v) => hasInstance.call(FakeElement, v);
+
 class FakeNode extends FakeEventTarget {
+  /** A node made in another realm's document is no `instanceof` this window's constructors. @param {any} v */
+  static [Symbol.hasInstance](v) {
+    return hasInstance.call(this, v) && !v?._foreign;
+  }
   constructor() {
     super();
+    /** @type {boolean} */
+    this._foreign = false;
     /** @type {any} */
     this.parentNode = null;
     /** @type {any[]} */
     this.childNodes = [];
   }
   // What the morph reads through `Node.prototype` lives on the prototype here too. As in a browser, the
-  // getter called on what is no node throws.
+  // getter called on what is no node throws, while a node of another document still answers.
   get parentNode() {
-    if (!(this instanceof FakeNode)) throw new TypeError("Illegal invocation");
+    if (!anyNode(this)) throw new TypeError("Illegal invocation");
     return this._parent ?? null;
   }
   set parentNode(node) {
@@ -307,13 +319,14 @@ class FakeNode extends FakeEventTarget {
     this._name = name;
   }
   get nodeType() {
+    if (!anyNode(this)) throw new TypeError("Illegal invocation");
     return this._type;
   }
   set nodeType(type) {
     this._type = type;
   }
   get parentElement() {
-    return this.parentNode instanceof FakeElement ? this.parentNode : null;
+    return anyEl(this.parentNode) ? this.parentNode : null;
   }
   get ownerDocument() {
     let at = this;
@@ -353,7 +366,7 @@ class FakeNode extends FakeEventTarget {
   _take(nodes) {
     const out = [];
     for (const node of nodes) {
-      if (node instanceof FakeFragment) {
+      if (hasInstance.call(FakeFragment, node)) {
         out.push(...node.childNodes);
         for (const kid of node.childNodes) kid.parentNode = null;
         node.childNodes = [];
@@ -421,7 +434,7 @@ class FakeNode extends FakeEventTarget {
     this.append(...nodes);
   }
   get children() {
-    return this.childNodes.filter((n) => n instanceof FakeElement);
+    return this.childNodes.filter(anyEl);
   }
   get childElementCount() {
     return this.children.length;
@@ -446,7 +459,7 @@ class FakeNode extends FakeEventTarget {
     const out = [];
     const walk = (/** @type {any} */ node) => {
       for (const kid of node.childNodes) {
-        if (kid instanceof FakeElement) {
+        if (anyEl(kid)) {
           out.push(kid);
           walk(kid);
         }
@@ -564,12 +577,13 @@ class FakeElement extends FakeNode {
   }
   /** @param {string} selector */
   closest(selector) {
-    for (let at = this; at instanceof FakeElement; at = at.parentNode) if (matches(at, selector, at)) return at;
+    for (let at = this; anyEl(at); at = at.parentNode) if (matches(at, selector, at)) return at;
     return null;
   }
   /** @param {boolean} [deep] */
   cloneNode(deep) {
     const copy = /** @type {any} */ (make(this.localName));
+    copy._foreign = this._foreign;
     for (const [name, value] of this._attrs) copy._attrs.set(name, value);
     if (deep) for (const kid of this.childNodes) copy.append(kid.cloneNode(true));
     return copy;
@@ -578,7 +592,9 @@ class FakeElement extends FakeNode {
     return this.childNodes.map(html).join("");
   }
   set innerHTML(text) {
-    this.replaceChildren(...parseNodes(String(text)));
+    const nodes = parseNodes(String(text));
+    if (this._foreign) markForeign(nodes);
+    this.replaceChildren(...nodes);
   }
   get outerHTML() {
     return html(this);
@@ -596,7 +612,7 @@ class FakeElement extends FakeNode {
     // What a click does by default: a link is followed, a submit button sends its form.
     const link = this.closest("a[href]");
     if (link) globalThis.location.assign(new URL(link.getAttribute("href"), globalThis.location.href).href);
-    else if (this instanceof FakeButton && (this.getAttribute("type") || "submit") === "submit") {
+    else if (hasInstance.call(FakeButton, this) && (this.getAttribute("type") || "submit") === "submit") {
       const form = this.form;
       if (form) FakeForm.prototype.requestSubmit.call(form, this);
     }
@@ -642,7 +658,7 @@ function formOf(el) {
   const named = el.getAttribute("form");
   if (named !== null) {
     const found = globalThis.document.getElementById(named);
-    return found instanceof FakeForm ? found : null;
+    return hasInstance.call(FakeForm, found) ? found : null;
   }
   return el.closest("form");
 }
@@ -748,7 +764,7 @@ class FakeForm extends FakeHTMLElement {
   }
   get elements() {
     const id = this.getAttribute("id");
-    const all = globalThis.document._descendants().filter((el) => el instanceof FakeControl && formOf(el) === this);
+    const all = globalThis.document._descendants().filter((el) => hasInstance.call(FakeControl, el) && formOf(el) === this);
     // A list that can be indexed, iterated and asked for a name, as a form's own is.
     const list = /** @type {any} */ ([...all]);
     list.namedItem = (/** @type {string} */ name) => all.find((el) => el.getAttribute("name") === name || el.getAttribute("id") === name) || null;
@@ -832,11 +848,19 @@ function parseNodes(source) {
 
 /** @param {any} node @returns {string} */
 function html(node) {
-  if (node instanceof FakeText) return node.data.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  if (!(node instanceof FakeElement)) return node.childNodes.map(html).join("");
+  if (hasInstance.call(FakeText, node)) return node.data.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  if (!anyEl(node)) return node.childNodes.map(html).join("");
   const attrs = [...node._attrs].map(([n, v]) => (v === "" ? ` ${n}` : ` ${n}="${v.replace(/"/g, "&quot;")}"`)).join("");
   if (VOID.has(node.localName)) return `<${node.localName}${attrs}>`;
   return `<${node.localName}${attrs}>${node.childNodes.map(html).join("")}</${node.localName}>`;
+}
+
+/** Marks `nodes` and everything in them as belonging to another realm's document. @param {any[]} nodes */
+function markForeign(nodes) {
+  for (const node of nodes) {
+    node._foreign = true;
+    if (node.childNodes?.length) markForeign(node.childNodes);
+  }
 }
 
 class FakeDocument extends FakeNode {
@@ -889,15 +913,30 @@ class FakeDocument extends FakeNode {
   }
   /** @param {string} tag */
   createElement(tag) {
-    return make(tag);
+    const el = make(tag);
+    if (this._foreign) el._foreign = true;
+    return el;
   }
   /** @param {string} text */
   createTextNode(text) {
-    return new FakeText(text);
+    const node = new FakeText(text);
+    if (this._foreign) node._foreign = true;
+    return node;
   }
   /** @param {any} node @param {boolean} [deep] */
   importNode(node, deep) {
-    return node.cloneNode(deep);
+    const copy = node.cloneNode(deep);
+    markForeign([copy]);
+    if (!this._foreign) {
+      const clear = (/** @type {any[]} */ ns) => {
+        for (const n of ns) {
+          n._foreign = false;
+          if (n.childNodes?.length) clear(n.childNodes);
+        }
+      };
+      clear([copy]);
+    }
+    return copy;
   }
 }
 
@@ -905,7 +944,7 @@ class FakeDocument extends FakeNode {
 function documentOf(markup) {
   const doc = new FakeDocument();
   const nodes = parseNodes(markup);
-  let root = nodes.find((n) => n instanceof FakeElement && n.localName === "html");
+  let root = nodes.find((n) => anyEl(n) && n.localName === "html");
   if (!root) {
     root = make("html");
     const head = make("head"), body = make("body");
@@ -916,6 +955,13 @@ function documentOf(markup) {
     if (!root.children.some((el) => el.localName === "body")) root.append(make("body"));
   }
   doc.append(root);
+  return doc;
+}
+
+/** A document of another realm (as a frame's is): its nodes are not `instanceof` this window's constructors. @param {string} [markup] */
+export function otherDocument(markup = "") {
+  const doc = documentOf(markup);
+  markForeign([doc]);
   return doc;
 }
 
@@ -1063,7 +1109,7 @@ export function install(options = {}) {
         super();
         if (!form) return;
         for (const el of form.elements) {
-          if (!el.name || el.disabled || el instanceof FakeButton) continue;
+          if (!el.name || el.disabled || hasInstance.call(FakeButton, el)) continue;
           if ((el.type === "checkbox" || el.type === "radio") && !el.checked) continue;
           this.append(el.name, el.value);
         }

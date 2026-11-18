@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
-import { answer, fire, install, settle } from "./fake-dom.mjs";
+import { answer, fire, install, otherDocument, settle } from "./fake-dom.mjs";
 
 // `https://app.test/_navree/ui/ext/NAME.js` is `fixtures/ext/NAME.mjs`; any other address fails to load.
 register("./ext-loader.mjs", import.meta.url);
@@ -224,6 +224,77 @@ test("a field written into an owned body does not post with the surrounding form
 test("every meta, link and base written into a body is taken out", () => {
   assert.ok($("vendor-charge"), "the library did not write its markup");
   assert.deepEqual([...$("vendor-body").querySelectorAll("meta,link,base")].map((el) => el.outerHTML), []);
+});
+
+test("a frame, an object and an embed written into a sealed body are taken out", async () => {
+  assert.ok($("vendor-charge"), "the library did not write its markup");
+  assert.deepEqual([...$("vendor-body").querySelectorAll("iframe,frame,object,embed")].map((el) => el.outerHTML), []);
+  // Also when one is already inside a body as it is sealed, and when a script adds one on its own.
+  const pre = document.createElement("div");
+  pre.innerHTML = `<div id="framed-ext" data-slot="proof:pad" data-ui-ext="${EXT}/proof.pad-0123456789ab.js" data-ui-props='{"step":1}'><div id="framed-body" data-slot="proof:pad-body" data-ui-keep><iframe srcdoc="<p>Amritsar</p>"></iframe><frame src="/proof/f"></frame><object data="/proof/o"></object><embed src="/proof/e"></div></div>`;
+  $("main").append(...pre.childNodes);
+  swap();
+  assert.deepEqual([...$("framed-body").querySelectorAll("iframe,frame,object,embed")].map((el) => el.outerHTML), []);
+  for (const tag of ["iframe", "frame", "object", "embed"]) $("vendor-body").append(document.createElement(tag));
+  await settle();
+  assert.deepEqual([...$("vendor-body").querySelectorAll("iframe,frame,object,embed")].map((el) => el.outerHTML), []);
+  $("framed-ext").remove();
+  swap();
+});
+
+test("a node made in another document and moved into a sealed body is scrubbed like any other", async () => {
+  const other = otherDocument();
+  const box = other.createElement("div");
+  box.setAttribute("id", "foreign-box");
+  box.setAttribute("data-ui-click", '[["toggle","menu"]]');
+  box.innerHTML =
+    `<button id="foreign-button" type="button" data-ui-click='[["toggle","menu"]]'>Open</button>` +
+    `<input id="foreign-charge" name="charge" value="99">` +
+    `<iframe id="foreign-frame" srcdoc="<p>Jalandhar</p>"></iframe>`;
+  assert.equal(box instanceof Element, false);
+  assert.equal(box instanceof Node, false);
+  $("vendor-body").append(box);
+  await settle();
+  assert.deepEqual(hooks($("vendor-body")), []);
+  assert.equal($("foreign-frame"), null);
+  assert.equal($("foreign-charge").getAttribute("form"), "ui-sealed");
+  assert.equal($("foreign-charge").form, null);
+  assert.deepEqual([...new FormData($("new-delivery"))], [["charge", "40"]]);
+  $("foreign-button").click();
+  assert.equal($("menu").hasAttribute("hidden"), true, "a command on a node from another document ran");
+  box.remove();
+});
+
+test("a seal that failed is tried again at the next ask", async () => {
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `<div id="retry-island" data-slot="island" data-ui-island="/_navree/ui/island/proof.notice-0123456789ab.js"><div id="retry-body" data-slot="island-body" data-ui-keep><button id="retry-drawn" type="button" data-ui-click='[["toggle","menu"]]'>Ludhiana</button></div></div>`;
+  $("main").append(...wrap.childNodes);
+  const observe = MutationObserver.prototype.observe;
+  let failOnce = true;
+  MutationObserver.prototype.observe = function (target, options) {
+    if (failOnce) {
+      failOnce = false;
+      throw new Error("observer unavailable");
+    }
+    return observe.call(this, target, options);
+  };
+  try {
+    // The first ask fails while setting up the observer, so the ask is not cancelled and the body is not noted as done.
+    assert.equal($("retry-body").dispatchEvent(new Event("ui:seal", { cancelable: true })), true);
+    // The next ask runs the seal again, puts the observer on, and cancels the event.
+    assert.equal($("retry-body").dispatchEvent(new Event("ui:seal", { cancelable: true })), false);
+  } finally {
+    MutationObserver.prototype.observe = observe;
+  }
+  const part = document.createElement("div");
+  part.innerHTML = `<button id="retry-later" type="button" data-ui-click='[["toggle","menu"]]'>Open</button><input id="retry-field" name="charge" value="9">`;
+  $("retry-body").append(part);
+  await settle();
+  assert.deepEqual(hooks($("retry-body")), []);
+  assert.equal($("retry-field").getAttribute("form"), "ui-sealed");
+  $("retry-later").click();
+  assert.equal($("menu").hasAttribute("hidden"), true);
+  $("retry-island").remove();
 });
 
 test("a form written into a body with the id the sealed fields name owns none of them", () => {
