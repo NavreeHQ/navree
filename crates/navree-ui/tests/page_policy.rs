@@ -12,7 +12,9 @@ use navree_http::{AppError, Controller, HttpModule, ModuleBuilderHttpExt, Path, 
 use navree_kernel::{
     BoxFuture, Factory, Injectable, KernelError, Module, ModuleBuilder, ProviderKey, Resolver,
 };
-use navree_plugin_geo::{Geo, GeoAskingForAnything, GeoWithClock, GeoWithMap, GeoWithScanner};
+use navree_plugin_geo::{
+    Geo, GeoAskingForAnything, GeoHelperSources, GeoWithClock, GeoWithMap, GeoWithScanner,
+};
 use navree_testing::{TestApp, TestAppBuilder, TestResponse};
 use navree_ui::app_files::IMAGE_CSP;
 use navree_ui::form::Rejected;
@@ -193,6 +195,16 @@ mod navree_plugin_geo {
         fn register(&self, m: &mut ModuleBuilder) {
             m.plugin(geo());
             m.contribute(CLOCK);
+        }
+    }
+
+    /// A second module of the plugin's crate that does not call `m.plugin` itself and asks for
+    /// sources on the plugin's behalf.
+    pub struct GeoHelperSources(pub PageSources);
+
+    impl Module for GeoHelperSources {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.contribute(self.0.clone());
         }
     }
 }
@@ -1263,6 +1275,138 @@ async fn the_page_a_refused_form_draws_at_a_fresh_address_is_fresh() {
         ),
         1
     );
+
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_page_source_asked_from_any_module_of_a_plugin_is_logged_under_the_plugin() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+
+    // `GeoHelperSources` is in `navree_plugin_geo` without calling `m.plugin` itself; its ask is
+    // logged under `geo`, with no "does not ask for" warning when `ui.policy.allow.geo` allows it.
+    let app = builder()
+        .module(GeoWithMap)
+        .module(GeoHelperSources(tiles()))
+        .config(
+            "ui.policy.allow.geo.img_src",
+            json!(["https://tile.openstreetmap.org"]),
+        )
+        .build()
+        .await;
+    assert!(logged(
+        &capture,
+        "INFO",
+        "page policy: plugin `geo` asks for img-src https://tile.openstreetmap.org (map tiles): allowed"
+    ));
+    assert!(!logged(
+        &capture,
+        "WARN",
+        "which plugin `geo` does not ask for"
+    ));
+    assert!(!logged(&capture, "INFO", "plugin `app` asks for"));
+    app.shutdown().await.unwrap();
+
+    // An invalid source from that helper module names the plugin in the boot failure.
+    let error = boot_error(builder().module(GeoWithMap).module(GeoHelperSources(
+        PageSources::new().ask(Directive::ImgSrc, "*", "map tiles"),
+    )))
+    .await;
+    assert!(
+        error.contains("plugin `navree-plugin-geo` asks for img-src `*`"),
+        "{error}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_source_whose_host_is_an_address_in_numbers_is_refused_unless_it_is_this_machine() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+
+    for refused in [
+        "https://203.0.113.10",
+        "https://192.168.1.1:8443",
+        "https://10.0.0.1",
+        "https://127.0.0.1",
+        "https://*.168.1.1",
+        "https://[::1]",
+        "http://192.168.1.1",
+    ] {
+        let error = boot_error(
+            builder()
+                .module(Geo)
+                .config("ui.policy.allow.geo.img_src", json!([refused])),
+        )
+        .await;
+        assert!(
+            error.contains("ui.policy.allow.geo.img_src[0] is not a source the page policy takes"),
+            "`{refused}` should be refused: {error}"
+        );
+    }
+
+    let wss_err = boot_error(builder().module(Geo).config(
+        "ui.policy.allow.geo.connect_src",
+        json!(["wss://203.0.113.10"]),
+    ))
+    .await;
+    assert!(
+        wss_err
+            .contains("ui.policy.allow.geo.connect_src[0] is not a source the page policy takes"),
+        "{wss_err}"
+    );
+
+    // `http://127.0.0.1` (with or without a port) points at this machine and stays allowed outside
+    // production and staging.
+    let app = builder()
+        .module(Geo)
+        .config(
+            "ui.policy.allow.geo.img_src",
+            json!(["http://127.0.0.1", "http://127.0.0.1:8090"]),
+        )
+        .build()
+        .await;
+    let policy = app.get::<PagePolicy>().await;
+    assert!(policy.allows(Directive::ImgSrc, "http://127.0.0.1/tiles/1.png"));
+    assert!(policy.allows(Directive::ImgSrc, "http://127.0.0.1:8090/tiles/1.png"));
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn allows_reads_an_address_with_a_backslash_as_a_browser_does() {
+    let capture = LogCapture::default();
+    let _guard = capture.install();
+    let app = builder()
+        .module(Geo)
+        .config(
+            "ui.policy.allow.geo.img_src",
+            json!(["https://*.tiles.example", "https://tile.openstreetmap.org"]),
+        )
+        .build()
+        .await;
+    let policy = app.get::<PagePolicy>().await;
+
+    // A backslash ends the host in a browser: `other.example` is the host, not a label under
+    // `*.tiles.example`.
+    assert!(!policy.allows(
+        Directive::ImgSrc,
+        r"https://other.example\.tiles.example/15/1/2.png"
+    ));
+    assert!(!policy.allows(
+        Directive::ImgSrc,
+        r"https:/\other.example/tile.openstreetmap.org"
+    ));
+
+    // A backslash after an allowed host starts the path, which the browser sends to that host.
+    assert!(policy.allows(
+        Directive::ImgSrc,
+        r"https://tile.openstreetmap.org\15\1\2.png"
+    ));
+    assert!(policy.allows(
+        Directive::ImgSrc,
+        r"https:/\tile.openstreetmap.org/15/1/2.png"
+    ));
+    assert!(policy.allows(Directive::ImgSrc, r"https://a.tiles.example\15\1\2.png"));
 
     app.shutdown().await.unwrap();
 }

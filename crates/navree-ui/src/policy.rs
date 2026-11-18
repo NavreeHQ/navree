@@ -372,15 +372,22 @@ fn covers(listed: &str, asked: &str) -> bool {
     if listed == "data:" || listed == "blob:" {
         return asked.starts_with(listed);
     }
-    let (Some((scheme, listed)), Some((asked_scheme, rest))) =
-        (listed.split_once("://"), asked.split_once("://"))
+    let (Some((scheme, listed)), Some((asked_scheme, after_colon))) =
+        (listed.split_once("://"), asked.split_once(':'))
     else {
         return false;
     };
     if scheme != asked_scheme {
         return false;
     }
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    let mut slashes = after_colon
+        .chars()
+        .take_while(|ch| matches!(ch, '/' | '\\'));
+    if slashes.next().is_none() || slashes.next().is_none() {
+        return false;
+    }
+    let rest = after_colon.trim_start_matches(['/', '\\']);
+    let authority = rest.split(['/', '\\', '?', '#']).next().unwrap_or(rest);
     if authority.contains('@') {
         return false;
     }
@@ -432,14 +439,18 @@ pub(crate) fn source_problem(
     if taken { None } else { Some(directive.forms()) }
 }
 
-/// Whether `authority` is a host name in lower case with at least two labels, which may start
-/// with `*.` and have a port after it.
+/// Whether `authority` is a host name in lower case with at least two labels (not an address in
+/// numbers), which may start with `*.` and have a port after it.
 fn is_origin(authority: &str) -> bool {
     let Some((host, _)) = host_and_port(authority) else {
         return false;
     };
     let name = host.strip_prefix("*.").unwrap_or(host);
-    name.len() <= 253 && name.split('.').count() >= 2 && name.split('.').all(is_label)
+    let top = name.rsplit('.').next().unwrap_or_default();
+    name.len() <= 253
+        && name.split('.').count() >= 2
+        && name.split('.').all(is_label)
+        && !top.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 /// Whether `authority` is this machine, with a port or without: `localhost` or `127.0.0.1`.
@@ -538,12 +549,14 @@ pub(crate) async fn build(ctx: &AppContext) -> Result<PagePolicy, BoxError> {
         }
     }
 
-    // What the modules ask for: under the namespace of their plugin, or `app` for a module that
-    // names none.
+    // What the modules ask for: under the namespace of the plugin each module acts for, or `app`
+    // for a module that acts for none.
+    let plugin_reports = ctx.plugins().plugins;
     let mut asks: Vec<Ask> = Vec::new();
     let mut wasm_asks: Vec<(String, &'static str)> = Vec::new();
     for entry in ctx.contributions::<PageSources>() {
-        let plugin = ctx.plugin(entry.module.id);
+        let plugin = crate::extension::plugin_of(&plugin_reports, entry.module.id)
+            .map(|report| &report.info);
         let namespace = plugin.map_or(APP, |info| info.namespace).to_owned();
         let who = match plugin {
             Some(info) => format!("plugin `{}`", info.name),
@@ -591,9 +604,7 @@ pub(crate) async fn build(ctx: &AppContext) -> Result<PagePolicy, BoxError> {
     let header = composed(&allowed, options.wasm);
     let value = HeaderValue::from_str(&header)?;
 
-    let plugins: Vec<&'static str> = ctx
-        .plugins()
-        .plugins
+    let plugins: Vec<&'static str> = plugin_reports
         .iter()
         .map(|plugin| plugin.info.namespace)
         .collect();
