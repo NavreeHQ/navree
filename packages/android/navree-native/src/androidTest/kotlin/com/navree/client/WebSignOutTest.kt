@@ -30,8 +30,10 @@ import com.navree.client.platform.OwedToken
 import com.navree.client.platform.PushProvider
 import com.navree.client.platform.SiteWipe
 import com.navree.client.platform.WipeRules
+import com.navree.client.platform.WorkerRequest
 import com.navree.client.platform.guardDocuments
 import com.navree.client.platform.guardWorkers
+import com.navree.client.platform.workerAsked
 import com.navree.protocol.Navree
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -77,6 +79,9 @@ class WebSignOutTest {
 
     private val app = MockWebServer()
 
+    /** A second server, for a test whose second origin has a worker of its own: the same machine at another port. */
+    private val help = MockWebServer()
+
     /** What the pages told the app's server, in order. */
     private val said = CopyOnWriteArrayList<String>()
 
@@ -113,13 +118,16 @@ class WebSignOutTest {
     @After
     fun stop() {
         app.close()
+        runCatching { help.close() }
+        workerAsked = null
         // A deletion a test here left unfinished has failed that test; it does not go on to refuse the web pages of the tests after it.
         SiteWipe.forget()
         // Nor does a push token a test left owed hold back what a later test shows.
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         OwedToken.of(context).gone()
-        // Nor is the person a test named here remembered by a later one.
+        // Nor is the person a test named here remembered by a later one, nor which cookies its answers set.
         File(context.noBackupFilesDir, "navree-person").delete()
+        File(context.noBackupFilesDir, "navree-own-cookies").delete()
     }
 
     private fun page(script: String) = MockResponse.Builder()
@@ -285,6 +293,20 @@ class WebSignOutTest {
                 })
             }
         }
+        stage(checked)
+        show("$base$path")
+        assertTrue("the first page stored all five: $said", waitFor(30) { said.isNotEmpty() })
+        assertEquals("the first page stored all five", listOf("stored"), said.toList())
+        // The page that stored them is left, as a person leaves it before signing out.
+        compose.runOnUiThread { shown = null }
+        compose.waitForIdle()
+    }
+
+    /**
+     * Where the test's pages are shown: one web view at a time, made new for each address ([show]). With [checked], it
+     * has the client's own checks for those origins; without, the system's own client.
+     */
+    private fun stage(checked: Origins?) {
         compose.setContent {
             val address = shown
             if (address != null) {
@@ -309,12 +331,6 @@ class WebSignOutTest {
                 }
             }
         }
-        show("$base$path")
-        assertTrue("the first page stored all five: $said", waitFor(30) { said.isNotEmpty() })
-        assertEquals("the first page stored all five", listOf("stored"), said.toList())
-        // The page that stored them is left, as a person leaves it before signing out.
-        compose.runOnUiThread { shown = null }
-        compose.waitForIdle()
     }
 
     /** What the page shown next finds, read from what it said. */
@@ -369,6 +385,9 @@ class WebSignOutTest {
         assertEquals("a service worker: $found", 1, found.getValue("workers").jsonPrimitive.int)
         // The control for the worker: with nothing being taken away, what it sends for the page that looked reaches the server.
         assertTrue("the worker's own write for the page that looked reached the server: $replayed", waitFor(15) { replayed.contains("/look") })
+        // And what this web view lets a worker do that the client is asked nothing about: open a socket, and write a cookie.
+        assertTrue("a socket the worker opened reached the server: $sockets", waitFor(15) { sockets.any { it.first == "/look" } })
+        assertTrue("a cookie the worker wrote is in the store: ${CookieManager.getInstance().getCookie(base)}", waitFor(15) { CookieManager.getInstance().getCookie(base).orEmpty().contains("worker=wrote") })
 
         // The page that looked is left. The core names one person; then an answer to one of the client's own requests sets a
         // session's cookie, as the sign-in of the next person does; then the core names that person, with no word of a sign-out.
@@ -632,6 +651,180 @@ class WebSignOutTest {
             assertTrue("once the push service says the token is gone, nothing is owed", waitFor(15) { !tokenMark.exists() })
         } finally {
             unanswered.countDown()
+        }
+    }
+    /**
+     * A worker that answers every page of its origin it does not know with
+     * what is no document, so that the deletion's own document never runs
+     * there and the origin is left; and that, once such a page has been asked
+     * for, goes on for half a minute sending to [to], another origin of the
+     * app, each second: a write as a script sends it, the same write with its
+     * referrer withheld, a read with its referrer withheld, and a socket.
+     */
+    private fun leftBehind(to: String) = """
+        self.addEventListener('install', function(){ self.skipWaiting() });
+        self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim()) });
+        var n = 0, going = false;
+        function send(){
+          n++;
+          fetch('$to/write?how=plain&n=' + n, {method: 'POST', body: 'x', mode: 'no-cors', credentials: 'include'}).catch(function(){});
+          fetch('$to/write?how=bare&n=' + n, {method: 'POST', body: 'x', mode: 'no-cors', credentials: 'include', referrerPolicy: 'no-referrer'}).catch(function(){});
+          fetch('$to/write?how=silent&n=' + n, {mode: 'no-cors', credentials: 'include', referrerPolicy: 'no-referrer'}).catch(function(){});
+          try { new WebSocket('${to.replace("http://", "ws://")}/socket?n=' + n).onerror = function(){} } catch (x) {}
+        }
+        self.addEventListener('fetch', function(e){
+          if (e.request.mode !== 'navigate' || new URL(e.request.url).pathname === '/') return;
+          e.respondWith(new Response(null, {status: 204}));
+          if (going) return;
+          going = true;
+          e.waitUntil(new Promise(function(done){ var t = setInterval(function(){ send(); if (n >= 30) { clearInterval(t); done() } }, 1000) }));
+        });
+    """.trimIndent()
+
+    /**
+     * A request of the [leftBehind] worker the client was asked about: how the worker sent it, what the web view handed the
+     * client of where it is from, what became of it, and whether the deletion was still on its way then ([during]: the
+     * pages of the origin it was sent to were still held back when the client had answered).
+     */
+    private class Asked(val how: String, val referer: String?, val origin: String?, val what: WorkerRequest, val during: Boolean)
+
+    /** A request of the [leftBehind] worker that reached the server it was sent to, and what it came with. */
+    private class Reached(val how: String, val cookie: String?, val referer: String?, val origin: String?)
+
+    /**
+     * A worker of the person before at an origin a deletion could not clear,
+     * and what it sends to another origin of the app. The app has two origins
+     * here, each a server of its own on this machine. A page on the second
+     * registers the [leftBehind] worker. Then another person is signed in:
+     * the deletion clears the first origin and leaves the second, whose
+     * worker answers the client's document with what is none, and that
+     * worker, which the deletion started, goes on sending to the first
+     * origin after the deletion is over and the pages of the first origin
+     * are shown again.
+     *
+     * A write of it that says where it is from never reaches the first
+     * origin's server, during the deletion or after it. Which of the two
+     * headers the web view hands the client for each kind of request, what
+     * became of each, what reached the server and with which cookies, and
+     * the cookies the worker's sockets came with, are written beside the
+     * pictures (`web-worker-left-behind.txt`): a socket is asked of nobody,
+     * and one the worker opens after the store has its cookies back carries
+     * them.
+     */
+    @Test
+    fun aWorkerLeftAtAnOriginThatCouldNotBeClearedIsRefusedTheAppsOtherOriginWhereItsRequestSaysWhereItIsFrom() {
+        SiteWipe.forget()
+        val reached = CopyOnWriteArrayList<Reached>()
+        val upgrades = CopyOnWriteArrayList<String>()
+        app.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.url.encodedPath) {
+                // What a sign-in's answer does.
+                "/session" -> MockResponse.Builder().code(204).addHeader("Set-Cookie", "session=Rohit; Path=/").build()
+                "/write" -> {
+                    reached += Reached(request.url.queryParameter("how") ?: "", request.headers["Cookie"], request.headers["Referer"], request.headers["Origin"])
+                    MockResponse.Builder().code(204).build()
+                }
+                "/socket" -> {
+                    upgrades += request.headers["Cookie"] ?: "none"
+                    MockResponse.Builder().code(404).build()
+                }
+                else -> MockResponse.Builder().code(204).build()
+            }
+        }
+        app.start()
+        val shop = "http://127.0.0.1:${app.port}"
+        help.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.url.encodedPath) {
+                "/says" -> {
+                    said += request.url.queryParameter("m") ?: ""
+                    MockResponse.Builder().code(204).build()
+                }
+                "/" -> page("navigator.serviceWorker.register('/sw.js').then(function(){ return navigator.serviceWorker.ready }).then(function(){ R('stored') }, function(e){ R('failed ' + e) });")
+                "/sw.js" -> MockResponse.Builder().code(200).addHeader("Content-Type", "text/javascript").body(leftBehind(shop)).build()
+                else -> MockResponse.Builder().code(204).build()
+            }
+        }
+        help.start()
+        val other = "http://127.0.0.1:${help.port}"
+        val origins = Origins(shop, also = listOf(other), loopbackHttp = true)
+
+        val asked = CopyOnWriteArrayList<Asked>()
+        workerAsked = { url, headers, what ->
+            if (url.startsWith("$shop/write")) {
+                fun handed(name: String) = headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+                asked += Asked(url.substringAfter("how=").substringBefore('&'), handed("referer"), handed("origin"), what, during = SiteWipe.held("$shop/"))
+            }
+        }
+        compose.runOnUiThread { SiteWipe.arm(compose.activity, origins) }
+        assertTrue("the rules for a service worker's requests were set", compose.runOnUiThread { guardWorkers(origins) })
+        stage(null)
+        show("$other/")
+        assertTrue("the page on the second origin registered its worker: $said", waitFor(30) { said.isNotEmpty() })
+        assertEquals("the page on the second origin registered its worker", listOf("stored"), said.toList())
+        compose.runOnUiThread { shown = null }
+        compose.waitForIdle()
+
+        // The core names one person; an answer to one of the client's own requests sets a session's cookie, as the sign-in of
+        // the next person does; then the core names that person, with no word of a sign-out.
+        val driver = Driver(object : Engine {
+            override fun send(event: ByteArray): ByteArray = "{}".encodeToByteArray()
+
+            override fun view(query: ByteArray): ByteArray = "{}".encodeToByteArray()
+        })
+        lateinit var effects: AndroidEffects
+        compose.runOnUiThread {
+            effects = AndroidEffects(compose.activity, driver, "$shop/".toHttpUrl(), null, null, origins, loopbackHttp = true)
+            effects.hears(Navree.User(name = "Meera Sharma", email = "meera.sharma@example.com"))
+            effects.run(Effect.Fetch(2, "get", "$shop/session", emptyList(), null, 5_000, false))
+        }
+        val cookies = CookieManager.getInstance()
+        try {
+            assertTrue("the answer's cookie reached the store: ${cookies.getCookie(shop)}", waitFor(15) { cookies.getCookie(shop).orEmpty().contains("session=Rohit") })
+            compose.runOnUiThread { effects.hears(Navree.User(name = "Rohit Khanna", email = "rohit.khanna@example.com")) }
+            // The deletion clears the first origin and leaves the second: its two tries there are answered by the worker with no document.
+            assertTrue(
+                "the pages of the first origin are shown again and those of the second stay held back",
+                waitFor(60) { !SiteWipe.held("$shop/") && SiteWipe.held("$other/") },
+            )
+            assertTrue("the person who is here is still signed in: ${cookies.getCookie(shop)}", cookies.getCookie(shop).orEmpty().contains("session=Rohit"))
+            // The worker the deletion started goes on sending: what the client is asked about once the first origin's pages are
+            // shown again is asked after the deletion.
+            val wentOn = waitFor(15) { asked.count { !it.during && it.how == "plain" } >= 3 }
+            val during = asked.filter { it.during }
+            val after = asked.filter { !it.during }
+
+            fun told(what: Asked) = "referer ${if (what.referer != null) "handed" else "not handed"}, origin ${what.origin ?: "not handed"}: ${what.what}"
+            val lines = buildString {
+                append("a worker left at an origin the deletion could not clear, sending to another origin of the app\n")
+                append("the worker went on after the deletion was over: $wentOn\n")
+                for (how in listOf("plain", "bare", "silent")) {
+                    append("$how, while the deletion ran: ${during.filter { it.how == how }.map(::told).distinct()}\n")
+                    append("$how, after it: ${after.filter { it.how == how }.map(::told).distinct()}\n")
+                    append("$how, reached the server ${reached.count { it.how == how }} times, with: ${reached.filter { it.how == how }.map { "cookie ${it.cookie}, referer ${if (it.referer != null) "sent" else "not sent"}, origin ${it.origin ?: "not sent"}" }.distinct()}\n")
+                }
+                append("the cookies the worker's sockets came with: ${upgrades.distinct()}\n")
+            }
+            Shots.put("web-worker-left-behind.txt", lines)
+            android.util.Log.i("WebSignOutTest", lines)
+
+            val plain = asked.filter { it.how == "plain" }
+            assertTrue("the client was asked about the worker's writes: $lines", plain.isNotEmpty())
+            assertTrue("a write as a script sends it says where it is from: $lines", plain.all { it.referer != null || it.origin != null })
+            assertEquals("and every one of them was refused: $lines", emptyList<WorkerRequest>(), plain.map { it.what }.filter { it != WorkerRequest.Refuse }.distinct())
+            assertEquals("so none reached the other origin's server: $lines", 0, reached.count { it.how == "plain" })
+            // A write whose referrer is withheld says it is from nowhere, where the web view hands that word on: it is refused then.
+            val bare = asked.filter { it.how == "bare" }
+            if (bare.isNotEmpty() && bare.all { it.referer != null || it.origin != null }) {
+                assertEquals("a write that says it is from no origin of the app was refused: $lines", emptyList<WorkerRequest>(), bare.map { it.what }.filter { it != WorkerRequest.Refuse }.distinct())
+                assertEquals("so none reached the other origin's server: $lines", 0, reached.count { it.how == "bare" })
+            }
+            // While the cookie store stood empty for the deletion, nothing of the worker's was sent, whatever it said or did not say.
+            assertEquals("while the deletion ran every request of the worker was refused: $lines", emptyList<WorkerRequest>(), during.map { it.what }.filter { it != WorkerRequest.Refuse }.distinct())
+        } finally {
+            workerAsked = null
+            compose.runOnUiThread { effects.close() }
+            // The cookies of this machine's address are every test's: the session set here is not left for the next.
+            compose.runOnUiThread { cookies.removeAllCookies(null) }
         }
     }
 }
