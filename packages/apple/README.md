@@ -84,13 +84,17 @@ A page shown in the web view is always on the app's origin, in the session's own
 
 ### Files a form sends
 
-**A photo is sent without the place it was taken**, unless its field asks for the place (`keep_location`). The place is taken out as the picked file is copied for the form, so the bytes the app keeps to send never hold it:
+**A photo is sent without what could say where it was taken**, unless its field asks for the place (`keep_location`). A place is written into a picture in more ways than one: as its GPS data; in its XMP packet, at the top or inside a structure, under the standard names or a maker's own (a drone's `GpsLatitude`); in a maker's notes; in the caption record, as the name of a town. No list of names covers them all, so the picture is not searched for names: everything that could hold a place is left out, whole. What is kept beside the pixels is which way up the picture is and a short list of what a camera says of the shot (when it was taken, with what camera and lens, at which exposure). The GPS data, the whole XMP packet, every maker's notes, the caption record, the owner's own words and every other field go.
 
-- A picture that names no place is copied as it is, byte for byte. So is a file that is not a picture.
-- A picture that names one is written again without it: with its pixels untouched where the system can do that for its format, else drawn into a new file of the same format. What was written is read back, and a copy that still names a place is thrown away.
-- A picture whose place cannot be taken out (a format the system reads and cannot write, a file that is a picture by its name and does not read as one) is not kept for the form at all. It is never sent as it was.
+It is done as the picked file is copied for the form, so the bytes the app keeps to send never hold any of it. The file is read once, and what is looked into is what is written from:
 
-What goes is what the system calls the picture's GPS data, in its EXIF and in its XMP: where it was taken, how high, which way the camera looked. What a camera's maker writes in a part of its own, and the names of places somebody typed into a picture's caption, are not taken out. A film is sent as it is, with whatever it says of where it was made.
+- A picture that holds none of that is copied as it is, byte for byte. So is a file that is not a picture.
+- Any other picture is written again without it: with its pixels untouched where the system can do that for its format, else drawn upright into a new file of the same format, with nothing beside its pixels. What was written is read back, and a copy that still holds any of it is thrown away.
+- A picture that cannot be written clean either way (a format the system reads and cannot write), and a file that is a picture by its name and does not read as one, are not kept for the form at all. They are never sent as they were.
+
+**A file that is not added is said so, in words.** The field names each file it did not add and says why, under the control and aloud to VoiceOver: that it could not be read; that it is a kind of picture the device cannot check for the place it was taken; or that it holds details that can say where it was taken, which cannot be taken out of that kind of file. The words stay until the person picks for that field again, and go with the session.
+
+A film is sent as it is, with whatever it says of where it was made.
 
 A file whose bytes the app no longer holds (the person signed out in another window, the system emptied the folder) is never sent empty under its name: the request does not go, and the core is told it failed.
 
