@@ -82,9 +82,9 @@ const parse = (text) => {
   }
 };
 
-/** @type {{apply: (envelope: any) => boolean, writing: <R>(write: () => Promise<R>) => Promise<R>, say: (text: string) => void} | null} */
+/** @type {{apply: (envelope: any) => boolean, writing: <R>(write: () => Promise<R>) => Promise<R>, say: (text: string) => void, swaps: () => number} | null} */
 let core = null;
-/** Core's write path, op applier and announcer, asked for until core gives them: none of their state is copied here. */
+/** Core's write path, op applier, announcer and swap count, asked for until core gives them: none of their state is copied here. */
 const hand = () => {
   if (!core) {
     const asked = /** @type {any} */ ({});
@@ -213,17 +213,19 @@ function helpers(el, src, signal) {
     /**
      * A write to one of the element's routes, through core's write path with the session's token. Ops
      * are applied; JSON is the script's; a page is shown only when asked for. Anything else fails. Once
-     * the element has left, its answer is for a part of the page that is gone: nothing of it is applied,
-     * and nothing is said. A call begun after it left is not sent, and takes no turn of the page's.
+     * the element has left, or the page has been swapped for another, its answer is for a page or a part
+     * that is gone: nothing of it is applied, and nothing is said. A call begun after it left is not sent,
+     * and takes no turn of the page's.
      * @param {string} url @param {FormData | URLSearchParams | Record<string, string>} [data]
      * @param {{method?: string, quiet?: boolean, page?: boolean} | null} [options]
      */
     async call(url, data, options) {
       const { method, quiet, page } = options || {};
-      let ok = false, status = 0, answer = null;
+      let ok = false, status = 0, answer = null, left = () => signal.aborted;
       try {
-        signal.throwIfAborted();
-        const href = allowed(url), given = /** @type {any} */ (hand());
+        if (left()) throw 0;
+        const href = allowed(url), given = /** @type {any} */ (hand()), at = given.swaps();
+        left = () => signal.aborted || given.swaps() !== at;
         /** @type {Record<string, string>} */
         const headers = { "x-navree-ui": "1", "x-navree-from": location.pathname + location.search, accept: OPS + ", application/json, text/html" };
         const token = cookie("XSRF-TOKEN");
@@ -235,9 +237,9 @@ function helpers(el, src, signal) {
         status = response.status;
         const type = response.headers.get("content-type") || "";
         // A page that starts clean answers nothing into this one.
-        if (!response.headers.has("x-navree-fresh")) {
+        if (!left() && !response.headers.has("x-navree-fresh")) {
           const json = type.startsWith(OPS) || type.startsWith("application/json") ? await response.json() : null;
-          signal.throwIfAborted();
+          if (left()) throw 0;
           // The ops bring their own word on how it went.
           if (type.startsWith(OPS)) {
             given.apply(json);
@@ -252,7 +254,7 @@ function helpers(el, src, signal) {
           }
         }
       } catch {}
-      if (!ok && !quiet && !signal.aborted) toast("danger", "That didn't work. Try again.");
+      if (!ok && !quiet && !left()) toast("danger", "That didn't work. Try again.");
       return { ok, status, data: answer };
     },
     /**
