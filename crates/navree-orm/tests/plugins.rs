@@ -17,7 +17,8 @@ use navree_kernel::{
 };
 use navree_orm::events::ModelEventFake;
 use navree_orm::hooks::{ModelEvent, ModelHook};
-use navree_orm::{Model, ModelLifecycle, ModuleBuilderOrmExt, Observer};
+use navree_orm::strict;
+use navree_orm::{Model, ModelLifecycle, ModuleBuilderOrmExt, Observer, OrmModule, OrmOptions};
 use navree_plugin_ledger::{LedgerModule, Titled, entry, live, open, stamp};
 use navree_testing::TestApp;
 
@@ -142,6 +143,43 @@ async fn a_plugin_global_scope_on_another_crates_model_fails_the_boot() {
     // The scopes apply to the whole process once installed: the refused boot installed none.
     assert!(!Company::has_global_scope("open"));
     assert!(Company::global_scope_names().is_empty());
+}
+
+#[tokio::test]
+async fn a_plugins_global_scope_on_another_crates_model_is_refused_before_strict_mode_is_installed()
+{
+    assert!(strict::current().prevents_missing_attributes());
+    assert!(strict::current().prevents_discarding_attributes());
+    assert!(!strict::current().auto_eager_loads());
+
+    // The app configures lenient modes and auto-eager-loading on `OrmModule`, while the plugin
+    // registers a global scope on the app's `Company`: the refusal runs before `strict::install`
+    // changes the process-wide strictness.
+    let ledger = LedgerModule(|m| {
+        m.global_scope::<Company>("open", |q| q.without_global_scopes());
+    });
+    let mut options = OrmOptions::lenient();
+    options.auto_eager_load = true;
+    let built = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(OrmModule::for_root(options))
+        .module(ledger)
+        .try_build()
+        .await;
+    let error = match built {
+        Ok(_) => panic!("the app booted"),
+        Err(error) => error.to_string(),
+    };
+    let expected = ledger_scopes("open", type_name::<Company>());
+    assert!(
+        error.contains(&expected),
+        "expected `{expected}` in:\n{error}"
+    );
+    assert!(strict::current().prevents_missing_attributes());
+    assert!(strict::current().prevents_discarding_attributes());
+    assert!(!strict::current().auto_eager_loads());
+    assert!(!Company::has_global_scope("open"));
 }
 
 /// An observer of the app's companies that the container builds; it changes nothing.

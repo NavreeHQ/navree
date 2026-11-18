@@ -34,7 +34,8 @@ use crate::strict::{self, Strictness, Violation};
 /// - installs, at boot, the global scopes modules register
 ///   ([`ModuleBuilderOrmExt::global_scope`]); when a module of a plugin
 ///   that is not one of the framework's own packages registers one on a
-///   model of another crate, the boot fails and none is installed;
+///   model of another crate, the boot fails before strict mode or any
+///   scope is installed;
 /// - keeps the registry of the app's models
 ///   ([`ModuleBuilderOrmExt::model`]) for tooling;
 /// - registers the commands `model:prune` (see [`prune`](crate::prune))
@@ -183,6 +184,12 @@ fn register(m: &mut ModuleBuilder, options: Option<OrmOptions>, handlers: Handle
             let handlers = handlers.clone();
             async move {
                 let app = r.app();
+                // Both strict mode and global scopes apply process-wide once
+                // installed, so a refusal stops before either runs.
+                let scopes = app.contributions::<ScopeRegistration>();
+                if let Some(refusal) = plugin_scope_refusal(&app, &scopes) {
+                    return Err(BoxError::from(refusal));
+                }
                 let config = app.try_get::<Config>().await;
                 let options = match (options, &config) {
                     (Some(options), _) => options,
@@ -193,11 +200,6 @@ fn register(m: &mut ModuleBuilder, options: Option<OrmOptions>, handlers: Handle
                 let strictness =
                     handlers.apply(Strictness::from_options(&options, environment.as_deref()));
                 strict::install(strictness.clone());
-                // The scopes apply process-wide once installed, so a refusal installs none.
-                let scopes = app.contributions::<ScopeRegistration>();
-                if let Some(refusal) = plugin_scope_refusal(&app, &scopes) {
-                    return Err(BoxError::from(refusal));
-                }
                 for registration in scopes {
                     (registration.value.install)();
                 }
