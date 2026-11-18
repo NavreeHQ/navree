@@ -64,6 +64,10 @@ public sealed class PersonChange
     private readonly Action<string> problem;
     private bool saidNoKey;
 
+    // A cover was up, and the core has not given the app's part anew since: the part the state had under the cover is the one it has still.
+    private bool afterCover;
+    private long givenUnderCover;
+
     /// <summary>Makes it for one host.</summary>
     /// <param name="watch">Who was named last.</param>
     /// <param name="gate">The gate the host marks what the core says with.</param>
@@ -99,23 +103,34 @@ public sealed class PersonChange
 
     /// <summary>
     /// The mark of the person who is signed in now, by the state heard last; null while that state names nobody, while it is that of a
-    /// person who is signing out, while the way in is up over the app (<see cref="WayInIsUp"/>), and before any state was heard. What
-    /// waits for a person's eyes (a reminder) is shown only while this is their mark.
+    /// person who is signing out, while a cover is up over the app (<see cref="WayInIsUp"/>), after a cover until the core has given the
+    /// app's part anew, and before any state was heard. What waits for a person's eyes (a reminder) is shown only while this is their
+    /// mark.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// When a session's end is found by an answer (a page, a region, a list or a form answered that the session is over), the core puts
-    /// the way in up as a cover the person cannot take away, and goes on naming the person whose session it was: it asks the shell again
-    /// only once somebody has signed in. So the state names them while whoever is at the device looks at the sign-in. Nobody is signed
-    /// in then, whatever the state says of the app, and this is null until the cover is gone and a person is named.
+    /// the way in up as a cover the person cannot take away. On a server that names nobody by id, or when the shell could not be asked
+    /// again just then, it goes on naming the person whose session it was. So the state names them while whoever is at the device looks
+    /// at the sign-in. Nobody is signed in then, whatever the state says of the app.
+    /// </para>
+    /// <para>
+    /// Nor when the cover goes. It goes with the answer to a sign-in, and that answer says nothing of who signed in: the app's part is
+    /// still the one from before, naming the person whose session ended, until the shell asked for then has answered. Whoever signed
+    /// in may be somebody else. So after a cover nobody is taken to be signed in until the core has given the app's part anew: then the
+    /// person it names is heard as any other, and when it is another person everything that waited for the one before has gone before
+    /// this is their mark. When that shell does not answer, this stays null until the shell is asked again and does.
+    /// </para>
     /// </remarks>
     public string? Here { get; private set; }
 
     /// <summary>
-    /// Whether the way in is up over the app: something is presented that the person cannot take away. The core presents so only a way
-    /// in (the sign-in a session's end leads to, or one a redirect led to), and nobody is signed in while it is up.
+    /// Whether a cover is up over the app: something is presented that the person cannot take away. The core presents so the sign-in a
+    /// session's end leads to, and a page a redirect led to that has to be answered before anything else (most often a sign-in too).
+    /// Nobody is taken to be signed in while one is up.
     /// </summary>
     /// <param name="state">The state.</param>
-    /// <returns>Whether it is up.</returns>
+    /// <returns>Whether one is up.</returns>
     public static bool WayInIsUp(ViewState state)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -135,6 +150,7 @@ public sealed class PersonChange
     public PersonHeard Hear(ViewState state, long stateMark)
     {
         ArgumentNullException.ThrowIfNull(state);
+        bool covered = Covered(state);
         if (gate.OfSomeoneLeaving(stateMark) || state.App?.User is not Models.User user)
         {
             // Nobody is signed in by this state, though what is kept is still kept for the person named before.
@@ -151,9 +167,10 @@ public sealed class PersonChange
 
         PersonHeard heard = watch.Hear(user.Key, user.Name, user.Email);
 
-        // Whom the state names is heard all the same while the way in is up, so a change of person is seen. But nobody is signed in
-        // while it is up: the person named is the one whose session ended, until the shell is asked again.
-        Here = WayInIsUp(state) ? null : watch.Named;
+        // Whom the state names is heard all the same under a cover and after one, so a change of person is seen. But nobody is signed
+        // in while a cover is up, nor after it until the app's part has been given anew: until then the person named is the one whose
+        // session ended, and whoever signed in at the cover may be somebody else.
+        Here = covered ? null : watch.Named;
         if (watch.Named is not string mark)
         {
             return heard;
@@ -193,6 +210,29 @@ public sealed class PersonChange
     {
         watch.SignedOut();
         Here = null;
+    }
+
+    // Whether what the state says of who is signed in is not to be gone by: a cover is up, or one was and the app's part is still the
+    // one the state had under it. The core says the app's part changed when it draws a shell, at a sign-out and when it forgets the
+    // session, and the client counts each time (ViewState.AppGiven): a state with another count than the one under the cover holds a
+    // part the core gave since, which says who is signed in now. The same count is the same part, also when every part was read
+    // again meanwhile. Every state is held to this, the ones that name nobody too.
+    private bool Covered(ViewState state)
+    {
+        if (WayInIsUp(state))
+        {
+            afterCover = true;
+            givenUnderCover = state.AppGiven;
+            return true;
+        }
+
+        if (afterCover && state.AppGiven == givenUnderCover)
+        {
+            return true;
+        }
+
+        afterCover = false;
+        return false;
     }
 
     private async Task<WipeReport> ChangeAsync(string mark)

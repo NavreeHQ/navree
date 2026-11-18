@@ -73,6 +73,7 @@ public sealed class TranscriptTests
             byte[] config = Config(over.ValueKind == JsonValueKind.Object ? over : null);
             client = new CoreClient(config, arrived => effects.AddRange(arrived.Effects), problems.Add);
             int number = 0;
+            long given = 0;
             foreach (JsonElement step in transcript.GetProperty("steps").EnumerateArray())
             {
                 number++;
@@ -81,6 +82,7 @@ public sealed class TranscriptTests
                 {
                     client.Dispose();
                     client = new CoreClient(config, arrived => effects.AddRange(arrived.Effects), problems.Add);
+                    given = 0;
                 }
 
                 string eventJson = EventOf(step, file);
@@ -97,6 +99,21 @@ public sealed class TranscriptTests
                 ViewState held = update.State;
                 ViewState whole = await client.ReadAllAsync();
                 Assert.AreEqual(ViewWriting.ToJson(whole), ViewWriting.ToJson(held), place + ": the state held differs from a whole read");
+
+                // The client counts each time the core says the app's part changed, which is how a part the core gave anew is told
+                // from the same part read again. A whole read is no such time: the count stays.
+                using (JsonDocument said = Reading.Open(update.Answer))
+                {
+                    if (said.RootElement.TryGetProperty("changed", out JsonElement changed)
+                        && changed.ValueKind == JsonValueKind.Array
+                        && changed.EnumerateArray().Any(change => change.ValueKind == JsonValueKind.Object && change.TryGetProperty("t", out JsonElement tag) && tag.ValueKind == JsonValueKind.String && tag.GetString() == "app"))
+                    {
+                        given++;
+                    }
+                }
+
+                Assert.AreEqual(given, held.AppGiven, place + ": the count of the times the core gave the app's part is not what its answers say");
+                Assert.AreEqual(given, whole.AppGiven, place + ": reading every part again was counted as the core giving the app's part anew");
             }
 
             Expect.That(problems.Count == 0, name + ": " + string.Join(" | ", problems));
