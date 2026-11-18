@@ -89,10 +89,10 @@ object WebRules {
     /**
      * Whether a service worker's own request is sent: only to the app's
      * origins and the hosts it names for the web view, and to none of them
-     * while what a session's pages left is being taken away at that origin
-     * ([wiping]: [SiteWipe.stops]). A worker which that deletion started is
-     * the worker of the person who left; what it sends would go with the
-     * cookies of whoever is signed in now.
+     * while what a session's pages left is being taken away ([wiping]:
+     * [SiteWipe.stops]). A worker which that deletion started is the worker
+     * of the person who left; what it sends would go with the cookies of
+     * whoever is signed in now.
      */
     fun workerRequest(ours: Boolean, webHost: Boolean, wiping: Boolean = false): WebRequest = if ((ours || webHost) && !wiping) WebRequest.Send else WebRequest.Refuse
 
@@ -295,11 +295,14 @@ internal fun guardDocuments(view: WebView, origins: Origins, told: Told): Boolea
  * reference for this callback says that where an answer is returned, "the
  * return response and data will be used", so a worker that fetches what its
  * pages ask for hands the client's document on and the address is not sent.
- * Every other request a worker makes is answered 403 for as long as the go
- * runs, and after it to an origin whose pages are still held back
+ * Every other request of a worker that this callback is asked about is
+ * answered 403 for as long as a go runs, and, go or no go, one to an origin
+ * whose pages are held back
  * ([SiteWipe.stops]): the go's document starts the workers of the person who
- * left, and nothing they send on their own leaves with the cookies of
- * whoever is signed in by then.
+ * left, and nothing they send this way leaves with the cookies of whoever is
+ * signed in by then. A socket a worker opens is not a request this callback
+ * is asked about; that is why a go at every origin runs with no cookie in the
+ * store ([WebViewCookies.takeOut]).
  * The setting is the process's: other code that sets a client of its own
  * replaces this one, and nothing tells. Throws when the system's web view
  * cannot take it.

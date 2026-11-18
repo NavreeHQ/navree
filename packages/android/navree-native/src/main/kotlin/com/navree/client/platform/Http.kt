@@ -38,16 +38,25 @@ import java.util.concurrent.TimeUnit
  * set, so they can be told from the rest of the one store and given back to
  * it. The web view writes to that store too: a page's script sets a cookie,
  * an answer inside a page sets one, a host named for the web view keeps a
- * session of its own. None of those passes through here. When another person
- * is signed in with no sign-out between, the store is emptied and only what
- * is remembered here goes back in ([stillHeld]): the cookies of the sign-in
- * that brought them, which is what keeps them signed in.
+ * session of its own, a service worker writes one. None of those passes
+ * through here. Where the store is emptied and the person who is signed in is
+ * to stay so (another person signed in with no sign-out between; what pages
+ * stored is being taken away), only what is remembered here goes back in: the
+ * cookies of the sign-in that brought them among it.
  *
  * A cookie is one by its domain, path and name; a later answer's takes the
  * place of an earlier one, and an answer that expires a cookie takes it out.
- * A cookie is given back only where the store still holds it with the value
- * the answer set: one a page has changed since is the page's, and is not put
- * back as it was. Kept in memory only, for this run of the app.
+ * A cookie is given back only where the store still held it with the value
+ * the answer set when it was emptied: one a page has changed since is the
+ * page's, and is not put back as it was.
+ *
+ * The store can be emptied and stay empty for a while before its own cookies
+ * go back ([takeOut], then [giving] and [giveBack]): what was taken out is
+ * remembered as out. What goes back is decided when the store says it is
+ * empty, not before: an answer that came in between has set a later cookie in
+ * place of an earlier one, or taken one away, and that is what holds.
+ *
+ * Kept in memory only, for this run of the app.
  */
 internal class OwnCookies(private val now: () -> Long = System::currentTimeMillis) {
     /**
@@ -56,16 +65,34 @@ internal class OwnCookies(private val now: () -> Long = System::currentTimeMilli
      * path, which the store is asked about to see whether it still holds it;
      * and what tells it from another and what it holds.
      */
-    class Given(val address: String, val probe: String, val header: String, val name: String, val value: String, val domain: String, val path: String, val expiresAt: Long)
+    class Given(val address: String, val probe: String, val header: String, val name: String, val value: String, val domain: String, val path: String, val expiresAt: Long) {
+        /** How many cookies answers had set when this one was set, itself among them. */
+        internal var at = 0L
+    }
+
+    /** Which cookies go back into a store that is being emptied, and how many cookies answers had set when that was decided. */
+    class Back internal constructor(internal val which: Set<String>, internal val at: Long)
 
     private val kept = LinkedHashMap<String, Given>()
 
-    /** An answer to one of the client's own requests set this cookie. */
+    /** The cookies taken out of the store, to go back in: by what tells one from another. */
+    private val out = HashSet<String>()
+    private var count = 0L
+
+    private fun which(cookie: Given) = cookie.domain + "\n" + cookie.path + "\n" + cookie.name
+
+    /**
+     * An answer to one of the client's own requests set this cookie. [put]
+     * puts it into the store, and runs here so that the store and what is
+     * remembered of it never part: no cookie is given back in between.
+     */
     @Synchronized
-    fun set(cookie: Given) {
-        val which = cookie.domain + "\n" + cookie.path + "\n" + cookie.name
+    fun set(cookie: Given, put: () -> Unit = {}) {
+        put()
+        val which = which(cookie)
+        cookie.at = ++count
         kept.remove(which)
-        // An answer that expires a cookie takes it away.
+        // An answer that expires a cookie takes it away, and it is not one to give back any more.
         if (cookie.expiresAt <= now()) return
         kept[which] = cookie
         // A client's own cookies are a handful; the oldest go first where an answer keeps setting new ones.
@@ -76,13 +103,14 @@ internal class OwnCookies(private val now: () -> Long = System::currentTimeMilli
     @Synchronized
     fun forget() {
         kept.clear()
+        out.clear()
     }
 
     /**
-     * The cookies to give back to a store that is about to be emptied: those
-     * the client's own answers set that have not run out and that the store
-     * still holds as they were set. [held] says what the store holds for an
-     * address, as it would send it (`name=value; name=value`), or null.
+     * The cookies the client's own answers set that have not run out and
+     * that the store holds as they were set. [held] says what the store holds
+     * for an address, as it would send it (`name=value; name=value`), or
+     * null.
      */
     @Synchronized
     fun stillHeld(held: (address: String) -> String?): List<Given> {
@@ -92,11 +120,41 @@ internal class OwnCookies(private val now: () -> Long = System::currentTimeMilli
         }
     }
 
-    /** The store was emptied and [given] went back in: those are the cookies remembered from now. */
+    /**
+     * The store is about to be emptied and to stay empty for a while: what
+     * it holds of the client's own now ([stillHeld]) is remembered as taken
+     * out, to go back in when the store is next given its own.
+     */
     @Synchronized
-    fun only(given: List<Given>) {
-        val back = given.toSet()
-        kept.values.retainAll { it in back }
+    fun takeOut(held: (address: String) -> String?) {
+        for (cookie in stillHeld(held)) out += which(cookie)
+    }
+
+    /**
+     * The store is about to be emptied and given its own back: which cookies
+     * those are. The ones taken out before, and the ones it holds now as the
+     * answers set them.
+     */
+    @Synchronized
+    fun giving(held: (address: String) -> String?): Back = Back(out + stillHeld(held).map(::which), count)
+
+    /**
+     * The store is empty now: its own cookies go back in, through [put].
+     * Those decided on ([back]) as they are by now, so a later answer's
+     * cookie and not the one it took the place of, and none an answer has
+     * taken away since; and with them whatever answers have set since it was
+     * decided, which the emptying took with the rest. From now those are the
+     * client's own cookies, and none is out. Answers what went back.
+     */
+    @Synchronized
+    fun giveBack(back: Back, put: (Given) -> Unit): List<Given> {
+        val time = now()
+        val given = kept.values.filter { cookie -> cookie.expiresAt > time && (which(cookie) in back.which || cookie.at > back.at) }
+        for (cookie in given) put(cookie)
+        out.clear()
+        val went = given.toSet()
+        kept.values.retainAll { it in went }
+        return given
     }
 
     private fun pairs(header: String?): List<Pair<String, String>> =
@@ -116,18 +174,26 @@ internal class OwnCookies(private val now: () -> Long = System::currentTimeMilli
  * that falls back to the web view is signed in, and signing out clears both.
  */
 class WebViewCookies(private val manager: () -> CookieManager = { CookieManager.getInstance() }) : CookieJar {
-    /** The cookies the answers to the client's own requests set, as they were set: what is given back when the store is emptied for another person. */
+    /** The cookies the answers to the client's own requests set, as they were set: what is given back when the store is emptied and the person is to stay signed in. */
     internal val own = OwnCookies()
 
+    /**
+     * Told each time an answer to one of the client's own requests is about
+     * to put a cookie into the store: from then the store may hold somebody's
+     * session again. On the thread the cookie is saved on, before it is.
+     */
+    @Volatile
+    var onOwn: (() -> Unit)? = null
+
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+        if (cookies.isNotEmpty()) onOwn?.invoke()
         val store = manager()
         store.setAcceptCookie(true)
         for (cookie in cookies) {
             val header = cookie.toString()
-            store.setCookie(url.toString(), header)
             // The store is asked about a cookie at an address on the cookie's own path, which need not be the answer's.
             val probe = runCatching { url.newBuilder().encodedPath(cookie.path).query(null).fragment(null).build().toString() }.getOrDefault(url.toString())
-            own.set(OwnCookies.Given(url.toString(), probe, header, cookie.name, cookie.value, cookie.domain, cookie.path, cookie.expiresAt))
+            own.set(OwnCookies.Given(url.toString(), probe, header, cookie.name, cookie.value, cookie.domain, cookie.path, cookie.expiresAt)) { store.setCookie(url.toString(), header) }
         }
         store.flush()
     }
@@ -148,21 +214,48 @@ class WebViewCookies(private val manager: () -> CookieManager = { CookieManager.
     }
 
     /**
-     * Another person is signed in, and nobody signed out. Every cookie of the
-     * store goes: what a page's script set, what an answer inside a page set,
-     * the cookies of every host named for the web view. Then the cookies the
-     * answers to the client's own requests set are given back, each as it
-     * was set and only where the store still held it so ([OwnCookies]): the
-     * sign-in that brought the person who is here now is among them, so they
-     * stay signed in.
+     * Every cookie of the store goes, and none comes back yet: what pages
+     * stored at the origins is about to be taken away through a document on
+     * each, which starts the service workers of the person before, and
+     * whatever such a worker sends, by whatever way, it sends with no session
+     * to carry. The cookies the answers to the client's own requests set are
+     * remembered as taken out ([OwnCookies.takeOut]) and go back in with
+     * [keepOwn].
+     *
+     * Waits for the store to say its cookies are gone, no longer than
+     * [waitMs], and answers whether it said so in time. Not on the main
+     * thread, and in the store's turn.
+     */
+    fun takeOut(onLooper: (() -> Unit) -> Unit, waitMs: Long): Boolean {
+        // No web view on this device: no cookie store, and nothing in it.
+        val store = try {
+            manager()
+        } catch (_: Throwable) {
+            return true
+        }
+        own.takeOut { address -> store.getCookie(address) }
+        val done = CountDownLatch(1)
+        onLooper { store.removeAllCookies { done.countDown() } }
+        return done.await(waitMs, TimeUnit.MILLISECONDS)
+    }
+
+    /**
+     * Every cookie of the store goes: what a page's script set, what an
+     * answer inside a page set, what a service worker wrote, the cookies of
+     * every host named for the web view. Then the cookies the answers to the
+     * client's own requests set are given back, each as it was set
+     * ([OwnCookies.giveBack]): those the store held so, and those taken out
+     * before ([takeOut]). The sign-in that brought the person who is here now
+     * is among them, so they stay signed in.
      *
      * The store is emptied on a thread with a looper ([onLooper] runs a piece
      * of work on one), and its cookies are given back there the moment it
      * says they are gone. This waits for that, no longer than [waitMs], then
      * writes the store to the disk, and answers whether it was done in time.
-     * A store that answers later is given its cookies back then all the same.
-     * Not on the main thread, and in the store's turn, so no request of the
-     * client's own reads the store in between.
+     * A store that answers later is given its cookies back then all the same,
+     * as the answers have left them by then. Not on the main thread, and in
+     * the store's turn, so no fetch or stream of the client's own reads the
+     * store in between.
      */
     fun keepOwn(onLooper: (() -> Unit) -> Unit, waitMs: Long): Boolean {
         // No web view on this device: no cookie store, and nothing in it.
@@ -171,12 +264,11 @@ class WebViewCookies(private val manager: () -> CookieManager = { CookieManager.
         } catch (_: Throwable) {
             return true
         }
-        val back = own.stillHeld { address -> store.getCookie(address) }
+        val back = own.giving { address -> store.getCookie(address) }
         val done = CountDownLatch(1)
         onLooper {
             store.removeAllCookies {
-                for (cookie in back) store.setCookie(cookie.address, cookie.header)
-                own.only(back)
+                own.giveBack(back) { cookie -> store.setCookie(cookie.address, cookie.header) }
                 done.countDown()
             }
         }
