@@ -101,8 +101,9 @@ pub(crate) fn check(
             // them is a subject the app checks, registered or not.
             let namespace = plugin.info.namespace;
             if !is_under(subject, namespace) {
+                let reason = navree_kernel::__private::acts_for_reason(ctx, contributed.module.id);
                 return Err(AccessError::Config(format!(
-                    "plugin `{}` registers the subject `{subject}` in `{module}`, a name outside its namespace `{namespace}`; a plugin's subjects are named under its namespace: remove the plugin or update it to a version that names them under `{namespace}.`, and to register `{subject}`, register it from a module of the app",
+                    "plugin `{}` registers the subject `{subject}` in `{module}`{reason}, a name outside its namespace `{namespace}`; a plugin's subjects are named under its namespace: remove the plugin or update it to a version that names them under `{namespace}.`, and to register `{subject}`, register it from a module of the app",
                     plugin.info.name
                 )));
             }
@@ -271,8 +272,8 @@ fn listed_under(plugins: &[PluginReport], plugin: &str, module: ModuleId) -> boo
 /// `subject`, which is not one of the plugin's own.
 fn outside_its_subjects(policy: &PluginPolicy, subject: &str) -> AccessError {
     let refusal = format!(
-        "plugin `{}` registers the policy `{}` in `{}`, which writes a rule on `{subject}`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them",
-        policy.plugin, policy.policy, policy.module
+        "plugin `{}` registers the policy `{}` in `{}`{}, which writes a rule on `{subject}`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them",
+        policy.plugin, policy.policy, policy.module, policy.module_reason
     );
     AccessError::Config(if subject == ALL {
         refusal

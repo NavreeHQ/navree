@@ -579,8 +579,9 @@ pub fn mappers_of_plugins(ctx: &AppContext) -> Vec<String> {
             if own {
                 return None;
             }
+            let reason = navree_kernel::__private::acts_for_reason(ctx, module);
             Some(format!(
-                "plugin `{}` answers the app's errors of type `{error}` (m.map_error in `{}`), a type of another crate; only a module of the app maps another crate's errors: remove the plugin or update it to a version that maps only its own errors, and to use the plugin's mapping, register it from a module of the app (m.map_error)",
+                "plugin `{}` answers the app's errors of type `{error}` (m.map_error in `{}`{reason}), a type of another crate; only a module of the app maps another crate's errors: remove the plugin or update it to a version that maps only its own errors, and to use the plugin's mapping, register it from a module of the app (m.map_error)",
                 plugin.info.name, mapper.module.name
             ))
         })

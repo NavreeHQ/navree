@@ -73,6 +73,16 @@ mod navree_plugin_announcements {
             m.plugin(announcements()).view_environment(self.0);
         }
     }
+
+    pub const CRATE: &str = module_path!();
+
+    /// A module of the plugin's crate that names no plugin itself.
+    pub struct Helper(pub fn(&mut ModuleBuilder));
+    impl Module for Helper {
+        fn register(&self, m: &mut ModuleBuilder) {
+            (self.0)(m);
+        }
+    }
 }
 
 #[tokio::test]
@@ -498,4 +508,92 @@ async fn a_plugins_hook_putting_an_app_global_back_marked_safe_fails_the_boot() 
     .await
     .expect("boots");
     app.shutdown().await.unwrap();
+}
+
+mod announcements_core {
+    use navree_kernel::{Module, ModuleBuilder};
+    use navree_view::ModuleBuilderViewExt;
+
+    pub struct SecondCrateViews;
+
+    impl Module for SecondCrateViews {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.templates(&[("mail/outside.html", "<p>outside</p>")])
+                .view_environment(|env| {
+                    env.add_filter("shout", |text: &str| text.to_uppercase());
+                });
+        }
+    }
+}
+
+mod navree_plugin_importer {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    const IMPORTER: PluginInfo = PluginInfo::new(
+        "navree-plugin-importer",
+        module_path!(),
+        "importer",
+        "1.0.0",
+    );
+
+    pub struct ImporterPlugin;
+
+    impl Module for ImporterPlugin {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(IMPORTER)
+                .import(super::announcements_core::SecondCrateViews);
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_refusal_says_why_the_module_acts_for_the_plugin() {
+    // 1. Module of the plugin's own crate (`Helper`).
+    let krate = navree_plugin_announcements::CRATE;
+    let in_crate = Navree::app()
+        .module(ViewModule::for_root(options(&[])))
+        .module(AnnouncementsModule)
+        .module(navree_plugin_announcements::Helper(|m| {
+            m.templates(&[("mail/outside.html", "<p>outside</p>")])
+                .view_environment(|env| {
+                    env.add_filter("shout", |text: &str| text.to_uppercase());
+                });
+        }))
+        .boot()
+        .await
+        .expect_err("fails")
+        .to_string();
+    assert!(
+        in_crate.contains(&format!(
+            "registers the template `mail/outside.html` in `Helper` (a module of the plugin's crate `{krate}`), which is not under its namespace"
+        )),
+        "{in_crate}"
+    );
+    assert!(
+        in_crate.contains(&format!(
+            "plugin `navree-plugin-announcements`: m.view_environment in `Helper` (a module of the plugin's crate `{krate}`) adds the filter `shout`"
+        )),
+        "{in_crate}"
+    );
+
+    // 2. Module of a second crate imported only by the plugin (`SecondCrateViews`).
+    let by_import = Navree::app()
+        .module(ViewModule::for_root(options(&[])))
+        .module(navree_plugin_importer::ImporterPlugin)
+        .boot()
+        .await
+        .expect_err("fails")
+        .to_string();
+    assert!(
+        by_import.contains(
+            "registers the template `mail/outside.html` in `SecondCrateViews` (only the plugin's modules import it), which is not under its namespace"
+        ),
+        "{by_import}"
+    );
+    assert!(
+        by_import.contains(
+            "plugin `navree-plugin-importer`: m.view_environment in `SecondCrateViews` (only the plugin's modules import it) adds the filter `shout`"
+        ),
+        "{by_import}"
+    );
 }

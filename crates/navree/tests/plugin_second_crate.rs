@@ -143,7 +143,7 @@ async fn a_plugin_in_two_crates_cannot_write_rules_on_all_add_an_app_wide_layer_
     let policy_name = std::any::type_name::<EverySubject>();
     let policy_module = AccessModule::for_policy::<EverySubject>().name();
     let expected_policy = format!(
-        "plugin `navree-plugin-khata` registers the policy `{policy_name}` in `{policy_module}`, which writes a rule on `all`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them"
+        "plugin `navree-plugin-khata` registers the policy `{policy_name}` in `{policy_module}` (only the plugin's modules import it), which writes a rule on `all`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them"
     );
     let error = boot_error(khata_app().module(KhataPlugin(writes_rules_on_all))).await;
     assert!(
@@ -152,7 +152,7 @@ async fn a_plugin_in_two_crates_cannot_write_rules_on_all_add_an_app_wide_layer_
     );
 
     // 2. Adding an app-wide HTTP layer from the second crate's module fails the boot.
-    let expected_layer = "plugin `navree-plugin-khata` adds the app-wide layer `khata-trace` in `KhataCoreModule`, which runs before every route's access check; only a module of the app adds app-wide layers: remove the plugin or update it to a version that leaves the layer to the app, and to use the plugin's layer, add it from a module of the app (m.http_layer)";
+    let expected_layer = "plugin `navree-plugin-khata` adds the app-wide layer `khata-trace` in `KhataCoreModule` (only the plugin's modules import it), which runs before every route's access check; only a module of the app adds app-wide layers: remove the plugin or update it to a version that leaves the layer to the app, and to use the plugin's layer, add it from a module of the app (m.http_layer)";
     let error = boot_error(khata_app().module(KhataPlugin(adds_app_wide_layer))).await;
     assert!(
         error.contains(expected_layer),

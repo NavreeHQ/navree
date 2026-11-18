@@ -30,7 +30,7 @@ mod navree_plugin_notice_board {
     use navree_realtime::{ChannelDecision, ModuleBuilderRealtimeExt};
 
     /// The plugin's info.
-    const NOTICE_BOARD: PluginInfo = PluginInfo::new(
+    pub const NOTICE_BOARD: PluginInfo = PluginInfo::new(
         "navree-plugin-notice-board",
         module_path!(),
         "notice_board",
@@ -53,6 +53,15 @@ mod navree_plugin_notice_board {
     impl Module for BoardModule {
         fn register(&self, m: &mut ModuleBuilder) {
             m.plugin(NOTICE_BOARD).channel(self.0, anyone);
+        }
+    }
+
+    /// A module of the plugin's crate that names no plugin itself.
+    pub struct Helper(pub &'static str);
+
+    impl Module for Helper {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.channel(self.0, anyone);
         }
     }
 }
@@ -444,5 +453,69 @@ async fn a_plugin_may_not_provide_the_apps_backplane() {
     assert!(
         backplane.is_some(),
         "the app's module registered the plugin's backplane"
+    );
+}
+
+mod notice_board_core {
+    use navree_kernel::{Module, ModuleBuilder};
+    use navree_realtime::ModuleBuilderRealtimeExt;
+
+    pub struct SecondCrateChannel;
+
+    impl Module for SecondCrateChannel {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.channel("users.{id}", super::navree_plugin_notice_board::anyone);
+        }
+    }
+}
+
+mod navree_plugin_notice_board_importer {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    const IMPORTER: PluginInfo = PluginInfo::new(
+        "navree-plugin-board-importer",
+        module_path!(),
+        "board_importer",
+        "1.0.0",
+    );
+
+    pub struct ImporterPlugin;
+
+    impl Module for ImporterPlugin {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(IMPORTER)
+                .import(super::notice_board_core::SecondCrateChannel);
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_refusal_says_why_the_module_acts_for_the_plugin() {
+    // 1. Module of the plugin's crate (`Helper`).
+    let in_crate = support::app(support::options())
+        .module(BoardModule("notice_board.{id}"))
+        .module(navree_plugin_notice_board::Helper("users.{id}"))
+        .boot()
+        .await
+        .expect_err("refused")
+        .to_string();
+    let expected_crate = format!(
+        "channel pattern `users.{{id}}` of module `Helper` (a module of the plugin's crate `{}`): plugin `navree-plugin-notice-board` authorizes channels under `notice_board.` only",
+        navree_plugin_notice_board::NOTICE_BOARD.crate_name
+    );
+    assert!(in_crate.contains(&expected_crate), "{in_crate}");
+
+    // 2. Module of a second crate imported only by the plugin (`SecondCrateChannel`).
+    let by_import = support::app(support::options())
+        .module(navree_plugin_notice_board_importer::ImporterPlugin)
+        .boot()
+        .await
+        .expect_err("refused")
+        .to_string();
+    assert!(
+        by_import.contains(
+            "channel pattern `users.{id}` of module `SecondCrateChannel` (only the plugin's modules import it): plugin `navree-plugin-board-importer` authorizes channels under `board_importer.` only"
+        ),
+        "{by_import}"
     );
 }

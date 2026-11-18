@@ -473,7 +473,7 @@ fn plugin_policy<P: Policy>() -> PolicyModule<P> {
 fn writes_outside<P: Policy>(subject: &str) -> String {
     let policy = std::any::type_name::<P>();
     format!(
-        "plugin `navree-plugin-announcements` registers the policy `{policy}` in `AccessPolicy<{policy}>`, which writes a rule on `{subject}`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them, and to apply the policy to `{subject}`, register it from a module of the app (AccessModule::for_policy)"
+        "plugin `navree-plugin-announcements` registers the policy `{policy}` in `AccessPolicy<{policy}>` (only the plugin's modules import it), which writes a rule on `{subject}`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them, and to apply the policy to `{subject}`, register it from a module of the app (AccessModule::for_policy)"
     )
 }
 
@@ -1320,7 +1320,7 @@ async fn a_plugin_subject_outside_its_namespace_fails_the_boot() {
     for (register, subject, type_name) in cases {
         let error = boot_error(builder().module(NoticeSubjects(register))).await;
         let expected = format!(
-            "plugin `navree-plugin-announcements` registers the subject `{subject}` in `AccessSubject<plugins::navree_plugin_announcements::{type_name}>`, a name outside its namespace `announcements`; a plugin's subjects are named under its namespace: remove the plugin or update it to a version that names them under `announcements.`, and to register `{subject}`, register it from a module of the app"
+            "plugin `navree-plugin-announcements` registers the subject `{subject}` in `AccessSubject<plugins::navree_plugin_announcements::{type_name}>` (only the plugin's modules import it), a name outside its namespace `announcements`; a plugin's subjects are named under its namespace: remove the plugin or update it to a version that names them under `announcements.`, and to register `{subject}`, register it from a module of the app"
         );
         assert!(error.contains(&expected), "{subject}: {error}");
     }
@@ -1456,7 +1456,7 @@ async fn a_plugin_policy_on_all_fails_the_boot() {
     let error = boot_error(builder().module(plugin_policy::<Open>())).await;
     assert!(
         error.contains(
-            "plugin `navree-plugin-announcements` registers the policy `plugins::navree_plugin_announcements::Open` in `AccessPolicy<plugins::navree_plugin_announcements::Open>`, which writes a rule on `all`; a plugin's policy writes rules on its own subjects only"
+            "plugin `navree-plugin-announcements` registers the policy `plugins::navree_plugin_announcements::Open` in `AccessPolicy<plugins::navree_plugin_announcements::Open>` (only the plugin's modules import it), which writes a rule on `all`; a plugin's policy writes rules on its own subjects only"
         ),
         "{error}"
     );
@@ -1474,7 +1474,7 @@ async fn a_plugin_policy_on_another_subject_fails_the_boot() {
     let error = boot_error(builder().module(plugin_policy::<Everyone>())).await;
     assert!(
         error.contains(
-            "plugin `navree-plugin-announcements` registers the policy `plugins::navree_plugin_announcements::Everyone` in `AccessPolicy<plugins::navree_plugin_announcements::Everyone>`, which writes a rule on `Post`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them, and to apply the policy to `Post`, register it from a module of the app (AccessModule::for_policy)"
+            "plugin `navree-plugin-announcements` registers the policy `plugins::navree_plugin_announcements::Everyone` in `AccessPolicy<plugins::navree_plugin_announcements::Everyone>` (only the plugin's modules import it), which writes a rule on `Post`; a plugin's policy writes rules on its own subjects only: remove the plugin or update it to a version whose policy keeps to them, and to apply the policy to `Post`, register it from a module of the app (AccessModule::for_policy)"
         ),
         "{error}"
     );
@@ -1923,8 +1923,32 @@ async fn one_policy_registered_by_modules_of_two_plugins_applies_the_first_plugi
     let error = boot_error(builder().module(notices).module(crm)).await;
     assert!(
         error.contains(
-            "plugin `navree-plugin-announcements` registers the policy `plugins::crm_core::SharedStage` in `AccessFeature<plugins::crm_core::SharedStage>`, which writes a rule on `crm.Stage`; a plugin's policy writes rules on its own subjects only"
+            "plugin `navree-plugin-announcements` registers the policy `plugins::crm_core::SharedStage` in `AccessFeature<plugins::crm_core::SharedStage>` (only the plugin's modules import it), which writes a rule on `crm.Stage`; a plugin's policy writes rules on its own subjects only"
         ),
         "{error}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_refusal_says_why_the_module_acts_for_the_plugin() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+
+    // `AccessSubject<..>` and `AccessPolicy<..>` are generic framework modules imported only by
+    // the plugin's modules: the refusal says `(only the plugin's modules import it)`.
+    let subject_error = boot_error(builder().module(NoticeSubjects(subject_of::<Unnamed>))).await;
+    assert!(
+        subject_error.contains(
+            "in `AccessSubject<plugins::navree_plugin_announcements::Unnamed>` (only the plugin's modules import it),"
+        ),
+        "{subject_error}"
+    );
+
+    let policy_error = boot_error(builder().module(plugin_policy::<Open>())).await;
+    assert!(
+        policy_error.contains(
+            "in `AccessPolicy<plugins::navree_plugin_announcements::Open>` (only the plugin's modules import it),"
+        ),
+        "{policy_error}"
     );
 }

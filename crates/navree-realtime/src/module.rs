@@ -208,8 +208,9 @@ fn channels_of_plugins(
                 .strip_prefix(namespace)
                 .is_some_and(|rest| rest.starts_with('.'));
             if !under {
+                let reason = navree_kernel::__private::acts_for_reason(app, registration.module.id);
                 refusals.push(format!(
-                    "channel pattern `{pattern}` of module `{module}`: plugin `{}` authorizes channels under `{namespace}.` only, and only a module of the app authorizes the app's other channels: remove the plugin or update it to a version that names its channels under `{namespace}.`, and to use the plugin's authorizer for `{pattern}`, register it from a module of the app (m.channel)",
+                    "channel pattern `{pattern}` of module `{module}`{reason}: plugin `{}` authorizes channels under `{namespace}.` only, and only a module of the app authorizes the app's other channels: remove the plugin or update it to a version that names its channels under `{namespace}.`, and to use the plugin's authorizer for `{pattern}`, register it from a module of the app (m.channel)",
                     plugin.info.name
                 ));
             }

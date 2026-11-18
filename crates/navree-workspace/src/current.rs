@@ -687,6 +687,7 @@ pub(crate) fn check_scoped_subjects(ctx: &AppContext) -> Result<(), String> {
         let (name, namespace) = (plugin.info.name, plugin.info.namespace);
         let subject = contributed.value.subject;
         let module = contributed.module.name;
+        let reason = navree_kernel::__private::acts_for_reason(ctx, contributed.module.id);
         let own = contributed
             .value
             .type_name
@@ -694,12 +695,12 @@ pub(crate) fn check_scoped_subjects(ctx: &AppContext) -> Result<(), String> {
             .is_some_and(|rest| rest.starts_with("::"));
         if !own {
             return Err(format!(
-                "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`, a model of another crate; only a module of the app scopes it: remove the plugin or update it to a version that leaves it to the app, and to scope `{subject}` to workspaces, call m.workspace_scoped from a module of the app"
+                "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`{reason}, a model of another crate; only a module of the app scopes it: remove the plugin or update it to a version that leaves it to the app, and to scope `{subject}` to workspaces, call m.workspace_scoped from a module of the app"
             ));
         }
         if subject == ALL || !is_under(subject, namespace) {
             return Err(format!(
-                "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`, a name outside its namespace `{namespace}`; a plugin's subjects are named under its namespace: remove the plugin or update it to a version that names them under `{namespace}.`, and to scope `{subject}` to workspaces, call m.workspace_scoped from a module of the app"
+                "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`{reason}, a name outside its namespace `{namespace}`; a plugin's subjects are named under its namespace: remove the plugin or update it to a version that names them under `{namespace}.`, and to scope `{subject}` to workspaces, call m.workspace_scoped from a module of the app"
             ));
         }
     }
@@ -710,17 +711,36 @@ pub(crate) fn check_scoped_subjects(ctx: &AppContext) -> Result<(), String> {
             {
                 continue;
             }
-            let (plugin, module, other, both_plugins) = match (
+            let (plugin, module_id, module, other, both_plugins) = match (
                 community_plugin(&plugins, second.module.id),
                 community_plugin(&plugins, first.module.id),
             ) {
-                (Some(plugin), Some(_)) => (plugin, first.module.name, second.module.name, true),
-                (Some(plugin), None) => (plugin, second.module.name, first.module.name, false),
-                (None, Some(plugin)) => (plugin, first.module.name, second.module.name, false),
+                (Some(plugin), Some(_)) => (
+                    plugin,
+                    first.module.id,
+                    first.module.name,
+                    second.module.name,
+                    true,
+                ),
+                (Some(plugin), None) => (
+                    plugin,
+                    second.module.id,
+                    second.module.name,
+                    first.module.name,
+                    false,
+                ),
+                (None, Some(plugin)) => (
+                    plugin,
+                    first.module.id,
+                    first.module.name,
+                    second.module.name,
+                    false,
+                ),
                 (None, None) => continue,
             };
             let (name, namespace) = (plugin.info.name, plugin.info.namespace);
             let subject = first.value.subject;
+            let reason = navree_kernel::__private::acts_for_reason(ctx, module_id);
             // Every subject a plugin's module scopes is already under its namespace.
             let advice = if both_plugins {
                 "remove the plugin or update it to a version that gives each model its own subject name"
@@ -731,7 +751,7 @@ pub(crate) fn check_scoped_subjects(ctx: &AppContext) -> Result<(), String> {
                 )
             };
             return Err(format!(
-                "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`, and `{other}` scopes another model under that name; a plugin scopes only a subject no other module scopes: {advice}"
+                "plugin `{name}` scopes the subject `{subject}` to workspaces in `{module}`{reason}, and `{other}` scopes another model under that name; a plugin scopes only a subject no other module scopes: {advice}"
             ));
         }
     }

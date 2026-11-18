@@ -19,7 +19,7 @@ mod navree_plugin_notices {
     use navree_workspace::WorkspaceScoped;
 
     /// The plugin's info.
-    const NOTICES: PluginInfo =
+    pub const NOTICES: PluginInfo =
         PluginInfo::new("navree-plugin-notices", module_path!(), "notices", "1.0.0");
 
     /// The plugin's notices: its own subject, named under its namespace.
@@ -357,4 +357,58 @@ async fn the_app_may_scope_any_subject_to_workspaces() {
         .await;
     assert_eq!(app.ctx().plugins().plugins.len(), 1);
     app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_refusal_says_why_the_module_acts_for_the_plugin() {
+    mod notices_core {
+        use navree_kernel::{Module, ModuleBuilder};
+        use navree_workspace::ModuleBuilderWorkspaceExt;
+
+        pub struct SecondCrateScopes;
+
+        impl Module for SecondCrateScopes {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.workspace_scoped::<crate::support::Deal>();
+            }
+        }
+    }
+
+    // 1. Module of a second crate imported only by the plugin (`SecondCrateScopes`).
+    let by_import = boot_error(support::builder().module(NoticesModule(|m| {
+        m.import(notices_core::SecondCrateScopes);
+    })))
+    .await;
+    assert!(
+        by_import.contains(
+            "plugin `navree-plugin-notices` scopes the subject `Deal` to workspaces in `SecondCrateScopes` (only the plugin's modules import it), a model of another crate;"
+        ),
+        "{by_import}"
+    );
+
+    // 2. Module of a second crate scoping the plugin's own un-namespaced model.
+    mod notices_core_unnamed {
+        use navree_kernel::{Module, ModuleBuilder};
+        use navree_workspace::ModuleBuilderWorkspaceExt;
+
+        pub struct SecondCrateUnnamed;
+
+        impl Module for SecondCrateUnnamed {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.workspace_scoped::<super::navree_plugin_notices::unnamed::Model>();
+            }
+        }
+    }
+
+    let outside = boot_error(support::builder().module(NoticesModule(|m| {
+        m.import(notices_core_unnamed::SecondCrateUnnamed);
+    })))
+    .await;
+    assert!(
+        outside.contains(
+            "plugin `navree-plugin-notices` scopes the subject `Notice` to workspaces in `SecondCrateUnnamed` (only the plugin's modules import it), a name outside its namespace `notices`;"
+        ),
+        "{outside}"
+    );
+    let _ = navree_plugin_notices::NOTICES;
 }

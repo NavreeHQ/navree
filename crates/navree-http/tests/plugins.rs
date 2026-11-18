@@ -33,7 +33,7 @@ mod navree_plugin_khata {
     };
 
     /// The plugin's info.
-    const KHATA: PluginInfo =
+    pub const KHATA: PluginInfo =
         PluginInfo::new("navree-plugin-khata", module_path!(), "khata", "1.0.0");
 
     /// Adds `x-khata: 1` to the answer of what it wraps.
@@ -134,6 +134,15 @@ mod navree_plugin_khata {
     impl Module for LedgerModule {
         fn register(&self, m: &mut ModuleBuilder) {
             m.plugin(KHATA);
+            (self.0)(m);
+        }
+    }
+
+    /// A module of the plugin's crate that names no plugin itself.
+    pub struct Helper(pub fn(&mut ModuleBuilder));
+
+    impl Module for Helper {
+        fn register(&self, m: &mut ModuleBuilder) {
             (self.0)(m);
         }
     }
@@ -317,4 +326,118 @@ async fn a_plugin_mapping_of_another_crates_errors_fails_the_boot() {
         .module(LedgerModule::new(|_| {}))
         .boot()
         .await;
+}
+
+#[tokio::test]
+async fn the_refusal_says_why_the_module_acts_for_the_plugin() {
+    use navree_http::response::Response;
+    use navree_http::{ErrorContext, ErrorPages};
+    use navree_kernel::BoxFuture;
+
+    struct DeclinePages;
+
+    impl ErrorPages for DeclinePages {
+        fn render<'a>(
+            &'a self,
+            _: &'a ErrorContext,
+            _: &'a AppError,
+        ) -> BoxFuture<'a, Option<Response>> {
+            Box::pin(async { None })
+        }
+    }
+
+    mod khata_core {
+        use navree_kernel::{Module, ModuleBuilder};
+
+        pub struct SecondCrate(pub fn(&mut ModuleBuilder));
+
+        impl Module for SecondCrate {
+            fn register(&self, m: &mut ModuleBuilder) {
+                (self.0)(m);
+            }
+        }
+    }
+
+    let krate = navree_plugin_khata::KHATA.crate_name;
+    let io_error = std::any::type_name::<std::io::Error>();
+
+    // 1. Module of the plugin's crate (`Helper`): layers, error pages and error mappers.
+    let in_crate = Setup::new(routes())
+        .authenticated()
+        .module(LedgerModule::new(|_| {}))
+        .module(navree_plugin_khata::Helper(|m| {
+            m.http_layer(navree_plugin_khata::trust_me())
+                .error_pages(DeclinePages)
+                .map_error::<std::io::Error>(busy);
+        }))
+        .boot_error()
+        .await;
+    // `mappers_of_plugins` runs before `build_router`, so check mapper first, then layer + pages.
+    assert!(
+        in_crate.contains(&format!(
+            "(m.map_error in `Helper` (a module of the plugin's crate `{krate}`))",
+        )),
+        "{in_crate}"
+    );
+
+    let in_crate_router = Setup::new(routes())
+        .authenticated()
+        .module(LedgerModule::new(|_| {}))
+        .module(navree_plugin_khata::Helper(|m| {
+            m.http_layer(navree_plugin_khata::trust_me())
+                .error_pages(DeclinePages);
+        }))
+        .boot_error()
+        .await;
+    assert!(
+        in_crate_router.contains(&format!(
+            "adds the app-wide layer `trust-me` in `Helper` (a module of the plugin's crate `{krate}`),"
+        )),
+        "{in_crate_router}"
+    );
+    assert!(
+        in_crate_router.contains(&format!(
+            "(m.error_pages in `Helper` (a module of the plugin's crate `{krate}`));"
+        )),
+        "{in_crate_router}"
+    );
+
+    // 2. Module of a second crate imported only by the plugin (`SecondCrate`).
+    let by_import_mapper = Setup::new(routes())
+        .authenticated()
+        .module(LedgerModule::new(|m| {
+            m.import(khata_core::SecondCrate(|m| {
+                m.map_error::<std::io::Error>(busy);
+            }));
+        }))
+        .boot_error()
+        .await;
+    assert!(
+        by_import_mapper.contains(&format!(
+            "answers the app's errors of type `{io_error}` (m.map_error in `SecondCrate` (only the plugin's modules import it)),"
+        )),
+        "{by_import_mapper}"
+    );
+
+    let by_import_router = Setup::new(routes())
+        .authenticated()
+        .module(LedgerModule::new(|m| {
+            m.import(khata_core::SecondCrate(|m| {
+                m.http_layer(navree_plugin_khata::trust_me())
+                    .error_pages(DeclinePages);
+            }));
+        }))
+        .boot_error()
+        .await;
+    assert!(
+        by_import_router.contains(
+            "adds the app-wide layer `trust-me` in `SecondCrate` (only the plugin's modules import it),"
+        ),
+        "{by_import_router}"
+    );
+    assert!(
+        by_import_router
+            .contains("(m.error_pages in `SecondCrate` (only the plugin's modules import it));"),
+        "{by_import_router}"
+    );
 }

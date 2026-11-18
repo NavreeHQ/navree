@@ -282,8 +282,9 @@ fn embedded_templates(ctx: &AppContext) -> Found {
                     && !(under && is_safe_relative_path(name))
                     && !registered_by_import(ctx, &registered, name, module.id)
                 {
+                    let reason = navree_kernel::__private::acts_for_reason(ctx, module.id);
                     found.errors.push(format!(
-                        "plugin `{plugin}` registers the template `{name}` in `{}`, which is not under its namespace: name it `{namespace}/..` or ship it with m.plugin_templates",
+                        "plugin `{plugin}` registers the template `{name}` in `{}`{reason}, which is not under its namespace: name it `{namespace}/..` or ship it with m.plugin_templates",
                         module.name
                     ));
                 }
@@ -554,11 +555,12 @@ fn configure_environment(ctx: &AppContext, views: &mut Views) -> Vec<String> {
             continue;
         };
         let namespace = plugin.info.namespace;
+        let reason = navree_kernel::__private::acts_for_reason(ctx, contributed.module.id);
         let before = views.fingerprint();
         views.configure(|env| configure(env));
         for change in before.changes_outside(&views.fingerprint(), namespace) {
             errors.push(format!(
-                "plugin `{}`: m.view_environment in `{}` {change}; a plugin's environment hook only adds filters, tests, functions and globals named `{namespace}_..`",
+                "plugin `{}`: m.view_environment in `{}`{reason} {change}; a plugin's environment hook only adds filters, tests, functions and globals named `{namespace}_..`",
                 plugin.info.name, contributed.module.name
             ));
         }

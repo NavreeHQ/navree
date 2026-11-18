@@ -144,6 +144,8 @@ pub(crate) struct PluginPolicy {
     pub(crate) policy: &'static str,
     /// The first module that registers it.
     pub(crate) module: &'static str,
+    /// Why `module` acts for `plugin` when it does not name it itself.
+    pub(crate) module_reason: String,
     /// The subjects its rules may name.
     pub(crate) own: OwnSubjects,
     /// Attribution added to each kept rule's `reason`: the policy and its
@@ -156,11 +158,17 @@ pub(crate) struct PluginPolicy {
 impl PluginPolicy {
     /// The policy `policy` that `module`, a module acting for `plugin`,
     /// registers.
-    fn new(plugin: &PluginInfo, policy: &'static str, module: &'static str) -> Self {
+    fn new(
+        plugin: &PluginInfo,
+        policy: &'static str,
+        module: &'static str,
+        module_reason: String,
+    ) -> Self {
         PluginPolicy {
             plugin: plugin.name,
             policy,
             module,
+            module_reason,
             own: OwnSubjects {
                 namespace: plugin.namespace,
             },
@@ -319,6 +327,10 @@ impl Subjects {
                                 &plugin.info,
                                 registration.name,
                                 contributed.module.name,
+                                navree_kernel::__private::acts_for_reason(
+                                    ctx,
+                                    contributed.module.id,
+                                ),
                             )
                         }),
                     });

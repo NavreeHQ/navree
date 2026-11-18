@@ -126,16 +126,18 @@ fn staff_policy_of_a_plugin(app: &AppContext) -> Option<String> {
     let plugins = app.plugins().plugins;
     for policy in &workspaces {
         if let Some(plugin) = community_plugin(&plugins, policy.module.id) {
+            let reason = navree_kernel::__private::acts_for_reason(app, policy.module.id);
             return Some(format!(
-                "plugin `{}` decides who works in workspaces they are not members of (m.helm_staff_workspaces in `{}`); only the app decides that: call it from a module of the app",
+                "plugin `{}` decides who works in workspaces they are not members of (m.helm_staff_workspaces in `{}`{reason}); only the app decides that: call it from a module of the app",
                 plugin.info.name, policy.module.name
             ));
         }
     }
     for policy in &organizations {
         if let Some(plugin) = community_plugin(&plugins, policy.module.id) {
+            let reason = navree_kernel::__private::acts_for_reason(app, policy.module.id);
             return Some(format!(
-                "plugin `{}` decides who works with the settings of organizations they are not members of (m.helm_staff_organizations in `{}`); only the app decides that: call it from a module of the app",
+                "plugin `{}` decides who works with the settings of organizations they are not members of (m.helm_staff_organizations in `{}`{reason}); only the app decides that: call it from a module of the app",
                 plugin.info.name, policy.module.name
             ));
         }

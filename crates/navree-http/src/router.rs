@@ -211,8 +211,9 @@ fn error_pages_of_plugins(
         .iter()
         .filter_map(|pages| {
             let plugin = community_plugin(&plugins, pages.module.id)?;
+            let reason = navree_kernel::__private::acts_for_reason(ctx, pages.module.id);
             Some(format!(
-                "plugin `{}` answers the app's errors (m.error_pages in `{}`); only the app chooses that: remove the plugin or update it to a version that leaves its pages to the app, and to use the plugin's pages, register them from a module of the app",
+                "plugin `{}` answers the app's errors (m.error_pages in `{}`{reason}); only the app chooses that: remove the plugin or update it to a version that leaves its pages to the app, and to use the plugin's pages, register them from a module of the app",
                 plugin.info.name, pages.module.name
             ))
         })
@@ -236,8 +237,9 @@ pub fn layers_of_plugins(ctx: &AppContext) -> Vec<String> {
         .iter()
         .filter_map(|layer| {
             let plugin = community_plugin(&plugins, layer.module.id)?;
+            let reason = navree_kernel::__private::acts_for_reason(ctx, layer.module.id);
             Some(format!(
-                "plugin `{}` adds the app-wide layer `{}` in `{}`, which runs before every route's access check; only a module of the app adds app-wide layers: remove the plugin or update it to a version that leaves the layer to the app, and to use the plugin's layer, add it from a module of the app (m.http_layer)",
+                "plugin `{}` adds the app-wide layer `{}` in `{}`{reason}, which runs before every route's access check; only a module of the app adds app-wide layers: remove the plugin or update it to a version that leaves the layer to the app, and to use the plugin's layer, add it from a module of the app (m.http_layer)",
                 plugin.info.name, layer.value.name, layer.module.name
             ))
         })

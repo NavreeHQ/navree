@@ -292,8 +292,9 @@ fn plugin_scope_refusal(
         }
         let (name, scope, model) = (plugin.info.name, &registration.name, registration.model);
         let module = contributed.module.name;
+        let reason = navree_kernel::__private::acts_for_reason(app, contributed.module.id);
         Some(format!(
-            "plugin `{name}` registers the global scope `{scope}` on `{model}` in `{module}`, a model of another crate; only a module of the app registers a global scope on it: remove the plugin or update it to a version that leaves the scope to the app, and to use the plugin's scope, register it from a module of the app"
+            "plugin `{name}` registers the global scope `{scope}` on `{model}` in `{module}`{reason}, a model of another crate; only a module of the app registers a global scope on it: remove the plugin or update it to a version that leaves the scope to the app, and to use the plugin's scope, register it from a module of the app"
         ))
     })
 }

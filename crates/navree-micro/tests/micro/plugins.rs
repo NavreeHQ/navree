@@ -40,7 +40,7 @@ mod navree_plugin_khata {
     use navree_testing::principal;
 
     /// The plugin's info.
-    const KHATA: PluginInfo =
+    pub const KHATA: PluginInfo =
         PluginInfo::new("navree-plugin-khata", module_path!(), "khata", "1.0.0");
 
     /// A layer for every message, in `slot`, that takes every caller for Harpreet Sandhu: in
@@ -98,6 +98,15 @@ mod navree_plugin_khata {
     impl Module for LedgerModule {
         fn register(&self, m: &mut ModuleBuilder) {
             m.plugin(KHATA);
+            (self.0)(m);
+        }
+    }
+
+    /// A module of the plugin's crate that names no plugin itself.
+    pub struct Helper(pub fn(&mut ModuleBuilder));
+
+    impl Module for Helper {
+        fn register(&self, m: &mut ModuleBuilder) {
             (self.0)(m);
         }
     }
@@ -429,4 +438,69 @@ async fn a_message_pattern_under_a_plugins_namespace_is_read_without_http() {
     let app = TestApp::from_builder(sales_service(&micro, &database)).await;
     assert!(app.ctx().plugins().plugins.is_empty());
     app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_refusal_says_why_the_module_acts_for_the_plugin() {
+    mod khata_core {
+        use navree_kernel::{Module, ModuleBuilder};
+
+        pub struct SecondCrate(pub fn(&mut ModuleBuilder));
+
+        impl Module for SecondCrate {
+            fn register(&self, m: &mut ModuleBuilder) {
+                (self.0)(m);
+            }
+        }
+    }
+
+    let krate = navree_plugin_khata::KHATA.crate_name;
+    let io_error = std::any::type_name::<std::io::Error>();
+
+    // 1. Module of the plugin's crate (`Helper`) in a service with no `HttpModule`.
+    let micro = MicroFake::new();
+    let in_crate =
+        TestAuthenticator::install(service(&micro).module(LedgerModule::new(|_| {})).module(
+            navree_plugin_khata::Helper(|m| {
+                m.http_layer(navree_plugin_khata::trust_me(LayerSlot::AuthContext))
+                    .map_error::<std::io::Error>(busy);
+            }),
+        ))
+        .boot()
+        .await
+        .expect_err("refused")
+        .to_string();
+    assert!(
+        in_crate.contains(&format!(
+            "adds the app-wide layer `trust-me` in `Helper` (a module of the plugin's crate `{krate}`),"
+        )),
+        "{in_crate}"
+    );
+    assert!(
+        in_crate.contains(&format!(
+            "answers the app's errors of type `{io_error}` (m.map_error in `Helper` (a module of the plugin's crate `{krate}`)),"
+        )),
+        "{in_crate}"
+    );
+
+    // 2. Module of a second crate imported only by the plugin (`SecondCrate`).
+    let by_import = boot_error(LedgerModule::new(|m| {
+        m.import(khata_core::SecondCrate(|m| {
+            m.http_layer(navree_plugin_khata::trust_me(LayerSlot::AuthContext))
+                .map_error::<std::io::Error>(busy);
+        }));
+    }))
+    .await;
+    assert!(
+        by_import.contains(
+            "adds the app-wide layer `trust-me` in `SecondCrate` (only the plugin's modules import it),"
+        ),
+        "{by_import}"
+    );
+    assert!(
+        by_import.contains(&format!(
+            "answers the app's errors of type `{io_error}` (m.map_error in `SecondCrate` (only the plugin's modules import it)),"
+        )),
+        "{by_import}"
+    );
 }

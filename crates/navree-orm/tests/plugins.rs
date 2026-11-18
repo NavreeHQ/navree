@@ -31,7 +31,7 @@ mod navree_plugin_ledger {
     use navree_orm::{Builder, ExecContext, Model, Record, Result};
 
     /// The plugin's info.
-    const LEDGER: PluginInfo =
+    pub const LEDGER: PluginInfo =
         PluginInfo::new("navree-plugin-ledger", module_path!(), "ledger", "1.0.0");
 
     /// The plugin's own model: an entry of the ledger.
@@ -355,4 +355,37 @@ fn a_plugin_may_not_silence_the_apps_model_listeners() {
         .module(RecordsEvents)
         .validate()
         .expect("the app's own fake");
+}
+
+#[tokio::test]
+async fn the_refusal_says_why_the_module_acts_for_the_plugin() {
+    mod ledger_core {
+        use navree_kernel::{Module, ModuleBuilder};
+        use navree_orm::ModuleBuilderOrmExt;
+
+        use crate::models::Company;
+
+        pub struct SecondCrateScope;
+
+        impl Module for SecondCrateScope {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.global_scope::<Company>("open", |q| q.without_global_scopes());
+            }
+        }
+    }
+
+    let company = type_name::<Company>();
+    let error = boot_error(LedgerModule(|m| {
+        m.import(ledger_core::SecondCrateScope);
+    }))
+    .await;
+    let expected = format!(
+        "plugin `navree-plugin-ledger` registers the global scope `open` on `{company}` in `SecondCrateScope` (only the plugin's modules import it), a model of another crate;"
+    );
+    assert!(
+        error.contains(&expected),
+        "expected `{expected}` in:\n{error}"
+    );
+    assert!(!Company::has_global_scope("open"));
+    let _ = navree_plugin_ledger::LEDGER;
 }

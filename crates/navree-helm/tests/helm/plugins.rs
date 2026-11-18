@@ -359,7 +359,7 @@ mod navree_plugin_pretty {
     use navree_kernel::{Module, ModuleBuilder, PluginInfo};
 
     /// The plugin, whose crate is this module.
-    const PRETTY: PluginInfo =
+    pub const PRETTY: PluginInfo =
         PluginInfo::new("navree-plugin-pretty", module_path!(), "pretty", "1.0.0");
 
     /// A module of the plugin that registers what `.0` registers.
@@ -452,9 +452,12 @@ async fn a_module_of_a_plugins_crate_may_not_decide_who_works_in_other_workspace
             .module(Helper(every_workspace)),
     )
     .await;
-    let expected = "plugin `navree-plugin-pretty` decides who works in workspaces they are not members of (m.helm_staff_workspaces in `Helper`); only the app decides that: call it from a module of the app";
+    let expected = format!(
+        "plugin `navree-plugin-pretty` decides who works in workspaces they are not members of (m.helm_staff_workspaces in `Helper` (a module of the plugin's crate `{}`)); only the app decides that: call it from a module of the app",
+        navree_plugin_pretty::PRETTY.crate_name
+    );
     assert!(
-        error.contains(expected),
+        error.contains(&expected),
         "expected `{expected}` in:\n{error}"
     );
     // The same call from a module of the app, beside the plugin, boots.
@@ -463,6 +466,49 @@ async fn a_module_of_a_plugins_crate_may_not_decide_who_works_in_other_workspace
         .module(Adds(every_workspace))
         .build()
         .await;
+}
+
+#[tokio::test]
+async fn the_refusal_says_why_the_module_acts_for_the_plugin() {
+    mod pretty_core {
+        use navree_helm::ModuleBuilderHelmExt;
+        use navree_kernel::{Module, ModuleBuilder};
+
+        pub struct SecondCrateStaff;
+
+        impl Module for SecondCrateStaff {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.helm_staff_organizations(|_| async { Ok(true) });
+            }
+        }
+    }
+
+    // 1. Module of the plugin's own crate (`Helper`).
+    let in_crate = boot_error(
+        builder()
+            .module(PrettyStaff(|_| {}))
+            .module(Helper(every_organization)),
+    )
+    .await;
+    let expected_crate = format!(
+        "plugin `navree-plugin-pretty` decides who works with the settings of organizations they are not members of (m.helm_staff_organizations in `Helper` (a module of the plugin's crate `{}`)); only the app decides that: call it from a module of the app",
+        navree_plugin_pretty::PRETTY.crate_name
+    );
+    assert!(
+        in_crate.contains(&expected_crate),
+        "expected `{expected_crate}` in:\n{in_crate}"
+    );
+
+    // 2. Module of a second crate imported only by the plugin (`SecondCrateStaff`).
+    let by_import = boot_error(builder().module(PrettyStaff(|m| {
+        m.import(pretty_core::SecondCrateStaff);
+    })))
+    .await;
+    let expected_import = "plugin `navree-plugin-pretty` decides who works with the settings of organizations they are not members of (m.helm_staff_organizations in `SecondCrateStaff` (only the plugin's modules import it)); only the app decides that: call it from a module of the app";
+    assert!(
+        by_import.contains(expected_import),
+        "expected `{expected_import}` in:\n{by_import}"
+    );
 }
 
 /// A page with no template.
