@@ -94,10 +94,28 @@ public sealed class PersonChange
 
     /// <summary>
     /// The mark of the person who is signed in now, by the state heard last; null while that state names nobody, while it is that of a
-    /// person who is signing out, and before any state was heard. What waits for a person's eyes (a reminder) is shown only while this is
-    /// their mark.
+    /// person who is signing out, while the way in is up over the app (<see cref="WayInIsUp"/>), and before any state was heard. What
+    /// waits for a person's eyes (a reminder) is shown only while this is their mark.
     /// </summary>
+    /// <remarks>
+    /// When a session's end is found by an answer (a page, a region, a list or a form answered that the session is over), the core puts
+    /// the way in up as a cover the person cannot take away, and goes on naming the person whose session it was: it asks the shell again
+    /// only once somebody has signed in. So the state names them while whoever is at the device looks at the sign-in. Nobody is signed
+    /// in then, whatever the state says of the app, and this is null until the cover is gone and a person is named.
+    /// </remarks>
     public string? Here { get; private set; }
+
+    /// <summary>
+    /// Whether the way in is up over the app: something is presented that the person cannot take away. The core presents so only a way
+    /// in (the sign-in a session's end leads to, or one a redirect led to), and nobody is signed in while it is up.
+    /// </summary>
+    /// <param name="state">The state.</param>
+    /// <returns>Whether it is up.</returns>
+    public static bool WayInIsUp(ViewState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        return state.Nav.Modals.Any(modal => modal.Locked);
+    }
 
     /// <summary>
     /// Hears who a state names as signed in, as the state is about to be shown and before any window is given it. The state of a person
@@ -127,7 +145,10 @@ public sealed class PersonChange
         }
 
         PersonHeard heard = watch.Hear(user.Key, user.Name, user.Email);
-        Here = watch.Named;
+
+        // Whom the state names is heard all the same while the way in is up, so a change of person is seen. But nobody is signed in
+        // while it is up: the person named is the one whose session ended, until the shell is asked again.
+        Here = WayInIsUp(state) ? null : watch.Named;
         if (watch.Named is not string mark)
         {
             return heard;
