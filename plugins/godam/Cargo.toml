@@ -1,0 +1,53 @@
+[package]
+name = "navree-plugin-godam"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+description = "Godam disks for Navree apps. Not an official Navree package."
+license = "MIT OR Apache-2.0"
+keywords = ["navree-plugin", "navree"]
+readme = "README.md"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("s3"))'] }
+
+[package.metadata.navree.plugin]
+title = "Godam disks"
+module = "GodamModule"
+features = ["storage"]
+config = []
+env = []
+
+[dependencies]
+bytes = "1.12.1"
+futures-util = "0.3.34"
+navree = { path = "../../crates/navree", default-features = false, features = ["storage"] }
+object_store = { version = "0.14.2", default-features = false }
+serde = { version = "1.0.229", features = ["derive"] }
+
+[dev-dependencies]
+async-trait = "0.1.92"
+chrono = { version = "0.4.45", features = ["serde"] }
+http = "1.5.0"
+http-body-util = "0.1.5"
+navree = { path = "../../crates/navree", default-features = false, features = ["storage", "testing", "sqlite"] }
+navree-contracts = { path = "../../crates/navree-contracts" }
+navree-http = { path = "../../crates/navree-http" }
+navree-kernel = { path = "../../crates/navree-kernel" }
+navree-storage = { path = "../../crates/navree-storage" }
+reqwest = { version = "0.13.5", default-features = false, features = [
+    "charset",
+    "form",
+    "http2",
+    "json",
+    "query",
+    "rustls-no-provider",
+    "stream",
+] }
+serde_json = "1.0.154"
+tempfile = "3.27.0"
+tokio = { version = "1.54.1", features = ["full"] }
+tower = { version = "0.5.3", features = ["limit", "timeout", "util"] }
