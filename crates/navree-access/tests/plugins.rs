@@ -12,8 +12,8 @@ use std::sync::{Arc, Mutex};
 
 use http::Method;
 use navree_access::{
-    AbilityCtx, AbilityFactory, AccessModule, AccessService, Policy, READ, Rule, Rules, Subject,
-    UPDATE,
+    AbilityCtx, AbilityFactory, AccessModule, AccessService, DELETE, Policy, READ, Rule, Rules,
+    Subject, UPDATE,
 };
 use navree_contracts::{ModuleBuilderPermissionsExt, Permission, permission_catalog, permitted};
 use navree_http::{
@@ -107,7 +107,7 @@ mod navree_plugin_announcements {
     use std::marker::PhantomData;
 
     use navree_access::{
-        ALL, AbilityCtx, AccessModule, MANAGE, Policy, READ, Rules, Subject, UPDATE,
+        ALL, AbilityCtx, AccessModule, CREATE, DELETE, MANAGE, Policy, READ, Rules, Subject, UPDATE,
     };
     use navree_contracts::{ModuleBuilderPermissionsExt, Permission};
     use navree_kernel::{Module, ModuleBuilder, ModuleId, PluginInfo};
@@ -321,12 +321,28 @@ mod navree_plugin_announcements {
             }
         }
     }
+
+    /// Lets signed-in users read announcements, denies deleting them with the plugin's own
+    /// words, and writes an empty `because` on creating them.
+    pub struct PinnedPolicy;
+
+    impl Policy for PinnedPolicy {
+        fn define(ctx: &AbilityCtx, rules: &mut Rules) {
+            if ctx.user.is_some() {
+                rules.can(READ, "announcements.Announcement");
+                rules
+                    .cannot(DELETE, "announcements.Announcement")
+                    .because("Published announcements stay on the board.");
+                rules.can(CREATE, "announcements.Announcement").because("");
+            }
+        }
+    }
 }
 
 use navree_plugin_announcements::{
     Announcement, Bulletin, Everyone, Everything, Extras, ForBilling, ForGuests, ForReaders,
     ForSuperAdmins, ForViewers, InWorkspaces, NightShift, NoticePolicy, NoticeSubjects, Open,
-    Plugin, PolicyModule, Unnamed,
+    PinnedPolicy, Plugin, PolicyModule, Unnamed,
 };
 
 /// A module of the app, named `name`, that describes `permissions`.
@@ -1522,5 +1538,66 @@ async fn a_plugin_policy_inside_a_workspace_keeps_its_own_rules_only() {
             "left out a rule of plugin `navree-plugin-announcements`'s policy `plugins::navree_plugin_announcements::InWorkspaces` on `Post`, not one of its own subjects"
         ],
         "{security:?}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_kept_rule_keeps_the_policys_own_words_beside_the_plugins_name() {
+    let warnings = Warnings::default();
+    let _guard = warnings.install();
+    let app = builder()
+        .module(plugin_policy::<PinnedPolicy>())
+        .try_build()
+        .await
+        .expect("a plugin's policy with its own denial words boots");
+
+    let meera = Uuid::now_v7();
+    let attribution = "policy `plugins::navree_plugin_announcements::PinnedPolicy` of plugin `navree-plugin-announcements`";
+    let denial = format!("Published announcements stay on the board. ({attribution})");
+    let explanation = app
+        .get::<AccessService>()
+        .await
+        .explain(meera, DELETE, "announcements.Announcement", None)
+        .await
+        .expect("an explanation");
+    assert!(!explanation.allowed, "{explanation}");
+    let decided =
+        format!("Decided by rule #2: cannot delete announcements.Announcement ({denial})");
+    assert!(explanation.to_string().contains(&decided), "{explanation}");
+
+    let abilities = app
+        .acting_as(principal(meera))
+        .get("/api/me/abilities")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(
+        abilities[0],
+        json!({
+            "action": "read",
+            "subject": "announcements.Announcement",
+            "reason": attribution,
+        }),
+        "{abilities}"
+    );
+    assert_eq!(
+        abilities[1],
+        json!({
+            "action": "delete",
+            "subject": "announcements.Announcement",
+            "inverted": true,
+            "reason": denial,
+        }),
+        "{abilities}"
+    );
+    assert_eq!(
+        abilities[2],
+        json!({
+            "action": "create",
+            "subject": "announcements.Announcement",
+            "reason": attribution,
+        }),
+        "{abilities}"
     );
 }

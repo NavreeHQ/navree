@@ -146,7 +146,8 @@ pub(crate) struct PluginPolicy {
     pub(crate) module: &'static str,
     /// The subjects its rules may name.
     pub(crate) own: OwnSubjects,
-    /// The `reason` of each rule it adds: the policy and its plugin.
+    /// Attribution added to each kept rule's `reason`: the policy and its
+    /// plugin.
     reason: String,
     /// The subjects of the rules left out so far, each logged once.
     logged: Mutex<BTreeSet<String>>,
@@ -169,10 +170,11 @@ impl PluginPolicy {
     }
 
     /// Calls `define` into rules of its own and adds to `rules`, in order,
-    /// each rule whose every subject is one of the plugin's own, with
-    /// `reason` naming this policy and its plugin. Any other rule is left
-    /// out, and each subject of it that is not the plugin's own is logged
-    /// once, at target `navree::security`.
+    /// each rule whose every subject is one of the plugin's own, naming
+    /// this policy and its plugin in `reason` (beside the policy's own
+    /// `because` words when it gave any). Any other rule is left out, and
+    /// each subject of it that is not the plugin's own is logged once, at
+    /// target `navree::security`.
     pub(crate) fn copy_own_rules(
         &self,
         define: fn(&crate::AbilityCtx, &mut crate::Rules),
@@ -183,7 +185,12 @@ impl PluginPolicy {
         define(ctx, &mut written);
         for mut rule in written.into_rules() {
             if self.outside(&rule).is_none() {
-                rule.reason = Some(self.reason.clone());
+                rule.reason = Some(
+                    match rule.reason.as_deref().filter(|words| !words.is_empty()) {
+                        Some(words) => format!("{words} ({})", self.reason),
+                        None => self.reason.clone(),
+                    },
+                );
                 rules.push(rule);
                 continue;
             }

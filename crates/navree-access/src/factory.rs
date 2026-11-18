@@ -242,8 +242,9 @@ impl AbilityFactory {
     /// this, so policies apply there too.
     ///
     /// A policy of a plugin that is not one of the framework's own packages
-    /// adds only its rules on the plugin's own subjects, each with a `reason`
-    /// naming the policy and the plugin; any other rule is left out and
+    /// adds only its rules on the plugin's own subjects, each naming the
+    /// policy and the plugin in its `reason` (beside the policy's own
+    /// `because` words when it gave any); any other rule is left out and
     /// logged once.
     pub fn define_rules(&self, ctx: &AbilityCtx, rules: &mut Rules) {
         for policy in &self.subjects.policies {
