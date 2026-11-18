@@ -740,6 +740,8 @@ pub(crate) struct Asked {
     pub hops: u8,
     /// The part of the screen asked for, by id: a region, or a list's next rows.
     pub region: Option<String>,
+    /// An earlier hop of this request already showed that the session ended.
+    pub ended_session: bool,
 }
 
 /// What a timer the core asked for is for.
@@ -861,6 +863,21 @@ pub(crate) struct Waiting {
     pub href: Option<String>,
 }
 
+/// What a screen held before a cover hid it while waiting for a shell.
+#[derive(Clone, Debug)]
+pub(crate) struct ParkedScreen {
+    pub title: Option<String>,
+    pub content: Content,
+    pub cached: bool,
+    pub status: u16,
+    pub overlays: Vec<String>,
+    pub states: BTreeMap<String, Vec<State>>,
+    pub forms: BTreeMap<String, FormView>,
+    pub regions: BTreeMap<String, RegionView>,
+    pub lists: BTreeMap<String, ListView>,
+    pub question: Option<Question>,
+}
+
 /// What the core remembers about a screen that the client has no use for.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ScreenInner {
@@ -926,6 +943,14 @@ pub(crate) struct ScreenInner {
     /// it, chose a row of a table on it, or chose another of its tabs. A place
     /// a snapshot kept is not put back over it.
     pub begun: bool,
+    /// What this screen showed before a waiting cover hid it, put back if the
+    /// shell names the same person.
+    pub parked: Option<ParkedScreen>,
+    /// This screen is a blank locked cover that waits for a shell to name who
+    /// is signed in.
+    pub waiting_shell: bool,
+    /// The waiting cover was put up for a way in that opened outside the app.
+    pub outside_way_in: bool,
 }
 
 /// What the core remembers about a message.
@@ -1088,6 +1113,9 @@ pub(crate) struct Inner {
     /// id: taken by the install.
     pub naming: Option<String>,
     pub has_shell: bool,
+    /// Who is signed in is not known (a session ended, or a sign-in finished)
+    /// until a shell answers.
+    pub who_unsure: bool,
     /// An address the app was opened with before the shell had arrived.
     pub launch: Option<String>,
     /// Moves on with every write: an answer asked for before one may be from before it.

@@ -95,7 +95,9 @@
       "body": "made/session-ended.json",
       "expect": {
         "changed": [
+          {"t":"app"},
           {"t":"nav"},
+          {"t":"screen","id":1},
           {"t":"screen","id":3},
           {"t":"screen","id":4}
         ],
@@ -104,9 +106,11 @@
         ]
       },
       "check": [
+        {"at":"/app/user","is":null},
         {"at":"/modals","is":[{"locked":true,"present":"full","stack":[4]}]},
         {"at":"/screens/4/url","is":"/sign-in?next=%2Forders%2F1"},
         {"at":"/screens/4/chrome","is":false},
+        {"at":"/screens/1/content/t","is":"blank"},
         {"at":"/screens/3/content/t","is":"blank"},
         {"at":"/screens/3/loading","is":false},
         {"at":"/destinations/1/stack","is":[2,3]},
@@ -291,6 +295,7 @@
       "body": "made/session-ended-post.json",
       "expect": {
         "changed": [
+          {"t":"app"},
           {"t":"nav"},
           {"t":"screen","id":3},
           {"t":"screen","id":5},
@@ -302,6 +307,7 @@
         ]
       },
       "check": [
+        {"at":"/app/user","is":null},
         {"at":"/messages/0/text","is":"Your session ended. Sign in to continue."},
         {"at":"/modals/0/locked","is":true},
         {"at":"/screens/3/forms/refund/fields/refund-amount/value/text","is":"10"},

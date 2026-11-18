@@ -53,6 +53,7 @@
       "body": "made/sign-in.json",
       "expect": {
         "changed": [
+          {"t":"app"},
           {"t":"nav"},
           {"t":"screen","id":1},
           {"t":"screen","id":2}

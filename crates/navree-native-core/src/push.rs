@@ -110,6 +110,7 @@ impl Core {
             delete: false,
             hops: 0,
             region: None,
+            ended_session: false,
         });
     }
 
@@ -171,6 +172,7 @@ impl Core {
         self.inner.hand_over = None;
         self.inner.signing_in = false;
         self.inner.has_shell = false;
+        self.inner.who_unsure = false;
         self.inner.user = None;
         self.inner.person = None;
         self.shell_settled();
@@ -202,6 +204,7 @@ impl Core {
                     delete: true,
                     hops: 0,
                     region: None,
+                    ended_session: false,
                 });
                 // After the removal's request, which has taken its cookies.
                 self.effects.push(Effect::SessionEnding);

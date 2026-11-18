@@ -34,7 +34,7 @@ use crate::event::{Event, Response, StreamState, TransportError};
 use crate::origin::{Target, https_address, openable};
 use crate::state::{
     App, AppUser, Asked, Content, Destination, Failure, Goes, Held, Message, MessageInner, Modal,
-    Notice, Pending, ScreenId, ScreenInner, ScreenView, Stage, TimerFor,
+    Notice, ParkedScreen, Pending, ScreenId, ScreenInner, ScreenView, Stage, TimerFor,
 };
 use crate::tree::{Names, Survey, has_id, opens, roots, walk};
 
@@ -266,13 +266,14 @@ impl Core {
             Event::PopTo { screen } => self.pop_to(screen),
             Event::Dismissed { screen } => {
                 // The sign-in a session's end put up is not the person's to take away.
-                if !self
+                if let Some(at) = self
                     .view
                     .modals
                     .iter()
-                    .any(|modal| modal.locked && modal.stack.contains(&screen))
+                    .position(|modal| modal.stack.contains(&screen))
+                    && !self.view.modals[at..].iter().any(|modal| modal.locked)
                 {
-                    self.dismissed(screen);
+                    self.take_modals_from(at);
                 }
             }
             Event::Overlay { screen, id, open } => self.set_open(screen, &id, open),
@@ -368,6 +369,7 @@ impl Core {
                 let waited = std::mem::take(&mut self.inner.signing_out);
                 self.push_forget();
                 self.inner.has_shell = false;
+                self.inner.who_unsure = false;
                 self.inner.user = None;
                 self.inner.person = None;
                 self.shell_settled();
@@ -547,6 +549,7 @@ impl Core {
             delete: false,
             hops: 0,
             region: Some(part.to_owned()),
+            ended_session: false,
         });
     }
 
@@ -576,6 +579,7 @@ impl Core {
             delete: false,
             hops: 0,
             region: None,
+            ended_session: false,
         });
     }
 
@@ -595,6 +599,7 @@ impl Core {
             delete: false,
             hops: 0,
             region: None,
+            ended_session: false,
         });
         true
     }
@@ -733,6 +738,7 @@ impl Core {
                     delete: asked.delete && same,
                     hops: asked.hops + 1,
                     region: asked.region.clone(),
+                    ended_session: asked.ended_session,
                 });
                 None
             }
@@ -1207,6 +1213,31 @@ impl Core {
             self.blank_all();
             self.forget_all();
         }
+        if !from_device {
+            self.inner.who_unsure = false;
+            if !another_person {
+                if user.is_some() {
+                    self.unpark_screens();
+                    if let Some(at) = self.view.modals.iter().position(|modal| {
+                        modal
+                            .stack
+                            .first()
+                            .and_then(|first| self.inner.screens.get(first))
+                            .is_some_and(|inner| inner.waiting_shell)
+                    }) {
+                        self.take_modals_from(at);
+                    }
+                } else if let Some(at) = self.view.modals.iter().position(|modal| {
+                    modal
+                        .stack
+                        .first()
+                        .and_then(|first| self.inner.screens.get(first))
+                        .is_some_and(|inner| inner.waiting_shell && !inner.outside_way_in)
+                }) {
+                    self.take_modals_from(at);
+                }
+            }
+        }
         if let Some(who) = &user {
             match &mut self.inner.person {
                 Some(last) if !another_person && last.same_as(who) => {
@@ -1384,6 +1415,7 @@ impl Core {
         self.inner.messages.clear();
         self.inner.calls.clear();
         self.inner.launch = None;
+        self.inner.land = None;
         // The removal of a push token is the session's before, and the wait
         // for it ends with the word that the session is forgotten: it stays.
         self.drop_pending(|purpose| !matches!(purpose, Pending::Shell | Pending::PushGone));
@@ -1480,13 +1512,6 @@ impl Core {
     pub(crate) fn session_ended(&mut self, under: ScreenId, href: &str) {
         // Nobody may be signed in any more, wherever the way in leads.
         self.who_may_have_changed(false);
-        let url = match self.resolve(href, under) {
-            Target::Inside(url) => url,
-            Target::Outside(url) => {
-                return self.open_outside(&url, false, By::Answer("sign-in"));
-            }
-            Target::Refused => return self.said_refused("navigate", href),
-        };
         if let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&under),
             self.inner.screens.get_mut(&under),
@@ -1496,6 +1521,30 @@ impl Core {
             inner.stale = true;
             self.touch_screen(under);
         }
+        let url = match self.resolve(href, under) {
+            Target::Inside(url) => url,
+            Target::Outside(url) => {
+                let up = self.view.modals.iter().any(|modal| {
+                    modal
+                        .stack
+                        .first()
+                        .and_then(|first| self.inner.screens.get(first))
+                        .is_some_and(|inner| inner.waiting_shell && inner.outside_way_in)
+                });
+                if !up {
+                    self.open_outside(&url, false, By::Answer("sign-in"));
+                }
+                self.await_shell_cover(None, true);
+                return;
+            }
+            Target::Refused => {
+                self.said_refused("navigate", href);
+                self.who_may_have_changed(true);
+                self.await_shell_cover(None, false);
+                return;
+            }
+        };
+        self.park_web_screens();
         let route = self.route(&url);
         let present = match route.and_then(|route| route.present) {
             Some(present @ (Present::Sheet | Present::Full | Present::Task)) => present,
@@ -2096,24 +2145,219 @@ impl Core {
         self.fetch_page(id, true);
     }
 
+    fn cancel_screen_timers(&mut self, inner: ScreenInner) {
+        let timers = inner
+            .query_timers
+            .into_values()
+            .chain(inner.live.into_values().filter_map(|sub| sub.timer));
+        let timers = timers
+            .chain(inner.live_lists.into_values().filter_map(|sub| sub.timer))
+            .chain(inner.options.into_values().filter_map(|ask| ask.timer));
+        for timer in timers {
+            self.cancel_timer(timer);
+        }
+    }
+
     /// Forgets a screen that no stack holds any more.
     pub(crate) fn close(&mut self, id: ScreenId) {
         self.view.screens.remove(&id);
         if let Some(inner) = self.inner.screens.remove(&id) {
-            let timers = inner
-                .query_timers
-                .into_values()
-                .chain(inner.live.into_values().filter_map(|sub| sub.timer));
-            let timers = timers
-                .chain(inner.live_lists.into_values().filter_map(|sub| sub.timer))
-                .chain(inner.options.into_values().filter_map(|ask| ask.timer));
-            for timer in timers {
-                self.cancel_timer(timer);
-            }
+            self.cancel_screen_timers(inner);
         }
         // The answer to a write is still wanted: it says whether it worked.
         self.drop_pending(|purpose| purpose.screen() == Some(id) && !purpose.writes());
         self.touch(Change::Nav);
+    }
+
+    /// The blank locked cover screen while a shell is waited for.
+    pub(crate) fn waiting_cover(&self) -> Option<ScreenId> {
+        self.view.modals.iter().find_map(|modal| {
+            let first = *modal.stack.first()?;
+            self.inner
+                .screens
+                .get(&first)
+                .is_some_and(|inner| inner.waiting_shell)
+                .then_some(first)
+        })
+    }
+
+    /// Empties any screen that holds a page in the web view when a locked cover
+    /// goes up: a live web page shares the cookies, so it must not stay running
+    /// under a sign-in cover.
+    pub(crate) fn park_web_screens(&mut self) {
+        let ids: Vec<ScreenId> = self
+            .view
+            .screens
+            .iter()
+            .filter_map(|(id, view)| matches!(view.content, Content::Web { .. }).then_some(*id))
+            .collect();
+        for id in ids {
+            if let (Some(view), Some(inner)) = (
+                self.view.screens.get_mut(&id),
+                self.inner.screens.get_mut(&id),
+            ) {
+                let mut blank = ScreenView::new(id, view.url.clone(), view.chrome);
+                blank.from.clone_from(&view.from);
+                *view = blank;
+                inner.visit += 1;
+                inner.stale = true;
+                self.touch_screen(id);
+            }
+            self.drop_pending(|purpose| purpose.screen() == Some(id) && !purpose.writes());
+        }
+    }
+
+    /// Sets aside what every screen under `except` holds, leaving each blank in
+    /// the view state until a shell names who is signed in.
+    pub(crate) fn park_screens(&mut self, except: ScreenId) {
+        let remember = self.inner.person.is_some();
+        let ids: Vec<ScreenId> = self
+            .view
+            .screens
+            .keys()
+            .copied()
+            .filter(|id| *id != except)
+            .collect();
+        for id in ids {
+            if let (Some(view), Some(inner)) = (
+                self.view.screens.get_mut(&id),
+                self.inner.screens.get_mut(&id),
+            ) {
+                let mut blank = ScreenView::new(id, view.url.clone(), view.chrome);
+                blank.from.clone_from(&view.from);
+                let changed = *view != blank;
+                if remember && matches!(view.content, Content::Native { .. }) {
+                    inner.parked = Some(ParkedScreen {
+                        title: view.title.take(),
+                        content: std::mem::replace(&mut view.content, Content::Blank),
+                        cached: view.cached,
+                        status: view.status,
+                        overlays: std::mem::take(&mut view.overlays),
+                        states: std::mem::take(&mut view.states),
+                        forms: std::mem::take(&mut view.forms),
+                        regions: std::mem::take(&mut view.regions),
+                        lists: std::mem::take(&mut view.lists),
+                        question: view.question.take(),
+                    });
+                }
+                inner.visit += 1;
+                inner.stale = true;
+                if changed {
+                    *view = blank;
+                    self.touch_screen(id);
+                }
+            }
+            self.drop_pending(|purpose| purpose.screen() == Some(id) && !purpose.writes());
+        }
+    }
+
+    /// Puts back what `park_screens` set aside for the same person.
+    pub(crate) fn unpark_screens(&mut self) {
+        let ids: Vec<ScreenId> = self.inner.screens.keys().copied().collect();
+        for id in ids {
+            let Some(parked) = self
+                .inner
+                .screens
+                .get_mut(&id)
+                .and_then(|inner| inner.parked.take())
+            else {
+                continue;
+            };
+            if let Some(view) = self.view.screens.get_mut(&id) {
+                view.title = parked.title;
+                view.content = parked.content;
+                view.cached = parked.cached;
+                view.status = parked.status;
+                view.overlays = parked.overlays;
+                view.states = parked.states;
+                view.forms = parked.forms;
+                view.regions = parked.regions;
+                view.lists = parked.lists;
+                view.question = parked.question;
+                self.touch_screen(id);
+            }
+        }
+    }
+
+    /// Covers the app with a locked blank screen while a shell is waited for,
+    /// reusing `from_modal` (or an existing waiting cover) when there is one.
+    pub(crate) fn await_shell_cover(
+        &mut self,
+        from_modal: Option<usize>,
+        outside_way_in: bool,
+    ) -> ScreenId {
+        let existing = self
+            .view
+            .modals
+            .iter()
+            .position(|modal| {
+                modal
+                    .stack
+                    .first()
+                    .and_then(|first| self.inner.screens.get(first))
+                    .is_some_and(|inner| inner.waiting_shell)
+            })
+            .or(from_modal);
+        let id = match existing {
+            Some(at) if at < self.view.modals.len() => {
+                self.take_modals_from(at + 1);
+                let extra: Vec<ScreenId> = self.view.modals[at].stack.drain(1..).collect();
+                for gone in extra {
+                    self.close(gone);
+                }
+                let id = self.view.modals[at].stack[0];
+                if self.view.modals[at].present != Present::Full || !self.view.modals[at].locked {
+                    self.view.modals[at].present = Present::Full;
+                    self.view.modals[at].locked = true;
+                    self.touch(Change::Nav);
+                }
+                let old_inner = self.inner.screens.remove(&id);
+                if let Some(old) = old_inner.as_ref() {
+                    let visit = old.visit + 1;
+                    self.cancel_screen_timers(old_inner.unwrap());
+                    self.inner.screens.insert(
+                        id,
+                        ScreenInner {
+                            visit,
+                            waiting_shell: true,
+                            outside_way_in,
+                            ..ScreenInner::default()
+                        },
+                    );
+                }
+                if let Some(view) = self.view.screens.get_mut(&id) {
+                    let mut blank = ScreenView::new(id, String::new(), false);
+                    blank.loading = true;
+                    if *view != blank {
+                        *view = blank;
+                        self.touch_screen(id);
+                    }
+                }
+                self.drop_pending(|purpose| purpose.screen() == Some(id));
+                id
+            }
+            _ => {
+                let id = self.new_screen("");
+                if let (Some(view), Some(inner)) = (
+                    self.view.screens.get_mut(&id),
+                    self.inner.screens.get_mut(&id),
+                ) {
+                    view.chrome = false;
+                    view.loading = true;
+                    inner.waiting_shell = true;
+                    inner.outside_way_in = outside_way_in;
+                }
+                self.view.modals.push(Modal {
+                    present: Present::Full,
+                    locked: true,
+                    stack: vec![id],
+                });
+                self.touch(Change::Nav);
+                id
+            }
+        };
+        self.park_screens(id);
+        id
     }
 
     /// What is open in a tree, by id: the sheets, dialogs and disclosures.
@@ -2407,12 +2651,12 @@ impl Core {
 
     fn answered_once(&mut self, response: Response) {
         // An answer nobody waits for any more changes nothing.
-        let Some(asked) = self.inner.pending.remove(&response.request) else {
+        let Some(mut asked) = self.inner.pending.remove(&response.request) else {
             return;
         };
         let heard = self.heard(&asked, &response);
         self.inner.write_may_have_run = heard.write_may_have_run();
-        let response = self.same_session(&asked, heard, response);
+        let response = self.same_session(&mut asked, heard, response);
         let response = self.keeping(&asked, response);
         // The push token's removal is over with its first answer, whatever
         // it is: a redirect of it is not followed. The client was told the
@@ -2438,6 +2682,11 @@ impl Core {
             Pending::PushPut { token } => return self.push_put_answered(token, &response),
             _ => {}
         }
+        let ended_session = asked.ended_session
+            || (asked.url.starts_with('/')
+                && self.inner.user.is_some()
+                && heard.speaks_for_the_session()
+                && matches!(response.status, 401 | 419));
         // A part of a page reads its pictures against the page it stands on.
         let page = match asked.purpose {
             Pending::Region { screen, .. }
@@ -2534,6 +2783,13 @@ impl Core {
                 was,
             } => self.more_answered(screen, visit, &id, &was, answer),
         }
+        if ended_session
+            && !self.inner.signing_out
+            && !self.view.modals.iter().any(|modal| modal.locked)
+        {
+            self.who_may_have_changed(true);
+            self.await_shell_cover(None, false);
+        }
     }
 
     /// Whether an answer that came from `url`, when `asked` was asked for, is
@@ -2563,6 +2819,8 @@ impl Core {
         url: &str,
         shown: Option<Shown>,
     ) {
+        self.who_may_have_changed(false);
+        self.park_web_screens();
         if let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&under),
             self.inner.screens.get_mut(&under),
@@ -2639,7 +2897,17 @@ impl Core {
                     settle(self, None);
                 }
             }
-            Answer::Html { url } => self.show_web(id, &url, &url, None, vec!["html".to_owned()]),
+            Answer::Html { url } => {
+                let shown = Shown::Web {
+                    url: url.clone(),
+                    title: None,
+                    why: vec!["html".to_owned()],
+                };
+                match self.covers(asked, &url) {
+                    Some(route) => self.cover(id, route, &url, Some(shown)),
+                    None => self.show(id, &url, shown),
+                }
+            }
             Answer::Empty => settle(self, blank.then_some(Failure::Protocol)),
             Answer::Tree {
                 url,
@@ -6287,15 +6555,16 @@ mod tests {
         assert_eq!(core.view.selected, 0);
     }
 
-    /// The app's part is said to have changed where a shell is drawn, at a
-    /// sign-out and where the session is forgotten, and nowhere else in the
-    /// core. A client counts those changes: after a sign-in it takes the
-    /// first of them for the word of a shell asked for since, and until then
-    /// holds back what belongs to the person who was signed in before. A
-    /// place that said so for a theme or a menu alone would end that hold
-    /// with the person before still named. So a new place is a decision:
-    /// look at what the clients do with the change first, and then name the
-    /// place here.
+    /// The app's part is said to have changed where a shell is drawn, where
+    /// `app.user` is cleared to nobody because who is signed in may have
+    /// changed, at a sign-out and where the session is forgotten, and nowhere
+    /// else in the core. A client counts those changes: after a sign-in it
+    /// takes the next one that names someone for the word of a shell asked for
+    /// since, and until then holds back what belongs to the person who was
+    /// signed in before. A place that said so for a theme or a menu alone
+    /// would end that hold with the person before still named. So a new place
+    /// is a decision: look at what the clients do with the change first, and
+    /// then name the place here.
     #[test]
     fn the_apps_part_is_said_to_have_changed_at_a_shell_a_sign_out_and_a_forgotten_session_only() {
         // Written in two pieces, so that this test is not one of the places.
@@ -6320,13 +6589,266 @@ mod tests {
         assert_eq!(
             places,
             [
+                // Where `app.user` is cleared to nobody until a shell answers.
+                ("cache.rs".to_owned(), 1),
                 // Where the session is forgotten.
                 ("push.rs".to_owned(), 1),
                 // Where a shell is drawn, and at a sign-out.
                 ("reduce.rs".to_owned(), 2),
             ],
-            "the app's part is said to have changed in a new place, or no longer in one of the three"
+            "the app's part is said to have changed in a new place, or no longer in one of the four"
         );
+    }
+
+    /// From the end of a session until a shell answers, `app.user` is `None`,
+    /// live web screens under a cover are emptied, and a session's end that
+    /// puts up no cover of its own covers the screens and asks for the shell.
+    #[test]
+    fn nobody_is_named_from_the_end_of_a_session_until_a_shell_answers() {
+        // 1. An inside way-in (`401` -> `/sign-in`) clears `app.user` and empties a live web screen.
+        let shell_routes = include_str!("../transcripts/fixtures/made/shell-routes.json");
+        let dashboard = include_str!("../transcripts/fixtures/store/dashboard.json");
+        let order = include_str!("../transcripts/fixtures/store/order.json");
+        let ended = include_str!("../transcripts/fixtures/made/session-ended.json");
+        let sign_in_page = include_str!("../transcripts/fixtures/made/sign-in.json");
+
+        let mut core = signed_in_as(None, shell_routes);
+        assert!(core.view.app.as_ref().unwrap().user.is_some());
+        // Screen 1 holds a web page (`store/dashboard.json` has an unlowered part).
+        core.send(native(2, dashboard, None, false));
+        assert!(matches!(core.view.screens[&1].content, Content::Web { .. }));
+        core.send(Event::Select { destination: 1 });
+        core.send(native(4, order, None, false));
+
+        core.send(Event::Refresh { screen: 2 });
+        let update = core.send(Event::Response(Response {
+            request: 5,
+            status: 401,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: ended.to_owned(),
+            ..Response::default()
+        }));
+        let app_change: Change =
+            serde_json::from_value(serde_json::json!({"t": "app"})).expect("app change");
+        assert!(update.changed.contains(&app_change));
+        assert!(
+            core.view.app.as_ref().unwrap().user.is_none(),
+            "the person whose session ended stayed named under the way in"
+        );
+        assert_eq!(core.part(&Query::Snapshot)["person_unknown"], true);
+        assert!(
+            matches!(core.view.screens[&1].content, Content::Blank),
+            "the live web page stayed running under the sign-in cover"
+        );
+        assert_eq!(core.view.modals.len(), 1);
+        assert!(core.view.modals[0].locked);
+        // The sign-in page itself loads: nobody is named still.
+        core.send(native(6, sign_in_page, None, false));
+        assert!(core.view.app.as_ref().unwrap().user.is_none());
+
+        // 2. A redirect to a page that is not a cover (`302` -> `/login`, HTML) on a server
+        // that named the person by id clears `app.user` at once and covers the screens.
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        let store_shell = include_str!("../transcripts/fixtures/store/shell.json");
+        let orders = include_str!("../transcripts/fixtures/store/orders.json");
+        let mut core = signed_in_as(Some(RAVNEET), store_shell);
+        core.send(native(
+            2,
+            include_str!("../transcripts/fixtures/made/home.json"),
+            Some(RAVNEET),
+            false,
+        ));
+        core.send(Event::Select { destination: 1 });
+        let hop0 = core.send(Event::Response(Response {
+            request: 3,
+            status: 302,
+            location: Some("/login".to_owned()),
+            ..Response::default()
+        }));
+        assert!(hop0.changed.contains(&app_change));
+        assert!(core.view.app.as_ref().unwrap().user.is_none());
+        assert!(
+            hop0.effects
+                .iter()
+                .any(|effect| asks_for_the_shell(effect).is_some()),
+            "the shell is asked on the redirect that lost the person header"
+        );
+        let login_req = hop0
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) if req.url == "https://shop.example/login" => Some(req.request),
+                _ => None,
+            })
+            .expect("the login page is followed");
+        let hop1 = core.send(Event::Response(Response {
+            request: login_req,
+            status: 200,
+            content_type: Some("text/html".to_owned()),
+            body: "<html><body>Sign in</body></html>".to_owned(),
+            ..Response::default()
+        }));
+        let shell_req = hop1
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("a fresh shell is asked after the HTML login page");
+        assert!(core.view.app.as_ref().unwrap().user.is_none());
+        assert!(
+            core.waiting_cover().is_some(),
+            "a redirect to a sign-in page that is not a cover left the screens uncovered"
+        );
+        assert!(matches!(core.view.screens[&1].content, Content::Blank));
+        assert!(matches!(core.view.screens[&2].content, Content::Blank));
+        core.send(native(
+            shell_req,
+            include_str!("../transcripts/fixtures/made/shell-nobody.json"),
+            None,
+            false,
+        ));
+        assert!(core.waiting_cover().is_none());
+        assert!(core.view.app.as_ref().unwrap().user.is_none());
+
+        // 3. A `419` (or coverless `401`) on a server that names nobody by id covers the screens
+        // and names nobody until the shell answers.
+        let mut core = signed_in_as(None, shell_routes);
+        core.send(native(
+            2,
+            include_str!("../transcripts/fixtures/made/home.json"),
+            None,
+            false,
+        ));
+        core.send(Event::Select { destination: 1 });
+        core.send(native(3, orders, None, false));
+        core.send(Event::Refresh { screen: 2 });
+        let expired = core.send(Event::Response(Response {
+            request: 4,
+            status: 419,
+            content_type: Some("application/json".to_owned()),
+            body: r#"{"message":"CSRF token mismatch"}"#.to_owned(),
+            ..Response::default()
+        }));
+        assert!(expired.changed.contains(&app_change));
+        assert!(core.view.app.as_ref().unwrap().user.is_none());
+        let cover_id = core.waiting_cover().expect("the screens are covered");
+        assert!(
+            core.view
+                .modals
+                .iter()
+                .any(|m| m.locked && m.stack == [cover_id])
+        );
+        assert!(matches!(core.view.screens[&1].content, Content::Blank));
+        assert!(matches!(core.view.screens[&2].content, Content::Blank));
+        let shell_req = expired
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("the shell is asked");
+        core.send(native(shell_req, shell_routes, None, false));
+        assert!(core.waiting_cover().is_none());
+        assert!(core.view.app.as_ref().unwrap().user.is_some());
+        assert!(core.view.screens[&1].screen().is_some());
+        assert!(core.view.screens[&2].screen().is_some());
+    }
+
+    /// A session that ends with a `401` whose way in is on another origin
+    /// opens that address outside once, clears `app.user` to `None`, blanks
+    /// every screen under a locked full-screen cover, and keeps them so until
+    /// a shell asked after returning answers.
+    #[test]
+    fn a_session_that_ends_with_a_way_in_on_another_origin_covers_the_app_and_names_nobody() {
+        let shell_routes = include_str!("../transcripts/fixtures/made/shell-routes.json");
+        let home = include_str!("../transcripts/fixtures/made/home.json");
+        let order = include_str!("../transcripts/fixtures/store/order.json");
+        let outside = include_str!("../transcripts/fixtures/made/session-ended-outside.json");
+
+        let mut core = signed_in_as(None, shell_routes);
+        let her_key = key_of(&core).expect("Ravneet has a key");
+        core.send(native(2, home, None, false));
+        core.send(Event::Select { destination: 1 });
+        core.send(native(3, order, None, false));
+        core.send(Event::Field {
+            screen: 2,
+            form: Some("refund".to_owned()),
+            field: "refund-amount".to_owned(),
+            value: crate::FieldValue::Text {
+                text: "10".to_owned(),
+            },
+        });
+
+        core.send(Event::Refresh { screen: 2 });
+        let update = core.send(Event::Response(Response {
+            request: 4,
+            status: 401,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: outside.to_owned(),
+            ..Response::default()
+        }));
+        let app_change: Change =
+            serde_json::from_value(serde_json::json!({"t": "app"})).expect("app change");
+        assert!(update.changed.contains(&app_change));
+        assert!(core.view.app.as_ref().unwrap().user.is_none());
+        assert_eq!(core.part(&Query::Snapshot)["person_unknown"], true);
+        assert!(
+            update.effects.iter().any(|effect| matches!(
+                effect,
+                Effect::OpenUrl { url, inside: false } if url == "https://accounts.example/sign-in"
+            )),
+            "the outside way in was not opened: {update:?}"
+        );
+        let cover_id = core.waiting_cover().expect("the waiting cover is up");
+        assert_eq!(
+            core.view.modals,
+            vec![Modal {
+                present: Present::Full,
+                locked: true,
+                stack: vec![cover_id],
+            }]
+        );
+        assert!(!core.view.screens[&cover_id].chrome);
+        assert!(matches!(core.view.screens[&1].content, Content::Blank));
+        assert!(matches!(core.view.screens[&2].content, Content::Blank));
+        assert!(core.view.screens[&2].forms.is_empty());
+
+        // Dismissing the locked cover is refused.
+        core.send(Event::Dismissed { screen: cover_id });
+        assert_eq!(core.waiting_cover(), Some(cover_id));
+
+        // Coming back to the front asks for the shell and nothing else; the cover stays up.
+        core.send(Event::Background);
+        let resumed = core.send(Event::Foreground);
+        assert!(core.view.app.as_ref().unwrap().user.is_none());
+        assert_eq!(core.waiting_cover(), Some(cover_id));
+        let shell_req = resumed
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("coming back asks for the shell");
+        assert!(
+            resumed.effects.iter().all(|effect| match effect {
+                Effect::Fetch(req) => req.request == shell_req,
+                _ => true,
+            }),
+            "a screen under the cover was fetched before the shell answered: {resumed:?}"
+        );
+
+        // The shell names Ravneet again: the cover goes, her work and draft are back, and the front screen refreshes.
+        let back = core.send(native(shell_req, shell_routes, None, false));
+        assert!(core.waiting_cover().is_none());
+        assert!(core.view.modals.is_empty());
+        assert_eq!(key_of(&core), Some(her_key));
+        assert!(core.view.screens[&1].screen().is_some());
+        assert!(core.view.screens[&2].screen().is_some());
+        assert_eq!(
+            core.view.screens[&2].forms["refund"].fields["refund-amount"].value,
+            crate::FieldValue::Text {
+                text: "10".to_owned()
+            }
+        );
+        assert!(back.effects.iter().any(|effect| matches!(
+            effect,
+            Effect::Fetch(req) if req.url == "https://shop.example/orders"
+        )));
     }
 
     /// Two cores over one store, one still naming Ravneet and one naming a

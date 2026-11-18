@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use navree_native::node::Method;
 
 use crate::Core;
-use crate::effect::Effect;
+use crate::effect::{Change, Effect};
 use crate::event::Response;
 use crate::state::{Asked, Content, Pending, ScreenId};
 
@@ -323,7 +323,7 @@ impl Core {
     /// them is the news that the session ended.
     pub(crate) fn same_session(
         &mut self,
-        asked: &Asked,
+        asked: &mut Asked,
         heard: crate::reduce::Heard,
         mut response: Response,
     ) -> Response {
@@ -360,6 +360,12 @@ impl Core {
         if same {
             return response;
         }
+        if asked.url.starts_with('/')
+            && named.as_ref().and_then(Who::id).is_some()
+            && made_for.is_none()
+        {
+            asked.ended_session = true;
+        }
         response
             .headers
             .retain(|(name, _)| !name.eq_ignore_ascii_case(navree_native::KEEP_HEADER));
@@ -380,15 +386,22 @@ impl Core {
     }
 
     /// Who is signed in may have changed (a sign-in finished, a session
-    /// ended): the person this launch's shell named holds no more, and
-    /// nothing is read or written until a shell asked from here on answers.
-    /// A shell request on its way was asked before, so it is dropped and,
-    /// like the shell when `ask`, asked again.
+    /// ended): nobody is named in the view state and nothing is read or
+    /// written until a shell asked from here on answers. A shell request on
+    /// its way was asked before, so it is dropped and, like the shell when
+    /// `ask`, asked again.
     pub(crate) fn who_may_have_changed(&mut self, ask: bool) {
         self.inner.cache.named = None;
+        self.inner.who_unsure = true;
+        if let Some(app) = self.view.app.as_mut()
+            && app.user.take().is_some()
+        {
+            self.touch(Change::App);
+        }
         // Only a request asked before the event that brought this: one asked
         // while it is handled was asked as things are now.
         let before = self.inner.event_start;
+        self.inner.cache.fresh_from = self.inner.cache.fresh_from.max(before);
         let stale: Vec<u64> = self
             .inner
             .pending

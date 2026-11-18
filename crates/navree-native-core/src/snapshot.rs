@@ -290,9 +290,9 @@ impl Core {
             return waiting.clone();
         }
         let view: &ViewState = &self.view;
-        // Until this launch's shell has answered, who the person is, is the
-        // device's word (the shell it kept) and not the server's.
-        let answered = self.inner.has_shell && !self.inner.shell_kept;
+        // Until this launch's shell has answered, or while a session's end or
+        // a sign-in waits for one, who the person is is not settled.
+        let answered = self.inner.has_shell && !self.inner.shell_kept && !self.inner.who_unsure;
         let screens = |stack: &[ScreenId]| -> Vec<KeptScreen> {
             stack
                 .iter()

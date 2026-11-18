@@ -80,6 +80,7 @@
       "body": "store/inventory.json",
       "expect": {
         "changed": [
+          {"t":"app"},
           {"t":"screen","id":3}
         ],
         "effects": [

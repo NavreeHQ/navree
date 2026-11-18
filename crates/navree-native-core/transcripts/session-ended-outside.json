@@ -1,0 +1,171 @@
+{
+  "about": "A session that ends with a 401 whose way in is on another origin opens that address outside once, clears who is named in the app part, and hides every screen under a locked cover until the app returns and a shell names who signed in.",
+  "steps": [
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":1,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":1,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-routes.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1}
+        ],
+        "effects": [
+          {"t":"fetch","request":2,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/app/user/name","is":"Ravneet Kaur"}
+      ]
+    },
+    {
+      "send": {"t":"response","request":2,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/home.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":1}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"select","destination":1},
+      "expect": {
+        "changed": [
+          {"t":"nav"},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":3,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"field","screen":2,"form":"refund","field":"refund-amount","value":{"t":"text","text":"10"}},
+      "expect": {
+        "changed": [
+          {"t":"form","screen":2,"form":"refund"}
+        ],
+        "effects": []
+      }
+    },
+    {
+      "send": {"t":"refresh","screen":2},
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":4,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "401, with a way in on another origin: it opens outside, nobody is named, and a locked cover hides every screen.",
+      "send": {"t":"response","request":4,"status":401,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/session-ended-outside.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1},
+          {"t":"screen","id":2},
+          {"t":"screen","id":3}
+        ],
+        "effects": [
+          {"t":"open_url","url":"https://accounts.example/sign-in"}
+        ]
+      },
+      "check": [
+        {"at":"/app/user","is":null},
+        {"at":"/modals","is":[{"locked":true,"present":"full","stack":[3]}]},
+        {"at":"/front","is":3},
+        {"at":"/screens/3/chrome","is":false},
+        {"at":"/screens/3/loading","is":true},
+        {"at":"/screens/1/content/t","is":"blank"},
+        {"at":"/screens/2/content/t","is":"blank"},
+        {"at":"/screens/2/forms","is":{}}
+      ]
+    },
+    {
+      "send": {"t":"background"},
+      "expect": {
+        "changed": [],
+        "effects": []
+      }
+    },
+    {
+      "note": "Coming back asks for the shell and keeps the screens covered until it answers.",
+      "send": {"t":"foreground"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/app/user","is":null},
+        {"at":"/modals","is":[{"locked":true,"present":"full","stack":[3]}]},
+        {"at":"/screens/2/content/t","is":"blank"}
+      ]
+    },
+    {
+      "note": "The shell names Ravneet again: the cover goes, her screens and draft are back, and the front screen refreshes.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-routes.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1},
+          {"t":"screen","id":2}
+        ],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/orders","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/app/user/name","is":"Ravneet Kaur"},
+        {"at":"/modals","is":[]},
+        {"at":"/screens/3","is":null},
+        {"at":"/screens/1/content/screen/title","is":"Overview"},
+        {"at":"/screens/2/content/screen/title","is":"Order CS-20481"},
+        {"at":"/screens/2/forms/refund/fields/refund-amount/value/text","is":"10"},
+        {"at":"/screens/2/refreshing","is":true}
+      ]
+    },
+    {
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "store/order.json",
+      "expect": {
+        "changed": [
+          {"t":"screen","id":2}
+        ],
+        "effects": []
+      },
+      "check": [
+        {"at":"/screens/2/refreshing","is":false},
+        {"at":"/screens/2/forms/refund/fields/refund-amount/value/text","is":"10"}
+      ]
+    }
+  ]
+}

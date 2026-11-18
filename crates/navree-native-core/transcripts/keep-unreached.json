@@ -152,6 +152,7 @@
       "send": {"t":"response","request":7,"status":503,"content_type":"text/html","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000hs02"]],"body":"<p>"},
       "expect": {
         "changed": [
+          {"t":"app"},
           {"t":"screen","id":3},
           {"t":"messages"}
         ],
@@ -189,18 +190,25 @@
       }
     },
     {
-      "note": "A 401 that names nobody is the news that the session ended: what was kept is emptied and the shell is asked again, as before.",
+      "note": "A 401 that names nobody is the news that the session ended: what was kept is emptied, nobody is named, the screens are covered, and the shell is asked again.",
       "send": {"t":"response","request":9,"status":401},
       "expect": {
         "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":1},
+          {"t":"screen","id":2},
           {"t":"screen","id":3},
+          {"t":"screen","id":4},
           {"t":"messages"}
         ],
         "effects": [
           {"t":"cache_clear"},
           {"t":"fetch","request":10,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
           {"t":"report","what":"session","detail":"an answer was made for another person than the shell named: what was kept was emptied, and the shell is asked again"},
-          {"t":"message","id":2,"tone":"danger","notice":"failed"}
+          {"t":"message","id":2,"tone":"danger","notice":"failed"},
+          {"t":"cancel","request":2},
+          {"t":"stream_close","stream":2}
         ]
       }
     }

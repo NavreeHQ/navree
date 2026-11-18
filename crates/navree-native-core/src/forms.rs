@@ -1378,7 +1378,12 @@ impl Core {
                         title: None,
                         why: vec!["html".to_owned()],
                     };
-                    self.arrive(id, &url, shown);
+                    match self.covers(asked, &url) {
+                        Some(route) => self.cover(id, route, &url, Some(shown)),
+                        None => {
+                            self.arrive(id, &url, shown);
+                        }
+                    }
                 }
             }
             Answer::Tree {

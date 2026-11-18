@@ -466,9 +466,15 @@ impl Core {
         else {
             return;
         };
-        if !self.inner.has_shell {
+        if !self.inner.has_shell || self.waiting_cover().is_some() {
             // Asked before the shell is here: it opens when the shell does.
-            self.inner.launch = Some(url);
+            if !self.inner.has_shell
+                || self.destination_at(&url).is_some()
+                || self.route(&url).is_some()
+                || self.config.deep_links != DeepLinks::Routes
+            {
+                self.inner.launch = Some(url);
+            }
             return;
         }
         let destination = self.destination_at(&url);

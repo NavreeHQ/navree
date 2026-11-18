@@ -267,18 +267,21 @@ pub enum Effect {
 #[non_exhaustive]
 pub enum Change {
     /// The app's part: its name, its theme and the person signed in. It is
-    /// said to have changed at three moments and no other: when a shell is
+    /// said to have changed at four moments and no other: when a shell is
     /// drawn (from an answer, from the one kept on the device, or a blank
-    /// one), at a sign-out, and when the session is forgotten. It is not said
-    /// for a theme, a menu or a name by itself.
+    /// one), when who is signed in may have changed and `app.user` is cleared
+    /// to nobody until a shell answers, at a sign-out, and when the session is
+    /// forgotten. It is not said for a theme, a menu or a name by itself.
     ///
-    /// A client relies on this. A shell asked for before a sign-in is never
-    /// drawn after it, so an app's part that changed after a sign-in is the
-    /// word of a shell asked for since, and says who is signed in now. A
-    /// client that held back what belongs to the person before (a reminder
-    /// that waits) lets go of the hold at that change, and at no other. A new
-    /// moment that says so would end such a hold with the person before
-    /// still named, so the clients are looked at before one is added
+    /// A client relies on this. From a session's end or a sign-in until a
+    /// shell asked for since answers, `app.user` is absent, and a shell asked
+    /// for before is never drawn after it: so an app's part that names a
+    /// person is always the word of a shell asked for since. A client that
+    /// held back what belongs to the person before (a reminder that waits)
+    /// keeps the hold while nobody is named and lets go of it only when a
+    /// shell answers. A new moment that said so with the person before still
+    /// named would end such a hold early, so the clients are looked at before
+    /// one is added
     /// (`the_apps_part_is_said_to_have_changed_at_a_shell_a_sign_out_and_a_forgotten_session_only`
     /// in `src/reduce.rs`).
     App,
