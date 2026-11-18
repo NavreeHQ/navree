@@ -1,0 +1,45 @@
+.notice-board {
+  display: grid;
+  gap: 1rem;
+  margin-block: 1.5rem;
+}
+
+.notice-board h2 {
+  color: var(--ink-1);
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.notice-list {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.notice-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+}
+
+.notice-card h3 {
+  color: var(--ink-1);
+  font-size: 1rem;
+  margin: 0 0 0.375rem;
+}
+
+.notice-card p {
+  color: var(--ink-2);
+  margin: 0 0 0.5rem;
+}
+
+.notice-meta,
+.notice-empty {
+  color: var(--ink-2);
+  font-size: 0.875rem;
+  margin: 0;
+}

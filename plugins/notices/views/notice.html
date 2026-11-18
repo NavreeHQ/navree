@@ -1,0 +1,5 @@
+<li class="notice-card">
+  <h3>{{ notice.title }}</h3>
+  {% if notice.body %}<p>{{ notice.body }}</p>{% endif %}
+  <p class="notice-meta">{% if t is defined %}{{ t("notices-posted-by", author=notice.posted_by) }}{% else %}Posted by {{ notice.posted_by }}{% endif %}</p>
+</li>

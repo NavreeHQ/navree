@@ -1,0 +1,12 @@
+<section class="notice-board">
+  <h2>{% if t is defined %}{{ t("notices-heading") }}{% else %}Notices{% endif %}</h2>
+  {% if notices %}
+  <ul class="notice-list">
+    {% for notice in notices %}
+      {% include "notices/notice.html" %}
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="notice-empty">{% if t is defined %}{{ t("notices-empty") }}{% else %}No notices have been posted yet.{% endif %}</p>
+  {% endif %}
+</section>
