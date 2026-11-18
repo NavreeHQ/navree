@@ -224,16 +224,17 @@ export async function showPage(response, how = {}) {
   // A page of this app says so in a header, which no file the app serves as it is can carry.
   const ours = response.headers.has(PAGE);
   const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+  const cleanDoc = fresh(doc) || response.headers.has("x-navree-fresh");
   if (newer()) {
     clean(body(doc));
-    if (ours) adoptToasts(doc);
+    if (ours && cleanDoc === fresh()) adoptToasts(doc);
     return;
   }
   if (late()) return true;
   const build = root(doc).getAttribute("data-build");
   // Anything else, a page from another build, or one without the runtime, loads for real.
   // A swap between a fresh and a plain page, and a fresh answer to a region of a plain page, load in full.
-  if (!ours || build !== root().getAttribute("data-build") || (fresh(doc) !== fresh() && (!id || fresh(doc)))) {
+  if (!ours || build !== root().getAttribute("data-build") || (cleanDoc !== fresh() && (!id || cleanDoc))) {
     location.assign(url);
     return;
   }
@@ -550,6 +551,8 @@ async function feed(el, src, current) {
   trouble.delete(el);
   const html = await response.text();
   if (stale()) return;
+  const cursor = response.headers.get("x-ui-cursor");
+  if (cursor) el.setAttribute("data-ui-after", cursor);
   if (html.trim()) {
     const have = new Set();
     for (const row of into.children) if (row.id) have.add(row.id);
@@ -579,8 +582,6 @@ async function feed(el, src, current) {
       emit(new Event("ui:swap"));
     }
   }
-  const cursor = response.headers.get("x-ui-cursor");
-  if (cursor) el.setAttribute("data-ui-after", cursor);
 }
 
 /**

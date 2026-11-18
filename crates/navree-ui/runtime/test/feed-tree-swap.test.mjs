@@ -74,6 +74,36 @@ test("a component in a row a feed adds mounts, and leaves when the feed drops it
   assert.equal(g.uis["in-r1"].signal.aborted, true, "a component in a dropped row still listens");
 });
 
+test("a feed has written its cursor before it says ui:swap", async () => {
+  page.fetched.length = 0;
+  /** @type {(string | null)[]} */
+  const seenAtSwap = [];
+  let refreshedOnce = false;
+  const onSwap = () => {
+    seenAtSwap.push($("recent").getAttribute("data-ui-after"));
+    if (!refreshedOnce) {
+      refreshedOnce = true;
+      fire($("recent"), "ui:refresh");
+    }
+  };
+  document.addEventListener("ui:swap", onSwap);
+  try {
+    page.answers.push(
+      answer(`<li id="r3">Kuldeep Gill signed in</li>`, { headers: { "content-type": "text/html; charset=utf-8", "x-ui-cursor": "42" } }),
+      answer("", { headers: { "content-type": "text/html; charset=utf-8", "x-ui-cursor": "42" } }),
+    );
+    fire($("recent"), "ui:refresh");
+    await settle();
+    assert.deepEqual(seenAtSwap, ["42"]);
+    assert.deepEqual(
+      page.fetched.map((f) => new URL(f.url).searchParams.get("after")),
+      ["0", "42"],
+    );
+  } finally {
+    document.removeEventListener("ui:swap", onSwap);
+  }
+});
+
 test("a component in a tree item drawn as its branch opens mounts", async () => {
   page.answers.push(
     answer(
