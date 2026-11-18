@@ -9,8 +9,8 @@ use navree_contracts::{Clock, Dispatcher, ModuleBuilderJobsExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::__private::{imports, is_app_module};
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, ConfiguredModule, Contributed, Factory, Lifecycle, Module,
-    ModuleBuilder, ModuleId, ModuleInfo, PluginReport, ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, Contributed, Factory, Lifecycle, Module, ModuleBuilder,
+    ModuleId, ModuleInfo, PluginReport, ProviderKey, Resolver,
 };
 use navree_storage::Storage;
 
@@ -62,13 +62,13 @@ impl DocumentsModule {
     /// root). They are checked at boot as the `documents` section is: a
     /// value it refuses fails the boot.
     pub fn for_root(options: DocumentsOptions) -> impl Module {
-        ConfiguredModule::<DocumentsModule, _>::for_root(options, register)
+        ConfiguredDocumentsModule::for_root(options)
     }
 
     /// The module configured from the `documents` section of `Config` at
     /// boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<DocumentsModule, DocumentsOptions>::from_config(register)
+        ConfiguredDocumentsModule::from_config()
     }
 }
 
@@ -77,6 +77,13 @@ impl Module for DocumentsModule {
         register(m, None);
     }
 }
+
+navree_kernel::configured_module!(
+    ConfiguredDocumentsModule,
+    DocumentsModule,
+    DocumentsOptions,
+    register,
+);
 
 /// Template files a module embeds (see
 /// [`ModuleBuilderDocumentsExt::document_files`]).
@@ -336,6 +343,7 @@ impl Lifecycle for CloseEngines {
 }
 
 fn register(m: &mut ModuleBuilder, options: Option<DocumentsOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         // Options given in code are checked at boot, as configuration is.

@@ -7,9 +7,7 @@ use navree_config::{Config, ConfigSection, ModuleBuilderConfigExt};
 use navree_contracts::Clock;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{
-    AppContext, ConfiguredModule, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
-};
+use navree_kernel::{AppContext, Factory, Module, ModuleBuilder, ProviderKey, Resolver};
 use navree_observe::MetricsCollector;
 use navree_queue::Queue;
 use navree_telemetry::{ModuleBuilderTelemetryExt, TelemetrySink};
@@ -56,12 +54,12 @@ impl FleetModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: FleetOptions) -> impl Module {
-        ConfiguredModule::<FleetModule, _>::for_root(options, register)
+        ConfiguredFleetModule::for_root(options)
     }
 
     /// The module configured from the `fleet` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<FleetModule, FleetOptions>::from_config(register)
+        ConfiguredFleetModule::from_config()
     }
 }
 
@@ -71,7 +69,10 @@ impl Module for FleetModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredFleetModule, FleetModule, FleetOptions, register);
+
 fn register(m: &mut ModuleBuilder, options: Option<FleetOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => {

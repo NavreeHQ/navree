@@ -7,8 +7,7 @@ use navree_contracts::{AuditSink, Clock, SystemClock};
 use navree_db::{ChangeObserver, Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, CommandSpec, ConfiguredModule, Factory, Module, ModuleBuilder,
-    ProviderKey, Resolver,
+    AppContext, BoxError, CommandSpec, Factory, Module, ModuleBuilder, ProviderKey, Resolver,
 };
 
 use crate::controller::AuditController;
@@ -53,12 +52,12 @@ pub struct AuditModule;
 impl AuditModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: AuditOptions) -> impl Module {
-        ConfiguredModule::<AuditModule, _>::for_root(options, register)
+        ConfiguredAuditModule::for_root(options)
     }
 
     /// The module configured from the `audit` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<AuditModule, AuditOptions>::from_config(register)
+        ConfiguredAuditModule::from_config()
     }
 }
 
@@ -68,7 +67,10 @@ impl Module for AuditModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredAuditModule, AuditModule, AuditOptions, register);
+
 fn register(m: &mut ModuleBuilder, options: Option<AuditOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<AuditOptions>::new(move |_| {

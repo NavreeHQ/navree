@@ -7,8 +7,8 @@ use navree_config::ModuleBuilderConfigExt;
 use navree_db::{Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, ConfiguredModule, Factory, Lifecycle, Module, ModuleBuilder,
-    ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, Factory, Lifecycle, Module, ModuleBuilder, ProviderKey,
+    Resolver,
 };
 
 use crate::agent::Agent;
@@ -61,12 +61,12 @@ impl AiModule {
     /// The module with explicit options, without reading configuration.
     /// Invalid options fail the boot, naming the key.
     pub fn for_root(options: AiOptions) -> impl Module {
-        ConfiguredModule::<AiModule, _>::for_root(options, register)
+        ConfiguredAiModule::for_root(options)
     }
 
     /// The module configured from the `ai` section at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<AiModule, AiOptions>::from_config(register)
+        ConfiguredAiModule::from_config()
     }
 }
 
@@ -76,7 +76,10 @@ impl Module for AiModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredAiModule, AiModule, AiOptions, register);
+
 fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     contribute_slot(m, SLOT);
     // Given in code, a provider table is what its registered driver reads;

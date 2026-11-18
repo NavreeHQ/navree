@@ -4,7 +4,7 @@
 use navree_config::ModuleBuilderConfigExt;
 use navree_http::__private::AccessDeclarations;
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{ConfiguredModule, Module, ModuleBuilder};
+use navree_kernel::{Module, ModuleBuilder};
 
 use crate::context::http_context_layer;
 use crate::edge::shared_port_layer;
@@ -44,12 +44,12 @@ pub struct GrpcModule;
 impl GrpcModule {
     /// The module with explicit options (configure it once, in the app root).
     pub fn for_root(options: GrpcOptions) -> impl Module {
-        ConfiguredModule::<GrpcModule, _>::for_root(options, register)
+        ConfiguredGrpcModule::for_root(options)
     }
 
     /// The module configured from the `grpc` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<GrpcModule, GrpcOptions>::from_config(register)
+        ConfiguredGrpcModule::from_config()
     }
 }
 
@@ -59,7 +59,10 @@ impl Module for GrpcModule {
     }
 }
 
+navree_kernel::configured_module!(ConfiguredGrpcModule, GrpcModule, GrpcOptions, register);
+
 fn register(m: &mut ModuleBuilder, options: Option<GrpcOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.value(options),

@@ -5,9 +5,7 @@ use std::sync::Arc;
 use navree_config::ModuleBuilderConfigExt;
 use navree_http::__private::AccessDeclarations;
 use navree_http::ModuleBuilderHttpExt;
-use navree_kernel::{
-    ConfiguredModule, Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver,
-};
+use navree_kernel::{Factory, Injectable, Module, ModuleBuilder, ProviderKey, Resolver};
 
 use crate::command::schema_command;
 use crate::endpoint::GraphqlController;
@@ -59,12 +57,12 @@ impl GraphqlModule {
     /// The module with explicit options (configure it once, in the app
     /// root). Invalid options fail the boot.
     pub fn for_root(options: GraphqlOptions) -> impl Module {
-        ConfiguredModule::<GraphqlModule, _>::for_root(options, register)
+        ConfiguredGraphqlModule::for_root(options)
     }
 
     /// The module configured from the `graphql` section of `Config` at boot.
     pub fn from_config() -> impl Module {
-        ConfiguredModule::<GraphqlModule, GraphqlOptions>::from_config(register)
+        ConfiguredGraphqlModule::from_config()
     }
 }
 
@@ -74,7 +72,15 @@ impl Module for GraphqlModule {
     }
 }
 
+navree_kernel::configured_module!(
+    ConfiguredGraphqlModule,
+    GraphqlModule,
+    GraphqlOptions,
+    register,
+);
+
 fn register(m: &mut ModuleBuilder, options: Option<GraphqlOptions>) {
+    m.plugin(navree_kernel::plugin_info!());
     m.global();
     match options {
         Some(options) => m.factory(Factory::<GraphqlOptions>::new(move |_| {
