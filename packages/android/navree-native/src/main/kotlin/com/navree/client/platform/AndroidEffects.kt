@@ -307,7 +307,7 @@ class AndroidEffects(
     private fun clearPages() {
         if (!SiteWipe.owesEvery) return SiteWipe.finish()
         if (!clearing.compareAndSet(false, true)) return
-        state.always {
+        val work = {
             try {
                 // Asked again in its turn: a go that ended meanwhile, or the end of a session, has seen to it.
                 if (SiteWipe.owesEvery) clearEvery()
@@ -315,6 +315,8 @@ class AndroidEffects(
                 clearing.set(false)
             }
         }
+        // A session that is closed has no queue any more, and what is owed is the process's: the go is run all the same.
+        if (closed.get()) thread(name = "navree-web-wipe", isDaemon = true) { work() } else state.always(work)
     }
 
     /** What a go begun from the store's thread came to, told across to it from the main thread. */
