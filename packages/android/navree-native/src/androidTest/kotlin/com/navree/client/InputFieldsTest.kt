@@ -10,6 +10,7 @@ import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -29,6 +30,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.core.app.ActivityOptionsCompat
 import androidx.exifinterface.media.ExifInterface
@@ -378,7 +380,10 @@ class InputFieldsTest {
         compose.onNode(hasSetTextAction()).performTextReplacement("DC2626")
         compose.waitForIdle()
         compose.onNodeWithText("OK").assertIsEnabled()
-        compose.onNodeWithText("OK").performClick()
+        // Confirmed by the button's own action and not by a touch at the place it is drawn: typing brought the keyboard up, and on
+        // a phone the dialog moves while the keyboard comes in, so a touch aimed at where the button was can land beside the
+        // dialog, which closes it with nothing sent.
+        compose.onNodeWithText("OK").performSemanticsAction(SemanticsActions.OnClick)
         waitFor("the typed colour to reach the core") { held("f-label") == FieldValue.Text("#dc2626") }
     }
 
