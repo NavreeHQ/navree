@@ -148,8 +148,12 @@ function enhance(root) {
   const stops = rows.filter((row) => attr(row, "tabindex") === "0");
   for (const extra of stops.slice(1)) set(extra, "tabindex", "-1");
   if (!stops.length && rows[0]) set(rows[0], "tabindex", "0");
-  // A branch the server drew open, whose children are still to come.
-  for (const item of items) if (has(item, "data-open") && has(item, "data-lazy")) load(item);
+  // A branch the server drew open, whose children are still to come and have not failed at this address.
+  for (const item of items) {
+    if (!has(item, "data-open") || !has(item, "data-lazy")) continue;
+    const group = first(item, ":scope > [data-slot=tree-group]");
+    if (!group || failed.get(item) !== attr(group, "data-src")) load(item);
+  }
 }
 
 /** Makes the row of `item` the one tab stop of its tree and focuses it. @param {HTMLElement} item @param {boolean} [focus] */
@@ -182,6 +186,7 @@ function close(item) {
   const focused = active();
   const row = rowOf(item);
   unset(item, "data-open");
+  failed.delete(item);
   if (row) set(row, "aria-expanded", "false");
   // Focus, or the tab stop, on a node that is no longer shown goes to the one that was closed.
   const lost = list(item, ":scope > [data-slot=tree-group] " + TREEITEM + "[tabindex='0']").length > 0;
@@ -196,6 +201,8 @@ const toggle = (item) => (has(item, "data-open") ? close(item) : open(item));
 
 /** What is on its way, by the element that asked: one request at a time for each. @type {WeakMap<Element, number>} */
 const pending = new WeakMap();
+/** The branches whose last fetch failed, with the address it failed at: a swap leaves them until they are opened again. @type {WeakMap<Element, string>} */
+const failed = new WeakMap();
 
 /**
  * Asks for the markup at `src` and gives back the list items in it. A rejected answer is null.
@@ -267,6 +274,7 @@ async function load(item) {
   const src = group && attr(group, "data-src");
   if (!root || !row || !group || !src || pending.has(group)) return;
   const l = words(root);
+  failed.delete(item);
   pending.set(group, 1);
   set(row, "aria-busy", "true");
   say_in(group, l.loading);
@@ -280,6 +288,7 @@ async function load(item) {
   if (!item.isConnected || attr(group, "data-src") !== src) return;
   unset(row, "aria-busy");
   if (!items) {
+    failed.set(item, src);
     say_in(group, l.failed, l.retry);
     say(root, l.failed);
     release(item);

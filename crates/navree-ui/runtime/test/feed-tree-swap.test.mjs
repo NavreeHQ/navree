@@ -16,9 +16,13 @@ const page = install({
       <div id="recent" data-ui-region data-ui-src="/activity" data-ui-feed="recent-rows" data-ui-feed-max="1"><ul id="recent-rows"></ul></div>
       <div id="zones" data-ui-tree data-select="none" data-label="Zones">
         <ul data-slot="tree-root">
-          <li data-slot="tree-item" data-level="1" data-setsize="1" data-posinset="1" data-branch data-lazy>
+          <li data-slot="tree-item" data-level="1" data-setsize="2" data-posinset="1" data-branch data-lazy>
             <div data-slot="tree-row"><span id="open-ludhiana" data-slot="tree-toggle" aria-hidden="true"></span><span data-slot="tree-label"><span data-slot="tree-text">Ludhiana</span></span></div>
             <ul id="ludhiana-group" data-slot="tree-group" data-src="/zones/children"></ul>
+          </li>
+          <li data-slot="tree-item" data-level="1" data-setsize="2" data-posinset="2" data-branch data-lazy>
+            <div data-slot="tree-row"><span id="open-amritsar" data-slot="tree-toggle" aria-hidden="true"></span><span data-slot="tree-label"><span data-slot="tree-text">Amritsar</span></span></div>
+            <ul id="amritsar-group" data-slot="tree-group" data-src="/zones/amritsar"></ul>
           </li>
         </ul>
         <div data-slot="tree-status" role="status" aria-live="polite"></div>
@@ -114,4 +118,36 @@ test("a component in a tree item drawn as its branch opens mounts", async () => 
   $("open-ludhiana").click();
   await until(() => $("in-item")?.hasAttribute("data-ui-mounted"), "the component in the tree item to mount");
   assert.deepEqual(calls("in-item"), ["mount"]);
+});
+
+test("a branch that failed to load is not asked for again by a swap, only when it is opened again", async () => {
+  const asked = () => page.fetched.filter((f) => new URL(f.url).pathname === "/zones/amritsar").length;
+  page.fetched.length = 0;
+  page.answers.push(answer("broken", { status: 500, headers: { "content-type": "text/html; charset=utf-8" } }));
+  $("open-amritsar").click();
+  await settle();
+  assert.equal(asked(), 1);
+  assert.ok($("amritsar-group").querySelector("li[data-slot=tree-note]"), "the failed branch shows no note");
+
+  // Swaps elsewhere on the page (a direct `ui:swap`, and a feed adding a row) leave the failed branch alone.
+  document.dispatchEvent(new Event("ui:swap"));
+  page.answers.push(answer(`<li id="r4">Simran Kaur signed in</li>`, ROWS));
+  fire($("recent"), "ui:refresh");
+  await settle();
+  assert.equal(asked(), 1, "a swap asked again for a branch that had failed");
+
+  // Closing the branch and opening it again asks anew, and draws the children that come.
+  $("open-amritsar").click();
+  await settle();
+  assert.equal(asked(), 1);
+  page.answers.push(
+    answer(
+      `<ul data-slot="tree-group"><li data-slot="tree-item" data-level="2" data-setsize="1" data-posinset="1"><div data-slot="tree-row"><span data-slot="tree-label"><span data-slot="tree-text">Ranjit Avenue</span>${pad("in-amritsar")}</span></div></li></ul>`,
+      ROWS,
+    ),
+  );
+  $("open-amritsar").click();
+  await until(() => $("in-amritsar")?.hasAttribute("data-ui-mounted"), "the reopened branch's component to mount");
+  assert.equal(asked(), 2);
+  assert.equal($("amritsar-group").textContent.includes("Ranjit Avenue"), true);
 });
