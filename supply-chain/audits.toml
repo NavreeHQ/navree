@@ -1,6 +1,12 @@
 
 # cargo-vet audits file
 
+[[audits.brotli]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "9.1.1 -> 9.1.3"
+notes = "Diff reviewed. The encoder checks minimum copy length after fix_unbroken_len truncates a match at a custom dictionary boundary; BrotliEncoderVersion is checked at compile time against CARGO_PKG_VERSION; BrotliEncoderMallocUsize uses checked_mul before calling a custom allocator; boundary test added. No build script, no new dependencies, no I/O in changed code. Same publisher as 9.1.1."
+
 [[audits.constant_time_eq]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
@@ -13,11 +19,53 @@ criteria = "safe-to-deploy"
 delta = "0.4.2 -> 0.4.3"
 notes = "Diff reviewed. Body encoding no longer picks 7bit or 8bit for input with a NUL, or a CR or LF outside a CRLF (a bare LF in a str is still taken as a line ending), so such bytes go out as quoted-printable or base64. RFC 2231 parameter encoding writes at least one character per line, so a 62-character key can no longer stall it or underflow. Header folding never leaves a line of white space only. Tests added. No new dependencies, no build script, no unsafe (forbid(unsafe_code)), no I/O. Published from github:lettre/email-encoding."
 
+[[audits.harfrust]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.15.0 -> 0.16.0"
+notes = "Diff reviewed. Bounds operation budgets across Buffer cluster merges, masks, lookup passes, WouldApplyContext, variation deltas and contextual or ligature rule construction; adds SyllableLookaheadMemo so Indic, Khmer and USE syllable scanners stay linear on long joiner or segment-begin runs; records syllable cuts across substitutions; caches glyph names in ShaperFont; precomputes running advance sums for mark attachment propagation; updates kern/kerx state handling and lookup deduplication in OtMapBuilder. No new dependencies, no build script, no unsafe, no I/O. Same publisher as 0.15.0."
+
 [[audits.lettre]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.11.23 -> 0.11.24"
 notes = "Diff reviewed. SMTP client: the connection is closed if bytes are already buffered after the STARTTLS reply; dot-stuffing also applies after a bare CR or LF; replies are read under a 100,000-byte cap and parsed once per line, only CRLF ending a line; a white-space EHLO line no longer panics; DATA and message replies must have the expected class. A quoted local part is kept as written and addresses reject non-ASCII white space. Debug hides DKIM keys and AUTH credentials. No new dependencies or build script, forbid(unsafe_code), I/O only on the SMTP socket. Published from github:lettre/lettre."
+
+[[audits.mongodb]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "3.10.0 -> 3.10.1"
+notes = "Diff reviewed. Bumps mongodb-internal-macros to 3.10.1, replaces derive_where(Debug) with manual Debug impls on Client, cursors and change streams, drops Debug on internal CSFLE and OIDC state types, and redacts DataKeyOptions::key_material, OIDC CallbackContext::refresh_token and IdpServerResponse tokens, Socks5Proxy::authentication and TlsOptions::tls_certificate_key_file_password in Debug output. No build script, no unsafe, no new I/O. Same publisher as 3.10.0."
+
+[[audits.mongodb-internal-macros]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "3.10.0 -> 3.10.1"
+notes = "Diff reviewed. Version bump in Cargo.toml only; no source changes, no build script, no unsafe, no I/O. Same publisher as 3.10.0."
+
+[[audits.notify]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "8.2.1 -> 8.2.2"
+notes = "Diff reviewed. Bumps MSRV to 1.88 and inlines format arguments. On Windows, adds an AtomicBool stopping flag on WatchState and ReadData so queued ReadDirectoryChangesW completions do not rearm a stopped watch, closes directory and semaphore handles only after waiting for completion when CancelIo succeeds (leaking the handle if CancelIo fails rather than closing under an in-flight APC), and signals the completion semaphore before sending Action::Stop on Drop. Unsafe Win32 calls are bounded to watch teardown and tests. Same publisher as 8.2.1."
+
+[[audits.prost]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.14.4 -> 0.14.6"
+notes = "Diff reviewed. Bumps prost-derive and html_root_url to 0.14.6; no library code changes, no build script, no unsafe, no I/O. Published from github:tokio-rs/prost."
+
+[[audits.prost-derive]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.14.4 -> 0.14.6"
+notes = 'Diff reviewed. Widens the itertools upper bound to <=0.15, emits check_wire_type(WireType::LengthDelimited, wire_type) in generated map-field merge code, and uses starts_with and strip_prefix("enumeration") instead of byte-index slicing in Ty::from_str so non-ASCII type strings return an error instead of panicking. No build script, no unsafe, no I/O. Published from github:tokio-rs/prost.'
+
+[[audits.prost-types]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.14.4 -> 0.14.6"
+notes = "Diff reviewed. Bumps prost and html_root_url to 0.14.6; no library code changes, no build script, no unsafe, no I/O. Published from github:tokio-rs/prost."
 
 [[audits.rc4]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
@@ -25,11 +73,89 @@ criteria = "safe-to-deploy"
 version = "0.2.0"
 notes = "Read in full: RC4 in safe Rust (forbid(unsafe_code)), no build script, no I/O; depends only on cipher."
 
+[[audits.read-fonts]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.46.0 -> 0.47.0"
+notes = "Diff reviewed. Regenerates table byte-range helpers with saturating_add; gates Type 1 font loading behind a type1 feature and adds CID-keyed Type 1 parsing with input-bounded map and subroutine budgets; adds U32Set::next_after and next_absent_after; bounds Varc Outlines::new on malformed axis_indices lists, CFF Format0 charset and custom encoding lookups at num_glyphs, and Stack roll shift on i32::MIN; supports signed pre-initial states in legacy AAT StateTable, byte offsets in kerx Subtable2, declared valueRecordSize strides in MVAR and single-pass contextual lookup closure; renames ColorGlyphVersion and PaintCachedColorGlyph to ColorVersion and PaintCached. No new dependencies, no build script, no unsafe, no I/O. Same publisher as 0.46.0."
+
+[[audits.redis]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.8.1 -> 1.8.2"
+notes = "Diff reviewed. Closes synchronous Connection and resets its parser on unrecoverable reply parse errors; ignores unsolicited RESP3 SUnsubscribe pushes while awaiting non-subscription replies; tracks per-shard invalidation counts in ShardedLRU so replies invalidated in flight are not cached; wakes async cluster pending queues via poll_recv, follows hostless MOVED and ASK redirects, routes MSETEX by first key and refreshes cluster routing; rejects out-of-range integer and double conversions in FromRedisValue, converts RESP3 doubles for big-number types, accepts -1 data_received on Role::Replica and adjusts TLS feature gates. No new dependencies, no build script, no unsafe. Same publisher as 1.8.1."
+
+[[audits.resvg]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.49.0 -> 0.50.0"
+notes = "Diff reviewed. Bumps usvg to 0.50.0 and svgtypes to 0.16.2, adapts to optional Node and Group bounding boxes and DEFAULT_MAX_DEPTH, demultiplies alpha on displacement-map inputs while passing pre-scaled scale_x and scale_y, and computes pattern pixmap sx and sy scales in render_pattern_pixmap. No build script, no unsafe, no new I/O. Same publisher as 0.49.0."
+
+[[audits.rpassword]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "7.5.4 -> 7.5.5"
+notes = "Diff reviewed. Extracts restore_terminal_configuration on Unix (tcsetattr) and Windows (SetConsoleMode) and calls it before raise(SIGINT) or GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0) in send_signal_sigint so terminal echo and mode flags are restored when the default signal action exits before Drop. No new dependencies, no build script. Same publisher as 7.5.4."
+
+[[audits.skrifa]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.49.0 -> 0.50.0"
+notes = "Diff reviewed. Bumps read-fonts to 0.47.0, adds a type1 feature forwarding agl and read-fonts/type1, uses math::mul14 for twilight-zone MIRP freedom-vector projection, and aligns TrueTypeHinter hdmx lookup with classic_cleartype and FreeType fixed-pitch rounded-ppem rules. No build script, no unsafe, no I/O. Same publisher as 0.49.0."
+
+[[audits.sqlparser]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.63.0 -> 0.64.0"
+notes = "Diff reviewed. Bumps sqlparser_derive to 0.7.0; memoizes failed speculative POSITION(... IN ...) and IN (subquery) parses so nested forms do not backtrack exponentially; adds ALTER TRIGGER, REFRESH MATERIALIZED VIEW, GRANT and REVOKE role statements, COPY ... FROM STDIN inline payload tokenization, tuple element access, non-decimal integer literals (0x, 0o, 0b), comment neighbor spans and dialect hooks. No new runtime dependencies, no build script, no unsafe, no I/O. Same publisher as 0.63.0."
+
+[[audits.sqlparser_derive]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.6.0 -> 0.7.0"
+notes = "Diff reviewed. Extends the optional internal derive_dialect! proc macro to accept syn::Expr method overrides checked against Dialect trait items, and sorts sibling sqlparser-* paths deterministically during workspace expansion. No build script, no unsafe. Same publisher as 0.6.0."
+
+[[audits.svgtypes]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.16.1 -> 0.16.2"
+notes = "Diff reviewed. Adds hwb() color parsing, angle units on hsl() and hsla() hues and slash alpha separators; matches CSS Syntax Level 3 non-ASCII identifier code points; parses PaintOrder into a stack array without heap allocation; returns TransformOriginError instead of panicking on malformed transform-origin input. No new dependencies, no build script, no unsafe, no I/O. Published from github:linebender/resvg."
+
+[[audits.syn]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "3.0.9 -> 3.0.10"
+notes = "Diff reviewed. Adds a scan flag to FixupContext::rightmost_subexpression_precedence_impl in src/fixup.rs so scan_right skips redundant subexpression walks across nested binary, unary, range and let expressions, plus test updates. No new dependencies, no build script, no unsafe, no I/O. Same publisher as 3.0.9."
+
+[[audits.trybuild]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-run"
+delta = "1.0.122 -> 1.0.125"
+notes = 'Diff reviewed. Forwards workspace profile and cargo-features tables into generated test manifests, probes -Zthreads=1 support on nightly rustc, streams cargo build stderr through std::io::pipe while building dependencies, and passes --config=term.color="always" when stderr is a terminal without NO_COLOR or TERM=dumb. Dev-only UI test harness; no unsafe. Same publisher as 1.0.122.'
+
+[[audits.usvg]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.49.0 -> 0.50.0"
+notes = "Diff reviewed. Bumps svgtypes to 0.16.2, skrifa to 0.49.0 and harfrust to 0.15.0; adds Options::max_depth (1024 by default) and general cycle detection for SVG resource references; computes Group and Path bounding boxes lazily through OnceLock; drops the parsed roxmltree::Document before tree conversion; adds FontCache reusing loaded skrifa fonts and harfrust shape plans; supports the inline path attribute on textPath. No build script, no unsafe, no new I/O. Same publisher as 0.49.0."
+
+[[audits.webpki-roots]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.11 -> 1.0.12"
+notes = "Diff reviewed. Removes six retired or distrusted root certificates from TLS_SERVER_ROOTS (DigiCert Trusted Root G4, QuoVadis Root CA 3 G3, QuoVadis Root CA 1 G3, Buypass Class 2 Root CA, Certigna Root CA and Buypass Class 3 Root CA); no other source changes, no build script, no unsafe, no I/O. Same publisher as 1.0.11."
+
 [[audits.zeroize_derive]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.4.2 -> 1.5.0"
 notes = "Diff reviewed: edition 2024 and MSRV bump, lint settings in Cargo.toml, format-string and assert! rewrites, unused_assignments added to the allow on generated code. The derive output is otherwise unchanged; no build script, no unsafe, no I/O. Published from github:RustCrypto/utils."
+
+[[audits.zip]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "9.5.0 -> 9.7.0"
+notes = "Diff reviewed. Widens the BSD and macOS nix dependency range to >=0.30.0, <0.33.0; hardens archive extraction to reject symlinked destination or ancestor directories inside the target root and opens non-symlink paths with O_NOFOLLOW (and O_DIRECTORY on directories) before setting permissions on Unix; seeks to the central directory start in ZipWriter::new_append_with_config; preserves encryption and data-descriptor flags, raw comments and ExtendedTimestamp or Ntfs extra fields across raw copies; exposes safe fixed-header parse helpers. Published from github:zip-rs/zip2."
 
 [[trusted.rusqlite]]
 criteria = "safe-to-deploy"
