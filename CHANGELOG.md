@@ -514,6 +514,10 @@ look at when you update:
 - The web app that `navree new --ui next` and `navree new --kit` make uses Next.js 16.4.5, which
   fixes GHSA-mfr8-8qww-v76h in 16.4.3. An app made with an earlier version moves to 16.4.5 or later
   in its `web/package.json`.
+- Mail over SMTP needs lettre 0.11.24, which fixes RUSTSEC-2026-0560 to RUSTSEC-2026-0565 in
+  0.11.23: a reply forged after STARTTLS, a bare line feed that could inject an SMTP command, a
+  panic on an empty `EHLO` line, and a quoted address sent to another mailbox, among them.
+  `cargo update -p lettre` brings it to an app.
 
 ## [1.2.4] - 2026-11-15
 

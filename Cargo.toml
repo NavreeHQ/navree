@@ -302,7 +302,7 @@ rqrr = { version = "0.11.0", default-features = false }
 # is already in the tree via url). Phone numbers are navree-phone's.
 unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
 icu_locale_core = { version = "2.4.0", features = ["alloc"] }
-lettre = { version = "0.11.23", default-features = false, features = [
+lettre = { version = "0.11.24", default-features = false, features = [
     "builder",
     "hostname",
     "pool",
