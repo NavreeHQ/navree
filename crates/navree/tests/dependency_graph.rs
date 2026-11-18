@@ -1733,3 +1733,48 @@ fn proof_plugin_manifests_inherit_nothing_from_the_workspace_and_name_the_worksp
         }
     }
 }
+
+/// Navree carries its own compiled time zone tables in `navree-time`: no crate
+/// of the workspace or of the fuzz suite declares `chrono-tz`, and it is in
+/// neither `Cargo.lock` nor `fuzz/Cargo.lock`.
+#[test]
+fn no_crate_of_the_workspace_depends_on_chrono_tz() {
+    for rel in ["../../Cargo.lock", "../../fuzz/Cargo.lock"] {
+        let lockfile = Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
+        let lock = std::fs::read_to_string(&lockfile).expect("lockfile is readable");
+        let in_lock = listed_packages(&lock, &["chrono-tz"]);
+        assert!(
+            in_lock.is_empty(),
+            "`{rel}` contains `chrono-tz`: {in_lock:?}; use `navree_time::Tz` instead"
+        );
+    }
+
+    let metadata = workspace_metadata();
+    let declared: Vec<String> = packages(&metadata)
+        .iter()
+        .flat_map(|package| {
+            let from = str_field(package, "name").to_owned();
+            package["dependencies"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|dependency| str_field(dependency, "name").to_owned())
+                .filter(|name| name == "chrono-tz")
+                .map(move |name| format!("{from} -> {name}"))
+        })
+        .collect();
+    assert!(
+        declared.is_empty(),
+        "workspace crates declare `chrono-tz`: {declared:?}; use `navree_time::Tz` instead"
+    );
+
+    for rel in ["../../Cargo.toml", "../../fuzz/Cargo.toml"] {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
+        let text = std::fs::read_to_string(&manifest).expect("manifest is readable");
+        let named = text.lines().any(|line| {
+            let trimmed = line.split('#').next().unwrap_or("").trim();
+            trimmed.starts_with("chrono-tz")
+        });
+        assert!(!named, "`{rel}` still declares `chrono-tz`");
+    }
+}

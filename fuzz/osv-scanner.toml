@@ -10,8 +10,3 @@ reason = "SQLite before 3.54.0 can return uninitialized page-cache memory when i
 id = "RUSTSEC-2026-0543"
 ignoreUntil = 2026-12-17
 reason = "The advisory says the chrono crate is unmaintained and names no flaw; no version is fixed. Navree's crates use it for dates and times, and navree-orm names its DateTime and Utc in its public types, so it is replaced (by jiff) in the next major version, where changing those types belongs. sqlx, async-graphql, bson and rust_xlsxwriter use it through their chrono features. Drop this entry when the replacement lands."
-
-[[IgnoredVulns]]
-id = "RUSTSEC-2026-0555"
-ignoreUntil = 2026-12-17
-reason = "The advisory says the chrono-tz crate is unmaintained and names no flaw; no version is fixed. navree-time, navree-schedule and navree-ui use it for named time zones, and Navree's own time zones replace it in 1.4.0. Drop this entry then."
