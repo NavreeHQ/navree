@@ -332,6 +332,10 @@ public sealed class SystemPlace : IDisposable
     /// waits and is nobody's is theirs from now on (one they asked for between their sign-in and the shell's answer that names them, or a
     /// visitor's before them). It is shown only while they are signed in, and no longer to whoever is there.
     /// </summary>
+    /// <remarks>
+    /// A host that makes its place only after the first person was named misses this call, and loses nothing by it: <see cref="Start"/>
+    /// reads what waits with that person already the one what is kept is kept for, and gives them what is nobody's there.
+    /// </remarks>
     /// <param name="owner">The person's mark.</param>
     internal void GiveWaitingTo(string owner)
     {
@@ -456,8 +460,10 @@ public sealed class SystemPlace : IDisposable
     }
 
     // Who is signed in by the state the windows were just given, which the host heard before it gave it. When that is somebody else than
-    // the timer was set for (the person's session ran out and the sign-in is up, or they signed in again), what may be shown is asked
-    // about again: what came due for a person while they were not signed in is shown now that they are.
+    // the timer was set for (the person's session ran out and the sign-in is up, or they signed in again and the shell has named them),
+    // what may be shown is asked about again: what came due for a person while they were not signed in is shown now that they are.
+    // Nobody is signed in from a cover going up until the shell has answered after it went, so nothing held for a person is shown to
+    // whoever signed in at the cover before the shell has said who they are (PersonChange.Here).
     private void HearWhoIsHere()
     {
         string? here = host.PersonHere;
