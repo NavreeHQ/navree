@@ -1541,7 +1541,14 @@ for (const [engine, launcher] of NAMES.map((name) => [name, ENGINES[name]])) {
         assert.deepEqual(f.evil, [], url);
         await context.close();
       }
-      const { context, page } = await afterOps({ modules: ["/_navree/ui/stand-in.js"], ops: [] });
+      const refused = await afterOps({ modules: ["/_navree/ui/stand-in.js", "/_navree/ui/ext/proof.pad-0123456789ab.js", "/_navree/ui/island/proof.notice-0123456789ab.js"], ops: [] });
+      assert.equal(await attr(refused.page, "data-stand-in-ran"), null);
+      await refused.context.close();
+      f.routes.set("/_navree/ui/count-up-0123456789ab.js", (req, res) => {
+        res.writeHead(200, { "content-type": "text/javascript" });
+        res.end('document.documentElement.setAttribute("data-stand-in-ran", "1");');
+      });
+      const { context, page } = await afterOps({ modules: ["/_navree/ui/count-up-0123456789ab.js"], ops: [] });
       assert.equal(await attr(page, "data-stand-in-ran"), "1");
       await context.close();
     });

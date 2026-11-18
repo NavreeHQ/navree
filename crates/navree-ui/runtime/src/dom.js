@@ -160,11 +160,15 @@ export const rescue = (node) => {
   }
 };
 
-/** Whether `url` is one of the toolkit's own modules. @param {string} url */
+/** The toolkit's own script modules, under its mount, with or without their content hash. */
+const MODULE =
+  /^\/_navree\/ui\/(core|sidebar|overlay|table|live|select|date(s|-text)|time|menus|slider|tree|toolbar|split|keys|lazy|sortable(-grid)?|upload|otp|carousel|menubar|charts|count-up|islands|parts|genui|extensions|phone)(-[0-9a-f]{12})?\.js$/;
+
+/** Whether `url` is one of the toolkit's own modules: on this origin, with nothing after its name. @param {string} url */
 export const ownModule = (url) => {
   try {
     const parsed = new URL(url, location.href);
-    return parsed.origin === location.origin && parsed.pathname.startsWith("/_navree/ui/");
+    return parsed.href === location.origin + parsed.pathname && MODULE.test(parsed.pathname);
   } catch {
     return false;
   }
