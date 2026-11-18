@@ -65,12 +65,14 @@ impl Who {
         self.id.as_deref()
     }
 
-    /// The core's own name for this person, as a client is given it in
-    /// `app.user.key`: the same for one person, another for another account,
-    /// and nothing of the person can be read from it. When the server named
-    /// them by id it is the name a snapshot is for ([`Who::id_key`]), so two
-    /// accounts of one name and one email are two. Otherwise it is a hash of
-    /// their name and email, which is all there is to tell such a person by.
+    /// The core's own name for this person when first held, as a client is
+    /// given it in `app.user.key`, and the core gives a client no other name
+    /// for a person. When the server named them by id it is the name a snapshot
+    /// is for ([`Who::id_key`]), so two accounts of one name and one email are
+    /// two; otherwise it is a hash of their name and email, which is all there
+    /// is to tell such a person by. Because it is an unsalted SHA-256 hash, the
+    /// key tells nothing of the person only for an id the server makes
+    /// unguessable.
     pub(crate) fn key(&self) -> String {
         self.id_key().unwrap_or_else(|| {
             let named = serde_json::to_string(&(&self.name, &self.email)).unwrap_or_default();

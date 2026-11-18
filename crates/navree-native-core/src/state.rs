@@ -133,11 +133,13 @@ pub struct AppUser {
     /// What the shell says of them.
     #[serde(flatten)]
     pub user: User,
-    /// The same for one person, another for another account, by which a
-    /// client tells when somebody else is signed in. Made from the id the
-    /// server named the person by when it gave one (then it is the value a
-    /// snapshot's `person` holds, and never the id), and from their name and
-    /// email otherwise.
+    /// Kept for as long as the core takes this person for the same one, another
+    /// for another account, by which a client tells when somebody else is
+    /// signed in; the core gives a client no other name for a person. Made when
+    /// the person is first held, from the id the server named them by when it
+    /// gave one (then it is the value a snapshot's `person` holds, and never
+    /// the id), and from their name and email otherwise. It tells nothing of
+    /// the person only for an id the server makes unguessable.
     pub key: String,
 }
 
