@@ -341,7 +341,7 @@ The extension says what the script may do:
 
 - `.contract(1)` is the browser contract the script is written for. A script with no contract stops the boot, and so does a contract the toolkit doesn't run.
 - `.routes(&["/ratings/"])` are the route prefixes the script may call: at most 8, each starting and ending with `/`, with at least one segment (`/ratings/`, never `/`), of lower-case letters, digits and `/ _ . -`, with no `.` or `..` segment, and never under `/_navree/`. `ui.call` and `ui.get` reach a path under one of them, and nothing else. They hold the helpers only: a script's own `fetch` is not held to them (see [what a script may and may not do](/docs/ui/extension-contract/#what-a-script-may-and-may-not-do)).
-- `Element::extension_call` lets a script call one exact address, for a route only the server can name. `Rating::rate_at("/deliveries/42/rating")` writes it with `extension_call`: the route is outside `/ratings/`, and the script posts to it with `ui.call`. A query and a fragment are left out, and so is an address that isn't a path of this site or that holds white space. Call it after `extension`, which replaces the addresses an earlier call wrote.
+- `Element::extension_call` lets a script call one exact address, for a route only the server can name. `Rating::rate_at("/deliveries/42/rating")` writes it with `extension_call`: the route is outside `/ratings/`, and the script posts to it with `ui.call`. A query and a fragment are left out, and so is an address that isn't a path of this site, holds white space, or has a `.` or `..` segment. Call it after `extension`, which replaces the addresses an earlier call wrote.
 - `.keeps(&["data-busy"])` are attributes the script sets on its root that a morph from the server leaves as the script set them, beside `data-ui-mounted` and `data-ui-failed`: at most 8, each a lower-case letter followed by up to 63 lower-case letters, digits or `-`, never `data-ui-*`, `style`, `on*`, `id`, `name`, `form` or an attribute that holds an address.
 
 A name, a namespace, a kept attribute or a route prefix outside these rules fails the build with a message that says which.
@@ -350,7 +350,7 @@ A page with a component that has a script loads the `core` and `extensions` modu
 
 ## Props, and the server telling it something
 
-`extension_with(&RATING, &props)` writes the props as JSON in an attribute, escaped as every attribute is, and the script is given them parsed, so a value can't become markup or code. A value that can't be written as JSON is written as `null`. Keep props under 64 KB, and fetch the rest from a route: `kit::problems` reports props over that. A string in the props opens nothing: a script reaches only the routes the element names, whatever the props hold.
+`extension_with(&RATING, &props)` writes the props as JSON in an attribute, escaped as every attribute is, and the script is given them parsed, so a value can't become markup or code. A value that can't be written as JSON is written as `null`. There is no size limit when the element is drawn; keep props under 64 KB, and fetch the rest from a route (`kit::problems` reports props over that). A string in the props opens nothing: a script reaches only the routes the element names, whatever the props hold.
 
 To tell a mounted component something, answer with a morph that carries new props. The script's `update(props)` is called with them, and the component keeps its state, its focus and what the script drew:
 
@@ -437,11 +437,11 @@ pub struct Feedback {
 }
 ```
 
-The control's name is the namespace of the plugin that ships it, a dot and a name of its own (`app.rating`, `geo.location`). `#[form(control = RATING_FIELD)]` draws the field with the control, and the field's type reads the text the control posted: no `Options` lookup runs for it. A field takes `control` or `widget`, not both, and a control draws a field of one value: on a `Many<T>` field, `control` stops the build. A form described at run time names it with `Widget::Control(Control::new(&RATING_FIELD))`, and a cell of a table with `EditCell::control`.
+The control's name is the namespace of the plugin that ships it, a dot and a name of its own (`app.rating`, `geo.location`). Contribute it from the plugin's module (`m.contribute(Control::new(&RATING_FIELD))`) so the boot holds its name to that grammar, checks that its namespace is the plugin's, and refuses two controls of one name and different types. `#[form(control = RATING_FIELD)]` draws the field with the control, and the field's type reads the text the control posted: no `Options` lookup runs for it. A field takes `control` or `widget`, not both, and a control draws a field of one value: on a field whose type is written as `Many<..>` (or `Option<Many<..>>`; the derive reads how the type is written and cannot see through a type alias), `control` stops the build. A form described at run time names it with `Widget::Control(Control::new(&RATING_FIELD))`, and a cell of a table with `EditCell::control`.
 
-A control whose value is a secret, such as a password with a strength meter or a one-time code in six boxes, says so with `fn secret(&self) -> bool { true }`. A field drawn by a control under a password's name (`password`, `new_password`) is a secret too, whatever its control says. The toolkit keeps a secret as it keeps a password input's value: a refused form never shows it again, `Rejected::values()` and `value(..)` never give it back, a wizard never keeps it in its draft, and `draw` is given no value for it, in a form and in a table cell.
+A control whose value is a secret, such as a password with a strength meter or a one-time code in six boxes, says so with `fn secret(&self) -> bool { true }`. A field drawn by a control under a password's name (`password`, `new_password`) is a secret too, whatever its control says. A field marked secret is drawn with no value whatever widget draws it, `Rejected::values()` and `value(..)` never give it back, a wizard never keeps it in its draft, and a refusal never repeats its value in error messages (on the `errors` op, the refused page, `Rejected::after_decode`, `check_controls` and `EditedValue::read`, as a wizard masks its step errors).
 
-`FormView` draws the field inside its own box, which gives it the label, the help and the error. What `draw` is given is a `ControlField`:
+`FormView` draws the field inside its own box, which gives it the label, the help and the error. What `draw` is given is a `ControlField` (built in a control's own tests with `ControlField::new` and its `id`, `label`, `label_id`, `value`, `placeholder`, `described_by`, `required`, `invalid` and `disabled` setters):
 
 | Field | What it holds |
 |---|---|
@@ -458,7 +458,7 @@ What a control draws follows a few rules, which `kit::assert_control` checks in 
 - Every form field it draws that can be disabled (`input`, `select`, `textarea`, `button` and `fieldset`) is disabled when `field.disabled` is.
 - The form field is drawn outside the control's owned bodies, so the seal doesn't detach it from its form. A field named `field.name` that sits only inside an element marked `data-ui-keep` never posts.
 
-The check runs where Navree UI reads a form, before the field's type reads the value. `Err` is the message the field shows. An optional field left empty is not checked. A field that is not optional and is missing from the post reads as empty, and is checked as that. What reads the form decides what the check is given:
+The check runs where Navree UI reads a form, before the field's type reads the value, once for each posted pair of the field (or once on empty text when a required field is missing from the post). `Err` is the message the field shows; when `check` accepts a value that the field's type cannot parse, `FieldControl::parse_error` can return `Some` message to show in place of the form's generic invalid-value words. An optional field left empty is not checked. What reads the form decides what the check is given:
 
 - **The app and its configuration:** a derived form read with `Submit`, which finds them itself, and, given a `Language` made by `Language::of(Some(&ctx)).await`, `decode_for`, `TestView::submit_as_for`, a step of a `Wizard`, a draft read back with `Draft::read_for`, a described form through `check_controls`, and an inline edit through `EditedValue::read`.
 - **Neither:** `decode`, `decode_with`, `Draft::read`, `TestView::submit_as`, and those above given a `Language` made with `new` or `english`, as a wizard's own language is.
@@ -669,10 +669,10 @@ UI extension `geo.tour` has a script but declares no contract: add .contract(1)
 UI extension `geo.tour` is written for extension contract 2, and this navree-ui runs contract 1: update navree, or use a release of `navree-plugin-geo` written for contract 1
 ```
 
-Two modules that contribute one name with the same files contribute one extension. Each extension is logged once, with the size of its files (``UI extension geo.map (plugin `navree-plugin-geo`): script 150 KB, stylesheet 21 KB, contract 1``). A plugin's route prefix that has no segment named for its namespace is a warning, so a plugin keeps its routes under its own name:
+Two modules that contribute one name with the same files contribute one extension. Each extension is logged once, with the size of its files (``UI extension geo.map (plugin `navree-plugin-geo`): script 150 KB, stylesheet 21 KB, contract 1``). A plugin's route prefix whose first segment is not its namespace is a warning, so a plugin keeps its routes under its own name:
 
 ```text
-UI extension `geo.map` may call routes under `/places/`, which has no segment named `geo`: keep a plugin's routes under its own namespace, such as .routes(&["/geo/"])
+UI extension `geo.map` may call routes under `/places/`, which is not under `/geo/`: keep a plugin's routes under its own namespace, such as .routes(&["/geo/"])
 ```
 
 `plugins/geo` in the Navree repository is a plugin built only from what this page shows: a map component and a drop-point form field. Its tests prove the blocks below, which show its code.

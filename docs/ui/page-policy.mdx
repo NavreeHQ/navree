@@ -35,7 +35,7 @@ img_src = ["https://tile.openstreetmap.org"]  # map tiles
 | `font_src` | `'self'`, `data:` and an https origin |
 | every key | `http://localhost` and `http://127.0.0.1`, with a port or without, outside production and staging |
 
-An https origin is a host of at least two labels, in lower case, with an optional port: `https://tile.openstreetmap.org`, `https://tiles.example:8443`. A leading `*.` stands for one label or more in front of a name (`https://*.tiles.example`), and the name after it has two labels or more. An allowed `font_src` host serves a font only to a script's `FontFace`, because a plugin's sheet takes `data:` fonts only.
+An https origin is a domain name of at least two labels (never an address in numbers), in lower case, with an optional port: `https://tile.openstreetmap.org`, `https://tiles.example:8443`. A leading `*.` stands for one label or more in front of a name (`https://*.tiles.example`), and the name after it has two labels or more. `http://127.0.0.1` is taken only as this machine, outside production and staging. An allowed `font_src` host serves a font only to a script's `FontFace`, because a plugin's sheet takes `data:` fonts only.
 
 The allowed sources are added to the toolkit's own in the header, after them. The keys are taken in name order with `app` first, and `media-src` comes after `connect-src`. With `ui.policy.allow.geo.img_src` set as above, a page carries:
 
@@ -70,7 +70,7 @@ fn register(m: &mut ModuleBuilder) {
 }
 ```
 
-`ask` takes the directive (`ImgSrc`, `MediaSrc`, `ConnectSrc` or `FontSrc`), the source and a few words on what needs it, which the boot says back. A source outside the forms above stops the boot, and the message names the plugin that asked. A module of the app that names no plugin asks under the namespace `app`.
+`ask` takes the directive (`ImgSrc`, `MediaSrc`, `ConnectSrc` or `FontSrc`), the source and a few words on what needs it, which the boot says back. A source outside the forms above stops the boot, and the message names the plugin that asked. Every module that acts for a plugin (one that names it, or another module of its crate) asks under that plugin's namespace; a module of the app that acts for no plugin asks under `app`.
 
 The boot says, one line each:
 
@@ -118,7 +118,7 @@ async fn confirm(shell: AppShell) -> AppPage {
 The mark acts in an app where plugin code can reach a page: the app contributes a `UiExtension`, contributes a plugin's island script (one built with a namespace, or one from a module of a plugin that is not one of the framework's own), or has a policy other than the toolkit's, because it allowed a source or WebAssembly. In any other app it changes nothing, and the page is the page it always was. Where it acts, a fresh page:
 
 - is entered and left by a full page load. A swap between a fresh page and a plain one, in either direction, loads the new page in full. Two fresh pages boost between each other.
-- keeps the toolkit's own policy (`PAGE_CSP`), whatever the app allowed.
+- keeps the toolkit's own policy (`PAGE_CSP`), whatever the app allowed, or the panel's own policy on the pages of Helm, which set a header of their own (`img-src 'self' data: https:`).
 - is served with no extension file and no `extensions` module linked. No component of your own mounts on it, and a plugin's island script isn't imported, even when a plain page's answer drawn into one of its regions brings a component's stylesheet or the `extensions` module into its head.
 - says so with `data-ui-fresh-page` on its `<html>` element and the header `x-navree-fresh: 1` on its answer. A view written outside a request writes neither.
 - is never drawn into a page that is not fresh, by any fetch of the runtime:
@@ -132,7 +132,7 @@ The mark acts in an app where plugin code can reach a page: the app contributes 
 | `ui.call` and `ui.get` of a component's script | a failure |
 | A form's ops (`morph`, `replace`, `append`, `prepend`) | not covered: ops carry markup, not documents |
 
-The sign-in and account pages of `navree-auth`, the consent page of `navree-oauth`, the panel pages of Helm and the pages of Lighthouse are fresh. An app marks its own pages the same way.
+The sign-in and account pages of `navree-auth`, the consent page of `navree-oauth`, the panel pages of Helm and the pages of Lighthouse are fresh. An error page at a fresh page's address, and the page a refused `Submit` draws on its own there, are fresh too. An app marks its own pages the same way.
 
 An app marks its own sign-in, re-authentication and PIN pages with `.fresh()`, and any page that holds a password field; in an app with extensions the boot names each route that does not.
 
@@ -166,7 +166,7 @@ async fn tiles_allowed(ctx: AppContext) -> bool {
 }
 ```
 
-`PagePolicy::allows(directive, source)` answers as the header does. A keyword is matched as it is written, `data:` and `blob:` by scheme, and an origin by scheme, host and port, with a leading `*.` standing for one label or more. A path or a query in `source` is left out of the match. The toolkit's own sources count: pictures may be `'self'` and `data:`, fonts and requests `'self'`, and media nothing. `header()` is the whole header, `allows_wasm()` says whether the app allowed WebAssembly, and `is_the_toolkits()` whether the app allowed nothing. There is no way to build a `PagePolicy`: the boot does.
+`PagePolicy::allows(directive, source)` answers as the header does. A keyword is matched as it is written, `data:` and `blob:` by scheme, and an origin by scheme, host and port, with a leading `*.` standing for one label or more. A path or a query in `source` is left out of the match, and a backslash in the authority ends the host as a browser reads it. The toolkit's own sources count: pictures may be `'self'` and `data:`, fonts and requests `'self'`, and media nothing. `header()` is the whole header, `allows_wasm()` says whether the app allowed WebAssembly, and `is_the_toolkits()` whether the app allowed nothing. There is no way to build a `PagePolicy`: the boot does.
 
 A browser test of the component, with the source not allowed, calls `Page::assert_no_policy_violations`, which fails when the page reported a policy violation.
 

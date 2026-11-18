@@ -118,8 +118,9 @@ impl Widget {
 ///
 /// A control is a plain value of a type you write, kept in a `static` so that a form can name
 /// it: `#[form(control = PIN_CODE)]` on a field of a derived form that holds one value (on a
-/// `Many<T>` field it stops the build), [`Widget::Control`] on a form described at run time, and
-/// [`EditCell::control`](crate::table::EditCell::control) in a table cell. Its
+/// field whose type is written with [`Many`] it stops the build; the derive reads how the type is
+/// written and does not see through a type alias), [`Widget::Control`] on a form described at run
+/// time, and [`EditCell::control`](crate::table::EditCell::control) in a table cell. Its
 /// [`name`](FieldControl::name) is the namespace of the plugin that ships it, a dot and a name of
 /// its own: `geo.location`.
 ///
