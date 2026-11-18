@@ -6114,6 +6114,48 @@ mod tests {
         assert_eq!(&read, core.view());
     }
 
+    /// The app's part is said to have changed where a shell is drawn, at a
+    /// sign-out and where the session is forgotten, and nowhere else in the
+    /// core. A client counts those changes: after a sign-in it takes the
+    /// first of them for the word of a shell asked for since, and until then
+    /// holds back what belongs to the person who was signed in before. A
+    /// place that said so for a theme or a menu alone would end that hold
+    /// with the person before still named. So a new place is a decision:
+    /// look at what the clients do with the change first, and then name the
+    /// place here.
+    #[test]
+    fn the_apps_part_is_said_to_have_changed_at_a_shell_a_sign_out_and_a_forgotten_session_only() {
+        // Written in two pieces, so that this test is not one of the places.
+        let said = concat!("Change::", "App");
+        let sources = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut places: Vec<(String, usize)> = std::fs::read_dir(&sources)
+            .expect("the core's sources are beside its manifest")
+            .map(|entry| entry.expect("a source file is listed").path())
+            .filter(|path| path.extension().is_some_and(|ending| ending == "rs"))
+            .map(|path| {
+                let text = std::fs::read_to_string(&path).expect("a source file reads");
+                let name = path
+                    .file_name()
+                    .expect("a source file has a name")
+                    .to_string_lossy()
+                    .into_owned();
+                (name, text.matches(said).count())
+            })
+            .filter(|(_, times)| *times > 0)
+            .collect();
+        places.sort();
+        assert_eq!(
+            places,
+            [
+                // Where the session is forgotten.
+                ("push.rs".to_owned(), 1),
+                // Where a shell is drawn, and at a sign-out.
+                ("reduce.rs".to_owned(), 2),
+            ],
+            "the app's part is said to have changed in a new place, or no longer in one of the three"
+        );
+    }
+
     /// Two cores over one store, one still naming Ravneet and one naming a
     /// visitor, never mix their pages: the next launch draws nothing of
     /// Ravneet's for a visitor.

@@ -155,7 +155,7 @@ Every event is an object whose `t` names it. A field shown with `?` may be left 
 
 | Change | The part |
 |---|---|
-| `app` | The app's name, theme and user. |
+| `app` | The app's name, theme and user. It is said only when a shell is drawn, at a sign-out and when the session is forgotten, never for a theme or a menu by itself, and a client may rely on that: after a sign-in, the first `app` is the word of a shell asked for since, and says who is signed in now. |
 | `nav` | Where the person is: `stage`, `failure`, `upgrade`, `destinations` with their stacks, `selected`, `modals`, `front`, `can_go_back`, `window`. |
 | `screen` (`id`) | Everything about one screen. `null` when no stack holds it any more. |
 | `form` (`screen`, `form`) | The state of one form, and nothing else of the screen. |
