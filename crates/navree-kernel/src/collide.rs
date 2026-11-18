@@ -40,16 +40,21 @@ pub fn is_community_plugin(ctx: &AppContext, module: ModuleId) -> bool {
 }
 
 /// The plugin `module` acts for, first-party or not: the plugin it names;
-/// else the plugin of the crate its type path is in, up to its first `<`
-/// (the longest crate name, then the one first in import order); else, for a
-/// module with generic arguments that no module of the app imports directly,
-/// the plugin among its importers' whose crate its arguments name, else the
-/// first of them in import order that is not first-party, else the first.
-/// When its type path gives a first-party plugin and its importers one that is
-/// not, the one that is not. A module's type path is read from the module
-/// value the app or its importer passed and from the type its id names: either
-/// one may name the plugin. `None` for a module of the app, the app root and
-/// an id not in the app. `plugins` lists a plugin's modules by it. Not public
+/// else the plugin of the crate its type path is in, up to its first angle
+/// bracket and read through a reference, a `Box` and a `Pin`, and a trait
+/// object as its trait (`&dyn Part` is `Part`; the longest crate name wins,
+/// then the plugin first in import order); else, for a module with generic
+/// arguments that no module of the app imports directly, the plugin among its
+/// importers' whose crate its arguments name, else the first of them in import
+/// order that is not first-party, else the first; else, for a plain module of
+/// no plugin's crate and of no framework crate whose direct importers all act
+/// for plugins that are not first-party, the first of those plugins in import
+/// order. When its type path gives a first-party plugin and its importers one
+/// that is not, it acts for the one that is not. A module's own type (from the
+/// module value the app or its importer passed) decides before the type its id
+/// names, and a first-party plugin is matched by the module's own type only,
+/// never by its id alone. `None` for a module of the app, the app root and an
+/// id not in the app. `plugins` lists a plugin's modules by it. Not public
 /// API; Navree's own crates use it.
 pub fn acts_for(ctx: &AppContext, module: ModuleId) -> Option<&PluginInfo> {
     let graph = &ctx.inner.graph;
