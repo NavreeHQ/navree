@@ -125,7 +125,8 @@ public static class NotifyRules
 /// person's eyes: it is given to be shown only while they are the one signed in (<see cref="Take"/>). Due while they are not (their
 /// session ran out and the sign-in is up, or the app was started and has not heard who is signed in), it goes on waiting as it is, and
 /// is given when they are signed in again. Another person signing in takes everything that waits away, which is the app's to do. A
-/// start keeps of a person's only those of the person it can say what is kept is kept for (<see cref="KeepFor"/>).
+/// start keeps of a person's only those of the person it can say what is kept is kept for (<see cref="KeepFor"/>). One that is
+/// nobody's stays so only until a person is named: it is theirs from then on (<see cref="GiveTo"/>).
 /// </remarks>
 public sealed class NotificationSchedule
 {
@@ -222,6 +223,30 @@ public sealed class NotificationSchedule
     /// <returns>How many were let go of.</returns>
     public int KeepFor(string? keptFor) =>
         waiting.RemoveAll(item => item.Owner is not null && !string.Equals(item.Owner, keptFor, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Gives every one that is nobody's to a person. It is done when the first person is named as signed in since the app was first
+    /// started or since the last sign-out: what waits then was asked for by them, between their sign-in and the answer that named
+    /// them, or by a visitor before them. And it is done at a start that read a person's mark: what is kept is kept for that person.
+    /// Either way it is theirs from then on, shown only while they are signed in, and never again to whoever is there.
+    /// </summary>
+    /// <param name="owner">The person's mark.</param>
+    /// <returns>How many were given.</returns>
+    public int GiveTo(string owner)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(owner);
+        int given = 0;
+        for (int at = 0; at < waiting.Count; at++)
+        {
+            if (waiting[at].Owner is null)
+            {
+                waiting[at] = waiting[at] with { Owner = owner };
+                given++;
+            }
+        }
+
+        return given;
+    }
 
     /// <summary>Writes what waits, to be kept between launches.</summary>
     /// <returns>JSON text.</returns>
