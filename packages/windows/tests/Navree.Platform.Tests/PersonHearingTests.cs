@@ -107,6 +107,11 @@ public sealed class PersonHearingTests
 
     private static ViewState NamingNobody() => ViewState.Empty with { App = new AppPart { Name = "Charkha Supply Co." } };
 
+    // The state the core gives when an answer said the session is over: the way in is put up as a cover the person cannot take away,
+    // and nothing else of the state changes. The app's part goes on naming the person whose session it was.
+    private static ViewState WithTheWayInUp(ViewState state) =>
+        state with { Nav = state.Nav with { Front = 4, Modals = [new Modal { Present = Models.Present.Full, Locked = true, Stack = [4] }] } };
+
     [TestMethod]
     public async Task Who_a_state_names_is_heard_before_the_windows_are_given_it_and_what_must_go_first_has_gone_by_then()
     {
@@ -292,10 +297,11 @@ public sealed class PersonHearingTests
     }
 
     [TestMethod]
-    public async Task Nobody_is_signed_in_while_the_sign_in_is_up_though_what_is_kept_is_still_kept_for_the_person_before()
+    public async Task Nobody_is_signed_in_while_the_way_in_is_up_though_the_state_goes_on_naming_the_person_whose_session_ended()
     {
         // What waits for a person's eyes (a reminder) is shown by who is signed in now, and kept by whom what is kept is kept for. The
-        // two are not the same between a session running out and somebody signing in.
+        // two are not the same between a session running out and somebody signing in. In that time the core's state goes on naming
+        // the person whose session it was, under the way in it put up: the way in says that nobody is signed in, and the name does not.
         string folder = Folder();
         try
         {
@@ -324,18 +330,39 @@ public sealed class PersonHearingTests
             Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(RituKey, "Ritu Sharma", null), mark));
             Assert.AreEqual(ritu, people.Here);
 
-            // Her session runs out overnight and the sign-in is up over her work. What is kept is still hers, and nobody is signed in.
-            Assert.AreEqual(PersonHeard.Nobody, people.Hear(NamingNobody(), mark));
-            Assert.IsNull(people.Here, "the person whose session ran out is still taken to be signed in: her reminder would be shown to whoever is at the counter");
+            // Her session runs out overnight. In the morning somebody taps the order list, and the answer says the session is over: the
+            // core puts the way in up over her work, as a cover nobody can take away, and goes on naming her, since it asks the shell
+            // again only once somebody has signed in. What is kept is still hers, and nobody is signed in.
+            ViewState wayInUp = WithTheWayInUp(Naming(RituKey, "Ritu Sharma", null));
+            Expect.That(wayInUp.App?.User?.Key == RituKey && PersonChange.WayInIsUp(wayInUp), "the state does not name her under the way in: this test shows nothing");
+            Assert.AreEqual(PersonHeard.Same, people.Hear(wayInUp, mark));
+            Assert.IsNull(people.Here, "the person whose session ran out is taken to be signed in while the way in is up: her reminder would be shown to whoever is at the counter");
             Assert.AreEqual(ritu, people.KeptFor, "what is kept stopped being hers when her session ran out: she would not find it when she signs in again");
 
-            // She signs in again.
-            Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(RituKey, "Ritu Sharma", null), mark));
-            Assert.AreEqual(ritu, people.Here);
+            // The sign-in page answers, and somebody types into it: each state is the same in this, for as long as the way in is up.
+            Assert.AreEqual(PersonHeard.Same, people.Hear(wayInUp, mark));
+            Assert.IsNull(people.Here, "the person whose session ran out is signed in again by a later state under the way in");
 
-            // It runs out again, and Harpreet signs in: from the state that names her, she is the one signed in and what is kept is hers.
-            Assert.AreEqual(PersonHeard.Nobody, people.Hear(NamingNobody(), mark));
-            Assert.AreEqual(PersonHeard.Another, people.Hear(Naming(HarpreetKey, "Harpreet Kaur", null), mark));
+            // The shell, asked again while the way in is up, names nobody: nothing changes.
+            Assert.AreEqual(PersonHeard.Nobody, people.Hear(WithTheWayInUp(NamingNobody()), mark));
+            Assert.IsNull(people.Here);
+            Assert.AreEqual(ritu, people.KeptFor);
+
+            // She signs in again: the way in goes, and she is named. She is the one signed in, so what came due meanwhile is hers to see.
+            Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(RituKey, "Ritu Sharma", null), mark));
+            Assert.AreEqual(ritu, people.Here, "she signed in again and is not taken to be signed in: what was held for her would never be shown");
+
+            // It runs out again, and the way in is up. This time Harpreet signs in. A state that names her while a way in is still up is
+            // a change of person all the same, and she is not taken to be signed in until it has gone.
+            Assert.AreEqual(PersonHeard.Same, people.Hear(wayInUp, mark));
+            Assert.IsNull(people.Here);
+            Assert.AreEqual(PersonHeard.Another, people.Hear(WithTheWayInUp(Naming(HarpreetKey, "Harpreet Kaur", null)), mark), "a change of person is not seen while a way in is up");
+            Assert.IsNull(people.Here, "a person named under a way in is taken to be signed in");
+            Assert.AreEqual(harpreet, people.KeptFor);
+            CollectionAssert.AreEqual(AtOnce, shell.Did.Take(4).ToArray(), "what must go first at a change of person did not, because a way in was up");
+
+            // The way in goes: from that state she is the one signed in, and what is kept is hers.
+            Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(HarpreetKey, "Harpreet Kaur", null), mark));
             Assert.AreEqual(harpreet, people.Here);
             Assert.AreEqual(harpreet, people.KeptFor);
             shell.SystemTakesItAway.SetResult();
@@ -357,6 +384,88 @@ public sealed class PersonHearingTests
             PersonChange unknown = new(new PersonWatch(null, somethingKept: true), new SessionGate(), keeper, new RecordedShell().Parts, _ => { });
             Assert.IsNull(unknown.KeptFor, "a start with no mark says whom what is kept is kept for");
             Assert.IsNull(unknown.Here);
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
+    public async Task In_the_cores_own_conversation_of_a_session_that_ended_nobody_is_signed_in_while_the_way_in_is_up()
+    {
+        // The core's conversation `session-ended.json`: Ravneet Kaur is signed in, an answer says her session is over, the way in is
+        // put up over her work, she signs in again, and later it ends once more. It is replayed through the real core, and each state
+        // is heard as the host hears it.
+        string transcripts = Path.Combine(Repository.Root, "crates", "navree-native-core", "transcripts");
+        JsonNode transcript = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(transcripts, "session-ended.json")))!;
+        JsonObject config = JsonNode.Parse("""{"origin":"https://shop.example","client":{"platform":"android","form":"phone","vocab":0,"text_percent":100}}""")!.AsObject();
+        if (transcript["config"] is JsonObject overrides)
+        {
+            foreach (KeyValuePair<string, JsonNode?> over in overrides)
+            {
+                config[over.Key] = over.Value?.DeepClone();
+            }
+        }
+
+        string folder = Folder();
+        try
+        {
+            using SessionKeeper keeper = new(new KeptStore(folder, App), new CookieStore(Shop));
+            _ = keeper.Open();
+            SessionGate gate = new();
+            RecordedShell shell = new();
+            PersonChange people = new(new PersonWatch(), gate, keeper, shell.Parts, _ => { });
+            List<(bool Named, bool WayInUp, string? Here)> seen = [];
+            using CoreClient client = new(System.Text.Encoding.UTF8.GetBytes(config.ToJsonString()), _ => { });
+            foreach (JsonNode? step in transcript["steps"]!.AsArray())
+            {
+                JsonObject send = step!["send"]!.DeepClone().AsObject();
+                if (step["body"] is JsonNode body)
+                {
+                    string text = await File.ReadAllTextAsync(Path.Combine(transcripts, "fixtures", body.GetValue<string>()));
+                    send[send["t"]!.GetValue<string>() == "cache" ? "value" : "body"] = text;
+                }
+
+                Update update = await client.SendAsync(send.ToJsonString());
+                _ = gate.Asked(update.Effects, out long mark);
+                _ = people.Hear(update.State, mark);
+                seen.Add((update.State.App?.User is not null, PersonChange.WayInIsUp(update.State), people.Here));
+            }
+
+            string Told() => string.Join(", ", seen.Select((step, at) => at + (step.Named ? " named" : " nobody") + (step.WayInUp ? " way-in" : string.Empty) + (step.Here is null ? " -" : " here")));
+
+            // The answer that says her session is over puts the way in up, and it stays up until she has signed in again.
+            int up = seen.FindIndex(step => step.WayInUp);
+            int gone = up < 0 ? -1 : seen.FindIndex(up, step => !step.WayInUp);
+            int again = gone < 0 ? -1 : seen.FindIndex(gone, step => step.WayInUp);
+            Expect.That(up > 0 && gone > up + 1 && again > gone, "the conversation does not put the way in up, take it away and put it up again: this test shows nothing (" + Told() + ")");
+            string? her = seen[up - 1].Here;
+            Assert.IsNotNull(her, "nobody was signed in before the session ended: this test shows nothing (" + Told() + ")");
+
+            // While it is up the core goes on naming her: that is the state this test is about. And nobody is signed in, from the very
+            // answer that said so.
+            for (int at = up; at < gone; at++)
+            {
+                Expect.That(seen[at].Named, "step " + at + ": the core does not name the person whose session ended under the way in, so this test no longer shows what it was written for (" + Told() + ")");
+                Assert.IsNull(seen[at].Here, "step " + at + ": the person whose session ended is taken to be signed in while the way in is up, so her reminder would be shown to whoever is at the sign-in (" + Told() + ")");
+            }
+
+            // She signs in again and the way in goes: she is the one signed in, and stays so until her session ends again.
+            for (int at = gone; at < again; at++)
+            {
+                Assert.AreEqual(her, seen[at].Here, "step " + at + ": she signed in again and is not taken to be signed in, so what was held for her would not be shown (" + Told() + ")");
+            }
+
+            // It ends again, with a form being sent: from that answer on, nobody is signed in.
+            Expect.That(seen[again].Named, "the core does not name her under the second way in: " + Told());
+            Assert.IsNull(seen[again].Here, "the second end of her session left her taken to be signed in (" + Told() + ")");
+            Expect.That(seen.All(step => !step.WayInUp || step.Here is null), "somebody is taken to be signed in while a way in is up: " + Told());
+
+            // She was one person throughout: nothing was taken away, and what is kept is still kept for her.
+            Assert.IsNull(people.Last, "the end of her session was taken for a change of person");
+            Assert.AreEqual(0, shell.Did.Length);
+            Assert.AreEqual(her, people.KeptFor);
         }
         finally
         {
@@ -401,7 +510,7 @@ public sealed class PersonHearingTests
             WipeReport report = await people.Last!.WaitAsync(Short);
             await keeper.DrainAsync().WaitAsync(Short);
             Expect.That(report.Complete, "the change did not finish: " + string.Join(", ", report.Failed.Select(failed => failed.Key)));
-            Assert.AreEqual(PersonWatch.MarkOf("Ritu Sharma", "ritu.sharma@example.com"), kept.Read(SessionKeeper.PersonKey), "the mark kept is still the key of the person before");
+            Assert.AreEqual(PersonWatch.MarkOf("Ritu Sharma", "ritu.sharma@example.com"), kept.Read(SessionKeeper.PersonKey), "the mark kept is not that of the person named now, made from the name and email");
 
             // A core that gives a key says nothing.
             ConcurrentQueue<string> none = new();
