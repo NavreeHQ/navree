@@ -1,0 +1,401 @@
+---
+title: "Drivers"
+description: "Register a cache store, queue store, session store, realtime backplane, mail transport, storage disk, notification channel, search engine, AI provider or custom telemetry event under a name of your own."
+---
+
+A plugin can ship a backend for any of the framework's open driver slots under a name of its own. Importing `use navree::plugin::prelude::*;` brings the registration methods onto `ModuleBuilder`, and the app selects the driver in its configuration the same way it selects a built-in one. See [Plugins](/docs/plugins/overview/) for how a plugin names itself and [Installing, listing and removing](/docs/plugins/installing/) for adding one to an app.
+
+## How a driver name works
+
+- **Names.** Built-in names (`memory`, `redis`, `local`, `s3`, and the rest) resolve as they always have. Any other lower-case word of up to 64 characters (`[a-z][a-z0-9_]{0,63}`) resolves a driver that a module registered under that name.
+- **Unregistered names.** Selecting a name that no module registered stops the boot naming the configuration key, the registration method, and the known names without repeating the configured string:
+
+  ```text wrap
+  cache.store does not name a built-in cache store or one a module registers with m.cache_store (known: memory, redis)
+  ```
+
+  `mail.transport` keeps its shorthand error (`unknown mail transport (expected ...)`) when given a bare string no module in the process registered, and prints the `m.mail_transport` refusal when a `DriverName` is not registered on the booting app. A notification that lists an unregistered channel with `Channel::named("..")` fails that channel's delivery naming `m.notification_channel`.
+- **Collisions checked at boot and in `config:check`.** Registering a driver under a built-in name, under a setting key of the parent section (`prefix` in `cache`, `workers` in `queue`, `cookie` in `session`, `secret` in `realtime`, `from` in `mail`, `slack` in `notify`), or under the same name in two modules stops the boot even when another driver is selected. `navree config:check` runs the same checks without starting the app.
+- **Settings (`DriverContext`).** Each factory receives a `DriverContext`. Calling `ctx.settings::<T>()` reads the driver's typed settings table:
+  - `cache.NAME` for `m.cache_store`
+  - `queue.NAME` for `m.queue_store`
+  - `session.NAME` for `m.session_store`
+  - `realtime.NAME` for `m.backplane`
+  - `mail.NAME` for `m.mail_transport`
+  - `storage.disks.DISK` for `m.disk_driver` (`ctx.instance()` returns `DISK`)
+  - `notify.NAME` for `m.notification_channel`, `m.sms_driver`, and `m.whatsapp_driver`
+  - `search.NAME` for `m.search_engine`
+  - `ai.providers.NAME` (or `ai.providers.TABLE` when `driver = "NAME"`, with `ctx.instance()` returning `TABLE`) for `m.ai_provider`
+- **No secrets in factory errors.** When a driver factory returns `Err(..)`, the boot error prints that message as written. Name the setting key that failed (`mail.dakiya.api_key is required`), never its secret value, token, or password.
+
+## Cache
+
+`m.cache_store(name, factory)` registers a [`CacheBackend`](/docs/digging-deeper/cache/#a-store-a-module-registers) pairing an `Arc<dyn CacheStore>` for entries with an `Arc<dyn LockStore>` for distributed locks. Select it with `cache.store = "sanduk"` and configure it under `[cache.sanduk]`:
+
+```rust title="src/lib.rs"
+// crates/navree/tests/plugins_docs_drivers.rs
+#[derive(Default, Deserialize)]
+#[serde(default)]
+pub struct SandukCacheSettings {
+    pub capacity: usize,
+}
+
+pub struct SandukCacheModule;
+
+impl Module for SandukCacheModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.cache_store("sanduk", |ctx| async move {
+            let settings: SandukCacheSettings = ctx.settings()?;
+            let store = Arc::new(MemoryStore::with_capacity(settings.capacity.max(1)));
+            Ok(CacheBackend::new(store, Arc::new(MemoryLockStore::new())))
+        });
+    }
+}
+```
+
+## Queue
+
+`m.queue_store(name, factory)` registers a type implementing [`QueueStore`](/docs/digging-deeper/queues/#a-store-a-module-registers). Select it with `queue.driver = "sanduk"` and configure it under `[queue.sanduk]`:
+
+```rust title="src/lib.rs"
+// crates/navree/tests/plugins_docs_drivers.rs
+#[derive(Default, Deserialize)]
+#[serde(default)]
+pub struct SandukQueueSettings {
+    pub depot: String,
+}
+
+pub struct SandukQueueModule;
+
+impl Module for SandukQueueModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.queue_store("sanduk", |ctx| async move {
+            let _settings: SandukQueueSettings = ctx.settings()?;
+            Ok(SandukQueue::default())
+        });
+    }
+}
+```
+
+## Sessions
+
+`m.session_store(name, factory)` registers a type implementing [`SessionStore`](/docs/basics/sessions-and-csrf/#a-store-a-module-registers) (`navree::contracts::SessionStore`). Select it with `session.store = "sanduk"` and configure it under `[session.sanduk]`:
+
+```rust title="src/lib.rs"
+// crates/navree/tests/plugins_docs_drivers.rs
+#[derive(Default, Deserialize)]
+#[serde(default)]
+pub struct SandukSessionSettings {
+    pub shelf: String,
+}
+
+pub struct SandukSessionModule;
+
+impl Module for SandukSessionModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.session_store("sanduk", |ctx| async move {
+            let _settings: SandukSessionSettings = ctx.settings()?;
+            Ok(SessionMemoryStore::new())
+        });
+    }
+}
+```
+
+## Backplane
+
+`m.backplane(name, factory)` registers a realtime [`Backplane`](/docs/digging-deeper/broadcasting/#a-backplane-a-module-registers) that carries broadcasts and live-stream nudges across server processes. Select it with `realtime.backplane = "sanduk"` and configure its settings under `[realtime.sanduk]`. Like the Redis backplane, a registered backplane requires `realtime.secret` so every process signs channel subscriptions with the same key:
+
+```rust title="src/lib.rs"
+// crates/navree/tests/plugins_docs_drivers.rs
+#[derive(Clone, Default)]
+pub struct SandukBackplaneModule {
+    pub backplane: MemoryBackplane,
+}
+
+impl Module for SandukBackplaneModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let backplane = self.backplane.clone();
+        m.backplane("sanduk", move |_ctx| {
+            let backplane = backplane.clone();
+            async move { Ok(backplane) }
+        });
+    }
+}
+```
+
+## Mail
+
+`m.mail_transport(name, factory)` registers a [`MailTransport`](/docs/digging-deeper/mail/#a-transport-a-module-registers). Select it with `mail.transport = "dakghar"`, in `mail.transports.{lane}`, or inside a failover transport list, and configure it under `[mail.dakghar]`:
+
+```rust title="src/lib.rs"
+// crates/navree/tests/plugins_docs_drivers.rs
+#[derive(Default, Deserialize)]
+#[serde(default)]
+pub struct DakgharSettings {
+    pub sender_id: String,
+}
+
+#[derive(Clone, Default)]
+pub struct Dakghar {
+    pub sender_id: String,
+    pub delivered: Arc<Mutex<Vec<(Option<String>, Vec<String>, String)>>>,
+}
+
+impl MailTransport for Dakghar {
+    fn send<'a>(
+        &'a self,
+        message: &'a Message,
+    ) -> BoxFuture<'a, std::result::Result<(), MailError>> {
+        Box::pin(async move {
+            self.delivered.lock().unwrap().push((
+                message.from.clone(),
+                message.to.clone(),
+                message.subject.clone(),
+            ));
+            Ok(())
+        })
+    }
+
+    fn name(&self) -> &'static str {
+        "dakghar"
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct DakgharModule {
+    pub delivered: Arc<Mutex<Vec<(Option<String>, Vec<String>, String)>>>,
+}
+
+impl Module for DakgharModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let delivered = self.delivered.clone();
+        m.mail_transport("dakghar", move |ctx| {
+            let delivered = delivered.clone();
+            async move {
+                let settings: DakgharSettings = ctx.settings()?;
+                Ok(Dakghar {
+                    sender_id: settings.sender_id,
+                    delivered,
+                })
+            }
+        });
+    }
+}
+```
+
+For a complete worked mail-transport plugin over `navree::http_client::HttpClient` — including `Secret<String>` deserialization that never echoes wrong types, URL checks, and provider error scrubbing — read `plugins/dakiya` in the repository:
+
+```rust title="plugins/dakiya/src/lib.rs"
+// plugins/dakiya/src/lib.rs
+impl Module for DakiyaModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(navree::plugin_info!(title = "Dakiya mail"));
+        m.mail_transport("dakiya", |ctx| async move {
+            let settings: DakiyaSettings = ctx.settings()?;
+            let client = ctx.app().get::<HttpClient>().await?;
+            Ok(DakiyaTransport::new((*client).clone(), settings)?)
+        });
+    }
+}
+```
+
+## Storage
+
+`m.disk_driver(name, factory)` registers a [`DiskDriver`](/docs/digging-deeper/storage/#a-driver-a-module-registers) (paired with [`DiskUpload`](/docs/digging-deeper/storage/#a-driver-a-module-registers) for streaming uploads). Every disk in `[storage.disks.DISK]` with `driver = "sanduk"` builds an instance from that disk's table (`ctx.instance()` is `DISK`). `Disk` normalises paths before calling the driver, so `DiskDriver` only receives relative `/`-separated paths without empty, `.`, or `..` segments:
+
+```rust title="src/lib.rs"
+// crates/navree/tests/plugins_docs_drivers.rs
+pub struct SandukDiskModule;
+
+impl Module for SandukDiskModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.disk_driver("sanduk", |ctx| async move {
+            let _settings: SandukDiskSettings = ctx.settings()?;
+            Ok(SandukDisk::default())
+        });
+    }
+}
+```
+
+For a complete storage plugin built on `object_store` and checked against the disk conformance suite (range clamping, folder boundaries, aborted uploads, and prefix checks), read `plugins/godam` in the repository:
+
+```rust title="plugins/godam/src/lib.rs"
+// plugins/godam/src/lib.rs
+impl Module for GodamModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(navree::plugin_info!(title = "Godam disks"));
+        m.disk_driver("godam", |ctx| async move {
+            let settings: GodamSettings = ctx.settings()?;
+            settings.validate(ctx.instance())?;
+            GodamDisk::new(settings)
+        });
+        // navree:wire
+    }
+}
+```
+
+## Notifications
+
+`navree::notify` opens three extension points on `ModuleBuilder`:
+
+- **A delivery channel (`m.notification_channel::<C>()`).** `C` implements [`ChannelDriver`](/docs/digging-deeper/notification-channels/#a-channel-a-module-adds) and `Injectable`, sets `const NAME: &'static str = "sandesh"`, and reads any settings from `notify.sandesh`. Notifications opt in with `Channel::named("sandesh")`, render their payload in `Notification::to_channel`, and route recipients via `Notifiable::route_channel`. Webhook URLs (`http://` or `https://`) are recorded in `notification_deliveries` as `webhook:{host}` so secret tokens in URLs never land in the database.
+- **SMS and WhatsApp drivers by name (`m.sms_driver`, `m.whatsapp_driver`).** Register an `SmsDriver` for `notify.sms.driver = "sandesh_sms"` (settings `[notify.sandesh_sms]`) or a `WhatsAppDriver` for `notify.whatsapp.driver = "sandesh_wa"` (settings `[notify.sandesh_wa]`).
+
+```rust title="src/lib.rs"
+// crates/navree/tests/plugins_docs_drivers.rs
+impl ChannelDriver for SandeshChannel {
+    const NAME: &'static str = "sandesh";
+
+    fn send<'a>(
+        &'a self,
+        to: &'a str,
+        message: &'a Value,
+    ) -> BoxFuture<'a, std::result::Result<SentMessage, ChannelError>> {
+        Box::pin(async move {
+            self.journal
+                .0
+                .lock()
+                .unwrap()
+                .push((to.to_owned(), message.clone()));
+            Ok(SentMessage::new("sandesh"))
+        })
+    }
+}
+
+impl Injectable for SandeshChannel {
+    fn construct(r: Resolver) -> BoxFuture<'static, std::result::Result<Self, KernelError>> {
+        Box::pin(async move {
+            Ok(SandeshChannel {
+                journal: r.get::<SandeshJournal>().await?,
+            })
+        })
+    }
+}
+```
+
+```rust title="src/lib.rs"
+// crates/navree/tests/plugins_docs_drivers.rs
+impl Module for SandeshModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.value(self.journal.clone());
+        m.notification_channel::<SandeshChannel>();
+        m.sms_driver("sandesh_sms", |_ctx| async { Ok(SandeshSms) });
+        m.whatsapp_driver("sandesh_wa", |_ctx| async { Ok(SandeshWhatsApp) });
+    }
+}
+```
+
+## Search
+
+`m.search_engine(name, factory)` registers a [`SearchEngine`](/docs/packages/search/#an-engine-a-module-registers). Select it with `search.engine = "sanduk"` and read its settings from `[search.sanduk]`:
+
+```rust title="src/lib.rs"
+// crates/navree/tests/plugins_docs_drivers.rs
+pub struct SandukSearchModule;
+
+impl Module for SandukSearchModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.search_engine("sanduk", |_ctx| async move { Ok(MemoryEngine::new()) });
+    }
+}
+```
+
+## AI
+
+`m.ai_provider(name, factory)` registers an [`AiDriver`](/docs/ai/ai-sdk/#a-provider-a-module-registers). Any `[ai.providers.vaani]` table (or `[ai.providers.TABLE]` with `driver = "vaani"`) builds an instance from that table (`ProviderConfig` or your own `Deserialize` struct):
+
+```rust title="src/lib.rs"
+// crates/navree/tests/plugins_docs_drivers.rs
+pub struct Vaani {
+    pub url: String,
+}
+
+impl AiDriver for Vaani {
+    fn capabilities(&self) -> AiCapabilities {
+        AiCapabilities::default()
+    }
+
+    fn chat<'a>(
+        &'a self,
+        _request: &'a AiDriverRequest,
+    ) -> BoxFuture<'a, std::result::Result<AiDriverAnswer, AiError>> {
+        Box::pin(async move {
+            let part = Part::Text {
+                text: format!("Namaste from {}", self.url),
+            };
+            Ok(AiDriverAnswer::new(
+                vec![part],
+                Usage::new(4, 3),
+                Finish::Stop,
+            ))
+        })
+    }
+
+    fn stream<'a>(
+        &'a self,
+        _request: &'a AiDriverRequest,
+    ) -> BoxFuture<'a, std::result::Result<AiDriverStream, AiError>> {
+        Box::pin(async { Err(AiError::unavailable("vaani")) })
+    }
+}
+
+pub struct VaaniModule;
+
+impl Module for VaaniModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.ai_provider("vaani", |ctx| async move {
+            let table: ProviderConfig = ctx.settings()?;
+            Ok(Vaani {
+                url: table.url.unwrap_or_default(),
+            })
+        });
+    }
+}
+```
+
+A registered `AiDriver` brings its own HTTP transport, so the app's guarded `HttpClient` (SSRF and private-network checks) does not apply automatically — resolve `HttpClient` from `ctx.app()` inside your factory when calling user-supplied or configurable URLs.
+
+## Telemetry events
+
+Modules emit structured custom events with `CustomEvent::new(name)` (`navree::telemetry::CustomEvent`) and receive them in sinks registered with `m.telemetry_sink::<S>()` (or `m.telemetry_sink_factory(..)`), just like built-in telemetry events. An event name is two or more lower-case words joined by `.` (`society.ludhiana_visit`); any other shape is dropped with a one-time warning:
+
+```rust title="src/lib.rs"
+// crates/navree/tests/plugins_docs_drivers.rs
+#[derive(Default)]
+pub struct VisitSink {
+    seen: Mutex<Vec<CustomEvent>>,
+}
+
+impl TelemetrySink for VisitSink {
+    fn interest(&self) -> Interest {
+        Interest::only([EventKind::Custom])
+    }
+
+    fn record(&self, record: &TelemetryRecord) {
+        if let TelemetryEvent::Custom(custom) = &record.event {
+            self.seen.lock().unwrap().push(custom.clone());
+        }
+    }
+}
+```
+
+Emit the event through `Telemetry` (or `Telemetry::current()` inside a request, job, or scheduled task):
+
+```rust
+let event = CustomEvent::new("society.ludhiana_visit")
+    .field("visitor", "Gurpreet Singh")
+    .field("gate", "Gate 2");
+Telemetry::current().emit(TelemetryEvent::Custom(event));
+```
+
+## Kinds not open yet
+
+These subsystems use fixed built-in backends in Navree 1.4 and do not take module-registered driver names yet:
+
+- `micro.transport` (microservice message brokers)
+- Vector stores (`ai` and `search`)
+- The durable workflow engine (`workflows`)
+- Lighthouse, Logbook, and `media` stores
+- The document rendering engine (`documents`)
+- Workspace resolvers (`workspace.resolvers`)
+- Database backends (`postgres`, `mysql`, `sqlite`, `mongo`)
