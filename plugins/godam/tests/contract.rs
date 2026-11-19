@@ -69,9 +69,11 @@ async fn a_range_past_the_end_is_cut_and_one_past_the_file_is_empty() {
             .unwrap()
             .is_empty()
     );
+    #[allow(clippy::reversed_empty_ranges)]
+    let reversed = 8..3;
     assert!(
         driver
-            .read("notes/ten.txt", Some(8..3))
+            .read("notes/ten.txt", Some(reversed))
             .await
             .unwrap()
             .is_empty()

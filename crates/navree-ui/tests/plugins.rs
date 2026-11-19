@@ -788,6 +788,15 @@ mod navree_plugin_pretty {
         }
     }
 
+    /// A module of the pretty plugin that registers nothing beyond its plugin info.
+    pub(super) struct PrettyEmpty;
+
+    impl Module for PrettyEmpty {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PRETTY);
+        }
+    }
+
     /// A module of the pretty plugin's crate that names no plugin itself and contributes an
     /// error shell.
     pub(super) struct PrettyHelperShell;
@@ -914,18 +923,10 @@ async fn a_sidebar_link_declares_the_permission_it_requires_with_its_module() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn the_error_shell_refusal_says_why_the_module_acts_for_the_plugin() {
-    struct PrettyEmpty;
-
-    impl Module for PrettyEmpty {
-        fn register(&self, m: &mut ModuleBuilder) {
-            m.plugin(navree_plugin_pretty::PRETTY);
-        }
-    }
-
     let krate = navree_plugin_pretty::PRETTY.crate_name;
     let in_crate = boot_error(
         builder(Shell::new("Kesar"))
-            .module(PrettyEmpty)
+            .module(navree_plugin_pretty::PrettyEmpty)
             .module(navree_plugin_pretty::PrettyHelperShell),
     )
     .await;

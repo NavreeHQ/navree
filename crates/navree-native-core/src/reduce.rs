@@ -7500,7 +7500,7 @@ mod tests {
             from: None,
         });
         core.send(Event::Field {
-            screen: Some(2).unwrap(),
+            screen: 2,
             form: Some("refund".to_owned()),
             field: "refund-amount".to_owned(),
             value: crate::FieldValue::Text {
