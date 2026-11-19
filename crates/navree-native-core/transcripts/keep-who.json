@@ -1,5 +1,5 @@
 {
-  "about": "One person, two ways of being named. A shell's answer names the person by id when the server says it, and always by name and email. Two are the same person when both have an id and the ids are equal, or when either has none and the name and email are equal: a proxy that strips the id from one answer, or a server rolled back, does not wipe the person's screens, typed words or kept pages. Another person is another person, with or without an id.",
+  "about": "One person, two ways of being named. A shell's answer names the person by id when the server says it, and by name and email when it does not. Two are the same person when both have an id and the ids are equal, or when neither has an id and the name and email are equal: an answer with an id and one without are never taken for the same person, and another person is another person with or without an id.",
   "config": {"cache":{"persist":true}},
   "steps": [
     {
@@ -71,37 +71,9 @@
       }
     },
     {
-      "note": "Ravneet by name and email: the same person, so her screens stay. What was kept for her id is emptied: a person named without an id keeps nothing.",
+      "note": "Ravneet without an id: an answer without an id is not taken for the id-bearing account, so her screens and what was kept for her id go.",
       "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "store/shell.json",
-      "expect": {
-        "changed": [
-          {"t":"app"},
-          {"t":"nav"}
-        ],
-        "effects": [
-          {"t":"cache_clear"},
-          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\\"navree\\\":1,\\\"build\\\":\\\"152bd84abf4d\\\",\\\"name\\\":\\\"Charkha Supply Co.\\\",\\\"context\\\":\\\"Store operations\\\",\\\"home\\\":\\\"/\\\",\\\"nav\\\":{\\\"groups\\\":[{\\\"label\\\":\\\"Store\\\",\\\"items\\\":[{\\\"label\\\":\\\"Dashboard\\\",\\\"icon\\\":{\\\"name\\\":\\\"layout-dashboard\\\",\\\"paths\\\":[\\\"M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z\\\",\\\"M15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1z\\\",\\\"M15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z\\\",\\\"M4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1z\\\"]},\\\"href\\\":\\\"/\\\"},{\\\"label\\\":\\\"Orders\\\",\\\"icon\\\":{\\\"name\\\":\\\"shopping-bag\\\",\\\"paths\\\":[\\\"M16 10a4 4 0 0 1-8 0\\\",\\\"M3.103 6.034h17.794\\\",\\\"M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z\\\"]},\\\"href\\\":\\\"/orders\\\"},{\\\"label\\\":\\\"Inventory\\\",\\\"icon\\\":{\\\"name\\\":\\\"boxes\\\",\\\"paths\\\":[\\\"M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z\\\",\\\"m7 16.5-4.74-2.85\\\",\\\"m7 16.5 5-3\\\",\\\"M7 16.5v5.17\\\",\\\"M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z\\\",\\\"m17 16.5-5-3\\\",\\\"m17 16.5 4.74-2.85\\\",\\\"M17 16.5v5.17\\\",\\\"M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z\\\",\\\"M12 8 7.26 5.15\\\",\\\"m12 8 4.74-2.85\\\",\\\"M12 13.5V8\\\"]},\\\"href\\\":\\\"/inventory\\\"}]}]},\\\"user\\\":{\\\"name\\\":\\\"Ravneet Kaur\\\",\\\"email\\\":\\\"ravneet.kaur@example.com\\\",\\\"menu\\\":[{\\\"t\\\":\\\"link\\\",\\\"label\\\":\\\"Profile\\\",\\\"action\\\":{\\\"t\\\":\\\"navigate\\\",\\\"href\\\":\\\"/\\\"}},{\\\"t\\\":\\\"button\\\",\\\"label\\\":\\\"Sign out\\\",\\\"action\\\":{\\\"t\\\":\\\"request\\\",\\\"method\\\":\\\"post\\\",\\\"href\\\":\\\"/sign-out\\\"}}]}}\",\"pages\":[],\"owner\":{\"person\":{\"name\":\"Ravneet Kaur\",\"email\":\"ravneet.kaur@example.com\"}},\"build\":\"152bd84abf4d\"}"}
-        ]
-      },
-      "check": [
-        {"at":"/screens/2/content/t","is":"native"},
-        {"at":"/app/user/name","is":"Ravneet Kaur"}
-      ]
-    },
-    {
-      "send": {"t":"start"},
-      "expect": {
-        "changed": [],
-        "effects": [
-          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
-        ]
-      }
-    },
-    {
-      "note": "Harpreet, without an id: another person. Everything goes.",
-      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
-      "body": "made/shell-other.json",
       "expect": {
         "changed": [
           {"t":"app"},
@@ -112,13 +84,45 @@
         "effects": [
           {"t":"cancel","request":2},
           {"t":"cache_clear"},
-          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"label\\\": \\\"Store\\\",\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Orders\\\",\\n      \\\"href\\\": \\\"/orders\\\",\\n      \\\"badge\\\": \\\"12\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Inventory\\\",\\n      \\\"href\\\": \\\"/inventory\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"user\\\": {\\n  \\\"name\\\": \\\"Harpreet Singh\\\",\\n  \\\"email\\\": \\\"harpreet.singh@example.com\\\",\\n  \\\"menu\\\": [\\n   {\\n    \\\"t\\\": \\\"link\\\",\\n    \\\"label\\\": \\\"Profile\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"navigate\\\",\\n     \\\"href\\\": \\\"/profile\\\"\\n    }\\n   },\\n   {\\n    \\\"t\\\": \\\"button\\\",\\n    \\\"label\\\": \\\"Sign out\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"request\\\",\\n     \\\"method\\\": \\\"post\\\",\\n     \\\"href\\\": \\\"/sign-out\\\"\\n    }\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ]\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"name\":\"Harpreet Singh\",\"email\":\"harpreet.singh@example.com\"}},\"build\":\"152bd84abf4d\"}"},
-          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\\"navree\\\":1,\\\"build\\\":\\\"152bd84abf4d\\\",\\\"name\\\":\\\"Charkha Supply Co.\\\",\\\"context\\\":\\\"Store operations\\\",\\\"home\\\":\\\"/\\\",\\\"nav\\\":{\\\"groups\\\":[{\\\"label\\\":\\\"Store\\\",\\\"items\\\":[{\\\"label\\\":\\\"Dashboard\\\",\\\"icon\\\":{\\\"name\\\":\\\"layout-dashboard\\\",\\\"paths\\\":[\\\"M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z\\\",\\\"M15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1z\\\",\\\"M15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-7a1 1 0 0 1 1 -1z\\\",\\\"M4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-5a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1z\\\"]},\\\"href\\\":\\\"/\\\"},{\\\"label\\\":\\\"Orders\\\",\\\"icon\\\":{\\\"name\\\":\\\"shopping-bag\\\",\\\"paths\\\":[\\\"M16 10a4 4 0 0 1-8 0\\\",\\\"M3.103 6.034h17.794\\\",\\\"M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z\\\"]},\\\"href\\\":\\\"/orders\\\"},{\\\"label\\\":\\\"Inventory\\\",\\\"icon\\\":{\\\"name\\\":\\\"boxes\\\",\\\"paths\\\":[\\\"M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z\\\",\\\"m7 16.5-4.74-2.85\\\",\\\"m7 16.5 5-3\\\",\\\"M7 16.5v5.17\\\",\\\"M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z\\\",\\\"m17 16.5-5-3\\\",\\\"m17 16.5 4.74-2.85\\\",\\\"M17 16.5v5.17\\\",\\\"M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z\\\",\\\"M12 8 7.26 5.15\\\",\\\"m12 8 4.74-2.85\\\",\\\"M12 13.5V8\\\"]},\\\"href\\\":\\\"/inventory\\\"}]}]},\\\"user\\\":{\\\"name\\\":\\\"Ravneet Kaur\\\",\\\"email\\\":\\\"ravneet.kaur@example.com\\\",\\\"menu\\\":[{\\\"t\\\":\\\"link\\\",\\\"label\\\":\\\"Profile\\\",\\\"action\\\":{\\\"t\\\":\\\"navigate\\\",\\\"href\\\":\\\"/\\\"}},{\\\"t\\\":\\\"button\\\",\\\"label\\\":\\\"Sign out\\\",\\\"action\\\":{\\\"t\\\":\\\"request\\\",\\\"method\\\":\\\"post\\\",\\\"href\\\":\\\"/sign-out\\\"}}]}}\",\"pages\":[],\"owner\":{\"person\":{\"name\":\"Ravneet Kaur\",\"email\":\"ravneet.kaur@example.com\"}},\"build\":\"152bd84abf4d\"}"},
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
           {"t":"stream_close","stream":1}
         ]
       },
       "check": [
         {"at":"/screens/2","is":null},
+        {"at":"/app/user/name","is":"Ravneet Kaur"}
+      ]
+    },
+    {
+      "send": {"t":"start"},
+      "expect": {
+        "changed": [],
+        "effects": [
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/_navree/native/shell","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      }
+    },
+    {
+      "note": "Harpreet, without an id: another person. Everything goes.",
+      "send": {"t":"response","request":6,"status":200,"content_type":"application/vnd.navree.native+json"},
+      "body": "made/shell-other.json",
+      "expect": {
+        "changed": [
+          {"t":"app"},
+          {"t":"nav"},
+          {"t":"screen","id":4},
+          {"t":"messages"}
+        ],
+        "effects": [
+          {"t":"cancel","request":5},
+          {"t":"cache_clear"},
+          {"t":"cache_write","key":"boot","value":"{\"shell\":\"{\\n \\\"navree\\\": 1,\\n \\\"build\\\": \\\"152bd84abf4d\\\",\\n \\\"name\\\": \\\"Charkha Supply Co.\\\",\\n \\\"context\\\": \\\"Store operations\\\",\\n \\\"home\\\": \\\"/\\\",\\n \\\"nav\\\": {\\n  \\\"groups\\\": [\\n   {\\n    \\\"label\\\": \\\"Store\\\",\\n    \\\"items\\\": [\\n     {\\n      \\\"label\\\": \\\"Overview\\\",\\n      \\\"href\\\": \\\"/\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Orders\\\",\\n      \\\"href\\\": \\\"/orders\\\",\\n      \\\"badge\\\": \\\"12\\\"\\n     },\\n     {\\n      \\\"label\\\": \\\"Inventory\\\",\\n      \\\"href\\\": \\\"/inventory\\\"\\n     }\\n    ]\\n   }\\n  ]\\n },\\n \\\"user\\\": {\\n  \\\"name\\\": \\\"Harpreet Singh\\\",\\n  \\\"email\\\": \\\"harpreet.singh@example.com\\\",\\n  \\\"menu\\\": [\\n   {\\n    \\\"t\\\": \\\"link\\\",\\n    \\\"label\\\": \\\"Profile\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"navigate\\\",\\n     \\\"href\\\": \\\"/profile\\\"\\n    }\\n   },\\n   {\\n    \\\"t\\\": \\\"button\\\",\\n    \\\"label\\\": \\\"Sign out\\\",\\n    \\\"action\\\": {\\n     \\\"t\\\": \\\"request\\\",\\n     \\\"method\\\": \\\"post\\\",\\n     \\\"href\\\": \\\"/sign-out\\\"\\n    }\\n   }\\n  ]\\n },\\n \\\"routes\\\": [\\n  {\\n   \\\"match\\\": \\\"/orders/new\\\",\\n   \\\"present\\\": \\\"sheet\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/sign-in\\\",\\n   \\\"present\\\": \\\"full\\\",\\n   \\\"chrome\\\": false\\n  },\\n  {\\n   \\\"match\\\": \\\"/orders/*\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/help\\\",\\n   \\\"present\\\": \\\"external\\\"\\n  },\\n  {\\n   \\\"match\\\": \\\"/reports\\\",\\n   \\\"present\\\": \\\"root\\\"\\n  }\\n ]\\n}\\n\",\"pages\":[],\"owner\":{\"person\":{\"name\":\"Harpreet Singh\",\"email\":\"harpreet.singh@example.com\"}},\"build\":\"152bd84abf4d\"}"},
+          {"t":"fetch","request":7,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
+      },
+      "check": [
+        {"at":"/screens/3","is":null},
         {"at":"/app/user/name","is":"Harpreet Singh"}
       ]
     }

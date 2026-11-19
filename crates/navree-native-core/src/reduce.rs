@@ -1299,8 +1299,7 @@ impl Core {
                     }
                 }
                 _ => {
-                    self.inner.person =
-                        Some(crate::cache::HeldPerson::from_shell(who, from_device));
+                    self.inner.person = Some(crate::cache::HeldPerson::from_shell(who));
                 }
             }
         }
@@ -6507,36 +6506,23 @@ mod tests {
         assert_eq!(&read, core.view());
     }
 
-    /// One person keeps the key made when their id was first seen, across an
-    /// answer that loses their id and when the id comes back.
+    /// An answer without an id is not merged with an id-bearing account of the
+    /// same name and email, and when the person's id comes back they carry the
+    /// same id-based key as before.
     #[test]
     fn a_person_keeps_one_key_when_an_answer_loses_their_id_and_when_it_comes_back() {
         const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
         let hers = include_str!("../transcripts/fixtures/store/shell.json");
         let renamed = include_str!("../transcripts/fixtures/made/shell-other.json");
+        let orders = include_str!("../transcripts/fixtures/store/orders.json");
         let mut core = signed_in_as(Some(RAVNEET), hers);
         let key = key_of(&core).expect("the person signed in has a key");
+        assert_eq!(core.snapshot().person.as_deref(), Some(key.as_str()));
+        core.send(Event::Select { destination: 1 });
+        core.send(native(3, orders, Some(RAVNEET), false));
+        assert!(core.view.screens.contains_key(&2));
 
-        // An answer that lost her id still names Ravneet by name and email: the key stays.
-        let asked = core
-            .send(Event::Start)
-            .effects
-            .iter()
-            .find_map(asks_for_the_shell)
-            .expect("the shell is asked for");
-        core.send(native(asked, hers, None, false));
-        assert_eq!(
-            key_of(&core),
-            Some(key.clone()),
-            "losing the id flipped the key"
-        );
-        assert_eq!(
-            core.view.destinations[0].stack,
-            vec![1],
-            "her screen stayed"
-        );
-
-        // Her id comes back, even with a changed name and email: still one key.
+        // While her id is present, a changed name and email keep the same key and screens.
         let asked = core
             .send(Event::Start)
             .effects
@@ -6546,29 +6532,31 @@ mod tests {
         core.send(native(asked, renamed, Some(RAVNEET), false));
         assert_eq!(
             key_of(&core),
-            Some(key),
-            "the returning id gave another key"
+            Some(key.clone()),
+            "renaming under the same id changed the key"
         );
-        assert_eq!(
-            core.view.destinations[0].stack,
-            vec![1],
-            "her screen stayed"
+        assert!(core.view.screens.contains_key(&2), "her screen stayed");
+
+        // An answer without an id cannot be proved to be that account: screens wipe and it gets the name-and-email key.
+        let asked = core
+            .send(Event::Start)
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("the shell is asked for");
+        core.send(native(asked, hers, None, false));
+        assert_ne!(
+            key_of(&core),
+            Some(key.clone()),
+            "an id-less answer inherited an id-based key"
         );
-    }
+        assert!(
+            !core.view.screens.contains_key(&2),
+            "screens of an id-bearing session stayed across an id-less answer"
+        );
+        assert_eq!(core.snapshot().person, None);
 
-    /// A person first named without an id keeps the key made then for as long
-    /// as the core takes them for the same person, including once the server
-    /// starts sending their id and when their name changes under that id.
-    #[test]
-    fn a_person_first_named_without_an_id_keeps_that_key_while_they_are_taken_for_the_same() {
-        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
-        const MEERA: &str = "0193a4b2-0000-7000-8000-00000000ms03";
-        let hers = include_str!("../transcripts/fixtures/store/shell.json");
-        let renamed = include_str!("../transcripts/fixtures/made/shell-other.json");
-        let mut core = signed_in_as(None, hers);
-        let key = key_of(&core).expect("a person named without an id has a key");
-
-        // The server begins sending her id: the core takes her for the same, and keeps her key.
+        // When her id comes back, her key is the exact id-based key again, matching her snapshot.
         let asked = core
             .send(Event::Start)
             .effects
@@ -6579,46 +6567,70 @@ mod tests {
         assert_eq!(
             key_of(&core),
             Some(key.clone()),
-            "adding the id changed the key of the same person"
+            "the returning id gave another key"
         );
-        assert_eq!(
-            core.view.destinations[0].stack,
-            vec![1],
-            "her screen stayed"
-        );
+        assert_eq!(core.snapshot().person.as_deref(), Some(key.as_str()));
+    }
 
-        // A rename under that id is still the same person, with the same key.
+    /// A person first named without an id keeps that key while named without an
+    /// id with the same name and email, and never carries a mismatched key and
+    /// snapshot owner when an answer with an id arrives.
+    #[test]
+    fn a_person_first_named_without_an_id_keeps_that_key_while_they_are_taken_for_the_same() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        let hers = include_str!("../transcripts/fixtures/store/shell.json");
+        let orders = include_str!("../transcripts/fixtures/store/orders.json");
+        let mut core = signed_in_as(None, hers);
+        let key = key_of(&core).expect("a person named without an id has a key");
+        core.send(Event::Select { destination: 1 });
+        core.send(native(3, orders, None, false));
+        assert!(core.view.screens.contains_key(&2));
+
+        // Another answer without an id for the same name and email keeps her key and screens.
         let asked = core
             .send(Event::Start)
             .effects
             .iter()
             .find_map(asks_for_the_shell)
             .expect("the shell is asked for");
-        core.send(native(asked, renamed, Some(RAVNEET), false));
+        core.send(native(asked, hers, None, false));
         assert_eq!(
             key_of(&core),
             Some(key.clone()),
-            "renaming under that id changed the key"
+            "the same person without an id changed key"
         );
+        assert!(core.view.screens.contains_key(&2), "her screen stayed");
+        assert_eq!(core.snapshot().person, None);
 
-        // Another id is another person, and gets its own key.
+        // Once the server names an id, it is distinct from an id-less session and its key matches its snapshot and next launch.
         let asked = core
             .send(Event::Start)
             .effects
             .iter()
             .find_map(asks_for_the_shell)
             .expect("the shell is asked for");
-        core.send(native(asked, renamed, Some(MEERA), false));
-        assert_ne!(
-            key_of(&core),
-            Some(key),
-            "another id kept the first person's key"
+        core.send(native(asked, hers, Some(RAVNEET), false));
+        let id_key = key_of(&core).expect("an id-based key");
+        assert_ne!(id_key, key, "an id-bearing session kept an id-less key");
+        assert!(
+            !core.view.screens.contains_key(&2),
+            "screens of an id-less session stayed for an id-bearing one"
+        );
+        assert_eq!(
+            core.snapshot().person.as_deref(),
+            Some(id_key.as_str()),
+            "app.user.key and snapshot.person disagreed"
+        );
+        assert_eq!(
+            key_of(&signed_in_as(Some(RAVNEET), hers)),
+            Some(id_key),
+            "key differed from a fresh launch with the same id"
         );
     }
 
     /// An answer without an id standing between two distinct ids of one name
-    /// and no email never joins the two accounts: the second wipes the first
-    /// and gets its own key.
+    /// and no email never joins the accounts at either step: each step wipes
+    /// the screens before it and no two of the three share a key.
     #[test]
     fn an_answer_without_an_id_between_two_ids_does_not_join_two_accounts_of_one_name() {
         const FIRST: &str = "7f1c2a90-0001-4000-8000-00000000a001";
@@ -6636,7 +6648,7 @@ mod tests {
                 .is_some_and(|s| s.screen().is_some())
         );
 
-        // An answer in between loses the id.
+        // An answer in between has no id: it is not taken for the first account, wipes its screens, and gets its own key.
         let asked = core
             .send(Event::Start)
             .effects
@@ -6644,9 +6656,18 @@ mod tests {
             .find_map(asks_for_the_shell)
             .expect("the shell is asked for");
         core.send(native(asked, harpreet, None, false));
-        assert_eq!(key_of(&core), Some(first_key.clone()));
+        let without_id_key = key_of(&core).expect("the id-less answer has a key");
+        assert_ne!(without_id_key, first_key);
+        assert!(
+            !core.view.screens.contains_key(&2),
+            "the first account's orders stayed for an answer without an id"
+        );
+        core.send(Event::Select { destination: 1 });
+        let orders_req = core.inner.next.request;
+        core.send(native(orders_req, orders, None, false));
+        let middle_orders = core.front().expect("orders screen");
 
-        // Now the second Harpreet Singh signs in with another id: everything of the first goes.
+        // Now the second Harpreet Singh signs in with another id: everything before goes too.
         let asked = core
             .send(Event::Start)
             .effects
@@ -6659,9 +6680,13 @@ mod tests {
             second_key, first_key,
             "the second account got the first account's key"
         );
+        assert_ne!(
+            second_key, without_id_key,
+            "the second account got the id-less session's key"
+        );
         assert!(
-            !core.view.screens.contains_key(&2),
-            "the first account's orders stayed for the second"
+            !core.view.screens.contains_key(&middle_orders),
+            "the previous orders stayed for the second account"
         );
         assert_eq!(core.view.selected, 0);
     }

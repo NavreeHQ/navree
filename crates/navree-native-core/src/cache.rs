@@ -32,10 +32,10 @@ use crate::state::{Asked, Content, Pending, ScreenId};
 
 /// Who a shell names, as the core tells people apart: by the id the app's
 /// sign-in gives them, when the shell's answer says it
-/// ([`navree_native::PERSON_HEADER`]), and always by their name and email.
-/// Two are the same person when both have an id and the ids are equal, or
-/// when either has none and the name and email are equal: an answer that
-/// lost its id (a proxy, a server rolled back) names the same person still.
+/// ([`navree_native::PERSON_HEADER`]), and by their name and email when it
+/// does not. Two are the same person when both have an id and the ids are
+/// equal, or when neither has an id and the name and email are equal: an
+/// answer with an id and one without are never taken for the same person.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct Who {
     /// The id, when the server said it.
@@ -52,7 +52,8 @@ impl PartialEq for Who {
     fn eq(&self, other: &Self) -> bool {
         match (&self.id, &other.id) {
             (Some(one), Some(other)) => one == other,
-            _ => self.name == other.name && self.email == other.email,
+            (None, None) => self.name == other.name && self.email == other.email,
+            _ => false,
         }
     }
 }
@@ -94,46 +95,35 @@ impl Who {
 pub(crate) type Person = Option<Who>;
 
 /// The person last signed in, with the key the core made when they were first
-/// held and the id first seen for them.
+/// held.
 #[derive(Clone, Debug)]
 pub(crate) struct HeldPerson {
-    /// The id the server gave for this person, kept once seen so an answer
-    /// without one does not join two accounts of one name.
     pub id: Option<String>,
     pub name: String,
     pub email: Option<String>,
     /// The core's own key for this person, kept while they are taken for the same.
     pub key: String,
-    /// Held only from a shell kept on the device, before this launch's shell answered.
-    pub from_device: bool,
 }
 
 impl HeldPerson {
-    pub(crate) fn from_shell(who: &Who, from_device: bool) -> Self {
+    pub(crate) fn from_shell(who: &Who) -> Self {
         Self {
             id: who.id.clone(),
             name: who.name.clone(),
             email: who.email.clone(),
             key: who.key(),
-            from_device,
         }
     }
 
     pub(crate) fn same_as(&self, who: &Who) -> bool {
         match (&self.id, &who.id) {
             (Some(one), Some(other)) => one == other,
-            _ => self.name == who.name && self.email == who.email,
+            (None, None) => self.name == who.name && self.email == who.email,
+            _ => false,
         }
     }
 
     pub(crate) fn note(&mut self, who: &Who) {
-        if self.from_device && self.id.is_none() && who.id.is_some() {
-            self.key = who.key();
-        }
-        self.from_device = false;
-        if self.id.is_none() {
-            self.id.clone_from(&who.id);
-        }
         self.name.clone_from(&who.name);
         self.email.clone_from(&who.email);
     }

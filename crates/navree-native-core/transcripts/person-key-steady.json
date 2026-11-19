@@ -1,5 +1,5 @@
 {
-  "about": "One person keeps one key while the core takes them for the same person: made when their id was first seen and kept across an answer that lost it, or made from their name and email when first named without an id and kept once their id arrives.",
+  "about": "One person keeps one key while the core takes them for the same person: made from their id and kept across changes of name and email while the id is the same, or made from their name and email while named without an id. Moving between no id and an id starts a distinct person with the id's key, matching the next launch.",
   "steps": [
     {
       "send": {"t":"start"},
@@ -62,9 +62,9 @@
       }
     },
     {
-      "note": "An answer loses her id and still names Ravneet by name and email: her key and her screens stay.",
-      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json"},
-      "body": "store/shell.json",
+      "note": "A rename under that id is still the same person: her key and her screens stay.",
+      "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "body": "made/shell-other.json",
       "expect": {
         "changed": [
           {"t":"app"},
@@ -87,23 +87,29 @@
       }
     },
     {
-      "note": "Her id comes back: her key is still the one.",
-      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "note": "An answer without an id is not merged with an id-bearing account: screens go and the key is made from name and email.",
+      "send": {"t":"response","request":5,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "store/shell.json",
       "expect": {
         "changed": [
           {"t":"app"},
-          {"t":"nav"}
+          {"t":"nav"},
+          {"t":"screen","id":3},
+          {"t":"messages"}
         ],
-        "effects": []
+        "effects": [
+          {"t":"cancel","request":2},
+          {"t":"fetch","request":6,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000},
+          {"t":"stream_close","stream":1}
+        ]
       },
       "check": [
-        {"at":"/app/user/key","is":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e"},
-        {"at":"/screens/2/content/t","is":"native"}
+        {"at":"/app/user/key","is":"46d4b2163f821b3c7b88c8ed419fa034677cc3588a21b4b4f0edf831f55b5d79"},
+        {"at":"/screens/2","is":null}
       ]
     },
     {
-      "note": "Another launch: she is first named without an id.",
+      "note": "Another launch: she is named without an id.",
       "restart": true,
       "send": {"t":"start"},
       "expect": {
@@ -140,8 +146,8 @@
       }
     },
     {
-      "note": "The server starts sending her id: she keeps that key while taken for the same person.",
-      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
+      "note": "Another answer without an id for Ravneet keeps her key and her screen.",
+      "send": {"t":"response","request":3,"status":200,"content_type":"application/vnd.navree.native+json"},
       "body": "store/shell.json",
       "expect": {
         "changed": [
@@ -165,19 +171,24 @@
       }
     },
     {
-      "note": "A rename under that id is still the same person, with the same key.",
+      "note": "The server starts sending her id: the id-less session goes and her key is the id's key, matching the next launch.",
       "send": {"t":"response","request":4,"status":200,"content_type":"application/vnd.navree.native+json","headers":[["x-navree-person","0193a4b2-0000-7000-8000-00000000ra01"]]},
-      "body": "made/shell-other.json",
+      "body": "store/shell.json",
       "expect": {
         "changed": [
           {"t":"app"},
-          {"t":"nav"}
+          {"t":"nav"},
+          {"t":"screen","id":2},
+          {"t":"messages"}
         ],
-        "effects": []
+        "effects": [
+          {"t":"cancel","request":2},
+          {"t":"fetch","request":5,"method":"get","url":"https://shop.example/","headers":[["x-navree-native","1"],["x-navree-client","platform=android; form=phone; vocab=0; scheme=light; contrast=normal; text=1.00"],["accept","application/vnd.navree.native+json"]],"timeout_ms":30000}
+        ]
       },
       "check": [
-        {"at":"/app/user/key","is":"46d4b2163f821b3c7b88c8ed419fa034677cc3588a21b4b4f0edf831f55b5d79"},
-        {"at":"/destinations/0/stack","is":[1]}
+        {"at":"/app/user/key","is":"1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e"},
+        {"at":"/destinations/0/stack","is":[2]}
       ]
     }
   ]
