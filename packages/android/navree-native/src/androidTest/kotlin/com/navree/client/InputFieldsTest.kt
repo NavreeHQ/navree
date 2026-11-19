@@ -1070,10 +1070,10 @@ class InputFieldsTest {
         val recorded = Recorded("", mapOf("/_navree/native/shell" to "shell", "/" to "screen-dashboard"))
         val html = """
             <!doctype html>
-            <html><head><meta charset="utf-8"><title>Web upload</title></head>
+            <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Web upload</title></head>
             <body style="margin:0;padding:0">
-              <input id="f" type="file" accept="image/*,video/*,.pdf" multiple style="position:fixed;top:-200px">
-              <label id="go" for="f" style="position:fixed;inset:0;width:100vw;height:100vh;display:block;margin:0;cursor:pointer">Choose</label>
+              <label id="go" for="f" style="display:block;width:100%;height:180px;margin:0;cursor:pointer">Choose</label>
+              <input id="f" type="file" accept="image/*,video/*,.pdf" multiple autofocus style="display:block;width:260px;height:64px;margin:0">
               <script>
                 var R = function(m){ fetch('/web-note?m=' + encodeURIComponent(m)).catch(function(){}) };
                 var f = document.getElementById('f');
@@ -1087,6 +1087,7 @@ class InputFieldsTest {
                   }, function(e){ R('err:' + e) });
                 });
                 window.addEventListener('load', function(){
+                  f.focus();
                   requestAnimationFrame(function(){ requestAnimationFrame(function(){ R('ready') }) });
                 });
               </script>
@@ -1144,41 +1145,93 @@ class InputFieldsTest {
                 var attempts = 0
                 val deadline = System.currentTimeMillis() + 15_000L
                 while (picker.launches.get() == before && System.currentTimeMillis() < deadline) {
-                    var point: Pair<Float, Float>? = null
+                    val mode = attempts % 3
+                    var screenPoint: Pair<Float, Float>? = null
                     compose.runOnUiThread {
                         val web = findWebView(compose.activity.window.decorView)
                         if (web != null && web.isShown && web.width > 0 && web.height > 0) {
+                            web.isFocusable = true
+                            web.isFocusableInTouchMode = true
                             web.requestFocus()
-                            val loc = IntArray(2)
-                            web.getLocationOnScreen(loc)
-                            point = (loc[0] + web.width / 2f) to (loc[1] + web.height / 2f)
+                            web.evaluateJavascript("var f=document.getElementById('f');if(f){f.value='';f.focus();}", null)
+                            val visible = android.graphics.Rect()
+                            if (web.getGlobalVisibleRect(visible) && visible.width() > 0 && visible.height() > 0) {
+                                val loc = IntArray(2)
+                                web.getLocationOnScreen(loc)
+                                val localX = visible.width() / 2f
+                                val localY = minOf(90f, visible.height() / 3f)
+                                screenPoint = (loc[0] + localX) to (loc[1] + localY)
+                            }
                         }
                     }
-                    val target = point
+                    Thread.sleep(60)
+                    val target = screenPoint
                     if (target != null) {
-                        if (attempts % 2 == 0) {
-                            val downTime = android.os.SystemClock.uptimeMillis()
-                            val down = android.view.MotionEvent.obtain(downTime, downTime, android.view.MotionEvent.ACTION_DOWN, target.first, target.second, 0).apply {
-                                source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                        when (mode) {
+                            0 -> {
+                                val downTime = android.os.SystemClock.uptimeMillis()
+                                compose.runOnUiThread {
+                                    val web = findWebView(compose.activity.window.decorView)
+                                    if (web != null && web.width > 0 && web.height > 0) {
+                                        val localX = web.width / 2f
+                                        val localY = minOf(90f, web.height / 3f)
+                                        val down = android.view.MotionEvent.obtain(downTime, downTime, android.view.MotionEvent.ACTION_DOWN, localX, localY, 0).apply {
+                                            source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                                        }
+                                        web.dispatchTouchEvent(down)
+                                        down.recycle()
+                                    }
+                                }
+                                Thread.sleep(60)
+                                compose.runOnUiThread {
+                                    val web = findWebView(compose.activity.window.decorView)
+                                    if (web != null && web.width > 0 && web.height > 0) {
+                                        val localX = web.width / 2f
+                                        val localY = minOf(90f, web.height / 3f)
+                                        val upTime = android.os.SystemClock.uptimeMillis()
+                                        val up = android.view.MotionEvent.obtain(downTime, upTime, android.view.MotionEvent.ACTION_UP, localX, localY, 0).apply {
+                                            source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                                        }
+                                        web.dispatchTouchEvent(up)
+                                        up.recycle()
+                                    }
+                                }
                             }
-                            runCatching { inst.sendPointerSync(down) }
-                            down.recycle()
-                            Thread.sleep(60)
-                            val upTime = android.os.SystemClock.uptimeMillis()
-                            val up = android.view.MotionEvent.obtain(downTime, upTime, android.view.MotionEvent.ACTION_UP, target.first, target.second, 0).apply {
-                                source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                            1 -> {
+                                val downTime = android.os.SystemClock.uptimeMillis()
+                                compose.runOnUiThread {
+                                    val web = findWebView(compose.activity.window.decorView)
+                                    web?.dispatchKeyEvent(KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE, 0))
+                                }
+                                Thread.sleep(40)
+                                compose.runOnUiThread {
+                                    val web = findWebView(compose.activity.window.decorView)
+                                    val upTime = android.os.SystemClock.uptimeMillis()
+                                    web?.dispatchKeyEvent(KeyEvent(downTime, upTime, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SPACE, 0))
+                                }
                             }
-                            runCatching { inst.sendPointerSync(up) }
-                            up.recycle()
-                        } else {
-                            Shots.shell("input tap ${target.first.toInt()} ${target.second.toInt()}")
+                            else -> {
+                                val downTime = android.os.SystemClock.uptimeMillis()
+                                val down = android.view.MotionEvent.obtain(downTime, downTime, android.view.MotionEvent.ACTION_DOWN, target.first, target.second, 0).apply {
+                                    source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                                }
+                                runCatching { inst.sendPointerSync(down) }
+                                down.recycle()
+                                Thread.sleep(60)
+                                val upTime = android.os.SystemClock.uptimeMillis()
+                                val up = android.view.MotionEvent.obtain(downTime, upTime, android.view.MotionEvent.ACTION_UP, target.first, target.second, 0).apply {
+                                    source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                                }
+                                runCatching { inst.sendPointerSync(up) }
+                                up.recycle()
+                            }
                         }
                         attempts++
                     }
                     try {
                         compose.waitUntil(1_500) { picker.launches.get() > before }
                     } catch (_: Throwable) {
-                        // Wait for the web view's hit-test frame to settle and tap again.
+                        // Wait for the web view's hit-test frame to settle and try again.
                     }
                 }
                 assertTrue("the web view's file chooser opened the client's picker", picker.launches.get() > before)

@@ -126,9 +126,25 @@ async fn a_module_that_imports_for_feature_stays_the_apps_own() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn the_flags_module_names_itself_and_boots_with_no_warning() {
+    let app = crate::servers::database(
+        navree_testing::TestApp::builder().sources(navree_config::ConfigSources::new()),
+    )
+    .config("http.per_ip_rate_limit", serde_json::Value::Null)
+    .module(navree_db::DatabaseModule::from_config())
+    .module(navree_cache::CacheModule::for_root(
+        navree_cache::CacheOptions::default(),
+    ))
+    .module(navree_events::EventsModule::for_root())
+    .module(navree_access::AccessModule::for_root(
+        navree_access::AccessOptions::default(),
+    ))
+    .module(crate::support::FixturesModule)
+    .module(navree_workspace::WorkspaceModule::from_config())
+    .module(crate::support::DealsModule)
+    .module(FlagsModule::from_config());
     let warnings = Warnings::default();
     let _guard = warnings.install();
-    let _world = World::new().await;
+    let _world = World::with(app).await;
     let logged = warnings.all();
     assert!(logged.is_empty(), "{logged:?}");
 }

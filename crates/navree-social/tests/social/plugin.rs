@@ -173,9 +173,10 @@ async fn a_module_that_imports_for_feature_stays_the_apps_own() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn the_social_module_names_itself_and_boots_with_no_warning() {
+    let app = builder().sources(navree_config::ConfigSources::new());
     let warnings = Warnings::default();
     let _guard = warnings.install();
-    let _app = builder().build().await;
+    let _app = app.build().await;
     let logged = warnings.all();
     assert!(logged.is_empty(), "{logged:?}");
 }

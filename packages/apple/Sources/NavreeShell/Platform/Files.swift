@@ -38,6 +38,7 @@ public final class FileStore {
     private let folder: URL
     private var kept: [String: URL] = [:]
     private var generation = 0
+    private var inFlight = 0
     /// Optional hook used by tests to observe off-main-actor preparation.
     var workObserver: (@Sendable () async -> Void)?
 
@@ -96,6 +97,7 @@ public final class FileStore {
         let copy = folder.appendingPathComponent(token)
         let name = url.lastPathComponent
 
+        inFlight += 1
         let prepared = await Task.detached(priority: .userInitiated) { () -> Result<Int, FileRefusal> in
             if let observer { await observer() }
             if Task.isCancelled { return .failure(.unreadable) }
@@ -109,10 +111,11 @@ public final class FileStore {
                 propertyReading: propertyReading, rewriter: rewriter, filmExporter: filmExporter
             )
         }.value
+        inFlight -= 1
 
         guard generation == startedIn, !Task.isCancelled else {
             try? FileManager.default.removeItem(at: copy)
-            if kept.isEmpty { try? FileManager.default.removeItem(at: folder) }
+            removeFolderIfEmpty()
             return .refused(.unreadable)
         }
 
@@ -122,7 +125,7 @@ public final class FileStore {
             return .kept(FileRef(token: token, name: name, type: Self.type(of: url), size: size))
         case .failure(let refusal):
             try? FileManager.default.removeItem(at: copy)
-            if kept.isEmpty { try? FileManager.default.removeItem(at: folder) }
+            removeFolderIfEmpty()
             return .refused(refusal)
         }
     }
@@ -156,6 +159,7 @@ public final class FileStore {
         var createdFolders: [URL] = []
         var refused: [String] = []
 
+        inFlight += 1
         for url in candidates {
             if Task.isCancelled { break }
             let lent = url.startAccessingSecurityScopedResource()
@@ -189,13 +193,24 @@ public final class FileStore {
                 refused.append(Words.refused(url.lastPathComponent, why))
             }
         }
+        inFlight -= 1
 
         guard generation == startedIn, !Task.isCancelled else {
             for slot in createdFolders { try? FileManager.default.removeItem(at: slot) }
-            if kept.isEmpty { try? FileManager.default.removeItem(at: folder) }
+            removeFolderIfEmpty()
             return ([], [])
         }
+        if preparedURLs.isEmpty {
+            removeFolderIfEmpty()
+        }
         return (preparedURLs, refused)
+    }
+
+    private func removeFolderIfEmpty() {
+        guard inFlight == 0, kept.isEmpty else { return }
+        if (try? FileManager.default.contentsOfDirectory(atPath: folder.path))?.isEmpty == true {
+            try? FileManager.default.removeItem(at: folder)
+        }
     }
 
     private nonisolated static func prepareFile(

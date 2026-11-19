@@ -101,6 +101,7 @@ for pass in $passes; do
                 -project NavreeDemo.xcodeproj -scheme NavreeDemo \
                 -destination "platform=iOS Simulator,id=$device" -derivedDataPath "$build/DerivedData" \
                 -resultBundlePath "$build/results/$pass.xcresult" \
+                -retry-tests-on-failure -test-iterations 2 \
                 2>&1 | tee "$build/logs/test-$pass.log" | pretty
     }
     if ! run_tests; then

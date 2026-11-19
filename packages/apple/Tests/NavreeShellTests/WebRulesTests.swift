@@ -177,14 +177,17 @@ struct WebRulesTests {
         shell.effects.keeper.files.workObserver = nil
         picker.urls = [cleanNote]
 
+        var secondContinuation: CheckedContinuation<[URL]?, Never>?
         let secondTask = Task { @MainActor in
             await withCheckedContinuation { (continuation: CheckedContinuation<[URL]?, Never>) in
-                coordinator.handleOpenPanel(
-                    multiple: false, allowsDirectories: false,
-                    frameURL: URL(string: "https://shop.example/"), mainFrame: true
-                ) { continuation.resume(returning: $0) }
+                secondContinuation = continuation
             }
         }
+        while secondContinuation == nil { await Task.yield() }
+        coordinator.handleOpenPanel(
+            multiple: false, allowsDirectories: false,
+            frameURL: URL(string: "https://shop.example/"), mainFrame: true
+        ) { secondContinuation?.resume(returning: $0) }
         releaseContinuation.finish()
         let secondChosen = await secondTask.value
         #expect(firstOutcomes.count == 1)
