@@ -18,7 +18,7 @@ import { chromium, firefox, webkit } from "playwright";
 import { BUILD, page as doc, start } from "./support/fixture.mjs";
 import { launch } from "./support/launch.mjs";
 
-const DIST = join(dirname(fileURLToPath(import.meta.url)), "../../../../crates/navree-ui/dist");
+const DIST = join(dirname(fileURLToPath(import.meta.url)), "../../../crates/navree-ui/dist");
 const EXT_JS = readFileSync(join(DIST, "extensions.js"));
 const ISL_JS = readFileSync(join(DIST, "islands.js"));
 

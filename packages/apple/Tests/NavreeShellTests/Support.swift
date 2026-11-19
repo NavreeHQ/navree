@@ -102,10 +102,13 @@ struct Shell {
         transport = FakeTransport()
         transport.answers = answers
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("navree-\(UUID().uuidString)")
-        effects = SystemEffects(
-            transport: transport, cache: KeptFiles(folder: folder.appendingPathComponent("cache")),
-            snapshots: KeptFiles(folder: folder.appendingPathComponent("snapshot")), signedWith: signedWith
+        let keeper = SessionKeeper(
+            jar: transport.jar,
+            cache: KeptFiles(folder: folder.appendingPathComponent("cache")),
+            snapshots: KeptFiles(folder: folder.appendingPathComponent("snapshot")),
+            files: FileStore(folder: folder.appendingPathComponent("files"))
         )
+        effects = SystemEffects(transport: transport, keeper: keeper, signedWith: signedWith)
         client = NativeClient(core: core, effects: effects)
         let problems = Problems()
         self.problems = problems

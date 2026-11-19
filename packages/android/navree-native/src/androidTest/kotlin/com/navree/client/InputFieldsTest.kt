@@ -19,13 +19,11 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
-import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -34,7 +32,6 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
-import androidx.compose.ui.test.performTouchInput
 import androidx.core.app.ActivityOptionsCompat
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.Lifecycle
@@ -1127,12 +1124,37 @@ class InputFieldsTest {
             Thread.sleep(300)
             compose.waitForIdle()
 
+            fun findWebView(view: android.view.View): android.webkit.WebView? {
+                if (view is android.webkit.WebView) return view
+                if (view is android.view.ViewGroup) {
+                    for (i in 0 until view.childCount) {
+                        findWebView(view.getChildAt(i))?.let { return it }
+                    }
+                }
+                return null
+            }
+
             fun tapWebChooser(vararg uris: Uri) {
                 picker.next = uris.toList()
                 val before = picker.launches.get()
                 val deadline = System.currentTimeMillis() + 15_000L
                 while (picker.launches.get() == before && System.currentTimeMillis() < deadline) {
-                    compose.onNode(isRoot()).performTouchInput { click(center) }
+                    compose.runOnUiThread {
+                        val web = findWebView(compose.activity.window.decorView)
+                        if (web != null && web.width > 0 && web.height > 0) {
+                            val now = android.os.SystemClock.uptimeMillis()
+                            val x = web.width / 2f
+                            val y = web.height / 2f
+                            val down = android.view.MotionEvent.obtain(now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0)
+                            down.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                            val up = android.view.MotionEvent.obtain(now, now + 20L, android.view.MotionEvent.ACTION_UP, x, y, 0)
+                            up.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                            web.dispatchTouchEvent(down)
+                            web.dispatchTouchEvent(up)
+                            down.recycle()
+                            up.recycle()
+                        }
+                    }
                     try {
                         compose.waitUntil(1_500) { picker.launches.get() > before }
                     } catch (_: Throwable) {

@@ -90,7 +90,7 @@ class CoreLoadsTest {
 
             fun shellBody(name: String, email: String?): String {
                 val emailLine = if (email != null) ""","email":"$email"""" else ""
-                return """{"navree":1,"build":"1","name":"Charkha Supply Co.","home":"/","nav":{"groups":[{"label":"Store","items":[{"label":"Home","href":"/"}]}]},"user":{"name":"$name"$emailLine,"menu":[]}}"""
+                return """{"navree":1,"build":"1","name":"Charkha Supply Co.","home":"/","nav":{"groups":[{"label":"Store","items":[{"label":"Home","href":"/"}]}]},"user":{"name":"$name"$emailLine,"menu":[]},"routes":[{"match":"/sign-in","present":"full"}]}"""
             }
 
             fun response(request: Int, status: Int, body: String, personId: String? = null): JsonObject = buildJsonObject {
@@ -106,14 +106,19 @@ class CoreLoadsTest {
 
             Core(config).use { core ->
                 var requestSeq = 0
+                var pageSeq = 0
                 val engine = object : Engine {
                     override fun send(event: ByteArray): ByteArray = core.send(event)
                     override fun view(query: ByteArray): ByteArray = core.view(query)
                 }
                 val driver = Driver(engine)
                 driver.effects = EffectRunner { effect ->
-                    if (effect is Effect.Fetch && effect.url.endsWith("/_navree/native/shell")) {
-                        requestSeq = effect.request.toInt()
+                    if (effect is Effect.Fetch) {
+                        if (effect.url.endsWith("/_navree/native/shell")) {
+                            requestSeq = effect.request.toInt()
+                        } else if (effect.url == "https://shop.example/") {
+                            pageSeq = effect.request.toInt()
+                        }
                     }
                 }
                 driver.person = { user ->
@@ -142,8 +147,7 @@ class CoreLoadsTest {
                 assertEquals(idMark, marks.last())
 
                 // 3. Under a sign-in cover nobody is named; the same id returning keeps the same mark.
-                driver.send(Events.start)
-                driver.send(response(requestSeq, 401, """{"navree":1,"build":"1","vocab":0,"ops":[{"op":"navigate","href":"/sign-in"}]}"""))
+                driver.send(response(pageSeq, 401, """{"navree":1,"build":"1","vocab":0,"ops":[{"op":"navigate","href":"/sign-in"}]}"""))
                 assertNull("nobody is named under a sign-in cover", driver.app?.user)
                 driver.send(Events.start)
                 driver.send(response(requestSeq, 200, shellBody("Harpreet Sandhu", "harpreet.sandhu@example.com"), "0193a4b2-0000-7000-8000-00000000hs01"))

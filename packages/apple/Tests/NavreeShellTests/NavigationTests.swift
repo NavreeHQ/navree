@@ -2,9 +2,9 @@ import Foundation
 import NavreeCoreBridge
 import NavreeDesign
 import NavreeProtocol
-import NavreeRuntime
 import Testing
 
+@testable import NavreeRuntime
 @testable import NavreeShell
 
 @Test func theSystemsPathShowsEveryScreenOverTheFirst() {

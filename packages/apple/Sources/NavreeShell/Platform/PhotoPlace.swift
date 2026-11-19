@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -326,20 +327,28 @@ enum PhotoPlace {
     /// nothing beside the pixels.
     static func rewrite(_ source: CGImageSource, as type: CFString, to copy: URL, pixelsUntouched: Bool) -> Bool {
         let count = CGImageSourceGetCount(source)
-        guard let destination = CGImageDestinationCreateWithURL(copy as CFURL, type, count, nil) else { return false }
         if pixelsUntouched {
+            guard let destination = CGImageDestinationCreateWithURL(copy as CFURL, type, count, nil) else {
+                return false
+            }
             let options: [CFString: Any] = [
                 kCGImageDestinationMetadata: kept(of: source), kCGImageDestinationMergeMetadata: false,
                 kCGImageMetadataShouldExcludeXMP: true, kCGImageMetadataShouldExcludeGPS: true,
             ]
             return CGImageDestinationCopyImageSource(destination, source, options as CFDictionary, nil)
         }
-        let quality: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.9]
-        for index in 0..<count {
-            guard let image = upright(source, at: index) else { return false }
-            CGImageDestinationAddImage(destination, image, quality as CFDictionary)
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, type, count, nil) else {
+            return false
         }
-        return CGImageDestinationFinalize(destination)
+        let opaque = (type as String) == UTType.jpeg.identifier
+        let empty: [CFString: Any] = [:]
+        for index in 0..<count {
+            guard let image = upright(source, at: index, forceOpaque: opaque) else { return false }
+            CGImageDestinationAddImage(destination, image, empty as CFDictionary)
+        }
+        guard CGImageDestinationFinalize(destination) else { return false }
+        return (try? (data as Data).write(to: copy)) != nil
     }
 
     /// What is kept of a picture's fields when it is written again with its
@@ -381,17 +390,36 @@ enum PhotoPlace {
         return metadata
     }
 
-    /// One image of a picture, drawn the way up it is shown, at its own size.
-    private static func upright(_ source: CGImageSource, at index: Int) -> CGImage? {
-        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [String: Any],
+    /// One image of a picture, drawn the way up it is shown, at its own size,
+    /// into a fresh bitmap with no source metadata attached.
+    private static func upright(_ source: CGImageSource, at index: Int, forceOpaque: Bool) -> CGImage? {
+        let decoded: CGImage?
+        if let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [String: Any],
             let width = properties[kCGImagePropertyPixelWidth as String] as? Int,
             let height = properties[kCGImagePropertyPixelHeight as String] as? Int
-        else { return CGImageSourceCreateImageAtIndex(source, index, nil) }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: max(width, height),
-        ]
-        return CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary)
+        {
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: max(width, height),
+            ]
+            decoded = CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary)
+        } else {
+            decoded = CGImageSourceCreateImageAtIndex(source, index, nil)
+        }
+        guard let decoded, decoded.width > 0, decoded.height > 0 else { return nil }
+        let hasAlpha: Bool = switch decoded.alphaInfo {
+        case .first, .last, .premultipliedFirst, .premultipliedLast, .alphaOnly: true
+        default: false
+        }
+        let bitmapInfo = (!forceOpaque && hasAlpha)
+            ? CGImageAlphaInfo.premultipliedLast.rawValue
+            : CGImageAlphaInfo.noneSkipLast.rawValue
+        guard let context = CGContext(
+            data: nil, width: decoded.width, height: decoded.height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: bitmapInfo
+        ) else { return nil }
+        context.draw(decoded, in: CGRect(x: 0, y: 0, width: decoded.width, height: decoded.height))
+        return context.makeImage()
     }
 
     // MARK: - Container structure

@@ -96,11 +96,15 @@ async fn an_app_adds_a_second_audit_sink_and_both_receive_every_record() {
     )
     .await
     .unwrap();
+    log.flush().await;
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 
     // 2. Entry through `AuditLog::record` directly.
     log.record(AuditEntry::new(AuditKind::Auth, "auth.login").actor(harpreet))
         .await
         .unwrap();
+    log.flush().await;
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 
     // 3. Rolled-back unit of work: neither `audit_logs` nor the added sinks receive its data row
     // or `record_in` entry.

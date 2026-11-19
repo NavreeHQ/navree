@@ -29,7 +29,7 @@ import Testing
 /// over the same session's store, and when another person signs in, that store
 /// is retired first.
 @MainActor
-@Test func webPagesUnderTheSignInAreTakenDownAndComeBackForTheSamePerson() throws {
+@Test func webPagesUnderTheSignInAreTakenDownAndComeBackForTheSamePerson() async throws {
     let places = SessionEndTests.Places()
     defer { places.remove() }
     let removed = RemovedStores()
@@ -114,6 +114,7 @@ import Testing
     #expect(!ModalRules.isUnderLockedCover(1, in: client.nav))
     #expect(keeper.number == 0)
     #expect(keeper.storeIdentifier() == firstStore)
+    await keeper.removal?.value
     #expect(removed.ids.isEmpty)
     guard case .web(let reloadedURL, _, _, let reloadedSerial)? = client.screen(1)?.content else {
         Issue.record("the web screen did not come back for the same person: \(String(describing: client.screen(1)?.content))")
@@ -140,6 +141,7 @@ import Testing
         headers: transport.headers, body: Fixtures.text("made/shell-other.json")
     )))
 
+    await keeper.removal?.value
     #expect(client.app?.user?.name == "Harpreet Singh")
     #expect(removed.ids == [firstStore])
     #expect(keeper.storeIdentifier() != firstStore)

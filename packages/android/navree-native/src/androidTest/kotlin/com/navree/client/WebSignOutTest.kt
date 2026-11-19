@@ -130,11 +130,15 @@ class WebSignOutTest {
         File(context.noBackupFilesDir, "navree-own-cookies").delete()
     }
 
-    private fun page(script: String) = MockResponse.Builder()
-        .code(200)
-        .addHeader("Content-Type", "text/html; charset=utf-8")
-        .body("<!doctype html><html><head><meta charset=\"utf-8\"></head><body><p>ours</p><script>var R = function(m){ new Image().src = '/says?m=' + encodeURIComponent(m) };$script</script></body></html>")
-        .build()
+    private fun page(script: String, personId: String? = null): MockResponse {
+        val builder = MockResponse.Builder()
+            .code(200)
+            .addHeader("Content-Type", "text/html; charset=utf-8")
+        if (personId != null) builder.addHeader("x-navree-person", personId)
+        return builder
+            .body("<!doctype html><html><head><meta charset=\"utf-8\"></head><body><p>ours</p><script>var R = function(m){ new Image().src = '/says?m=' + encodeURIComponent(m) };$script</script></body></html>")
+            .build()
+    }
 
     private val stores =
         "document.cookie = 'city=Amritsar; max-age=3600; path=/';" +
@@ -853,7 +857,7 @@ class WebSignOutTest {
                     .addHeader("x-navree-person", "0193a4b2-0000-7000-8000-00000000hs01")
                     .body(shell)
                     .build()
-                "/" -> page(pulsing)
+                "/" -> page(pulsing, "0193a4b2-0000-7000-8000-00000000hs01")
                 "/says" -> {
                     said += request.url.queryParameter("m") ?: ""
                     MockResponse.Builder().code(204).build()
@@ -935,7 +939,7 @@ class WebSignOutTest {
                 "/" -> if (expired.compareAndSet(true, false)) {
                     MockResponse.Builder().code(401).addHeader("Content-Type", "application/vnd.navree.native+json").body(ended).build()
                 } else {
-                    page(if (inspect.get()) looks else stores)
+                    page(if (inspect.get()) looks else stores, "0193a4b2-0000-7000-8000-00000000hs01")
                 }
                 "/sw.js" -> MockResponse.Builder().code(200).addHeader("Content-Type", "text/javascript").body(worker).build()
                 "/says" -> {

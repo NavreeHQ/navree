@@ -595,7 +595,7 @@ struct PhotoPlaceTests {
         #expect(!context.fileBusy(form, field))
         context.send(.files(form: form, field: field, urls: [photoURL]))
         #expect(context.fileBusy(form, field))
-        #expect(context.values(form, field) == nil)
+        #expect(context.values(form, field) == [])
 
         for await _ in enteredStream { break }
         #expect(workerOnMain.withLock { $0 } == false)

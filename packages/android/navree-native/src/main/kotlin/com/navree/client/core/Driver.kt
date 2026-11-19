@@ -247,8 +247,39 @@ class Driver(private val engine: Engine) {
         return answer
     }
 
-    private fun <T> decode(serializer: kotlinx.serialization.KSerializer<T>, element: JsonElement): T? =
-        runCatching { CoreJson.decodeFromJsonElement(serializer, element) }
-            .onFailure { problems("a part of the view state did not decode: ${it.message}") }
-            .getOrNull()
+    private fun <T> decode(serializer: kotlinx.serialization.KSerializer<T>, element: JsonElement): T? {
+        runCatching { return CoreJson.decodeFromJsonElement(serializer, element) }.onFailure { error ->
+            // The core writes a command whose state came from a newer server back as `unknown`, a word the protocol's
+            // models do not have; the core skips such a command, so it goes before the tree is read.
+            val repaired = withoutUnknownStates(element)
+            if (repaired != null) {
+                runCatching { return CoreJson.decodeFromJsonElement(serializer, repaired) }
+            }
+            problems("a part of the view state did not decode: ${error.message}")
+        }
+        return null
+    }
+}
+
+private fun withoutUnknownStates(root: JsonElement): JsonElement? {
+    var found = false
+    fun mend(element: JsonElement): JsonElement = when (element) {
+        is JsonArray -> JsonArray(
+            element.mapNotNull { item ->
+                val obj = item as? JsonObject
+                val tag = (obj?.get("c") as? JsonPrimitive)?.contentOrNull
+                val state = (obj?.get("state") as? JsonPrimitive)?.contentOrNull
+                if ((tag == "set" || tag == "flip") && state == "unknown") {
+                    found = true
+                    null
+                } else {
+                    mend(item)
+                }
+            },
+        )
+        is JsonObject -> JsonObject(element.mapValues { (_, value) -> mend(value) })
+        else -> element
+    }
+    val mended = mend(root)
+    return if (found) mended else null
 }
