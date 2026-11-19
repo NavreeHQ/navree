@@ -448,3 +448,315 @@ async fn the_key_never_reaches_a_debug_print_or_a_log_line() {
 
     app.shutdown().await.expect("clean shutdown");
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn whitespace_padded_keys_are_trimmed_and_control_characters_fail_the_boot() {
+    let logs = AllLogs::default();
+    let _guard = logs.install();
+
+    let trimmed_key = "test-only-key-ludhiana";
+    let (client, server) = HttpClient::fake();
+    server.on(
+        Method::POST,
+        "https://api.dakiya.example/v1/send",
+        FakeResponse::new(401).json(&json!({ "error": format!("invalid key {trimmed_key}") })),
+    );
+
+    let app = TestApp::builder()
+        .temp_database()
+        .config("mail.from", "Harpreet Sandhu <harpreet@ludhiana.example>")
+        .config("mail.transport", "dakiya")
+        .config("mail.delivery.enabled", true)
+        .config("mail.delivery.routes", false)
+        .config("mail.dakiya.url", "https://api.dakiya.example/v1/send")
+        .config("mail.dakiya.api_key", format!("  {trimmed_key}\r\n"))
+        .module(DatabaseModule::from_config())
+        .module(HttpClientModule::from_config())
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(DakiyaModule)
+        .override_value(Arc::new(client))
+        .build()
+        .await;
+
+    let error = app
+        .get::<Mailer>()
+        .await
+        .send(&sample_mail())
+        .await
+        .expect_err("401 fails the send");
+    let recorded = server.recorded();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(
+        recorded[0].header("authorization"),
+        Some("Bearer test-only-key-ludhiana")
+    );
+
+    let display = error.to_string();
+    let debug = format!("{error:?}");
+    for surface in [&display, &debug] {
+        assert!(!surface.contains(trimmed_key), "{surface}");
+        assert!(!surface.contains("ludhiana"), "{surface}");
+    }
+    for line in logs.all() {
+        assert!(!line.contains(trimmed_key), "{line}");
+    }
+
+    let failed = app
+        .get::<Deliveries>()
+        .await
+        .list(
+            &DeliveryFilter {
+                status: Some(DeliveryStatus::Failed),
+                ..DeliveryFilter::default()
+            },
+            PageQuery::new(1, 10),
+        )
+        .await
+        .expect("delivery log");
+    assert_eq!(failed.data.len(), 1);
+    let logged = failed.data[0].error.as_deref().expect("error recorded");
+    assert!(!logged.contains(trimmed_key), "{logged}");
+
+    app.shutdown().await.expect("clean shutdown");
+
+    let whitespace_only = TestApp::builder()
+        .config("mail.from", "Harpreet Sandhu <harpreet@ludhiana.example>")
+        .config("mail.transport", "dakiya")
+        .config("mail.dakiya.url", "https://api.dakiya.example/v1/send")
+        .config("mail.dakiya.api_key", "   \t\r\n")
+        .module(HttpClientModule::from_config())
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(DakiyaModule)
+        .try_build()
+        .await
+        .expect_err("whitespace-only api_key fails the boot");
+    assert!(
+        whitespace_only
+            .to_string()
+            .contains("mail.dakiya.api_key is required"),
+        "{whitespace_only}"
+    );
+
+    for bad_key in ["dakiya\x07ludhiana", "dakiya\nludhiana"] {
+        let control_err = TestApp::builder()
+            .config("mail.from", "Harpreet Sandhu <harpreet@ludhiana.example>")
+            .config("mail.transport", "dakiya")
+            .config("mail.dakiya.url", "https://api.dakiya.example/v1/send")
+            .config("mail.dakiya.api_key", bad_key)
+            .module(HttpClientModule::from_config())
+            .module(ViewModule::from_config())
+            .module(MailModule::from_config())
+            .module(DakiyaModule)
+            .try_build()
+            .await
+            .expect_err("api_key with control characters fails the boot");
+        let display = control_err.to_string();
+        let debug = format!("{control_err:?}");
+        assert!(
+            display.contains("mail.dakiya.api_key must not contain control characters"),
+            "{display}"
+        );
+        for surface in [&display, &debug] {
+            assert!(!surface.contains("ludhiana"), "{surface}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn unicode_escaped_and_structured_json_errors_scrub_the_key_and_percent_chains() {
+    let key = "dakiya&amritsar<1>=₹ਸ";
+    let go_json_body =
+        r#"{"detail":"invalid key dakiya\u0026amritsar\u003c1\u003e\u003d\u20b9\u0a38"}"#;
+    let nested_body = json!({
+        "errors": [{ "reason": format!("rejected {key}") }],
+        key: "unauthorised",
+    });
+    let truncated_and_double = concat!(
+        r#"{"detail":"bad dakiya\u0026amritsar\u003c1\u003e\u003d\u20b9\u0a38 and "#,
+        r#"dakiya\\u0026amritsar\\u003c1\\u003e\\u003d\\u20B9\\u0A38"#,
+    );
+
+    let (client, server) = HttpClient::fake();
+    server.on_sequence(
+        Method::POST,
+        "https://api.dakiya.example/v1/send",
+        [
+            FakeResponse::new(401)
+                .header("content-type", "application/json")
+                .body(go_json_body),
+            FakeResponse::new(422).json(&nested_body),
+            FakeResponse::new(502).text(truncated_and_double),
+        ],
+    );
+
+    let app = TestApp::builder()
+        .config("mail.from", "Simran Kaur <simran@ludhiana.example>")
+        .config("mail.transport", "dakiya")
+        .config("mail.dakiya.url", "https://api.dakiya.example/v1/send")
+        .config("mail.dakiya.api_key", key)
+        .module(HttpClientModule::from_config())
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(DakiyaModule)
+        .override_value(Arc::new(client))
+        .build()
+        .await;
+
+    let mailer = app.get::<Mailer>().await;
+    for _ in 0..3 {
+        let error = mailer
+            .send(&sample_mail())
+            .await
+            .expect_err("non-2xx fails");
+        let display = error.to_string();
+        let debug = format!("{error:?}");
+        for surface in [&display, &debug] {
+            for leaked in [
+                key, "amritsar", r"\u0026", r"\u003c", r"\u20b9", r"\u0a38", "₹ਸ",
+            ] {
+                assert!(!surface.contains(leaked), "leaked {leaked:?} in {surface}");
+            }
+        }
+    }
+    app.shutdown().await.expect("clean shutdown");
+
+    let percent_key = "dak-%252-ludhiana";
+    let (pct_client, pct_server) = HttpClient::fake();
+    pct_server.on(
+        Method::POST,
+        "https://api.dakiya.example/v1/send",
+        FakeResponse::new(401)
+            .text("echoed dak-%252-ludhiana | dak-%25252-ludhiana | dak-%2525%32-ludhiana"),
+    );
+
+    let pct_app = TestApp::builder()
+        .config("mail.from", "Simran Kaur <simran@ludhiana.example>")
+        .config("mail.transport", "dakiya")
+        .config("mail.dakiya.url", "https://api.dakiya.example/v1/send")
+        .config("mail.dakiya.api_key", percent_key)
+        .module(HttpClientModule::from_config())
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(DakiyaModule)
+        .override_value(Arc::new(pct_client))
+        .build()
+        .await;
+
+    let pct_err = pct_app
+        .get::<Mailer>()
+        .await
+        .send(&sample_mail())
+        .await
+        .expect_err("401 fails");
+    let display = pct_err.to_string();
+    let debug = format!("{pct_err:?}");
+    for surface in [&display, &debug] {
+        for leaked in [
+            percent_key,
+            "dak-%25252-ludhiana",
+            "dak-%2525%32-ludhiana",
+            "ludhiana",
+            "%32",
+        ] {
+            assert!(!surface.contains(leaked), "leaked {leaked:?} in {surface}");
+        }
+    }
+    pct_app.shutdown().await.expect("clean shutdown");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn url_credentials_and_query_tokens_are_scrubbed_from_provider_replies() {
+    let logs = AllLogs::default();
+    let _guard = logs.install();
+
+    let key = "test-only-key-ludhiana";
+    let (client, server) = HttpClient::fake();
+    server.on_sequence(
+        Method::POST,
+        "https://api.dakiya.example/*",
+        [
+            FakeResponse::new(200)
+                .json(&json!({ "id": "dak-id-harpreet-dak-word-dak-query" })),
+            FakeResponse::new(404).text(
+                "Cannot POST https://harpreet:dak-word@api.dakiya.example/v1/send?secret_token=dak-query (dak%2Dword / dak%2dquery)",
+            ),
+        ],
+    );
+
+    let app = TestApp::builder()
+        .temp_database()
+        .config("mail.from", "Gurpreet Singh <gurpreet@ludhiana.example>")
+        .config("mail.transport", "dakiya")
+        .config("mail.delivery.enabled", true)
+        .config("mail.delivery.routes", false)
+        .config(
+            "mail.dakiya.url",
+            "https://harpreet:dak-word@api.dakiya.example/v1/send?secret_token=dak-query",
+        )
+        .config("mail.dakiya.api_key", key)
+        .module(DatabaseModule::from_config())
+        .module(HttpClientModule::from_config())
+        .module(ViewModule::from_config())
+        .module(MailModule::from_config())
+        .module(DakiyaModule)
+        .override_value(Arc::new(client))
+        .build()
+        .await;
+
+    let mailer = app.get::<Mailer>().await;
+    let sent = mailer.deliver(&sample_mail()).await.expect("200 succeeds");
+    let provider_id = sent.provider_id.as_deref().expect("provider_id kept");
+    for leaked in [key, "harpreet", "dak-word", "dak-query"] {
+        assert!(
+            !provider_id.contains(leaked),
+            "leaked {leaked:?} in provider_id {provider_id}"
+        );
+    }
+
+    let err = mailer.send(&sample_mail()).await.expect_err("404 fails");
+    let display = err.to_string();
+    let debug = format!("{err:?}");
+    for surface in [&display, &debug] {
+        for leaked in [
+            key,
+            "harpreet",
+            "dak-word",
+            "dak-query",
+            "dak%2Dword",
+            "dak%2dquery",
+        ] {
+            assert!(!surface.contains(leaked), "leaked {leaked:?} in {surface}");
+        }
+    }
+
+    for line in logs.all() {
+        for leaked in [key, "harpreet", "dak-word", "dak-query"] {
+            assert!(!line.contains(leaked), "leaked {leaked:?} in log {line}");
+        }
+    }
+
+    let rows = app
+        .get::<Deliveries>()
+        .await
+        .list(&DeliveryFilter::default(), PageQuery::new(1, 10))
+        .await
+        .expect("delivery rows");
+    assert_eq!(rows.data.len(), 2);
+    for row in &rows.data {
+        let combined = format!(
+            "{} {}",
+            row.provider_id.as_deref().unwrap_or_default(),
+            row.error.as_deref().unwrap_or_default()
+        );
+        for leaked in [key, "harpreet", "dak-word", "dak-query"] {
+            assert!(
+                !combined.contains(leaked),
+                "leaked {leaked:?} in delivery row {combined}"
+            );
+        }
+    }
+
+    app.shutdown().await.expect("clean shutdown");
+}

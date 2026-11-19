@@ -1,5 +1,6 @@
 //! [`DakiyaTransport`]: mail delivery over the app's [`HttpClient`].
 
+use std::collections::HashSet;
 use std::fmt;
 
 use navree::BoxFuture;
@@ -14,31 +15,71 @@ use crate::DakiyaSettings;
 /// Maximum length, in Unicode scalar values, of a scrubbed provider error message.
 const MAX_ERROR_CHARS: usize = 200;
 
-/// Replacement marker written in place of any occurrence of the API key.
+/// Replacement marker written in place of any occurrence of a secret value.
 const MASK: &str = "***";
+
+/// Quote wrappers stripped around a matched secret, longest first.
+const WRAPPERS: &[(&[u8], &[u8])] = &[
+    (b"\"\\\"", b"\\\"\""),
+    (b"\\\"", b"\\\""),
+    (b"\"", b"\""),
+    (b"'", b"'"),
+    (b"`", b"`"),
+];
+
+/// Single-byte JSON escape sequences (double-escaped forms before single-escaped forms).
+const JSON_ESCAPES: &[(&[u8], u8)] = &[
+    (b"\\\\\\\"", b'"'),
+    (b"\\\\\\\\", b'\\'),
+    (b"\\\\\\/", b'/'),
+    (b"\\\\/", b'/'),
+    (b"\\\\b", 0x08),
+    (b"\\\\f", 0x0C),
+    (b"\\\\n", b'\n'),
+    (b"\\\\r", b'\r'),
+    (b"\\\\t", b'\t'),
+    (b"\\\"", b'"'),
+    (b"\\\\", b'\\'),
+    (b"\\/", b'/'),
+    (b"\\b", 0x08),
+    (b"\\f", 0x0C),
+    (b"\\n", b'\n'),
+    (b"\\r", b'\r'),
+    (b"\\t", b'\t'),
+];
 
 /// Delivers mail through the Dakiya HTTP API using the app's shared [`HttpClient`].
 ///
 /// Messages are posted as JSON to the configured `url` with `Authorization: Bearer`
 /// authentication, and [`check`](MailTransport::check) sends a read-only `GET` to `/v1/ping`.
 /// Non-2xx responses become [`MailError::Provider`] with every plain, quoted, JSON-escaped,
-/// percent-encoded and form-encoded occurrence of the key scrubbed before truncation.
+/// Unicode-escaped, percent-encoded and form-encoded occurrence of the API key and URL
+/// credentials scrubbed before truncation.
 pub struct DakiyaTransport {
     client: HttpClient,
     url: Url,
     key: Secret<String>,
+    url_secrets: Vec<Secret<String>>,
     sender_name: Option<String>,
 }
 
 impl DakiyaTransport {
     /// Builds a transport from `client` and `settings`.
     ///
-    /// Returns [`MailError::Config`] naming the setting key (and never its value) when
-    /// `api_key` is empty or `url` is not `https://` (or `http://localhost` / `http://127.0.0.1`).
+    /// Trims leading and trailing whitespace from `api_key`, and returns [`MailError::Config`]
+    /// naming the setting key (and never its value) when `api_key` is empty or contains control
+    /// characters, when `sender_name` contains control characters, or when `url` is not
+    /// `https://` (or `http://localhost` / `http://127.0.0.1`).
     pub fn new(client: HttpClient, settings: DakiyaSettings) -> Result<Self, MailError> {
-        if settings.api_key.expose().trim().is_empty() {
+        let trimmed_key = settings.api_key.expose().trim();
+        if trimmed_key.is_empty() {
             return Err(MailError::Config(
                 "mail.dakiya.api_key is required".to_owned(),
+            ));
+        }
+        if trimmed_key.chars().any(char::is_control) {
+            return Err(MailError::Config(
+                "mail.dakiya.api_key must not contain control characters".to_owned(),
             ));
         }
         let url = parse_endpoint(&settings.url)?;
@@ -51,19 +92,39 @@ impl DakiyaTransport {
                 "mail.dakiya.sender_name must not contain control characters".to_owned(),
             ));
         }
+        let url_secrets = collect_url_secrets(&url);
         Ok(Self {
             client,
             url,
-            key: settings.api_key,
-            sender_name: settings.sender_name.filter(|name| !name.trim().is_empty()),
+            key: Secret::new(trimmed_key.to_owned()),
+            url_secrets,
+            sender_name: settings
+                .sender_name
+                .map(|name| name.trim().to_owned())
+                .filter(|name| !name.is_empty()),
         })
     }
 
     fn formatted_sender(&self, from: &str) -> String {
         match &self.sender_name {
-            Some(name) if !from.contains('<') => format!("{name} <{from}>"),
+            Some(name) if !from.contains('<') => {
+                let display = format_display_name(name);
+                format!("{display} <{from}>")
+            }
             _ => from.to_owned(),
         }
+    }
+
+    fn ordered_secrets(&self) -> Vec<&str> {
+        let mut secrets: Vec<&str> = Vec::with_capacity(1 + self.url_secrets.len());
+        secrets.push(self.key.expose());
+        for secret in &self.url_secrets {
+            secrets.push(secret.expose());
+        }
+        secrets.retain(|s| !s.is_empty());
+        secrets.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        secrets.dedup();
+        secrets
     }
 
     fn payload(&self, message: &Message) -> Result<Value, MailError> {
@@ -102,8 +163,9 @@ impl DakiyaTransport {
     }
 
     fn provider_error(&self, response: &Response) -> MailError {
-        let raw = extract_error_text(response);
-        let message = scrub_and_truncate(&raw, self.key.expose());
+        let secrets = self.ordered_secrets();
+        let raw = extract_error_text(response, &secrets);
+        let message = scrub_and_truncate(&raw, &secrets);
         MailError::Provider {
             transport: "dakiya",
             status: response.status().as_u16(),
@@ -136,12 +198,13 @@ impl MailTransport for DakiyaTransport {
             if !response.is_success() {
                 return Err(self.provider_error(&response));
             }
+            let secrets = self.ordered_secrets();
             let id = response
                 .json::<Value>()
                 .ok()
                 .and_then(|body| body.get("id").and_then(Value::as_str).map(str::to_owned))
                 .filter(|id| !id.is_empty())
-                .map(|id| scrub_key(&id, self.key.expose()));
+                .map(|id| scrub_secrets(&id, &secrets));
             let sent = Sent::new("dakiya");
             Ok(match id {
                 Some(id) => sent.with_provider_id(id),
@@ -182,6 +245,85 @@ impl fmt::Debug for DakiyaTransport {
     }
 }
 
+fn format_display_name(name: &str) -> String {
+    if name
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == ' ')
+    {
+        name.to_owned()
+    } else {
+        let mut quoted = String::with_capacity(name.len() + 2);
+        quoted.push('"');
+        for ch in name.chars() {
+            if matches!(ch, '\\' | '"') {
+                quoted.push('\\');
+            }
+            quoted.push(ch);
+        }
+        quoted.push('"');
+        quoted
+    }
+}
+
+fn collect_url_secrets(url: &Url) -> Vec<Secret<String>> {
+    let mut raw = Vec::new();
+    if let Some(password) = url.password()
+        && !password.is_empty()
+    {
+        raw.push(password.to_owned());
+        if let Some(decoded) = percent_decode_utf8(password)
+            && !decoded.is_empty()
+        {
+            raw.push(decoded);
+        }
+    }
+    let username = url.username();
+    if !username.is_empty() {
+        raw.push(username.to_owned());
+        if let Some(decoded) = percent_decode_utf8(username)
+            && !decoded.is_empty()
+        {
+            raw.push(decoded);
+        }
+    }
+    for (_, value) in url.query_pairs() {
+        if !value.is_empty() {
+            raw.push(value.into_owned());
+        }
+    }
+    if let Some(query) = url.query() {
+        for pair in query.split('&') {
+            if let Some((_, value)) = pair.split_once('=')
+                && !value.is_empty()
+            {
+                raw.push(value.to_owned());
+            }
+        }
+    }
+    raw.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    raw.dedup();
+    raw.into_iter().map(Secret::new).collect()
+}
+
+fn percent_decode_utf8(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && let (Some(&hi), Some(&lo)) = (bytes.get(i + 1), bytes.get(i + 2))
+            && let Some(decoded) = hex_pair(hi, lo)
+        {
+            out.push(decoded);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
 fn parse_endpoint(raw: &str) -> Result<Url, MailError> {
     let bad = || MailError::Config("mail.dakiya.url must start with https://".to_owned());
     let parsed = Url::parse(raw).map_err(|_| bad())?;
@@ -193,19 +335,37 @@ fn parse_endpoint(raw: &str) -> Result<Url, MailError> {
     if allowed { Ok(parsed) } else { Err(bad()) }
 }
 
-fn extract_error_text(response: &Response) -> String {
-    if let Ok(body) = response.json::<Value>()
-        && let Some(text) = body
+fn extract_error_text(response: &Response, secrets: &[&str]) -> String {
+    if let Ok(mut body) = response.json::<Value>() {
+        if let Some(text) = body
             .get("error")
             .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
             .or_else(|| {
                 body.get("error")
                     .and_then(|err| err.get("message"))
                     .and_then(Value::as_str)
+                    .filter(|s| !s.trim().is_empty())
             })
-            .or_else(|| body.get("message").and_then(Value::as_str))
-    {
-        return text.to_owned();
+            .or_else(|| {
+                body.get("message")
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.trim().is_empty())
+            })
+        {
+            return scrub_secrets(text.trim(), secrets);
+        }
+        scrub_json_value(&mut body, secrets);
+        if let Value::String(text) = body {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_owned();
+            }
+        } else if !body.is_null()
+            && let Ok(serialised) = serde_json::to_string(&body)
+        {
+            return serialised;
+        }
     }
     let text = response.text();
     let trimmed = text.trim();
@@ -220,47 +380,50 @@ fn extract_error_text(response: &Response) -> String {
     }
 }
 
-fn scrub_and_truncate(raw: &str, key: &str) -> String {
-    let scrubbed = scrub_key(raw, key);
+fn scrub_json_value(value: &mut Value, secrets: &[&str]) {
+    match value {
+        Value::String(text) => {
+            *text = scrub_secrets(text, secrets);
+        }
+        Value::Array(items) => {
+            for item in items {
+                scrub_json_value(item, secrets);
+            }
+        }
+        Value::Object(map) => {
+            let entries: Vec<(String, Value)> = std::mem::take(map)
+                .into_iter()
+                .map(|(key, mut item)| {
+                    scrub_json_value(&mut item, secrets);
+                    (scrub_secrets(&key, secrets), item)
+                })
+                .collect();
+            for (key, item) in entries {
+                map.insert(key, item);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
+fn scrub_and_truncate(raw: &str, secrets: &[&str]) -> String {
+    let scrubbed = scrub_secrets(raw, secrets);
     scrubbed.chars().take(MAX_ERROR_CHARS).collect()
+}
+
+fn scrub_secrets(raw: &str, secrets: &[&str]) -> String {
+    let mut text = raw.to_owned();
+    for secret in secrets {
+        text = scrub_key(&text, secret);
+    }
+    text
 }
 
 fn scrub_key(raw: &str, key: &str) -> String {
     if key.is_empty() {
         return raw.to_owned();
     }
-
-    let mut text = raw.to_owned();
-
-    // Scrub JSON-escaped and quoted variants first (longest first, quoted before bare).
-    if let Ok(json_quoted) = serde_json::to_string(key) {
-        let json_inner = &json_quoted[1..json_quoted.len() - 1];
-        let slash_escaped = json_inner.replace('/', "\\/");
-        let mut variants = vec![
-            json_quoted.clone(),
-            format!("'{json_inner}'"),
-            format!("`{json_inner}`"),
-            format!("\"{slash_escaped}\""),
-            format!("'{slash_escaped}'"),
-            format!("`{slash_escaped}`"),
-            json_inner.to_owned(),
-            slash_escaped,
-        ];
-        if let Ok(double_quoted) = serde_json::to_string(&json_quoted) {
-            let double_inner = &double_quoted[1..double_quoted.len() - 1];
-            variants.push(double_quoted.clone());
-            variants.push(double_inner.to_owned());
-        }
-        variants.retain(|v| !v.is_empty());
-        variants.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
-        variants.dedup();
-        for variant in &variants {
-            text = text.replace(variant, MASK);
-        }
-    }
-
-    // Scrub plain, quoted, percent-encoded (%XX and %xx, full or partial) and URL `+` forms.
-    scrub_encoded(&text, key.as_bytes())
+    scrub_encoded(raw, key.as_bytes())
 }
 
 fn scrub_encoded(text: &str, secret: &[u8]) -> String {
@@ -268,24 +431,26 @@ fn scrub_encoded(text: &str, secret: &[u8]) -> String {
     let mut out = String::with_capacity(text.len());
     let mut i = 0;
 
-    while i < bytes.len() {
-        let b = bytes[i];
-        if matches!(b, b'"' | b'\'' | b'`')
-            && let Some(end) = match_encoded_end(bytes, i + 1, secret)
-            && bytes.get(end) == Some(&b)
-            && text.is_char_boundary(end + 1)
-        {
-            out.push_str(MASK);
-            i = end + 1;
-            continue;
-        }
-        if text.is_char_boundary(i)
-            && let Some(end) = match_encoded_end(bytes, i, secret)
-            && text.is_char_boundary(end)
-        {
-            out.push_str(MASK);
-            i = end;
-            continue;
+    'scan: while i < bytes.len() {
+        if text.is_char_boundary(i) {
+            for &(open, close) in WRAPPERS {
+                if bytes[i..].starts_with(open)
+                    && let Some(end) = match_encoded_end(bytes, i + open.len(), secret)
+                    && bytes[end..].starts_with(close)
+                    && text.is_char_boundary(end + close.len())
+                {
+                    out.push_str(MASK);
+                    i = end + close.len();
+                    continue 'scan;
+                }
+            }
+            if let Some(end) = match_encoded_end(bytes, i, secret)
+                && text.is_char_boundary(end)
+            {
+                out.push_str(MASK);
+                i = end;
+                continue 'scan;
+            }
         }
         let ch = text[i..].chars().next().expect("valid UTF-8 slice");
         out.push(ch);
@@ -296,28 +461,131 @@ fn scrub_encoded(text: &str, secret: &[u8]) -> String {
 }
 
 fn match_encoded_end(bytes: &[u8], start: usize, secret: &[u8]) -> Option<usize> {
-    let mut p = start;
-    for (idx, &expected) in secret.iter().enumerate() {
-        if bytes.get(p) == Some(&b'%')
-            && let (Some(&hi), Some(&lo)) = (bytes.get(p + 1), bytes.get(p + 2))
-            && let Some(decoded) = hex_pair(hi, lo)
-            && decoded == expected
-            && !(expected == b'%' && bytes[p..].starts_with(&secret[idx..]))
-        {
-            p += 3;
-            continue;
-        }
-        if expected == b' ' && bytes.get(p) == Some(&b'+') {
-            p += 1;
-            continue;
-        }
-        if bytes.get(p) == Some(&expected) {
-            p += 1;
-            continue;
-        }
+    let mut failed = HashSet::new();
+    match_encoded_inner(bytes, start, secret, &mut failed)
+}
+
+fn match_encoded_inner(
+    bytes: &[u8],
+    p: usize,
+    secret: &[u8],
+    failed: &mut HashSet<(usize, usize)>,
+) -> Option<usize> {
+    if secret.is_empty() {
+        return Some(p);
+    }
+    if p >= bytes.len() || failed.contains(&(p, secret.len())) {
         return None;
     }
-    Some(p)
+
+    if bytes[p] == b'\\' {
+        for slashes in [2, 1] {
+            if let Some((first, after_first)) = parse_unicode_unit(bytes, p, slashes) {
+                if (0xD800..=0xDBFF).contains(&first) {
+                    if let Some((second, after_second)) =
+                        parse_unicode_unit(bytes, after_first, slashes)
+                        && (0xDC00..=0xDFFF).contains(&second)
+                    {
+                        let scalar = 0x1_0000
+                            + (((u32::from(first) - 0xD800) << 10) | (u32::from(second) - 0xDC00));
+                        if let Some(ch) = char::from_u32(scalar) {
+                            let mut buf = [0u8; 4];
+                            let ch_bytes = ch.encode_utf8(&mut buf).as_bytes();
+                            if secret.starts_with(ch_bytes)
+                                && let Some(end) = match_encoded_inner(
+                                    bytes,
+                                    after_second,
+                                    &secret[ch_bytes.len()..],
+                                    failed,
+                                )
+                            {
+                                return Some(end);
+                            }
+                        }
+                    }
+                } else if let Some(ch) = char::from_u32(u32::from(first)) {
+                    let mut buf = [0u8; 4];
+                    let ch_bytes = ch.encode_utf8(&mut buf).as_bytes();
+                    if secret.starts_with(ch_bytes)
+                        && let Some(end) = match_encoded_inner(
+                            bytes,
+                            after_first,
+                            &secret[ch_bytes.len()..],
+                            failed,
+                        )
+                    {
+                        return Some(end);
+                    }
+                    if u8::try_from(first) == Ok(secret[0])
+                        && let Some(end) =
+                            match_encoded_inner(bytes, after_first, &secret[1..], failed)
+                    {
+                        return Some(end);
+                    }
+                }
+            }
+        }
+
+        for &(escaped, decoded) in JSON_ESCAPES {
+            if decoded == secret[0]
+                && bytes[p..].starts_with(escaped)
+                && let Some(end) =
+                    match_encoded_inner(bytes, p + escaped.len(), &secret[1..], failed)
+            {
+                return Some(end);
+            }
+        }
+    }
+
+    if bytes[p] == b'%'
+        && let (Some(&hi), Some(&lo)) = (bytes.get(p + 1), bytes.get(p + 2))
+        && let Some(decoded) = hex_pair(hi, lo)
+        && decoded == secret[0]
+        && let Some(end) = match_encoded_inner(bytes, p + 3, &secret[1..], failed)
+    {
+        return Some(end);
+    }
+
+    if secret[0] == b' '
+        && bytes[p] == b'+'
+        && let Some(end) = match_encoded_inner(bytes, p + 1, &secret[1..], failed)
+    {
+        return Some(end);
+    }
+
+    if bytes[p] == secret[0]
+        && let Some(end) = match_encoded_inner(bytes, p + 1, &secret[1..], failed)
+    {
+        return Some(end);
+    }
+
+    failed.insert((p, secret.len()));
+    None
+}
+
+fn parse_unicode_unit(bytes: &[u8], start: usize, slashes: usize) -> Option<(u16, usize)> {
+    if !bytes
+        .get(start..start + slashes)?
+        .iter()
+        .all(|&b| b == b'\\')
+    {
+        return None;
+    }
+    if bytes.get(start + slashes) != Some(&b'u') {
+        return None;
+    }
+    let hex_start = start + slashes + 1;
+    let unit = hex_u16(bytes.get(hex_start..hex_start + 4)?)?;
+    Some((unit, hex_start + 4))
+}
+
+fn hex_u16(digits: &[u8]) -> Option<u16> {
+    if digits.len() != 4 {
+        return None;
+    }
+    let hi = u16::from(hex_pair(digits[0], digits[1])?);
+    let lo = u16::from(hex_pair(digits[2], digits[3])?);
+    Some((hi << 8) | lo)
 }
 
 fn hex_pair(hi: u8, lo: u8) -> Option<u8> {

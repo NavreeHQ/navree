@@ -17,8 +17,8 @@ missing_docs = "warn"
 title = "Dakiya mail"
 module = "DakiyaModule"
 features = ["http-client", "mail"]
-config = ["dakiya"]
-env = ["APP_DAKIYA__API_KEY"]
+config = []
+env = []
 
 [dependencies]
 navree = { path = "../../crates/navree", default-features = false, features = ["http-client", "mail"] }

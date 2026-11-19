@@ -272,3 +272,56 @@ async fn check_reads_the_ping_path_with_the_key_and_sends_nothing() {
 
     app.shutdown().await.expect("clean shutdown");
 }
+
+#[tokio::test]
+async fn sender_name_with_specials_is_quoted_on_bare_sender_addresses() {
+    for (sender_name, expected_from) in [
+        ("Ludhiana Desk", "Ludhiana Desk <harpreet@ludhiana.example>"),
+        (
+            "Society Office, Ludhiana",
+            "\"Society Office, Ludhiana\" <harpreet@ludhiana.example>",
+        ),
+        (
+            "Model Town \"Block B\" \\ 2",
+            "\"Model Town \\\"Block B\\\" \\\\ 2\" <harpreet@ludhiana.example>",
+        ),
+    ] {
+        let (client, server) = HttpClient::fake();
+        server.on(
+            Method::POST,
+            "https://api.dakiya.example/v1/send",
+            FakeResponse::new(200).json(&json!({ "id": "dak-ludhiana-2503" })),
+        );
+
+        let app = TestApp::builder()
+            .config("mail.from", "harpreet@ludhiana.example")
+            .config("mail.transport", "dakiya")
+            .config("mail.dakiya.url", "https://api.dakiya.example/v1/send")
+            .config("mail.dakiya.api_key", "test-only-key-ludhiana")
+            .config("mail.dakiya.sender_name", sender_name)
+            .module(HttpClientModule::from_config())
+            .module(ViewModule::from_config())
+            .module(MailModule::from_config())
+            .module(DakiyaModule)
+            .override_value(Arc::new(client))
+            .build()
+            .await;
+
+        let message = Message::new()
+            .to("Meera Sharma <meera@ludhiana.example>")
+            .subject("Maintenance notice, ₹25,000")
+            .text("Quarter due for Model Town, Ludhiana.");
+        app.get::<Mailer>()
+            .await
+            .send(&message)
+            .await
+            .expect("mail sends with formatted sender_name");
+
+        let recorded = server.recorded();
+        assert_eq!(recorded.len(), 1);
+        let body: Value = recorded[0].json().expect("JSON request body");
+        assert_eq!(body["from"], expected_from);
+
+        app.shutdown().await.expect("clean shutdown");
+    }
+}
