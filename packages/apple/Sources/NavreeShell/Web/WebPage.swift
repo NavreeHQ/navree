@@ -284,7 +284,7 @@ struct WebPageView {
         private var title: NSKeyValueObservation?
         private var loading: Task<Void, Never>?
         private var panelTask: Task<Void, Never>?
-        private var pendingPanel: (([URL]?) -> Void)?
+        private var pendingPanel: (@MainActor ([URL]?) -> Void)?
         private var panelSerial = 0
         private var dismantled = false
         private(set) var serial: Int?
@@ -406,7 +406,7 @@ struct WebPageView {
             allowsDirectories: Bool,
             frameURL: URL?,
             mainFrame: Bool,
-            completionHandler: @escaping ([URL]?) -> Void
+            completionHandler: @escaping @MainActor ([URL]?) -> Void
         ) {
             cancelPendingPanel()
             panelSerial &+= 1
@@ -529,7 +529,7 @@ struct WebPageView {
             _ webView: WKWebView,
             runOpenPanelWith parameters: WKOpenPanelParameters,
             initiatedByFrame frame: WKFrameInfo,
-            completionHandler: @escaping ([URL]?) -> Void
+            completionHandler: @escaping @MainActor @Sendable ([URL]?) -> Void
         ) {
             // Use the frame's security origin alone so sandboxed opaque frames
             // (`host == ""`) and `about:` frames never open a picker.
@@ -538,7 +538,7 @@ struct WebPageView {
                 allowsDirectories: parameters.allowsDirectories,
                 frameURL: Self.originURL(of: frame.securityOrigin),
                 mainFrame: frame.isMainFrame,
-                completionHandler: completionHandler
+                completionHandler: { urls in completionHandler(urls) }
             )
         }
 

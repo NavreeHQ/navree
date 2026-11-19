@@ -319,7 +319,7 @@ class PersonWatchTest {
             }
         }
         val steady = keysIn("person-key-steady.json")
-        assertEquals("five key checks in person-key-steady.json", 5, steady.size)
+        assertEquals("six key checks in person-key-steady.json", 6, steady.size)
         val firstRun = watch()
         assertEquals(Heard.First, firstRun.hearAndKeep(steady[0], "Ravneet Kaur" to "ravneet.kaur@example.com"))
         assertEquals("renamed under the same id keeps one mark", Heard.Same, firstRun.hearAndKeep(steady[1], "Harpreet Singh" to "harpreet.singh@example.com"))
@@ -327,8 +327,8 @@ class PersonWatchTest {
         assertEquals("an answer without an id is not merged with an id-bearing account", Heard.Another, withoutId.heard)
         firstRun.changed(withoutId)
         assertEquals("and stays one mark across launches without an id", Heard.Same, watch().hearAndKeep(steady[3], "Ravneet Kaur" to "ravneet.kaur@example.com"))
-        assertEquals(Heard.Same, watch().hearAndKeep(steady[4 - 1], "Ravneet Kaur" to "ravneet.kaur@example.com"))
-        val withIdAgain = watch().hear(steady[4], "Ravneet Kaur" to "ravneet.kaur@example.com")
+        assertEquals(Heard.Same, watch().hearAndKeep(steady[4], "Ravneet Kaur" to "ravneet.kaur@example.com"))
+        val withIdAgain = watch().hear(steady[5], "Ravneet Kaur" to "ravneet.kaur@example.com")
         assertEquals("moving from no id to an id starts the id's mark", Heard.Another, withIdAgain.heard)
         assertEquals(PersonWatch.markOfKey(steady[0]), withIdAgain.mark)
 

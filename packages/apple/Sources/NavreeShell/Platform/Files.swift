@@ -4,7 +4,7 @@ import Observation
 import UniformTypeIdentifiers
 
 /// Why a file a person picked was not added to its field.
-public enum FileRefusal: Sendable, Equatable {
+public enum FileRefusal: Error, Sendable, Equatable {
     /// It could not be read, or its copy could not be written.
     case unreadable
     /// A picture by its name that does not read as one: whether it says
