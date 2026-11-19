@@ -1,0 +1,144 @@
+---
+title: "Templates, translations and files"
+description: "Embed templates, Fluent translations and static assets in a plugin crate, copy them into an app with navree plugin:publish, and control which copy wins at boot."
+---
+
+A plugin ships its templates, Fluent translations and static assets inside its crate, so an app that installs the plugin works out of the box with no extra files to copy. Every embedded name stays under the plugin's namespace, and an app that wants to change a template, a translated message or a published file puts a copy of its own in its folders with `navree plugin:publish`. [Plugins](/docs/plugins/overview/) covers what a plugin is and how an app wires one.
+
+## embed_templates! and m.plugin_templates
+
+`navree::embed_templates!("views")` embeds every file inside the plugin crate's `views/` directory (relative to its `Cargo.toml`) at compile time, skipping hidden entries and sorting paths. Register the directory in the plugin's module with `m.plugin_templates(..)` from `navree::plugin::prelude::*`, which requires the `view` feature on `navree`:
+
+```rust title="src/lib.rs"
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+
+pub struct NoticesModule;
+
+impl Module for NoticesModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(navree::plugin_info!(title = "Notice board"))
+            .plugin_templates(navree::embed_templates!("views"));
+    }
+}
+```
+
+Each file is registered under `<namespace>/`, and the crate also contributes a `Publishable` entry under the `views` tag: `views/list.html` becomes the template `notices/list.html`, and `views/notice.html` becomes `notices/notice.html`:
+
+```jinja title="views/list.html"
+<section class="notice-board">
+  <h2>{% if t is defined %}{{ t("notices-heading") }}{% else %}Notices{% endif %}</h2>
+  {% if notices %}
+  <ul class="notice-list">
+    {% for notice in notices %}
+      {% include "notices/notice.html" %}
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="notice-empty">{% if t is defined %}{{ t("notices-empty") }}{% else %}No notices have been posted yet.{% endif %}</p>
+  {% endif %}
+</section>
+```
+
+A symbolic link or junction inside `views/`, or a file path that is not a safe relative path (such as a backslash or a Windows device name like `con.html`), fails compilation naming the file.
+
+`ViewModule` enforces three checks at boot on every module that acts for a community plugin:
+
+- **Namespace.** Every template the plugin registers — through `m.plugin_templates(..)` or `m.templates(..)` — must start with `<namespace>/` and be a safe relative path, unless it is the exact name of an embedded template registered by a module the plugin imports (handled by [which one wins](#which-one-wins) below). Anything outside `<namespace>/` stops the boot.
+- **Stem collisions.** A plugin template `notices/list.html` fails the boot if the app has a template with the same stem under another extension (`notices/list.txt` in `view.dirs` or in an app module). Lookups without an extension (`views.render("notices/list", ..)`) and `TemplateMail` resolve `.html` first, so the plugin's HTML file would attach itself to the app's text template. Copy the plugin's full template name into a template folder (`navree plugin:publish notices --tag views`) or rename the app's template to settle it.
+- **Environment hooks.** A `m.view_environment(..)` hook on a community plugin may add filters, tests, functions and globals whose names start with `<namespace>_` (`notices_badge`), and nothing else. Adding an unprefixed name, removing or replacing an existing unprefixed item (including putting back equal text marked safe), or changing the template loader, escaping rules, undefined-variable behaviour, limits or whitespace settings stops the boot. When an app wants a plugin to customize the wider environment, the plugin exports a plain function and a module of the app calls `m.view_environment(notices::configure_views)`.
+
+See [templates a plugin ships](/docs/digging-deeper/views/#templates-a-plugin-ships) on the Views page for template rendering and limits.
+
+## embed_locales! and m.locales
+
+`navree::embed_locales!("locales")` embeds the crate's Fluent files (`locales/<locale>/*.ftl`) in the binary, and `m.locales(..)` from `navree::plugin::prelude::*` registers them and marks them publishable under the `locales` tag:
+
+```text title="locales/en/notices.ftl"
+notices-heading = Notices
+notices-empty = No notices have been posted yet.
+notices-posted-by = Posted by { $author }
+```
+
+```text title="locales/pa-IN/notices.ftl"
+notices-heading = ਸੂਚਨਾਵਾਂ
+notices-empty = ਹਾਲੇ ਕੋਈ ਸੂਚਨਾ ਨਹੀਂ ਲਗਾਈ ਗਈ।
+notices-posted-by = { $author } ਵੱਲੋਂ ਲਗਾਈ ਗਈ
+```
+
+`embed_locales!` and `m.locales(..)` are always available on `navree` without turning on the `i18n` feature. An app that does not include `I18nModule` ignores the embedded files, and an app that runs `I18nModule` loads them automatically.
+
+Every message id in a community plugin's Fluent files must start with `<namespace>-` (`notices-heading`), and every term must start with `-<namespace>-` (`-notices-board`). Any id outside that prefix fails both the boot and `navree i18n:check`.
+
+For each supported locale, `I18nModule` loads the app's own files first (`i18n.dir` or `I18nOptions::files`), then plugins' embedded files in module order, and finally the framework's shipped validation messages. Because the first definition of an id wins, an app overrides a single message by defining `notices-heading` in its own `locales/en/` file while keeping the rest of the plugin's translations. Two plugins that define the same id fail the check.
+
+When an app moves `i18n.dir` away from `locales`, `navree i18n:publish notices [--force]` copies the plugin's Fluent files directly into `<i18n.dir>/<locale>/notices/` for every locale in `i18n.locales`, matching exact tags first, then parent tags (`en` for `en-IN`), then sibling regional tags of the same language. See [translations a plugin ships](/docs/packages/localization/#translations-a-plugin-ships).
+
+## Static files under a namespace
+
+Stylesheets, web fonts, images and island scripts served by [Navree UI](/docs/ui/overview/) take `.namespace("<namespace>")` on `AppSheet`, `AppFont`, `AppImage` and `IslandScript`:
+
+```rust title="src/lib.rs"
+// plugins/notices/src/lib.rs
+/// Stylesheet served for the notice board under the `notices` namespace (`notices.board`).
+pub const BOARD_SHEET: AppSheet =
+    AppSheet::new("board", include_bytes!("../assets/board.css"), 4_000).namespace("notices");
+```
+
+Contributing `BOARD_SHEET` with `m.contribute(BOARD_SHEET)` serves it at `/_navree/ui/app/notices.board-<hash>.css` with immutable caching and brotli compression, separate from any `board` sheet the app contributes itself:
+
+| Type | Served path |
+|---|---|
+| `AppSheet` | `/_navree/ui/app/<namespace>.<name>-<hash>.css` |
+| `AppFont` | `/_navree/ui/app/<namespace>.<name>-<hash>.woff2` and `/_navree/ui/app/<namespace>.<name>.face-<hash>.css` |
+| `AppImage` | `/_navree/ui/app/<namespace>.<name>-<hash>.<ext>` |
+| `IslandScript` | `/_navree/ui/island/<namespace>.<name>-<hash>.js` |
+
+`BOARD_SHEET.name()` continues to return `"board"`. A stylesheet named `face` cannot take a namespace — the build rejects it because a font's generated `@font-face` sheet uses `.face` in that position. A static file contributed by a community plugin without `.namespace("<namespace>")`, or under another namespace, stops the boot. See [files of a plugin](/docs/ui/app-styles/#files-of-a-plugin).
+
+When a plugin also ships plain files for an app to copy onto disk rather than serve through `navree-ui`, wrap them in `Publishable::new(PublishTag::Files).file("guide.txt", include_bytes!(..))` and register them with `m.contribute(..)`.
+
+## Taking them over with plugin:publish
+
+`navree plugin:publish <plugin>` copies what a plugin ships into the app's own project directory so you can customize the copies. `<plugin>` accepts either the namespace (`notices`) or the package name (`navree-plugin-notices`):
+
+```sh
+navree plugin:publish notices
+navree plugin:publish notices --tag views
+navree plugin:publish notices --tag views --dry-run
+navree plugin:publish notices --tag locales --force
+```
+
+| Tag | Destination inside the app | Source |
+|---|---|---|
+| `views` | `resources/views/<namespace>/` | `m.plugin_templates(..)` and `Publishable` entries with `PublishTag::Views` |
+| `locales` | `locales/<locale>/<namespace>/` | `m.locales(..)` and `Publishable` entries with `PublishTag::Locales` |
+| `files` | `resources/<namespace>/` | `Publishable` entries with `PublishTag::Files` |
+| `config` | `config/<section>.toml` | `config:publish --plugin <namespace>` for derived `ConfigSection` types |
+
+Without `--tag`, all four tags run. Without `--force`, any destination file that already exists is kept untouched and reported as `exists, kept (use --force to replace it)`. With `--dry-run`, nothing is written and every planned line is printed first.
+
+Every destination is validated before the first file is written, so a refusal leaves the working tree untouched even with `--force`. Neither `..`, leading slashes, backslashes, drive letters, Windows device names, case-insensitive duplicates, file-and-folder collisions, nor symbolic links or directory junctions along the path can write a byte outside the app's three resource folders (`resources/`, `locales/`, `config/`). Each file is written to a sibling temporary file and atomically renamed into place.
+
+## Which one wins
+
+When both a plugin and an app define the same resource, the app stays in charge:
+
+- **Templates on disk win over embedded templates.** Any file in `view.dirs` (`resources/views/notices/list.html` by default) overrides the embedded `notices/list.html` from `m.plugin_templates(..)`. Publishing with `plugin:publish notices --tag views` and editing the file on disk is enough to customize the markup.
+- **App translations win over plugin translations.** In each locale, a message id defined in the app's own Fluent files (`locales/en/app.ftl` or `locales/en/notices/notices.ftl`) overrides the plugin's definition of that id while leaving the plugin's other message ids intact.
+- **Replacing an imported module's embedded template.** If a module of a community plugin registers (via `m.templates(..)`) the exact template name of a module it imports, replacing another community plugin's template logs a warning, whereas replacing an app or framework template stops the boot as long as the plugin's copy would be the one rendered. An app settles that conflict in either of two ways: place the template file it wants at `<first folder in view.dirs>/<name>` (`resources/views/<name>`), or register that template name from a module of the app that runs after the plugin's module (such as an app module that imports the plugin's module). Either choice puts an app-chosen template in front and turns the boot error into an `info` log line. Embedded document templates registered with `m.document_files(..)` follow the same rule with `documents.templates`.
+
+<LinkCards>
+  <LinkCard href="/docs/plugins/writing/" title="Writing a plugin">
+    Scaffold a plugin crate and wire options, models, routes, permissions and jobs.
+  </LinkCard>
+  <LinkCard href="/docs/digging-deeper/views/" title="Views and templates">
+    Template directories, syntax, auto-escaping, filters and limits.
+  </LinkCard>
+  <LinkCard href="/docs/packages/localization/" title="Localization">
+    Fluent bundles, locale negotiation, formatting and i18n:check.
+  </LinkCard>
+  <LinkCard href="/docs/ui/app-styles/" title="App styles and fonts">
+    Hashed stylesheets, fonts and images under the page policy.
+  </LinkCard>
+</LinkCards>
