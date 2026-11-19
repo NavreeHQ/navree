@@ -2161,4 +2161,104 @@ async fn a_plugin_may_not_export_a_provider_another_module_exports() {
         .await
         .expect("two app modules validate");
     assert_eq!(app.ctx().try_get::<ShopBanner>().await, None);
+
+    // Also refused when the app's module provides `ShopBanner` without exporting it: exporting
+    // from the plugin would replace the app module's `ShopBanner` in app-wide lookups.
+    struct PrivateShopBanner(&'static str);
+    impl Module for PrivateShopBanner {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.value(ShopBanner(self.0));
+        }
+    }
+    let expected_unexported = format!(
+        "plugin `navree-plugin-khata` exports `{banner}` in `KhataModule`, which `PrivateShopBanner` also provides; exporting `{banner}` would replace `PrivateShopBanner`'s provider in app-wide lookups: remove the plugin or update it to a version that keeps `{banner}` private to `KhataModule` or registers it under a name"
+    );
+    for app in [
+        Navree::app()
+            .module(PrivateShopBanner("Ludhiana"))
+            .module(KhataModule(|m| {
+                m.value(ShopBanner("Amritsar")).exports::<ShopBanner>();
+            })),
+        Navree::app()
+            .module(KhataModule(|m| {
+                m.value(ShopBanner("Amritsar")).exports::<ShopBanner>();
+            }))
+            .module(PrivateShopBanner("Ludhiana")),
+    ] {
+        assert_eq!(errors(app), expected_unexported);
+    }
+}
+
+#[tokio::test]
+async fn a_plugins_private_provider_stays_out_of_app_wide_lookups_and_it_may_not_export_a_framework_type()
+ {
+    use navree_kernel::{CodeConfigured, KernelError, ProviderKey};
+    use navree_plugin_khata::KhataModule;
+    use navree_plugin_khata_core::KhataCoreModule;
+
+    // 1. An unexported provider of a community plugin does not leak into `get` or `try_get`
+    // when no other module registers that type, and does not silence an unexported provider of
+    // an app module when one does.
+    let app = Navree::app()
+        .module(KhataModule(|m| {
+            m.value(ShopBanner("khata-private"));
+        }))
+        .boot()
+        .await
+        .expect("private plugin provider boots");
+    assert_eq!(app.ctx().try_get::<ShopBanner>().await, None);
+    assert!(matches!(
+        app.ctx().get::<ShopBanner>().await,
+        Err(KernelError::MissingProvider { .. })
+    ));
+
+    struct UnexportedAppBanner;
+    impl Module for UnexportedAppBanner {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.value(ShopBanner("app-private"));
+        }
+    }
+    let app = Navree::app()
+        .module(UnexportedAppBanner)
+        .module(KhataModule(|m| {
+            m.value(ShopBanner("khata-private"));
+        }))
+        .boot()
+        .await
+        .expect("both unexported boots");
+    assert_eq!(
+        app.ctx().try_get::<ShopBanner>().await.as_deref(),
+        Some(&ShopBanner("app-private"))
+    );
+
+    // 2. Exporting a provider whose outer type belongs to a framework crate (`navree_kernel`)
+    // is refused whether or not any other module registers it, and from a second crate too.
+    let framework_type = std::any::type_name::<CodeConfigured>();
+    assert_eq!(
+        errors(Navree::app().module(KhataModule(|m| {
+            let dummy: Option<CodeConfigured> = None;
+            let _ = dummy;
+            m.factory(Factory::<CodeConfigured>::new(|_| async {
+                Err("unreachable".into())
+            }))
+            .exports::<CodeConfigured>();
+        }))),
+        format!(
+            "plugin `navree-plugin-khata` exports `{framework_type}` in `KhataModule`, a provider type of the framework; only a framework or app module exports `{framework_type}`: remove the plugin or update it to a version that leaves `{framework_type}` to the framework and registers its drivers or extensions through the module builder"
+        )
+    );
+    assert_eq!(
+        errors(Navree::app().module(KhataModule(|m| {
+            m.import(KhataCoreModule(|m| {
+                m.factory(
+                    Factory::<CodeConfigured>::new(|_| async { Err("unreachable".into()) })
+                        .named("khata"),
+                )
+                .export_key(ProviderKey::named::<CodeConfigured>("khata"));
+            }));
+        }))),
+        format!(
+            "plugin `navree-plugin-khata` exports `{framework_type}(\"khata\")` in `KhataCoreModule` (only the plugin's modules import it), a provider type of the framework; only a framework or app module exports `{framework_type}(\"khata\")`: remove the plugin or update it to a version that leaves `{framework_type}(\"khata\")` to the framework and registers its drivers or extensions through the module builder"
+        )
+    );
 }

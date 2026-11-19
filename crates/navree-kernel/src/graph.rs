@@ -377,13 +377,27 @@ impl Graph {
             .collect()
     }
 
+    /// Whether provider `p` may answer an app-wide service-locator lookup:
+    /// multi-bindings never do, and an unexported provider of a module acting
+    /// for a community plugin stays private to that module.
+    fn is_locator_candidate(&self, p: usize) -> bool {
+        let provider = &self.providers[p];
+        if provider.def.multi {
+            return false;
+        }
+        let m = provider.module;
+        !(self.community_plugin(m).is_some()
+            && !self.modules[m].exports.contains(&provider.def.key))
+    }
+
     /// The service locator's answers, decided once: every key with exactly
-    /// one provider, or with several of which exactly one is exported (the
-    /// rule of [`locate_by_scan`](Graph::locate_by_scan)).
+    /// one candidate provider, or with several of which exactly one is exported
+    /// (the rule of [`locate_by_scan`](Graph::locate_by_scan)). Unexported
+    /// providers of community-plugin modules are excluded.
     fn locator_map(&self) -> HashMap<ProviderKey, usize> {
         let mut candidates: HashMap<&ProviderKey, Vec<usize>> = HashMap::new();
         for (index, provider) in self.providers.iter().enumerate() {
-            if !provider.def.multi {
+            if self.is_locator_candidate(index) {
                 candidates.entry(&provider.def.key).or_default().push(index);
             }
         }
@@ -447,10 +461,10 @@ impl Graph {
         }
     }
 
-    /// [`locate`](Graph::locate) by scanning every provider.
+    /// [`locate`](Graph::locate) by scanning every candidate provider.
     fn locate_by_scan(&self, key: &ProviderKey, required_by: &str) -> Result<usize, KernelError> {
         let candidates: Vec<usize> = (0..self.providers.len())
-            .filter(|&p| !self.providers[p].def.multi && self.providers[p].def.key == *key)
+            .filter(|&p| self.is_locator_candidate(p) && self.providers[p].def.key == *key)
             .collect();
         let exported: Vec<usize> = candidates
             .iter()
@@ -458,9 +472,11 @@ impl Graph {
             .filter(|&p| self.modules[self.providers[p].module].exports.contains(key))
             .collect();
         match (candidates.as_slice(), exported.as_slice()) {
-            ([], _) => {
-                Err(self.missing(None, self.modules[ROOT].name, key, required_by.to_owned()))
-            }
+            ([], _) => Err(KernelError::MissingProvider {
+                module: self.modules[ROOT].name,
+                requested: key.to_string(),
+                required_by: required_by.to_owned(),
+            }),
             ([only], _) | (_, [only]) => Ok(*only),
             _ => Err(KernelError::AmbiguousProvider {
                 module: self.modules[ROOT].name,

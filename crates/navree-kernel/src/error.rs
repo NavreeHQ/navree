@@ -326,12 +326,10 @@ pub enum KernelError {
         second: &'static str,
     },
     /// A module that acts for a plugin that is not first-party exports a
-    /// non-multi provider key that another module also registers and exports,
-    /// which leaves the key out of the service locator so app-wide lookups of
-    /// it fail or answer `None`.
-    #[error(
-        "plugin `{plugin}` exports `{provider}` in `{module}`{reason}, which `{other}` also exports; two exports of one provider make app-wide lookups of `{provider}` answer nothing: remove the plugin or update it to a version that keeps `{provider}` private to `{module}` or registers it under a name"
-    )]
+    /// non-multi provider key that another module also registers, which would
+    /// either replace that module's unexported provider in app-wide lookups or
+    /// make app-wide lookups of the key answer `None`.
+    #[error("{}", plugin_exports_provider_message(.plugin, .provider, .module, .reason, .other, *.also_exported))]
     PluginExportsProvider {
         /// The plugin's name.
         plugin: &'static str,
@@ -342,9 +340,46 @@ pub enum KernelError {
         /// Why `module` acts for the plugin when it does not name it, in
         /// parentheses after a space; empty when it names it.
         reason: String,
-        /// Another module that registers and exports the same key.
+        /// Another module that registers the same key.
         other: &'static str,
+        /// Whether `other` also exports the key.
+        also_exported: bool,
     },
+    /// A module that acts for a plugin that is not first-party exports a
+    /// non-multi provider whose outer type belongs to a framework crate.
+    #[error(
+        "plugin `{plugin}` exports `{provider}` in `{module}`{reason}, a provider type of the framework; only a framework or app module exports `{provider}`: remove the plugin or update it to a version that leaves `{provider}` to the framework and registers its drivers or extensions through the module builder"
+    )]
+    PluginExportsFrameworkProvider {
+        /// The plugin's name.
+        plugin: &'static str,
+        /// The exported provider key.
+        provider: String,
+        /// The plugin's module that exports it.
+        module: &'static str,
+        /// Why `module` acts for the plugin when it does not name it, in
+        /// parentheses after a space; empty when it names it.
+        reason: String,
+    },
+}
+
+fn plugin_exports_provider_message(
+    plugin: &str,
+    provider: &str,
+    module: &str,
+    reason: &str,
+    other: &str,
+    also_exported: bool,
+) -> String {
+    if also_exported {
+        format!(
+            "plugin `{plugin}` exports `{provider}` in `{module}`{reason}, which `{other}` also exports; two exports of one provider make app-wide lookups of `{provider}` answer nothing: remove the plugin or update it to a version that keeps `{provider}` private to `{module}` or registers it under a name"
+        )
+    } else {
+        format!(
+            "plugin `{plugin}` exports `{provider}` in `{module}`{reason}, which `{other}` also provides; exporting `{provider}` would replace `{other}`'s provider in app-wide lookups: remove the plugin or update it to a version that keeps `{provider}` private to `{module}` or registers it under a name"
+        )
+    }
 }
 
 /// Every error found while booting or validating an app.

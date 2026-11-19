@@ -94,9 +94,11 @@ impl Graph {
     ///     plugin's crate: one `PluginHooksModel` per module and model;
     /// 13. such a module registering a command with the name of one of the
     ///     framework's own ([`FRAMEWORK_COMMANDS`]): `PluginCommand`;
-    /// 14. two modules each registering and exporting one non-multi provider
-    ///     key (not on [`APP_ONLY_PROVIDERS`]), when at least one of them acts
-    ///     for a plugin that is not first-party: `PluginExportsProvider`.
+    /// 14. a module acting for a plugin that is not first-party exporting a
+    ///     non-multi provider key (not on [`APP_ONLY_PROVIDERS`]) whose outer
+    ///     type is in [`FRAMEWORK_CRATES`] (`PluginExportsFrameworkProvider`),
+    ///     or exporting a non-multi provider key that any other module also
+    ///     registers (`PluginExportsProvider`).
     pub(crate) fn check_plugins(&mut self, errors: &mut Vec<KernelError>) {
         let version = env!("CARGO_PKG_VERSION");
         // Each plugin's modules, plugins in first-seen order.
@@ -385,10 +387,12 @@ impl Graph {
             }
         }
 
-        // Step 14. Two modules each registering and exporting one non-multi
-        // provider key leave that key out of `locator_map`, so `get` fails and
-        // `try_get` answers `None`.
-        let mut exported_by: Vec<(ProviderKey, Vec<usize>)> = Vec::new();
+        // Step 14. A module acting for a community plugin may not export a
+        // non-multi provider whose outer type belongs to a framework crate, nor
+        // export a non-multi provider key that any other module also registers
+        // (exported or unexported).
+        let mut framework_refused: Vec<(usize, ProviderKey)> = Vec::new();
+        let mut registered_by: Vec<(ProviderKey, Vec<usize>)> = Vec::new();
         for m in self.import_order() {
             if configured_refused.contains(&m) {
                 continue;
@@ -399,44 +403,75 @@ impl Graph {
                 if def.multi || APP_ONLY_PROVIDERS.contains(&def.key.type_name()) {
                     continue;
                 }
-                if !module.exports.contains(&def.key) {
+                if is_framework_crate(def.key.type_name()) {
+                    if module.exports.contains(&def.key)
+                        && let Some(info) = self.community_plugin(m)
+                        && !framework_refused
+                            .iter()
+                            .any(|(seen_m, seen_k)| *seen_m == m && *seen_k == def.key)
+                    {
+                        framework_refused.push((m, def.key.clone()));
+                        errors.push(KernelError::PluginExportsFrameworkProvider {
+                            plugin: info.name,
+                            provider: def.key.to_string(),
+                            module: module.name,
+                            reason: self.acts_for_reason(m, info),
+                        });
+                    }
                     continue;
                 }
-                match exported_by.iter_mut().find(|(key, _)| *key == def.key) {
+                match registered_by.iter_mut().find(|(key, _)| *key == def.key) {
                     Some((_, owners)) => {
                         if !owners.contains(&m) {
                             owners.push(m);
                         }
                     }
-                    None => exported_by.push((def.key.clone(), vec![m])),
+                    None => registered_by.push((def.key.clone(), vec![m])),
                 }
             }
         }
-        for (key, owners) in exported_by {
-            let Some((&first, rest)) = owners.split_first() else {
+        for (key, owners) in registered_by {
+            if owners.len() < 2 {
                 continue;
-            };
-            let mut first_reported = false;
-            for &later in rest {
-                match (self.community_plugin(later), self.community_plugin(first)) {
-                    (Some(info), _) => errors.push(KernelError::PluginExportsProvider {
+            }
+            let exported_community: Vec<usize> = owners
+                .iter()
+                .copied()
+                .filter(|&m| {
+                    self.modules[m].exports.contains(&key) && self.community_plugin(m).is_some()
+                })
+                .collect();
+            if exported_community.is_empty() {
+                continue;
+            }
+            if let Some(&other) = owners.iter().find(|m| !exported_community.contains(m)) {
+                let also_exported = self.modules[other].exports.contains(&key);
+                for m in exported_community {
+                    let Some(info) = self.community_plugin(m) else {
+                        continue;
+                    };
+                    errors.push(KernelError::PluginExportsProvider {
+                        plugin: info.name,
+                        provider: key.to_string(),
+                        module: self.modules[m].name,
+                        reason: self.acts_for_reason(m, info),
+                        other: self.modules[other].name,
+                        also_exported,
+                    });
+                }
+            } else if let Some((&first, rest)) = exported_community.split_first() {
+                for &later in rest {
+                    let Some(info) = self.community_plugin(later) else {
+                        continue;
+                    };
+                    errors.push(KernelError::PluginExportsProvider {
                         plugin: info.name,
                         provider: key.to_string(),
                         module: self.modules[later].name,
                         reason: self.acts_for_reason(later, info),
                         other: self.modules[first].name,
-                    }),
-                    (None, Some(info)) if !first_reported => {
-                        first_reported = true;
-                        errors.push(KernelError::PluginExportsProvider {
-                            plugin: info.name,
-                            provider: key.to_string(),
-                            module: self.modules[first].name,
-                            reason: self.acts_for_reason(first, info),
-                            other: self.modules[later].name,
-                        });
-                    }
-                    _ => {}
+                        also_exported: true,
+                    });
                 }
             }
         }
