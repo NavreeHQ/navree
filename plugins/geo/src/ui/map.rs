@@ -162,6 +162,12 @@ impl Tiles {
     /// address starting with a single slash (not `//` or `/\`) is this app's own, and always
     /// allowed.
     pub fn new(options: &GeoOptions, policy: &PagePolicy) -> Tiles {
+        if options.tiles.bytes().any(|byte| byte <= b' ') {
+            return Tiles {
+                address: None,
+                attribution: options.attribution.clone(),
+            };
+        }
         let own = options.tiles.starts_with('/')
             && !options.tiles.starts_with("//")
             && !options.tiles.starts_with("/\\");

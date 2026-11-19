@@ -540,6 +540,22 @@ async fn a_tile_address_that_starts_with_a_backslash_host_is_refused() {
         ..GeoOptions::default()
     };
     assert_eq!(Tiles::new(&scheme_rel, &policy).address(), None);
+
+    for with_control in [
+        "/\t/tiles.other.example/{z}/{x}/{y}.png",
+        "/\n\\tiles.other.example/{z}/{x}/{y}.png",
+        "/geo-test/tiles/{z}/{x}/{y} extra",
+    ] {
+        let bad = GeoOptions {
+            tiles: with_control.to_owned(),
+            ..GeoOptions::default()
+        };
+        assert_eq!(
+            Tiles::new(&bad, &policy).address(),
+            None,
+            "{with_control:?}"
+        );
+    }
     app.shutdown().await.unwrap();
 }
 
