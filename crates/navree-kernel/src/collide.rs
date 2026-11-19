@@ -39,6 +39,16 @@ pub fn is_community_plugin(ctx: &AppContext, module: ModuleId) -> bool {
         .is_some_and(|info| !ctx.inner.graph.first_party.contains(info.name))
 }
 
+/// Whether `module` acts for a plugin ([`acts_for`]) that the kernel did not
+/// find first-party: `true` for a community plugin's naming module, an unnamed
+/// module of its crate, a generic module imported only by its modules, and a
+/// plain module of its second crate imported only by its modules. `false` for
+/// an app module, a first-party plugin's module, the app root, and an id not in
+/// the app. Not public API; Navree's own crates use it.
+pub fn acts_for_community_plugin(ctx: &AppContext, module: ModuleId) -> bool {
+    acts_for(ctx, module).is_some_and(|info| !ctx.inner.graph.first_party.contains(info.name))
+}
+
 /// The plugin `module` acts for, first-party or not: the plugin it names;
 /// else the plugin of the crate its type path is in, up to its first angle
 /// bracket and read through a reference, a `Box` and a `Pin`, and a trait
@@ -179,6 +189,13 @@ mod tests {
         );
         assert_eq!(acts_for_reason(ctx, app_mod), "");
         assert_eq!(acts_for_reason(ctx, missing), "");
+        assert!(acts_for_community_plugin(ctx, naming));
+        assert!(acts_for_community_plugin(ctx, helper));
+        assert!(acts_for_community_plugin(ctx, second));
+        assert!(!is_community_plugin(ctx, helper));
+        assert!(!is_community_plugin(ctx, second));
+        assert!(!acts_for_community_plugin(ctx, app_mod));
+        assert!(!acts_for_community_plugin(ctx, missing));
 
         // Each non-empty or empty clause matches byte for byte what the kernel's refusals put
         // after `in \`<module>\``.

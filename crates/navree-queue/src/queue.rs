@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use navree_contracts::{BoxError, BoxFuture, Clock, Dispatcher, Job, JobEnvelope, JobRegistration};
 use navree_db::Uow;
-use navree_kernel::__private::is_community_plugin;
+use navree_kernel::__private::acts_for_community_plugin;
 use navree_kernel::{AppContext, ModuleInfo, WeakAppContext};
 use navree_telemetry::{Telemetry, TelemetryContext, TraceContext, TracePolicy};
 use sha2::{Digest, Sha256};
@@ -567,7 +567,8 @@ pub(crate) fn job_registrations(app: &AppContext) -> Result<Vec<JobRegistration>
         }
         if let Some(first) = modules.first() {
             let (first_name, second_name) = (first.name, module.name);
-            if is_community_plugin(app, first.id) || is_community_plugin(app, module.id) {
+            if acts_for_community_plugin(app, first.id) || acts_for_community_plugin(app, module.id)
+            {
                 errors.push(format!(
                     "job `{name}` is registered by both `{first_name}` and `{second_name}`; give one another name"
                 ));
@@ -584,5 +585,106 @@ pub(crate) fn job_registrations(app: &AppContext) -> Result<Vec<JobRegistration>
         Ok(registrations)
     } else {
         Err(errors.join("\n"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::marker::PhantomData;
+
+    use navree_contracts::{Job, JobContext, ModuleBuilderJobsExt};
+    use navree_kernel::{Module, ModuleBuilder, Navree};
+    use serde::{Deserialize, Serialize};
+
+    use super::*;
+
+    #[derive(Serialize, Deserialize)]
+    struct SendPayslip;
+
+    impl Job for SendPayslip {
+        const NAME: &'static str = "send_payslip";
+
+        async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
+            Ok(())
+        }
+    }
+
+    struct PayrollModule;
+
+    impl Module for PayrollModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.job::<SendPayslip>();
+        }
+    }
+
+    mod navree_plugin_khata {
+        use navree_contracts::ModuleBuilderJobsExt;
+        use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+        use super::SendPayslip;
+
+        const KHATA: PluginInfo =
+            PluginInfo::new("navree-plugin-khata", module_path!(), "khata", "1.0.0");
+
+        pub struct Marker;
+
+        pub struct KhataHelper;
+
+        impl Module for KhataHelper {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.job::<SendPayslip>();
+            }
+        }
+
+        pub struct KhataPlugin(pub fn(&mut ModuleBuilder));
+
+        impl Module for KhataPlugin {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(KHATA);
+                (self.0)(m);
+            }
+        }
+    }
+
+    struct GenericWorker<T>(PhantomData<fn() -> T>);
+
+    impl<T: 'static> Module for GenericWorker<T> {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.job::<SendPayslip>();
+        }
+    }
+
+    #[tokio::test]
+    async fn helper_and_generic_modules_acting_for_a_community_plugin_cannot_share_an_apps_job_name()
+     {
+        use navree_plugin_khata::{KhataHelper, KhataPlugin, Marker};
+
+        let app = Navree::app()
+            .module(KhataPlugin(|m| {
+                m.import(KhataHelper);
+            }))
+            .module(PayrollModule)
+            .boot()
+            .await
+            .expect("kernel boots");
+        let err = job_registrations(app.ctx()).expect_err("colliding job is refused");
+        assert_eq!(
+            err,
+            "job `send_payslip` is registered by both `KhataHelper` and `PayrollModule`; give one another name"
+        );
+
+        let app = Navree::app()
+            .module(KhataPlugin(|m| {
+                m.import(GenericWorker::<Marker>(PhantomData));
+            }))
+            .module(PayrollModule)
+            .boot()
+            .await
+            .expect("kernel boots");
+        let err = job_registrations(app.ctx()).expect_err("colliding generic job is refused");
+        assert!(
+            err.starts_with("job `send_payslip` is registered by both `GenericWorker<"),
+            "{err}"
+        );
     }
 }

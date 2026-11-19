@@ -373,8 +373,8 @@ pub(crate) fn section_collisions(ctx: &navree_kernel::AppContext) -> SectionColl
         };
         let (_, first_type, first_module) = &firsts[first];
         let (first_name, second_name) = (first_module.name, module.name);
-        let community = navree_kernel::__private::is_community_plugin(ctx, first_module.id)
-            || navree_kernel::__private::is_community_plugin(ctx, module.id);
+        let community = navree_kernel::__private::acts_for_community_plugin(ctx, first_module.id)
+            || navree_kernel::__private::acts_for_community_plugin(ctx, module.id);
         let ending = if community {
             "a section belongs to one type"
         } else {
@@ -472,3 +472,110 @@ pub const FRAMEWORK_SECTIONS: &[&str] = &[
     "workflows",
     "workspace",
 ];
+
+#[cfg(test)]
+mod tests {
+    use std::marker::PhantomData;
+
+    use navree_kernel::{Module, ModuleBuilder, Navree};
+    use serde::Deserialize;
+
+    use super::*;
+    use crate::{ConfigSection, ModuleBuilderConfigExt};
+
+    #[derive(Default, Deserialize)]
+    struct AppMailSection;
+
+    impl ConfigSection for AppMailSection {
+        const KEY: &'static str = "mail";
+    }
+
+    struct AppMailModule;
+
+    impl Module for AppMailModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.config_section::<AppMailSection>();
+        }
+    }
+
+    mod navree_plugin_khata {
+        use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+        use serde::Deserialize;
+
+        use crate::{ConfigSection, ModuleBuilderConfigExt};
+
+        const KHATA: PluginInfo =
+            PluginInfo::new("navree-plugin-khata", module_path!(), "khata", "1.0.0");
+
+        #[derive(Default, Deserialize)]
+        pub struct MirrorMailSection;
+
+        impl ConfigSection for MirrorMailSection {
+            const KEY: &'static str = "mail";
+        }
+
+        pub struct Marker;
+
+        pub struct KhataHelper;
+
+        impl Module for KhataHelper {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.config_section::<MirrorMailSection>();
+            }
+        }
+
+        pub struct KhataPlugin(pub fn(&mut ModuleBuilder));
+
+        impl Module for KhataPlugin {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(KHATA);
+                (self.0)(m);
+            }
+        }
+    }
+
+    struct GenericHolder<T>(PhantomData<fn() -> T>);
+
+    impl<T: 'static> Module for GenericHolder<T> {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.config_section::<navree_plugin_khata::MirrorMailSection>();
+        }
+    }
+
+    #[tokio::test]
+    async fn helper_and_generic_modules_acting_for_a_community_plugin_cannot_share_a_section_key() {
+        use navree_plugin_khata::{KhataHelper, KhataPlugin, Marker};
+
+        let app = Navree::app()
+            .module(AppMailModule)
+            .module(KhataPlugin(|m| {
+                m.import(KhataHelper);
+            }))
+            .boot()
+            .await
+            .expect("kernel boots");
+        let collisions = section_collisions(app.ctx());
+        assert!(collisions.warnings.is_empty(), "{collisions:?}");
+        assert_eq!(collisions.errors.len(), 1);
+        assert!(
+            collisions.errors[0].ends_with("(KhataHelper); a section belongs to one type"),
+            "{collisions:?}"
+        );
+
+        let app = Navree::app()
+            .module(KhataPlugin(|m| {
+                m.import(GenericHolder::<Marker>(PhantomData));
+            }))
+            .module(AppMailModule)
+            .boot()
+            .await
+            .expect("kernel boots");
+        let collisions = section_collisions(app.ctx());
+        assert!(collisions.warnings.is_empty(), "{collisions:?}");
+        assert_eq!(collisions.errors.len(), 1);
+        assert!(
+            collisions.errors[0].ends_with("(AppMailModule); a section belongs to one type"),
+            "{collisions:?}"
+        );
+    }
+}

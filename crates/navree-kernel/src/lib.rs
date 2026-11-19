@@ -76,7 +76,8 @@ pub use resolver::Resolver;
 pub mod __private {
     pub use crate::builder::PassedModule;
     pub use crate::collide::{
-        acts_for, acts_for_reason, imports, is_app_module, is_community_plugin,
+        acts_for, acts_for_community_plugin, acts_for_reason, imports, is_app_module,
+        is_community_plugin,
     };
     pub use crate::command::FRAMEWORK_COMMANDS;
     pub use crate::module::{ConfiguredPlainModule, PlainModule};
