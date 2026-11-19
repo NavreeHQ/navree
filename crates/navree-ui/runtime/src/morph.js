@@ -79,7 +79,7 @@ function moveTo(parent, node, before) {
  */
 function sameField(a, b) {
   const x = /** @type {Element} */ (a), y = /** @type {Element} */ (b);
-  if (has(x, "data-ui-stored") && !(has(x, "data-ui-keep") ? has(y, "data-ui-keep") : has(y, "data-ui-stored"))) return false;
+  if (has(x, "data-ui-stored") && !has(y, has(x, "data-ui-keep") ? "data-ui-keep" : "data-ui-stored")) return false;
   if (!FIELD.has(nameOf(a))) return true;
   if (attr(x, "name") !== attr(y, "name") || attr(x, "type") !== attr(y, "type")) return false;
   const one = EP.closest.call(x, "form"), other = EP.closest.call(y, "form");

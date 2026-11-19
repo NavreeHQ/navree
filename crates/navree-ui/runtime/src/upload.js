@@ -4,14 +4,16 @@
 // so a morph needs no wiring and a name in stored markup can't shadow a method. The limits in
 // the markup are hints; the server holds every file to them. Text from the server goes in with
 // textContent, never as markup.
-import { D, T, all, attr, byId, closest, cookie, has, holds, on, set, stored, unset } from "./dom.js";
+import { D, E, T, all, attr, byId, cookie, has, holds, on, set, stored, unset } from "./dom.js";
+
+/** @param {any} node @param {string} selector @returns {Element | null} */
+const closest = (node, selector) => (node instanceof Element && !stored(node) ? E.closest.call(node, selector) : null);
 
 /** Whether `url` is on this site. One no browser can read throws, and its send fails. @param {string} url */
 const here = (url) => new URL(url, location.href).origin === location.origin;
 
 const ROOT = "[data-ui-upload]";
 const ROW = "[data-slot=upload-item]";
-const READY = "data-ready";
 
 /** @param {Element} root @param {string} name */
 const part = (root, name) => all(root, "[data-slot=" + name + "]")[0];
@@ -23,7 +25,7 @@ const num = (root, name) => Number(attr(root, name)) || 0;
  * that stores a file and answers with its key. @param {Element} root */
 const target = (root) => attr(root, "action") || attr(root, "data-send") || "";
 /** @param {Element} root */
-const auto = (root) => !!target(root) && !has(root, "data-manual");
+const auto = (root) => target(root) && !has(root, "data-manual");
 /** The hidden field that carries the key of the file a form's upload sent. @param {Element} root */
 const keyField = (root) => /** @type {HTMLInputElement | undefined} */ (/** @type {any} */ (part(root, "upload-key")));
 /** Whether a file of `root` is on its way or waiting to go. @param {Element} root */
@@ -39,15 +41,17 @@ function needs(root) {
 }
 /** @param {number} n */
 const size = (n) => {
-  const unit = (v, u) => v.toFixed(1).replace(/\.0$/, "") + " " + u;
-  return n < 1024 ? n + " B" : n < 10240 ? unit(n / 1024, "KB") : n < 1048576 ? Math.round(n / 1024) + " KB" : unit(n / 1048576, "MB");
+  const unit = (v, u) => +v.toFixed(1) + " " + u;
+  return n < 1024 ? n + " B" : n < 10240 ? unit(n / 1024, "KB") : n < 1 << 20 ? Math.round(n / 1024) + " KB" : unit(n / (1 << 20), "MB");
 };
 
 /** A word of the page, with its `{name}`s filled. @param {Element} root @param {string} key @param {Record<string, any>} [o] */
 function say(root, key, o = {}) {
-  let words = {};
-  try { words = JSON.parse(attr(root, "data-l") || "{}"); } catch {}
-  return String(words[key] ?? "").replace(/\{(\w+)\}/g, (_, k) => o[k] ?? "");
+  try {
+    return String(JSON.parse(attr(root, "data-l") || "{}")[key] ?? "").replace(/\{(\w+)\}/g, (_, k) => o[k] ?? "");
+  } catch {
+    return "";
+  }
 }
 /** Says `text` to assistive technology. @param {Element} root @param {string} text */
 const tell = (root, text) => { part(root, "upload-status").textContent = text; };
@@ -84,7 +88,7 @@ function add(root, file, state) {
 /** A picture is shown small, read as a `data:` URL (the page's policy allows no `blob:`): not above 2 MB, and never an SVG. @param {Job} job */
 function preview(job) {
   const img = part(job.li, "upload-preview");
-  if (!img || !/^image\/(png|jpeg|gif|webp|avif)$/.test(job.file.type) || job.file.size > 2097152) return;
+  if (!img || !/^image\/(png|jpeg|gif|webp|avif)$/.test(job.file.type) || job.file.size > 2 << 20) return;
   const read = new FileReader();
   // A data URL is text: the reader read it as one.
   read.onload = () => { set(img, "src", /** @type {string} */ (read.result)); unset(img, "hidden"); };
@@ -137,7 +141,7 @@ function req(job, method, url, body, type, up) {
 
 /** @param {Job} job @param {number} done */
 function progress(job, done) {
-  const pct = Math.min(100, Math.floor((done * 100) / job.file.size));
+  const pct = Math.min(100, ((done * 100) / job.file.size) | 0);
   set(all(job.li, "progress")[0], "value", /** @type {any} */ (pct));
   show(job, "sending", pct + "%");
 }
@@ -169,7 +173,7 @@ async function chunked(job) {
         if (job.gone) throw e;
       }
       if (tries > 1) throw 0;
-      await new Promise((go) => setTimeout(go, 500 * 2 ** tries));
+      await new Promise((go) => setTimeout(go, 500 << tries));
     }
     if (r.status >= 300) return r;
     done += piece.size;
@@ -191,11 +195,7 @@ async function run(job) {
       // a root has a key field, and one that sends at all sends to `data-send`.
       const key = keyField(root);
       const sent = r.json?.stored?.[0]?.key;
-      if (r.status < 300 && key) {
-        if (typeof sent === "string" && sent) key.value = sent;
-        else r.status = 500;
-      }
-      if (r.status < 300) {
+      if (r.status < 300 && (!key || (typeof sent === "string" && sent && (key.value = sent)))) {
         const done = say(root, "done");
         show(job, "done", size(file.size) + " · " + done);
         tell(root, file.name + " · " + done);
@@ -236,13 +236,6 @@ function chosen(root) {
   for (const file of field(root).files || []) add(root, file, "chosen");
 }
 
-/** @param {HTMLInputElement} input @param {Iterable<File>} files */
-function putFiles(input, files) {
-  const kept = new DataTransfer();
-  for (const file of files) kept.items.add(file);
-  input.files = kept.files;
-}
-
 /** Files arrive, chosen in the field or dropped. @param {Element} root @param {FileList | File[]} list @param {boolean} native */
 function take(root, list, native) {
   const input = field(root);
@@ -253,7 +246,11 @@ function take(root, list, native) {
     input.value = "";
     return;
   }
-  if (!native) putFiles(input, files);
+  if (!native) {
+    const kept = new DataTransfer();
+    for (const file of files) kept.items.add(file);
+    input.files = kept.files;
+  }
   chosen(root);
 }
 
@@ -263,7 +260,11 @@ function leave(job) {
   job.gone = true;
   job.x?.abort();
   if (job.id) req({}, "DELETE", (attr(root, "data-chunks") || "") + "/" + job.id, "", "").catch(() => {});
-  if (job.state === "chosen") putFiles(input, [...(input.files || [])].filter((f) => f !== job.file));
+  if (job.state === "chosen") {
+    const kept = new DataTransfer();
+    for (const file of input.files || []) if (file !== job.file) kept.items.add(file);
+    input.files = kept.files;
+  }
   // A file a form's upload sent is no longer the form's.
   const key = keyField(root);
   if (key && job.state === "done") key.value = "";
@@ -273,19 +274,17 @@ function leave(job) {
   input.focus();
 }
 
-/** @param {any} node @returns {Element | false | null} */
-const rootAt = (node) => node instanceof Element && !stored(node) && closest(node, ROOT);
-
 on(document, "change", (e) => {
-  const input = closest(e.target, ROOT + " input[type=file]"), root = input && closest(input, ROOT);
-  if (root && has(root, READY)) take(root, /** @type {HTMLInputElement} */ (input).files || [], true);
+  const input = closest(e.target, ROOT + " input[type=file]");
+  const root = input && closest(input, ROOT);
+  if (root && has(root, "data-ready")) take(root, /** @type {HTMLInputElement} */ (input).files || [], true);
 });
 
 // Both run before the core runtime's own submit handler, which then leaves a prevented submit alone.
 on(document, "submit", (e) => {
   // A form sent by hand sends its files one by one, with progress.
   const area = closest(e.target, ROOT);
-  if (area && has(area, READY) && attr(area, "action") && !has(area, "data-disabled")) {
+  if (area && has(area, "data-ready") && attr(area, "action") && !has(area, "data-disabled")) {
     const input = field(area);
     const files = [...(input.files || [])];
     if (files.length) {
@@ -316,7 +315,7 @@ on(document, "click", (e) => {
   e.preventDefault();
   if (has(button, "data-ui-retry")) {
     job.gone = false;
-    job.id = undefined;
+    job.id = "";
     enqueue(job);
   } else leave(job);
 });
@@ -334,15 +333,15 @@ on(document, "keydown", (e) => {
 // Dropping: files over the area are taken, and a file dropped anywhere else never takes the
 // page away from where it is.
 /** @param {DragEvent} e */
-const dragging = (e) => !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+const dragging = (e) => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
 on(document, "dragenter", (e) => {
-  const root = dragging(e) && rootAt(e.target);
+  const root = dragging(e) && closest(e.target, ROOT);
   if (root) set(root, "data-drag", "");
 });
 on(document, "dragover", (e) => {
   if (!dragging(e)) return;
   e.preventDefault();
-  if (!rootAt(e.target) && e.dataTransfer) e.dataTransfer.dropEffect = "none";
+  if (!closest(e.target, ROOT)) e.dataTransfer.dropEffect = "none";
 });
 on(document, "dragleave", (e) => {
   const root = closest(e.target, ROOT);
@@ -351,15 +350,15 @@ on(document, "dragleave", (e) => {
 on(document, "drop", (e) => {
   if (!dragging(e)) return;
   e.preventDefault();
-  const root = rootAt(e.target);
+  const root = closest(e.target, ROOT);
   if (!root) return;
   unset(root, "data-drag");
-  if (has(root, READY)) take(root, e.dataTransfer?.files || [], false);
+  if (has(root, "data-ready")) take(root, e.dataTransfer.files || [], false);
 });
 
 // The area is ready: the native control is laid over it, and the list takes over from its text.
 function ready() {
-  for (const root of D.querySelectorAll.call(document, ROOT + ":not([data-ui-stored] *)")) set(root, READY, "");
+  for (const root of D.querySelectorAll.call(document, ROOT)) if (!stored(root)) set(root, "data-ready", "");
 }
 ready();
 on(document, "ui:swap", ready);

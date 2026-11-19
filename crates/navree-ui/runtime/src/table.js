@@ -14,8 +14,6 @@ const tables = () => /** @type {NodeListOf<HTMLElement>} */ (D.querySelectorAll.
 /** Which way `el` reads along a row: 1 to the right, -1 to the left. @param {Element} el */
 const dir = (el) => (getComputedStyle(el).direction === "rtl" ? -1 : 1);
 
-const STICKY_SELECT = "[data-sticky=s]";
-
 /** @typedef {{mode: "ids" | "all", ids: string[], ex: string[], key: string}} Selection */
 
 /**
@@ -76,16 +74,13 @@ const selectedCount = (root, selection) => (selection.mode === "all" ? Math.max(
 function drawSelection(root) {
   const bar = root.querySelector("[data-slot=table-bulk]");
   if (!bar) return;
-  const selection = load(root);
+  let selection = load(root);
   const words = labels(root);
   const key = root.getAttribute("data-filter-key") || "";
   // "All results" meant the results of that filter. It ends with the filter.
   let ended = false;
   if (selection.mode === "all" && selection.key !== key) {
-    selection.mode = "ids";
-    selection.ids = [];
-    selection.ex = [];
-    save(root, selection);
+    save(root, (selection = { mode: "ids", ids: [], ex: [], key: "" }));
     ended = true;
   }
   const excluded = new Set(selection.ex);
@@ -122,7 +117,8 @@ function drawSelection(root) {
     text = fill(root, words.selected, n);
     if (n > onPage) text += " · " + fill(root, words.off, n - onPage);
   }
-  if (count && count.textContent !== (ended ? words.ended : text)) count.textContent = ended ? words.ended : text;
+  if (ended) text = words.ended;
+  if (count && count.textContent !== text) count.textContent = text;
   root.toggleAttribute("data-has-selection", n > 0 || ended);
 }
 
@@ -189,7 +185,7 @@ function measureSticky(root) {
   markScroll(root);
   // A table with nothing sticky but its boxes needs no offsets.
   if (!root.querySelector('[data-sticky="1"],[data-sticky=e2],tr[data-sticky-row]')) return;
-  let at = root.querySelector(`thead ${STICKY_SELECT}`)?.getBoundingClientRect().width || 0;
+  let at = root.querySelector("thead [data-sticky=s]")?.getBoundingClientRect().width || 0;
   // What covers the box's start: a cell or control scrolled into view (by focus, or a script) stops beside it.
   let covered = at;
   el.style.setProperty("--s0", at + "px");
@@ -619,16 +615,14 @@ function restore(form, back) {
 // An edited cell is made of one field, the one named `value` that belongs to the cell's form. A control of
 // the app's or a plugin's own can hold other elements (a search box, buttons, or fields inside a sealed body);
 // their keys and changes are the control's, not the cell's.
-/** @param {any} c @returns {HTMLFormElement | false | null | undefined} */
-const editOf = (c) => c?.name == "value" && c.form?.matches("form[data-ui-edit]") && c.form;
-
 on("change", (e) => {
-  const form = editOf(e.target);
-  if (form) HTMLFormElement.prototype.requestSubmit.call(form);
+  const control = /** @type {HTMLInputElement} */ (e.target);
+  if (control.name == "value" && control.form?.hasAttribute("data-ui-edit")) HTMLFormElement.prototype.requestSubmit.call(control.form);
 });
 
 on("keydown", (e) => {
-  const control = /** @type {HTMLInputElement} */ (e.target), form = editOf(control);
+  const control = /** @type {HTMLInputElement} */ (e.target);
+  const form = control.name == "value" && control.form?.hasAttribute("data-ui-edit") && control.form;
   if (!form) return;
   if (e.key === "Escape") {
     restore(form, true);
@@ -685,10 +679,7 @@ on("keydown", (e) => {
     gridKey(e, target);
     return;
   }
-  if (e.key === "Escape") {
-    const inGrid = target.closest?.("[data-ui-grid] td[tabindex]");
-    if (inGrid) /** @type {HTMLElement} */ (inGrid).focus();
-  }
+  if (e.key === "Escape") /** @type {HTMLElement | null} */ (target.closest?.("[data-ui-grid] td[tabindex]"))?.focus();
   if (!target.matches?.("[data-slot=col-resize]") || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
   const root = target.closest("[data-ui-table]");
   if (!root) return;

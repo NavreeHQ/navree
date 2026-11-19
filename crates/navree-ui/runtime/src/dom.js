@@ -164,10 +164,10 @@ export const rescue = (node) => {
 
 /** The toolkit's own script modules, under its mount, with or without their content hash. */
 const MODULE =
-  /^\/_navree\/ui\/(core|sidebar|overlay|table|live|select|date(s|-text)|time|menus|slider|tree|toolbar|split|keys|lazy|sortable(-grid)?|upload|otp|carousel|menubar|charts|count-up|islands|parts|genui|extensions|phone)(-[0-9a-f]{12})?\.js$/;
+  /^\/_navree\/ui\/(core|sidebar|overlay|table|live|select|date(s|-text)|time|menu(s|bar)|slider|tree|toolbar|split|keys|lazy|sortable(-grid)?|upload|otp|carousel|charts|count-up|islands|parts|genui|extensions|phone)(-[0-9a-f]{12})?\.js$/;
 
 /** Whether `url` is one of the toolkit's own modules, named at its mount with nothing after its name. @param {string} url */
-export const ownModule = (url) => typeof url === "string" && url.startsWith("/_navree/ui/") && MODULE.test(url);
+export const ownModule = (url) => typeof url === "string" && MODULE.test(url);
 
 /** @param {Element} el @param {string} name */
 export const attr = (el, name) => E.getAttribute.call(el, name);

@@ -1,7 +1,7 @@
 // The op applier: the closed list the server sends. Nothing here runs code from
 // the wire but the toolkit's own modules; the HTML in an op is rendered by the server.
 import { morph, parse, pieces } from "./morph.js";
-import { all, byId, emit, field, has, make, ownModule, rescue, root } from "./dom.js";
+import { T, all, byId, emit, field, has, make, ownModule, rescue, root } from "./dom.js";
 import { announce, toast, openTarget, closeTarget } from "./ui.js";
 import { forget, go, leave, refresh, setUrl } from "./nav.js";
 
@@ -78,7 +78,7 @@ function apply(op, how) {
     // A region is asked through the event a module can hold, as a stream's refresh is: a sortable
     // waits out a drag. Any other element with a source is fetched at once.
     case "invalidate":
-      if (target && has(target, "data-ui-region")) EventTarget.prototype.dispatchEvent.call(target, new CustomEvent("ui:refresh", { bubbles: true }));
+      if (target && has(target, "data-ui-region")) T.dispatchEvent.call(target, new CustomEvent("ui:refresh", { bubbles: true }));
       else refresh(op.target);
       break;
   }
