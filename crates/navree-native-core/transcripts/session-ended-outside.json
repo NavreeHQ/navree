@@ -150,7 +150,7 @@
         {"at":"/screens/1/content/screen/title","is":"Overview"},
         {"at":"/screens/2/content/screen/title","is":"Order CS-20481"},
         {"at":"/screens/2/forms/refund/fields/refund-amount/value/text","is":"10"},
-        {"at":"/screens/2/refreshing","is":true}
+        {"at":"/screens/2/loading","is":true}
       ]
     },
     {
@@ -163,7 +163,7 @@
         "effects": []
       },
       "check": [
-        {"at":"/screens/2/refreshing","is":false},
+        {"at":"/screens/2/loading","is":false},
         {"at":"/screens/2/forms/refund/fields/refund-amount/value/text","is":"10"}
       ]
     }

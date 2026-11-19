@@ -7402,6 +7402,7 @@ mod tests {
             "origin": "https://shop.example",
             "app_id": "com.charkha.supply",
             "client": {"platform": "ios", "form": "phone", "vocab": 0, "text_percent": 100, "caps": ["auth_session"]},
+            "sign_in": {"paths": ["/sign-in"]},
         }))
         .expect("config");
         let mut core = Core::new(config);
@@ -7963,6 +7964,7 @@ mod tests {
             "origin": "https://shop.example",
             "app_id": "com.charkha.supply",
             "client": {"platform": "ios", "form": "phone", "vocab": 0, "text_percent": 100, "caps": ["auth_session"]},
+            "sign_in": {"paths": ["/sign-in"]},
         }))
         .expect("config");
         let mut core = Core::new(config);
