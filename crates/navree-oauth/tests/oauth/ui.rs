@@ -120,7 +120,7 @@ async fn a_guest_and_a_token_are_refused() {
 /// start from a clean document.
 static PROOF: UiExtension = UiExtension::new("app", "proof").sheet(ExtensionFile::__new(
     br#":where([data-slot^="app:"]){}"#,
-    "aaaaaaaaaaaa",
+    "34f360b879e8",
     Some("app"),
 ));
 

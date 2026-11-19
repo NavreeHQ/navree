@@ -679,7 +679,7 @@ async fn the_docs_link_and_card_show_to_reps_only() {
 /// start from a clean document.
 static PROOF: UiExtension = UiExtension::new("app", "proof").sheet(ExtensionFile::__new(
     br#":where([data-slot^="app:"]){}"#,
-    "aaaaaaaaaaaa",
+    "34f360b879e8",
     Some("app"),
 ));
 

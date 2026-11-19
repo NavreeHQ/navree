@@ -835,7 +835,7 @@ async fn every_route_of_the_pages_is_documented() {
 /// start from a clean document.
 static PROOF: UiExtension = UiExtension::new("app", "proof").sheet(ExtensionFile::__new(
     br#":where([data-slot^="app:"]){}"#,
-    "aaaaaaaaaaaa",
+    "34f360b879e8",
     Some("app"),
 ));
 
