@@ -104,7 +104,7 @@ private class PickFiles(private val plan: FileRules.Plan) : ActivityResultContra
 }
 
 /** The client's words for a file that was not taken. */
-private fun words(context: Context, why: FileRules.Refusal): String = when (why) {
+internal fun refusalWords(context: Context, why: FileRules.Refusal): String = when (why) {
     is FileRules.Refusal.TooLarge -> context.getString(R.string.navree_file_too_large, why.name, Formatter.formatShortFileSize(context, why.most))
     is FileRules.Refusal.TooLargeTogether -> context.getString(R.string.navree_file_too_large_together, why.name, Formatter.formatShortFileSize(context, why.most))
     is FileRules.Refusal.WrongType -> context.getString(R.string.navree_file_wrong_type, why.name, why.accepted)
@@ -112,6 +112,7 @@ private fun words(context: Context, why: FileRules.Refusal): String = when (why)
     is FileRules.Refusal.NoAnswer -> context.getString(R.string.navree_file_no_answer, why.name)
     is FileRules.Refusal.WithLocation -> context.getString(R.string.navree_file_with_location, why.name)
     is FileRules.Refusal.PlaceUnchecked -> context.getString(R.string.navree_file_place_unchecked, why.name)
+    is FileRules.Refusal.VideoUnchecked -> context.getString(R.string.navree_file_video_unchecked, why.name)
 }
 
 /** The tokens of every file a field of any screen the core holds names. */
@@ -178,7 +179,7 @@ internal fun FileFieldView(field: Navree.Field, input: Navree.FileInput, place: 
                 }
                 val refused = results.filterIsInstance<PickedFiles.Result.Refused>()
                 val kept = results.filterIsInstance<PickedFiles.Result.Kept>().map { it.file }
-                notice = refused.takeIf { it.isNotEmpty() }?.joinToString("\n") { words(context, it.why) }
+                notice = refused.takeIf { it.isNotEmpty() }?.joinToString("\n") { refusalWords(context, it.why) }
                 if (kept.isNotEmpty()) {
                     val before = latestHeld
                     // One file replaces the one held; the extras a picker gave a field that takes one are let go.

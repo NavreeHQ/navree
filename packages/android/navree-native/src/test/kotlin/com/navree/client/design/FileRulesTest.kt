@@ -125,4 +125,11 @@ class FileRulesTest {
         assertFalse(FileRules.isToken(""))
         assertFalse(FileRules.isToken("0123456789abcdef0123456789abcde"))
     }
+
+    @Test
+    fun the_place_in_an_iso_video_is_taken_out_and_other_video_containers_are_refused() {
+        assertEquals(FileRules.Place.None, FileRules.videoPlace(null))
+        assertEquals(FileRules.Place.TakeOut, FileRules.videoPlace(FileRules.Video.Iso))
+        assertEquals(FileRules.Place.Refuse, FileRules.videoPlace(FileRules.Video.Other))
+    }
 }

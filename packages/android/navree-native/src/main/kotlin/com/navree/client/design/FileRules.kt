@@ -68,11 +68,14 @@ object FileRules {
         /** Where the file is kept gave nothing of it for longer than the client waits. */
         data class NoAnswer(override val name: String) : Refusal
 
-        /** The place a picture was taken is in it, and the field does not keep it, and it cannot be taken out of this kind of file. */
+        /** The place a picture or video was made is in it, and the field does not keep it, and it cannot be taken out of this kind of file. */
         data class WithLocation(override val name: String) : Refusal
 
         /** A picture of a kind this device cannot read for the place it was taken, for a field that does not keep it. */
         data class PlaceUnchecked(override val name: String) : Refusal
+
+        /** A video of a kind this device cannot rewrite without the place it was made, for a field that does not keep it. */
+        data class VideoUnchecked(override val name: String) : Refusal
     }
 
     /** A kind of picture, read from the file's own first bytes, never from its type or name. */
@@ -124,6 +127,22 @@ object FileRules {
         Picture.Heic -> if (sdk >= 28) Place.Check else Place.Refuse
         Picture.Avif -> if (sdk >= 31) Place.Check else Place.Refuse
         Picture.Raw -> Place.Refuse
+    }
+
+    /** A kind of video, read from the file's own first bytes (or a `video/` media type when its container is another). */
+    enum class Video {
+        /** An ISO media or QuickTime container (MP4, MOV, M4V, 3GP), whose location boxes can be removed. */
+        Iso,
+
+        /** Any other video container (WebM, Matroska, AVI, Ogg, transport streams), which the client does not rewrite. */
+        Other,
+    }
+
+    /** What is done about the place a video was made, for a field that does not keep it. */
+    fun videoPlace(kind: Video?): Place = when (kind) {
+        null -> Place.None
+        Video.Iso -> Place.TakeOut
+        Video.Other -> Place.Refuse
     }
 
     /** The kinds a field's `accept` names: trimmed, in lower case, none empty. */

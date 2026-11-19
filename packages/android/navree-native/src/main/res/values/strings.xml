@@ -50,6 +50,7 @@
     <string name="navree_file_no_answer">%1$s was not added: where it is kept did not answer in time. Choose it again.</string>
     <string name="navree_file_with_location">%1$s has the place it was taken in it, which cannot be taken out of this kind of file, so it was not added.</string>
     <string name="navree_file_place_unchecked">%1$s is a kind of picture this device cannot check for the place it was taken, so it was not added.</string>
+    <string name="navree_file_video_unchecked">%1$s is a kind of video this device cannot rewrite without the place it was made, so it was not added.</string>
     <string name="navree_file_no_picker">No app on this device can choose files.</string>
     <!-- A colour field. -->
     <string name="navree_colour_none">No colour chosen</string>

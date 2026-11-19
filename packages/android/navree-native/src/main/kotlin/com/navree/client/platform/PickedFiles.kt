@@ -2,6 +2,11 @@ package com.navree.client.platform
 
 import android.content.ContentResolver
 import android.content.Context
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMetadataRetriever
+import android.media.MediaMuxer
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
@@ -19,6 +24,9 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.ByteBuffer
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
@@ -185,13 +193,21 @@ class PickedFiles internal constructor(private val folder: File) {
             // From here on the provider is not asked again.
             reading.local = true
             if (!keepLocation) {
-                // What the file is, by its own first bytes: never by the type the provider gave or the name.
-                val kind = PictureData.kindOf(copy)
-                val refused = when (FileRules.place(kind, Build.VERSION.SDK_INT)) {
-                    FileRules.Place.None -> null
-                    FileRules.Place.TakeOut -> if (takeOutPlace(copy, kind!!)) null else FileRules.Refusal.WithLocation(name)
-                    FileRules.Place.Check -> if (holdsPlace(copy, kind!!)) FileRules.Refusal.WithLocation(name) else null
-                    FileRules.Place.Refuse -> FileRules.Refusal.PlaceUnchecked(name)
+                // What the file is, by its own first bytes: never by the type the provider gave or the name, save to refuse a video whose container is another.
+                val picture = PictureData.kindOf(copy)
+                val refused = if (picture != null) {
+                    when (FileRules.place(picture, Build.VERSION.SDK_INT)) {
+                        FileRules.Place.None -> null
+                        FileRules.Place.TakeOut -> if (takeOutPlace(copy, picture)) null else FileRules.Refusal.WithLocation(name)
+                        FileRules.Place.Check -> if (holdsPlace(copy, picture)) FileRules.Refusal.WithLocation(name) else null
+                        FileRules.Place.Refuse -> FileRules.Refusal.PlaceUnchecked(name)
+                    }
+                } else {
+                    when (FileRules.videoPlace(VideoData.kindOf(copy, mime))) {
+                        FileRules.Place.None -> null
+                        FileRules.Place.TakeOut -> if (takeOutVideoPlace(copy)) null else FileRules.Refusal.WithLocation(name)
+                        FileRules.Place.Check, FileRules.Place.Refuse -> FileRules.Refusal.VideoUnchecked(name)
+                    }
                 }
                 if (refused != null) {
                     copy.delete()
@@ -364,6 +380,107 @@ class PickedFiles internal constructor(private val folder: File) {
         inExif || copy.inputStream().buffered().use { PictureData.packetNamesPlace(it) }
     } catch (_: Exception) {
         true
+    }
+
+    /**
+     * Rewrites an ISO or QuickTime video without the place it was made (remuxing
+     * video and audio tracks alone first when the container also carries timed
+     * metadata or other tracks), then checks the result again through the box
+     * tree, raw XMP packets, and `MediaMetadataRetriever`. False when any
+     * step fails or still finds a place.
+     */
+    private fun takeOutVideoPlace(copy: File): Boolean {
+        val remuxed = File(copy.path + ".remux")
+        val cleaned = File(copy.path + ".clean")
+        return try {
+            val initial = VideoData.inspect(copy)
+            if (initial.broken) return false
+            if (initial.nonMediaTracks > 0) {
+                if (!remuxMediaTracksOnly(copy, remuxed)) return false
+                Files.move(remuxed.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+            if (VideoData.clean(copy, cleaned).broken) return false
+            Files.move(cleaned.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            VideoData.inspect(copy).clean &&
+                copy.inputStream().buffered().use { !PictureData.packetNamesPlace(it) } &&
+                noRetrieverLocation(copy)
+        } catch (_: Throwable) {
+            false
+        } finally {
+            remuxed.delete()
+            cleaned.delete()
+        }
+    }
+
+    private fun remuxMediaTracksOnly(from: File, to: File): Boolean {
+        val extractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        var started = false
+        return try {
+            extractor.setDataSource(from.path)
+            val created = MediaMuxer(to.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            muxer = created
+            val trackMap = HashMap<Int, Int>()
+            var bufferBytes = 1024 * 1024
+            for (index in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(index)
+                val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
+                if (mime.startsWith("video/") || mime.startsWith("audio/")) {
+                    if (mime.startsWith("video/") && format.containsKey(MediaFormat.KEY_ROTATION)) {
+                        created.setOrientationHint(format.getInteger(MediaFormat.KEY_ROTATION))
+                    }
+                    if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+                        bufferBytes = maxOf(bufferBytes, format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE))
+                    }
+                    trackMap[index] = created.addTrack(format)
+                    extractor.selectTrack(index)
+                }
+            }
+            if (trackMap.isEmpty()) return false
+            created.start()
+            started = true
+            val buffer = ByteBuffer.allocate(bufferBytes)
+            val info = MediaCodec.BufferInfo()
+            while (true) {
+                val track = extractor.sampleTrackIndex
+                if (track < 0) break
+                val dst = trackMap[track] ?: return false
+                val sampleFlags = extractor.sampleFlags
+                if ((sampleFlags and MediaExtractor.SAMPLE_FLAG_ENCRYPTED) != 0) return false
+                buffer.clear()
+                val size = extractor.readSampleData(buffer, 0)
+                if (size < 0) break
+                info.set(
+                    0,
+                    size,
+                    extractor.sampleTime.coerceAtLeast(0L),
+                    if ((sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) MediaCodec.BUFFER_FLAG_KEY_FRAME else 0,
+                )
+                created.writeSampleData(dst, buffer, info)
+                extractor.advance()
+            }
+            created.stop()
+            started = false
+            true
+        } catch (_: Throwable) {
+            false
+        } finally {
+            runCatching { extractor.release() }
+            if (started) runCatching { muxer?.stop() }
+            runCatching { muxer?.release() }
+        }
+    }
+
+    private fun noRetrieverLocation(file: File): Boolean {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.path)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION) == null
+        } catch (_: Throwable) {
+            false
+        } finally {
+            runCatching { retriever.release() }
+        }
     }
 
     companion object {

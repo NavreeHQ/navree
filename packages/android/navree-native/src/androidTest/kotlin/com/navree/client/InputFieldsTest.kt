@@ -901,4 +901,163 @@ class InputFieldsTest {
         Shots.take("inputs-colour-sheet-custom")
         Shots.requireWindowsFollowTheScreen("the colour dialog")
     }
+
+    // ---------------------------------------------------------------- video location
+
+    private fun videoForm(): String = """
+        {"navree":1,"build":"inputs","vocab":0,"screen":{"title":"Videos","subtitle":"Charkha Supply Co.","body":{"t":"form","id":"claim","method":"post","action":"/claims","children":[
+          {"t":"field","id":"f-clip","name":"clip","label":"Clip","input":{"t":"file","accept":"video/*"}},
+          {"t":"field","id":"f-raw-clip","name":"raw_clip","label":"Field clip","input":{"t":"file","accept":"video/*","keep_location":true}},
+          {"t":"button","label":"Save","role":"primary","action":{"t":"submit"}}
+        ]}}}
+    """.trimIndent()
+
+    private fun startOnTheVideoForm(): NavreeSession {
+        val form = videoForm()
+        return start(form, "/videos/new" to "videos", "Videos") { file -> if (file == "videos.json") form else null }
+    }
+
+    /** Encodes a tiny H.264 MP4 clip with [latitude] and [longitude] written into its container metadata. */
+    private fun geotaggedMp4Video(latitude: Float = 30.9010f, longitude: Float = 75.8573f): ByteArray {
+        val file = File(context.cacheDir, "fixture-${System.nanoTime()}.mp4")
+        val format = android.media.MediaFormat.createVideoFormat(android.media.MediaFormat.MIMETYPE_VIDEO_AVC, 160, 120).apply {
+            setInteger(android.media.MediaFormat.KEY_COLOR_FORMAT, android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+            setInteger(android.media.MediaFormat.KEY_BIT_RATE, 128_000)
+            setInteger(android.media.MediaFormat.KEY_FRAME_RATE, 15)
+            setInteger(android.media.MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+        }
+        val encoder = android.media.MediaCodec.createEncoderByType(android.media.MediaFormat.MIMETYPE_VIDEO_AVC)
+        var muxer: android.media.MediaMuxer? = null
+        var surface: android.view.Surface? = null
+        var muxerStarted = false
+        try {
+            encoder.configure(format, null, null, android.media.MediaCodec.CONFIGURE_FLAG_ENCODE)
+            val inputSurface = encoder.createInputSurface()
+            surface = inputSurface
+            encoder.start()
+            val created = android.media.MediaMuxer(file.path, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            created.setLocation(latitude, longitude)
+            muxer = created
+            repeat(3) { frame ->
+                val canvas = inputSurface.lockCanvas(null)
+                canvas.drawRGB(22, 163, 74 + frame * 20)
+                inputSurface.unlockCanvasAndPost(canvas)
+                Thread.sleep(20)
+            }
+            encoder.signalEndOfInputStream()
+            val info = android.media.MediaCodec.BufferInfo()
+            var track = -1
+            val deadline = System.nanoTime() + 10_000_000_000L
+            while (System.nanoTime() < deadline) {
+                val index = encoder.dequeueOutputBuffer(info, 50_000)
+                when {
+                    index == android.media.MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                    index == android.media.MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        track = created.addTrack(encoder.outputFormat)
+                        created.start()
+                        muxerStarted = true
+                    }
+                    index >= 0 -> {
+                        val out = encoder.getOutputBuffer(index)
+                        if (out != null && (info.flags and android.media.MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0 && info.size > 0 && muxerStarted) {
+                            out.position(info.offset)
+                            out.limit(info.offset + info.size)
+                            created.writeSampleData(track, out, info)
+                        }
+                        val eos = (info.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
+                        encoder.releaseOutputBuffer(index, false)
+                        if (eos) break
+                    }
+                }
+            }
+            created.stop()
+            muxerStarted = false
+            return file.readBytes()
+        } finally {
+            runCatching { surface?.release() }
+            runCatching { encoder.stop() }
+            runCatching { encoder.release() }
+            if (muxerStarted) runCatching { muxer?.stop() }
+            runCatching { muxer?.release() }
+            file.delete()
+        }
+    }
+
+    /** Reads `(location, hasVideo)` from [bytes] through [android.media.MediaMetadataRetriever]. */
+    private fun videoLocation(bytes: ByteArray): Pair<String?, String?> {
+        val temp = File(context.cacheDir, "check-${System.nanoTime()}.mp4").apply { writeBytes(bytes) }
+        val retriever = android.media.MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(temp.path)
+            retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_LOCATION) to
+                retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO)
+        } finally {
+            runCatching { retriever.release() }
+            temp.delete()
+        }
+    }
+
+    private fun uuidXmpBox(xml: String): ByteArray {
+        val payload = ByteArray(16) { 0xBE.toByte() } + xml.toByteArray(Charsets.UTF_8)
+        val size = 8 + payload.size
+        return byteArrayOf(
+            (size ushr 24).toByte(),
+            (size ushr 16).toByte(),
+            (size ushr 8).toByte(),
+            size.toByte(),
+            'u'.code.toByte(),
+            'u'.code.toByte(),
+            'i'.code.toByte(),
+            'd'.code.toByte(),
+        ) + payload
+    }
+
+    @Test
+    fun aVideoIsSentWithoutThePlaceItWasMadeOrNotAtAll() {
+        startOnTheVideoForm()
+        val xmp = """<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/"><rdf:Description photoshop:City="Ludhiana"/></rdf:RDF></x:xmpmeta>"""
+        val tagged = geotaggedMp4Video(30.9010f, 75.8573f) + uuidXmpBox(xmp)
+        val (beforeLocation, beforeHasVideo) = videoLocation(tagged)
+        assertEquals("yes", beforeHasVideo)
+        assertNotNull("the fixture holds the place it was made", beforeLocation)
+
+        // A video container the client cannot rewrite without its place is refused, and so is a broken ISO file claiming a place.
+        val webm = byteArrayOf(0x1A, 0x45, 0xDF.toByte(), 0xA3.toByte()) + randomBytes(512)
+        pick("Clip", "Choose a file", document("Moga.webm", "video/webm", webm))
+        said("Moga.webm is a kind of video").assertExists()
+        assertTrue("an unrewritable video container is not held", heldFiles("f-clip").isEmpty())
+
+        val brokenIso = byteArrayOf(0, 0, 0, 20) + "ftypmp42\u0000\u0000\u0000\u0000mp42".toByteArray(Charsets.ISO_8859_1) +
+            byteArrayOf(0, 0, 1, 0) + "moov+30.9010+075.8573/".toByteArray(Charsets.ISO_8859_1)
+        pick("Clip", "Choose a file", document("Broken.mp4", "video/mp4", brokenIso))
+        said("Broken.mp4 has the place").assertExists()
+        assertTrue("a broken video whose place cannot be removed is not held", heldFiles("f-clip").isEmpty())
+
+        pick("Clip", "Choose a file", document("Ludhiana.mp4", "video/mp4", tagged))
+        waitFor("the cleaned video to reach the core") { heldFiles("f-clip").size == 1 }
+        save()
+        val sent = partsOf(claims.posts.last()).single { it.name == "clip" }
+        assertEquals("Ludhiana.mp4", sent.filename)
+        val (afterLocation, afterHasVideo) = videoLocation(sent.bytes)
+        assertEquals("the rewritten video is still a playable video", "yes", afterHasVideo)
+        assertNull("the place was removed from the video", afterLocation)
+        val rawText = String(sent.bytes, Charsets.ISO_8859_1)
+        assertFalse("the coordinates are gone from the bytes", rawText.contains("30.901"))
+        assertFalse("the city in XMP is gone from the bytes", rawText.contains("Ludhiana"))
+    }
+
+    @Test
+    fun aFieldThatAsksForThePlaceIsSentTheVideoAsItIs() {
+        startOnTheVideoForm()
+        val tagged = geotaggedMp4Video(31.6340f, 74.8723f)
+        assertNotNull("the fixture holds Amritsar's coordinates", videoLocation(tagged).first)
+
+        pick("Field clip", "Choose a file", document("Amritsar.mp4", "video/mp4", tagged))
+        waitFor("the video to reach the core") { heldFiles("f-raw-clip").size == 1 }
+        save()
+        val sent = partsOf(claims.posts.last()).single { it.name == "raw_clip" }
+        assertEquals("Amritsar.mp4", sent.filename)
+        assertEquals("the field that keeps the place sends the video byte-for-byte as it is", sha(tagged), sha(sent.bytes))
+        assertNotNull("the sent video still carries its place", videoLocation(sent.bytes).first)
+    }
 }
