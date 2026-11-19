@@ -101,9 +101,10 @@ public sealed partial class ShellHost : IDisposable
                 OnWindow: OnUi,
                 More: () => moreWipeSteps,
 
-                // A person became the one signed in with no change of person (the first since a sign-out, or the one from before after
-                // nobody was): a reminder that waits and is nobody's is theirs from here on.
-                GiveWaitingTo: mark => Place?.GiveWaitingTo(mark)),
+                // The first person named since a sign-out or a clean start gets what waited for nobody; when the person before returns
+                // after nobody was named, what waited for nobody is let go of so a newcomer's reminder never reaches the person before.
+                GiveWaitingTo: mark => Place?.GiveWaitingTo(mark),
+                DropWaitingForNobody: () => Place?.DropWaitingForNobody()),
             ReportProblem);
 
         // Only naming the session's folder has to be done before a web view starts. The older folders are deleted off the window's thread: a

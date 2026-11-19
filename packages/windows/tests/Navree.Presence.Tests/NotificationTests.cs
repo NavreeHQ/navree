@@ -323,44 +323,45 @@ public sealed class NotificationTests
         Assert.AreEqual(Manpreet, given.Owner);
         Assert.AreEqual((five, 9, 0), (given.At, given.Hour!.Value, given.Minute!.Value), "giving a reminder to a person changed when it is due");
 
-        // A start that read a person's mark gives what is nobody's to that person: what is kept is kept for them.
+        // A start that read a person's mark lets go of what waited for nobody: it could have been asked by a newcomer who was never named.
         NotificationSchedule leftOver = NotificationSchedule.Read("[{\"id\":\"bedi\",\"title\":\"Call Mrs. Bedi about the refund\",\"at\":1,\"for\":null}]");
         Assert.AreEqual(0, leftOver.KeepFor(Simran));
-        Assert.AreEqual(1, leftOver.GiveTo(Simran));
-        Assert.AreEqual(0, leftOver.Take(morning, India, null).Count, "what was nobody's at a start that read a person's mark is still shown to whoever is there");
+        Assert.AreEqual(1, leftOver.DropNobodys());
+        Assert.AreEqual(0, leftOver.Take(morning, India, Simran).Count, "what was nobody's at a start that read a person's mark was shown to the person before");
     }
 
     [TestMethod]
-    public void OneAskedForWhileNobodyIsSignedInIsNobodysAndNotThePersonsWhoWasSignedInBefore()
+    public void AReminderAskedWhileNobodyIsNamedNeverGoesToThePersonBefore()
     {
-        // Simran's session ran out at the counter in Model Town, and the sign-in went up over her work. Her reminder of nine is hers,
-        // and held.
+        // Simran's session ran out at the counter in Model Town, and her reminder of nine is held for her.
         NotificationSchedule schedule = new();
         DateTimeOffset nine = new(2026, 11, 16, 9, 0, 0, TimeSpan.FromHours(5.5));
         DateTimeOffset eleven = nine.AddHours(2);
+        DateTimeOffset twoPm = nine.AddHours(5);
         _ = schedule.Add(new PendingNotification("insulin", "Call Mr. Arora about the insulin refill", null, null, null, nine, null, null) { Owner = Simran });
 
-        // At twenty past nine somebody signs in at it, and the shop's line drops before the shell has said who. On the orders page they
-        // ask to be reminded at eleven. Nobody is signed in that the app knows of, so it is kept by who is signed in: nobody. It is
-        // not kept as Simran's, though what is kept is still kept for her.
+        // A newcomer works with nobody named for their whole session (for example, the shell never answered for them, or the session
+        // never named an account), and asks for reminders at eleven and at two. Neither is labelled for Simran.
         string? signedIn = null;
         _ = schedule.Add(new PendingNotification("daughter", "Call Mr. Arora's daughter about the refill", null, null, null, eleven, null, null) { Owner = signedIn });
+        _ = schedule.Add(new PendingNotification("courier", "Hand parcel to Ludhiana courier", null, null, null, twoPm, null, null) { Owner = signedIn });
         Assert.IsNull(schedule.Waiting.Single(item => item.Id == "daughter").Owner);
+        Assert.IsNull(schedule.Waiting.Single(item => item.Id == "courier").Owner);
 
-        // At eleven it is shown to whoever is there, who asked for it. Simran's is still held: it is not theirs to see.
-        Assert.AreEqual(eleven, schedule.Next(null), "a reminder asked for while nobody is signed in waits for the person who was signed in before");
-        Assert.AreEqual("daughter", schedule.Take(eleven.AddMinutes(1), India, null).Single().Id, "a reminder asked for while nobody is signed in is held with those of the person who was signed in before");
-        Assert.AreEqual("insulin", schedule.Waiting.Single().Id);
+        // At eleven, while nobody is named, the newcomer's eleven o'clock reminder is shown; Simran's nine o'clock reminder stays held.
+        Assert.AreEqual(eleven, schedule.Next(null));
+        Assert.AreEqual("daughter", schedule.Take(eleven.AddMinutes(1), India, null).Single().Id);
         Assert.AreEqual(1, schedule.HeldBack(eleven.AddMinutes(1), null));
 
-        // When it was Simran herself who signed in again, and the shell then names her, what she asked for meanwhile is given to her
-        // with no change of person: it is hers from there on, shown to her and no longer to whoever is there.
-        NotificationSchedule hers = new();
-        _ = hers.Add(new PendingNotification("insulin", "Call Mr. Arora about the insulin refill", null, null, null, nine, null, null) { Owner = Simran });
-        _ = hers.Add(new PendingNotification("lunch", "Order lunch for the counter", null, null, null, eleven, null, null) { Owner = signedIn });
-        Assert.AreEqual(1, hers.GiveTo(Simran));
-        Assert.AreEqual(0, hers.Take(eleven.AddMinutes(1), India, null).Count, "what the same person asked for before the shell named her is shown to whoever is there after it has");
-        CollectionAssert.AreEqual(new[] { "insulin", "lunch" }, hers.Take(eleven.AddMinutes(1), India, Simran).Select(item => item.Id).ToArray());
+        // Even before DropNobodys runs, MayShow refuses to show an unnamed reminder to Simran when she is signed in.
+        Assert.IsFalse(NotificationSchedule.MayShow(schedule.Waiting.Single(item => item.Id == "courier"), Simran));
+        Assert.AreEqual("insulin", schedule.Take(twoPm.AddMinutes(5), India, Simran).Single().Id, "the newcomer's unnamed reminder was shown to Simran");
+        Assert.AreEqual("courier", schedule.Waiting.Single().Id, "the newcomer's reminder was consumed as Simran's");
+
+        // And when the newcomer's session ends at a cover, when Simran signs back in, or at a restart that read Simran's mark,
+        // DropNobodys removes what waited for nobody so it never fires later either.
+        Assert.AreEqual(1, schedule.DropNobodys());
+        Assert.AreEqual(0, schedule.Waiting.Count);
     }
 
     [TestMethod]

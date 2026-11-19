@@ -25,7 +25,8 @@ public sealed record PendingNotification(
     /// <summary>
     /// Whose it is: the mark of the person who was signed in when it was asked for (a mark tells one person from another and says
     /// nothing of either), or null when nobody was. One that is a person's is shown only while that person is signed in. One that is
-    /// nobody's is shown whoever is there, and is nobody's only until a person becomes the one signed in and is given it.
+    /// nobody's is shown only while nobody is signed in, and is given to a person only when they are the first person named since a
+    /// sign-out or since a start that kept nothing of a person; it never goes to a person who was signed in before.
     /// </summary>
     public string? Owner { get; init; }
 
@@ -158,8 +159,8 @@ public sealed class NotificationSchedule
     public bool Cancel(string id) => waiting.RemoveAll(held => held.Id == id) > 0;
 
     /// <summary>
-    /// Whether one may be shown now: one that is nobody's always, and one that is a person's only while that person is the one signed
-    /// in.
+    /// Whether one may be shown now: one that is nobody's only while nobody is signed in, and one that is a person's only while that
+    /// person is the one signed in.
     /// </summary>
     /// <param name="item">The notification.</param>
     /// <param name="here">The mark of the person who is signed in now; null while nobody is.</param>
@@ -167,7 +168,7 @@ public sealed class NotificationSchedule
     public static bool MayShow(PendingNotification item, string? here)
     {
         ArgumentNullException.ThrowIfNull(item);
-        return item.Owner is null || string.Equals(item.Owner, here, StringComparison.Ordinal);
+        return string.Equals(item.Owner, here, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -226,11 +227,9 @@ public sealed class NotificationSchedule
         waiting.RemoveAll(item => item.Owner is not null && !string.Equals(item.Owner, keptFor, StringComparison.Ordinal));
 
     /// <summary>
-    /// Gives every one that is nobody's to a person. It is done when a person becomes the one signed in with no change of person: the
-    /// first since the app was first started or since the last sign-out, or the person from before, signed in again after nobody was.
-    /// What waits for nobody then was asked for while nobody was signed in: most often by them, between their sign-in and the answer
-    /// that named them, or by a visitor before them. And it is done at a start that read a person's mark: what is kept is kept for
-    /// that person. Either way it is theirs from then on, shown only while they are signed in, and never again to whoever is there.
+    /// Gives every one that is nobody's to the first person named since the app was first started or since the last sign-out (when there
+    /// was no person before). It is never called for a person who was signed in before, since what was asked while nobody was named could
+    /// be a newcomer's who was never named for their whole session.
     /// </summary>
     /// <param name="owner">The person's mark.</param>
     /// <returns>How many were given.</returns>
@@ -249,6 +248,14 @@ public sealed class NotificationSchedule
 
         return given;
     }
+
+    /// <summary>
+    /// Lets go of every one that is nobody's: called when a session ends at a cover after a person was kept, when the person before
+    /// returns after nobody was named, and at a start that read a person's mark, so a reminder asked while nobody was named never goes
+    /// to the person before.
+    /// </summary>
+    /// <returns>How many were let go of.</returns>
+    public int DropNobodys() => waiting.RemoveAll(item => item.Owner is null);
 
     /// <summary>Writes what waits, to be kept between launches.</summary>
     /// <returns>JSON text.</returns>

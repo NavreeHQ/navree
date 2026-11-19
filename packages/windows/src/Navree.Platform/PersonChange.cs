@@ -19,8 +19,12 @@ namespace Navree.Platform;
 /// <param name="More">What else the shell keeps of a person, as steps: asked for when a change begins.</param>
 /// <param name="GiveWaitingTo">
 /// No part of a change: gives what waits and is nobody's (a reminder asked for while nobody was signed in) to the person whose mark it
-/// is given, here and now. It is called when a person becomes the one signed in with no change of person: the first person since a
-/// sign-out or since a start that kept nothing of a person, and the person named before when they are signed in again after nobody was.
+/// is given, here and now. It is called only for the first person named since a sign-out or since a start that kept nothing of a person
+/// (when there was no person before).
+/// </param>
+/// <param name="DropWaitingForNobody">
+/// No part of a change: lets go of what waits for nobody when a session ends at a cover after a person was kept, or when the person
+/// named before becomes signed in again after nobody was, so a reminder asked while nobody was named never goes to the person before.
 /// </param>
 public sealed record PersonChangeParts(
     Func<string> MoveWebOn,
@@ -30,7 +34,8 @@ public sealed record PersonChangeParts(
     Func<string, Task> EmptyWeb,
     Func<Func<Task>, Task> OnWindow,
     Func<IEnumerable<WipeStep>> More,
-    Action<string> GiveWaitingTo);
+    Action<string> GiveWaitingTo,
+    Action? DropWaitingForNobody = null);
 
 /// <summary>
 /// Another person signed in than the one before, and nobody signed out between: a session ran out, or the server ended it and said nothing
@@ -64,6 +69,7 @@ public sealed class PersonChange
     private readonly PersonChangeParts parts;
     private readonly Action<string> problem;
     private bool saidNoKey;
+    private bool wasCovered;
 
     /// <summary>Makes it for one host.</summary>
     /// <param name="watch">Who was named last.</param>
@@ -135,7 +141,17 @@ public sealed class PersonChange
     {
         ArgumentNullException.ThrowIfNull(state);
         bool covered = WayInIsUp(state);
+        bool coverJustWentUp = covered && !wasCovered;
+        wasCovered = covered;
         bool nobodyWasHere = Here is null;
+
+        // When a cover goes up after a person was kept, whoever was using the app with nobody named has had their session end: anything
+        // they asked for while nobody was named goes now, so it is never shown at the cover or to the person before.
+        if (coverJustWentUp && watch.Named is not null)
+        {
+            DropWaitingForNobody();
+        }
+
         if (gate.OfSomeoneLeaving(stateMark) || state.App?.User is not Models.User user)
         {
             // Nobody is signed in by this state, though what is kept is still kept for the person named before.
@@ -168,9 +184,10 @@ public sealed class PersonChange
         }
         else
         {
-            if (heard == PersonHeard.First || (nobodyWasHere && Here is not null))
+            if (heard == PersonHeard.First)
             {
-                // This person is the first named, or is the one signed in from this state on and nobody was before it.
+                // This person is the first named since a sign-out or since a start that kept nothing of a person: there was no person
+                // before, so what waited for nobody is theirs from here on.
                 try
                 {
                     parts.GiveWaitingTo(mark);
@@ -179,6 +196,12 @@ public sealed class PersonChange
                 {
                     Say("what waited for nobody could not be given to the person who signed in: " + failure.GetType().Name);
                 }
+            }
+            else if (nobodyWasHere && Here is not null)
+            {
+                // The person before is signed in again after nobody was named: what was asked while nobody was named may be a newcomer's
+                // who was never named for their whole session, so it is let go of and never given to the person before.
+                DropWaitingForNobody();
             }
 
             keeper.KeepPerson(mark);
@@ -192,6 +215,19 @@ public sealed class PersonChange
     {
         watch.SignedOut();
         Here = null;
+        wasCovered = false;
+    }
+
+    private void DropWaitingForNobody()
+    {
+        try
+        {
+            parts.DropWaitingForNobody?.Invoke();
+        }
+        catch (Exception failure)
+        {
+            Say("what waited for nobody could not be let go of: " + failure.GetType().Name);
+        }
     }
 
     private async Task<WipeReport> ChangeAsync(string mark)

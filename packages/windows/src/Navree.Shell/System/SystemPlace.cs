@@ -159,10 +159,10 @@ public sealed class SystemPlace : IDisposable
             Say(letGo + " notifications that waited were let go of: this start cannot say they are for the person what is kept is kept for");
         }
 
-        int given = host.KeptFor is string keptFor ? schedule.GiveTo(keptFor) : 0;
-        if (given > 0)
+        int droppedNobodys = host.KeptFor is not null ? schedule.DropNobodys() : 0;
+        if (droppedNobodys > 0)
         {
-            Say(given + " notifications that waited for nobody are for the person what is kept is kept for");
+            Say(droppedNobodys + " notifications that waited for nobody were let go of: a person was kept before this start");
         }
 
         if (!string.Equals(keptText, schedule.Waiting.Count == 0 ? null : schedule.Write(), StringComparison.Ordinal))
@@ -351,6 +351,22 @@ public sealed class SystemPlace : IDisposable
         Remember();
         Arm();
         Say(given + " notifications that waited for nobody are for the person who signed in");
+    }
+
+    /// <summary>
+    /// Lets go of every notification that waits for nobody, so a reminder asked while nobody was named never goes to the person before.
+    /// </summary>
+    internal void DropWaitingForNobody()
+    {
+        int dropped = schedule.DropNobodys();
+        if (dropped == 0)
+        {
+            return;
+        }
+
+        Remember();
+        Arm();
+        Say(dropped + " notifications that waited for nobody were let go of");
     }
 
     /// <summary>The core took a notification back.</summary>
