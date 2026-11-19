@@ -3,8 +3,6 @@
 //! held to every plugin rule, while a plain framework module that only a plugin imports acts for
 //! no plugin and boots as before.
 
-use std::sync::Arc;
-
 use navree::contracts::AuditSink;
 use navree::kernel::ModuleId;
 use navree::prelude::*;
