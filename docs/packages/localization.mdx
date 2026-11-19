@@ -11,6 +11,12 @@ The smallest setup: turn the feature on, write a message and look it up. The res
 navree = { version = "1", features = ["i18n"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add i18n
+```
+
 ```text title="locales/en/main.ftl"
 deal-created = { $count ->
     [one] One deal created

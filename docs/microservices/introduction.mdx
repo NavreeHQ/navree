@@ -48,6 +48,12 @@ With no broker yet, start with NATS: it is one small binary, and `navree dock up
 navree = { version = "1", features = ["micro", "micro-nats", "postgres"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add micro
+```
+
 | Feature | Adds |
 |---|---|
 | `micro` | `MicroModule`, `ServiceClient`, the macros, the TCP and in-memory transports |

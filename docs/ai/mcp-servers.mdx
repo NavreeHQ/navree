@@ -46,6 +46,12 @@ Turn on the `mcp` feature. It is opt-in: `full` (the default) doesn't include it
 navree = { version = "1", features = ["mcp"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add mcp
+```
+
 Add `McpModule` to the app, next to the HTTP and auth modules:
 
 ```rust title="src/app.rs"

@@ -37,6 +37,12 @@ Turn on the `ai` feature of the `navree` facade. It is opt-in: `full` doesn't in
 navree = { version = "1", features = ["ai"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add ai
+```
+
 The feature brings `navree-ai` and every provider, all pure Rust. Providers speak HTTP through [`navree-http-client`](/docs/digging-deeper/http-client/) (rustls, timeouts and its SSRF guard), so there is nothing else to install. The guard refuses private and internal addresses except the hosts you configure yourself: every `ai.providers.*.url`, `ai.vectors.url`, and `127.0.0.1` when a model uses Ollama at its default address. Add `AiModule` to your app root:
 
 ```rust title="src/app.rs"

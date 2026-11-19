@@ -11,6 +11,12 @@ The smallest setup: turn the feature on, pick a provider and a plan, and start a
 navree = { version = "1", features = ["billing"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add billing
+```
+
 ```toml title="config/app.toml"
 [billing]
 provider = "fake"                 # stripe | paddle | fake

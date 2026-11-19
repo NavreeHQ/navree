@@ -11,6 +11,12 @@ The smallest setup: turn the feature on, put a template in `resources/documents`
 navree = { version = "1", features = ["documents"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add documents
+```
+
 ```rust
 // src/app.rs: .module(DocumentsModule::from_config())
 // resources/documents/certificates/course.html is the template

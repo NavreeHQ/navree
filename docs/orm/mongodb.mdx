@@ -47,6 +47,12 @@ Turn on the `mongo` feature of the facade (also called `mongodb`; it is opt-in, 
 navree = { version = "1", features = ["mongo"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add mongo
+```
+
 ```rust title="src/app.rs"
 pub fn app(sources: ConfigSources) -> AppBuilder {
     Navree::app()

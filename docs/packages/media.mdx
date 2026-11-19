@@ -11,6 +11,12 @@ The smallest setup: turn the feature on, let a model declare a collection and at
 navree = { version = "1", features = ["media"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add media
+```
+
 ```rust
 impl HasMedia for Course {
     const MEDIA_TYPE: &'static str = "Course";

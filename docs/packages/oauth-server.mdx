@@ -11,6 +11,12 @@ The smallest setup: turn the feature on, add the module after `AuthModule` and r
 navree = { version = "1", features = ["oauth"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add oauth
+```
+
 ```rust
 // src/app.rs, after AuthModule:
 .module(OAuthServerModule::from_config()) // section `oauth`

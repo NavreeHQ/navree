@@ -27,6 +27,12 @@ navree = { version = "1", features = ["graphql"] }
 async-graphql = { version = "7.2", default-features = false, features = ["chrono", "uuid"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add graphql
+```
+
 The `graphql` feature isn't in the default `full` set: turn it on yourself. It brings `navree::graphql` (the crate, plus the `#[resolver]` macro) and puts `GraphqlModule` and `ModuleBuilderGraphqlExt` in the prelude. Add `GraphqlModule` to the app root:
 
 ```rust title="src/app.rs"

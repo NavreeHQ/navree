@@ -11,6 +11,12 @@ The smallest setup: turn the feature on, list one provider and add the module af
 navree = { version = "1", features = ["social"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add social
+```
+
 ```toml title="config/app.toml"
 [social]
 redirect_base = "https://app.sutlej.example/auth/callback"

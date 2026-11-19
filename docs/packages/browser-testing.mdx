@@ -59,6 +59,12 @@ If your app depends on the `navree` facade, you can turn on its opt-in <Badge fe
 navree = { version = "1", features = ["browser"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it adds the feature as a dev-dependency.
+
+```bash
+navree plugin:add browser
+```
+
 It needs Chrome, Chromium or Edge at test time. It uses `NAVREE_BROWSER_CHROME` when set, then looks, in order, for Chrome and Chromium installed on the machine, Chrome for Testing in Navree's cache, Playwright's Chromium (`ms-playwright`, or `PLAYWRIGHT_BROWSERS_PATH`), and Microsoft Edge. On a machine without any of them, install a pinned Chrome for Testing build into Navree's cache:
 
 ```sh

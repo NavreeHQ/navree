@@ -30,6 +30,12 @@ Turn on the `redis` feature of the `navree` facade. It brings `navree-redis` and
 navree = { version = "1", features = ["redis"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add redis
+```
+
 Add `RedisModule` to your app root, next to the modules whose driver you switch:
 
 ```rust title="src/app.rs"

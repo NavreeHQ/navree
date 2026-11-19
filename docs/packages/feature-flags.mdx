@@ -11,6 +11,12 @@ The smallest setup: turn the feature on, define a flag, register it and check it
 navree = { version = "1", features = ["flags"] }
 ```
 
+Or let [the command](/docs/plugins/installing/) do it: it turns the feature on and wires the module, and prints what is left to do.
+
+```bash
+navree plugin:add flags
+```
+
 ```rust
 /// The redesigned deal pipeline board.
 #[flag]
