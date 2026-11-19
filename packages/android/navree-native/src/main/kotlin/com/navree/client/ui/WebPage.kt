@@ -1,42 +1,79 @@
 package com.navree.client.ui
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
+import android.net.Uri
 import android.webkit.CookieManager
+import android.webkit.MimeTypeMap
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import com.navree.client.BuildConfig
 import com.navree.client.R
 import com.navree.client.core.Failure
-import androidx.compose.runtime.LaunchedEffect
+import com.navree.client.design.FileRules
 import com.navree.client.platform.ClientLog
 import com.navree.client.platform.OriginWebClient
 import com.navree.client.platform.Origins
+import com.navree.client.platform.PickedFiles
 import com.navree.client.platform.SiteWipe
 import com.navree.client.platform.WebRules
 import com.navree.client.platform.WorkerGuard
 import com.navree.client.platform.guardDocuments
 import com.navree.client.webViewToken
+import kotlinx.coroutines.launch
+import java.util.Collections
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 
 /** The tag of a web view whose script at the start of every document could not be added: it loads nothing. */
 private const val NOT_GUARDED = "not guarded"
+
+/**
+ * One pending `WebChromeClient.onShowFileChooser` request. Its callback must be
+ * answered at most once on every path, whether with chosen URIs or with null.
+ */
+private class ChooserCall(
+    val accept: String?,
+    val multiple: Boolean,
+    private val callback: ValueCallback<Array<Uri>>,
+) {
+    private val settled = AtomicBoolean(false)
+
+    fun finish(uris: Array<Uri>?) {
+        if (settled.compareAndSet(false, true)) {
+            callback.onReceiveValue(uris)
+        }
+    }
+}
+
+private class ChooserSlot {
+    var active: ChooserCall? = null
+    val disposed = AtomicBoolean(false)
+}
 
 /**
  * What a web page is shown with, as the answers [WebPage] decides by: whether
@@ -66,9 +103,10 @@ internal val LocalWebGuards = staticCompositionLocalOf { WebGuards() }
  * requests' cookies (the system store is the one store), carries the
  * protocol's token at the end of its user agent so the server leaves out its
  * web chrome, and has no bridge to the app: no script interface, no file or
- * content access, no pop-ups, no mixed content. The one object a document of
- * the app is given says only where the document is, and what is posted
- * through it is not read ([guardDocuments]).
+ * content access, no pop-ups, no mixed content. A `<input type="file">` on an
+ * app-origin document opens the client's own picker and passes each chosen
+ * file through [PickedFiles] (with `keepLocation = false`) before handing a
+ * read-only `content://` handle to the web view.
  *
  * The page stays on the app's origins, and what it loads inside it is asked
  * for only from them or from the app's web hosts, by the first address of each
@@ -92,8 +130,12 @@ internal fun WebPage(
     modifier: Modifier = Modifier,
     covered: Boolean = false,
 ) {
-    val origins = LocalUi.current.origins
+    val ui = LocalUi.current
+    val origins = ui.origins
     val guards = LocalWebGuards.current
+    val appContext = LocalContext.current.applicationContext
+    val store = remember(appContext) { PickedFiles.of(appContext) }
+    val scope = rememberCoroutineScope()
     val link by rememberUpdatedState(onLink)
     val title by rememberUpdatedState(onTitle)
     // A new web view for each attempt: one whose process ended can no longer be used.
@@ -136,6 +178,57 @@ internal fun WebPage(
             }
         } else {
             key(attempt) {
+                val slot = remember { ChooserSlot() }
+                val webTokens = remember { Collections.synchronizedSet(HashSet<String>()) }
+                val launcher = rememberLauncherForActivityResult(remember { PickFiles() }) { uris ->
+                    val call = slot.active ?: return@rememberLauncherForActivityResult
+                    slot.active = null
+                    if (uris.isEmpty()) {
+                        call.finish(null)
+                        return@rememberLauncherForActivityResult
+                    }
+                    scope.launch {
+                        try {
+                            val chosen = if (call.multiple) uris else uris.take(1)
+                            var total = 0L
+                            val results = chosen.map { uri ->
+                                store.keep(appContext.contentResolver, uri, call.accept, keepLocation = false, held = total)
+                                    .also { if (it is PickedFiles.Result.Kept) total += it.file.size }
+                            }
+                            val refused = results.filterIsInstance<PickedFiles.Result.Refused>()
+                            val kept = results.filterIsInstance<PickedFiles.Result.Kept>().map { it.file }
+                            if (slot.disposed.get()) {
+                                if (kept.isNotEmpty()) thread(name = "navree-web-picked-drop", isDaemon = true) { kept.forEach { store.drop(it.token) } }
+                                call.finish(null)
+                                return@launch
+                            }
+                            kept.forEach { webTokens.add(it.token) }
+                            if (refused.isNotEmpty()) {
+                                val text = refused.joinToString("\n") { refusalWords(appContext, it.why) }
+                                launch { ui.snackbars.showSnackbar(text) }
+                            }
+                            if (kept.isEmpty()) {
+                                call.finish(null)
+                            } else {
+                                call.finish(kept.map { store.uri(appContext, it) }.toTypedArray())
+                            }
+                        } finally {
+                            call.finish(null)
+                        }
+                    }
+                }
+                val latestLauncher by rememberUpdatedState(launcher)
+                DisposableEffect(Unit) {
+                    onDispose {
+                        slot.disposed.set(true)
+                        slot.active?.finish(null)
+                        slot.active = null
+                        val tokens = synchronized(webTokens) { webTokens.toList().also { webTokens.clear() } }
+                        if (tokens.isNotEmpty()) {
+                            thread(name = "navree-web-picked-drop", isDaemon = true) { tokens.forEach(store::drop) }
+                        }
+                    }
+                }
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { context ->
@@ -174,6 +267,36 @@ internal fun WebPage(
                                 override fun onReceivedTitle(view: WebView, text: String?) {
                                     val from = view.url
                                     if (from != null && origins.ours(from) && !text.isNullOrBlank() && !text.startsWith("http")) title(text)
+                                }
+
+                                override fun onShowFileChooser(
+                                    webView: WebView,
+                                    filePathCallback: ValueCallback<Array<Uri>>,
+                                    fileChooserParams: FileChooserParams?,
+                                ): Boolean {
+                                    val mode = fileChooserParams?.mode
+                                    val from = webView.url
+                                    val supported = mode == FileChooserParams.MODE_OPEN || mode == FileChooserParams.MODE_OPEN_MULTIPLE
+                                    if (from == null || !origins.ours(from) || !supported) {
+                                        filePathCallback.onReceiveValue(null)
+                                        return true
+                                    }
+                                    val accept = FileRules.chooserAccept(fileChooserParams.acceptTypes)
+                                    val multiple = mode == FileChooserParams.MODE_OPEN_MULTIPLE
+                                    val plan = FileRules.plan(accept, multiple) { extension ->
+                                        MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+                                    }
+                                    val call = ChooserCall(accept, multiple, filePathCallback)
+                                    slot.active?.finish(null)
+                                    slot.active = call
+                                    try {
+                                        latestLauncher.launch(plan)
+                                    } catch (_: ActivityNotFoundException) {
+                                        slot.active = null
+                                        call.finish(null)
+                                        scope.launch { ui.snackbars.showSnackbar(appContext.getString(R.string.navree_file_no_picker)) }
+                                    }
+                                    return true
                                 }
                             }
                         }

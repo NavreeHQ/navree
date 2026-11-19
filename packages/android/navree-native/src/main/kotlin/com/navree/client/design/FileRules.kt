@@ -150,6 +150,14 @@ object FileRules {
         accept.orEmpty().split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
 
     /**
+     * Joins the `accept` entries `WebChromeClient.FileChooserParams.getAcceptTypes`
+     * hands over into one field `accept` list, or null when the input accepts
+     * every kind of file.
+     */
+    fun chooserAccept(acceptTypes: Array<String>?): String? =
+        acceptTypes.orEmpty().flatMap(::kinds).distinct().joinToString(",").ifEmpty { null }
+
+    /**
      * Where the files come from, by the protocol's own rule: a field that
      * takes only pictures and video opens the photo picker, any other opens
      * the file picker. Both ask for no permission.

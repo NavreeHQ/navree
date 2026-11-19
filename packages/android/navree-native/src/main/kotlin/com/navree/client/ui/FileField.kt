@@ -72,28 +72,37 @@ import kotlin.concurrent.thread
  * document or several). Neither asks for a permission. Its result is the list
  * of documents chosen, none when the person left without choosing.
  */
-private class PickFiles(private val plan: FileRules.Plan) : ActivityResultContract<Unit, List<Uri>>() {
+internal class PickFiles : ActivityResultContract<FileRules.Plan, List<Uri>>() {
     private val onePhoto = ActivityResultContracts.PickVisualMedia()
     private val manyPhotos = ActivityResultContracts.PickMultipleVisualMedia()
     private val oneDocument = ActivityResultContracts.OpenDocument()
     private val manyDocuments = ActivityResultContracts.OpenMultipleDocuments()
-    private val photos = plan.source == FileRules.Source.Photos
+    private var lastPlan: FileRules.Plan? = null
 
-    override fun createIntent(context: Context, input: Unit): Intent = when {
-        photos && plan.multiple -> manyPhotos.createIntent(context, request())
-        photos -> onePhoto.createIntent(context, request())
-        plan.multiple -> manyDocuments.createIntent(context, plan.documentTypes.toTypedArray())
-        else -> oneDocument.createIntent(context, plan.documentTypes.toTypedArray())
+    override fun createIntent(context: Context, input: FileRules.Plan): Intent {
+        lastPlan = input
+        val photos = input.source == FileRules.Source.Photos
+        return when {
+            photos && input.multiple -> manyPhotos.createIntent(context, request(input))
+            photos -> onePhoto.createIntent(context, request(input))
+            input.multiple -> manyDocuments.createIntent(context, input.documentTypes.toTypedArray())
+            else -> oneDocument.createIntent(context, input.documentTypes.toTypedArray())
+        }
     }
 
-    override fun parseResult(resultCode: Int, intent: Intent?): List<Uri> = when {
-        photos && plan.multiple -> manyPhotos.parseResult(resultCode, intent)
-        photos -> listOfNotNull(onePhoto.parseResult(resultCode, intent))
-        plan.multiple -> manyDocuments.parseResult(resultCode, intent)
-        else -> listOfNotNull(oneDocument.parseResult(resultCode, intent))
+    override fun parseResult(resultCode: Int, intent: Intent?): List<Uri> {
+        val plan = lastPlan
+        val photos = plan?.source == FileRules.Source.Photos
+        val multiple = plan?.multiple == true
+        return when {
+            photos && multiple -> manyPhotos.parseResult(resultCode, intent)
+            photos -> listOfNotNull(onePhoto.parseResult(resultCode, intent))
+            multiple -> manyDocuments.parseResult(resultCode, intent)
+            else -> listOfNotNull(oneDocument.parseResult(resultCode, intent))
+        }
     }
 
-    private fun request(): PickVisualMediaRequest = PickVisualMediaRequest(
+    private fun request(plan: FileRules.Plan): PickVisualMediaRequest = PickVisualMediaRequest(
         when (val media = plan.media) {
             FileRules.Media.ImageAndVideo -> ActivityResultContracts.PickVisualMedia.ImageAndVideo
             FileRules.Media.ImageOnly -> ActivityResultContracts.PickVisualMedia.ImageOnly
@@ -164,7 +173,7 @@ internal fun FileFieldView(field: Navree.Field, input: Navree.FileInput, place: 
     val plan = remember(input.accept, input.multiple) {
         FileRules.plan(input.accept, input.multiple) { extension -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) }
     }
-    val launcher = rememberLauncherForActivityResult(remember(plan) { PickFiles(plan) }) { uris ->
+    val launcher = rememberLauncherForActivityResult(remember { PickFiles() }) { uris ->
         if (uris.isNotEmpty()) {
             scope.launch {
                 busy = true
@@ -235,7 +244,7 @@ internal fun FileFieldView(field: Navree.Field, input: Navree.FileInput, place: 
             OutlinedButton(
                 onClick = {
                     try {
-                        launcher.launch(Unit)
+                        launcher.launch(plan)
                     } catch (_: ActivityNotFoundException) {
                         notice = context.getString(R.string.navree_file_no_picker)
                     }

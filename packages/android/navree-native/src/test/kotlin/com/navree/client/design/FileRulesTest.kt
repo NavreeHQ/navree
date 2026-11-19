@@ -132,4 +132,12 @@ class FileRulesTest {
         assertEquals(FileRules.Place.TakeOut, FileRules.videoPlace(FileRules.Video.Iso))
         assertEquals(FileRules.Place.Refuse, FileRules.videoPlace(FileRules.Video.Other))
     }
+
+    @Test
+    fun the_web_views_accept_array_is_read_as_a_fields_accept_list() {
+        assertNull(FileRules.chooserAccept(null))
+        assertNull(FileRules.chooserAccept(emptyArray()))
+        assertNull(FileRules.chooserAccept(arrayOf("", "  ")))
+        assertEquals("image/*,.pdf", FileRules.chooserAccept(arrayOf("Image/*", " .PDF , image/* ")))
+    }
 }

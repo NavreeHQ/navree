@@ -1,7 +1,11 @@
 package com.navree.client.platform
 
+import android.content.ContentProvider
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
+import android.database.MatrixCursor
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
@@ -9,6 +13,7 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaMuxer
 import android.net.Uri
 import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
@@ -67,6 +72,9 @@ class PickedFiles internal constructor(private val folder: File) {
 
     /** What a file was chosen as: its media type, by token. A token that is here was made by this process. */
     private val types = ConcurrentHashMap<String, String>()
+
+    /** Metadata of each kept file by token, for [PickedFilesProvider]. */
+    private val refs = ConcurrentHashMap<String, FileRef>()
 
     /** Which session the store is in: one more at each [clear]. Read and changed under [lock]. */
     private var generation = 0L
@@ -224,6 +232,7 @@ class PickedFiles internal constructor(private val folder: File) {
         val kept = synchronized(lock) {
             if (generation != session || reading.givenUp) false else {
                 types[token] = mime
+                refs[token] = file
                 reading.kept = file
                 true
             }
@@ -238,6 +247,12 @@ class PickedFiles internal constructor(private val folder: File) {
     /** The kept copy under a token, or null for a token that is not one of ours or a copy that is gone. */
     fun file(token: String): File? = if (FileRules.isToken(token)) File(folder, token).takeIf { it.isFile } else null
 
+    /** Metadata of the kept copy under [token], or null when none is held. */
+    internal fun ref(token: String): FileRef? = if (FileRules.isToken(token)) refs[token] else null
+
+    /** A read-only `content://` address inside this app for a kept file handed to a web view's file chooser. */
+    internal fun uri(context: Context, file: FileRef): Uri = PickedFilesProvider.uri(context, file)
+
     /** Whether the bytes under a token can still be read. A cheap check, but it touches the disk: not on the main thread. */
     fun readable(token: String): Boolean = file(token)?.canRead() == true
 
@@ -249,8 +264,9 @@ class PickedFiles internal constructor(private val folder: File) {
 
     /** Lets the copy under a token go. */
     fun drop(token: String) {
-        file(token)?.delete()
+        if (FileRules.isToken(token)) File(folder, token).delete()
         types.remove(token)
+        refs.remove(token)
     }
 
     /** Lets the copies under these tokens go: a form sent them and the server took it. */
@@ -263,6 +279,7 @@ class PickedFiles internal constructor(private val folder: File) {
         synchronized(lock) {
             generation++
             types.clear()
+            refs.clear()
         }
         folder.deleteRecursively()
     }
@@ -278,6 +295,7 @@ class PickedFiles internal constructor(private val folder: File) {
         folder.listFiles()?.forEach {
             if (it.lastModified() < cut) {
                 types.remove(it.name)
+                refs.remove(it.name)
                 it.delete()
             }
         }
@@ -526,5 +544,70 @@ class PickedFiles internal constructor(private val folder: File) {
             ExifInterface.TAG_GPS_PROCESSING_METHOD, ExifInterface.TAG_GPS_AREA_INFORMATION,
             ExifInterface.TAG_GPS_DIFFERENTIAL, ExifInterface.TAG_GPS_H_POSITIONING_ERROR,
         )
+    }
+}
+
+/**
+ * Serves cleaned copies from [PickedFiles] to the app's own web view after its
+ * file chooser picked them. Unexported and read-only: only tokens held by this
+ * process in the current session resolve, and every query answers the cleaned
+ * file's sanitized name, media type and byte length.
+ */
+class PickedFilesProvider : ContentProvider() {
+    override fun onCreate(): Boolean = true
+
+    private fun store(): PickedFiles? = context?.let(PickedFiles::of)
+
+    private fun tokenOf(uri: Uri): String? = uri.pathSegments.firstOrNull()?.takeIf(FileRules::isToken)
+
+    override fun query(
+        uri: Uri,
+        projection: Array<String>?,
+        selection: String?,
+        selectionArgs: Array<String>?,
+        sortOrder: String?,
+    ): Cursor? {
+        val token = tokenOf(uri) ?: return null
+        val picked = store() ?: return null
+        val ref = picked.ref(token) ?: return null
+        val file = picked.file(token) ?: return null
+        val columns = projection ?: arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
+        val row = Array<Any?>(columns.size) { index ->
+            when (columns[index]) {
+                OpenableColumns.DISPLAY_NAME -> ref.name
+                OpenableColumns.SIZE -> file.length()
+                else -> null
+            }
+        }
+        return MatrixCursor(columns, 1).apply { addRow(row) }
+    }
+
+    override fun getType(uri: Uri): String? {
+        val token = tokenOf(uri) ?: return null
+        return store()?.ref(token)?.mediaType
+    }
+
+    override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
+        if (mode != "r") throw SecurityException("read-only")
+        val token = tokenOf(uri) ?: throw java.io.FileNotFoundException(uri.toString())
+        val picked = store() ?: throw java.io.FileNotFoundException(uri.toString())
+        if (picked.ref(token) == null) throw java.io.FileNotFoundException(uri.toString())
+        val file = picked.file(token) ?: throw java.io.FileNotFoundException(uri.toString())
+        return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+    }
+
+    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+
+    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<String>?): Int = 0
+
+    override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<String>?): Int = 0
+
+    internal companion object {
+        fun uri(context: Context, file: FileRef): Uri = Uri.Builder()
+            .scheme(ContentResolver.SCHEME_CONTENT)
+            .authority("${context.packageName}.navree.picked")
+            .appendPath(file.token)
+            .appendPath(file.name)
+            .build()
     }
 }

@@ -20,6 +20,13 @@
          An app that says nothing has these rules; one with rules of its own adds their lines. -->
     <application
         android:dataExtractionRules="@xml/navree_data_extraction_rules"
-        android:fullBackupContent="@xml/navree_backup_rules" />
+        android:fullBackupContent="@xml/navree_backup_rules">
+
+        <!-- Cleaned copies chosen for a web page's file input, readable only inside this app. -->
+        <provider
+            android:name="com.navree.client.platform.PickedFilesProvider"
+            android:authorities="${applicationId}.navree.picked"
+            android:exported="false" />
+    </application>
 
 </manifest>

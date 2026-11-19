@@ -19,11 +19,13 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -32,6 +34,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import androidx.core.app.ActivityOptionsCompat
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.Lifecycle
@@ -1059,5 +1062,134 @@ class InputFieldsTest {
         assertEquals("Amritsar.mp4", sent.filename)
         assertEquals("the field that keeps the place sends the video byte-for-byte as it is", sha(tagged), sha(sent.bytes))
         assertNotNull("the sent video still carries its place", videoLocation(sent.bytes).first)
+    }
+
+    // ---------------------------------------------------------------- a web page's own file field
+
+    @Test
+    fun aPageInTheWebViewPicksFilesThroughTheSameCheckAsANativeField() {
+        val notes = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val webPosts = java.util.concurrent.CopyOnWriteArrayList<RecordedRequest>()
+        val recorded = Recorded("", mapOf("/_navree/native/shell" to "shell", "/" to "screen-dashboard"))
+        val html = """
+            <!doctype html>
+            <html><head><meta charset="utf-8"><title>Web upload</title></head>
+            <body style="margin:0;padding:0">
+              <input id="f" type="file" accept="image/*,video/*,.pdf" multiple style="position:fixed;top:-200px">
+              <button id="go" type="button" style="position:fixed;inset:0;width:100vw;height:100vh;border:0"
+                onclick="var i=document.getElementById('f');i.value='';i.click()">Choose</button>
+              <script>
+                var R = function(m){ fetch('/web-note?m=' + encodeURIComponent(m)).catch(function(){}) };
+                document.getElementById('f').addEventListener('change', function(){
+                  var files = Array.prototype.slice.call(this.files);
+                  var fd = new FormData();
+                  files.forEach(function(file){ fd.append('files', file, file.name) });
+                  fetch('/web-post', {method: 'POST', body: fd}).then(function(){
+                    R('sent:' + files.map(function(f){ return f.name + ':' + f.type + ':' + f.size }).join(','));
+                  }, function(e){ R('err:' + e) });
+                });
+                window.addEventListener('load', function(){ R('ready') });
+              </script>
+            </body></html>
+        """.trimIndent()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.url.encodedPath) {
+                "/web-upload" -> MockResponse.Builder().code(200).addHeader("Content-Type", "text/html; charset=utf-8").body(html).build()
+                "/web-note" -> {
+                    notes += request.url.queryParameter("m") ?: ""
+                    MockResponse.Builder().code(204).build()
+                }
+                "/web-post" -> {
+                    webPosts += request
+                    MockResponse.Builder().code(204).build()
+                }
+                else -> recorded.dispatch(request)
+            }
+        }
+        server.start()
+        val origin = server.url("/").toString().trimEnd('/')
+        val config = NavreeConfig(origin = origin, name = "Charkha Supply Co.", seed = null, loopbackHttp = true, openAnyLink = true)
+        lateinit var made: NavreeSession
+        compose.runOnUiThread {
+            made = NavreeSession(compose.activity.application, config, origin.toHttpUrl())
+            made.effects.activity = compose.activity
+        }
+        app = made
+        val owner = object : ActivityResultRegistryOwner {
+            override val activityResultRegistry: ActivityResultRegistry = picker
+        }
+        try {
+            compose.setContent { CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) { Shots.Looked { Host(made) } } }
+            waitFor("the app is ready", 60_000) { made.driver.nav.stage == Stage.Ready }
+            front("Today")
+            compose.runOnUiThread { made.driver.send(Events.openLink("$origin/web-upload")) }
+            waitFor("the web page to load its file input", 30_000) { notes.contains("ready") }
+            Thread.sleep(300)
+            compose.waitForIdle()
+
+            fun tapWebChooser(vararg uris: Uri) {
+                picker.next = uris.toList()
+                val before = picker.launches.get()
+                val deadline = System.currentTimeMillis() + 15_000L
+                while (picker.launches.get() == before && System.currentTimeMillis() < deadline) {
+                    compose.onNode(isRoot()).performTouchInput { click(center) }
+                    try {
+                        compose.waitUntil(1_500) { picker.launches.get() > before }
+                    } catch (_: Throwable) {
+                        // Wait for the web view's hit-test frame to settle and tap again.
+                    }
+                }
+                assertTrue("the web view's file chooser opened the client's picker", picker.launches.get() > before)
+            }
+
+            // Wrong media type: refused with words, and `onReceiveValue(null)` leaves the input ready for the next tap.
+            tapWebChooser(document("Notes.txt", "text/plain", "plain".toByteArray()))
+            waitFor("the refusal snackbar for the wrong type") {
+                compose.onAllNodes(hasText("Notes.txt is not a kind of file", substring = true)).fetchSemanticsNodes().isNotEmpty()
+            }
+            assertTrue("nothing was handed to the page", webPosts.isEmpty())
+
+            // Picture with an unremovable place: refused, and nothing handed to the page.
+            val heic = byteArrayOf(0, 0, 0, 24) + "ftypheic\u0000\u0000\u0000\u0000mif1heic".toByteArray(Charsets.ISO_8859_1) +
+                ByteArray(2_000) + xmpWithPlace.toByteArray(Charsets.ISO_8859_1)
+            tapWebChooser(document("Kapurthala.heic", "image/heic", heic))
+            waitFor("the refusal snackbar for a picture with a place") {
+                compose.onAllNodes(hasText("Kapurthala.heic has the place", substring = true)).fetchSemanticsNodes().isNotEmpty()
+            }
+            assertTrue("nothing was handed to the page", webPosts.isEmpty())
+
+            // Leaving the picker empty cancels cleanly without wedging the input.
+            tapWebChooser()
+            compose.waitForIdle()
+            assertTrue(webPosts.isEmpty())
+
+            // Geotagged photo and geotagged video: both reach the page under sanitized names and without their places.
+            val jpeg = picture("ludhiana-web.jpg", Bitmap.CompressFormat.JPEG) {
+                setLatLong(30.9010, 75.8573)
+                setAttribute(ExifInterface.TAG_XMP, xmpWithPlace)
+            }
+            val mp4 = geotaggedMp4Video(31.6340f, 74.8723f)
+            tapWebChooser(
+                document("../../Ludhiana.jpg", "image/jpeg", jpeg),
+                document("Amritsar.mp4", "video/mp4", mp4),
+            )
+            waitFor("the page to upload the files it was given", 30_000) {
+                webPosts.isNotEmpty() && notes.any { it.startsWith("sent:") }
+            }
+            val sent = partsOf(webPosts.single()).filter { it.name == "files" }
+            assertEquals("what the page saw of the file names", listOf("Ludhiana.jpg", "Amritsar.mp4"), sent.map { it.filename })
+            assertNull("the photo reached the page without its place", namesPlace(sent[0].bytes))
+            val (afterLocation, afterHasVideo) = videoLocation(sent[1].bytes)
+            assertEquals("the video reached the page playable", "yes", afterHasVideo)
+            assertNull("the video reached the page without its place", afterLocation)
+
+            // Leaving the web page drops the kept copies made for it.
+            compose.runOnUiThread { made.driver.send(Events.back) }
+            front("Today")
+            val pickedFolder = File(context.cacheDir, "navree-picked")
+            waitFor("the copies made for the web page to go") { pickedFolder.list().orEmpty().isEmpty() }
+        } finally {
+            compose.runOnUiThread { made.effects.close() }
+        }
     }
 }
