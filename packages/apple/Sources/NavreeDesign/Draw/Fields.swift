@@ -97,7 +97,7 @@ struct FieldControl: View {
                 set: { set([HexColor.hex($0)]) }
             ))
         case .file(let input):
-            FileControl(label: label, input: input, chosen: values) { urls in
+            FileControl(label: label, input: input, chosen: values, busy: context.fileBusy(ref, field.key)) { urls in
                 context.send(.files(form: ref, field: field.key, urls: urls, keepLocation: input.keepLocation))
             }
         case .range(let input):
@@ -308,26 +308,40 @@ struct RangeControl: View {
 }
 
 /// Files: the system's file browser, limited to the types the field takes.
-/// The chosen files' names are shown; the app keeps their bytes until the
-/// form sends them.
+/// The chosen files' names are shown, or a progress indicator while photos or
+/// films are being prepared off the main actor; the app keeps their bytes
+/// until the form sends them.
 struct FileControl: View {
     let label: String
     let input: Navree.FileInput
     let chosen: [String]
+    var busy: Bool = false
     let choose: ([URL]) -> Void
     @State private var importing = false
 
     var body: some View {
         LabeledContent(label) {
-            TargetRoom {
-                Button { importing = true } label: {
-                    Text(chosen.isEmpty ? String(localized: "Choose…") : chosen.joined(separator: ", "))
-                        .lineLimit(2)
-                        .modifier(TargetFill())
+            if busy {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(String(localized: "Preparing…"))
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderless)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(label): \(String(localized: "Preparing…"))")
+            } else {
+                TargetRoom {
+                    Button { importing = true } label: {
+                        Text(chosen.isEmpty ? String(localized: "Choose…") : chosen.joined(separator: ", "))
+                            .lineLimit(2)
+                            .modifier(TargetFill())
+                    }
+                    .buttonStyle(.borderless)
+                }
             }
         }
+        .disabled(busy)
         .fileImporter(
             isPresented: $importing, allowedContentTypes: FileRules.types(input.accept),
             allowsMultipleSelection: input.multiple

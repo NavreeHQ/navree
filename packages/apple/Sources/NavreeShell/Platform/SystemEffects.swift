@@ -454,7 +454,7 @@ public enum Words {
     }
 
     /// What is said at a file field of a file the person picked and the app
-    /// did not add: the file by its name, why, and that it was not added.
+    /// did not add: the file by its name, why, and what the person can do.
     public static func refused(_ name: String, _ why: FileRefusal) -> String {
         switch why {
         case .unreadable:
@@ -462,7 +462,9 @@ public enum Words {
         case .placeUnchecked:
             String(localized: "\(name) is a kind of picture this device cannot check for the place it was taken, so it was not added.")
         case .placeStays:
-            String(localized: "\(name) holds details that can say where it was taken, and they cannot be taken out of this kind of file, so it was not added.")
+            String(localized: "\(name) cannot be sent in this format without details that could say where it was taken, so it was not added. Save it as JPEG or PNG and pick it again.")
+        case .filmPlaceStays:
+            String(localized: "\(name) could not be prepared without the place it was made, so it was not added.")
         }
     }
 

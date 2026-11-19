@@ -194,6 +194,9 @@ public struct DrawingContext: Sendable {
     /// beside what the server says of its value: each file the person picked
     /// for it that was not added, by name and with why.
     public var notes: @MainActor @Sendable (FormRef, String) -> [String] = { _, _ in [] }
+    /// Whether the app is still preparing files picked for a form's field,
+    /// by the field's key, off the main actor.
+    public var fileBusy: @MainActor @Sendable (FormRef, String) -> Bool = { _, _ in false }
 
     public init(
         send: @escaping @MainActor @Sendable (Intent) -> Void,

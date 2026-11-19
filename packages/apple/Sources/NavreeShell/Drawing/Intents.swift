@@ -42,9 +42,11 @@ extension NativeClient {
         let site = pictures?.site
         let hosts = pictures?.hosts ?? []
         context.pictureAddress = { source in site?.picture(source, hosts: hosts) }
-        // What the app itself says at a field: the files it did not add, and why.
+        // What the app itself says at a field: the files it did not add, and
+        // why, and whether picked files are still being prepared.
         let notes = (effects as? SystemEffects)?.fileNotes
         context.notes = { form, field in notes?.words(screen: id, form: form.key, field: field) ?? [] }
+        context.fileBusy = { form, field in notes?.isBusy(screen: id, form: form.key, field: field) ?? false }
         return context
     }
 
@@ -101,25 +103,49 @@ extension NativeClient {
             guard self.field(form, field, on: id) != nil else {
                 return problem("a file field the core does not hold changed: \(form.key) \(field)")
             }
-            var files: [FileRef] = []
-            var refused: [String] = []
-            for url in urls {
-                // A file from another app's storage is lent for as long as it is copied.
-                let lent = url.startAccessingSecurityScopedResource()
-                defer { if lent { url.stopAccessingSecurityScopedResource() } }
-                // A photo is kept without what could say where it was taken,
-                // unless the field asks for the place.
-                switch FileStore.shared.take(url, keepLocation: keepLocation) {
-                case .kept(let file): files.append(file)
-                case .refused(let why): refused.append(Words.refused(url.lastPathComponent, why))
+            let system = effects as? SystemEffects
+            let sessionAtStart = system?.keeper.number
+            let store = system?.keeper.files ?? .shared
+            let run: @MainActor (Int?) async -> Void = { [weak self] serial in
+                var files: [FileRef] = []
+                var refused: [String] = []
+                for url in urls {
+                    if Task.isCancelled { break }
+                    // A file from another app's storage is lent for as long as it is copied.
+                    let lent = url.startAccessingSecurityScopedResource()
+                    let picked = await store.takeAsync(url, keepLocation: keepLocation)
+                    if lent { url.stopAccessingSecurityScopedResource() }
+                    switch picked {
+                    case .kept(let file): files.append(file)
+                    case .refused(let why): refused.append(Words.refused(url.lastPathComponent, why))
+                    }
                 }
+                guard let self else {
+                    store.discard(files.map(\.token))
+                    return
+                }
+                let stillSameSession = sessionAtStart == nil || system?.keeper.number == sessionAtStart
+                let stillCurrentPick = serial.map {
+                    system?.fileNotes.isCurrent($0, screen: id, form: form.key, field: field) ?? true
+                } ?? true
+                guard !Task.isCancelled, stillSameSession, stillCurrentPick, self.field(form, field, on: id) != nil else {
+                    store.discard(files.map(\.token))
+                    return
+                }
+                // A file that was not added is said at its field, by name and
+                // with why, and aloud: the field would otherwise show one file
+                // fewer, or none, as if nothing had been picked.
+                system?.fileNotes.say(refused, screen: id, form: form.key, field: field)
+                if !refused.isEmpty { AccessibilityNotification.Announcement(refused.joined(separator: " ")).post() }
+                self.send(.field(screen: id, form: Self.formID(form), field: field, value: .files(files)))
             }
-            // A file that was not added is said at its field, by name and
-            // with why, and aloud: the field would otherwise show one file
-            // fewer, or none, as if nothing had been picked.
-            (effects as? SystemEffects)?.fileNotes.say(refused, screen: id, form: form.key, field: field)
-            if !refused.isEmpty { AccessibilityNotification.Announcement(refused.joined(separator: " ")).post() }
-            send(.field(screen: id, form: Self.formID(form), field: field, value: .files(files)))
+            if let notes = system?.fileNotes {
+                notes.begin(screen: id, form: form.key, field: field) { serial in
+                    await run(serial)
+                }
+            } else {
+                Task { @MainActor in await run(nil) }
+            }
         case .choose(let table, let row, let on, let across):
             send(.choose(screen: id, table: table, row: row, on: on, across: across))
         case .move(let item, let from, let to, let before):

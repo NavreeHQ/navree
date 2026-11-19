@@ -72,7 +72,7 @@ struct IntentTests {
         #expect(shell.problems.list.isEmpty, "\(shell.problems.list)")
     }
 
-    @Test func aPickedFileThatIsNotAddedIsSaidAtItsFieldByNameAndWithWhy() throws {
+    @Test func aPickedFileThatIsNotAddedIsSaidAtItsFieldByNameAndWithWhy() async throws {
         let shell = try Shell()
         // An expense claim: a field that takes several receipts, and does not ask for where they were taken.
         shell.transport.pages["/orders"] = """
@@ -107,6 +107,7 @@ struct IntentTests {
         try Data("not a picture".utf8).write(to: photo)
 
         context.send(.files(form: form, field: field, urls: [typed, photo]))
+        await shell.effects.fileNotes.settled()
 
         // The receipt that could be added is the field's. The other is not
         // dropped without a word: the field says which file, and why.
@@ -119,11 +120,13 @@ struct IntentTests {
 
         // The person picks again, only what can be added: nothing is said there any more.
         context.send(.files(form: form, field: field, urls: [typed]))
+        await shell.effects.fileNotes.settled()
         #expect(context.values(form, field) == ["taxi.txt"])
         #expect(context.notes(form, field).isEmpty)
 
         // When every file picked is refused, the field holds none and says why for each.
         context.send(.files(form: form, field: field, urls: [photo, folder.appendingPathComponent("gone.txt")]))
+        await shell.effects.fileNotes.settled()
         #expect(context.values(form, field) == [])
         #expect(context.notes(form, field).count == 2)
         #expect(context.notes(form, field).last == "gone.txt could not be read and was not added.")

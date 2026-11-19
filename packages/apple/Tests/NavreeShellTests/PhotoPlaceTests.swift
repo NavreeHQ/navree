@@ -1,11 +1,22 @@
+import AVFoundation
 import CoreGraphics
+import CoreMedia
+import CoreVideo
+import Darwin
 import Foundation
 import ImageIO
+import NavreeDesign
+import NavreeProtocol
 import NavreeRuntime
+import Synchronization
 import Testing
 import UniformTypeIdentifiers
 
 @testable import NavreeShell
+
+private nonisolated func runsOnMainThread() -> Bool {
+    pthread_main_np() != 0
+}
 
 /// Whether this system can write a HEIC picture: the test images are made in code.
 private let writesHEIC: Bool = {
@@ -352,7 +363,489 @@ struct PhotoPlaceTests {
         )
         #expect(
             Words.refused("Kapurthala.dng", .placeStays)
-                == "Kapurthala.dng holds details that can say where it was taken, and they cannot be taken out of this kind of file, so it was not added."
+                == "Kapurthala.dng cannot be sent in this format without details that could say where it was taken, so it was not added. Save it as JPEG or PNG and pick it again."
         )
+        #expect(
+            Words.refused("walkthrough.mov", .filmPlaceStays)
+                == "walkthrough.mov could not be prepared without the place it was made, so it was not added."
+        )
+    }
+
+    // MARK: - Container bytes, properties and fallback
+
+    @Test func aPictureWhosePropertiesDoNotReadIsNeverSentAsItIs() throws {
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        #expect(!PhotoPlace.arePropertiesBare(nil))
+        #expect(!PhotoPlace.arePropertiesBare([:]))
+
+        // A clean picture whose properties fail to read is never copied byte for byte:
+        // when rewritten copies do read cleanly, it is rewritten; when properties never
+        // read at all, it is refused rather than sent as it was.
+        let clean = try Self.picture()
+        let sourceURL = folder.appendingPathComponent("counter.jpg")
+        try clean.write(to: sourceURL)
+        #expect(!PhotoPlace.isBare(clean, readableProperties: false))
+
+        let rewrittenURL = folder.appendingPathComponent("rewritten.jpg")
+        #expect(
+            PhotoPlace.copy(sourceURL, to: rewrittenURL, keepingPlace: false, propertyReading: .unreadableOriginal)
+                == .copied
+        )
+        let rewritten = try Data(contentsOf: rewrittenURL)
+        #expect(PhotoPlace.isBare(rewritten))
+
+        let refusedURL = folder.appendingPathComponent("refused.jpg")
+        #expect(
+            PhotoPlace.copy(sourceURL, to: refusedURL, keepingPlace: false, propertyReading: .alwaysUnreadable)
+                == .placeStays
+        )
+        #expect(!FileManager.default.fileExists(atPath: refusedURL.path))
+
+        // A JPEG carrying an Exif segment with broken IFD offsets — which Image I/O
+        // skips while another tool can still read coordinates from its bytes — is
+        // rejected by the container check and rewritten without that segment.
+        let brokenExif = Self.jpegWithBrokenExif(clean, hiddenText: "Amritsar 31.6200,74.8765")
+        #expect(Self.holds(brokenExif, "Amritsar"))
+        #expect(!PhotoPlace.isBare(brokenExif))
+        let sent = try Self.sent(brokenExif, named: "broken-exif.jpg", in: folder)
+        #expect(sent.bytes != brokenExif)
+        #expect(PhotoPlace.isBare(sent.bytes))
+        #expect(!Self.holds(sent.bytes, "Amritsar"))
+    }
+
+    @Test func aPngWithAProfileChunkIsWrittenAgainWithoutIt() throws {
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let plain = try Self.picture(as: .png)
+        #expect(PhotoPlace.isBare(plain))
+
+        // ImageMagick-style compressed `zTXt` chunk named `Raw profile type exif`
+        // holding hex-encoded Exif GPS coordinates of Amritsar: Image I/O reports no
+        // `{GPS}` group and no XMP mark appears in the raw bytes.
+        let profiled = try Self.pngWithProfileChunk(plain)
+        #expect(!try Self.groups(of: profiled).contains("{GPS}"))
+        #expect(!PhotoPlace.holdsPacket(profiled))
+        #expect(Self.holds(profiled, "Raw profile type exif"))
+        #expect(!PhotoPlace.isBare(profiled))
+
+        let sent = try Self.sent(profiled, named: "site-plan.png", in: folder)
+        #expect(sent.bytes != profiled)
+        #expect(PhotoPlace.isBare(sent.bytes))
+        #expect(!Self.holds(sent.bytes, "Raw profile type exif"))
+        #expect(!Self.holds(sent.bytes, "zTXt"))
+        let shape = try Self.shape(of: sent.bytes)
+        #expect(shape.kind == UTType.png.identifier)
+        #expect(shape.width == 8)
+    }
+
+    @Test func bytesAfterThePicturesEndAreNotSent() throws {
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let base = try Self.picture()
+        #expect(PhotoPlace.isBare(base))
+
+        // 1. Maker trailer after EOI carrying India's mobile country code (MCC 404).
+        let trailed = Self.jpegWithMakerTrailer(base)
+        #expect(!try Self.groups(of: trailed).contains("{GPS}"))
+        #expect(!PhotoPlace.holdsPacket(trailed))
+        #expect(!PhotoPlace.isBare(trailed))
+
+        let sentTrailed = try Self.sent(trailed, named: "IMG_20261118.jpg", in: folder)
+        #expect(PhotoPlace.isBare(sentTrailed.bytes))
+        #expect(sentTrailed.bytes.suffix(2) == Data([0xFF, 0xD9]))
+        #expect(!Self.holds(sentTrailed.bytes, "MCC_Data"))
+        #expect(!Self.holds(sentTrailed.bytes, "SEFT"))
+
+        // 2. Motion photo: a clean JPEG followed after EOI by an MP4 container carrying
+        // QuickTime `©xyz` coordinates for Amritsar, with no XMP mark in the JPEG.
+        let motion = Self.motionPhoto(base)
+        #expect(!try Self.groups(of: motion).contains("{GPS}"))
+        #expect(!PhotoPlace.holdsPacket(motion))
+        #expect(!PhotoPlace.isBare(motion))
+
+        let sentMotion = try Self.sent(motion, named: "MP_20261118.jpg", in: folder)
+        #expect(PhotoPlace.isBare(sentMotion.bytes))
+        #expect(sentMotion.bytes.suffix(2) == Data([0xFF, 0xD9]))
+        #expect(!Self.holds(sentMotion.bytes, "+31.6200+074.8765"))
+        #expect(!Self.holds(sentMotion.bytes, "ftyp"))
+        #expect(try Self.shape(of: sentMotion.bytes).width == 8)
+    }
+
+    @Test func whatTheFirstWayWroteIsCheckedAgainAndTheSecondWayIsUsedWhereItFails() throws {
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let photo = try Self.picture(properties: [kCGImagePropertyGPSDictionary: Self.place])
+        let sourceURL = folder.appendingPathComponent("depot.jpg")
+        try photo.write(to: sourceURL)
+        let copyURL = folder.appendingPathComponent("clean.jpg")
+
+        let cleanSample = Self.jpegWithMakerTrailer(try Self.picture())
+        let calls = Mutex<[Bool]>([])
+        let outcome = PhotoPlace.copy(
+            sourceURL, to: copyURL, keepingPlace: false,
+            rewriter: { sourceBytes, destination, pixelsUntouched in
+                calls.withLock { $0.append(pixelsUntouched) }
+                if pixelsUntouched {
+                    // Simulate a lossless first pass that left maker bytes after EOI.
+                    return (try? cleanSample.write(to: destination)) != nil
+                }
+                return PhotoPlace.defaultRewriter(sourceBytes, destination, false)
+            }
+        )
+        #expect(outcome == .copied)
+        #expect(calls.withLock { $0 } == [true, false])
+        let written = try Data(contentsOf: copyURL)
+        #expect(PhotoPlace.isBare(written))
+        #expect(!Self.holds(written, "MCC_Data"))
+        #expect(try Self.shape(of: written).width == 8)
+
+        // When both passes leave unclean bytes, nothing is kept at all.
+        let failedURL = folder.appendingPathComponent("failed.jpg")
+        let failedOutcome = PhotoPlace.copy(
+            sourceURL, to: failedURL, keepingPlace: false,
+            rewriter: { _, destination, _ in
+                (try? cleanSample.write(to: destination)) != nil
+            }
+        )
+        #expect(failedOutcome == .placeStays)
+        #expect(!FileManager.default.fileExists(atPath: failedURL.path))
+    }
+
+    @Test func aDesignFileOrARawIsRefusedWithWordsThatSayWhatToDo() async throws {
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = FileStore(folder: folder.appendingPathComponent("kept"))
+
+        let svg = folder.appendingPathComponent("emblem.svg")
+        try Data("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\"/>".utf8).write(to: svg)
+
+        // Minimal Photoshop 8BPS header.
+        var psdBytes: [UInt8] = [0x38, 0x42, 0x50, 0x53, 0x00, 0x01]
+        psdBytes += [UInt8](repeating: 0, count: 20)
+        let psd = folder.appendingPathComponent("banner.psd")
+        try Data(psdBytes).write(to: psd)
+
+        let dng = folder.appendingPathComponent("Amritsar.dng")
+        try Self.picture(as: .tiff, properties: [kCGImagePropertyGPSDictionary: Self.place]).write(to: dng)
+
+        let cr2 = folder.appendingPathComponent("Ludhiana.cr2")
+        try Data([0x49, 0x49, 0x2A, 0x00, 0x10, 0x00, 0x00, 0x00, 0x43, 0x52, 0x02, 0x00]).write(to: cr2)
+
+        for candidate in [svg, psd, dng, cr2] {
+            let picked = await store.takeAsync(candidate)
+            #expect(picked == .refused(.placeStays), "\(candidate.lastPathComponent)")
+            let message = Words.refused(candidate.lastPathComponent, .placeStays)
+            #expect(message.contains(candidate.lastPathComponent))
+            #expect(message.contains("Save it as JPEG or PNG and pick it again."))
+            // When the field explicitly sets `keep_location`, the file is kept as it is.
+            let allowed = await store.keepAsync(candidate, keepLocation: true)
+            #expect(allowed != nil, "\(candidate.lastPathComponent)")
+        }
+    }
+
+    @Test func photosAreWrittenAgainOffTheMainActorAndTheFieldShowsItIsBusy() async throws {
+        let shell = try Shell()
+        shell.transport.pages["/orders"] = """
+            {"build": "152bd84abf4d", "navree": 1, "vocab": 0, "screen": {"title": "Site visit", "body":
+              {"t": "form", "id": "visit", "method": "post", "action": "/visits", "children": [
+                {"t": "field", "name": "photos", "label": "Site photos",
+                 "input": {"t": "file", "accept": "image/*", "multiple": true}}]}}}
+            """
+        shell.client.begin()
+        shell.client.send(.select(destination: 1))
+        let screen = try #require(shell.client.nav.front)
+        let tree = try #require(shell.client.screen(screen)?.screen)
+        var foundField: Navree.Field?
+        var foundForm: Navree.Form?
+        tree.body.walk { node in
+            if case .field(let f) = node { foundField = f }
+            if case .form(let f) = node { foundForm = f }
+        }
+        let form = FormRef(try #require(foundForm))
+        let field = try #require(foundField).key
+        let context = shell.client.context(for: screen, depth: 0, base: nil)
+
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let photoURL = folder.appendingPathComponent("amritsar.jpg")
+        try Self.picture(properties: [kCGImagePropertyGPSDictionary: Self.place]).write(to: photoURL)
+
+        let (enteredStream, enteredContinuation) = AsyncStream<Void>.makeStream()
+        let (releaseStream, releaseContinuation) = AsyncStream<Void>.makeStream()
+        let workerOnMain = Mutex<Bool?>(nil)
+        shell.effects.keeper.files.workObserver = {
+            workerOnMain.withLock { $0 = runsOnMainThread() }
+            enteredContinuation.yield()
+            enteredContinuation.finish()
+            for await _ in releaseStream { break }
+        }
+        defer { shell.effects.keeper.files.workObserver = nil }
+
+        #expect(!context.fileBusy(form, field))
+        context.send(.files(form: form, field: field, urls: [photoURL]))
+        #expect(context.fileBusy(form, field))
+        #expect(context.values(form, field) == nil)
+
+        for await _ in enteredStream { break }
+        #expect(workerOnMain.withLock { $0 } == false)
+        #expect(context.fileBusy(form, field))
+
+        releaseContinuation.finish()
+        await shell.effects.fileNotes.settled()
+
+        #expect(!context.fileBusy(form, field))
+        #expect(context.values(form, field) == ["amritsar.jpg"])
+        if case .files(let refs)? = shell.client.screen(screen)?.forms[form.key]?.fields[field]?.value {
+            let ref = try #require(refs.first)
+            let bytes = try #require(shell.effects.keeper.files.data(ref.token))
+            #expect(PhotoPlace.isBare(bytes))
+        } else {
+            Issue.record("the rewritten photo did not reach the core")
+        }
+    }
+
+    // MARK: - Films
+
+    @Test func aFilmIsSentWithoutThePlaceItWasMadeAndNotSentWhenThatCannotBeDone() async throws {
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = FileStore(folder: folder.appendingPathComponent("kept"))
+
+        let clip = try await Self.film(in: folder, named: "hall-bazaar.mov", withPlace: true)
+        let originalBytes = try Data(contentsOf: clip)
+        #expect(FilmPlace.isFilm(clip))
+        #expect(!PhotoPlace.isPicture(clip))
+        #expect(Self.holds(originalBytes, "+31.6200+074.8765"))
+        #expect(!(await FilmPlace.isBare(clip)))
+
+        guard case .kept(let sent) = await store.takeAsync(clip) else {
+            Issue.record("the geotagged film should be exported without its place")
+            return
+        }
+        let exportedBytes = try #require(store.data(sent.token))
+        #expect(sent.name == "hall-bazaar.mov")
+        #expect(sent.size == exportedBytes.count)
+        #expect(!Self.holds(exportedBytes, "+31.6200+074.8765"))
+        #expect(!Self.holds(exportedBytes, "location.ISO6709"))
+        let checkURL = folder.appendingPathComponent("checked.mov")
+        try exportedBytes.write(to: checkURL)
+        #expect(await FilmPlace.isBare(checkURL))
+        let tracks = try await AVURLAsset(url: checkURL).load(.tracks)
+        #expect(!tracks.isEmpty)
+
+        // When export fails (a broken movie container), the film is refused rather than sent.
+        let broken = folder.appendingPathComponent("broken.mov")
+        try Data("not a valid movie".utf8).write(to: broken)
+        #expect(await store.takeAsync(broken) == .refused(.filmPlaceStays))
+
+        // When an exporter leaves the place in the output, read-back verification refuses it too.
+        let unstripped = await store.takeAsync(
+            clip,
+            filmExporter: { src, dst in
+                (try? FileManager.default.copyItem(at: src, to: dst)) != nil
+            }
+        )
+        #expect(unstripped == .refused(.filmPlaceStays))
+    }
+
+    @Test func aFieldThatAsksForThePlaceIsSentTheFilmAsItIs() async throws {
+        let shell = try Shell()
+        shell.transport.pages["/orders"] = """
+            {"build": "152bd84abf4d", "navree": 1, "vocab": 0, "screen": {"title": "Field inspection", "body":
+              {"t": "form", "id": "inspection", "method": "post", "action": "/inspections", "children": [
+                {"t": "field", "name": "clip", "label": "Inspection video",
+                 "input": {"t": "file", "accept": "video/*", "keep_location": true}}]}}}
+            """
+        shell.client.begin()
+        shell.client.send(.select(destination: 1))
+        let screen = try #require(shell.client.nav.front)
+        let tree = try #require(shell.client.screen(screen)?.screen)
+        var foundField: Navree.Field?
+        var foundForm: Navree.Form?
+        tree.body.walk { node in
+            if case .field(let f) = node { foundField = f }
+            if case .form(let f) = node { foundForm = f }
+        }
+        let form = FormRef(try #require(foundForm))
+        let field = try #require(foundField)
+        let context = shell.client.context(for: screen, depth: 0, base: nil)
+
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let clip = try await Self.film(in: folder, named: "pune-depot.mov", withPlace: true)
+        let original = try Data(contentsOf: clip)
+
+        context.send(.files(form: form, field: field.key, urls: [clip], keepLocation: true))
+        await shell.effects.fileNotes.settled()
+
+        #expect(context.values(form, field.key) == ["pune-depot.mov"])
+        #expect(context.notes(form, field.key).isEmpty)
+        if case .files(let refs)? = shell.client.screen(screen)?.forms[form.key]?.fields[field.key]?.value {
+            let ref = try #require(refs.first)
+            let keptBytes = try #require(shell.effects.keeper.files.data(ref.token))
+            #expect(keptBytes == original)
+            #expect(Self.holds(keptBytes, "+31.6200+074.8765"))
+        } else {
+            Issue.record("the film was not kept as it is for a keep_location field")
+        }
+    }
+
+    // MARK: - Fixture builders
+
+    /// Inserts a JPEG `APP1` Exif segment whose TIFF root IFD offset points past
+    /// the segment end, followed by hidden text bytes.
+    static func jpegWithBrokenExif(_ jpeg: Data, hiddenText: String) -> Data {
+        let bytes = [UInt8](jpeg)
+        let first = 4 + (Int(bytes[4]) << 8 | Int(bytes[5]))
+        var payload: [UInt8] = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00]
+        // Little-endian TIFF header with an out-of-range IFD0 offset (0x7FFF_FFFF).
+        payload += [0x49, 0x49, 0x2A, 0x00, 0xFF, 0xFF, 0xFF, 0x7F]
+        payload += [UInt8](hiddenText.utf8)
+        let length = payload.count + 2
+        var out = Array(bytes[..<first])
+        out += [0xFF, 0xE1, UInt8(length >> 8), UInt8(length & 0xFF)]
+        out += payload
+        out += bytes[first...]
+        return Data(out)
+    }
+
+    /// Inserts a compressed PNG `zTXt` chunk with keyword `Raw profile type exif`
+    /// carrying hex-encoded Exif GPS bytes.
+    static func pngWithProfileChunk(_ png: Data) throws -> Data {
+        let exifHex = Data("Exif\0\0Amritsar 31.6200N 74.8765E".utf8)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let profileText = "\nexif\n      \(exifHex.count / 2)\n\(exifHex)\n"
+        let rawBytes = [UInt8](profileText.utf8)
+        let deflated = try (Data(rawBytes) as NSData).compressed(using: .zlib) as Data
+        var zlibStream: [UInt8] = [0x78, 0x9C]
+        zlibStream += [UInt8](deflated)
+        zlibStream += word(adler32(rawBytes))
+
+        var chunk = [UInt8]("zTXt".utf8)
+        chunk += [UInt8]("Raw profile type exif".utf8)
+        chunk += [0x00, 0x00]
+        chunk += zlibStream
+
+        let bytes = [UInt8](png)
+        var out = Array(bytes[..<33])
+        out += word(UInt32(chunk.count - 4))
+        out += chunk
+        out += word(checksum(chunk))
+        out += bytes[33...]
+        return Data(out)
+    }
+
+    static func adler32(_ bytes: [UInt8]) -> UInt32 {
+        var sumLow: UInt32 = 1
+        var sumHigh: UInt32 = 0
+        for byte in bytes {
+            sumLow = (sumLow + UInt32(byte)) % 65521
+            sumHigh = (sumHigh + sumLow) % 65521
+        }
+        return (sumHigh << 16) | sumLow
+    }
+
+    /// Appends a Samsung-style SEFT trailer with `MCC_Data` (`404`) after JPEG `EOI`.
+    static func jpegWithMakerTrailer(_ jpeg: Data) -> Data {
+        var out = jpeg
+        out.append(Data([0x00, 0x00, 0x01, 0x0A]))
+        out.append(Data("MCC_Data404SEFT".utf8))
+        return out
+    }
+
+    /// Appends an MP4 trailer carrying a QuickTime `©xyz` atom after JPEG `EOI`.
+    static func motionPhoto(_ jpeg: Data) -> Data {
+        var ftypPayload = [UInt8]("mp42".utf8)
+        ftypPayload += [0x00, 0x00, 0x00, 0x00]
+        ftypPayload += [UInt8]("mp42isom".utf8)
+        let ftyp = box("ftyp", payload: ftypPayload)
+
+        var xyzPayload: [UInt8] = [0x00, 0x12, 0x15, 0xC7]
+        xyzPayload += [UInt8]("+31.6200+074.8765/".utf8)
+        let xyz = rawBox([0xA9, 0x78, 0x79, 0x7A], payload: xyzPayload)
+        let udta = box("udta", payload: xyz)
+        let moov = box("moov", payload: udta)
+        let mdat = box("mdat", payload: [0x00, 0x00, 0x00, 0x00])
+
+        var out = jpeg
+        out.append(contentsOf: ftyp + moov + mdat)
+        return out
+    }
+
+    static func box(_ kind: String, payload: [UInt8]) -> [UInt8] {
+        rawBox([UInt8](kind.utf8), payload: payload)
+    }
+
+    static func rawBox(_ kind: [UInt8], payload: [UInt8]) -> [UInt8] {
+        word(UInt32(8 + payload.count)) + kind + payload
+    }
+
+    /// Writes a short 64x64 H.264 `.mov` file, optionally carrying QuickTime
+    /// ISO-6709 location metadata for Amritsar.
+    static func film(in folder: URL, named name: String, withPlace: Bool) async throws -> URL {
+        let url = folder.appendingPathComponent(name)
+        try? FileManager.default.removeItem(at: url)
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        if withPlace {
+            let location = AVMutableMetadataItem()
+            location.identifier = .quickTimeMetadataLocationISO6709
+            location.dataType = kCMMetadataBaseDataType_UTF8 as String
+            location.value = "+31.6200+074.8765+234.0/" as NSString
+            writer.metadata = [location]
+        }
+        let settings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: 64,
+            AVVideoHeightKey: 64,
+        ]
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
+        let attributes: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+            kCVPixelBufferWidthKey as String: 64,
+            kCVPixelBufferHeightKey as String: 64,
+        ]
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: input, sourcePixelBufferAttributes: attributes
+        )
+        #expect(writer.canAdd(input))
+        writer.add(input)
+        #expect(writer.startWriting())
+        writer.startSession(atSourceTime: .zero)
+
+        for frame in 0..<2 {
+            while !input.isReadyForMoreMediaData {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            let pixelBuffer = try makeFrameBuffer(attributes: attributes)
+            let time = CMTime(value: CMTimeValue(frame), timescale: 10)
+            #expect(adaptor.append(pixelBuffer, withPresentationTime: time))
+        }
+        input.markAsFinished()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            writer.finishWriting { continuation.resume() }
+        }
+        #expect(writer.status == .completed)
+        return url
+    }
+
+    private static func makeFrameBuffer(attributes: [String: Any]) throws -> CVPixelBuffer {
+        var buffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault, 64, 64, kCVPixelFormatType_32BGRA, attributes as CFDictionary, &buffer
+        )
+        #expect(status == kCVReturnSuccess)
+        let pixelBuffer = try #require(buffer)
+        CVPixelBufferLockBaseAddress(pixelBuffer, [])
+        if let base = CVPixelBufferGetBaseAddress(pixelBuffer) {
+            memset(base, 0x90, CVPixelBufferGetDataSize(pixelBuffer))
+        }
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+        return pixelBuffer
     }
 }
