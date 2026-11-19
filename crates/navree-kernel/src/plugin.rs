@@ -635,6 +635,7 @@ pub const RESERVED_NAMESPACES: &[&str] = &[
     "mcp",
     "media",
     "micro",
+    "mongo",
     "navree",
     "notify",
     "nul",
@@ -1145,6 +1146,12 @@ mod tests {
         for (package, krate) in FIRST_PARTY {
             assert_eq!(package.replace('-', "_"), *krate);
             assert!(FRAMEWORK_CRATES.binary_search(krate).is_ok(), "{krate}");
+            let (ns_bytes, ns_len) = default_namespace::<64>(package);
+            let ns = std::str::from_utf8(&ns_bytes[..ns_len]).expect("UTF-8");
+            assert!(
+                RESERVED_NAMESPACES.binary_search(&ns).is_ok(),
+                "{package}: `{ns}`"
+            );
         }
         assert_eq!(FRAMEWORK_CRATES.len(), 74);
         assert!(FRAMEWORK_CRATES.windows(2).all(|w| w[0] < w[1]));
@@ -1183,7 +1190,7 @@ mod tests {
             module_crate("alloc::boxed::Box<dyn navree_kernel::module::Module>"),
             None
         );
-        assert_eq!(RESERVED_NAMESPACES.len(), 87);
+        assert_eq!(RESERVED_NAMESPACES.len(), 88);
         assert!(RESERVED_NAMESPACES.windows(2).all(|w| w[0] < w[1]));
         assert!(RESERVED_NAMESPACES.iter().all(|ns| is_namespace(ns)));
         // Sorted, each name once, each a type path.

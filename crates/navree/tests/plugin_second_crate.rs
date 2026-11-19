@@ -93,12 +93,22 @@ mod navree_plugin_khata {
         }
     }
 
-    /// A plugin module that imports a plain framework module (`UiModule`) directly.
+    /// A plugin module that imports a plain framework module (`UiOnDemand`) directly.
     pub struct KhataUiPlugin;
 
     impl Module for KhataUiPlugin {
         fn register(&self, m: &mut ModuleBuilder) {
-            m.plugin(KHATA).import(UiModule);
+            m.plugin(KHATA).import(navree::ui::UiOnDemand);
+        }
+    }
+
+    /// A plugin module that imports `UiOnDemand` boxed inside `Vec<Box<dyn Module>>`.
+    pub struct KhataBoxedUiPlugin;
+
+    impl Module for KhataBoxedUiPlugin {
+        fn register(&self, m: &mut ModuleBuilder) {
+            let boxed: Vec<Box<dyn Module>> = vec![Box::new(navree::ui::UiOnDemand)];
+            m.plugin(KHATA).imports(boxed);
         }
     }
 }
@@ -189,11 +199,11 @@ async fn a_plugin_in_two_crates_cannot_write_rules_on_all_add_an_app_wide_layer_
 
 #[tokio::test]
 async fn a_plain_framework_module_a_plugin_imports_boots_as_before() {
-    use navree_plugin_khata::KhataUiPlugin;
+    use navree_plugin_khata::{KhataBoxedUiPlugin, KhataUiPlugin};
 
-    // `UiModule` is a plain module of a framework crate (`navree_ui`), imported here only by the
-    // community plugin: it acts for no plugin, its app-wide layers and command are not refused,
-    // and the app boots cleanly.
+    // `UiOnDemand` is the plain unconfigured module of `navree_ui`, imported here only by the
+    // community plugin (directly and boxed in `Vec<Box<dyn Module>>`): it acts for no plugin,
+    // its app-wide layers and command are not refused, and the app boots cleanly.
     let app = khata_app().module(KhataUiPlugin).build().await;
     assert_eq!(
         navree::kernel::__private::acts_for(app.ctx(), UiModule.id()),
@@ -207,4 +217,137 @@ async fn a_plain_framework_module_a_plugin_imports_boots_as_before() {
     let ids: Vec<ModuleId> = plugin.modules.iter().map(|module| module.id).collect();
     assert_eq!(ids, [ModuleId::of::<KhataUiPlugin>()]);
     app.shutdown().await.unwrap();
+
+    let app = khata_app().module(KhataBoxedUiPlugin).build().await;
+    assert_eq!(
+        navree::kernel::__private::acts_for(app.ctx(), UiModule.id()),
+        None
+    );
+    let report = app.ctx().plugins();
+    let [plugin] = report.plugins.as_slice() else {
+        panic!("one plugin")
+    };
+    let ids: Vec<ModuleId> = plugin.modules.iter().map(|module| module.id).collect();
+    assert_eq!(ids, [ModuleId::of::<KhataBoxedUiPlugin>()]);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_second_crates_module_cannot_claim_a_framework_module_id_export_a_framework_provider_or_collide_on_jobs_and_sections()
+ {
+    use navree::config::ConfigSection;
+    use navree::contracts::{Job, JobContext};
+    use navree::queue::{QueueDriver, QueueOptions};
+    use navree::ui::PagesOptions;
+    use navree_plugin_khata::KhataPlugin;
+    use serde::{Deserialize, Serialize};
+
+    // 1. A second-crate module returning `UiModule`'s `ModuleId` beside `UiOnDemand` is refused
+    // as a cross-crate `ModuleId` collision.
+    struct FakeUiOnDemand;
+    impl Module for FakeUiOnDemand {
+        fn id(&self) -> ModuleId {
+            ModuleId::of::<UiModule>()
+        }
+
+        fn register(&self, _: &mut ModuleBuilder) {}
+    }
+    let id_error = Navree::app()
+        .module(KhataPlugin(|m| {
+            m.import(FakeUiOnDemand);
+        }))
+        .module(navree::ui::UiOnDemand)
+        .validate()
+        .expect_err("cross-crate ModuleId collision")
+        .to_string();
+    assert!(
+        id_error.contains("is claimed by modules in two crates"),
+        "{id_error}"
+    );
+
+    // 2. Exporting a framework provider (`PagesOptions`) from the second crate is refused, while
+    // an unexported `PagesOptions` in the second crate stays invisible to `try_get`.
+    let pages_error = Navree::app()
+        .module(KhataPlugin(|m| {
+            m.value(PagesOptions::default().sign_in("https://khata.ludhiana.example/sign-in"))
+                .exports::<PagesOptions>();
+        }))
+        .validate()
+        .expect_err("framework provider export refused")
+        .to_string();
+    assert!(
+        pages_error.contains("a provider type of the framework"),
+        "{pages_error}"
+    );
+
+    let app = khata_app()
+        .module(KhataPlugin(|m| {
+            m.value(PagesOptions::default().sign_in("https://khata.ludhiana.example/sign-in"));
+        }))
+        .build()
+        .await;
+    assert!(app.ctx().try_get::<PagesOptions>().await.is_none());
+    app.shutdown().await.unwrap();
+
+    // 3. Colliding job names and configuration sections registered from the second crate fail the
+    // boot rather than warning.
+    #[derive(Serialize, Deserialize)]
+    struct SendPayslip;
+    impl Job for SendPayslip {
+        const NAME: &'static str = "send_payslip";
+        async fn handle(self, _ctx: JobContext) -> Result<(), BoxError> {
+            Ok(())
+        }
+    }
+    struct PayrollAppModule;
+    impl Module for PayrollAppModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.job::<SendPayslip>();
+        }
+    }
+    let job_error = boot_error(
+        khata_app()
+            .module(QueueModule::for_root(QueueOptions {
+                driver: QueueDriver::Memory,
+                ..QueueOptions::default()
+            }))
+            .module(KhataPlugin(|m| {
+                m.job::<SendPayslip>();
+            }))
+            .module(PayrollAppModule),
+    )
+    .await;
+    assert!(
+        job_error.contains(
+            "job `send_payslip` is registered by both `KhataCoreModule` and `PayrollAppModule`; give one another name"
+        ),
+        "{job_error}"
+    );
+
+    #[derive(Default, Deserialize)]
+    struct AppPayrollConfig;
+    impl ConfigSection for AppPayrollConfig {
+        const KEY: &'static str = "payroll";
+    }
+    #[derive(Default, Deserialize)]
+    struct KhataPayrollConfig;
+    impl ConfigSection for KhataPayrollConfig {
+        const KEY: &'static str = "payroll";
+    }
+    struct PayrollConfigModule;
+    impl Module for PayrollConfigModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.config_section::<AppPayrollConfig>();
+        }
+    }
+    let section_error = boot_error(khata_app().module(PayrollConfigModule).module(KhataPlugin(
+        |m| {
+            m.config_section::<KhataPayrollConfig>();
+        },
+    )))
+    .await;
+    assert!(
+        section_error.contains("a section belongs to one type"),
+        "{section_error}"
+    );
 }

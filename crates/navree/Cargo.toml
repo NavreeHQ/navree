@@ -992,7 +992,7 @@ required-features = ["full", "sqlite"]
 
 [[test]]
 name = "plugin_second_crate"
-required-features = ["access", "db", "http", "sqlite", "testing", "ui"]
+required-features = ["access", "db", "http", "queue", "sqlite", "testing", "ui"]
 
 [[test]]
 name = "plugins_docs"

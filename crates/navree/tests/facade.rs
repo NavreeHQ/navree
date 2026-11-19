@@ -1265,7 +1265,7 @@ fn the_reserved_namespaces_match_the_framework_sections_and_permission_prefixes(
         .iter()
         .map(|key| key.split('.').next().unwrap())
         .collect();
-    expected.extend(["navree", "views", "roles", "env", "plugins"]);
+    expected.extend(["navree", "views", "roles", "env", "plugins", "mongo"]);
     expected.extend([
         "all",
         "users",
@@ -2121,7 +2121,7 @@ fn a_community_plugin_in_a_reserved_namespace_fails_the_boot() {
             .validate()
             .unwrap_err()
             .to_string(),
-        "plugin `navree-plugin-time` uses the namespace `time`, which the framework keeps for itself; set another with plugin_info!(namespace = \"..\")"
+        "plugin `navree-plugin-time` uses the namespace `time`, which the framework keeps for itself; remove the plugin or update it to a version that uses another namespace"
     );
 }
 

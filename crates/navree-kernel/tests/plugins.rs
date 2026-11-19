@@ -227,7 +227,15 @@ fn two_crates_claiming_one_plugin_name_fail_the_boot() {
 
 #[test]
 fn a_plugin_in_a_reserved_namespace_fails_the_boot() {
-    for namespace in ["billing", "views", "plugins", "all", "users", "operations"] {
+    for namespace in [
+        "billing",
+        "mongo",
+        "views",
+        "plugins",
+        "all",
+        "users",
+        "operations",
+    ] {
         let ledger = PluginInfo::new("navree-plugin-ledger", "plugins", namespace, "1.0.0");
         assert_eq!(
             errors(Navree::app().module(Claims("LedgerModule", ledger))),
