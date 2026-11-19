@@ -57,17 +57,20 @@ pub(crate) fn plan(
             .by_key
             .get(key.as_str())
             .is_some_and(|(_, list)| list.iter().any(|item| item == source));
+        let active_key_setter = state.by_key.get(key.as_str()).map(|(src, _)| src.as_str());
+        let other_ns_setter = state
+            .ns_setters
+            .iter()
+            .rev()
+            .find(|src| src.as_str() != "config/ui.policy.toml");
 
         if already_allowed {
             lines.push(format!(
                 "  kept     ui.policy.allow.{ns} already allows {directive} {source}"
             ));
-        } else if !state.ns_setters.is_empty() {
-            let where_set = state
-                .by_key
-                .get(key.as_str())
-                .map(|(src, _)| src.as_str())
-                .or_else(|| state.ns_setters.last().map(String::as_str))
+        } else if active_key_setter.is_some() || other_ns_setter.is_some() {
+            let where_set = active_key_setter
+                .or_else(|| other_ns_setter.map(String::as_str))
                 .unwrap_or("config/ui.policy.toml");
             lines.push(format!(
                 "  next     to allow {directive} {source} for {ns}, add it to ui.policy.allow.{ns}.{key} in {where_set}"
@@ -512,15 +515,48 @@ fn apply_policy_env(state: &mut PolicyScan, name: &str, value: &str, ns: &str) {
             record_ns_setter(&mut state.ns_setters, name);
             state
                 .by_key
-                .insert(key.clone(), (name.to_owned(), Vec::new()));
+                .insert(key.clone(), (name.to_owned(), parse_env_policy_list(value)));
         }
         [ui, policy, allow, env_ns]
             if ui == "ui" && policy == "policy" && allow == "allow" && env_ns == ns =>
         {
             record_ns_setter(&mut state.ns_setters, name);
+            if let Ok(serde_json::Value::Object(ns_obj)) = serde_json::from_str(value.trim()) {
+                for (key, val) in ns_obj {
+                    let list = val
+                        .as_array()
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(serde_json::Value::as_str)
+                                .map(str::to_owned)
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    state.by_key.insert(key, (name.to_owned(), list));
+                }
+            }
         }
         _ => {}
     }
+}
+
+fn parse_env_policy_list(value: &str) -> Vec<String> {
+    let trimmed = value.trim();
+    if trimmed.starts_with('[')
+        && let Ok(parsed) = serde_json::from_str::<Vec<String>>(trimmed)
+    {
+        return parsed
+            .into_iter()
+            .map(|item| item.trim().to_owned())
+            .filter(|item| !item.is_empty())
+            .collect();
+    }
+    trimmed
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 fn record_ns_setter(setters: &mut Vec<String>, source: &str) {
@@ -993,5 +1029,86 @@ mod tests {
                 "{file_path}"
             );
         }
+    }
+
+    #[test]
+    fn env_allowances_and_wasm_are_recognised_and_new_directives_append_under_active_tables() {
+        // 1. `.env` JSON array and `APP_UI__POLICY__WASM=true` produce `kept` lines.
+        let mut files = AppFiles::default();
+        files.dot_env.insert(
+            ".env".to_owned(),
+            concat!(
+                "APP_UI__POLICY__ALLOW__GEO__IMG_SRC='[\"https://tile.openstreetmap.org\"]'\n",
+                "APP_UI__POLICY__WASM=true\n",
+            )
+            .to_owned(),
+        );
+        let (written, lines) = plan(
+            &files,
+            &[],
+            "navree-plugin-geo",
+            "geo",
+            &geo_ask(true),
+            None,
+        );
+        assert_eq!(written, None);
+        assert_eq!(
+            lines,
+            vec![
+                "  kept     ui.policy.allow.geo already allows img-src https://tile.openstreetmap.org".to_owned(),
+                "  kept     ui.policy.wasm already allows WebAssembly".to_owned(),
+            ]
+        );
+
+        // 2. Uncommented `img_src` in `config/ui.policy.toml` still appends a new commented `# connect_src`.
+        let mut upgrade_files = AppFiles::default();
+        upgrade_files.config.insert(
+            "config/ui.policy.toml".to_owned(),
+            concat!(
+                "# Sources every page may load beyond Navree UI's own policy: /docs/ui/page-policy/\n",
+                "[allow.geo]\n",
+                "# plugin:add navree-plugin-geo asks for these. Uncomment a line to allow it on every page.\n",
+                "img_src = [\"https://tile.openstreetmap.org\"]\n",
+            )
+            .to_owned(),
+        );
+        let upgrade_ask = PolicyAsk {
+            sources: vec![
+                (
+                    "img_src".to_owned(),
+                    "https://tile.openstreetmap.org".to_owned(),
+                ),
+                (
+                    "connect_src".to_owned(),
+                    "https://nominatim.openstreetmap.org".to_owned(),
+                ),
+            ],
+            wasm: false,
+        };
+        let (updated, upgrade_lines) = plan(
+            &upgrade_files,
+            &[],
+            "navree-plugin-geo",
+            "geo",
+            &upgrade_ask,
+            None,
+        );
+        assert_eq!(
+            updated.as_deref(),
+            Some(concat!(
+                "# Sources every page may load beyond Navree UI's own policy: /docs/ui/page-policy/\n",
+                "[allow.geo]\n",
+                "# plugin:add navree-plugin-geo asks for these. Uncomment a line to allow it on every page.\n",
+                "img_src = [\"https://tile.openstreetmap.org\"]\n",
+                "# connect_src = [\"https://nominatim.openstreetmap.org\"]\n",
+            ))
+        );
+        assert_eq!(
+            upgrade_lines,
+            vec![
+                "  kept     ui.policy.allow.geo already allows img-src https://tile.openstreetmap.org".to_owned(),
+                "  policy   connect-src https://nominatim.openstreetmap.org for geo: written commented out in config/ui.policy.toml; uncomment it to allow it on every page".to_owned(),
+            ]
+        );
     }
 }

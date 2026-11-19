@@ -240,14 +240,148 @@ fn squeeze_line(text: &str) -> String {
 }
 
 fn file_wires_module(contents: &str, type_name: &str, crate_mention: &str) -> bool {
-    if type_name.is_empty() || crate_mention.is_empty() {
+    let crate_prefix = crate_mention.trim_end_matches("::");
+    if type_name.is_empty() || crate_prefix.is_empty() {
         return false;
     }
     let code = strip_comments(contents);
     if !mentions_crate(&code, crate_mention) {
         return false;
     }
-    code.lines().any(|line| has_whole_word(line, type_name))
+    let imported_bare = use_imports_type(&code, crate_prefix, type_name);
+    let imported_short_mod = crate_prefix
+        .rsplit_once("::")
+        .and_then(|(_, tail)| has_use_of_prefix(&code, crate_prefix).then_some(tail));
+
+    let bytes = code.as_bytes();
+    let mut from = 0;
+    while let Some(rel) = code[from..].find(type_name) {
+        let start = from + rel;
+        let end = start + type_name.len();
+        let before_ok = start == 0 || !is_ident_byte(bytes[start - 1]);
+        let after_ok = end == bytes.len() || !is_ident_byte(bytes[end]);
+        if before_ok && after_ok {
+            match qualifier_before(&code, start) {
+                Some(qual) => {
+                    if qual == crate_prefix
+                        || qual.starts_with(&format!("{crate_prefix}::"))
+                        || imported_short_mod.is_some_and(|short| {
+                            qual == short || qual.starts_with(&format!("{short}::"))
+                        })
+                    {
+                        return true;
+                    }
+                }
+                None => {
+                    if imported_bare {
+                        return true;
+                    }
+                }
+            }
+        }
+        from = start + 1;
+    }
+    false
+}
+
+fn qualifier_before(code: &str, start: usize) -> Option<String> {
+    let before = code[..start].trim_end();
+    let mut cur = before.strip_suffix("::")?.trim_end();
+    let mut segments = Vec::new();
+    loop {
+        let end = cur.len();
+        let seg_start = cur
+            .as_bytes()
+            .iter()
+            .rposition(|&b| !is_ident_byte(b))
+            .map_or(0, |pos| pos + 1);
+        if seg_start == end {
+            break;
+        }
+        segments.push(&cur[seg_start..end]);
+        let head = cur[..seg_start].trim_end();
+        match head.strip_suffix("::") {
+            Some(next) => cur = next.trim_end(),
+            None => break,
+        }
+    }
+    if segments.is_empty() {
+        return None;
+    }
+    segments.reverse();
+    Some(segments.join("::"))
+}
+
+fn use_imports_type(code: &str, crate_prefix: &str, type_name: &str) -> bool {
+    let needle = format!("{crate_prefix}::");
+    let bytes = code.as_bytes();
+    let mut from = 0;
+    while let Some(rel) = code[from..].find(&needle) {
+        let start = from + rel;
+        let before_ok = start == 0 || !is_ident_byte(bytes[start - 1]);
+        if before_ok {
+            let mut rest = code[start + needle.len()..].trim_start();
+            loop {
+                let ident_len = rest
+                    .as_bytes()
+                    .iter()
+                    .take_while(|&&b| is_ident_byte(b))
+                    .count();
+                if ident_len > 0 {
+                    let after_ident = rest[ident_len..].trim_start();
+                    if let Some(next) = after_ident.strip_prefix("::") {
+                        rest = next.trim_start();
+                        continue;
+                    }
+                }
+                break;
+            }
+            if rest.starts_with('*') {
+                return true;
+            }
+            if rest.starts_with('{')
+                && let Some(group) = brace_group(rest)
+                && (group.contains('*') || has_whole_word(group, type_name))
+            {
+                return true;
+            }
+        }
+        from = start + 1;
+    }
+    false
+}
+
+fn has_use_of_prefix(code: &str, crate_prefix: &str) -> bool {
+    let bytes = code.as_bytes();
+    let mut from = 0;
+    while let Some(rel) = code[from..].find(crate_prefix) {
+        let start = from + rel;
+        let end = start + crate_prefix.len();
+        let before_ok = start == 0 || !is_ident_byte(bytes[start - 1]);
+        let after = code[end..].trim_start();
+        if before_ok && (after.starts_with(';') || after.starts_with("as ")) {
+            return true;
+        }
+        from = start + 1;
+    }
+    false
+}
+
+fn brace_group(text: &str) -> Option<&str> {
+    let mut depth = 0usize;
+    for (idx, ch) in text.char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(&text[1..idx]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn mentions_crate(code: &str, crate_mention: &str) -> bool {
@@ -509,6 +643,35 @@ mod tests {
         assert_eq!(
             wired_in(&unrelated, "ClientModule", "navree_plugin_notices::"),
             None
+        );
+
+        // Importing an unrelated item from the plugin crate alongside an app module of the same
+        // struct name does not count as wiring the plugin's module.
+        let helper_only = vec![(
+            "src/app.rs".to_owned(),
+            concat!(
+                "use navree_plugin_khata::Currency;\n",
+                "pub fn app() { Navree::app().module(modules::khata::KhataModule); }\n",
+            )
+            .to_owned(),
+        )];
+        assert_eq!(
+            wired_in(&helper_only, "KhataModule", "navree_plugin_khata::"),
+            None
+        );
+
+        // Importing the module type itself from the plugin crate does count as wired.
+        let imported_module = vec![(
+            "src/app.rs".to_owned(),
+            concat!(
+                "use navree_plugin_khata::{Currency, KhataModule};\n",
+                "pub fn app() { Navree::app().module(KhataModule::from_config()); }\n",
+            )
+            .to_owned(),
+        )];
+        assert_eq!(
+            wired_in(&imported_module, "KhataModule", "navree_plugin_khata::"),
+            Some("src/app.rs".to_owned())
         );
     }
 

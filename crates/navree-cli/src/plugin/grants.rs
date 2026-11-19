@@ -327,17 +327,25 @@ fn edit_workspace_toml(
         table.set_implicit(true);
         Item::Table(table)
     });
+    let roles_is_inline = roles_item.is_inline_table();
     let Some(roles_table) = roles_item.as_table_like_mut() else {
         return Err("config/workspace.toml: `roles` must be a table".to_owned());
     };
 
     for (role, new_perms) in additions {
         if roles_table.get(role).is_none() {
-            let mut role_table = Table::new();
-            if let Some(prefix) = leading_comments.take() {
-                role_table.decor_mut().set_prefix(prefix);
+            if roles_is_inline {
+                roles_table.insert(
+                    role,
+                    Item::Value(Value::InlineTable(toml_edit::InlineTable::new())),
+                );
+            } else {
+                let mut role_table = Table::new();
+                if let Some(prefix) = leading_comments.take() {
+                    role_table.decor_mut().set_prefix(prefix);
+                }
+                roles_table.insert(role, Item::Table(role_table));
             }
-            roles_table.insert(role, Item::Table(role_table));
         }
 
         let Some(role_table) = roles_table.get_mut(role).and_then(Item::as_table_like_mut) else {
@@ -1467,5 +1475,57 @@ mod tests {
             lines[0].text(),
             "  kept     member already has announcements.read"
         );
+    }
+
+    #[test]
+    fn inline_table_role_definitions_are_scanned_and_updated() {
+        let mut files = AppFiles::default();
+        files.config.insert(
+            "config/app.toml".to_owned(),
+            "[workspace]\nroles = { member = { permissions = [\"deals.read\", \"khata.audit\"] }, support = { permissions = [\"tickets.reply\"] } }\n"
+                .to_owned(),
+        );
+        let scanned = scan(&files, &[]);
+        assert!(scanned.roles().contains("member"));
+        assert!(scanned.roles().contains("support"));
+        assert_eq!(scanned.setters("member"), vec!["config/app.toml"]);
+        assert!(
+            scanned
+                .granted()
+                .iter()
+                .any(|g| g.permission == "khata.audit" && g.source == "config/app.toml")
+        );
+
+        let requested = grants_map(&[("member", &["khata.read"])]);
+        let (edited, lines) =
+            plan(&scanned, None, "navree-plugin-khata", &requested, None).unwrap();
+        assert_eq!(edited, None);
+        assert_eq!(
+            lines,
+            vec![GrantLine::Next {
+                role: "member".to_owned(),
+                permission: "khata.read".to_owned(),
+                source: "config/app.toml".to_owned(),
+            }]
+        );
+
+        // Inline `roles` table inside `config/workspace.toml` can gain a new role without panicking.
+        let inline_ws = "roles = { member = { permissions = [\"deals.read\"] } }\n";
+        let mut ws_files = AppFiles::default();
+        ws_files
+            .config
+            .insert("config/workspace.toml".to_owned(), inline_ws.to_owned());
+        let ws_scanned = scan(&ws_files, &[]);
+        let add_support = grants_map(&[("support", &["khata.read"])]);
+        let (ws_edited, _) = plan(
+            &ws_scanned,
+            Some(inline_ws),
+            "navree-plugin-khata",
+            &add_support,
+            None,
+        )
+        .unwrap();
+        let ws_edited = ws_edited.expect("inline workspace.toml updated");
+        assert!(ws_edited.contains("khata.read"));
     }
 }
