@@ -115,7 +115,7 @@ const PREVIEW = {
 };
 
 // Crates whose README is written by hand.
-const HAND_WRITTEN = new Set(["navree-ui"]);
+const HAND_WRITTEN = new Set(["navree-time", "navree-ui"]);
 
 function metadata() {
   const out = spawnSync("cargo", ["metadata", "--no-deps", "--format-version", "1", "--offline"], {
