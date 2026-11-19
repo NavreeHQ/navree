@@ -133,11 +133,11 @@ fn user_channel(
 ```
 
 - **Patterns** are written without the `private-` or `presence-` prefix. They hold literal text and `{name}` parameters; a parameter matches one or more characters other than `.`, and its value is in `params` (`params["id"]` for `users.{id}`).
-- **The first matching pattern decides**, in module dependency order. A channel no pattern matches is refused.
+- **The first matching pattern decides**: patterns of modules that act for no community plugin are tried first, in module dependency order, and then patterns of community plugins in module dependency order. A channel no pattern matches is refused.
 - **Mistakes fail the boot**: a malformed pattern, a pattern written with its prefix, or the same pattern registered twice.
 - The authoriser gets the `Principal` asking and the `AppContext`, so it can resolve any service, such as the ability factory above (see [Authorization](/docs/security/authorization/)).
 
-A plugin that is not one of the framework's own packages authorizes only the channels under its own namespace. Its patterns start with the namespace and a dot, as `notice_board.{id}` does for the namespace `notice_board`, so its authoriser never decides one of your own private or presence channels. Any other pattern stops the boot, and the message names the pattern, the module and the plugin:
+A plugin that is not one of the framework's own packages authorizes only the channels under its own namespace. Its patterns start with the namespace and a dot, as `notice_board.{id}` does for the namespace `notice_board`, so its authoriser never decides one of your own private or presence channels. Any other pattern stops the boot, and the message names the pattern, the module (with why it acts for the plugin when it does not call `m.plugin(..)` itself) and the plugin:
 
 ```text wrap
 channel pattern `users.{id}` of module `BoardModule`: plugin `navree-plugin-notice-board` authorizes channels under `notice_board.` only, and only a module of the app authorizes the app's other channels: remove the plugin or update it to a version that names its channels under `notice_board.`, and to use the plugin's authorizer for `users.{id}`, register it from a module of the app (m.channel)
@@ -145,13 +145,13 @@ channel pattern `users.{id}` of module `BoardModule`: plugin `navree-plugin-noti
 
 A pattern made only of parameters (`{scope}.{id}`), one that starts with the namespace and more letters (`notice_board_extra.{id}`), one with the namespace after a parameter (`{board}.notice_board`) and the namespace alone (`notice_board`) are all outside the namespace. To use a plugin's authoriser for one of your own channels, register it from a module of your app: `m.channel("orders.{id}", notices::authorize)`.
 
-The channels under a plugin's namespace are the plugin's, so the rule runs the other way too. A pattern of a module that does not act for the plugin stops the boot when its first segment is the plugin's namespace, whatever the order of the modules, so the plugin's authoriser never decides a channel you named and yours never decides the plugin's (`chat.support` beside a plugin whose namespace is `chat`, or `chat` alone):
+The channels under a plugin's namespace are the plugin's, so the rule runs the other way too. A pattern of a module that does not act for the plugin (whether your app's or a first-party package's) stops the boot when its first segment is literal text equal to the plugin's namespace, whatever the order of the modules (`chat.support` beside a plugin whose namespace is `chat`, or `chat` alone):
 
 ```text wrap
 channel pattern `chat.support` of module `SupportDesk`: `chat` is the namespace of plugin `navree-plugin-chat`, whose authorizer would decide the channels named under it, and only the plugin's modules authorize channels there: name the channel outside the plugin's namespace, or leave that channel to the plugin's own pattern
 ```
 
-There are two ways out. Name your channel outside the plugin's namespace (`support.desk`), and your own authoriser decides it. Or register no pattern of your own for it, and the plugin's pattern decides the channel as it decides the plugin's other channels. Your own channels under words no plugin holds (`crm.deals`, `users.{id}`) boot beside a plugin as before. The check reads a first segment that is literal text, so a pattern that starts with a parameter is not read, and the first matching pattern still decides when two overlap. [What a plugin may not grant](/docs/security/authorization/#what-a-plugin-may-not-grant) says which modules count as a plugin's.
+There are two ways out (or remove the plugin, since its namespace is fixed by the plugin crate). Name your channel outside the plugin's namespace (`support.desk`, updating any clients already subscribed under the old name), and your own authoriser decides it. Or register no pattern of your own for it, and the plugin's pattern decides the channel as it decides the plugin's other channels. Your own channels under words no plugin holds (`crm.deals`, `users.{id}`) boot beside a plugin as before. Because the boot check reads a first segment that is literal text, a pattern of yours that starts with a parameter (`{team}.support`) is not refused at boot, and because patterns of modules acting for no community plugin run before any community plugin's patterns regardless of module order, `{team}.support` still decides `private-chat.support` before the plugin's `chat.{room}`, while `chat.{room}` decides the other channels under `chat.`. [What a plugin may not grant](/docs/security/authorization/#what-a-plugin-may-not-grant) says which modules count as a plugin's.
 
 It returns a `ChannelDecision`:
 
