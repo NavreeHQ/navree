@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Navree.Design;
+using Navree.Platform;
 using Navree.Protocol;
 using Navree.Runtime;
 using Windows.Graphics;
@@ -24,8 +25,11 @@ public sealed partial class ShellWindow : Window
     private readonly NavigationView navigation = new();
     private readonly ScreenPresenter front;
     private readonly ScreenPresenter back;
+    private readonly ScreenPresenter cover;
+    private readonly Border coverHost = new() { Visibility = Visibility.Collapsed };
     private readonly Grid content = new();
     private readonly StackPanel messages = new() { Spacing = 8, VerticalAlignment = VerticalAlignment.Bottom, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(16), MaxWidth = 560 };
+    private readonly Dictionary<long, InfoBar> messageBars = [];
     private readonly TextBlock announcer = new() { Opacity = 0, Height = 0, IsHitTestVisible = false };
     private readonly Grid root = new();
     private readonly Dialogs dialogs;
@@ -45,6 +49,8 @@ public sealed partial class ShellWindow : Window
         this.host = host;
         front = new ScreenPresenter(host);
         back = new ScreenPresenter(host);
+        cover = new ScreenPresenter(host);
+        coverHost.Child = cover;
         dialogs = new Dialogs(host, root, sidePane);
 
         Title = host.Options.AppName;
@@ -66,6 +72,16 @@ public sealed partial class ShellWindow : Window
         };
         titleBar.BackRequested += (_, _) =>
         {
+            if (CoverRules.Decide(host.State) is { IsCovered: true } covered)
+            {
+                if (covered.CanGoBack)
+                {
+                    host.Send(Events.Back);
+                }
+
+                return;
+            }
+
             if (settingsOpen)
             {
                 HideSettings();
@@ -85,8 +101,6 @@ public sealed partial class ShellWindow : Window
 
         content.Children.Add(front);
         content.Children.Add(sidePane);
-        content.Children.Add(messages);
-        content.Children.Add(announcer);
         navigation.Content = content;
 
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -94,18 +108,36 @@ public sealed partial class ShellWindow : Window
         root.Children.Add(titleBar);
         Grid.SetRow(navigation, 1);
         root.Children.Add(navigation);
+        Grid.SetRow(coverHost, 1);
+        root.Children.Add(coverHost);
+        Grid.SetRow(messages, 1);
+        root.Children.Add(messages);
+        Grid.SetRow(announcer, 1);
+        root.Children.Add(announcer);
         Content = root;
         SetTitleBar(titleBar);
 
         root.SizeChanged += (_, e) => OnWidth(e.NewSize.Width);
         root.KeyboardAccelerators.Add(Accelerator(VirtualKey.F5, VirtualKeyModifiers.None, () =>
         {
-            if (host.State.Nav.Front is long screen)
+            if (CoverRules.Decide(host.State) is { IsCovered: true, CoverScreenId: long coverScreen })
+            {
+                host.Send(Events.Refresh(coverScreen));
+            }
+            else if (host.State.Nav.Front is long screen)
             {
                 host.Send(Events.Refresh(screen));
             }
         }));
-        root.KeyboardAccelerators.Add(Accelerator(VirtualKey.Left, VirtualKeyModifiers.Menu, () => host.Send(Events.Back)));
+        root.KeyboardAccelerators.Add(Accelerator(VirtualKey.Left, VirtualKeyModifiers.Menu, () =>
+        {
+            if (CoverRules.Decide(host.State) is { IsCovered: true, CanGoBack: false })
+            {
+                return;
+            }
+
+            host.Send(Events.Back);
+        }));
 
         WindowVisibility.Follow(this, host);
 
@@ -129,6 +161,7 @@ public sealed partial class ShellWindow : Window
             // The web pages this window showed are closed with it.
             front.ReleaseWebs();
             back.ReleaseWebs();
+            cover.ReleaseWebs();
         };
         InitializeSystem();
     }
@@ -140,7 +173,7 @@ public sealed partial class ShellWindow : Window
     public string? OverTheWindow => dialogs.ShowingKey;
 
     /// <summary>The page of the screen in front, all of it (not only what the window's height shows).</summary>
-    public FrameworkElement? CurrentPage => front.PageElement;
+    public FrameworkElement? CurrentPage => coverHost.Visibility == Visibility.Visible ? cover.PageElement : front.PageElement;
 
     /// <summary>Sets the direction text runs in, for a language that runs right to left.</summary>
     /// <param name="rightToLeft">Whether it runs from the right.</param>
@@ -224,7 +257,53 @@ public sealed partial class ShellWindow : Window
     /// <summary>Shows the view state: the navigation, the screen or screens in front, what is over them.</summary>
     private void Show(ViewState state)
     {
+        HashSet<long> liveMessages = [.. state.Messages.Select(item => item.Id)];
+        foreach ((long id, InfoBar stale) in messageBars.Where(pair => !liveMessages.Contains(pair.Key)).ToList())
+        {
+            _ = messageBars.Remove(id);
+            stale.IsOpen = false;
+            _ = messages.Children.Remove(stale);
+        }
+
         NavPart nav = state.Nav;
+        CoverLayout coverLayout = CoverRules.Decide(state);
+        if (coverLayout.IsCovered)
+        {
+            // A locked cover takes the whole window over an opaque surface: navigation, title-bar search, account menu and settings are
+            // hidden, with neither a close button nor Escape dismissal.
+            if (settingsOpen)
+            {
+                settingsOpen = false;
+                settingsHost.Visibility = Visibility.Collapsed;
+            }
+
+            titleBar.IsPaneToggleButtonVisible = false;
+            titleBar.IsBackButtonEnabled = coverLayout.CanGoBack;
+            ShowSearch(null);
+            ShowAccount(null);
+            front.Show(null, width);
+            EnsurePanes(false);
+            navigation.Visibility = Visibility.Collapsed;
+
+            ScreenView? coverScreen = coverLayout.CoverScreenId is long coverId && state.Screens.TryGetValue(coverId, out ScreenView? heldCover) ? heldCover : null;
+            cover.Show(coverScreen, width);
+            coverHost.Background = Look.Resource("SolidBackgroundFillColorBaseBrush");
+            coverHost.Visibility = Visibility.Visible;
+
+            bool unlockedAbove = coverLayout.UnlockedModalAbove is not null;
+            dialogs.Update(state, unlockedAbove ? null : cover.Context, modalInFront: unlockedAbove);
+            return;
+        }
+
+        if (coverHost.Visibility == Visibility.Visible)
+        {
+            coverHost.Visibility = Visibility.Collapsed;
+            cover.Show(null, width);
+            cover.ReleaseWebs();
+        }
+
+        navigation.Visibility = Visibility.Visible;
+        titleBar.IsPaneToggleButtonVisible = true;
         titleBar.IsBackButtonEnabled = nav.CanGoBack || settingsOpen;
         ShowDestinations(nav);
         ShowSearch(state.FrontScreen?.Screen?.Search);
@@ -435,11 +514,15 @@ public sealed partial class ShellWindow : Window
         }
 
         DispatcherTimer? goesBy = null;
+        messageBars[message.Id] = bar;
         bar.Closed += (_, _) =>
         {
             goesBy?.Stop();
             messages.Children.Remove(bar);
-            host.Send(Events.MessageShown(message.Id));
+            if (messageBars.Remove(message.Id))
+            {
+                host.Send(Events.MessageShown(message.Id));
+            }
         };
         messages.Children.Add(bar);
 

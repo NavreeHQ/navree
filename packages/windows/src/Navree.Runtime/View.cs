@@ -455,13 +455,6 @@ public sealed record ViewState(
     public static ViewState Empty { get; } =
         new(null, new NavPart(), ImmutableDictionary<long, ScreenView>.Empty, ImmutableList<Message>.Empty);
 
-    /// <summary>
-    /// How many times the core has said that the app's part changed. It is no part of the core's state: the client counts. The core
-    /// says so when it draws a shell, at a sign-out and when it forgets the session, so a state with another count than an earlier one
-    /// holds an app's part the core gave since, and one with the same count holds the same part, also when every part was read again.
-    /// </summary>
-    public long AppGiven { get; init; }
-
     /// <summary>The screen in front, when there is one.</summary>
     public ScreenView? FrontScreen =>
         Nav.Front is long front && Screens.TryGetValue(front, out ScreenView? screen) ? screen : null;

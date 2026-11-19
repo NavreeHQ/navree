@@ -545,7 +545,9 @@ public sealed class SystemPlace : IDisposable
     /// <returns>Whether a window was opened.</returns>
     public bool OpenWindow()
     {
-        if (host.State.Nav.Front is not long front || !host.State.Screens.ContainsKey(front))
+        if (Navree.Platform.CoverRules.IsCovered(host.State)
+            || host.State.Nav.Front is not long front
+            || !host.State.Screens.ContainsKey(front))
         {
             return false;
         }

@@ -256,8 +256,7 @@ public sealed class CoreClient : IDisposable
         switch (Reading.Tag(change, "t"))
         {
             case "app":
-                // Counted: this is the core saying who the app is for now, which reading every part again is not (ViewState.AppGiven).
-                state = state with { App = Query<AppPart>(Part("app"), ViewReading.ReadApp), AppGiven = state.AppGiven + 1 };
+                state = state with { App = Query<AppPart>(Part("app"), ViewReading.ReadApp) };
                 break;
             case "nav":
                 if (Query<NavPart>(Part("nav"), ViewReading.ReadNav) is NavPart nav)
@@ -360,8 +359,7 @@ public sealed class CoreClient : IDisposable
             ImmutableList<Message> messages = Reading.TryField(all, "messages", out JsonElement list)
                 ? ViewReading.ReadMessages(list)
                 : ImmutableList<Message>.Empty;
-            // Every part read again is the same app's part read again, not one the core gave anew: the count stays.
-            state = new ViewState(app, nav, screens.ToImmutable(), messages) { AppGiven = state.AppGiven };
+            state = new ViewState(app, nav, screens.ToImmutable(), messages);
         }
         catch (JsonException problem)
         {

@@ -1,8 +1,13 @@
+using Navree.Runtime;
+
 namespace Navree.Platform;
 
-/// <summary>A web view that is alive, as the end of a session needs to know it: with the session it was made for.</summary>
+/// <summary>A web view that is alive, as the end of a session or a cover over the app needs to know it.</summary>
 public interface ILiveWebView
 {
+    /// <summary>The number of the screen this web view was made for.</summary>
+    long Screen { get; }
+
     /// <summary>The folder it keeps its data in, which is the folder of the session it was started for; null when it was never started.</summary>
     string? Folder { get; }
 
@@ -124,6 +129,34 @@ public static class WebWipe
 
         note?.Invoke("the folder " + (gone ? "was deleted" : "could not be deleted"));
         return gone;
+    }
+
+    /// <summary>
+    /// Takes down every live web view whose screen is covered by a locked cover, parked as blank, or no longer showing a web page: each is
+    /// emptied and closed so nothing in the page keeps running or talking to the server under the sign-in or waiting cover, while its folder
+    /// stays on disk for the same person if they sign in again.
+    /// </summary>
+    /// <param name="state">The state about to be shown.</param>
+    /// <param name="live">Every web view that is alive.</param>
+    /// <returns>How many web views were taken down.</returns>
+    public static int TakeDownUnderCover(ViewState state, IReadOnlyList<ILiveWebView> live)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(live);
+        int closed = 0;
+        foreach (ILiveWebView view in live)
+        {
+            if (CoverRules.AllowsWeb(state, view.Screen))
+            {
+                continue;
+            }
+
+            Quietly(view.Empty);
+            Quietly(view.Close);
+            closed++;
+        }
+
+        return closed;
     }
 
     private static void Quietly(Action act)

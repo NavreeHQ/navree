@@ -1,7 +1,14 @@
+using System.Collections.Immutable;
+using System.Text;
+using System.Text.Json.Nodes;
+using Navree.Design;
+using Navree.Protocol;
+using Navree.Runtime;
+
 namespace Navree.Platform.Tests;
 
 /// <summary>A web view that is only a record of what was asked of it.</summary>
-internal sealed class FakeWebView(string name, string? folder, Func<Task>? clear = null) : ILiveWebView
+internal sealed class FakeWebView(string name, string? folder, Func<Task>? clear = null, long screen = 1) : ILiveWebView
 {
     internal string Name { get; } = name;
 
@@ -10,6 +17,8 @@ internal sealed class FakeWebView(string name, string? folder, Func<Task>? clear
     internal bool AskedToClear { get; private set; }
 
     internal bool Closed { get; private set; }
+
+    public long Screen { get; } = screen;
 
     public string? Folder { get; } = folder;
 
@@ -123,5 +132,66 @@ public sealed class WebWipeTests
         FakeWebView other = new("a web view of another folder", Now);
         _ = await WebWipe.RunAsync(Ended, null, [other], () => Task.FromResult(true), Brief).WaitAsync(Long);
         Expect.That(other.Closed, "a web view was left alive though no web page may be shown");
+    }
+
+    [TestMethod]
+    public async Task WebPagesUnderTheSignInAreTakenDown()
+    {
+        Origins origins = new("https://shop.example");
+        string transcripts = Path.Combine(Repository.Root, "crates", "navree-native-core", "transcripts");
+        string shellBody = await File.ReadAllTextAsync(Path.Combine(transcripts, "fixtures", "made", "shell-routes.json"));
+        string legacyHtml = await File.ReadAllTextAsync(Path.Combine(transcripts, "fixtures", "made", "legacy.html"));
+        string endedBody = await File.ReadAllTextAsync(Path.Combine(transcripts, "fixtures", "made", "session-ended.json"));
+        byte[] config = Encoding.UTF8.GetBytes("""{"origin":"https://shop.example","client":{"platform":"windows","form":"desktop","vocab":0,"text_percent":100}}""");
+
+        using CoreClient client = new(config, _ => { });
+        _ = await client.SendAsync(Events.Start);
+        Update shell = await client.SendAsync(Events.Response(1, 200, "application/vnd.navree.native+json", null, [], shellBody));
+        Update legacy = await client.SendAsync(Events.Response(2, 200, "text/html; charset=utf-8", null, [], legacyHtml));
+        Expect.That(legacy.State.Screens[1].Content is WebContent, "the first screen did not open in the web view");
+
+        // While the screen is shown with no cover, its web view stands and its requests to the app's origin go out.
+        FakeWebView mainWeb = new("main window web page", Now, screen: 1);
+        Assert.AreEqual(0, WebWipe.TakeDownUnderCover(legacy.State, [mainWeb]));
+        Assert.IsFalse(mainWeb.Emptied || mainWeb.Closed);
+        Assert.AreEqual(WebAnswer.Ours, WebData.Answer("https://shop.example/legacy.js", origins.Ours, wiping: false, covered: !CoverRules.AllowsWeb(legacy.State, 1)));
+
+        // Refreshing the orders destination answers 401 and puts the sign-in cover up: the core parks the web screen underneath, and the
+        // client empties and closes every web view under the cover (main window and secondary window alike), while keeping a web sign-in
+        // cover's own web view alive until the sign-in finishes.
+        Update selected = await client.SendAsync(Events.Select(1));
+        long ordersRequest = selected.Effects.OfType<FetchEffect>().Single().Request;
+        Update covered = await client.SendAsync(Events.Response(ordersRequest, 401, "application/vnd.navree.native+json", null, [], endedBody));
+        Expect.That(CoverRules.IsCovered(covered.State), "the 401 did not put a locked cover up");
+        long coverScreen = CoverRules.Decide(covered.State).CoverScreenId!.Value;
+        long signInRequest = covered.Effects.OfType<FetchEffect>().Single().Request;
+
+        // Suppose the sign-in page itself is HTML in the web view, while another web view stood in a secondary window.
+        Update htmlSignIn = await client.SendAsync(Events.Response(signInRequest, 200, "text/html; charset=utf-8", null, [], "<html><body>Sign in</body></html>"));
+        FakeWebView secondaryWeb = new("secondary window web page", Now, screen: 2);
+        FakeWebView signInWeb = new("sign-in cover web page", Now, screen: coverScreen);
+        int takenDown = WebWipe.TakeDownUnderCover(htmlSignIn.State, [mainWeb, secondaryWeb, signInWeb]);
+        Assert.AreEqual(2, takenDown, "every web view under the sign-in cover must be taken down while the HTML sign-in cover itself stays");
+        Expect.That(mainWeb.Emptied && mainWeb.Closed, "the main window's web view under the sign-in cover was left alive");
+        Expect.That(secondaryWeb.Emptied && secondaryWeb.Closed, "the secondary window's web view under the sign-in cover was left alive");
+        Expect.That(!signInWeb.Emptied && !signInWeb.Closed, "the HTML sign-in cover's own web view was closed before the person could sign in");
+        Assert.AreEqual(WebAnswer.Refused, WebData.Answer("https://shop.example/api/poll", origins.Ours, wiping: false, covered: !CoverRules.AllowsWeb(htmlSignIn.State, 1)));
+
+        // Even if a state still held WebContent on a destination screen while a locked cover stood over it, AllowsWeb refuses it.
+        ViewState unparkedUnderCover = htmlSignIn.State with
+        {
+            Screens = htmlSignIn.State.Screens.SetItem(1, new ScreenView { Id = 1, Url = "https://shop.example/legacy", Content = new WebContent("https://shop.example/legacy", "Legacy", [], 1) }),
+        };
+        FakeWebView stillWeb = new("unparked web view under cover", Now, screen: 1);
+        Assert.AreEqual(1, WebWipe.TakeDownUnderCover(unparkedUnderCover, [stillWeb]));
+        Expect.That(stillWeb.Emptied && stillWeb.Closed, "a web screen underneath a locked cover was left alive");
+
+        // Once the sign-in cover finishes (for example via a web link back to the app) and turns into the locked waiting cover while the
+        // shell is asked, the sign-in web view itself is taken down too.
+        Update waiting = await client.SendAsync(Events.WebLink(coverScreen, "https://shop.example/orders"));
+        Expect.That(CoverRules.IsCovered(waiting.State), "the post-sign-in waiting cover is not up while the shell is asked");
+        Assert.AreEqual(1, WebWipe.TakeDownUnderCover(waiting.State, [signInWeb]));
+        Expect.That(signInWeb.Emptied && signInWeb.Closed, "the web view of the sign-in cover stayed alive under the waiting cover");
+        _ = shell;
     }
 }

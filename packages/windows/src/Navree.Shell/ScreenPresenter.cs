@@ -94,10 +94,10 @@ internal sealed class ScreenPresenter : Grid
 
         if (screen.Content is WebContent web)
         {
-            if (webs.TryGetValue(screen.Id, out WebPage? page) && page.OfAnEndedSession && !page.Shows(web))
+            if (webs.TryGetValue(screen.Id, out WebPage? page) && (page.IsClosed || (page.OfAnEndedSession && !page.Shows(web))))
             {
-                // A web view started for a session that has ended is never shown a page again (the page it was emptied of stays empty): when
-                // the screen has another page to show it gets a new web view, which keeps its data in the folder of the session now.
+                // A web view closed under a cover, or started for a session that has ended, is never shown a page again: when the screen
+                // has a page to show again it gets a fresh web view in the folder of the session now.
                 webs.Remove(screen.Id);
                 page.Release();
                 page = null;
@@ -116,6 +116,11 @@ internal sealed class ScreenPresenter : Grid
             Present(page);
             _ = page.ShowAsync(web);
             return;
+        }
+
+        if (webs.Remove(screen.Id, out WebPage? parked))
+        {
+            parked.Release();
         }
 
         Present(scroller);
@@ -322,8 +327,8 @@ internal sealed class ScreenPresenter : Grid
             NodeRenderer.Forget(gone);
         }
 
-        // A web screen that has left the app lets go of its web view and the process behind it.
-        foreach (long gone in webs.Keys.Where(id => !host.State.Screens.ContainsKey(id)).ToList())
+        // A web screen that has left the app, or was closed under a cover, lets go of its web view and the process behind it.
+        foreach (long gone in webs.Keys.Where(id => !host.State.Screens.ContainsKey(id) || webs[id].IsClosed || !Navree.Platform.CoverRules.AllowsWeb(host.State, id)).ToList())
         {
             if (webs.Remove(gone, out WebPage? left))
             {
@@ -437,14 +442,22 @@ internal sealed class ScreenPresenter : Grid
             default:
                 if (screen.Failure is Failure failed)
                 {
-                    page.Children.Add(Look.Label(screen.Title ?? string.Empty, "TitleTextBlockStyle"));
+                    if (!string.IsNullOrEmpty(screen.Title))
+                    {
+                        page.Children.Add(Look.Label(screen.Title, "TitleTextBlockStyle"));
+                    }
+
                     page.Children.Add(FailureBar(failed, screen.Id, retry: true));
                 }
                 else if (screen.Loading || screen.Refreshing)
                 {
-                    if (screen.Title is not null)
+                    if (!string.IsNullOrEmpty(screen.Title))
                     {
                         page.Children.Add(Look.Label(screen.Title, "TitleTextBlockStyle"));
+                    }
+                    else
+                    {
+                        page.Children.Add(new ProgressRing { IsActive = true, Width = 36, Height = 36, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 48, 0, 0) });
                     }
                 }
 

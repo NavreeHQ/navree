@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Navree.Design;
+using Navree.Platform;
 using Navree.Presence;
 using Navree.Runtime;
 using Windows.Graphics;
@@ -106,10 +107,22 @@ internal sealed class ScreenWindow : Window
             return;
         }
 
+        double width = root.ActualWidth > 0 ? root.ActualWidth : 840;
+        if (CoverRules.Decide(state).BlankSecondaryWindow)
+        {
+            // While a locked cover stands over the main window, secondary windows show nothing of the person before and close any web view.
+            titleBar.Subtitle = string.Empty;
+            Title = host.Options.AppName;
+            presenter.Show(null, WindowRules.ClassOf(width));
+            presenter.ReleaseWebs();
+            dialogs.Update(state, null, modalInFront: false);
+            frontWas = state.Nav.Front;
+            return;
+        }
+
         string? title = screen.Title;
         titleBar.Subtitle = title ?? string.Empty;
         Title = title is null ? host.Options.AppName : title + " - " + host.Options.AppName;
-        double width = root.ActualWidth > 0 ? root.ActualWidth : 840;
         presenter.Show(screen, WindowRules.ClassOf(width));
 
         // The questions and sheets of this window's screen are shown in this window, not left waiting for an answer nobody can see.

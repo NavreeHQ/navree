@@ -31,7 +31,7 @@ public sealed partial class ShellWindow
     // Called once, at the end of the constructor.
     private void InitializeSystem()
     {
-        content.Children.Insert(2, settingsHost);
+        content.Children.Add(settingsHost);
         navigation.IsSettingsVisible = true;
 
         // The window may be made no smaller than snap layouts allow; the maximise button stays the system's. The least size is in device
@@ -111,7 +111,7 @@ public sealed partial class ShellWindow
     /// <summary>Shows the settings page in place of the screen, and selects the navigation's last item.</summary>
     public void ShowSettings()
     {
-        if (host.Place is null)
+        if (host.Place is null || CoverRules.IsCovered(host.State))
         {
             return;
         }

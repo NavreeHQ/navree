@@ -138,6 +138,9 @@ internal sealed class WebPage : Grid, ILiveWebView
     }
 
     /// <inheritdoc />
+    long ILiveWebView.Screen => screen;
+
+    /// <inheritdoc />
     string? ILiveWebView.Folder => startedIn;
 
     /// <inheritdoc />
@@ -169,6 +172,16 @@ internal sealed class WebPage : Grid, ILiveWebView
 
     /// <inheritdoc />
     void ILiveWebView.Close() => CloseNow();
+
+    /// <summary>Whether the page has been closed or let go of.</summary>
+    internal bool IsClosed => closed || released;
+
+    /// <summary>
+    /// Empties and closes every live web view whose screen is covered by a locked cover, parked as blank, or no longer showing a web page,
+    /// leaving the session's folder on disk for the same person if they return.
+    /// </summary>
+    /// <param name="state">The state about to be shown.</param>
+    internal static void TakeDownUnder(ViewState state) => _ = WebWipe.TakeDownUnderCover(state, [.. Known]);
 
     /// <summary>
     /// Whether the page's web view was started for a session that has ended: it keeps its data in a folder that is not the one of the session
@@ -213,6 +226,12 @@ internal sealed class WebPage : Grid, ILiveWebView
     /// <summary>Shows the page; loads it again when the serial has moved on.</summary>
     internal async Task ShowAsync(WebContent web)
     {
+        if (closed || released || !CoverRules.AllowsWeb(host.State, screen))
+        {
+            CloseNow();
+            return;
+        }
+
         if (loaded == web.Url && loadedSerial == web.Serial)
         {
             return;
@@ -241,6 +260,12 @@ internal sealed class WebPage : Grid, ILiveWebView
             for (int waited = 0; host.Wiping && waited < 400; waited++)
             {
                 await Task.Delay(50);
+            }
+
+            if (closed || released || !CoverRules.AllowsWeb(host.State, screen))
+            {
+                CloseNow();
+                return;
             }
 
             if (wanted != web || !host.Origins.Ours(web.Url))
@@ -345,9 +370,9 @@ internal sealed class WebPage : Grid, ILiveWebView
 
         _ = browsers.Add((int)view.CoreWebView2!.BrowserProcessId);
 
-        // A web view whose session ended while it was being started is closed at once: it is never shown a page, and nothing of whoever
-        // comes next is ever in it.
-        if (OfAnEndedSession)
+        // A web view whose session ended or whose screen was covered while it was being started is closed at once: it is never shown a page,
+        // and nothing of whoever comes next is ever in it.
+        if (closed || released || OfAnEndedSession || !CoverRules.AllowsWeb(host.State, screen))
         {
             CloseNow();
         }
@@ -431,7 +456,8 @@ internal sealed class WebPage : Grid, ILiveWebView
         web.WebResourceRequested += (sender, args) =>
         {
             string uri = args.Request.Uri;
-            switch (WebData.Answer(uri, host.Origins.Ours, host.Wiping))
+            bool covered = closed || released || !CoverRules.AllowsWeb(host.State, screen);
+            switch (WebData.Answer(uri, host.Origins.Ours, host.Wiping, covered))
             {
                 case WebAnswer.AsItIs:
                     return;

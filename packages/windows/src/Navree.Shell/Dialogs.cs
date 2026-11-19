@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Navree.Design;
+using Navree.Platform;
 using Navree.Protocol;
 using Navree.Runtime;
 
@@ -101,11 +102,18 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
 
     private WidthClass Width => WindowRules.ClassOf(root.ActualWidth);
 
-    // A window of one screen has no pane at its side: what would be a pane is a dialog there.
-    private bool AsPane(bool large) => Own is null && WindowRules.UsesSidePane(root.ActualWidth, large);
+    // A window of one screen has no pane at its side, nor does the main window while its navigation is hidden under a locked cover.
+    private bool AsPane(ViewState state, bool large) => Own is null && !CoverRules.IsCovered(state) && WindowRules.UsesSidePane(root.ActualWidth, large);
 
     private Wanted? Decide(ViewState state, RenderContext? context, bool modalInFront)
     {
+        // A secondary window blanks while a locked cover is up: any open dialog or popover of its screen is hidden without telling the core
+        // it was answered, and returns if the same person comes back.
+        if (Own is not null && CoverRules.IsCovered(state))
+        {
+            return null;
+        }
+
         // The main window shows the questions and sheets of the screen in front; a window of one screen shows those of its own screen (unless the
         // main window is showing that same screen, which would be two dialogs for one question).
         ScreenView? front = Own is long own
@@ -128,7 +136,8 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 result => host.Send(Events.Answer(front.Id, question.Id, result == ContentDialogResult.Primary)));
         }
 
-        if (modalInFront && front is not null)
+        // A locked modal is drawn across the whole main window by ShellWindow, never as a closable ContentDialog or SidePane here.
+        if (modalInFront && front is not null && !CoverRules.IsLockedModalScreen(state, front.Id))
         {
             long id = front.Id;
             string heading = front.Screen?.Title ?? front.Title ?? string.Empty;
@@ -150,7 +159,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
             }
 
             return new Wanted(
-                "screen:" + id + (AsPane(large) ? ":pane" : ":dialog"),
+                "screen:" + id + (AsPane(state, large) ? ":pane" : ":dialog"),
                 () => new ContentDialog { Title = heading, Content = PresenterOf(false), CloseButtonText = "Close", MinWidth = 520 },
                 new PaneBody(heading, () => PresenterOf(true)),
                 () =>
@@ -213,7 +222,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                 }
 
                 return new Wanted(
-                    "overlay:" + screen.Id + ":" + overlay.Id + (AsPane(large) ? ":pane" : ":dialog"),
+                    "overlay:" + screen.Id + ":" + overlay.Id + (AsPane(state, large) ? ":pane" : ":dialog"),
                     () => OverlayDialog(overlay, Body()),
                     new PaneBody(Titled(overlay), Body),
                     null,
@@ -408,7 +417,7 @@ internal sealed class Dialogs(ShellHost host, FrameworkElement root, SidePane pa
                     return;
                 }
 
-                if (want.Pane is PaneBody body && AsPane(want.Large))
+                if (want.Pane is PaneBody body && AsPane(host.State, want.Large))
                 {
                     showing = want;
                     pane.Show(body.Title, body.Build(), () =>

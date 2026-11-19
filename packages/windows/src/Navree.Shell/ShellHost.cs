@@ -370,7 +370,11 @@ public sealed partial class ShellHost : IDisposable
                     Delivery.Show(
                         state,
                         heard => _ = people.Hear(heard, stateMark),
-                        shown => StateChanged?.Invoke(shown),
+                        shown =>
+                        {
+                            WebPage.TakeDownUnder(shown);
+                            StateChanged?.Invoke(shown);
+                        },
                         what => Problem?.Invoke(what));
                 },
                 effect =>

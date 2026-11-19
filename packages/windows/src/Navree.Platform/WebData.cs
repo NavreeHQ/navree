@@ -69,14 +69,15 @@ public static class WebData
 
     /// <summary>
     /// What the client answers a request the web view asks it about, whichever part of a page made it (the page, a frame, a worker of any
-    /// kind): what the web view makes itself goes as it is; an address that is not the app's own is refused; and while a sign-out's steps run,
-    /// every request that would reach the network is refused, so no answer can put a cookie into what is being cleared.
+    /// kind): what the web view makes itself goes as it is; an address that is not the app's own is refused; and while a sign-out's steps run
+    /// or the web view's screen is covered, every request that would reach the network is refused.
     /// </summary>
     /// <param name="address">The whole address asked for.</param>
     /// <param name="ours">Whether an address is one of the app's own.</param>
     /// <param name="wiping">Whether a sign-out's steps are running.</param>
+    /// <param name="covered">Whether the web view's screen is covered or closed.</param>
     /// <returns>What to do with it.</returns>
-    public static WebAnswer Answer(string address, Func<string, bool> ours, bool wiping)
+    public static WebAnswer Answer(string address, Func<string, bool> ours, bool wiping, bool covered = false)
     {
         ArgumentNullException.ThrowIfNull(address);
         ArgumentNullException.ThrowIfNull(ours);
@@ -85,7 +86,7 @@ public static class WebData
             return WebAnswer.AsItIs;
         }
 
-        return !wiping && ours(address) ? WebAnswer.Ours : WebAnswer.Refused;
+        return !wiping && !covered && ours(address) ? WebAnswer.Ours : WebAnswer.Refused;
     }
 
     /// <summary>
