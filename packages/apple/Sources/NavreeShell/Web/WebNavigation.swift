@@ -14,42 +14,45 @@ public enum WebNavigation: Equatable, Sendable {
 
 /// The web view's navigation rule. The core takes a `web_link` as a tap, and
 /// a tap may open the dialler, messages, mail, maps or another site. So the
-/// core is told only of what the system says the person did: a navigation
-/// of the type `WKNavigationType.linkActivated`, of which Apple says "This
-/// action occurs when the user activates a link with an `href` attribute".
-/// Every other type (`other`, which is what a page's script and a redirect
-/// are, a form sent, a reload, back and forward) may stay inside the app's
-/// own origin and may not leave it: one that would is cancelled, and told to
-/// nobody.
+/// core is told only when the system reports `WKNavigationType.linkActivated`
+/// AND the web view recently received real person input (`userInteracted`),
+/// never when a page's own script synthesises a click on a link. Every other
+/// navigation (`other`, a script's own link click, a redirect, a form sent, a
+/// reload, back and forward) may stay inside the app's own origin and may not
+/// leave it: one that would is cancelled, and told to nobody.
 public enum WebNavigationRules {
     /// What becomes of a navigation.
     ///
-    /// - `linkActivated`: the system's type for it is a link the person activated.
+    /// - `linkActivated`: the system's type for it is an activated link.
     /// - `mainFrame`: it would replace the page itself, not a frame inside it.
     /// - `ours`: its address is the app's own, whole; for a frame, also one
     ///   of a host the app names for the web view (``WebRules``).
     /// - `loaded`: its address is the one the app itself asked the web view to load.
     /// - `empty`: its address is `about:`, an empty frame.
+    /// - `userInteracted`: the web view recently saw a real touch, click,
+    ///   key press or accessibility activation from the person.
     public static func decide(
-        linkActivated: Bool, mainFrame: Bool, ours: Bool, loaded: Bool = false, empty: Bool = false
+        linkActivated: Bool, mainFrame: Bool, ours: Bool, loaded: Bool = false, empty: Bool = false,
+        userInteracted: Bool = true
     ) -> WebNavigation {
         guard mainFrame else {
             // A frame stays where the app lets a frame be, or empty; it never takes the person anywhere.
             return ours || empty ? .allow : .cancel
         }
         // The page the app asked for, and its own reload.
-        if loaded && !linkActivated { return .allow }
-        // A link the person tapped: the core decides, whatever it leads to.
-        if linkActivated { return .tap }
-        // A form posted, a redirect, the page's script: inside the origin it
-        // stays in the web view; out of it, it goes nowhere.
+        if loaded && (!linkActivated || !userInteracted) { return .allow }
+        // A link the person actually tapped: the core decides, whatever it leads to.
+        if linkActivated && userInteracted { return .tap }
+        // A form posted, a redirect, the page's script (including `anchor.click()`):
+        // inside the origin it stays in the web view; out of it, it goes nowhere.
         return ours ? .allow : .cancel
     }
 
     /// What becomes of a page's request for a new window: a link the person
-    /// activated is a tap for the core to follow; a window a script asks for
-    /// is not opened and nobody is told. No new web view is ever made.
-    public static func newWindow(linkActivated: Bool) -> WebNavigation {
-        linkActivated ? .tap : .cancel
+    /// actually activated is a tap for the core to follow; a window or
+    /// synthetic click a script asks for is not opened and nobody is told.
+    /// No new web view is ever made.
+    public static func newWindow(linkActivated: Bool, userInteracted: Bool = true) -> WebNavigation {
+        linkActivated && userInteracted ? .tap : .cancel
     }
 }

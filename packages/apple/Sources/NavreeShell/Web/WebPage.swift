@@ -1,25 +1,177 @@
+import Accessibility
 import CryptoKit
 import Foundation
 import NavreeProtocol
 import NavreeRuntime
 import SwiftUI
+import UniformTypeIdentifiers
 import WebKit
+
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
+
+/// What presents the app's own file picker when a web page asks for files.
+@MainActor
+protocol WebFilePicker {
+    func pick(multiple: Bool) async -> [URL]?
+}
+
+/// The system's own file browser for web `<input type="file">` fields:
+/// `UIDocumentPickerViewController` on iPhone and iPad, `NSOpenPanel` on a Mac.
+@MainActor
+final class SystemWebFilePicker: WebFilePicker {
+    #if canImport(UIKit)
+    private var activeDelegate: DocumentPickerDelegate?
+    #endif
+
+    func pick(multiple: Bool) async -> [URL]? {
+        #if canImport(UIKit)
+        guard let presenter = Windows.top else { return nil }
+        return await withCheckedContinuation { continuation in
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item])
+            picker.allowsMultipleSelection = multiple
+            let delegate = DocumentPickerDelegate { [weak self] urls in
+                self?.activeDelegate = nil
+                continuation.resume(returning: urls)
+            }
+            self.activeDelegate = delegate
+            picker.delegate = delegate
+            picker.presentationController?.delegate = delegate
+            presenter.present(picker, animated: true)
+        }
+        #elseif canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = multiple
+        let response: NSApplication.ModalResponse
+        if let window = Windows.key {
+            response = await panel.beginSheetModal(for: window)
+        } else {
+            response = panel.runModal()
+        }
+        return response == .OK && !panel.urls.isEmpty ? panel.urls : nil
+        #endif
+    }
+}
+
+#if canImport(UIKit)
+@MainActor
+private final class DocumentPickerDelegate: NSObject, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
+    private var finish: (([URL]?) -> Void)?
+
+    init(finish: @escaping ([URL]?) -> Void) {
+        self.finish = finish
+    }
+
+    private func complete(_ urls: [URL]?) {
+        guard let finish else { return }
+        self.finish = nil
+        finish(urls)
+    }
+
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        complete(urls.isEmpty ? nil : urls)
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        complete(nil)
+    }
+
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        complete(nil)
+    }
+}
+#endif
+
+/// Tracks when the person last touched, clicked, pressed a key or activated
+/// an element with assistive technology in the web view, so a script's own
+/// `anchor.click()` is not mistaken for a tap.
+struct InteractionTracker: Sendable {
+    static let window: Duration = .seconds(1)
+    private(set) var last: ContinuousClock.Instant?
+
+    mutating func note(at instant: ContinuousClock.Instant = ContinuousClock.now) {
+        last = instant
+    }
+
+    func hasRecent(at instant: ContinuousClock.Instant = ContinuousClock.now) -> Bool {
+        guard let last else { return false }
+        let elapsed = last.duration(to: instant)
+        return elapsed >= .zero && elapsed <= Self.window
+    }
+}
+
+/// A `WKWebView` that observes real person input without interfering with
+/// WebKit's own gestures or scrolling.
+@MainActor
+final class InteractiveWebView: WKWebView {
+    var onInteraction: (() -> Void)?
+
+    #if canImport(UIKit)
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        if hit != nil { onInteraction?() }
+        return hit
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        onInteraction?()
+        super.pressesBegan(presses, with: event)
+    }
+
+    override func accessibilityActivate() -> Bool {
+        onInteraction?()
+        return super.accessibilityActivate()
+    }
+    #elseif canImport(AppKit)
+    private var eventMonitor: Any?
+
+    func startMonitoring() {
+        guard eventMonitor == nil else { return }
+        eventMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .leftMouseUp, .rightMouseDown, .otherMouseDown, .keyDown]
+        ) { [weak self] event in
+            MainActor.assumeIsolated {
+                if let self, let window = self.window, event.window === window {
+                    self.onInteraction?()
+                }
+            }
+            return event
+        }
+    }
+
+    func stopMonitoring() {
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+            self.eventMonitor = nil
+        }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onInteraction?()
+        return super.accessibilityPerformPress()
+    }
+    #endif
+}
 
 /// A page shown whole in the system web view, inside the app's own bars, at
 /// the address the runtime core gives, loaded again whenever its serial moves.
 ///
 /// What a page in it can do is what a browser tab on the same site can do, and
 /// nothing more: there is no script bridge to the app, no pop-up, and no way
-/// to the app's files. A file field of the page's own is the web engine's:
-/// on iPhone and iPad it shows its own menu (the Photo Library, the camera,
-/// Files) and takes a file dropped on an iPad, as Safari does, and what is
-/// picked there goes to the page as it is, past the app's care for a photo's
-/// place (``PhotoPlace``) and its words for a file not added; on a Mac no
-/// file panel is opened, so such a field does nothing. A
-/// link the person taps is the core's to follow (a native screen, the system
-/// browser, or nothing): the web view's own navigation is cancelled. What a
-/// page does by itself (its script, a redirect) stays on the origin or goes
-/// nowhere, and is never told to the core as a tap (``WebNavigationRules``).
+/// to the app's files. Where the system gives ``WKUIDelegate``'s open-panel
+/// call (macOS 10.12 and later, iOS and iPadOS 18.4 and later — including
+/// iOS 26, iPadOS 26 and macOS 26), a web page's `<input type="file">` opens
+/// the app's own file picker and passes every chosen file through ``PhotoPlace``
+/// and ``FilmPlace`` with the same refusal words as a native field; elsewhere
+/// `<input type="file">` is switched off at document start and tells the
+/// person to use the app's own form. A link the person actually taps is the
+/// core's to follow; what a page does by itself (including `anchor.click()`)
+/// stays on the origin or goes nowhere, and is never told to the core as a tap.
 struct WebPageView {
     let url: URL
     let serial: Int
@@ -45,16 +197,25 @@ struct WebPageView {
         settings.preferences.javaScriptCanOpenWindowsAutomatically = false
         settings.defaultWebpagePreferences.allowsContentJavaScript = true
         // No `WKScriptMessageHandler` is ever added to the user content
-        // controller: the page has no way to reach the app. The one script
-        // added runs first in every frame, in a world of its own, and empties
-        // a document of another origin.
+        // controller: the page has no way to reach the app.
         if let site = configuration.site {
             settings.userContentController.addUserScript(WKUserScript(
-                source: WebRules.documentScript(site: site, hosts: configuration.webHosts), injectionTime: .atDocumentStart,
-                forMainFrameOnly: false, in: .defaultClient
+                source: WebRules.documentScript(
+                    site: site, hosts: configuration.webHosts,
+                    answersFilePicker: WebFileRules.systemAnswersOpenPanel
+                ),
+                injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .defaultClient
+            ))
+            settings.userContentController.addUserScript(WKUserScript(
+                source: WebRules.pageClickScript(site: site),
+                injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page
             ))
         }
-        let view = WKWebView(frame: .zero, configuration: settings)
+        let view = InteractiveWebView(frame: .zero, configuration: settings)
+        view.onInteraction = { [weak coordinator] in coordinator?.noteInteraction() }
+        #if canImport(AppKit)
+        view.startMonitoring()
+        #endif
         view.navigationDelegate = coordinator
         view.uiDelegate = coordinator
         view.allowsBackForwardNavigationGestures = false
@@ -79,8 +240,13 @@ struct WebPageView {
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         var parent: WebPageView
+        var filePicker: any WebFilePicker = SystemWebFilePicker()
+        var filmExporter: FilmPlace.Exporter = FilmPlace.systemExport
+        private(set) var interactions = InteractionTracker()
         private var title: NSKeyValueObservation?
         private var loading: Task<Void, Never>?
+        private var panelTask: Task<Void, Never>?
+        private var pendingPanel: (([URL]?) -> Void)?
         private var dismantled = false
         private(set) var serial: Int?
         private var loaded: URL?
@@ -101,6 +267,10 @@ struct WebPageView {
 
         init(_ parent: WebPageView) {
             self.parent = parent
+        }
+
+        func noteInteraction(at instant: ContinuousClock.Instant = ContinuousClock.now) {
+            interactions.note(at: instant)
         }
 
         func observe(_ view: WKWebView) {
@@ -157,13 +327,79 @@ struct WebPageView {
             dismantled = true
             loading?.cancel()
             loading = nil
+            panelTask?.cancel()
+            panelTask = nil
+            finishPanel(with: nil)
             title?.invalidate()
             title = nil
+            if let interactive = view as? InteractiveWebView {
+                interactive.onInteraction = nil
+                #if canImport(AppKit)
+                interactive.stopMonitoring()
+                #endif
+            }
             view.stopLoading()
             view.navigationDelegate = nil
             view.uiDelegate = nil
             if let blank = URL(string: "about:blank") {
                 view.load(URLRequest(url: blank))
+            }
+        }
+
+        private func finishPanel(with urls: [URL]?) {
+            guard let handler = pendingPanel else { return }
+            pendingPanel = nil
+            handler(urls)
+        }
+
+        /// Answers a web page's `<input type="file">` request through the
+        /// app's own picker, ``PhotoPlace``, ``FilmPlace`` and ``FileNotes``.
+        func handleOpenPanel(
+            multiple: Bool,
+            allowsDirectories: Bool,
+            frameURL: URL?,
+            mainFrame: Bool,
+            completionHandler: @escaping ([URL]?) -> Void
+        ) {
+            panelTask?.cancel()
+            finishPanel(with: nil)
+            pendingPanel = completionHandler
+
+            let config = parent.configuration
+            guard !dismantled, isCurrent,
+                WebFileRules.allowsPanel(
+                    frameURL: frameURL, mainFrame: mainFrame, site: config.site,
+                    hosts: config.webHosts, directoryRequested: allowsDirectories
+                )
+            else {
+                finishPanel(with: nil)
+                return
+            }
+
+            panelTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard let chosen = await self.filePicker.pick(multiple: multiple), !chosen.isEmpty else {
+                    self.finishPanel(with: nil)
+                    return
+                }
+                guard !self.dismantled, self.isCurrent else {
+                    self.finishPanel(with: nil)
+                    return
+                }
+                let effects = self.parent.client.effects as? SystemEffects
+                let store = effects?.keeper.files ?? .shared
+                let prepared = await store.prepareForWeb(
+                    chosen, multiple: multiple, filmExporter: self.filmExporter
+                )
+                guard !self.dismantled, self.isCurrent else {
+                    self.finishPanel(with: nil)
+                    return
+                }
+                effects?.fileNotes.sayOnWeb(prepared.refused, screen: self.parent.screen)
+                if !prepared.refused.isEmpty {
+                    AccessibilityNotification.Announcement(prepared.refused.joined(separator: " ")).post()
+                }
+                self.finishPanel(with: prepared.kept.isEmpty ? nil : prepared.kept)
             }
         }
 
@@ -175,9 +411,12 @@ struct WebPageView {
         /// then the page is not loaded.
         private func rule(_ view: WKWebView) async -> Bool {
             if ruled { return true }
-            guard let site = parent.configuration.site, let store = WKContentRuleListStore.default() else { return false }
+            guard let site = parent.configuration.site, let store = WKContentRuleListStore.default() else {
+                return false
+            }
             let source = WebRules.contentRules(site: site, hosts: parent.configuration.webHosts)
-            let name = "navree-web-" + SHA256.hash(data: Data(source.utf8)).map { String(format: "%02x", $0) }.joined()
+            let name =
+                "navree-web-" + SHA256.hash(data: Data(source.utf8)).map { String(format: "%02x", $0) }.joined()
             guard let list = try? await store.compileContentRuleList(forIdentifier: name, encodedContentRuleList: source)
             else { return false }
             view.configuration.userContentController.add(list)
@@ -201,16 +440,18 @@ struct WebPageView {
             // may also be of a host the app names for the web view.
             let configuration = parent.configuration
             let ours = mainFrame
-                ? isThePagesOwn(url) : WebRules.allowsFrame(url, site: configuration.site, hosts: configuration.webHosts)
+                ? isThePagesOwn(url)
+                : WebRules.allowsFrame(url, site: configuration.site, hosts: configuration.webHosts)
             let decision = WebNavigationRules.decide(
                 linkActivated: navigationAction.navigationType == .linkActivated, mainFrame: mainFrame,
-                ours: ours, loaded: url == loaded, empty: url.scheme == "about"
+                ours: ours, loaded: url == loaded, empty: url.scheme == "about",
+                userInteracted: interactions.hasRecent()
             )
             switch decision {
             case .allow:
                 return .allow
             case .tap:
-                // A link the person tapped: the core decides where it leads.
+                // A link the person actually tapped: the core decides where it leads.
                 parent.client.send(.webLink(screen: parent.screen, url: url.absoluteString))
             case .cancel:
                 // The page's script, a redirect or a form would leave the
@@ -220,6 +461,32 @@ struct WebPageView {
             // A first page stopped on its way is a screen that failed, not a blank one.
             if mainFrame, !shown { parent.failed() }
             return .cancel
+        }
+
+        @available(iOS 18.4, macOS 10.12, *)
+        func webView(
+            _ webView: WKWebView,
+            runOpenPanelWith parameters: WKOpenPanelParameters,
+            initiatedByFrame frame: WKFrameInfo,
+            completionHandler: @escaping ([URL]?) -> Void
+        ) {
+            let originURL = Self.originURL(of: frame.securityOrigin)
+            let frameURL = frame.request.url ?? (frame.isMainFrame ? webView.url : nil) ?? originURL
+            handleOpenPanel(
+                multiple: parameters.allowsMultipleSelection,
+                allowsDirectories: parameters.allowsDirectories,
+                frameURL: frameURL,
+                mainFrame: frame.isMainFrame,
+                completionHandler: completionHandler
+            )
+        }
+
+        private static func originURL(of securityOrigin: WKSecurityOrigin) -> URL? {
+            let scheme = securityOrigin.protocol.lowercased()
+            let host = securityOrigin.host
+            guard !scheme.isEmpty, !host.isEmpty else { return nil }
+            let portPart = securityOrigin.port > 0 ? ":\(securityOrigin.port)" : ""
+            return URL(string: "\(scheme)://\(host)\(portPart)/")
         }
 
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
@@ -261,11 +528,14 @@ struct WebPageView {
             _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
             for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
-            // A link the person tapped that asks for a new window is a link,
-            // which the core follows; a window a script asks for is not
+            // A link the person actually tapped that asks for a new window is a
+            // link, which the core follows; a window a script asks for is not
             // opened, and nobody is told.
             let linkActivated = navigationAction.navigationType == .linkActivated
-            if WebNavigationRules.newWindow(linkActivated: linkActivated) == .tap, let url = navigationAction.request.url {
+            let decision = WebNavigationRules.newWindow(
+                linkActivated: linkActivated, userInteracted: interactions.hasRecent()
+            )
+            if decision == .tap, let url = navigationAction.request.url {
                 parent.client.send(.webLink(screen: parent.screen, url: url.absoluteString))
             }
             return nil

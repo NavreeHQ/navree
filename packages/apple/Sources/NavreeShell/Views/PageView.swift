@@ -374,7 +374,7 @@ struct ScreenPage: View {
                 .ignoresSafeArea(.container, edges: .bottom)
                 .navigationTitle(webTitle ?? title ?? state.title ?? "")
                 .modifier(InlineTitle(mode: NavigationRules.webTitleMode(screenDepth)))
-                .modifier(WebMessage(message: message, client: client))
+                .modifier(WebMessage(screen: state.id, message: message, client: client))
             } else {
                 failed(Failure.server) { webFailed = nil }
             }
@@ -452,22 +452,53 @@ struct ScreenPage: View {
 }
 
 /// A message over a page the web view shows, as over any screen: a failure
-/// is the system's alert; anything else a line of status at the top of the
-/// content, which the person puts away. Never a floating toast.
+/// is the system's alert; anything else (including words for files refused by
+/// the web file picker) is a line of status at the top of the content, which
+/// the person puts away. Never a floating toast.
 struct WebMessage: ViewModifier {
+    let screen: ScreenID
     let message: Message?
     let client: NativeClient
 
     func body(content: Content) -> some View {
         let shown = Drawable.notice(message)
+        let notes = (client.effects as? SystemEffects)?.fileNotes
+        let refusedWords = notes?.webWords(screen: screen) ?? []
         content
             .safeAreaInset(edge: .top, spacing: 0) {
-                if let notice = shown.notice {
-                    VStack(spacing: 0) {
-                        NoticeRow(notice: notice)
+                if shown.notice != nil || !refusedWords.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if let notice = shown.notice {
+                            NoticeRow(notice: notice)
+                                .padding(.horizontal)
+                                .padding(.vertical, 10)
+                            Divider()
+                        }
+                        if !refusedWords.isEmpty {
+                            HStack(alignment: .top, spacing: 8) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    ForEach(Array(refusedWords.enumerated()), id: \.offset) { _, word in
+                                        Label(word, systemImage: "exclamationmark.circle.fill")
+                                            .font(.footnote)
+                                            .foregroundStyle(.red)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+                                Spacer(minLength: 8)
+                                Button {
+                                    notes?.sayOnWeb([], screen: screen)
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(Text("Dismiss"))
+                            }
                             .padding(.horizontal)
                             .padding(.vertical, 10)
-                        Divider()
+                            Divider()
+                        }
                     }
                     .background(.background)
                 }
