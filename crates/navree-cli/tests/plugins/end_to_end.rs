@@ -27,7 +27,7 @@ use crate::support;
 const SQLITE: &str = "navree/sqlite";
 
 /// Proof plugins under the repository root; populated as proof crates land.
-const PROOF_PLUGINS: &[&str] = &[];
+const PROOF_PLUGINS: &[&str] = &["plugins/notices", "plugins/dakiya", "plugins/godam"];
 
 /// The workspace root. `std::path::absolute`, not `canonicalize`, which
 /// gives verbatim `\\?\C:\..` paths on Windows.
@@ -159,11 +159,15 @@ fn first_party_plugins() -> Vec<String> {
 }
 
 fn copy_tree(src: &Path, dst: &Path) {
+    let in_tests = src.file_name().is_some_and(|n| n == "tests");
     fs::create_dir_all(dst).expect("create dir");
     for entry in fs::read_dir(src).expect("read dir") {
         let entry = entry.expect("dir entry");
         let name = entry.file_name();
         if name == "target" {
+            continue;
+        }
+        if in_tests && name.to_string_lossy().ends_with("_page.rs") {
             continue;
         }
         let src_path = entry.path();
@@ -177,7 +181,12 @@ fn copy_tree(src: &Path, dst: &Path) {
     }
 }
 
-fn rewrite_proof_cargo_toml(plugin_toml: &str, workspace_toml: &str, facade: &Path) -> String {
+fn rewrite_proof_cargo_toml(
+    plugin_toml: &str,
+    workspace_toml: &str,
+    workspace: &Path,
+    facade: &Path,
+) -> String {
     let ws_doc: toml_edit::DocumentMut = workspace_toml.parse().expect("parse workspace toml");
     let ws_pkg = ws_doc
         .get("workspace")
@@ -213,6 +222,7 @@ fn rewrite_proof_cargo_toml(plugin_toml: &str, workspace_toml: &str, facade: &Pa
     }
 
     let facade_slash = plain_slash_path(facade);
+    let crates_slash = plain_slash_path(&workspace.join("crates"));
     for section in ["dependencies", "dev-dependencies"] {
         let Some(deps) = doc.get_mut(section).and_then(toml_edit::Item::as_table_mut) else {
             continue;
@@ -226,6 +236,23 @@ fn rewrite_proof_cargo_toml(plugin_toml: &str, workspace_toml: &str, facade: &Pa
                     && tbl.contains_key("path")
                 {
                     tbl.insert("path", toml_edit::value(facade_slash.as_str()));
+                }
+                continue;
+            }
+            if let Some(rel_crate) = deps
+                .get(&key)
+                .and_then(toml_edit::Item::as_table_like)
+                .and_then(|t| t.get("path"))
+                .and_then(toml_edit::Item::as_str)
+                .and_then(|p| p.strip_prefix("../../crates/"))
+                .map(str::to_owned)
+            {
+                if let Some(tbl) = deps
+                    .get_mut(&key)
+                    .and_then(toml_edit::Item::as_table_like_mut)
+                {
+                    let rewritten_path = format!("{crates_slash}/{rel_crate}");
+                    tbl.insert("path", toml_edit::value(rewritten_path));
                 }
                 continue;
             }
@@ -257,6 +284,23 @@ fn rewrite_proof_cargo_toml(plugin_toml: &str, workspace_toml: &str, facade: &Pa
     doc.to_string()
 }
 
+fn rewrite_repo_test_paths(tests_dir: &Path, workspace: &Path) {
+    let Ok(entries) = fs::read_dir(tests_dir) else {
+        return;
+    };
+    let crates_prefix = format!("{}/", plain_slash_path(&workspace.join("crates")));
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "rs")
+            && let Ok(text) = fs::read_to_string(&path)
+            && text.contains("../../../crates/")
+        {
+            let updated = text.replace("../../../crates/", &crates_prefix);
+            fs::write(&path, updated).expect("rewrite repository test path");
+        }
+    }
+}
+
 fn copy_proof_plugin(workspace: &Path, facade: &Path, root: &Path, rel: &str) -> (String, String) {
     let src = workspace.join(rel);
     let folder = src
@@ -267,10 +311,11 @@ fn copy_proof_plugin(workspace: &Path, facade: &Path, root: &Path, rel: &str) ->
     let rel_dst = format!("plugins/{folder}");
     let dst = root.join("plugins").join(&folder);
     copy_tree(&src, &dst);
+    rewrite_repo_test_paths(&dst.join("tests"), workspace);
 
     let ws_toml = fs::read_to_string(workspace.join("Cargo.toml")).expect("read workspace toml");
     let plugin_toml = fs::read_to_string(dst.join("Cargo.toml")).expect("read plugin toml");
-    let rewritten = rewrite_proof_cargo_toml(&plugin_toml, &ws_toml, facade);
+    let rewritten = rewrite_proof_cargo_toml(&plugin_toml, &ws_toml, workspace, facade);
     let parsed: toml::Table = rewritten.parse().expect("valid rewritten toml");
     let pkg_name = parsed["package"]["name"]
         .as_str()
@@ -414,10 +459,17 @@ fn a_new_app_installs_each_proof_plugin_builds_checks_and_lists_it() {
         let (plugins_ok, plugins_stdout) =
             cargo_capture(&root, &target, &["run", "--quiet", "--", "plugins"]);
         assert!(plugins_ok, "cargo run -- plugins failed");
-        assert!(
-            plugins_stdout.contains("khata  navree-plugin-khata 0.1.0"),
-            "plugins output did not list khata:\n{plugins_stdout}"
-        );
+        for expected_head in [
+            "khata  navree-plugin-khata 0.1.0",
+            "notices  navree-plugin-notices 0.1.0  Notice board",
+            "dakiya  navree-plugin-dakiya 0.1.0  Dakiya mail",
+            "godam  navree-plugin-godam 0.1.0  Godam disks",
+        ] {
+            assert!(
+                plugins_stdout.contains(expected_head),
+                "plugins output did not list `{expected_head}`:\n{plugins_stdout}"
+            );
+        }
         assert!(
             cargo(
                 &root,
@@ -499,6 +551,21 @@ fn a_new_app_installs_each_proof_plugin_builds_checks_and_lists_it() {
                     .map(str::to_owned)
                     .unwrap_or_else(|| manifest::default_namespace(&entry.krate));
 
+                let needs_storage = short == "media";
+                if needs_storage {
+                    add::run(
+                        &root,
+                        &AddOptions {
+                            package: Some("storage".to_owned()),
+                            app_env: env.clone(),
+                            ..AddOptions::default()
+                        },
+                        &mut ProcessRunner,
+                        &mut Vec::new(),
+                    )
+                    .expect("prerequisite plugin:add storage for media");
+                }
+
                 let mut fp_out = Vec::new();
                 add::run(
                     &root,
@@ -512,6 +579,7 @@ fn a_new_app_installs_each_proof_plugin_builds_checks_and_lists_it() {
                 )
                 .unwrap_or_else(|e| panic!("first-party plugin:add {short}: {e}"));
                 let fp_printed = String::from_utf8(fp_out).unwrap();
+                let wired_by_add = fp_printed.contains("  wired    ");
                 assert!(
                     fp_printed.contains(&format!("\n{ns}  {} ", entry.krate)),
                     "first-party {short} missing plugins block:\n{fp_printed}"
@@ -539,9 +607,10 @@ fn a_new_app_installs_each_proof_plugin_builds_checks_and_lists_it() {
                 .expect("plugin:list for first-party");
                 let fp_list_text = String::from_utf8(fp_list).unwrap();
                 assert!(
-                    fp_list_text
-                        .lines()
-                        .any(|line| line.starts_with(&short) && line.contains("wired")),
+                    fp_list_text.lines().any(|line| {
+                        line.split_whitespace().next() == Some(short.as_str())
+                            && line.contains("wired")
+                    }),
                     "plugin:list did not mark {short} wired:\n{fp_list_text}"
                 );
 
@@ -556,10 +625,29 @@ fn a_new_app_installs_each_proof_plugin_builds_checks_and_lists_it() {
                 )
                 .unwrap_or_else(|e| panic!("first-party plugin:remove {short}: {e}"));
                 let fp_rm_text = String::from_utf8(fp_rm).unwrap();
-                assert!(
-                    fp_rm_text.contains("  unwired  "),
-                    "plugin:remove {short} did not unwire:\n{fp_rm_text}"
-                );
+                if wired_by_add {
+                    assert!(
+                        fp_rm_text.contains("  unwired  "),
+                        "plugin:remove {short} did not unwire:\n{fp_rm_text}"
+                    );
+                } else {
+                    assert!(
+                        fp_rm_text.contains("  next     remove "),
+                        "plugin:remove {short} for pre-wired module unexpected:\n{fp_rm_text}"
+                    );
+                }
+
+                if needs_storage {
+                    remove::run(
+                        &root,
+                        &RemoveOptions {
+                            package: "storage".to_owned(),
+                        },
+                        &mut ProcessRunner,
+                        &mut Vec::new(),
+                    )
+                    .expect("cleanup plugin:remove storage after media");
+                }
             }
         }
     }));

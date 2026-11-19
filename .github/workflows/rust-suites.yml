@@ -459,4 +459,5 @@ jobs:
         run: >-
           cargo test --locked --package navree-cli --all-features --no-fail-fast
           --test generated_app --test generated_kits --test navigator
+          --test plugins --test proof_plugins
           -- --ignored --test-threads 1
