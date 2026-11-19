@@ -91,6 +91,7 @@ conventions, and says which skill to load for each task.
 | [`navree-native-design`](navree-native-design/SKILL.md) | Make a screen belong on every system without writing it twice: the rules that hold everywhere (one main action, creation and cancel and confirm as roles, destructive actions, records, forms, sheets, search, states, icons, brand, text and mirroring), and how to review each system's screenshots |
 | [`navree-native-apple`](navree-native-apple/SKILL.md) | The Apple client on iPhone and iPad as built (SwiftUI, Liquid Glass): what it does with each part, which systems and versions exist, the server pieces an Apple app needs, a review checklist, common mistakes, and the dated sources |
 | [`navree-native-android`](navree-native-android/SKILL.md) | The Android client on phones and tablets as built (Compose, Material 3): navigation by window width, the floating action button, the app bar, dynamic colour and the brand's seed, the server pieces an Android app needs, a review checklist, common mistakes, and the dated sources |
+| [`navree-native-windows`](navree-native-windows/SKILL.md) | The Windows client as built (.NET 10, WinUI 3, Fluent 2): NavigationView and two panes by window width, Mica title bar, full-window locked covers, the virtualized DataTable, photo and video location stripping, WebView2 rules, presence with and without MSIX identity, a screenshot checklist, common mistakes, and the dated sources |
 
 ## Installing
 

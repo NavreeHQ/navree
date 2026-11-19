@@ -172,6 +172,7 @@ commands, `mcp`, `skills:install`, `browser:install`, `openapi:client`,
 | Deciding where actions, records, forms, sheets and states go on a native screen so it belongs on every system; reviewing native screenshots in light and dark, at the largest text and right to left | `navree-native-design` |
 | Working on or reviewing a Navree app on iPhone or iPad: what the Apple client does with each part, Liquid Glass, the Apple checklist, app ids, passkeys, Sign in with Apple and push for an Apple app | `navree-native-apple` |
 | Working on or reviewing a Navree app on an Android phone or tablet: navigation by window width, the floating action button, Material 3, dynamic colour, the Android checklist, package ids, passkeys, Sign in with Google and push for an Android app | `navree-native-android` |
+| Working on or checking a Navree app on Windows: WinUI 3 and Fluent 2 by window width, Mica title bar, locked covers, the virtualized DataTable, photo and video location stripping, WebView2 rules, MSIX vs unpackaged presence, and the Windows screenshot checklist | `navree-native-windows` |
 
 ## Common mistakes
 
