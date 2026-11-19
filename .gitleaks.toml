@@ -110,6 +110,33 @@ regexes = [
 
 [[allowlists]]
 description = """
+Sample values in the secret-masking and plugin driver tests: made-up passphrases
+and API keys that `crates/navree-ui/tests/field_control.rs` checks are never
+drawn into HTML or echoed in form refusals, the shared names that
+`crates/navree/tests/plugins_docs_drivers.rs` hands to an in-memory backplane,
+and the sample API keys, URL passwords and query tokens that
+`plugins/dakiya/tests/` checks never reach errors, `Debug` output or logs. None
+is issued by any system."""
+regexes = [
+  '''sk-live-amritsar-88''',
+  '''live-jalandhar-5530''',
+  '''hunter-ludhiana-91''',
+  '''weak-kesar-9912''',
+  '''bad-vault-7741''',
+  '''strong-amritsar-8821''',
+  '''amritsar-key(-9941)?''',
+  '''ludhiana(-amritsar-shared)?-secret''',
+  '''test-only-key-ludhiana''',
+  '''dakiya-test-placeholder''',
+  '''98140123456789''',
+  '''dakiya([ &+]key|%20key|\\u0026amritsar|&amritsar)''',
+  '''dak-%252(52|5%32)?-ludhiana''',
+  '''(harpreet|localhost):dak-word@''',
+  '''secret_token=dak-query''',
+]
+
+[[allowlists]]
+description = """
 Webhook signature test tokens: the mail-provider verification token and the
 SNS subscription token that the test signers in navree-webhooks and navree-mail
 generate (see tests/fixtures/sources/generate.py), used only to sign and verify
@@ -182,15 +209,20 @@ two malformed copies a test refuses, the hash of nothing as a second app's
 signature, the challenge of a sample passkey answer, a three-part token
 with an empty body and the signature "sig", the made-up token of the
 Android client's tests of what a sign-out clears (thirty-two hex digits that
-start 7b1d), and the person keys of the Windows client's tests (sixty-four hex
-digits: two are the keys the runtime core's own conversations write for their
-sample people, starting 1c54 and 38c9, and two are made up, starting 6b1f and
-0a9b; a key only tells one person from another and opens nothing). None is
-issued by any system."""
+start 7b1d), and the person keys of the runtime core's conversations and the native clients'
+tests (sixty-four hex digits: six are the keys the runtime core's own
+conversations write for their sample people, starting 1c54, 38c9, 1bc3, a5e6,
+9cc5 and 46d4, and two are made up for the Windows client's tests, starting
+6b1f and 0a9b; a key only tells one person from another and opens nothing).
+None is issued by any system."""
 regexes = [
   '''fcm-[A-Za-z0-9]{16}''',
   '''1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e''',
   '''38c9705141ffe6c8247000b823439d8248a231f176ef18db39fa1940e1e809cc''',
+  '''1bc3dcdc8ebf5d231237007ccc4903b602f64185813b65bc5b6d1f5f798fcab7''',
+  '''a5e6cbd53a0871ea6f18622e1d0b5d518a53324a19796af0c335aad7cc1e43a1''',
+  '''9cc5ffc2817cc3c911c721e28112cc30ae527d56ce46fbc784f9207caf606c75''',
+  '''46d4b2163f821b3c7b88c8ed419fa034677cc3588a21b4b4f0edf831f55b5d79''',
   '''6b1f0d2c9a7e4853b1c6d0e2f4a8975c3e2d1b0a9f8e7d6c5b4a39281706f5e4''',
   '''0a9b8c7d6e5f40312233445566778899aabbccddeeff00112233445566778899''',
   '''7b1d2468ace013579bdf24680f3a9c5e''',
