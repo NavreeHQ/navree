@@ -4,24 +4,19 @@
 // so a morph needs no wiring and a name in stored markup can't shadow a method. The limits in
 // the markup are hints; the server holds every file to them. Text from the server goes in with
 // textContent, never as markup.
-import { D, E, T, all, attr, byId, cookie, has, holds, on, set, unset } from "./dom.js";
-
-// Unlike dom.js's, this finds what is in stored content too, which costs nothing here: an upload area there is
-// never made ready (`every` leaves stored content out), and every listener below acts only on a ready area or on
-// a file it is sending.
-/** @param {any} node @param {string} selector @returns {Element | null} */
-const closest = (node, selector) => (node instanceof Element ? E.closest.call(node, selector) : null);
+import { D, T, all, attr, byId, closest, cookie, has, holds, on, set, stored, unset } from "./dom.js";
 
 /** Whether `url` is on this site. One no browser can read throws, and its send fails. @param {string} url */
 const here = (url) => new URL(url, location.href).origin === location.origin;
 
 const ROOT = "[data-ui-upload]";
 const ROW = "[data-slot=upload-item]";
+const READY = "data-ready";
 
 /** @param {Element} root @param {string} name */
 const part = (root, name) => all(root, "[data-slot=" + name + "]")[0];
 /** @param {Element} root @returns {HTMLInputElement} */
-const field = (root) => /** @type {any} */ (all(root, "input[type=file]")[0]);
+const field = (root) => /** @type {any} */ ([...all(root, "input[type=file]")].find((i) => !stored(i)));
 /** @param {Element} root @param {string} name */
 const num = (root, name) => Number(attr(root, name)) || 0;
 /** Where a root sends its files: its own form's action, or, in a form of the page's, the route
@@ -241,6 +236,13 @@ function chosen(root) {
   for (const file of field(root).files || []) add(root, file, "chosen");
 }
 
+/** @param {HTMLInputElement} input @param {Iterable<File>} files */
+function putFiles(input, files) {
+  const kept = new DataTransfer();
+  for (const file of files) kept.items.add(file);
+  input.files = kept.files;
+}
+
 /** Files arrive, chosen in the field or dropped. @param {Element} root @param {FileList | File[]} list @param {boolean} native */
 function take(root, list, native) {
   const input = field(root);
@@ -251,11 +253,7 @@ function take(root, list, native) {
     input.value = "";
     return;
   }
-  if (!native) {
-    const kept = new DataTransfer();
-    for (const file of files) kept.items.add(file);
-    input.files = kept.files;
-  }
+  if (!native) putFiles(input, files);
   chosen(root);
 }
 
@@ -265,11 +263,7 @@ function leave(job) {
   job.gone = true;
   job.x?.abort();
   if (job.id) req({}, "DELETE", (attr(root, "data-chunks") || "") + "/" + job.id, "", "").catch(() => {});
-  if (job.state === "chosen") {
-    const kept = new DataTransfer();
-    for (const file of input.files || []) if (file !== job.file) kept.items.add(file);
-    input.files = kept.files;
-  }
+  if (job.state === "chosen") putFiles(input, [...(input.files || [])].filter((f) => f !== job.file));
   // A file a form's upload sent is no longer the form's.
   const key = keyField(root);
   if (key && job.state === "done") key.value = "";
@@ -279,17 +273,19 @@ function leave(job) {
   input.focus();
 }
 
+/** @param {any} node @returns {Element | false | null} */
+const rootAt = (node) => node instanceof Element && !stored(node) && closest(node, ROOT);
+
 on(document, "change", (e) => {
-  const input = closest(e.target, ROOT + " input[type=file]");
-  const root = input && closest(input, ROOT);
-  if (root && has(root, "data-ready")) take(root, /** @type {HTMLInputElement} */ (input).files || [], true);
+  const input = closest(e.target, ROOT + " input[type=file]"), root = input && closest(input, ROOT);
+  if (root && has(root, READY)) take(root, /** @type {HTMLInputElement} */ (input).files || [], true);
 });
 
 // Both run before the core runtime's own submit handler, which then leaves a prevented submit alone.
 on(document, "submit", (e) => {
   // A form sent by hand sends its files one by one, with progress.
   const area = closest(e.target, ROOT);
-  if (area && has(area, "data-ready") && attr(area, "action") && !has(area, "data-disabled")) {
+  if (area && has(area, READY) && attr(area, "action") && !has(area, "data-disabled")) {
     const input = field(area);
     const files = [...(input.files || [])];
     if (files.length) {
@@ -340,13 +336,13 @@ on(document, "keydown", (e) => {
 /** @param {DragEvent} e */
 const dragging = (e) => !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
 on(document, "dragenter", (e) => {
-  const root = dragging(e) && closest(e.target, ROOT);
+  const root = dragging(e) && rootAt(e.target);
   if (root) set(root, "data-drag", "");
 });
 on(document, "dragover", (e) => {
   if (!dragging(e)) return;
   e.preventDefault();
-  if (!closest(e.target, ROOT) && e.dataTransfer) e.dataTransfer.dropEffect = "none";
+  if (!rootAt(e.target) && e.dataTransfer) e.dataTransfer.dropEffect = "none";
 });
 on(document, "dragleave", (e) => {
   const root = closest(e.target, ROOT);
@@ -355,15 +351,15 @@ on(document, "dragleave", (e) => {
 on(document, "drop", (e) => {
   if (!dragging(e)) return;
   e.preventDefault();
-  const root = closest(e.target, ROOT);
+  const root = rootAt(e.target);
   if (!root) return;
   unset(root, "data-drag");
-  if (has(root, "data-ready")) take(root, e.dataTransfer?.files || [], false);
+  if (has(root, READY)) take(root, e.dataTransfer?.files || [], false);
 });
 
 // The area is ready: the native control is laid over it, and the list takes over from its text.
 function ready() {
-  for (const root of D.querySelectorAll.call(document, ROOT + ":not([data-ui-stored] *)")) set(root, "data-ready", "");
+  for (const root of D.querySelectorAll.call(document, ROOT + ":not([data-ui-stored] *)")) set(root, READY, "");
 }
 ready();
 on(document, "ui:swap", ready);

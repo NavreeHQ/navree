@@ -605,7 +605,7 @@ on("click", (e) => {
  * @param {HTMLFormElement} form @param {boolean} back
  */
 function restore(form, back) {
-  const control = /** @type {any} */ (form.querySelector("[name=value]"));
+  const control = /** @type {any} */ (form.elements.namedItem("value"));
   if (!control) return;
   if (control.nodeName === "SELECT") {
     for (const option of control.options) {
@@ -616,17 +616,19 @@ function restore(form, back) {
   else control.defaultValue = control.value;
 }
 
-// An edited cell is made of one field, the one named `value`. A control of the app's or a plugin's own can hold
-// other elements (a search box, buttons); their keys and changes are the control's, not the cell's.
+// An edited cell is made of one field, the one named `value` that belongs to the cell's form. A control of
+// the app's or a plugin's own can hold other elements (a search box, buttons, or fields inside a sealed body);
+// their keys and changes are the control's, not the cell's.
+/** @param {any} c @returns {HTMLFormElement | false | null | undefined} */
+const editOf = (c) => c?.name == "value" && c.form?.matches("form[data-ui-edit]") && c.form;
+
 on("change", (e) => {
-  const control = /** @type {HTMLInputElement} */ (e.target);
-  const form = control.name == "value" && control.closest?.("form[data-ui-edit]");
+  const form = editOf(e.target);
   if (form) HTMLFormElement.prototype.requestSubmit.call(form);
 });
 
 on("keydown", (e) => {
-  const control = /** @type {HTMLInputElement} */ (e.target);
-  const form = /** @type {HTMLFormElement | null} */ (control.name == "value" && control.closest?.("form[data-ui-edit]"));
+  const control = /** @type {HTMLInputElement} */ (e.target), form = editOf(control);
   if (!form) return;
   if (e.key === "Escape") {
     restore(form, true);

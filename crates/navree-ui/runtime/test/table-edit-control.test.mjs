@@ -241,3 +241,34 @@ test("the select editor posts on change, and goes back to the option the server 
   assert.equal($("done").selected, true);
   assert.deepEqual(page.errors, []);
 });
+
+test("a field named value inside a sealed body neither posts the cell nor takes its rollback", () => {
+  document.head.innerHTML = `<template id="ui-sealed"></template>`;
+  draw(`
+    <div id="control">
+      <div id="sealed-body" data-ui-keep data-ui-stored>
+        <input id="sealed-value" type="text" name="value" value="Amritsar" form="ui-sealed">
+      </div>
+      <input id="field" type="text" name="value" aria-label="Place" value="Ludhiana">
+    </div>`);
+
+  $("sealed-value").value = "Jalandhar";
+  fire($("sealed-value"), "change");
+  $("sealed-value").focus();
+  const enter = fire($("sealed-value"), "keydown", { key: "Enter" });
+  assert.equal(enter.defaultPrevented, false);
+  assert.equal(document.activeElement, $("sealed-value"));
+  assert.deepEqual(page.submitted, []);
+
+  $("field").value = "Patiala";
+  sent(false);
+  assert.equal($("field").value, "Ludhiana");
+  assert.equal($("sealed-value").value, "Jalandhar");
+
+  $("field").value = "Bathinda";
+  $("field").focus();
+  fire($("field"), "keydown", { key: "Escape" });
+  assert.equal($("field").value, "Ludhiana");
+  assert.equal($("sealed-value").value, "Jalandhar");
+  assert.deepEqual(page.errors, []);
+});

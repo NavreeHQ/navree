@@ -5,7 +5,7 @@
 // and new messages arrive; one they scrolled up in stays where they left it. Both are
 // delegated from `document`, so a morph or a swap needs no wiring, and with no script the
 // composer is a plain form and the list a plain list.
-import { closest, every, on, scrolling } from "./dom.js";
+import { closest, every, on, scrolling, stored } from "./dom.js";
 
 const COMPOSER = "form[data-genui=composer]";
 const CONVERSATION = "[data-genui=conversation]";
@@ -15,9 +15,9 @@ const NEAR = 64;
 on(document, "keydown", (/** @type {KeyboardEvent} */ e) => {
   if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.isComposing || e.keyCode === 229 || e.defaultPrevented) return;
   const area = e.target;
-  if (!(area instanceof HTMLTextAreaElement)) return;
+  if (!(area instanceof HTMLTextAreaElement) || stored(area)) return;
   const form = closest(area, COMPOSER);
-  if (!(form instanceof HTMLFormElement)) return;
+  if (!(form instanceof HTMLFormElement) || area.form !== form) return;
   e.preventDefault();
   if (area.value.trim() !== "" && form.checkValidity()) HTMLFormElement.prototype.requestSubmit.call(form);
 });
