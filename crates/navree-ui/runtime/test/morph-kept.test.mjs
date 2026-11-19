@@ -81,3 +81,59 @@ test("a kept element itself still moves whole", () => {
   assert.equal(kept.nextElementSibling, $("first"));
   assert.equal(kept.textContent, "Drawn by the script");
 });
+
+test("a sealed body given one of the page's ids or keys never takes the place of the page's element in either order", () => {
+  const root = document.createElement("div");
+  root.innerHTML =
+    `<div id="ahead-ext"><div id="summary" data-ui-keep data-ui-stored>From plugin ahead</div></div>` +
+    `<section id="summary">Ludhiana summary</section>` +
+    `<div id="behind-ext"><div data-ui-keep data-ui-stored>From plugin behind</div></div>` +
+    `<ul id="orders"><li data-key="order-42">Harpreet Sandhu</li></ul>`;
+  document.body.append(root);
+  const realSummary = root.querySelector("section#summary");
+  const aheadBody = root.querySelector("#ahead-ext > [data-ui-keep]");
+  const behindBody = root.querySelector("#behind-ext > [data-ui-keep]");
+  const realOrder = root.querySelector("#orders > li");
+  // The behind body also takes the page's id, a key of the list, and an id that arrives only on the next page.
+  behindBody.setAttribute("id", "summary");
+  aheadBody.setAttribute("data-key", "order-42");
+
+  const next = server(
+    `<div>` +
+      `<div id="ahead-ext"><div data-ui-keep>Fresh ahead</div></div>` +
+      `<section id="summary">Amritsar summary</section>` +
+      `<div id="behind-ext"><div data-ui-keep>Fresh behind</div></div>` +
+      `<ul id="orders"><li data-key="order-42">Simran Kaur</li></ul>` +
+      `<aside id="arrived">Jalandhar aside</aside>` +
+    `</div>`,
+  );
+  morph(root, next);
+
+  assert.equal(root.querySelector("section#summary"), realSummary);
+  assert.equal(realSummary.textContent, "Amritsar summary");
+  assert.equal(root.querySelector("#orders > li"), realOrder);
+  assert.equal(realOrder.textContent, "Simran Kaur");
+  assert.equal(aheadBody.isConnected, false);
+  assert.equal(behindBody.isConnected, false);
+
+  // Even when no element on the old page held the id yet, a sealed body given that id does not stand in for a new page element.
+  const replacedBody = root.querySelector("#ahead-ext > [data-ui-keep]");
+  replacedBody.setAttribute("data-ui-stored", "");
+  replacedBody.setAttribute("id", "fresh-panel");
+  morph(
+    root,
+    server(
+      `<div>` +
+        `<div id="ahead-ext"><div data-ui-keep>Fresh ahead</div></div>` +
+        `<section id="summary">Amritsar summary</section>` +
+        `<div id="behind-ext"><div data-ui-keep>Fresh behind</div></div>` +
+        `<ul id="orders"><li data-key="order-42">Simran Kaur</li></ul>` +
+        `<div id="fresh-panel">Patiala panel</div>` +
+      `</div>`,
+    ),
+  );
+  const panel = root.querySelector("div#fresh-panel");
+  assert.notEqual(panel, replacedBody);
+  assert.equal(panel.hasAttribute("data-ui-keep"), false);
+  assert.equal(panel.textContent, "Patiala panel");
+});

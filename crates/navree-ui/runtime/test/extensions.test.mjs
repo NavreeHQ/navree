@@ -297,6 +297,40 @@ test("a seal that failed is tried again at the next ask", async () => {
   $("retry-island").remove();
 });
 
+test("a sealed body scrubs hooks and form ownership on the body itself, and its id never stands in for the page's own", async () => {
+  const { byId } = await import("../src/dom.js");
+  const wrap = document.createElement("div");
+  wrap.innerHTML =
+    `<div id="self-ext" data-slot="proof:pad" data-ui-ext="${EXT}/proof.pad-0123456789ab.js" data-ui-props='{"step":1}'>` +
+    `<button id="self-body" type="submit" name="charge" value="999" data-slot="proof:pad-body" data-ui-keep data-ui-click='[["toggle","menu"]]'>Send</button>` +
+    `</div>`;
+  $("new-delivery").prepend(...wrap.childNodes);
+  swap();
+  await settle();
+
+  const selfBody = $("self-body");
+  assert.equal(selfBody.hasAttribute("data-ui-stored"), true);
+  assert.equal(selfBody.hasAttribute("data-ui-click"), false);
+  assert.equal(selfBody.getAttribute("form"), "ui-sealed");
+  assert.equal(selfBody.form, null);
+  selfBody.setAttribute("form", "new-delivery");
+  await settle();
+  assert.equal(selfBody.getAttribute("form"), "ui-sealed");
+  assert.equal(selfBody.form, null);
+  selfBody.click();
+  assert.equal($("menu").hasAttribute("hidden"), true);
+  assert.deepEqual([...new FormData($("new-delivery"))], [["charge", "40"]]);
+
+  // Even when a sealed body carries an id ahead of one of the page's own elements, byId skips it.
+  assert.equal(byId("self-body"), null);
+  const realZones = $("zones");
+  selfBody.setAttribute("id", "zones");
+  assert.equal(byId("zones"), realZones);
+  $("self-ext").remove();
+  swap();
+  await settle();
+});
+
 test("a form written into a body with the id the sealed fields name owns none of them", () => {
   const written = $("vendor-body").querySelector("form[id=ui-sealed]");
   assert.ok(written, "the library did not write its form");

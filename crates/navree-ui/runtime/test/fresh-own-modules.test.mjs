@@ -79,6 +79,9 @@ const REFUSED = [
   "/_navree/ui/keys-0123456789AB.js",
   "/_navree/ui/keys-0123456789ab.js?v=2",
   "/_navree/ui/keys-0123456789ab.js#part",
+  "../_navree/ui/keys-0123456789ab.js",
+  "/_navree/ui/./keys-0123456789ab.js",
+  "https://app.test/_navree/ui/keys-0123456789ab.js",
   "https://user:pass@app.test/_navree/ui/keys-0123456789ab.js",
   "https://cdn.example/_navree/ui/keys-0123456789ab.js",
 ];

@@ -36,6 +36,7 @@ const PREFIXES = 8;
 const SEALED = "ui-sealed";
 /** What a form takes into its post. */
 const FIELDS = "input,select,textarea,button,fieldset,output,object";
+const DROP = "meta,link,base,iframe,frame,object,embed";
 const MARK = "data-ui-stored";
 const OPS = "application/vnd.navree.ops+json";
 /** Read through the prototype: a named element can't stand in for it, and a node of another document answers too. */
@@ -108,29 +109,33 @@ const detach = (el) => E.matches.call(el, FIELDS) && attr(el, "form") !== SEALED
  * @param {Element} el
  */
 const scrub = (el) => {
-  if (E.matches.call(el, "meta,link,base,iframe,frame,object,embed")) el.remove();
+  if (E.matches.call(el, DROP)) el.remove();
   for (const name of E.getAttributeNames.call(el)) if (name.startsWith("data-ui-")) unset(el, name);
   detach(el);
 };
 
 /**
- * Seals a body before its script is imported: scrubs what it holds, marks it stored content, and
- * keeps both so for whatever is written in it later. A change to an attribute is judged by its name
- * first, so the styles and classes a library moves on every frame cost a comparison. The body is noted
- * once its observer is on, so a seal that failed is tried again.
+ * Seals a body before its script is imported: scrubs what it holds and any hook or form association on
+ * the body itself, marks it stored content, and keeps both so for whatever is written in it later. A
+ * change to an attribute is judged by its name first, so the styles and classes a library moves on every
+ * frame cost a comparison. The body is noted once its observer is on, so a seal that failed is tried again.
  * @param {Element} b
  */
 function seal(b) {
   if (sealed.has(b)) return;
+  if (E.matches.call(b, DROP)) return b.remove();
+  for (const name of E.getAttributeNames.call(b)) if (name.startsWith("data-ui-") && name !== "data-ui-keep") unset(b, name);
+  detach(b);
   all(b, "*").forEach(scrub);
   set(b, MARK, "");
   new MutationObserver((records) => {
     for (const { target, attributeName: name, addedNodes } of records) {
       if (!name) {
         for (const node of addedNodes) if (isEl(node)) [node, ...all(node, "*")].forEach(scrub);
+      } else if (name === "form") {
+        detach(/** @type {Element} */ (target));
       } else if (target !== b) {
         if (name.startsWith("data-ui-")) unset(/** @type {Element} */ (target), name);
-        else if (name === "form") detach(/** @type {Element} */ (target));
       } else if (name === MARK) {
         // Its mark comes back, unless it lies in another sealed body: that one's mark covers it.
         if (!has(b, MARK) && !stored(b)) set(b, MARK, "");

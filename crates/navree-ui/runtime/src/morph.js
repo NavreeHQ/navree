@@ -78,22 +78,23 @@ function moveTo(parent, node, before) {
  * @param {Node} a @param {Node} b
  */
 function sameField(a, b) {
-  if (!FIELD.has(nameOf(a))) return true;
   const x = /** @type {Element} */ (a), y = /** @type {Element} */ (b);
+  if (has(x, "data-ui-stored") && !(has(x, "data-ui-keep") ? has(y, "data-ui-keep") : has(y, "data-ui-stored"))) return false;
+  if (!FIELD.has(nameOf(a))) return true;
   if (attr(x, "name") !== attr(y, "name") || attr(x, "type") !== attr(y, "type")) return false;
   const one = EP.closest.call(x, "form"), other = EP.closest.call(y, "form");
   return (one && attr(one, "action")) === (other && attr(other, "action"));
 }
 
 /**
- * Whether `node` is something the runtime keeps, or inside it, or inside an element the morph keeps
- * below `root` (a component's body, an island's): a page's element with the same id never stands in
- * for it, and what a script or a library wrote there never stands in for the page's own. A kept
- * element itself still moves whole.
+ * Whether `node` is something the runtime keeps, or inside it, or inside an element the morph keeps or
+ * marks stored below `root` (a component's body, an island's, stored rich text): a page's element with
+ * the same id never stands in for it, and what a script or a library wrote there never stands in for
+ * the page's own. A kept element itself still moves whole.
  * @param {Node} node @param {Node} root
  */
 function kept(node, root) {
-  for (let at = /** @type {Node | null} */ (node); at && at !== root; at = parentOf(at)) if (persistent.has(at) || (at !== node && has(/** @type {Element} */ (at), "data-ui-keep"))) return true;
+  for (let at = /** @type {Node | null} */ (node); at && at !== root; at = parentOf(at)) if (persistent.has(at) || (at !== node && (has(/** @type {Element} */ (at), "data-ui-keep") || has(/** @type {Element} */ (at), "data-ui-stored")))) return true;
   return false;
 }
 
@@ -279,8 +280,8 @@ export function morph(from, to, how = {}) {
   /** @type {Map<string, Element>} */
   const ids = new Map();
   for (const element of EP.querySelectorAll.call(from, "[id],[data-key]")) {
-    const key = keyOf(element);
-    if (key && !kept(element, from)) ids.set(key, element);
+    const key = keyOf(element), prev = key && ids.get(key);
+    if (key && !kept(element, from) && (!prev || !has(element, "data-ui-stored"))) ids.set(key, element);
   }
   morphElement(from, to, ids);
   if (resetting) resetControls(from);

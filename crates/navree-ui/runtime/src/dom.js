@@ -84,14 +84,16 @@ export const stored = (el) => {
 };
 /** @param {Element | null} el */
 const own = (el) => (el && !stored(el) ? el : null);
+/** @param {Element} el */
+const notPage = (el) => stored(el) || (has(el, "data-ui-stored") && has(el, "data-ui-keep"));
 /**
- * The element with this id that is not stored content: the first one is not it when stored content holds
- * the same id ahead of it, so the page's own is looked for past it.
+ * The element with this id that is not stored content or a sealed body: the first one is not it when stored
+ * content or a sealed body holds the same id ahead of it, so the page's own is looked for past it.
  * @param {string} id @param {Document} [doc] @returns {HTMLElement | null}
  */
 export const byId = (id, doc = document) => {
   const found = D.getElementById.call(doc, id);
-  return found && stored(found) ? [...D.querySelectorAll.call(doc, "#" + CSS.escape(id))].find((el) => !stored(el)) || null : found;
+  return found && notPage(found) ? /** @type {HTMLElement | null} */ ([...D.querySelectorAll.call(doc, "#" + CSS.escape(id))].find((el) => !notPage(el)) || null) : found;
 };
 /** @param {string} selector @returns {Element | null} */
 export const one = (selector) => own(D.querySelector.call(document, selector));
@@ -164,15 +166,8 @@ export const rescue = (node) => {
 const MODULE =
   /^\/_navree\/ui\/(core|sidebar|overlay|table|live|select|date(s|-text)|time|menus|slider|tree|toolbar|split|keys|lazy|sortable(-grid)?|upload|otp|carousel|menubar|charts|count-up|islands|parts|genui|extensions|phone)(-[0-9a-f]{12})?\.js$/;
 
-/** Whether `url` is one of the toolkit's own modules: on this origin, with nothing after its name. @param {string} url */
-export const ownModule = (url) => {
-  try {
-    const parsed = new URL(url, location.href);
-    return parsed.href === location.origin + parsed.pathname && MODULE.test(parsed.pathname);
-  } catch {
-    return false;
-  }
-};
+/** Whether `url` is one of the toolkit's own modules, named at its mount with nothing after its name. @param {string} url */
+export const ownModule = (url) => typeof url === "string" && url.startsWith("/_navree/ui/") && MODULE.test(url);
 
 /** @param {Element} el @param {string} name */
 export const attr = (el, name) => E.getAttribute.call(el, name);
