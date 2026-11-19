@@ -21,13 +21,16 @@ public enum WebFileRules {
         String(localized: "File uploads aren't available on this web page here. Use the app's own form to attach files.")
     }
 
-    /// Whether the app may present a file picker for `frameURL`. Directory
-    /// selection (`webkitdirectory`) is never opened.
+    /// Whether the app may present a file picker for a frame whose security
+    /// origin is `frameURL`. Directory selection (`webkitdirectory`), opaque
+    /// origins (`nil`), and `about:` schemes are never opened.
     public static func allowsPanel(
         frameURL: URL?, mainFrame: Bool, site: Origin?, hosts: [String], directoryRequested: Bool
     ) -> Bool {
         if directoryRequested { return false }
-        guard let frameURL else { return false }
+        guard let frameURL, let scheme = frameURL.scheme?.lowercased(),
+            scheme == "http" || scheme == "https"
+        else { return false }
         if mainFrame { return site?.inside(frameURL.absoluteString) != nil }
         return WebRules.allowsFrame(frameURL, site: site, hosts: hosts)
     }
@@ -105,8 +108,8 @@ public enum WebRules {
 
     /// The script that runs first in every document of every frame, in an
     /// isolated world: a document of another origin is stopped and emptied;
-    /// file drops onto `<input type="file">` and untrusted synthetic link
-    /// clicks are stopped; and when `answersFilePicker` is `false`, file
+    /// file drops and file pastes anywhere on the page and untrusted synthetic
+    /// link clicks are stopped; and when `answersFilePicker` is `false`, file
     /// fields are switched off and explain why.
     public static func documentScript(
         site: Origin, hosts: [String], answersFilePicker: Bool = WebFileRules.systemAnswersOpenPanel
@@ -146,26 +149,60 @@ public enum WebRules {
                 return Boolean(node && node.tagName && String(node.tagName).toUpperCase() === 'INPUT'
                   && String(node.type || (node.getAttribute && node.getAttribute('type')) || '').toLowerCase() === 'file');
               }
+              function findFileInput(node) {
+                var cur = node;
+                while (cur) {
+                  if (isFileInput(cur)) return cur;
+                  if (cur.tagName && String(cur.tagName).toUpperCase() === 'LABEL' && isFileInput(cur.control)) return cur.control;
+                  cur = cur.parentNode;
+                }
+                return null;
+              }
+              function carriesFiles(transfer) {
+                if (!transfer) return false;
+                if (transfer.files && transfer.files.length > 0) return true;
+                if (transfer.items && transfer.items.length > 0) {
+                  for (var i = 0; i < transfer.items.length; i++) {
+                    if (transfer.items[i] && transfer.items[i].kind === 'file') return true;
+                  }
+                }
+                var types = transfer.types;
+                if (types && typeof types.length === 'number') {
+                  for (var j = 0; j < types.length; j++) {
+                    if (types[j] === 'Files' || types[j] === 'application/x-moz-file') return true;
+                  }
+                }
+                return false;
+              }
               function linkTarget(node) {
                 var cur = node;
                 while (cur && cur.tagName) {
                   var tag = String(cur.tagName).toUpperCase();
-                  if ((tag === 'A' || tag === 'AREA') && ((cur.hasAttribute && cur.hasAttribute('href')) || cur.href)) {
-                    return cur;
+                  if (tag === 'A' || tag === 'AREA') {
+                    if (cur.hasAttribute && (cur.hasAttribute('href') || cur.hasAttribute('xlink:href'))) return cur;
+                    if (typeof cur.href === 'string' && cur.href.length > 0) return cur;
+                    if (cur.href && typeof cur.href.baseVal === 'string' && cur.href.baseVal.length > 0) return cur;
                   }
                   cur = cur.parentNode;
                 }
                 return null;
               }
+              window.addEventListener('dragover', function (event) {
+                if (event && (findFileInput(event.target) || carriesFiles(event.dataTransfer))) {
+                  event.preventDefault();
+                  event.stopImmediatePropagation();
+                }
+              }, true);
               window.addEventListener('drop', function (event) {
-                var cur = event.target;
-                while (cur) {
-                  if (isFileInput(cur)) {
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                    return;
-                  }
-                  cur = cur.parentNode;
+                if (event && (findFileInput(event.target) || carriesFiles(event.dataTransfer))) {
+                  event.preventDefault();
+                  event.stopImmediatePropagation();
+                }
+              }, true);
+              window.addEventListener('paste', function (event) {
+                if (event && carriesFiles(event.clipboardData)) {
+                  event.preventDefault();
+                  event.stopImmediatePropagation();
                 }
               }, true);
               window.addEventListener('click', function (event) {
@@ -173,15 +210,12 @@ public enum WebRules {
                   event.preventDefault();
                 }
                 if (!answersFilePicker && event) {
-                  var cur = event.target;
-                  while (cur) {
-                    if (isFileInput(cur)) {
-                      cur.disabled = true;
-                      event.preventDefault();
-                      event.stopImmediatePropagation();
-                      return;
-                    }
-                    cur = cur.parentNode;
+                  var fileField = findFileInput(event.target);
+                  if (fileField) {
+                    fileField.disabled = true;
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    return;
                   }
                 }
               }, true);
@@ -238,24 +272,64 @@ public enum WebRules {
     }
 
     /// The script that runs first in every document in the page's own world
-    /// so a script's call to `anchor.click()` or `dispatchEvent` on a link
-    /// (including a detached `<a>` never added to the document) is never
-    /// turned into a user link-activation event.
-    public static func pageClickScript(site: Origin) -> String {
+    /// so a script's call to `click()` or `dispatchEvent` on a link or a child
+    /// inside a link (including detached HTML and SVG `<a>` elements) is never
+    /// turned into a user link-activation event, and so `.page`-world
+    /// `showPicker()` and detached `input.click()` calls are blocked when
+    /// `answersFilePicker` is `false`.
+    public static func pageClickScript(
+        site: Origin, answersFilePicker: Bool = WebFileRules.systemAnswersOpenPanel
+    ) -> String {
         let allowedOrigin = jsonString(site.serialized)
+        let answersLiteral = answersFilePicker ? "true" : "false"
         return """
             (function () {
               var allowedOrigin = \(allowedOrigin);
-              function linkHref(node) {
-                if (!node || !node.tagName) return null;
-                var tag = String(node.tagName).toUpperCase();
+              var answersFilePicker = \(answersLiteral);
+              function isFileInput(node) {
+                return Boolean(node && node.tagName && String(node.tagName).toUpperCase() === 'INPUT'
+                  && String(node.type || (node.getAttribute && node.getAttribute('type')) || '').toLowerCase() === 'file');
+              }
+              function findFileInput(node) {
+                var cur = node;
+                while (cur) {
+                  if (isFileInput(cur)) return cur;
+                  if (cur.tagName && String(cur.tagName).toUpperCase() === 'LABEL' && isFileInput(cur.control)) return cur.control;
+                  cur = cur.parentNode;
+                }
+                return null;
+              }
+              function extractHref(el) {
+                if (!el || !el.tagName) return null;
+                var tag = String(el.tagName).toUpperCase();
                 if (tag !== 'A' && tag !== 'AREA') return null;
-                if (node.hasAttribute && node.hasAttribute('href')) return String(node.getAttribute('href') || '');
-                if (typeof node.href === 'string' && node.href.length > 0) return node.href;
+                if (el.hasAttribute) {
+                  if (el.hasAttribute('href')) return String(el.getAttribute('href') || '');
+                  if (el.hasAttribute('xlink:href')) return String(el.getAttribute('xlink:href') || '');
+                }
+                if (typeof el.href === 'string' && el.href.length > 0) return el.href;
+                if (el.href && typeof el.href.baseVal === 'string' && el.href.baseVal.length > 0) return el.href.baseVal;
+                return null;
+              }
+              function findLink(node) {
+                var cur = node;
+                while (cur) {
+                  var raw = extractHref(cur);
+                  if (raw !== null) return { node: cur, href: raw };
+                  cur = cur.parentNode;
+                }
                 return null;
               }
               function navigateSameOrigin(node, rawHref) {
-                var target = String((node.getAttribute && node.getAttribute('target')) || node.target || '').toLowerCase();
+                var targetAttr = '';
+                if (node.getAttribute) {
+                  targetAttr = String(node.getAttribute('target') || '');
+                } else if (typeof node.target === 'string') {
+                  targetAttr = node.target;
+                } else if (node.target && typeof node.target.baseVal === 'string') {
+                  targetAttr = node.target.baseVal;
+                }
+                var target = targetAttr.toLowerCase();
                 if (target && target !== '_self') return;
                 if (node.hasAttribute && node.hasAttribute('download')) return;
                 try {
@@ -268,19 +342,49 @@ public enum WebRules {
               }
               var origDispatch = (typeof EventTarget !== 'undefined' && EventTarget.prototype && EventTarget.prototype.dispatchEvent)
                 || function () { return true; };
-              if (typeof HTMLElement !== 'undefined' && HTMLElement.prototype && typeof HTMLElement.prototype.click === 'function') {
-                var origClick = HTMLElement.prototype.click;
-                HTMLElement.prototype.click = function () {
-                  var rawHref = linkHref(this);
-                  if (rawHref === null) return origClick.apply(this, arguments);
-                  navigateSameOrigin(this, rawHref);
+              if (!answersFilePicker && typeof HTMLInputElement !== 'undefined' && HTMLInputElement.prototype) {
+                var origShowPicker = HTMLInputElement.prototype.showPicker;
+                HTMLInputElement.prototype.showPicker = function () {
+                  if (isFileInput(this)) {
+                    this.disabled = true;
+                    return;
+                  }
+                  if (typeof origShowPicker === 'function') return origShowPicker.apply(this, arguments);
                 };
               }
+              function wrapClick(proto) {
+                if (!proto || typeof proto.click !== 'function') return;
+                var origClick = proto.click;
+                proto.click = function () {
+                  if (!answersFilePicker) {
+                    var fileField = findFileInput(this);
+                    if (fileField) {
+                      fileField.disabled = true;
+                      return;
+                    }
+                  }
+                  var found = findLink(this);
+                  if (!found) return origClick.apply(this, arguments);
+                  navigateSameOrigin(found.node, found.href);
+                };
+              }
+              if (typeof HTMLElement !== 'undefined' && HTMLElement.prototype) wrapClick(HTMLElement.prototype);
+              if (typeof SVGElement !== 'undefined' && SVGElement.prototype) wrapClick(SVGElement.prototype);
               if (typeof EventTarget !== 'undefined' && EventTarget.prototype && typeof EventTarget.prototype.dispatchEvent === 'function') {
                 EventTarget.prototype.dispatchEvent = function (event) {
-                  if (event && String(event.type).toLowerCase() === 'click' && event.isTrusted === false && linkHref(this) !== null) {
-                    if (typeof event.preventDefault === 'function') event.preventDefault();
-                    return origDispatch.call(this, event);
+                  if (event && String(event.type).toLowerCase() === 'click') {
+                    if (!answersFilePicker) {
+                      var fileField = findFileInput(this);
+                      if (fileField) {
+                        fileField.disabled = true;
+                        if (typeof event.preventDefault === 'function') event.preventDefault();
+                        return origDispatch.call(this, event);
+                      }
+                    }
+                    if (event.isTrusted === false && findLink(this) !== null) {
+                      if (typeof event.preventDefault === 'function') event.preventDefault();
+                      return origDispatch.call(this, event);
+                    }
                   }
                   return origDispatch.apply(this, arguments);
                 };

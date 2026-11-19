@@ -426,7 +426,7 @@ struct ScreenPage: View {
             }
             ToolbarSpacer(.fixed, placement: .primaryAction)
         }
-        if case .web(let address, _, _, _) = state.content, let url = configuration.site?.inside(address) {
+        if state.chrome, case .web(let address, _, _, _) = state.content, let url = configuration.site?.inside(address) {
             ToolbarItem(placement: .primaryAction) {
                 ShareLink(item: url) {
                     Label("Share", systemImage: Symbols.standard(.share) ?? "square.and.arrow.up")
@@ -543,6 +543,8 @@ struct MessageAlert: ViewModifier {
 }
 
 /// A screen the shell's routes show without the app around it, such as sign-in.
+/// On a Mac the window's own titlebar controls stay visible so the person can
+/// still close or minimise the window while a locked cover is up.
 struct Chromeless: ViewModifier {
     let hidden: Bool
 
@@ -554,11 +556,7 @@ struct Chromeless: ViewModifier {
             content
         }
         #else
-        if hidden {
-            content.toolbarVisibility(.hidden, for: .windowToolbar)
-        } else {
-            content
-        }
+        content
         #endif
     }
 }

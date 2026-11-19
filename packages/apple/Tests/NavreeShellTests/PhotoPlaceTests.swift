@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import CoreGraphics
 import CoreMedia
 import CoreVideo
@@ -536,7 +536,13 @@ struct PhotoPlaceTests {
         let cr2 = folder.appendingPathComponent("Ludhiana.cr2")
         try Data([0x49, 0x49, 0x2A, 0x00, 0x10, 0x00, 0x00, 0x00, 0x43, 0x52, 0x02, 0x00]).write(to: cr2)
 
-        for candidate in [svg, psd, dng, cr2] {
+        let gif = folder.appendingPathComponent("badge.gif")
+        try Self.picture(as: .gif).write(to: gif)
+
+        let tiff = folder.appendingPathComponent("scan.tiff")
+        try Self.picture(as: .tiff).write(to: tiff)
+
+        for candidate in [svg, psd, dng, cr2, gif, tiff] {
             let picked = await store.takeAsync(candidate)
             #expect(picked == .refused(.placeStays), "\(candidate.lastPathComponent)")
             let message = Words.refused(candidate.lastPathComponent, .placeStays)
@@ -622,6 +628,14 @@ struct PhotoPlaceTests {
         #expect(!PhotoPlace.isPicture(clip))
         #expect(Self.holds(originalBytes, "+31.6200+074.8765"))
         #expect(!(await FilmPlace.isBare(clip)))
+
+        // An extensionless camera file with a vendor major brand and `mp42` in compatible brands is recognised as a film.
+        let branded = folder.appendingPathComponent("camera-upload.bin")
+        var ftypPayload = [UInt8]("ZZZZ".utf8)
+        ftypPayload += [0x00, 0x00, 0x00, 0x00]
+        ftypPayload += [UInt8]("ZZZZmp42".utf8)
+        try Data(Self.box("ftyp", payload: ftypPayload)).write(to: branded)
+        #expect(FilmPlace.isFilm(branded))
 
         guard case .kept(let sent) = await store.takeAsync(clip) else {
             Issue.record("the geotagged film should be exported without its place")

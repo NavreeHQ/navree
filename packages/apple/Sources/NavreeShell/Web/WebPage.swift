@@ -4,6 +4,7 @@ import Foundation
 import NavreeProtocol
 import NavreeRuntime
 import SwiftUI
+import Synchronization
 import UniformTypeIdentifiers
 import WebKit
 
@@ -29,13 +30,19 @@ final class SystemWebFilePicker: WebFilePicker {
 
     func pick(multiple: Bool) async -> [URL]? {
         #if canImport(UIKit)
+        if let previous = activeDelegate {
+            activeDelegate = nil
+            previous.cancelAndDismiss()
+        }
         guard let presenter = Windows.top else { return nil }
         return await withCheckedContinuation { continuation in
             let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item])
             picker.allowsMultipleSelection = multiple
-            let delegate = DocumentPickerDelegate { [weak self] urls in
-                self?.activeDelegate = nil
-                continuation.resume(returning: urls)
+            let delegate = DocumentPickerDelegate(controller: picker, continuation: continuation)
+            delegate.onComplete = { [weak self, weak delegate] in
+                if let delegate, self?.activeDelegate === delegate {
+                    self?.activeDelegate = nil
+                }
             }
             self.activeDelegate = delegate
             picker.delegate = delegate
@@ -61,16 +68,40 @@ final class SystemWebFilePicker: WebFilePicker {
 #if canImport(UIKit)
 @MainActor
 private final class DocumentPickerDelegate: NSObject, UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate {
-    private var finish: (([URL]?) -> Void)?
+    private let pending: Mutex<CheckedContinuation<[URL]?, Never>?>
+    private weak var controller: UIDocumentPickerViewController?
+    var onComplete: (@MainActor () -> Void)?
 
-    init(finish: @escaping ([URL]?) -> Void) {
-        self.finish = finish
+    init(
+        controller: UIDocumentPickerViewController,
+        continuation: CheckedContinuation<[URL]?, Never>
+    ) {
+        self.controller = controller
+        self.pending = Mutex(continuation)
+    }
+
+    deinit {
+        let leftover = pending.withLock { slot -> CheckedContinuation<[URL]?, Never>? in
+            defer { slot = nil }
+            return slot
+        }
+        leftover?.resume(returning: nil)
+    }
+
+    func cancelAndDismiss() {
+        controller?.dismiss(animated: false)
+        complete(nil)
     }
 
     private func complete(_ urls: [URL]?) {
-        guard let finish else { return }
-        self.finish = nil
-        finish(urls)
+        let current = pending.withLock { slot -> CheckedContinuation<[URL]?, Never>? in
+            defer { slot = nil }
+            return slot
+        }
+        let notify = onComplete
+        onComplete = nil
+        notify?()
+        current?.resume(returning: urls)
     }
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
@@ -128,7 +159,13 @@ final class InteractiveWebView: WKWebView {
         return super.accessibilityActivate()
     }
     #elseif canImport(AppKit)
-    private var eventMonitor: Any?
+    private nonisolated(unsafe) var eventMonitor: Any?
+
+    deinit {
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+        }
+    }
 
     func startMonitoring() {
         guard eventMonitor == nil else { return }
@@ -167,11 +204,12 @@ final class InteractiveWebView: WKWebView {
 /// call (macOS 10.12 and later, iOS and iPadOS 18.4 and later — including
 /// iOS 26, iPadOS 26 and macOS 26), a web page's `<input type="file">` opens
 /// the app's own file picker and passes every chosen file through ``PhotoPlace``
-/// and ``FilmPlace`` with the same refusal words as a native field; elsewhere
-/// `<input type="file">` is switched off at document start and tells the
-/// person to use the app's own form. A link the person actually taps is the
-/// core's to follow; what a page does by itself (including `anchor.click()`)
-/// stays on the origin or goes nowhere, and is never told to the core as a tap.
+/// and ``FilmPlace`` with the same refusal words as a native field, while file
+/// drops and file pastes are stopped; elsewhere `<input type="file">` is
+/// switched off at document start and tells the person to use the app's own
+/// form. A link the person actually taps is the core's to follow; what a page
+/// does by itself (including `anchor.click()`) stays on the origin or goes
+/// nowhere, and is never told to the core as a tap.
 struct WebPageView {
     let url: URL
     let serial: Int
@@ -199,15 +237,15 @@ struct WebPageView {
         // No `WKScriptMessageHandler` is ever added to the user content
         // controller: the page has no way to reach the app.
         if let site = configuration.site {
+            let answersFilePicker = WebFileRules.systemAnswersOpenPanel
             settings.userContentController.addUserScript(WKUserScript(
                 source: WebRules.documentScript(
-                    site: site, hosts: configuration.webHosts,
-                    answersFilePicker: WebFileRules.systemAnswersOpenPanel
+                    site: site, hosts: configuration.webHosts, answersFilePicker: answersFilePicker
                 ),
                 injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .defaultClient
             ))
             settings.userContentController.addUserScript(WKUserScript(
-                source: WebRules.pageClickScript(site: site),
+                source: WebRules.pageClickScript(site: site, answersFilePicker: answersFilePicker),
                 injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page
             ))
         }
@@ -247,6 +285,7 @@ struct WebPageView {
         private var loading: Task<Void, Never>?
         private var panelTask: Task<Void, Never>?
         private var pendingPanel: (([URL]?) -> Void)?
+        private var panelSerial = 0
         private var dismantled = false
         private(set) var serial: Int?
         private var loaded: URL?
@@ -327,9 +366,7 @@ struct WebPageView {
             dismantled = true
             loading?.cancel()
             loading = nil
-            panelTask?.cancel()
-            panelTask = nil
-            finishPanel(with: nil)
+            cancelPendingPanel()
             title?.invalidate()
             title = nil
             if let interactive = view as? InteractiveWebView {
@@ -346,9 +383,19 @@ struct WebPageView {
             }
         }
 
-        private func finishPanel(with urls: [URL]?) {
+        private func cancelPendingPanel() {
+            panelSerial &+= 1
+            panelTask?.cancel()
+            panelTask = nil
             guard let handler = pendingPanel else { return }
             pendingPanel = nil
+            handler(nil)
+        }
+
+        private func finishPanel(serial: Int, with urls: [URL]?) {
+            guard panelSerial == serial, let handler = pendingPanel else { return }
+            pendingPanel = nil
+            panelTask = nil
             handler(urls)
         }
 
@@ -361,8 +408,9 @@ struct WebPageView {
             mainFrame: Bool,
             completionHandler: @escaping ([URL]?) -> Void
         ) {
-            panelTask?.cancel()
-            finishPanel(with: nil)
+            cancelPendingPanel()
+            panelSerial &+= 1
+            let serial = panelSerial
             pendingPanel = completionHandler
 
             let config = parent.configuration
@@ -373,20 +421,19 @@ struct WebPageView {
                     hosts: config.webHosts, directoryRequested: allowsDirectories
                 )
             else {
-                finishPanel(with: nil)
+                finishPanel(serial: serial, with: nil)
                 return
             }
 
             panelTask = Task { @MainActor [weak self] in
                 guard let self else { return }
-                guard let chosen = await self.filePicker.pick(multiple: multiple), !chosen.isEmpty else {
-                    self.finishPanel(with: nil)
-                    return
-                }
-                guard !self.dismantled, self.isCurrent,
+                let chosen = await self.filePicker.pick(multiple: multiple)
+                guard self.panelSerial == serial, !Task.isCancelled else { return }
+                guard let chosen, !chosen.isEmpty,
+                    !self.dismantled, self.isCurrent,
                     !ModalRules.isUnderLockedCover(self.parent.screen, in: self.parent.client.nav)
                 else {
-                    self.finishPanel(with: nil)
+                    self.finishPanel(serial: serial, with: nil)
                     return
                 }
                 let effects = self.parent.client.effects as? SystemEffects
@@ -394,20 +441,26 @@ struct WebPageView {
                 let prepared = await store.prepareForWeb(
                     chosen, multiple: multiple, filmExporter: self.filmExporter
                 )
+                guard self.panelSerial == serial, !Task.isCancelled else {
+                    for url in prepared.kept {
+                        try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+                    }
+                    return
+                }
                 guard !self.dismantled, self.isCurrent,
                     !ModalRules.isUnderLockedCover(self.parent.screen, in: self.parent.client.nav)
                 else {
                     for url in prepared.kept {
                         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
                     }
-                    self.finishPanel(with: nil)
+                    self.finishPanel(serial: serial, with: nil)
                     return
                 }
                 effects?.fileNotes.sayOnWeb(prepared.refused, screen: self.parent.screen)
                 if !prepared.refused.isEmpty {
                     AccessibilityNotification.Announcement(prepared.refused.joined(separator: " ")).post()
                 }
-                self.finishPanel(with: prepared.kept.isEmpty ? nil : prepared.kept)
+                self.finishPanel(serial: serial, with: prepared.kept.isEmpty ? nil : prepared.kept)
             }
         }
 
@@ -478,12 +531,12 @@ struct WebPageView {
             initiatedByFrame frame: WKFrameInfo,
             completionHandler: @escaping ([URL]?) -> Void
         ) {
-            let originURL = Self.originURL(of: frame.securityOrigin)
-            let frameURL = frame.request.url ?? (frame.isMainFrame ? webView.url : nil) ?? originURL
+            // Use the frame's security origin alone so sandboxed opaque frames
+            // (`host == ""`) and `about:` frames never open a picker.
             handleOpenPanel(
                 multiple: parameters.allowsMultipleSelection,
                 allowsDirectories: parameters.allowsDirectories,
-                frameURL: frameURL,
+                frameURL: Self.originURL(of: frame.securityOrigin),
                 mainFrame: frame.isMainFrame,
                 completionHandler: completionHandler
             )

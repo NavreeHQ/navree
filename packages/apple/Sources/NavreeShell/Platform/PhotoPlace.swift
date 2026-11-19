@@ -69,6 +69,13 @@ enum PhotoPlace {
         Set(CGImageDestinationCopyTypeIdentifiers() as? [String] ?? [])
     }()
 
+    /// Container formats whose structure ``hasKnownContainer(_:)`` verifies
+    /// byte for byte. Other image formats (such as GIF, TIFF, BMP, WebP or
+    /// AVIF) are refused before rewriting unless `keep_location` is set.
+    private static let verifiedContainerTypes: Set<String> = [
+        UTType.jpeg.identifier, UTType.png.identifier, UTType.heic.identifier,
+    ]
+
     /// Extensions of layered design files and camera raws, which Image I/O
     /// either cannot write or would flatten if rewritten.
     private static let designAndRawExtensions: Set<String> = [
@@ -279,7 +286,7 @@ enum PhotoPlace {
             CGImageSourceGetCount(source) > 0
         else {
             if !ext.isEmpty, let named = UTType(filenameExtension: ext), named.conforms(to: .image),
-                !writableTypes.contains(named.identifier)
+                !verifiedContainerTypes.contains(named.identifier) || !writableTypes.contains(named.identifier)
             {
                 return .placeStays
             }
@@ -287,7 +294,10 @@ enum PhotoPlace {
         }
 
         let typeID = type as String
-        if isDesignOrRaw(extension: ext, typeIdentifier: typeID, bytes: bytes) || !writableTypes.contains(typeID) {
+        if isDesignOrRaw(extension: ext, typeIdentifier: typeID, bytes: bytes)
+            || !verifiedContainerTypes.contains(typeID)
+            || !writableTypes.contains(typeID)
+        {
             return .placeStays
         }
 

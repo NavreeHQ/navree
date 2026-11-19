@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import CoreMedia
 import Foundation
 import UniformTypeIdentifiers
@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 /// The place a film was made, which a phone, a camera or a drone writes into
 /// the container beside its video and sound tracks (`©xyz`, QuickTime's
 /// `com.apple.quicktime.location.ISO6709`, 3GPP's `loci`, XMP, or a timed
-/// metadata track).
+/// metadata or subtitle track).
 ///
 /// Unless the field asks to keep it (`keep_location`), a picked film is
 /// exported through the system's own exporter with sharing metadata filtering
@@ -38,7 +38,11 @@ enum FilmPlace {
     private static let isoFilmBrands: Set<String> = [
         "qt  ", "isom", "iso2", "iso4", "iso5", "iso6",
         "mp41", "mp42", "M4V ", "M4VP", "3gp4", "3gp5", "3gp6", "3g2a",
-        "avc1", "f4v ", "mmp4",
+        "avc1", "f4v ", "mmp4", "MSNV", "XAVC", "CAEP", "niko",
+    ]
+
+    private static let isoImageBrands: Set<String> = [
+        "heic", "heix", "heim", "heis", "mif1", "msf1", "avif", "avis", "jxl ",
     ]
 
     /// Whether `url` is a film (video) by its extension or container magic,
@@ -51,7 +55,7 @@ enum FilmPlace {
             if named.conforms(to: .movie) || named.conforms(to: .video) { return true }
         }
         if PhotoPlace.isPicture(url, originalExtension: ext) { return false }
-        guard let head = prefix(of: url, count: 32), head.count >= 12 else { return false }
+        guard let head = prefix(of: url, count: 128), head.count >= 12 else { return false }
         let bytes = [UInt8](head)
         // Matroska / WebM EBML header.
         if bytes.starts(with: [0x1A, 0x45, 0xDF, 0xA3]) { return true }
@@ -61,11 +65,20 @@ enum FilmPlace {
         {
             return true
         }
-        // QuickTime / ISO base media file format movie brands.
+        // QuickTime / ISO base media file format movie brands (major and compatible).
         let boxKind = String(decoding: bytes[4..<8], as: UTF8.self)
         if boxKind == "ftyp" {
-            let brand = String(decoding: bytes[8..<12], as: UTF8.self)
-            if isoFilmBrands.contains(brand) { return true }
+            let major = String(decoding: bytes[8..<12], as: UTF8.self)
+            if isoImageBrands.contains(major) { return false }
+            if isoFilmBrands.contains(major) { return true }
+            let rawSize = Int(u32BE(bytes, at: 0))
+            let ftypLimit = rawSize >= 16 ? min(bytes.count, rawSize) : bytes.count
+            var pos = 16
+            while pos + 4 <= ftypLimit {
+                let compat = String(decoding: bytes[pos..<(pos + 4)], as: UTF8.self)
+                if isoFilmBrands.contains(compat) { return true }
+                pos += 4
+            }
         } else if boxKind == "moov" || boxKind == "wide" {
             return true
         }
@@ -113,11 +126,10 @@ enum FilmPlace {
     /// metadata using ``AVAssetExportSession`` and ``AVMetadataItemFilter/forSharing()``.
     private static func exportWithoutPlace(from source: URL, to destination: URL) async -> Bool {
         let asset = AVURLAsset(url: source)
-        guard let tracks = try? await asset.load(.tracks), !tracks.isEmpty else { return false }
-        let hasOnlyMediaTracks = tracks.allSatisfy { $0.mediaType == .video || $0.mediaType == .audio }
+        guard let hasOnlyMedia = await inspectTrackKinds(of: asset) else { return false }
         let fileTypes = preferredFileTypes(for: source.pathExtension.lowercased())
 
-        if hasOnlyMediaTracks {
+        if hasOnlyMedia {
             for preset in [AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality] {
                 if await runExport(asset: asset, preset: preset, types: fileTypes, to: destination),
                     await isBare(destination)
@@ -127,12 +139,14 @@ enum FilmPlace {
             }
         }
 
-        // Rebuild from video and audio tracks only so timed metadata tracks
-        // cannot carry coordinates into the exported file.
-        let slices = await loadSlices(from: tracks)
+        // Rebuild from video and audio tracks only so timed metadata or
+        // subtitle tracks cannot carry coordinates into the exported file.
+        let slices = await loadSlices(from: asset)
         guard !slices.isEmpty else { return false }
         for preset in [AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality] {
-            if await runSliceExport(slices: slices, preset: preset, types: fileTypes, to: destination),
+            if await runSliceExport(
+                asset: asset, slices: slices, preset: preset, types: fileTypes, to: destination
+            ),
                 await isBare(destination)
             {
                 return true
@@ -143,19 +157,36 @@ enum FilmPlace {
     }
 
     private struct TrackSlice: Sendable {
-        let track: AVAssetTrack
+        let trackID: CMPersistentTrackID
         let mediaType: AVMediaType
         let range: CMTimeRange
         let transform: CGAffineTransform?
     }
 
-    private static func loadSlices(from tracks: [AVAssetTrack]) async -> [TrackSlice] {
+    /// Returns `nil` when `asset` has no readable tracks, `true` when every
+    /// track is `.video` or `.audio`, and `false` when auxiliary tracks exist.
+    private static func inspectTrackKinds(of asset: AVURLAsset) async -> Bool? {
+        guard let tracks = try? await asset.load(.tracks), !tracks.isEmpty else { return nil }
+        return tracks.allSatisfy { $0.mediaType == .video || $0.mediaType == .audio }
+    }
+
+    private static func loadSlices(from asset: AVURLAsset) async -> [TrackSlice] {
+        guard let initialTracks = try? await asset.load(.tracks), !initialTracks.isEmpty else { return [] }
+        let descriptors: [(id: CMPersistentTrackID, mediaType: AVMediaType)] = initialTracks.compactMap { track in
+            (track.mediaType == .video || track.mediaType == .audio) ? (track.trackID, track.mediaType) : nil
+        }
         var slices: [TrackSlice] = []
-        for track in tracks where track.mediaType == .video || track.mediaType == .audio {
-            guard let range = try? await track.load(.timeRange) else { continue }
+        for descriptor in descriptors {
+            guard let track = try? await asset.loadTrack(withTrackID: descriptor.id),
+                let range = try? await track.load(.timeRange)
+            else { continue }
             let transform: CGAffineTransform? =
-                track.mediaType == .video ? (try? await track.load(.preferredTransform)) : nil
-            slices.append(TrackSlice(track: track, mediaType: track.mediaType, range: range, transform: transform))
+                descriptor.mediaType == .video ? (try? await track.load(.preferredTransform)) : nil
+            slices.append(
+                TrackSlice(
+                    trackID: descriptor.id, mediaType: descriptor.mediaType, range: range, transform: transform
+                )
+            )
         }
         return slices
     }
@@ -185,7 +216,7 @@ enum FilmPlace {
     }
 
     private static func runSliceExport(
-        slices: [TrackSlice], preset: String, types: [(AVFileType, String)], to destination: URL
+        asset: AVURLAsset, slices: [TrackSlice], preset: String, types: [(AVFileType, String)], to destination: URL
     ) async -> Bool {
         for (fileType, ext) in types {
             if Task.isCancelled { return false }
@@ -193,9 +224,10 @@ enum FilmPlace {
                 .appendingPathComponent("navree-film-try-\(UUID().uuidString)")
                 .appendingPathExtension(ext)
             defer { try? FileManager.default.removeItem(at: attempt) }
-            guard let session = makeSliceSession(slices: slices, preset: preset) else { continue }
+            guard await exportOneSliceAttempt(
+                asset: asset, slices: slices, preset: preset, fileType: fileType, to: attempt
+            ) else { continue }
             do {
-                try await session.export(to: attempt, as: fileType)
                 try? FileManager.default.removeItem(at: destination)
                 try FileManager.default.moveItem(at: attempt, to: destination)
                 return true
@@ -206,17 +238,26 @@ enum FilmPlace {
         return false
     }
 
-    private static func makeSliceSession(slices: [TrackSlice], preset: String) -> AVAssetExportSession? {
+    private static func exportOneSliceAttempt(
+        asset: AVURLAsset, slices: [TrackSlice], preset: String, fileType: AVFileType, to attempt: URL
+    ) async -> Bool {
+        var resolved: [(slice: TrackSlice, track: AVAssetTrack)] = []
+        for slice in slices {
+            guard let track = try? await asset.loadTrack(withTrackID: slice.trackID) else { continue }
+            resolved.append((slice, track))
+        }
+        guard !resolved.isEmpty else { return false }
+
         let composition = AVMutableComposition()
         var added = 0
-        for slice in slices {
+        for (slice, track) in resolved {
             guard
                 let target = composition.addMutableTrack(
                     withMediaType: slice.mediaType, preferredTrackID: kCMPersistentTrackID_Invalid
                 )
             else { continue }
             do {
-                try target.insertTimeRange(slice.range, of: slice.track, at: .zero)
+                try target.insertTimeRange(slice.range, of: track, at: .zero)
                 if let transform = slice.transform { target.preferredTransform = transform }
                 added += 1
             } catch {
@@ -224,21 +265,29 @@ enum FilmPlace {
             }
         }
         guard added > 0, let session = AVAssetExportSession(asset: composition, presetName: preset) else {
-            return nil
+            return false
         }
         session.metadata = []
         session.metadataItemFilter = AVMetadataItemFilter.forSharing()
-        return session
+        do {
+            try await session.export(to: attempt, as: fileType)
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// Whether the film at `url` reads cleanly as an audiovisual asset with
-    /// zero location metadata items, zero timed metadata tracks, and clean
+    /// video/audio tracks only, zero location metadata items, and clean
     /// container boxes.
     static func isBare(_ url: URL) async -> Bool {
         guard hasCleanBoxes(at: url) else { return false }
         let asset = AVURLAsset(url: url)
-        guard let tracks = try? await asset.load(.tracks), !tracks.isEmpty else { return false }
-        if tracks.contains(where: { $0.mediaType == .metadata }) { return false }
+        guard let initialTracks = try? await asset.load(.tracks), !initialTracks.isEmpty else { return false }
+        guard initialTracks.allSatisfy({ $0.mediaType == .video || $0.mediaType == .audio }) else {
+            return false
+        }
+        let trackIDs = initialTracks.map(\.trackID)
 
         guard let topMetadata = try? await asset.load(.metadata),
             let commonMetadata = try? await asset.load(.commonMetadata),
@@ -250,13 +299,16 @@ enum FilmPlace {
             if items.contains(where: { itemHoldsPlace($0) }) { return false }
         }
 
-        for track in tracks {
-            guard let trackMeta = try? await track.load(.metadata),
+        for trackID in trackIDs {
+            guard let track = try? await asset.loadTrack(withTrackID: trackID),
+                let trackMeta = try? await track.load(.metadata),
                 let trackFormats = try? await track.load(.availableMetadataFormats)
             else { return false }
             if trackMeta.contains(where: { itemHoldsPlace($0) }) { return false }
             for format in trackFormats {
-                guard let items = try? await track.loadMetadata(for: format) else { return false }
+                guard let formatTrack = try? await asset.loadTrack(withTrackID: trackID),
+                    let items = try? await formatTrack.loadMetadata(for: format)
+                else { return false }
                 if items.contains(where: { itemHoldsPlace($0) }) { return false }
             }
         }

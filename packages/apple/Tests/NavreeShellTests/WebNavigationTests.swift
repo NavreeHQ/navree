@@ -69,9 +69,9 @@ struct WebNavigationTests {
         #expect(tracker.hasRecent(at: start.advanced(by: .milliseconds(200))))
         #expect(!tracker.hasRecent(at: start.advanced(by: .seconds(2))))
 
-        // 3. Both document-start scripts block synthetic clicks (`anchor.click()` on
-        // detached and attached links, and `dispatchEvent` with `isTrusted == false`),
-        // while keeping real trusted clicks intact.
+        // 3. Both document-start scripts block synthetic clicks (`anchor.click()`,
+        // `span.click()` inside a detached `<a>`, SVG `<a xlink:href>`, and
+        // `dispatchEvent` with `isTrusted == false`), while keeping real trusted clicks intact.
         let site = try #require(Origin("https://shop.example"))
         let ctx = try #require(JSContext())
         ctx.evaluateScript(Self.clickHarness)
@@ -81,23 +81,35 @@ struct WebNavigationTests {
         ctx.evaluateScript(WebRules.pageClickScript(site: site))
         #expect(ctx.exception == nil)
 
-        // Detached `<a href="tel:+919814012345">`: `a.click()` neither invokes
-        // WebKit's native link click nor navigates anywhere.
+        // Detached `<a href="tel:+919814012345">`, nested `<span>.click()`, and SVG `<a xlink:href>`:
+        // none invokes WebKit's native link click or navigates anywhere.
         ctx.evaluateScript("""
             var telLink = new Anchor('tel:+919814012345');
             telLink.click();
+
+            var nestedTel = new Anchor('tel:+919814012345');
+            var childSpan = new Span(nestedTel);
+            childSpan.click();
+
+            var svgTel = new SvgAnchor('tel:+919814012345');
+            svgTel.click();
             """)
         #expect(ctx.evaluateScript("nativeClicks")?.toInt32() == 0)
         #expect(ctx.evaluateScript("assignedURLs.length")?.toInt32() == 0)
 
-        // Detached same-origin `<a href="/orders/2">`: `a.click()` navigates via
-        // `location.assign` (`.other`, never `.linkActivated`) without native click.
+        // Detached same-origin `<a href="/orders/2">` and nested `<span>.click()` inside `<a href="/orders/3">`
+        // navigate via `location.assign` (`.other`, never `.linkActivated`) without native click.
         ctx.evaluateScript("""
             var internalLink = new Anchor('/orders/2');
             internalLink.click();
+
+            var nestedInternal = new Anchor('/orders/3');
+            var internalSpan = new Span(nestedInternal);
+            internalSpan.click();
             """)
         #expect(ctx.evaluateScript("nativeClicks")?.toInt32() == 0)
         #expect(ctx.evaluateScript("assignedURLs[0]")?.toString() == "https://shop.example/orders/2")
+        #expect(ctx.evaluateScript("assignedURLs[1]")?.toString() == "https://shop.example/orders/3")
 
         // Untrusted `dispatchEvent` on an attached link is cancelled (`defaultPrevented`),
         // whereas a real person tap (`isTrusted: true`) is not.
@@ -125,6 +137,9 @@ struct WebNavigationTests {
         function HTMLElement() {}
         HTMLElement.prototype = Object.create(EventTarget.prototype);
         HTMLElement.prototype.click = function () { nativeClicks += 1; };
+        function SVGElement() {}
+        SVGElement.prototype = Object.create(EventTarget.prototype);
+        SVGElement.prototype.click = function () { nativeClicks += 1; };
         function Anchor(href) {
           this.tagName = 'A';
           this.href = href;
@@ -134,6 +149,20 @@ struct WebNavigationTests {
         Anchor.prototype = Object.create(HTMLElement.prototype);
         Anchor.prototype.hasAttribute = function (n) { return n === 'href' && Boolean(this.href); };
         Anchor.prototype.getAttribute = function (n) { return n === 'href' ? this.href : (n === 'target' ? this.target : null); };
+        function Span(parent) {
+          this.tagName = 'SPAN';
+          this.parentNode = parent || null;
+        }
+        Span.prototype = Object.create(HTMLElement.prototype);
+        function SvgAnchor(xlinkHref) {
+          this.tagName = 'a';
+          this.href = { baseVal: xlinkHref };
+          this.parentNode = null;
+          this._xlink = xlinkHref;
+        }
+        SvgAnchor.prototype = Object.create(SVGElement.prototype);
+        SvgAnchor.prototype.hasAttribute = function (n) { return n === 'xlink:href' && Boolean(this._xlink); };
+        SvgAnchor.prototype.getAttribute = function (n) { return n === 'xlink:href' ? this._xlink : null; };
         function URL(raw, base) {
           if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) {
             var m = /^(https?:\\/\\/[^\\/]+)(\\/.*)?$/i.exec(raw);

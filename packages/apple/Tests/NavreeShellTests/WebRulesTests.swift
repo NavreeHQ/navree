@@ -101,6 +101,8 @@ struct WebRulesTests {
         let geotaggedFilm = try await PhotoPlaceTests.film(in: folder, named: "hall-bazaar.mov", withPlace: true)
         let designFile = folder.appendingPathComponent("banner.psd")
         try Data([0x38, 0x42, 0x50, 0x53, 0x00, 0x01] + [UInt8](repeating: 0, count: 20)).write(to: designFile)
+        let cleanNote = folder.appendingPathComponent("invoice.txt")
+        try Data("Invoice 20481, Ludhiana".utf8).write(to: cleanNote)
 
         let config = ShellConfiguration(origin: "https://shop.example", appID: "com.navree.demo", appVersion: "1.0")
         let page = WebPageView(
@@ -117,7 +119,7 @@ struct WebRulesTests {
             coordinator.handleOpenPanel(
                 multiple: true,
                 allowsDirectories: false,
-                frameURL: URL(string: "https://shop.example/checkout"),
+                frameURL: URL(string: "https://shop.example/"),
                 mainFrame: true
             ) { urls in
                 continuation.resume(returning: urls)
@@ -137,23 +139,84 @@ struct WebRulesTests {
             Words.refused("banner.psd", .placeStays)
         ])
 
-        // Directory uploads and frames outside allowed origins are refused without opening the picker.
-        let dirResult = await withCheckedContinuation { (continuation: CheckedContinuation<[URL]?, Never>) in
-            coordinator.handleOpenPanel(
-                multiple: false, allowsDirectories: true,
-                frameURL: URL(string: "https://shop.example/checkout"), mainFrame: true
-            ) { continuation.resume(returning: $0) }
+        // Directory uploads, foreign origins, opaque sandboxed origins (`nil`) and `about:` frames open no picker.
+        let disallowedCases: [(dirs: Bool, url: URL?, main: Bool)] = [
+            (dirs: true, url: URL(string: "https://shop.example/"), main: true),
+            (dirs: false, url: URL(string: "https://evil.example/frame"), main: false),
+            (dirs: false, url: nil, main: false),
+            (dirs: false, url: URL(string: "about:srcdoc"), main: false),
+        ]
+        for disallowed in disallowedCases {
+            let blocked = await withCheckedContinuation { (continuation: CheckedContinuation<[URL]?, Never>) in
+                coordinator.handleOpenPanel(
+                    multiple: false, allowsDirectories: disallowed.dirs,
+                    frameURL: disallowed.url, mainFrame: disallowed.main
+                ) { continuation.resume(returning: $0) }
+            }
+            #expect(blocked == nil)
         }
-        #expect(dirResult == nil)
-
-        let foreignResult = await withCheckedContinuation { (continuation: CheckedContinuation<[URL]?, Never>) in
-            coordinator.handleOpenPanel(
-                multiple: false, allowsDirectories: false,
-                frameURL: URL(string: "https://evil.example/frame"), mainFrame: false
-            ) { continuation.resume(returning: $0) }
-        }
-        #expect(foreignResult == nil)
         #expect(picker.calls.count == 1)
+
+        // Re-entering `handleOpenPanel` while an earlier pick is still preparing off the main actor
+        // completes the superseded handler with `nil` without prematurely completing the new one.
+        let (enteredStream, enteredContinuation) = AsyncStream<Void>.makeStream()
+        let (releaseStream, releaseContinuation) = AsyncStream<Void>.makeStream()
+        shell.effects.keeper.files.workObserver = {
+            enteredContinuation.yield()
+            enteredContinuation.finish()
+            for await _ in releaseStream { break }
+        }
+        picker.urls = [geotaggedPhoto]
+        var firstOutcomes: [[URL]?] = []
+        coordinator.handleOpenPanel(
+            multiple: false, allowsDirectories: false,
+            frameURL: URL(string: "https://shop.example/"), mainFrame: true
+        ) { firstOutcomes.append($0) }
+
+        for await _ in enteredStream { break }
+        shell.effects.keeper.files.workObserver = nil
+        picker.urls = [cleanNote]
+
+        let secondTask = Task { @MainActor in
+            await withCheckedContinuation { (continuation: CheckedContinuation<[URL]?, Never>) in
+                coordinator.handleOpenPanel(
+                    multiple: false, allowsDirectories: false,
+                    frameURL: URL(string: "https://shop.example/"), mainFrame: true
+                ) { continuation.resume(returning: $0) }
+            }
+        }
+        releaseContinuation.finish()
+        let secondChosen = await secondTask.value
+        #expect(firstOutcomes.count == 1)
+        if let recorded = firstOutcomes.first {
+            #expect(recorded == nil)
+        }
+        #expect(secondChosen?.map(\.lastPathComponent) == ["invoice.txt"])
+
+        // File drops anywhere on the page (such as a `<div class="dropzone">`) and file pastes
+        // are blocked by `documentScript`, while plain-text paste is untouched.
+        let ctx = try #require(JSContext())
+        ctx.evaluateScript(Self.domHarness)
+        ctx.evaluateScript(WebRules.documentScript(site: Self.site, hosts: [], answersFilePicker: true))
+        #expect(ctx.exception == nil)
+        ctx.evaluateScript("""
+            var dropzone = makeElement('DIV', {});
+            formNode.appendChild(dropzone);
+            var dropEvt = makeEvent('drop', dropzone, true, true);
+            dropEvt.dataTransfer = { files: [{ name: 'amritsar.jpg' }], types: ['Files'] };
+            dispatchOnWindow(dropEvt);
+
+            var filePasteEvt = makeEvent('paste', dropzone, true, true);
+            filePasteEvt.clipboardData = { files: [{ name: 'amritsar.jpg' }], items: [{ kind: 'file' }] };
+            dispatchOnWindow(filePasteEvt);
+
+            var textPasteEvt = makeEvent('paste', textInput, true, true);
+            textPasteEvt.clipboardData = { files: [], items: [{ kind: 'string' }], types: ['text/plain'] };
+            dispatchOnWindow(textPasteEvt);
+            """)
+        #expect(ctx.evaluateScript("dropEvt.defaultPrevented")?.toBool() == true)
+        #expect(ctx.evaluateScript("filePasteEvt.defaultPrevented")?.toBool() == true)
+        #expect(ctx.evaluateScript("textPasteEvt.defaultPrevented")?.toBool() == false)
 
         // Ending the session wipes both the prepared web files and the refusal words.
         shell.effects.run(.forgetSession, for: shell.client)
@@ -166,8 +229,9 @@ struct WebRulesTests {
         ctx.evaluateScript(Self.domHarness)
         #expect(ctx.exception == nil)
 
-        let script = WebRules.documentScript(site: Self.site, hosts: [], answersFilePicker: false)
-        ctx.evaluateScript(script)
+        ctx.evaluateScript(WebRules.documentScript(site: Self.site, hosts: [], answersFilePicker: false))
+        #expect(ctx.exception == nil)
+        ctx.evaluateScript(WebRules.pageClickScript(site: Self.site, answersFilePicker: false))
         #expect(ctx.exception == nil)
 
         let expectedWords = WebFileRules.disabledWords
@@ -190,62 +254,85 @@ struct WebRulesTests {
         #expect(ctx.evaluateScript("formNode.children.length")?.toInt32() == 5)
         #expect(ctx.evaluateScript("formNode.children[4].textContent")?.toString() == expectedWords)
 
-        // Even if a script clears `disabled` and clicks the input, the capture listener stops it.
+        // Even if a script clears `disabled` and clicks the input, calls `showPicker()`,
+        // or calls `.click()` on a detached file input, the guards block it.
         ctx.evaluateScript("""
             receiptInput.disabled = false;
             var clickEvt = makeEvent('click', receiptInput, true, true);
             dispatchOnWindow(clickEvt);
+
+            receiptInput.disabled = false;
+            receiptInput.showPicker();
+
+            var detachedInput = makeElement('INPUT', { type: 'file' });
+            detachedInput.click();
             """)
         #expect(ctx.evaluateScript("receiptInput.disabled")?.toBool() == true)
         #expect(ctx.evaluateScript("clickEvt.defaultPrevented")?.toBool() == true)
+        #expect(ctx.evaluateScript("nativeShowPickers")?.toInt32() == 0)
+        #expect(ctx.evaluateScript("detachedInput.disabled")?.toBool() == true)
+        #expect(ctx.evaluateScript("nativeElementClicks")?.toInt32() == 0)
     }
 
     static let domHarness = """
         var windowListeners = [];
         var mutationCallbacks = [];
+        var nativeElementClicks = 0;
+        var nativeShowPickers = 0;
+        function EventTarget() {}
+        EventTarget.prototype.dispatchEvent = function (ev) { return !ev.defaultPrevented; };
+        function HTMLElement() {}
+        HTMLElement.prototype = Object.create(EventTarget.prototype);
+        HTMLElement.prototype.click = function () { nativeElementClicks += 1; };
+        function HTMLInputElement() {}
+        HTMLInputElement.prototype = Object.create(HTMLElement.prototype);
+        HTMLInputElement.prototype.showPicker = function () { nativeShowPickers += 1; };
         function makeElement(tag, attrs) {
+          var upper = tag.toUpperCase();
+          var proto = upper === 'INPUT' ? HTMLInputElement.prototype : HTMLElement.prototype;
           var map = {};
           if (attrs) { for (var k in attrs) map[k] = String(attrs[k]); }
-          var el = {
-            tagName: tag.toUpperCase(),
-            type: map.type || '',
-            disabled: false,
-            textContent: '',
-            parentNode: null,
-            children: [],
-            get nextSibling() {
+          var el = Object.create(proto);
+          el.tagName = upper;
+          el.type = map.type || '';
+          el.disabled = false;
+          el.textContent = '';
+          el.parentNode = null;
+          el.children = [];
+          Object.defineProperty(el, 'nextSibling', {
+            get: function () {
               if (!this.parentNode) return null;
               var idx = this.parentNode.children.indexOf(this);
               return (idx >= 0 && idx + 1 < this.parentNode.children.length) ? this.parentNode.children[idx + 1] : null;
-            },
-            getAttribute: function (n) { return Object.prototype.hasOwnProperty.call(map, n) ? map[n] : null; },
-            setAttribute: function (n, v) { map[n] = String(v); if (n === 'type') this.type = String(v); },
-            hasAttribute: function (n) { return Object.prototype.hasOwnProperty.call(map, n); },
-            appendChild: function (child) {
-              child.parentNode = this;
-              this.children.push(child);
-              return child;
-            },
-            insertBefore: function (child, ref) {
-              child.parentNode = this;
-              if (!ref) { this.children.push(child); return child; }
-              var idx = this.children.indexOf(ref);
-              if (idx < 0) this.children.push(child);
-              else this.children.splice(idx, 0, child);
-              return child;
-            },
-            querySelectorAll: function () {
-              var out = [];
-              function walk(node) {
-                for (var i = 0; i < node.children.length; i++) {
-                  var c = node.children[i];
-                  if (c.tagName === 'INPUT') out.push(c);
-                  walk(c);
-                }
-              }
-              walk(this);
-              return out;
             }
+          });
+          el.getAttribute = function (n) { return Object.prototype.hasOwnProperty.call(map, n) ? map[n] : null; };
+          el.setAttribute = function (n, v) { map[n] = String(v); if (n === 'type') this.type = String(v); };
+          el.hasAttribute = function (n) { return Object.prototype.hasOwnProperty.call(map, n); };
+          el.appendChild = function (child) {
+            child.parentNode = this;
+            this.children.push(child);
+            return child;
+          };
+          el.insertBefore = function (child, ref) {
+            child.parentNode = this;
+            if (!ref) { this.children.push(child); return child; }
+            var idx = this.children.indexOf(ref);
+            if (idx < 0) this.children.push(child);
+            else this.children.splice(idx, 0, child);
+            return child;
+          };
+          el.querySelectorAll = function () {
+            var out = [];
+            function walk(node) {
+              for (var i = 0; i < node.children.length; i++) {
+                var c = node.children[i];
+                if (c.tagName === 'INPUT') out.push(c);
+                walk(c);
+              }
+            }
+            walk(this);
+            return out;
           };
           return el;
         }

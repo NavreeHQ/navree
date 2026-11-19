@@ -114,11 +114,34 @@ import Testing
     #expect(!ModalRules.isUnderLockedCover(1, in: client.nav))
     #expect(keeper.number == 0)
     #expect(keeper.storeIdentifier() == firstStore)
+    #expect(removed.ids.isEmpty)
     guard case .web(let reloadedURL, _, _, let reloadedSerial)? = client.screen(1)?.content else {
         Issue.record("the web screen did not come back for the same person: \(String(describing: client.screen(1)?.content))")
         return
     }
     #expect(reloadedURL == "https://shop.example/")
     #expect(reloadedSerial > firstSerial)
+
+    // When the session ends again and another person signs in, the first person's store is retired first.
+    transport.answers["/"] = (401, "made/session-ended.json")
+    transport.headers = []
+    client.send(.refresh(screen: 1))
+    let secondCover = try #require(client.nav.modals.first?.stack.first)
+    transport.answers.removeValue(forKey: "/_navree/native/shell")
+    transport.answers["/"] = (200, "store/dashboard.json")
+    client.send(.field(screen: secondCover, form: "sign-in", field: "sign-in.email", value: .text("harpreet.singh@example.com")))
+    client.send(.field(screen: secondCover, form: "sign-in", field: "sign-in.password", value: .text("right")))
+    client.send(.act(.init(screen: secondCover, action: .submit(.init()), form: "sign-in")))
+    let secondShellRequest = try #require(transport.fetched.last?.request)
+    transport.headers = [["x-navree-person", "0193a4b2-0000-7000-8000-00000000hs02"]]
+    transport.answers["/_navree/native/shell"] = (200, "made/shell-other.json")
+    client.send(.response(Response(
+        request: secondShellRequest, status: 200, contentType: "application/vnd.navree.native+json",
+        headers: transport.headers, body: Fixtures.text("made/shell-other.json")
+    )))
+
+    #expect(client.app?.user?.name == "Harpreet Singh")
+    #expect(removed.ids == [firstStore])
+    #expect(keeper.storeIdentifier() != firstStore)
     #expect(problems.isEmpty, "\(problems)")
 }
