@@ -74,9 +74,12 @@ pub struct AuditLog {
 
 /// What the background writer receives.
 enum Message {
-    /// An entry to write.
-    Entry(Box<AuditRecord>),
-    /// Answer once every earlier entry is written.
+    /// An entry to write, and its cleaned form for any added sinks.
+    Entry {
+        row: Box<AuditRecord>,
+        forwarded: Option<AuditEntry>,
+    },
+    /// Answer once every earlier entry is written and delivered to added sinks.
     Flush(oneshot::Sender<()>),
 }
 
@@ -114,7 +117,12 @@ impl AuditLog {
         spawn: impl FnOnce(BoxFuture<'static, ()>),
     ) -> AuditLog {
         let (queue, receiver) = mpsc::channel(QUEUE_CAPACITY);
-        spawn(Box::pin(write_until(db.clone(), receiver, stop)));
+        spawn(Box::pin(write_until(
+            db.clone(),
+            sinks.clone(),
+            receiver,
+            stop,
+        )));
         AuditLog {
             policy: Arc::new(Policy::new(&options)),
             db,
@@ -144,25 +152,24 @@ impl AuditLog {
         }
         let entry = self.clean_entry(entry);
         let forwarded = (!self.sinks.is_empty()).then(|| entry.clone());
-        let row = self.row(entry);
-        let written = match self.queue.try_send(Message::Entry(Box::new(row))) {
+        let row = Box::new(self.row(entry));
+        match self.queue.try_send(Message::Entry { row, forwarded }) {
             Ok(()) => Ok(()),
-            Err(mpsc::error::TrySendError::Full(Message::Entry(row))) => {
+            Err(mpsc::error::TrySendError::Full(Message::Entry { row, .. })) => {
                 let action = row.action;
                 tracing::warn!(target: "navree::audit", %action, "the audit queue is full; entry dropped");
                 Err(AuditError::QueueFull { action })
             }
             // The writer has stopped (the app is shutting down): write directly.
-            Err(mpsc::error::TrySendError::Closed(Message::Entry(row))) => {
+            Err(mpsc::error::TrySendError::Closed(Message::Entry { row, forwarded })) => {
                 insert(own_connection(&self.db), &[*row]).await?;
+                if let Some(entry) = forwarded {
+                    deliver_to_sinks(&self.sinks, entry).await;
+                }
                 Ok(())
             }
             Err(_) => Ok(()),
-        };
-        if let Some(entry) = forwarded {
-            deliver_to_sinks(&self.sinks, entry).await;
         }
-        written
     }
 
     /// Records `entry` inside the transaction of `uow`, so it commits or
@@ -266,13 +273,8 @@ impl AuditLog {
 
     /// `entry` with skipped fields stripped from `old_values`, `new_values` and
     /// `metadata`.
-    fn clean_entry(&self, mut entry: AuditEntry) -> AuditEntry {
-        let owner = entry.subject_type.clone();
-        let strip = |v: Value| self.policy.strip(owner.as_deref(), v);
-        entry.old_values = entry.old_values.map(strip);
-        entry.new_values = entry.new_values.map(strip);
-        entry.metadata = strip(entry.metadata);
-        entry
+    fn clean_entry(&self, entry: AuditEntry) -> AuditEntry {
+        clean_entry(&self.policy, entry)
     }
 
     /// The row for a cleaned `entry`, stamped now.
@@ -437,11 +439,23 @@ impl fmt::Debug for AuditLog {
     }
 }
 
+/// `entry` with skipped fields stripped from `old_values`, `new_values` and
+/// `metadata` according to `policy`.
+pub(crate) fn clean_entry(policy: &Policy, mut entry: AuditEntry) -> AuditEntry {
+    let owner = entry.subject_type.clone();
+    let strip = |v: Value| policy.strip(owner.as_deref(), v);
+    entry.old_values = entry.old_values.map(strip);
+    entry.new_values = entry.new_values.map(strip);
+    entry.metadata = strip(entry.metadata);
+    entry
+}
+
 /// Writes queued entries in order until every sender is gone or `stop`
 /// resolves, then the entries still queued; later entries are written
 /// directly by [`AuditLog::record`].
 async fn write_until(
     db: Db,
+    sinks: Vec<Arc<dyn AuditSink>>,
     mut receiver: mpsc::Receiver<Message>,
     stop: impl Future<Output = ()>,
 ) {
@@ -449,7 +463,7 @@ async fn write_until(
     loop {
         tokio::select! {
             message = receiver.recv() => match message {
-                Some(message) => handle(&db, message).await,
+                Some(message) => handle(&db, &sinks, message).await,
                 None => return,
             },
             () = &mut stop => break,
@@ -457,16 +471,19 @@ async fn write_until(
     }
     receiver.close();
     while let Some(message) = receiver.recv().await {
-        handle(&db, message).await;
+        handle(&db, &sinks, message).await;
     }
 }
 
-async fn handle(db: &Db, message: Message) {
+async fn handle(db: &Db, sinks: &[Arc<dyn AuditSink>], message: Message) {
     match message {
-        Message::Entry(row) => {
+        Message::Entry { row, forwarded } => {
             let action = row.action.clone();
             if let Err(error) = insert(own_connection(db), &[*row]).await {
                 tracing::warn!(target: "navree::audit", %action, %error, "could not write an audit entry");
+            }
+            if let Some(entry) = forwarded {
+                deliver_to_sinks(sinks, entry).await;
             }
         }
         Message::Flush(done) => {

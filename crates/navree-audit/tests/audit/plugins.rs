@@ -165,34 +165,97 @@ async fn an_app_adds_a_second_audit_sink_and_both_receive_every_record() {
 
     app.shutdown().await.unwrap();
 
-    // Without `AuditModule`, two sinks added by the app form the app's `dyn AuditSink` and both
-    // receive every recorded entry.
+    // Without `AuditModule`, two sinks added by the app form the app's exported `dyn AuditSink`
+    // (supporting constructor injection as well as `try_get`) and both receive every recorded
+    // entry with secret fields stripped.
     let left = RecordingSink::default();
     let right = RecordingSink::default();
+    struct WritesAudit(Arc<dyn AuditSink>);
+    impl Injectable for WritesAudit {
+        fn dependencies() -> Vec<navree_kernel::ProviderKey> {
+            vec![navree_kernel::ProviderKey::of::<dyn AuditSink>()]
+        }
+        fn construct(r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+            Box::pin(async move { Ok(Self(r.get::<dyn AuditSink>().await?)) })
+        }
+    }
     struct TwoMemorySinks(RecordingSink, RecordingSink);
     impl Module for TwoMemorySinks {
         fn register(&self, m: &mut ModuleBuilder) {
             m.audit_sink_value(self.0.clone())
-                .audit_sink_value(self.1.clone());
+                .audit_sink_value(self.1.clone())
+                .provider::<WritesAudit>()
+                .exports::<WritesAudit>();
         }
     }
     let standalone = Navree::app()
         .module(TwoMemorySinks(left.clone(), right.clone()))
         .boot()
         .await
-        .expect("standalone sinks boot");
-    let fanout = standalone
-        .ctx()
-        .try_get::<dyn AuditSink>()
-        .await
-        .expect("fan-out sink");
-    fanout
-        .record(AuditEntry::new(AuditKind::Access, "role.granted"))
+        .expect("standalone sinks boot and satisfy constructor injection");
+    let writer = standalone.ctx().get::<WritesAudit>().await.unwrap();
+    writer
+        .0
+        .record(
+            AuditEntry::new(AuditKind::Access, "role.granted")
+                .metadata(json!({"password": "do-not-forward", "role": "editor"})),
+        )
         .await
         .unwrap();
     assert_eq!(left.actions(), vec!["role.granted".to_owned()]);
     assert_eq!(right.actions(), vec!["role.granted".to_owned()]);
+    assert_eq!(left.entries()[0].metadata, json!({"role": "editor"}));
+    assert_eq!(right.entries()[0].metadata, json!({"role": "editor"}));
     standalone.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_custom_audit_sink_beside_added_sinks_fails_the_boot() {
+    struct UnexportedDirectSink;
+    impl Module for UnexportedDirectSink {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.value_arc::<dyn AuditSink>(Arc::new(RecordingSink::default()));
+        }
+    }
+
+    struct ExportedDirectSink;
+    impl Module for ExportedDirectSink {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.value_arc::<dyn AuditSink>(Arc::new(RecordingSink::default()))
+                .exports::<dyn AuditSink>();
+        }
+    }
+
+    struct AddedSink;
+    impl Module for AddedSink {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.audit_sink_value(RecordingSink::default());
+        }
+    }
+
+    let unexported_err = Navree::app()
+        .module(UnexportedDirectSink)
+        .module(AddedSink)
+        .boot()
+        .await
+        .expect_err("unexported direct dyn AuditSink beside ModuleBuilderAuditExt must fail boot")
+        .to_string();
+    assert!(
+        unexported_err.contains("module `UnexportedDirectSink` registers `dyn AuditSink` directly alongside sinks added with ModuleBuilderAuditExt"),
+        "{unexported_err}"
+    );
+
+    let exported_err = Navree::app()
+        .module(ExportedDirectSink)
+        .module(AddedSink)
+        .boot()
+        .await
+        .expect_err("exported direct dyn AuditSink beside ModuleBuilderAuditExt must fail boot")
+        .to_string();
+    assert!(
+        exported_err.contains("multiple modules export `dyn AuditSink` alongside sinks added with ModuleBuilderAuditExt"),
+        "{exported_err}"
+    );
 }
 
 /// A community plugin shipping an audit sink for the app to add, and a module for testing its

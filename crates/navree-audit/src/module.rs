@@ -2,18 +2,19 @@
 
 use std::sync::Arc;
 
-use navree_config::ModuleBuilderConfigExt;
+use navree_config::{Config, ModuleBuilderConfigExt};
 use navree_contracts::{AuditEntry, AuditSink, Clock, SystemClock};
 use navree_db::{ChangeObserver, Db, ModuleBuilderDbExt};
 use navree_http::ModuleBuilderHttpExt;
 use navree_kernel::{
-    AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, Module, ModuleBuilder,
-    ProviderKey, Resolver,
+    AppContext, BoxError, BoxFuture, CommandSpec, Factory, Injectable, KernelError, Module,
+    ModuleBuilder, ProviderKey, Resolver,
 };
 
 use crate::controller::AuditController;
-use crate::log::deliver_to_sinks;
+use crate::log::{clean_entry, deliver_to_sinks};
 use crate::migration::migrations;
+use crate::policy::Policy;
 use crate::{AuditLog, AuditOptions};
 
 /// The audit module. Global; provides and exports [`AuditOptions`],
@@ -116,13 +117,7 @@ fn register(m: &mut ModuleBuilder, options: Option<AuditOptions>) {
             ]),
         )
         .exports::<AuditLog>()
-        .factory(
-            Factory::<dyn AuditSink>::new(|r: Resolver| async move {
-                Ok(r.get::<AuditLog>().await? as Arc<dyn AuditSink>)
-            })
-            .deps(vec![ProviderKey::of::<AuditLog>()]),
-        )
-        .exports::<dyn AuditSink>()
+        .import(AuditSinksModule)
         .multi(
             Factory::<dyn ChangeObserver>::new(|r: Resolver| async move {
                 Ok(r.get::<AuditLog>().await? as Arc<dyn ChangeObserver>)
@@ -137,10 +132,13 @@ fn register(m: &mut ModuleBuilder, options: Option<AuditOptions>) {
         ));
 }
 
-/// Provides a fan-out `dyn AuditSink` when an app adds sinks with
-/// [`ModuleBuilderAuditExt`] without [`AuditModule`]. Not exported, so
-/// [`AuditModule`]'s exported [`AuditLog`] wins when both are in the app and
-/// forwards every record to the added sinks itself.
+/// Marker singleton verifying that sinks added with [`ModuleBuilderAuditExt`]
+/// are never shadowed or made ambiguous by a separate `dyn AuditSink` provider.
+struct AuditSinkCheck;
+
+/// Provides and exports the app's `dyn AuditSink` for both [`AuditModule`]
+/// (resolving [`AuditLog`]) and standalone [`ModuleBuilderAuditExt`] callers
+/// (building a [`FanoutAuditSink`] with skipped fields stripped).
 #[derive(Clone, Copy, Debug, Default)]
 struct AuditSinksModule;
 
@@ -149,20 +147,81 @@ impl Module for AuditSinksModule {
         m.plugin(navree_kernel::plugin_info!());
         m.global()
             .factory(Factory::<dyn AuditSink>::new(|r: Resolver| async move {
+                let ctx = r.app();
+                match ctx.get::<AuditLog>().await {
+                    Ok(log) => return Ok(log as Arc<dyn AuditSink>),
+                    Err(KernelError::MissingProvider { .. }) => {}
+                    Err(error) => return Err(error.into()),
+                }
+                let options = match ctx.get::<Config>().await {
+                    Ok(config) => config.typed::<AuditOptions>()?,
+                    Err(KernelError::MissingProvider { .. }) => AuditOptions::default(),
+                    Err(error) => return Err(error.into()),
+                };
                 let sinks = r.get_all::<dyn AuditSink>().await?;
-                Ok(Arc::new(FanoutAuditSink(sinks)) as Arc<dyn AuditSink>)
+                Ok(Arc::new(FanoutAuditSink {
+                    policy: Policy::new(&options),
+                    sinks,
+                }) as Arc<dyn AuditSink>)
+            }))
+            .exports::<dyn AuditSink>()
+            .factory(Factory::<AuditSinkCheck>::new(|r: Resolver| async move {
+                let ctx = r.app();
+                if ctx.multi_count::<dyn AuditSink>() == 0 {
+                    return Ok(Arc::new(AuditSinkCheck));
+                }
+                let chosen = match ctx.get::<dyn AuditSink>().await {
+                    Ok(sink) => sink,
+                    Err(KernelError::AmbiguousProvider { .. }) => {
+                        return Err(
+                            "multiple modules export `dyn AuditSink` alongside sinks added with ModuleBuilderAuditExt, making `dyn AuditSink` ambiguous: add every sink with m.audit_sink, m.audit_sink_value or m.audit_sink_factory instead"
+                                .into(),
+                        );
+                    }
+                    Err(error) => return Err(error.into()),
+                };
+                for module in ctx.modules() {
+                    let seen = match ctx.resolver_for(module.id).get::<dyn AuditSink>().await {
+                        Ok(seen) => seen,
+                        Err(KernelError::AmbiguousProvider { .. }) => {
+                            return Err(
+                                "multiple modules export `dyn AuditSink` alongside sinks added with ModuleBuilderAuditExt, making `dyn AuditSink` ambiguous: add every sink with m.audit_sink, m.audit_sink_value or m.audit_sink_factory instead"
+                                    .into(),
+                            );
+                        }
+                        Err(error) => return Err(error.into()),
+                    };
+                    if !std::ptr::addr_eq(
+                        Arc::as_ptr(&seen) as *const (),
+                        Arc::as_ptr(&chosen) as *const (),
+                    ) {
+                        return Err(format!(
+                            "module `{}` registers `dyn AuditSink` directly alongside sinks added with ModuleBuilderAuditExt, so one of them would receive no records: add `{}`'s sink with m.audit_sink, m.audit_sink_value or m.audit_sink_factory instead",
+                            module.name, module.name
+                        )
+                        .into());
+                    }
+                }
+                Ok(Arc::new(AuditSinkCheck))
             }));
     }
 }
 
-/// Delivers each entry to every registered `dyn AuditSink` multi-binding in an
-/// app that has no [`AuditModule`].
-struct FanoutAuditSink(Vec<Arc<dyn AuditSink>>);
+/// Delivers each entry (with skipped and secret fields stripped) to every
+/// registered `dyn AuditSink` multi-binding in an app without [`AuditModule`].
+struct FanoutAuditSink {
+    policy: Policy,
+    sinks: Vec<Arc<dyn AuditSink>>,
+}
 
 impl AuditSink for FanoutAuditSink {
     fn record(&self, entry: AuditEntry) -> BoxFuture<'_, Result<(), BoxError>> {
+        if !self.policy.enabled {
+            return Box::pin(async { Ok(()) });
+        }
+        let entry = clean_entry(&self.policy, entry);
         Box::pin(async move {
-            deliver_to_sinks(&self.0, entry).await;
+            deliver_to_sinks(&self.sinks, entry).await;
             Ok(())
         })
     }
@@ -175,11 +234,13 @@ impl AuditSink for FanoutAuditSink {
 /// every recorded entry (`AuditLog::record`, `AuditSink::record`, and once
 /// committed `AuditLog::record_in` and `Uow` data changes) reaches both the
 /// database audit log and each sink added here, with skipped fields stripped.
-/// Without [`AuditModule`], the added sinks form the app's `dyn AuditSink` and
-/// every `AuditSink::record` entry reaches each of them.
+/// Without [`AuditModule`], the added sinks form the app's exported
+/// `dyn AuditSink` and every `AuditSink::record` entry reaches each of them,
+/// also with skipped fields stripped.
 pub trait ModuleBuilderAuditExt {
-    /// Registers provider `S` (built by the container) and adds it as an audit
-    /// sink.
+    /// Registers provider `S` on this module and adds it as an audit sink (for
+    /// a sink type built in this module; for a sink built by another module or
+    /// plugin, pass its factory to [`audit_sink_factory`](Self::audit_sink_factory)).
     fn audit_sink<S: AuditSink + Injectable>(&mut self) -> &mut Self;
 
     /// Adds an already-built audit sink.
