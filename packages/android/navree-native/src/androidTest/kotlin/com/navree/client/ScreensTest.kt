@@ -230,4 +230,78 @@ class ScreensTest {
         val papers = names.count { it.contains("Papers") }
         assertTrue("the file field Papers is one stop of the loop: $papers; the stops were $trace", papers == 1)
     }
+
+    /**
+     * A locked cover (the sign-in a session that ended was sent to) covers the
+     * whole window on phones and tablets even when the route asked for a sheet
+     * with chrome: no floating dialog window, no Close button, and nothing of
+     * the screens or navigation underneath visible, spoken by TalkBack, or
+     * reachable by Tab.
+     */
+    @Test
+    fun aLockedCoverCoversTheWholeWindowWithoutACloseButton() {
+        val shell = """
+            {"navree":1,"build":"1","name":"Charkha Supply Co.","home":"/",
+             "nav":{"groups":[{"label":"Store","items":[{"label":"Today","href":"/"},{"label":"Orders","href":"/orders"},{"label":"Inventory","href":"/inventory"}]}]},
+             "user":{"name":"Harpreet Sandhu","email":"harpreet.sandhu@example.com","menu":[]},
+             "routes":[{"match":"/sign-in","present":"sheet"}]}
+        """.trimIndent()
+        val home = """{"navree":1,"build":"1","vocab":0,"screen":{"title":"Today","body":{"t":"text","value":"Ludhiana warehouse"}}}"""
+        val ended = """{"navree":1,"build":"1","vocab":0,"ops":[{"op":"navigate","href":"/sign-in"}]}"""
+        val signIn = """
+            {"navree":1,"build":"1","vocab":0,"screen":{"title":"Sign in","body":{
+              "t":"form","id":"login","method":"post","action":"/sign-in","children":[
+                {"t":"field","id":"login.email","name":"email","label":"Email","input":{"t":"text","kind":"email"}},
+                {"t":"button","id":"login.go","label":"Continue","role":"primary","action":{"t":"submit"}}
+              ]}}}
+        """.trimIndent()
+        server.dispatcher = object : mockwebserver3.Dispatcher() {
+            override fun dispatch(request: mockwebserver3.RecordedRequest): mockwebserver3.MockResponse = when (request.url.encodedPath) {
+                "/_navree/native/shell" -> mockwebserver3.MockResponse.Builder().code(200).addHeader("Content-Type", "application/vnd.navree.native+json").body(shell).build()
+                "/" -> mockwebserver3.MockResponse.Builder().code(200).addHeader("Content-Type", "application/vnd.navree.native+json").body(home).build()
+                "/orders" -> mockwebserver3.MockResponse.Builder().code(401).addHeader("Content-Type", "application/vnd.navree.native+json").body(ended).build()
+                "/sign-in" -> mockwebserver3.MockResponse.Builder().code(200).addHeader("Content-Type", "application/vnd.navree.native+json").body(signIn).build()
+                else -> mockwebserver3.MockResponse.Builder().code(404).build()
+            }
+        }
+        server.start()
+        val origin = server.url("/").toString().trimEnd('/')
+        val config = NavreeConfig(origin = origin, name = "Charkha Supply Co.", seed = null, loopbackHttp = true)
+        lateinit var app: NavreeSession
+        compose.runOnUiThread {
+            app = NavreeSession(compose.activity.application, config, origin.toHttpUrl())
+            app.effects.activity = compose.activity
+        }
+        try {
+            compose.setContent { Shots.Looked { Host(app) } }
+            waitFor("the app is ready", 60_000) { app.driver.nav.stage == Stage.Ready }
+            front(app, "Today")
+            assertTrue("navigation is present before the session ends", compose.onAllNodes(androidx.compose.ui.test.hasText("Orders")).fetchSemanticsNodes().isNotEmpty())
+
+            send(app, Events.select(1))
+            front(app, "Sign in")
+            val modal = app.driver.nav.modals.single()
+            assertTrue("the sign-in cover is locked", modal.locked)
+            assertEquals("the route asked for a sheet", com.navree.protocol.Navree.Present.SHEET, modal.present)
+            assertTrue("no separate dialog window floats over the activity", Shots.windows().none { !it.first })
+            assertTrue("a locked cover has no Close button", compose.onAllNodes(hasContentDescription("Close")).fetchSemanticsNodes().isEmpty())
+            assertTrue("the screen underneath is gone from semantics", compose.onAllNodes(androidx.compose.ui.test.hasText("Ludhiana warehouse")).fetchSemanticsNodes().isEmpty())
+            assertTrue("the destinations underneath are gone from semantics", compose.onAllNodes(androidx.compose.ui.test.hasText("Orders")).fetchSemanticsNodes().isEmpty())
+
+            repeat(6) {
+                Shots.pressTab()
+                compose.waitForIdle()
+                val focused = compose.onAllNodes(isFocused()).fetchSemanticsNodes()
+                assertEquals("each press of Tab lands on a visible stop of the cover", 1, focused.size)
+                val cfg = focused.single().config
+                val words = listOfNotNull(
+                    cfg.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(", "),
+                    cfg.getOrNull(SemanticsProperties.Text)?.joinToString(", ") { it.text },
+                ).joinToString(" ")
+                assertTrue("Tab stays inside the sign-in cover, never on Orders or Today: $words", !words.contains("Orders") && !words.contains("Today") && !words.contains("Inventory"))
+            }
+        } finally {
+            compose.runOnUiThread { app.effects.close() }
+        }
+    }
 }

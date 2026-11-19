@@ -235,6 +235,26 @@ class ScreenRulesTest {
     }
 
     @Test
+    fun a_locked_cover_covers_the_whole_window_and_has_no_close_button() {
+        for (window in listOf(WindowInfo.Phone, WindowInfo.PhoneLandscape, WindowInfo.Foldable, WindowInfo.Tablet)) {
+            for (present in listOf(Navree.Present.SHEET, Navree.Present.TASK, Navree.Present.FULL)) {
+                assertEquals(
+                    "$present on $window",
+                    Presentation.FullScreenDialog,
+                    ScreenRules.presentation(present, window, locked = true),
+                )
+            }
+        }
+        val locked = ScreenContext(presentation = Presentation.FullScreenDialog, locked = true)
+        assertEquals(NavigationIcon.None, ScreenRules.plan(screen(), locked, WindowInfo.Tablet).navigationIcon)
+        assertEquals(
+            "a second step pushed inside the sign-in cover goes back to the first",
+            NavigationIcon.Back,
+            ScreenRules.plan(screen(), locked.copy(canGoBack = true), WindowInfo.Tablet).navigationIcon,
+        )
+    }
+
+    @Test
     fun a_glance_stands_beside_the_content_on_a_wide_window() {
         assertEquals(Presentation.BottomSheet, ScreenRules.sheet(task = false, window = WindowInfo.Phone))
         assertEquals(Presentation.SideSheet, ScreenRules.sheet(task = false, window = WindowInfo.Tablet))

@@ -827,4 +827,180 @@ class WebSignOutTest {
             compose.runOnUiThread { cookies.removeAllCookies(null) }
         }
     }
+
+    /**
+     * While a locked sign-in cover stands over the app, a live web page under
+     * it is taken down and makes no request of the server until the cover is
+     * answered.
+     */
+    @Test
+    fun webPagesUnderTheSignInAreTakenDownAndMakeNoRequest() {
+        val beats = CopyOnWriteArrayList<String>()
+        val shell = """
+            {"navree":1,"build":"1","name":"Charkha Supply Co.","home":"/",
+             "nav":{"groups":[{"label":"Store","items":[{"label":"Page","href":"/"},{"label":"Orders","href":"/orders"}]}]},
+             "user":{"name":"Harpreet Sandhu","email":"harpreet.sandhu@example.com","menu":[]},
+             "routes":[{"match":"/sign-in","present":"sheet"}]}
+        """.trimIndent()
+        val ended = """{"navree":1,"build":"1","vocab":0,"ops":[{"op":"navigate","href":"/sign-in"}]}"""
+        val signIn = """{"navree":1,"build":"1","vocab":0,"screen":{"title":"Sign in","body":{"t":"text","value":"Enter your email"}}}"""
+        val pulsing = "var n = 0; setInterval(function(){ fetch('/beat?n=' + (++n), {cache: 'no-store'}).catch(function(){}) }, 150); R('live');"
+        app.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.url.encodedPath.also { asked += it }) {
+                "/_navree/native/shell" -> MockResponse.Builder()
+                    .code(200)
+                    .addHeader("Content-Type", "application/vnd.navree.native+json")
+                    .addHeader("x-navree-person", "0193a4b2-0000-7000-8000-00000000hs01")
+                    .body(shell)
+                    .build()
+                "/" -> page(pulsing)
+                "/says" -> {
+                    said += request.url.queryParameter("m") ?: ""
+                    MockResponse.Builder().code(204).build()
+                }
+                "/beat" -> {
+                    beats += request.url.queryParameter("n") ?: ""
+                    MockResponse.Builder().code(204).build()
+                }
+                "/orders" -> MockResponse.Builder().code(401).addHeader("Content-Type", "application/vnd.navree.native+json").body(ended).build()
+                "/sign-in" -> MockResponse.Builder().code(200).addHeader("Content-Type", "application/vnd.navree.native+json").body(signIn).build()
+                else -> MockResponse.Builder().code(204).build()
+            }
+        }
+        app.start()
+        base = app.url("/").toString().trimEnd('/')
+        val config = NavreeConfig(origin = base, name = "Charkha Supply Co.", seed = null, loopbackHttp = true)
+        lateinit var session: NavreeSession
+        compose.runOnUiThread {
+            session = NavreeSession(compose.activity.application, config, "$base/".toHttpUrl())
+            session.effects.activity = compose.activity
+        }
+        try {
+            compose.setContent { Host(session) }
+            assertTrue("the web page loaded and started its heartbeat: $said, $beats", waitFor(30) { said.contains("live") && beats.size >= 2 })
+
+            compose.runOnUiThread { session.driver.send( com.navree.client.core.Events.select(1) ) }
+            assertTrue(
+                "the locked sign-in cover is in front",
+                waitFor(20) {
+                    session.driver.nav.modals.singleOrNull()?.locked == true &&
+                        session.driver.nav.front?.let { session.driver.screens[it]?.screen?.title } == "Sign in"
+                },
+            )
+            Thread.sleep(300)
+            compose.waitForIdle()
+            val beatsAtCover = beats.size
+            val pagesAtCover = asked.count { it == "/" }
+            assertFalse("no heartbeat reaches the server while the sign-in cover is up: $beats", waitFor(2) { beats.size > beatsAtCover })
+            assertEquals("no heartbeat arrived under the cover", beatsAtCover, beats.size)
+            assertEquals("the web page was not fetched again under the cover", pagesAtCover, asked.count { it == "/" })
+        } finally {
+            compose.runOnUiThread {
+                session.effects.close()
+                CookieManager.getInstance().removeAllCookies(null)
+            }
+        }
+    }
+
+    /**
+     * When a session ends over a web page and the same person signs back in,
+     * the page loads again and finds everything it stored (cookies, local
+     * storage, IndexedDB, Cache Storage, and its service worker) as it was.
+     */
+    @Test
+    fun theSamePersonComingBackFindsTheirWebPagesStorageAsItWas() {
+        val expired = AtomicBoolean(false)
+        val inspect = AtomicBoolean(false)
+        val shell = """
+            {"navree":1,"build":"1","name":"Charkha Supply Co.","home":"/",
+             "nav":{"groups":[{"label":"Store","items":[{"label":"Page","href":"/"}]}]},
+             "user":{"name":"Harpreet Sandhu","email":"harpreet.sandhu@example.com","menu":[]},
+             "routes":[{"match":"/sign-in","present":"full","chrome":false}]}
+        """.trimIndent()
+        val ended = """{"navree":1,"build":"1","vocab":0,"ops":[{"op":"navigate","href":"/sign-in"}]}"""
+        val signIn = """
+            {"navree":1,"build":"1","vocab":0,"screen":{"title":"Sign in","body":{
+              "t":"form","id":"login","method":"post","action":"/sign-in","children":[
+                {"t":"button","id":"login.go","label":"Continue","role":"primary","action":{"t":"submit"}}
+              ]}}}
+        """.trimIndent()
+        app.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (request.url.encodedPath.also { asked += it }) {
+                "/_navree/native/shell" -> MockResponse.Builder()
+                    .code(200)
+                    .addHeader("Content-Type", "application/vnd.navree.native+json")
+                    .addHeader("x-navree-person", "0193a4b2-0000-7000-8000-00000000hs01")
+                    .body(shell)
+                    .build()
+                "/" -> if (expired.compareAndSet(true, false)) {
+                    MockResponse.Builder().code(401).addHeader("Content-Type", "application/vnd.navree.native+json").body(ended).build()
+                } else {
+                    page(if (inspect.get()) looks else stores)
+                }
+                "/sw.js" -> MockResponse.Builder().code(200).addHeader("Content-Type", "text/javascript").body(worker).build()
+                "/says" -> {
+                    said += request.url.queryParameter("m") ?: ""
+                    MockResponse.Builder().code(204).build()
+                }
+                "/sign-in" -> if (request.method == "POST") {
+                    MockResponse.Builder()
+                        .code(303)
+                        .addHeader("Location", "/")
+                        .addHeader("Set-Cookie", "session=Harpreet; Path=/")
+                        .build()
+                } else {
+                    MockResponse.Builder().code(200).addHeader("Content-Type", "application/vnd.navree.native+json").body(signIn).build()
+                }
+                else -> MockResponse.Builder().code(204).build()
+            }
+        }
+        app.start()
+        base = app.url("/").toString().trimEnd('/')
+        val config = NavreeConfig(origin = base, name = "Charkha Supply Co.", seed = null, loopbackHttp = true)
+        lateinit var session: NavreeSession
+        compose.runOnUiThread {
+            session = NavreeSession(compose.activity.application, config, "$base/".toHttpUrl())
+            session.effects.activity = compose.activity
+        }
+        try {
+            compose.setContent { Host(session) }
+            assertTrue("the web page stored all five before the session ended: $said", waitFor(30) { said.contains("stored") })
+
+            inspect.set(true)
+            expired.set(true)
+            val webId = compose.runOnUiThread<Long> { session.driver.nav.front!! }
+            compose.runOnUiThread { session.driver.send(com.navree.client.core.Events.refresh(webId)) }
+            assertTrue(
+                "the sign-in cover came up with nobody named",
+                waitFor(20) {
+                    session.driver.app?.user == null &&
+                        session.driver.nav.modals.singleOrNull()?.locked == true &&
+                        session.driver.nav.front?.let { session.driver.screens[it]?.screen?.title } == "Sign in"
+                },
+            )
+
+            val beforeLook = said.size
+            val coverId = compose.runOnUiThread<Long> { session.driver.nav.front!! }
+            compose.runOnUiThread {
+                session.driver.send(com.navree.client.core.Events.act(coverId, Navree.Action.Submit(), form = "login"))
+            }
+            assertTrue(
+                "the same person returned and the web page said what it found: $said",
+                waitFor(30) { session.driver.nav.modals.isEmpty() && said.size > beforeLook && said.last().startsWith("{") },
+            )
+            val found = Json.parseToJsonElement(said.last()) as JsonObject
+            val cookie = found.getValue("cookie").jsonPrimitive.content
+            assertTrue("the page's cookie stayed for the same person: $found", cookie.contains("city=Amritsar"))
+            assertTrue("and the new session cookie is there: $found", cookie.contains("session=Harpreet"))
+            assertEquals("local storage stayed: $found", 1, found.getValue("local").jsonPrimitive.int)
+            assertTrue("IndexedDB stayed: $found", found.getValue("indexeddb").jsonArray.any { it.jsonPrimitive.content == "orders" })
+            assertTrue("Cache Storage stayed: $found", found.getValue("caches").jsonArray.any { it.jsonPrimitive.content == "pages" })
+            assertEquals("the service worker stayed: $found", 1, found.getValue("workers").jsonPrimitive.int)
+        } finally {
+            compose.runOnUiThread {
+                session.effects.close()
+                CookieManager.getInstance().removeAllCookies(null)
+            }
+        }
+    }
 }

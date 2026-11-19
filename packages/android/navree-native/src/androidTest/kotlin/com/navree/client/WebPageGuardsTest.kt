@@ -5,6 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -58,6 +61,7 @@ class WebPageGuardsTest {
     private val workers = AtomicBoolean(true)
     private val documents = AtomicBoolean(true)
     private val clean = AtomicBoolean(true)
+    private var covered by mutableStateOf(false)
 
     /** How many times the page asked for each answer. */
     private val workersAsked = AtomicInteger()
@@ -103,7 +107,7 @@ class WebPageGuardsTest {
         compose.setContent {
             MaterialTheme {
                 CompositionLocalProvider(LocalUi provides ui, LocalWebGuards provides guards) {
-                    WebPage(url = "$base/", serial = 1, onLink = {}, onTitle = {})
+                    WebPage(url = "$base/", serial = 1, onLink = {}, onTitle = {}, covered = covered)
                 }
             }
         }
@@ -166,5 +170,17 @@ class WebPageGuardsTest {
         clean.set(true)
         loadsOnceTheGuardIsThere()
         assertEquals("\"Try again\" on the page that was held back asked for one go", 1, againAsked.get())
+    }
+
+    @Test
+    fun aWebPageUnderALockedCoverShowsTheHeldStateAndMakesNoRequest() {
+        covered = true
+        show()
+        compose.waitUntil(10_000) {
+            compose.onAllNodes(androidx.compose.ui.test.hasText(compose.activity.getString(R.string.navree_web_held_title))).fetchSemanticsNodes().isNotEmpty()
+        }
+        refused("a locked cover over the page")
+        compose.runOnUiThread { covered = false }
+        assertTrue("the page loaded once the cover went away: $asked", waitFor(15) { asked.contains("GET /") })
     }
 }

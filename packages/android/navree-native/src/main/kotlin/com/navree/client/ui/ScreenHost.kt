@@ -129,6 +129,8 @@ internal data class HostInfo(
     /** This is the screen the person is looking at: it shows the passing messages. */
     val front: Boolean,
     val selectedUrl: String? = null,
+    /** A locked cover stands over this screen: its web views and dialogs are held down. */
+    val covered: Boolean = false,
 )
 
 /** One screen: its bar, its content and what floats over it, placed by the design rules. */
@@ -164,11 +166,11 @@ private fun NavigationIconView(icon: NavigationIcon, screen: ScreenView, back: N
     }
 }
 
-/** The icon a screen with nothing drawn yet still needs: a way out. */
+/** The icon a screen with nothing drawn yet still needs: a way out, unless the cover is locked. */
 private fun wayOut(info: HostInfo): NavigationIcon = when {
     !info.context.chrome -> NavigationIcon.None
     info.context.canGoBack -> NavigationIcon.Back
-    info.context.presentation != Presentation.Stack -> NavigationIcon.Close
+    info.context.presentation != Presentation.Stack && !info.context.locked -> NavigationIcon.Close
     else -> NavigationIcon.None
 }
 
@@ -258,6 +260,7 @@ private fun WebScreen(screen: ScreenView, content: Content.Web, info: HostInfo) 
             onLink = { ui.send(Events.webLink(screen.id, it)) },
             onTitle = { title = it },
             modifier = Modifier.padding(padding).consumeWindowInsets(padding).imePadding(),
+            covered = info.covered,
         )
     }
 }
@@ -395,8 +398,10 @@ private fun NativeScreen(view: ScreenView, screen: Navree.Screen, info: HostInfo
             SideSheet(side, place, Modifier.width((window.widthDp * 0.4f).coerceIn(360f, 480f).dp))
         }
     }
-    Overlays(place)
-    QuestionDialog(place)
+    if (!info.covered) {
+        Overlays(place)
+        QuestionDialog(place)
+    }
 }
 
 /** The screen's column of blocks, drawn as it scrolls. */

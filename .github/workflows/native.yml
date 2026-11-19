@@ -381,17 +381,17 @@ jobs:
             name: phone
             held: portrait
             profile: pixel_7
-            tests: 114
+            tests: 120
           - device: tablet
             name: tablet
             held: landscape
             profile: pixel_tablet
-            tests: 114
+            tests: 120
           - device: tablet
             name: tablet-portrait
             held: portrait
             profile: pixel_tablet
-            tests: 114
+            tests: 120
     env:
       IMAGE: system-images;android-35;google_apis;x86_64
     steps:

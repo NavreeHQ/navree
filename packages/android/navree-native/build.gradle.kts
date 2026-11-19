@@ -1,7 +1,31 @@
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+}
+
+abstract class CopyTranscriptsTask : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val inputDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val target = outputDir.get().asFile.resolve("transcripts")
+        target.deleteRecursively()
+        inputDir.get().asFile.copyRecursively(target, overwrite = true)
+    }
 }
 
 group = "com.navree"
@@ -51,6 +75,17 @@ android {
         // and the store demo's recorded answers.
         assets.directories.add("../../../crates/navree-native/corpus")
         assets.directories.add("../fixtures")
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val androidTest = variant.androidTest ?: return@onVariants
+        val taskName = "copy${variant.name.replaceFirstChar { it.uppercase() }}AndroidTestTranscripts"
+        val copyTask = tasks.register<CopyTranscriptsTask>(taskName) {
+            inputDir.set(layout.projectDirectory.dir("../../../crates/navree-native-core/transcripts"))
+        }
+        androidTest.sources.assets?.addGeneratedSourceDirectory(copyTask, CopyTranscriptsTask::outputDir)
     }
 }
 

@@ -114,6 +114,8 @@ data class ScreenContext(
     val detailPane: Boolean = false,
     /** The screen has a floating toolbar of its own: creation goes in the bar, not in a second floating button. */
     val toolbar: Boolean = false,
+    /** Presented as a cover the person cannot dismiss, such as a sign-in or a wait for the shell. */
+    val locked: Boolean = false,
 )
 
 /** Where everything on a screen's frame goes. Action numbers index `Screen.actions`. */
@@ -216,8 +218,12 @@ object ScreenRules {
 
         val navigationIcon = when {
             !context.chrome -> NavigationIcon.None
-            // A presented screen is closed with an X; a screen pushed inside it goes back with an arrow.
-            modal -> if (context.canGoBack) NavigationIcon.Back else NavigationIcon.Close
+            // A presented screen is closed with an X unless it is locked; a screen pushed inside it goes back with an arrow.
+            modal -> when {
+                context.canGoBack -> NavigationIcon.Back
+                context.locked -> NavigationIcon.None
+                else -> NavigationIcon.Close
+            }
             context.detailPane && !context.canGoBack -> NavigationIcon.None
             context.root -> if (context.menuButton) NavigationIcon.Menu else NavigationIcon.None
             context.canGoBack || screen.back != null -> NavigationIcon.Back
@@ -283,13 +289,17 @@ object ScreenRules {
     }
 
     /**
-     * How something presented over the app is shown. `full` covers the window.
-     * A task (something finished or cancelled) is a full-screen dialog where
-     * space is short and a basic dialog where it is not. A glance (`sheet`, or
-     * a word this build does not know) is a modal bottom sheet on a compact
-     * window and a dialog on a wider one.
+     * How something presented over the app is shown. `full`, or anything
+     * `locked` (the sign-in a session that ended was sent to, or the wait for
+     * the shell after one), covers the whole window on every size of screen so
+     * nothing under it shows or takes focus. Otherwise a task (something
+     * finished or cancelled) is a full-screen dialog where space is short and
+     * a basic dialog where it is not, and a glance (`sheet`, or a word this
+     * build does not know) is a modal bottom sheet on a compact window and a
+     * dialog on a wider one.
      */
-    fun presentation(present: Navree.Present, window: WindowInfo): Presentation {
+    fun presentation(present: Navree.Present, window: WindowInfo, locked: Boolean = false): Presentation {
+        if (locked) return Presentation.FullScreenDialog
         val short = window.width == WidthClass.Compact || window.height == HeightClass.Compact
         return when (present) {
             Navree.Present.FULL -> Presentation.FullScreenDialog

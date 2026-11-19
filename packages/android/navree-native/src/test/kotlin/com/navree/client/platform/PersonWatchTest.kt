@@ -298,4 +298,49 @@ class PersonWatchTest {
         assertEquals(Heard.First, word.heard)
         assertEquals("she is remembered by name and email", mark(anjali), word.mark)
     }
+
+    @Test
+    fun the_person_keys_recorded_in_the_cores_transcripts_give_the_marks_the_client_keeps() {
+        val folder = File("../../../crates/navree-native-core/transcripts")
+        org.junit.Assume.assumeTrue("the core's transcripts are beside the client", folder.isDirectory)
+        fun keysIn(name: String): List<String> {
+            val root = kotlinx.serialization.json.Json.parseToJsonElement(File(folder, name).readText())
+            val steps = root.let { it as kotlinx.serialization.json.JsonObject }["steps"] as kotlinx.serialization.json.JsonArray
+            return steps.mapNotNull { step ->
+                val checks = (step as kotlinx.serialization.json.JsonObject)["check"] as? kotlinx.serialization.json.JsonArray ?: return@mapNotNull null
+                checks.firstNotNullOfOrNull { item ->
+                    val obj = item as kotlinx.serialization.json.JsonObject
+                    if ((obj["at"] as? kotlinx.serialization.json.JsonPrimitive)?.content == "/app/user/key") {
+                        (obj["is"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                    } else {
+                        null
+                    }
+                }
+            }
+        }
+        val steady = keysIn("person-key-steady.json")
+        assertEquals("five key checks in person-key-steady.json", 5, steady.size)
+        val firstRun = watch()
+        assertEquals(Heard.First, firstRun.hearAndKeep(steady[0], "Ravneet Kaur" to "ravneet.kaur@example.com"))
+        assertEquals("renamed under the same id keeps one mark", Heard.Same, firstRun.hearAndKeep(steady[1], "Harpreet Singh" to "harpreet.singh@example.com"))
+        val withoutId = firstRun.hear(steady[2], "Ravneet Kaur" to "ravneet.kaur@example.com")
+        assertEquals("an answer without an id is not merged with an id-bearing account", Heard.Another, withoutId.heard)
+        firstRun.changed(withoutId)
+        assertEquals("and stays one mark across launches without an id", Heard.Same, watch().hearAndKeep(steady[3], "Ravneet Kaur" to "ravneet.kaur@example.com"))
+        assertEquals(Heard.Same, watch().hearAndKeep(steady[4 - 1], "Ravneet Kaur" to "ravneet.kaur@example.com"))
+        val withIdAgain = watch().hear(steady[4], "Ravneet Kaur" to "ravneet.kaur@example.com")
+        assertEquals("moving from no id to an id starts the id's mark", Heard.Another, withIdAgain.heard)
+        assertEquals(PersonWatch.markOfKey(steady[0]), withIdAgain.mark)
+
+        file.delete()
+        val other = keysIn("person-key-other-id.json")
+        assertEquals("three distinct keys in person-key-other-id.json", 3, other.distinct().size)
+        val between = watch()
+        assertEquals(Heard.First, between.hearAndKeep(other[0], harpreet))
+        val middle = between.hear(other[1], harpreet)
+        assertEquals(Heard.Another, middle.heard)
+        between.changed(middle)
+        val secondAccount = between.hear(other[2], harpreet)
+        assertEquals(Heard.Another, secondAccount.heard)
+    }
 }

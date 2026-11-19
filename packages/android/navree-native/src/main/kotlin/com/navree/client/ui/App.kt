@@ -262,10 +262,19 @@ private fun Frame(nav: NavPart, name: String, user: Navree.User?) {
     val destination = nav.destinations.getOrNull(nav.selected)
     val frontOfTab = destination?.stack?.lastOrNull()?.let(screens::get)
     val kind = if (frontOfTab?.chrome == false) NavigationKind.None else plan.kind
-    val covers = nav.modals.map { ScreenRules.presentation(it.present, window) }
-    val covered = covers.any { it == Presentation.FullScreenDialog }
+    val locked = nav.modals.any { it.locked }
+    val covers = nav.modals.map { ScreenRules.presentation(it.present, window, locked = it.locked) }
+    val covered = locked || covers.any { it == Presentation.FullScreenDialog }
     val menu = rememberWideNavigationRailState()
     val scope = rememberCoroutineScope()
+    val topLocked = nav.modals.lastOrNull { it.locked }
+    LaunchedEffect(topLocked?.stack?.firstOrNull()) {
+        if (topLocked != null) {
+            menu.collapse()
+            val askingOn = ui.asking.value?.first?.id
+            if (askingOn != null && askingOn !in topLocked.stack) ui.asking.value = null
+        }
+    }
 
     // Back belongs to the app while there is somewhere in it to go back to.
     // Otherwise the system takes it and plays its own way home.
@@ -286,33 +295,35 @@ private fun Frame(nav: NavPart, name: String, user: Navree.User?) {
 
     CompositionLocalProvider(LocalOpenMenu provides { scope.launch { menu.expand() } }) {
         Box(Modifier.fillMaxSize()) {
-            // Under a full-screen cover the app is still drawn, but it is not there for TalkBack.
-            Box(Modifier.fillMaxSize().then(if (covered) Modifier.clearAndSetSemantics {} else Modifier)) {
-                val stack: @Composable () -> Unit = {
-                    if (destination != null) {
-                        StackHost(nav, user, name, plan, destination.stack, group = nav.selected, Presentation.Stack, holder, active = nav.modals.isEmpty())
+            // Under a locked cover nothing underneath is drawn or focusable; under any other full-screen cover it is hidden from TalkBack.
+            if (!locked) {
+                Box(Modifier.fillMaxSize().then(if (covered) Modifier.clearAndSetSemantics {} else Modifier)) {
+                    val stack: @Composable () -> Unit = {
+                        if (destination != null) {
+                            StackHost(nav, user, name, plan, destination.stack, group = nav.selected, Presentation.Stack, holder, active = nav.modals.isEmpty())
+                        }
                     }
-                }
-                when (kind) {
-                    NavigationKind.None -> stack()
-                    NavigationKind.Bar -> BottomNavigationWindow(
-                        bottomBar = { BottomBar(nav.destinations, plan, nav.selected) { ui.send(Events.select(it)) } },
-                    ) { stack() }
-                    NavigationKind.Rail, NavigationKind.ExpandedRail -> SideNavigationWindow(
-                        rail = {
-                            SideRail(
-                                destinations = nav.destinations,
-                                plan = plan,
-                                selected = nav.selected,
-                                expanded = kind == NavigationKind.ExpandedRail,
-                                fab = if (railFab && root != null && rootPlan != null) ({ RailFab(root, rootPlan) }) else null,
-                            ) { ui.send(Events.select(it)) }
-                        },
-                    ) { stack() }
+                    when (kind) {
+                        NavigationKind.None -> stack()
+                        NavigationKind.Bar -> BottomNavigationWindow(
+                            bottomBar = { BottomBar(nav.destinations, plan, nav.selected) { ui.send(Events.select(it)) } },
+                        ) { stack() }
+                        NavigationKind.Rail, NavigationKind.ExpandedRail -> SideNavigationWindow(
+                            rail = {
+                                SideRail(
+                                    destinations = nav.destinations,
+                                    plan = plan,
+                                    selected = nav.selected,
+                                    expanded = kind == NavigationKind.ExpandedRail,
+                                    fab = if (railFab && root != null && rootPlan != null) ({ RailFab(root, rootPlan) }) else null,
+                                ) { ui.send(Events.select(it)) }
+                            },
+                        ) { stack() }
+                    }
                 }
             }
             Covers(nav, user, name, plan, covers, holder)
-            if (plan.menuButton) {
+            if (plan.menuButton && !covered) {
                 AllDestinations(nav.destinations, nav.selected, menu) { index ->
                     scope.launch { menu.collapse() }
                     ui.send(Events.select(index))
@@ -331,7 +342,7 @@ private fun Frame(nav: NavPart, name: String, user: Navree.User?) {
     }
 }
 
-private fun context(plan: NavigationPlan, user: Navree.User?, screen: ScreenView?, index: Int, presentation: Presentation, detailPane: Boolean): ScreenContext =
+private fun context(plan: NavigationPlan, user: Navree.User?, screen: ScreenView?, index: Int, presentation: Presentation, detailPane: Boolean, locked: Boolean = false): ScreenContext =
     ScreenContext(
         root = index == 0 && presentation == Presentation.Stack,
         presentation = presentation,
@@ -342,6 +353,7 @@ private fun context(plan: NavigationPlan, user: Navree.User?, screen: ScreenView
         // The first screen of the detail pane has the list beside it, not under it.
         canGoBack = if (detailPane) index > 1 else index > 0,
         detailPane = detailPane,
+        locked = locked,
     )
 
 /** A destination's icon: the system's symbol when its name maps to one, filled when selected; a count beside it. */
@@ -516,6 +528,8 @@ private fun StackHost(
     presentation: Presentation,
     holder: SaveableStateHolder,
     active: Boolean,
+    locked: Boolean = false,
+    covered: Boolean = false,
 ) {
     val ui = LocalUi.current
     val window = ui.window
@@ -529,9 +543,9 @@ private fun StackHost(
 
     @Composable
     fun host(screen: ScreenView, index: Int, detailPane: Boolean, selectedUrl: String? = null) {
-        val context = context(plan, user, screen, index, presentation, detailPane)
+        val context = context(plan, user, screen, index, presentation, detailPane, locked = locked)
         holder.SaveableStateProvider(screen.id) {
-            ScreenHost(screen, HostInfo(context, user, name, front = screen.id == front, selectedUrl = selectedUrl))
+            ScreenHost(screen, HostInfo(context, user, name, front = screen.id == front, selectedUrl = selectedUrl, covered = covered))
         }
     }
 
@@ -662,15 +676,31 @@ private fun Covers(
     ) { first ->
         val modal = first?.let { nav.modals.firstOrNull { modal -> modal.stack.firstOrNull() == it } ?: known[it] }
         if (modal != null) {
+            val modalIndex = nav.modals.indexOf(modal)
+            val coveredAbove = modalIndex >= 0 && (modalIndex + 1 until nav.modals.size).any { nav.modals[it].locked }
             // A cover the person cannot take away (the sign-in a session that ended is sent to) has no back of its own.
             BackHandler(enabled = !modal.locked && nav.modals.lastOrNull() == modal && modal.stack.size <= 1) { ui.send(Events.back) }
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-                StackHost(nav, user, name, plan, modal.stack, group = -1 - nav.modals.indexOf(modal), Presentation.FullScreenDialog, holder, active = nav.modals.lastOrNull() == modal)
+                StackHost(
+                    nav,
+                    user,
+                    name,
+                    plan,
+                    modal.stack,
+                    group = -1 - modalIndex,
+                    Presentation.FullScreenDialog,
+                    holder,
+                    active = nav.modals.lastOrNull() == modal,
+                    locked = modal.locked,
+                    covered = coveredAbove,
+                )
             }
         }
     }
 
     nav.modals.forEachIndexed { index, modal ->
+        val coveredAbove = (index + 1 until nav.modals.size).any { presentations.getOrNull(it) == Presentation.FullScreenDialog || nav.modals[it].locked }
+        if (coveredAbove) return@forEachIndexed
         if (presentations.getOrNull(index) == Presentation.Dialog) {
             val first = modal.stack.firstOrNull() ?: return@forEachIndexed
             Dialog(onDismissRequest = { if (!modal.locked) ui.send(Events.dismissed(first)) }) {
@@ -679,7 +709,7 @@ private fun Covers(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().heightIn(max = (window.heightDp * 0.9f).dp),
                 ) {
-                    StackHost(nav, user, name, plan, modal.stack, group = -1 - index, Presentation.Dialog, holder, active = index == nav.modals.lastIndex)
+                    StackHost(nav, user, name, plan, modal.stack, group = -1 - index, Presentation.Dialog, holder, active = index == nav.modals.lastIndex, locked = modal.locked)
                 }
             }
         } else if (presentations.getOrNull(index) == Presentation.BottomSheet) {
@@ -692,7 +722,7 @@ private fun Covers(
                 sheetGesturesEnabled = !modal.locked,
             ) {
                 Box(Modifier.fillMaxWidth().heightIn(max = (window.heightDp * 0.92f).dp)) {
-                    StackHost(nav, user, name, plan, modal.stack, group = -1 - index, Presentation.BottomSheet, holder, active = index == nav.modals.lastIndex)
+                    StackHost(nav, user, name, plan, modal.stack, group = -1 - index, Presentation.BottomSheet, holder, active = index == nav.modals.lastIndex, locked = modal.locked)
                 }
             }
         }

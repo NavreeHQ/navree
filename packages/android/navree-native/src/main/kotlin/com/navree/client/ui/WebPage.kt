@@ -90,14 +90,15 @@ internal fun WebPage(
     onLink: (String) -> Unit,
     onTitle: (String) -> Unit,
     modifier: Modifier = Modifier,
+    covered: Boolean = false,
 ) {
     val origins = LocalUi.current.origins
     val guards = LocalWebGuards.current
-    var loading by remember { mutableStateOf(true) }
     val link by rememberUpdatedState(onLink)
     val title by rememberUpdatedState(onTitle)
     // A new web view for each attempt: one whose process ended can no longer be used.
     var attempt by remember { mutableIntStateOf(0) }
+    var loading by remember(url, serial, attempt, covered) { mutableStateOf(true) }
     var gone by remember { mutableIntStateOf(0) }
     var failed by remember(url, serial) { mutableStateOf(!origins.ours(url)) }
     // A page is not shown without its guards. The rules for a service worker's requests are asked for again
@@ -117,17 +118,17 @@ internal fun WebPage(
     }
 
     Box(modifier.fillMaxSize()) {
-        if (failed || missing.isNotEmpty()) {
+        if (covered || failed || missing.isNotEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 val again: () -> Unit = {
                     gone = 0
                     failed = !origins.ours(url)
                     // The person asks for it: another go at what an ended session's pages left begins here, and nowhere in the drawing.
-                    if (!clean) guards.again()
+                    if (!covered && !clean) guards.again()
                     attempt++
                 }
-                if (!failed && workers && documents && !clean) {
-                    // Held back only by what the pages of an ended session left: said in words, with what the person can do about it.
+                if (covered || (!failed && workers && documents && !clean)) {
+                    // Held back by a locked cover over the app, or by what the pages of an ended session left.
                     FailureState(Failure.Protocol, stringResource(R.string.navree_web_held_title), stringResource(R.string.navree_web_held_text), again)
                 } else {
                     FailureState(Failure.Protocol, retry = again)
@@ -188,6 +189,7 @@ internal fun WebPage(
                     },
                     onRelease = { web ->
                         web.stopLoading()
+                        web.onPause()
                         web.destroy()
                     },
                 )
