@@ -311,10 +311,23 @@ const islands = new WeakMap();
 const sealIsland = (el) => {
   if (islands.get(el) === attr(el, "data-ui-island") && !stored(el)) all(el, ":scope > [data-slot=island-body]").forEach(seal);
 };
-/** Watches noted plugin islands so a body put in place while `mount` runs is sealed as soon as it is there or `mount` ends. */
-const islandWatch = new MutationObserver((records) => {
-  for (const { target } of records) if (isEl(target)) sealIsland(target);
-});
+/**
+ * Watches `el` outside sealed bodies so a body put in place while `mount` runs, in `update` or
+ * later is sealed at once, without firing for writes inside an already-sealed body.
+ * @param {Element} el @param {() => void} fn @param {AbortSignal} [signal]
+ */
+function watchBodies(el, fn, signal) {
+  const obs = new MutationObserver((records) => {
+    for (const { target } of records) {
+      if (isEl(target) && !has(target, MARK) && !stored(target)) {
+        fn();
+        break;
+      }
+    }
+  });
+  obs.observe(el, { childList: true, subtree: true, ...(signal ? {} : { attributes: true, attributeFilter: ["data-ui-mounted", "data-ui-failed"] }) });
+  signal?.addEventListener("abort", () => obs.disconnect(), { once: true });
+}
 
 /**
  * Gives a mounted element its props as they are now: to its `update`, or, when they changed and it has
@@ -327,6 +340,7 @@ function renew(el, m, changed) {
     try {
       m.update(parse(m.props));
     } catch {}
+    if (!stored(el)) bodiesOf(el).forEach(seal);
   } else if (changed) {
     leave(el);
     mount(el, m.at, m.props);
@@ -343,6 +357,7 @@ async function mount(el, at, props) {
   mounted.set(el, m);
   // Before anything of the script's runs, and for good: a script that fails leaves its bodies sealed.
   bodiesOf(el).forEach(seal);
+  watchBodies(el, () => !stored(el) && bodiesOf(el).forEach(seal), stop.signal);
   unset(el, "data-ui-failed");
   let why = "could not be loaded";
   try {
@@ -454,8 +469,8 @@ if (!fresh()) {
       if (isEl(b) && E.matches.call(b, "[data-ui-island] > [data-slot=island-body]")) {
         seal(b);
         const el = /** @type {Element} */ (up.call(b));
+        if (!islands.has(el)) watchBodies(el, () => sealIsland(el));
         islands.set(el, attr(el, "data-ui-island"));
-        islandWatch.observe(el, { childList: true, attributes: true, attributeFilter: ["data-ui-mounted", "data-ui-failed"] });
         e.preventDefault();
       }
     },
@@ -468,10 +483,15 @@ if (!fresh()) {
     if (from === body()) paged = true;
     for (const el of mounted.keys()) if (holds(from, el)) touched.add(el);
   });
-  on(document, "ui:swap", () => {
-    if (paged) drop();
-    paged = false;
-    link();
-    scan();
-  });
+  on(
+    document,
+    "ui:swap",
+    () => {
+      if (paged) drop();
+      paged = false;
+      link();
+      scan();
+    },
+    true,
+  );
 }

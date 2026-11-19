@@ -127,7 +127,7 @@ class FakeEventTarget {
     event.target = this;
     const path = [];
     for (let at = this.parentNode; at; at = at.parentNode) path.push(at);
-    if (path.length && path[path.length - 1] === globalThis.document) path.push(globalThis);
+    if ((path.length ? path[path.length - 1] : this) === globalThis.document) path.push(globalThis);
     const run = (/** @type {any} */ target, /** @type {boolean} */ capture) => {
       event.currentTarget = target;
       for (const l of [...(listeners.get(target) || [])]) {
@@ -145,7 +145,8 @@ class FakeEventTarget {
       if (event.stopped) break;
       run(target, true);
     }
-    if (!event.stopped) run(this, null);
+    if (!event.stopped) run(this, true);
+    if (!event.stopped) run(this, false);
     if (event.bubbles) for (const target of path) {
       if (event.stopped) break;
       run(target, false);

@@ -239,7 +239,6 @@ export async function showPage(response, how = {}) {
     return;
   }
   clean(body(doc));
-  if (!id) swaps++;
   // A toast the last request left joins the standing toaster; the page's own is never morphed.
   adoptToasts(doc);
   // The styles it brings first: a page or region shows only in its own theme.
@@ -260,6 +259,7 @@ export async function showPage(response, how = {}) {
       return;
     }
   }
+  swaps++;
   takeLook(doc);
   morph(body(), body(doc), { reset: !id && !how.keep });
   // The page is drawn for whoever is signed in now.

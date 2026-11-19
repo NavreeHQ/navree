@@ -242,12 +242,44 @@ test("the body is sealed whichever of the two modules hears ui:swap first", asyn
   bodyOf("updating").setAttribute("id", "updating-drawn");
   morph($("updating"), server(island("updating", "proof.updating", `{"city":"Jalandhar"}`, "menu", "Jalandhar")));
   await settle();
-  assert.deepEqual(g.updatingSeen, [{ city: "Jalandhar", sealedAtUpdate: false }]);
+  assert.deepEqual(g.updatingSeen, [{ city: "Jalandhar", sealedAtUpdate: true }]);
   assert.equal(bodyOf("updating").hasAttribute("data-ui-stored"), true);
   assert.deepEqual(hooks(bodyOf("updating")), []);
   assert.equal($("updating-field").getAttribute("form"), "ui-sealed");
   assert.equal($("updating-field").form, null);
   assert.deepEqual([...new FormData($("order"))], [["charge", "40"]]);
   $("updating-button").click();
+  assert.equal($("menu").hasAttribute("hidden"), true);
+});
+
+test("a body put in place by a component after mount is sealed without waiting for a swap", async () => {
+  const wrap = document.createElement("div");
+  wrap.innerHTML =
+    `<div id="post-mount-ext" data-slot="proof:pad" data-ui-ext="/_navree/ui/ext/proof.pad-0123456789ab.js" data-ui-props='{"step":1}'>` +
+    `<div id="post-mount-first" data-slot="proof:pad-body" data-ui-keep>Ludhiana</div></div>`;
+  $("order").append(...wrap.childNodes);
+  document.dispatchEvent(new Event("ui:swap"));
+  await until(() => $("post-mount-ext").hasAttribute("data-ui-mounted"), "the component to mount");
+  await settle();
+
+  // Later, with no ui:swap, the script replaces its body with a fresh kept element carrying a hook and a field.
+  const replacement = document.createElement("div");
+  replacement.setAttribute("id", "post-mount-next");
+  replacement.setAttribute("data-slot", "proof:pad-body");
+  replacement.setAttribute("data-ui-keep", "");
+  replacement.setAttribute("data-ui-click", `[["toggle","menu"]]`);
+  replacement.innerHTML =
+    `<button id="post-mount-button" type="button" data-ui-click='[["toggle","menu"]]'>Open</button>` +
+    `<input id="post-mount-field" name="charge" value="0">`;
+  $("post-mount-first").replaceWith(replacement);
+  await settle();
+
+  assert.equal(replacement.hasAttribute("data-ui-stored"), true);
+  assert.equal(replacement.hasAttribute("data-ui-click"), false);
+  assert.deepEqual(hooks(replacement), []);
+  assert.equal($("post-mount-field").getAttribute("form"), "ui-sealed");
+  assert.equal($("post-mount-field").form, null);
+  assert.deepEqual([...new FormData($("order"))], [["charge", "40"]]);
+  $("post-mount-button").click();
   assert.equal($("menu").hasAttribute("hidden"), true);
 });

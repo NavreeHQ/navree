@@ -108,3 +108,51 @@ test("the answer of a call whose element is still there after a navigation is no
   assert.deepEqual(await ui.call("/proof/save", { at: "31.3260,75.5762" }), { ok: true, status: 200, data: null });
   assert.equal($("place").textContent, "Jalandhar, saved");
 });
+
+test("a call begun while the next page waits on its stylesheets is not applied once that page shows", async () => {
+  const before = $("here");
+  const ui = g.uis.here;
+
+  // A form post redirects to Delivery 3, whose head links a theme sheet not yet in the page.
+  const formWrap = document.createElement("div");
+  formWrap.innerHTML = `<form id="next-delivery" data-ui-form method="post" action="/deliveries/next"><button id="next-go" type="submit">Next</button></form>`;
+  $("main").append(...formWrap.childNodes);
+
+  const sheetUrl = "/_navree/ui/theme/amber-0123456789ab.css";
+  page.answers.push(
+    answer(
+      `<!doctype html><html data-build="b1"><head><title>Delivery 3</title><link rel="stylesheet" href="${sheetUrl}"></head><body data-ui-boost><main id="main"><h1 id="heading">Delivery 3</h1><p id="place">Amritsar</p>${PAD}</main></body></html>`,
+      { headers: PAGE, url: "https://app.test/deliveries/3" },
+    ),
+  );
+  $("next-go").click();
+  await until(() => !!document.head.querySelector(`link[href="${sheetUrl}"]`), "the new page's stylesheet link");
+  // Delivery 2 is still on screen while the stylesheet loads.
+  assert.equal($("heading").textContent, "Delivery 2");
+
+  // While Delivery 3 waits on its stylesheet, the component on Delivery 2 starts a call.
+  const slowSave = held();
+  page.answers.push(() => slowSave.promise);
+  const duringWait = ui.call("/proof/save", { at: "31.3260,75.5762" });
+  await settle(2);
+
+  // The stylesheet finishes loading and Delivery 3 is swapped in, keeping the component's element.
+  const link = /** @type {any} */ (document.head.querySelector(`link[href="${sheetUrl}"]`));
+  link.dispatchEvent(new Event("load"));
+  await settle();
+  assert.equal($("heading").textContent, "Delivery 3");
+  assert.equal($("place").textContent, "Amritsar");
+  assert.equal($("here"), before);
+  assert.equal(ui.signal.aborted, false);
+
+  // Delivery 2's call resolves after Delivery 3 has swapped in: nothing of it touches Delivery 3.
+  slowSave.release(
+    answer(`{"ops":[{"op":"morph","target":"place","html":"<p id=\\"place\\">Jalandhar, late</p>"},{"op":"toast","tone":"success","text":"Saved for Simran Kaur"}]}`, {
+      headers: OPS,
+    }),
+  );
+  assert.deepEqual(await duringWait, { ok: false, status: 200, data: null });
+  await settle();
+  assert.equal($("place").textContent, "Amritsar");
+  assert.deepEqual(toasts(), []);
+});
