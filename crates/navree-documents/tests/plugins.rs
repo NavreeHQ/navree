@@ -457,3 +457,74 @@ async fn a_plugin_replacing_an_app_document_file_fails_until_the_app_takes_it() 
     );
     app.shutdown().await.unwrap();
 }
+
+mod announcements_doc_core {
+    use navree_documents::ModuleBuilderDocumentsExt;
+    use navree_kernel::{Module, ModuleBuilder};
+
+    pub struct SecondCrateDocuments;
+
+    impl Module for SecondCrateDocuments {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.document_files([("invoices/outside.html", "outside")]);
+        }
+    }
+}
+
+mod navree_plugin_doc_importer {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    const DOC_IMPORTER: PluginInfo = PluginInfo::new(
+        "navree-plugin-doc-importer",
+        module_path!(),
+        "doc_importer",
+        "1.0.0",
+    );
+
+    pub struct DocImporter;
+
+    impl Module for DocImporter {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(DOC_IMPORTER)
+                .import(super::announcements_doc_core::SecondCrateDocuments);
+        }
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_refusal_says_why_the_module_acts_for_the_plugin() {
+    let dir = folder();
+
+    // 1. Module of the plugin's crate (`PluginHelperDocuments`).
+    let Err(in_crate) = builder(dir.path())
+        .module(PluginDocuments("announcements/invoice.html"))
+        .module(PluginHelperDocuments)
+        .try_build()
+        .await
+    else {
+        panic!("fails")
+    };
+    let in_crate = in_crate.to_string();
+    assert!(
+        in_crate.contains(
+            "plugin `navree-plugin-announcements` embeds the document file `invoices/standard.html` in `PluginHelperDocuments` (a module of the plugin's crate `plugins::navree_plugin_announcements`), which is not under its namespace: put it under `announcements/`"
+        ),
+        "{in_crate}"
+    );
+
+    // 2. Module of a second crate imported only by the plugin (`SecondCrateDocuments`).
+    let Err(by_import) = builder(dir.path())
+        .module(navree_plugin_doc_importer::DocImporter)
+        .try_build()
+        .await
+    else {
+        panic!("fails")
+    };
+    let by_import = by_import.to_string();
+    assert!(
+        by_import.contains(
+            "plugin `navree-plugin-doc-importer` embeds the document file `invoices/outside.html` in `SecondCrateDocuments` (only the plugin's modules import it), which is not under its namespace: put it under `doc_importer/`"
+        ),
+        "{by_import}"
+    );
+}

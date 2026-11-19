@@ -775,7 +775,7 @@ mod navree_plugin_pretty {
     use navree_ui::ErrorShell;
 
     /// The plugin's info.
-    const PRETTY: PluginInfo =
+    pub(super) const PRETTY: PluginInfo =
         PluginInfo::new("navree-plugin-pretty", module_path!(), "pretty", "1.0.0");
 
     /// A module of the pretty plugin that builds the shell of the app's error pages.
@@ -785,6 +785,49 @@ mod navree_plugin_pretty {
         fn register(&self, m: &mut ModuleBuilder) {
             m.plugin(PRETTY)
                 .contribute(ErrorShell::new(|_| async { None }));
+        }
+    }
+
+    /// A module of the pretty plugin's crate that names no plugin itself and contributes an
+    /// error shell.
+    pub(super) struct PrettyHelperShell;
+
+    impl Module for PrettyHelperShell {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.contribute(ErrorShell::new(|_| async { None }));
+        }
+    }
+}
+
+mod pretty_core {
+    use navree_kernel::{Module, ModuleBuilder};
+    use navree_ui::ErrorShell;
+
+    pub(super) struct SecondCrateErrorShell;
+
+    impl Module for SecondCrateErrorShell {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.contribute(ErrorShell::new(|_| async { None }));
+        }
+    }
+}
+
+mod navree_plugin_pretty_importer {
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    const PRETTY_IMPORTER: PluginInfo = PluginInfo::new(
+        "navree-plugin-pretty-importer",
+        module_path!(),
+        "pretty_importer",
+        "1.0.0",
+    );
+
+    pub(super) struct PrettyImporter;
+
+    impl Module for PrettyImporter {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PRETTY_IMPORTER)
+                .import(super::pretty_core::SecondCrateErrorShell);
         }
     }
 }
@@ -866,5 +909,41 @@ async fn a_sidebar_link_declares_the_permission_it_requires_with_its_module() {
             "KhataNav",
             &["khata.view".to_owned()][..],
         )]
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn the_error_shell_refusal_says_why_the_module_acts_for_the_plugin() {
+    struct PrettyEmpty;
+
+    impl Module for PrettyEmpty {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(navree_plugin_pretty::PRETTY);
+        }
+    }
+
+    let krate = navree_plugin_pretty::PRETTY.crate_name;
+    let in_crate = boot_error(
+        builder(Shell::new("Kesar"))
+            .module(PrettyEmpty)
+            .module(navree_plugin_pretty::PrettyHelperShell),
+    )
+    .await;
+    assert!(
+        in_crate.contains(&format!(
+            "plugin `navree-plugin-pretty` builds the shell of the app's error pages (an ErrorShell in `PrettyHelperShell` (a module of the plugin's crate `{krate}`));"
+        )),
+        "{in_crate}"
+    );
+
+    let by_import = boot_error(
+        builder(Shell::new("Kesar")).module(navree_plugin_pretty_importer::PrettyImporter),
+    )
+    .await;
+    assert!(
+        by_import.contains(
+            "plugin `navree-plugin-pretty-importer` builds the shell of the app's error pages (an ErrorShell in `SecondCrateErrorShell` (only the plugin's modules import it));"
+        ),
+        "{by_import}"
     );
 }

@@ -153,8 +153,9 @@ fn check_document_files(
                 && !under_namespace(path, namespace)
                 && !embedded_by_import(ctx, &embedded_by, path, module.id)
             {
+                let reason = navree_kernel::__private::acts_for_reason(ctx, module.id);
                 errors.push(format!(
-                    "plugin `{plugin}` embeds the document file `{path}` in `{}`, which is not under its namespace: put it under `{namespace}/`",
+                    "plugin `{plugin}` embeds the document file `{path}` in `{}`{reason}, which is not under its namespace: put it under `{namespace}/`",
                     module.name
                 ));
             }
