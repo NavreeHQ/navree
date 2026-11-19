@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Navree.Platform;
 
 /// <summary>What the client answers a request of the web view.</summary>
@@ -20,6 +22,13 @@ public enum WebAnswer
 /// </summary>
 public static class WebData
 {
+    /// <summary>
+    /// Why file fields and file drops are turned off in web pages on Windows: WebView2 offers no callback by which the client could
+    /// inspect or strip location metadata from a chosen file before the page reads it.
+    /// </summary>
+    public const string FilePickerOffReason =
+        "Choosing or dropping files is turned off in web pages on Windows because the system web view gives the app no way to check a file for location data before the page reads it. Use a native screen of the app to send files.";
+
     /// <summary>The folder the app's web views keep their data in, unless the app says another.</summary>
     /// <param name="appName">The app's name.</param>
     /// <returns>The folder's path.</returns>
@@ -118,4 +127,39 @@ public static class WebData
     /// <returns>True for a blank page, a blob and inline data.</returns>
     public static bool IsOwnRequest(string address) =>
         IsOwnDocument(address) || address.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Builds the script run on every document created in the web view before anything in the page runs: empties any document whose
+    /// origin is not one of <paramref name="allowedOrigins"/>, disables <c>&lt;input type="file"&gt;</c>, blocks programmatic file
+    /// pickers, file drops and file pastes, and writes <see cref="FilePickerOffReason"/> into the page so the person sees why.
+    /// </summary>
+    /// <param name="allowedOrigins">The document origins the app allows.</param>
+    /// <returns>The script source.</returns>
+    public static string DocumentGuardScript(IReadOnlyList<string> allowedOrigins)
+    {
+        ArgumentNullException.ThrowIfNull(allowedOrigins);
+        string allowed = JsonSerializer.Serialize(allowedOrigins);
+        string why = JsonSerializer.Serialize(FilePickerOffReason);
+        return
+            "(function(){var allowed=" + allowed + ";var why=" + why + ";" +
+            "try{var o=location.origin;if(o!=='null'&&location.protocol!=='about:'&&location.protocol!=='data:'){" +
+            "var ok=allowed.some(function(a){var star=a.indexOf('://*.');if(star<0){return a===o;}var scheme=a.slice(0,star+3);var rest=a.slice(star+4);return o.indexOf(scheme)===0&&o.slice(scheme.length).endsWith(rest)&&o.slice(scheme.length).length>rest.length;});" +
+            "if(!ok){window.stop();if(document.documentElement){document.documentElement.innerHTML='';}return;}}}catch(e){}" +
+            "function isFileInput(el){return !!el&&el.tagName==='INPUT'&&String(el.type||'').toLowerCase()==='file';}" +
+            "function fileTarget(el){for(var cur=el;cur&&cur.nodeType===1;cur=cur.parentElement){if(isFileInput(cur)){return cur;}if(cur.tagName==='LABEL'){if(isFileInput(cur.control)){return cur.control;}var id=cur.getAttribute('for');if(id&&document.getElementById){var linked=document.getElementById(id);if(isFileInput(linked)){return linked;}}}}return null;}" +
+            "function tellWhy(anchor){try{var doc=(anchor&&anchor.ownerDocument)||document;var box=doc.getElementById('__navree_file_off');if(!box){box=doc.createElement('div');box.id='__navree_file_off';box.setAttribute('role','status');box.setAttribute('aria-live','polite');box.style.cssText='margin:8px 0;padding:10px 12px;border:1px solid currentColor;border-radius:6px;font:13px/1.4 system-ui,Segoe UI,sans-serif;background:Canvas;color:CanvasText;';box.textContent=why;}if(anchor&&anchor.parentNode){anchor.parentNode.insertBefore(box,anchor.nextSibling);}else if(doc.body&&!box.parentNode){doc.body.insertBefore(box,doc.body.firstChild);}}catch(e){}}" +
+            "function markInputs(root){try{if(!root||!root.querySelectorAll){return;}var list=root.querySelectorAll('input');for(var i=0;i<list.length;i++){if(isFileInput(list[i])){list[i].disabled=true;list[i].setAttribute('aria-disabled','true');list[i].setAttribute('title',why);tellWhy(list[i]);}}}catch(e){}}" +
+            "try{if(typeof HTMLInputElement!=='undefined'){var rawClick=HTMLInputElement.prototype.click;HTMLInputElement.prototype.click=function(){if(isFileInput(this)){tellWhy(this);return;}return rawClick.apply(this,arguments);};if(typeof HTMLInputElement.prototype.showPicker==='function'){var rawShow=HTMLInputElement.prototype.showPicker;HTMLInputElement.prototype.showPicker=function(){if(isFileInput(this)){tellWhy(this);throw new DOMException(why,'NotAllowedError');}return rawShow.apply(this,arguments);};}}}catch(e){}" +
+            "function denyPicker(){tellWhy(null);return Promise.reject(new DOMException(why,'NotAllowedError'));}" +
+            "try{['showOpenFilePicker','showDirectoryPicker','showSaveFilePicker'].forEach(function(fn){if(fn in window){Object.defineProperty(window,fn,{configurable:false,writable:false,value:denyPicker});}});}catch(e){}" +
+            "window.addEventListener('click',function(e){var hit=fileTarget(e.target);if(hit){e.preventDefault();e.stopImmediatePropagation();hit.disabled=true;tellWhy(hit);}},true);" +
+            "window.addEventListener('keydown',function(e){if((e.key===' '||e.key==='Enter')&&isFileInput(e.target)){e.preventDefault();e.stopImmediatePropagation();tellWhy(e.target);}},true);" +
+            "function hasFiles(dt){if(!dt){return false;}if(dt.files&&dt.files.length>0){return true;}if(dt.items){for(var i=0;i<dt.items.length;i++){if(dt.items[i].kind==='file'){return true;}}}if(dt.types){for(var j=0;j<dt.types.length;j++){if(dt.types[j]==='Files'){return true;}}}return false;}" +
+            "window.addEventListener('dragover',function(e){if(hasFiles(e.dataTransfer)){e.preventDefault();e.stopImmediatePropagation();try{e.dataTransfer.dropEffect='none';}catch(err){}}},true);" +
+            "window.addEventListener('drop',function(e){if(hasFiles(e.dataTransfer)){e.preventDefault();e.stopImmediatePropagation();tellWhy(e.target&&e.target.nodeType===1?e.target:null);}},true);" +
+            "window.addEventListener('paste',function(e){if(hasFiles(e.clipboardData)){e.preventDefault();e.stopImmediatePropagation();tellWhy(e.target&&e.target.nodeType===1?e.target:null);}},true);" +
+            "function watch(){markInputs(document);try{new MutationObserver(function(records){for(var i=0;i<records.length;i++){var r=records[i];if(r.type==='attributes'&&isFileInput(r.target)){r.target.disabled=true;r.target.setAttribute('aria-disabled','true');r.target.setAttribute('title',why);tellWhy(r.target);}for(var j=0;j<r.addedNodes.length;j++){var n=r.addedNodes[j];if(n.nodeType===1){if(isFileInput(n)){n.disabled=true;n.setAttribute('aria-disabled','true');n.setAttribute('title',why);tellWhy(n);}markInputs(n);}}}}).observe(document.documentElement||document,{subtree:true,childList:true,attributes:true,attributeFilter:['type','disabled']});}catch(e){}}" +
+            "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',watch,{once:true});}else{watch();}" +
+            "})();";
+    }
 }

@@ -1,5 +1,3 @@
-using System.Text;
-using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
@@ -14,8 +12,9 @@ namespace Navree.Shell;
 /// A page of the app's own origins shown in the system's web view (WebView2), and held there by every means the web view
 /// documents: a navigation that is not the app's own is cancelled and handed to the core as a link, a popup is never
 /// opened, a document that is not the app's own is emptied by a script that runs before anything in it does (the layer
-/// that sees redirects, which a callback does not), a request for anything that is not the app's own is answered blocked,
-/// no host object and no message channel is offered, and every permission is refused.
+/// that sees redirects, which a callback does not), file inputs and drops are turned off with an explanation in the page,
+/// a request for anything that is not the app's own is answered blocked, no host object and no message channel is offered,
+/// and every permission is refused.
 /// </summary>
 /// <remarks>
 /// What the callbacks cannot see: the web view reports the first address of a navigation, so a redirect inside a frame
@@ -56,10 +55,26 @@ internal sealed class WebPage : Grid, ILiveWebView
         this.screen = screen;
         this.recorded = recorded;
 
-        // Nothing dragged from outside is handed to a web page: a page's own drop handler would send a photo as it is, with the place it
-        // was taken, and a page with none would be sent to the file's own path. A file reaches a web page only through the page's own file
-        // input (the system's picker).
+        // WebView2 offers no callback to inspect or clean a file chosen in a web page before the page reads it: file inputs, programmatic
+        // file pickers, file drops and file pastes are all turned off, and the page states why.
+        AllowDrop = false;
         view.AllowDrop = false;
+        AddHandler(
+            DragOverEvent,
+            new DragEventHandler((_, args) =>
+            {
+                args.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.None;
+                args.Handled = true;
+            }),
+            handledEventsToo: true);
+        AddHandler(
+            DropEvent,
+            new DragEventHandler((_, args) =>
+            {
+                args.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.None;
+                args.Handled = true;
+            }),
+            handledEventsToo: true);
         Children.Add(view);
     }
 
@@ -432,13 +447,9 @@ internal sealed class WebPage : Grid, ILiveWebView
             host.ReportProblem("a download a web page started was refused");
         };
 
-        // The layer that sees what a callback does not: a document that is not the app's own is emptied before anything in it runs.
-        // The script is waited for: it is in place before the first page is asked for, not only for the pages after it.
-        string allowed = JsonSerializer.Serialize(host.Origins.Documents);
-        _ = await web.AddScriptToExecuteOnDocumentCreatedAsync(
-            "(function(){var allowed=" + allowed + ";try{var o=location.origin;if(o==='null'||location.protocol==='about:'||location.protocol==='data:'){return;}" +
-            "var ok=allowed.some(function(a){var star=a.indexOf('://*.');if(star<0){return a===o;}var scheme=a.slice(0,star+3);var rest=a.slice(star+4);return o.indexOf(scheme)===0&&o.slice(scheme.length).endsWith(rest)&&o.slice(scheme.length).length>rest.length;});" +
-            "if(!ok){window.stop();document.documentElement.innerHTML='';}}catch(e){}})();");
+        // The layer that sees what a callback does not: a document that is not the app's own is emptied before anything in it runs, and
+        // file inputs, programmatic file pickers, file drops and file pastes are turned off with an explanation in the page.
+        _ = await web.AddScriptToExecuteOnDocumentCreatedAsync(WebData.DocumentGuardScript(host.Origins.Documents));
 
         // Every request is asked of the app first, whichever part of the page made it: the page, its frames, and its workers of every kind (a
         // service worker or a shared worker is raised only through this overload, with all its source kinds). A runtime without the overload shows

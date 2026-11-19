@@ -98,4 +98,43 @@ public sealed class WebDataTests
         Assert.AreEqual(WebAnswer.AsItIs, WebData.Answer("about:blank", shop.Ours, wiping: true));
         Assert.AreEqual(WebAnswer.AsItIs, WebData.Answer("blob:https://shop.example/1f2e", shop.Ours, wiping: false));
     }
+
+    [TestMethod]
+    public void APageInTheWebViewCannotPickOrBeGivenAFile()
+    {
+        // WebView2 offers no callback to intercept or clean a file chosen in a web page before the page reads it: file inputs, file-picker
+        // APIs, file drops, file pastes and local-file navigations are all blocked, and the page states why.
+        Navree.Design.Origins shop = new("https://shop.example", ["https://*.shop.example"]);
+        string script = WebData.DocumentGuardScript(shop.Documents);
+
+        // Allowed origins and the explanation are JSON-encoded into the document-start script.
+        StringAssert.Contains(script, "https://shop.example");
+        StringAssert.Contains(script, "https://*.shop.example");
+        StringAssert.Contains(script, "location data");
+        StringAssert.Contains(WebData.FilePickerOffReason, "Windows");
+        StringAssert.Contains(WebData.FilePickerOffReason, "native screen");
+
+        // Every path by which a page could pick or be given a file is guarded in the document-start script, including sandboxed/srcdoc
+        // frames (no early return before installing the file guards).
+        int originReturn = script.IndexOf("if(!ok){window.stop();", StringComparison.Ordinal);
+        int fileGuard = script.IndexOf("function isFileInput", StringComparison.Ordinal);
+        Expect.That(originReturn > 0 && fileGuard > originReturn, "the origin guard must precede the file guards without skipping them on about:srcdoc or blob documents");
+        Assert.IsFalse(script.Contains("location.protocol==='about:'||location.protocol==='data:'){return;}", StringComparison.Ordinal), "about:srcdoc frames must not skip the file guards");
+
+        StringAssert.Contains(script, "list[i].disabled=true");
+        StringAssert.Contains(script, "HTMLInputElement.prototype.click");
+        StringAssert.Contains(script, "HTMLInputElement.prototype.showPicker");
+        StringAssert.Contains(script, "showOpenFilePicker");
+        StringAssert.Contains(script, "showDirectoryPicker");
+        StringAssert.Contains(script, "showSaveFilePicker");
+        StringAssert.Contains(script, "addEventListener('dragover'");
+        StringAssert.Contains(script, "addEventListener('drop'");
+        StringAssert.Contains(script, "addEventListener('paste'");
+        StringAssert.Contains(script, "MutationObserver");
+        StringAssert.Contains(script, "__navree_file_off");
+
+        // Local file navigations (what an unhandled drop onto a browser surface turns into) are recognised and refused too.
+        Assert.IsTrue(WebData.IsLocalFile("file:///C:/Users/harpreet/Videos/Ludhiana%20warehouse.mp4"));
+        Assert.AreEqual(WebAnswer.Refused, WebData.Answer("file:///C:/Users/harpreet/Videos/Ludhiana%20warehouse.mp4", shop.Ours, wiping: false));
+    }
 }
