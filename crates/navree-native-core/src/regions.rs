@@ -992,6 +992,17 @@ impl Core {
     /// While the screen's page is on its way the fetch is owed, and asked of
     /// the page that comes.
     pub(crate) fn live_fire(&mut self, id: ScreenId, region: &str) {
+        if self.waiting_cover().is_some() {
+            if let Some(sub) = self
+                .inner
+                .screens
+                .get_mut(&id)
+                .and_then(|inner| inner.live.get_mut(region))
+            {
+                sub.timer = None;
+            }
+            return;
+        }
         let waits = self.page_on_its_way(id);
         let Some(inner) = self.inner.screens.get_mut(&id) else {
             return;

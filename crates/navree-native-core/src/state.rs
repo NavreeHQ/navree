@@ -1085,6 +1085,9 @@ pub(crate) struct Inner {
     /// The number the first request asked while the event in hand is
     /// handled gets: what was asked before is from before the event.
     pub event_start: u64,
+    /// The number the first message added while the event in hand is
+    /// handled gets: what was shown before is from before the event.
+    pub event_message_start: u64,
     /// An answer the core makes itself (a request never sent) is being read.
     pub synthetic: bool,
     /// The answer being read may follow a write the server ran (see

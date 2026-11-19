@@ -49,12 +49,31 @@ impl Core {
         }
     }
 
-    /// Takes every sheet and cover away.
-    fn dismiss_modals(&mut self) {
+    pub(crate) fn has_locked_modal(&self) -> bool {
+        self.view.modals.iter().any(|modal| modal.locked)
+    }
+
+    fn in_or_above_locked_modal(&self, id: ScreenId) -> bool {
+        let Some(last_locked) = self.view.modals.iter().rposition(|modal| modal.locked) else {
+            return true;
+        };
+        self.view.modals[last_locked..]
+            .iter()
+            .any(|modal| modal.stack.contains(&id))
+    }
+
+    /// Takes every unlocked sheet and cover away; returns `false` when a locked
+    /// cover holds the app and refuses to be removed.
+    fn dismiss_modals(&mut self) -> bool {
+        if let Some(last_locked) = self.view.modals.iter().rposition(|modal| modal.locked) {
+            self.take_modals_from(last_locked + 1);
+            return false;
+        }
         let modals = std::mem::take(&mut self.view.modals);
         for id in modals.into_iter().flat_map(|modal| modal.stack) {
             self.close(id);
         }
+        true
     }
 
     /// The destination whose own address is `url`'s.
@@ -120,18 +139,23 @@ impl Core {
         how: Present,
         select: bool,
     ) -> Option<ScreenId> {
+        if self.waiting_cover().is_some() {
+            return from;
+        }
         if how == Present::External {
             self.open_ours_outside(url);
             return from;
         }
-        if let Some(from) = from {
+        if let Some(from) = from.filter(|id| self.in_or_above_locked_modal(*id)) {
             self.close_overlays(from);
         }
         if let (true, Some(tab), Present::Auto | Present::Push | Present::Root) =
             (select, self.destination_at(url), how)
         {
-            // A link to a top-level destination selects it.
-            self.dismiss_modals();
+            // A link to a top-level destination selects it, unless a locked cover holds the app.
+            if !self.dismiss_modals() {
+                return self.front();
+            }
             let stack = std::mem::take(&mut self.view.destinations[tab].stack);
             let root = stack.first().copied().filter(|root| {
                 self.view
@@ -150,15 +174,19 @@ impl Core {
             self.touch(Change::Nav);
             return Some(root);
         }
-        let anchor = from.filter(|from| self.view.holds(*from)).or(self.front());
+        let anchor = from
+            .filter(|from| self.view.holds(*from) && self.in_or_above_locked_modal(*from))
+            .or(self.front());
         match how {
             Present::Replace => {
-                let id = anchor?;
+                let id = anchor.filter(|id| self.in_or_above_locked_modal(*id))?;
                 self.replace(id, url);
                 Some(id)
             }
             Present::Root => {
-                self.dismiss_modals();
+                if !self.dismiss_modals() {
+                    return self.front();
+                }
                 let selected = self.view.selected;
                 let stack = std::mem::take(&mut self.view.destinations.get_mut(selected)?.stack);
                 for id in stack {
@@ -198,9 +226,14 @@ impl Core {
                 let id = self.open(url);
                 self.opened_from(id);
                 let selected = self.view.selected;
+                let locked = self.has_locked_modal();
                 match anchor.and_then(|anchor| self.view.stack_of(anchor)) {
                     Some(stack) => stack.push(id),
-                    None => self.view.destinations.get_mut(selected)?.stack.push(id),
+                    None if !locked => self.view.destinations.get_mut(selected)?.stack.push(id),
+                    None => {
+                        self.close(id);
+                        return self.front();
+                    }
                 }
                 self.touch(Change::Nav);
                 Some(id)
@@ -310,6 +343,9 @@ impl Core {
 
     /// The person went back to a screen further down its stack.
     pub(crate) fn pop_to(&mut self, id: ScreenId) {
+        if self.waiting_cover().is_some() || !self.in_or_above_locked_modal(id) {
+            return;
+        }
         let Some(stack) = self.view.stack_of(id) else {
             return;
         };
@@ -491,7 +527,10 @@ impl Core {
             return;
         }
         // It is stacked on the destination it belongs to: the one whose address its own starts with.
-        self.dismiss_modals();
+        if !self.dismiss_modals() {
+            self.inner.launch = Some(url);
+            return;
+        }
         let path = self.inner.origin.where_of(&url);
         let owner = self
             .view

@@ -327,6 +327,17 @@ impl Core {
     /// While the screen's page is on its way the ask is owed, and made of the
     /// page that comes.
     pub(crate) fn ask_changes(&mut self, id: ScreenId, list: &str) {
+        if self.waiting_cover().is_some() {
+            if let Some(sub) = self
+                .inner
+                .screens
+                .get_mut(&id)
+                .and_then(|inner| inner.live_lists.get_mut(list))
+            {
+                sub.timer = None;
+            }
+            return;
+        }
         let waits = self.page_on_its_way(id);
         let (Some(view), Some(inner)) =
             (self.view.screens.get(&id), self.inner.screens.get_mut(&id))

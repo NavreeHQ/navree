@@ -582,6 +582,17 @@ impl Core {
 
     /// The typing paused: the search is asked.
     pub(crate) fn options_fire(&mut self, id: ScreenId, form: &str, field: &str) {
+        if self.waiting_cover().is_some() {
+            if let Some(ask) = self
+                .inner
+                .screens
+                .get_mut(&id)
+                .and_then(|inner| inner.options.get_mut(field))
+            {
+                ask.timer = Option::None;
+            }
+            return;
+        }
         let Some((Some(search), _)) = self.choice_of(id, field) else {
             return;
         };
@@ -770,6 +781,9 @@ impl Core {
     /// Asks a table's query: the form's values as a query to its address,
     /// answered in the table's place.
     pub(crate) fn query(&mut self, id: ScreenId, handle: &str) {
+        if self.waiting_cover().is_some() {
+            return;
+        }
         let (Some(view), Some(inner)) = (self.view.screens.get(&id), self.inner.screens.get(&id))
         else {
             return;

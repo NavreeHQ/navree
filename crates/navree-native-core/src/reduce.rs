@@ -191,6 +191,7 @@ impl Core {
             return Update::default();
         }
         self.inner.event_start = self.inner.next.request + 1;
+        self.inner.event_message_start = self.inner.next.message + 1;
         match event {
             Event::Start => self.start(),
             Event::Response(response) => self.answered(response),
@@ -205,7 +206,9 @@ impl Core {
                 ask,
                 from,
             } => {
-                if let Some(screen) = screen.or(self.front()) {
+                if self.waiting_cover().is_none()
+                    && let Some(screen) = screen.or(self.front())
+                {
                     match ask {
                         // The control asks first: what it does waits for the answer.
                         Some(ask) => self.ask_first(
@@ -229,15 +232,27 @@ impl Core {
                 screen,
                 question,
                 yes,
-            } => self.answer(screen, question, yes),
+            } => {
+                if self.waiting_cover().is_none() {
+                    self.answer(screen, question, yes);
+                }
+            }
             Event::Choose {
                 screen,
                 table,
                 row,
                 on,
                 across,
-            } => self.choose(screen, &table, row.as_deref(), on, across),
-            Event::Tab { screen, id, index } => self.tab(screen, &id, index),
+            } => {
+                if self.waiting_cover().is_none() {
+                    self.choose(screen, &table, row.as_deref(), on, across);
+                }
+            }
+            Event::Tab { screen, id, index } => {
+                if self.waiting_cover().is_none() {
+                    self.tab(screen, &id, index);
+                }
+            }
             Event::Random { request, bytes } => self.random(request, &bytes),
             Event::PushToken { token, environment } => self.push_token(token, environment),
             Event::Restore { snapshot } => self.restore(snapshot),
@@ -247,21 +262,37 @@ impl Core {
                 from,
                 to,
                 before,
-            } => self.moved(screen, &item, &from, &to, before.as_deref()),
+            } => {
+                if self.waiting_cover().is_none() {
+                    self.moved(screen, &item, &from, &to, before.as_deref());
+                }
+            }
             Event::Options {
                 screen,
                 form,
                 field,
                 text,
                 more,
-            } => self.options(screen, form.as_deref(), &field, text, more),
+            } => {
+                if self.waiting_cover().is_none() {
+                    self.options(screen, form.as_deref(), &field, text, more);
+                }
+            }
             Event::Field {
                 screen,
                 form,
                 field,
                 value,
-            } => self.field_changed(screen, form.as_deref(), &field, value),
-            Event::Search { screen, text } => self.search(screen, &text),
+            } => {
+                if self.waiting_cover().is_none() {
+                    self.field_changed(screen, form.as_deref(), &field, value);
+                }
+            }
+            Event::Search { screen, text } => {
+                if self.waiting_cover().is_none() {
+                    self.search(screen, &text);
+                }
+            }
             Event::Back => self.back(),
             Event::PopTo { screen } => self.pop_to(screen),
             Event::Dismissed { screen } => {
@@ -276,41 +307,57 @@ impl Core {
                     self.take_modals_from(at);
                 }
             }
-            Event::Overlay { screen, id, open } => self.set_open(screen, &id, open),
+            Event::Overlay { screen, id, open } => {
+                if self.waiting_cover().is_none() {
+                    self.set_open(screen, &id, open);
+                }
+            }
             Event::Refresh { screen } => self.refresh(screen),
             Event::RegionRetry { screen, region } => {
-                self.acted_on(screen);
-                self.shell_again();
-                self.fetch_region(screen, &region, None)
+                if self.waiting_cover().is_none() {
+                    self.acted_on(screen);
+                    self.shell_again();
+                    self.fetch_region(screen, &region, None);
+                }
             }
             Event::More {
                 screen,
                 id,
                 before: false,
             } => {
-                self.acted_on(screen);
-                self.more(screen, &id)
+                if self.waiting_cover().is_none() {
+                    self.acted_on(screen);
+                    self.more(screen, &id);
+                }
             }
             Event::More {
                 screen,
                 id,
                 before: true,
             } => {
-                self.acted_on(screen);
-                self.rows_before(screen, &id)
+                if self.waiting_cover().is_none() {
+                    self.acted_on(screen);
+                    self.rows_before(screen, &id);
+                }
             }
             Event::RegionGo {
                 screen,
                 region,
                 href,
             } => {
-                if let Target::Inside(url) = self.resolve(&href, screen) {
+                if self.waiting_cover().is_none()
+                    && let Target::Inside(url) = self.resolve(&href, screen)
+                {
                     self.region_go(screen, &region, url);
                 }
             }
             Event::MessageShown { id } => self.message_gone(id),
             Event::MessageAction { id } => self.message_action(id),
-            Event::WebLink { screen, url } => self.web_link(screen, &url),
+            Event::WebLink { screen, url } => {
+                if self.waiting_cover().is_none() {
+                    self.web_link(screen, &url);
+                }
+            }
             Event::OpenLink { url } => self.opened(&url),
             Event::Notification { href } => self.opened(&href),
             Event::Window { width } => {
@@ -395,10 +442,38 @@ impl Core {
                     if let Some(inner) = self.inner.screens.get_mut(&screen) {
                         inner.query_timers.remove(&form);
                     }
-                    self.query(screen, &form);
+                    if self.waiting_cover().is_none() {
+                        self.query(screen, &form);
+                    }
                 }
-                Some(TimerFor::Live { screen, region }) => self.live_fire(screen, &region),
-                Some(TimerFor::Changes { screen, list }) => self.ask_changes(screen, &list),
+                Some(TimerFor::Live { screen, region }) => {
+                    if self.waiting_cover().is_some() {
+                        if let Some(sub) = self
+                            .inner
+                            .screens
+                            .get_mut(&screen)
+                            .and_then(|inner| inner.live.get_mut(&region))
+                        {
+                            sub.timer = None;
+                        }
+                    } else {
+                        self.live_fire(screen, &region);
+                    }
+                }
+                Some(TimerFor::Changes { screen, list }) => {
+                    if self.waiting_cover().is_some() {
+                        if let Some(sub) = self
+                            .inner
+                            .screens
+                            .get_mut(&screen)
+                            .and_then(|inner| inner.live_lists.get_mut(&list))
+                        {
+                            sub.timer = None;
+                        }
+                    } else {
+                        self.ask_changes(screen, &list);
+                    }
+                }
                 Some(TimerFor::Changed {
                     screen,
                     form,
@@ -407,14 +482,40 @@ impl Core {
                     if let Some(inner) = self.inner.screens.get_mut(&screen) {
                         inner.query_timers.remove(&form);
                     }
-                    self.changed_fire(screen, &form, *action);
+                    if self.waiting_cover().is_none() {
+                        self.changed_fire(screen, &form, *action);
+                    }
                 }
                 Some(TimerFor::Options {
                     screen,
                     form,
                     field,
-                }) => self.options_fire(screen, &form, &field),
-                Some(TimerFor::Reopen { stream }) => self.reopen(stream),
+                }) => {
+                    if self.waiting_cover().is_some() {
+                        if let Some(ask) = self
+                            .inner
+                            .screens
+                            .get_mut(&screen)
+                            .and_then(|inner| inner.options.get_mut(&field))
+                        {
+                            ask.timer = None;
+                        }
+                    } else {
+                        self.options_fire(screen, &form, &field);
+                    }
+                }
+                Some(TimerFor::Reopen { stream }) => {
+                    if self.waiting_cover().is_none() {
+                        self.reopen(stream);
+                    } else if let Some(found) = self
+                        .inner
+                        .streams
+                        .iter_mut()
+                        .find(|found| found.id == stream)
+                    {
+                        found.reopen = None;
+                    }
+                }
                 Some(TimerFor::Shell) => {
                     // A new pause: a request that gets through may ask once more.
                     self.inner.shell_timer = None;
@@ -875,6 +976,18 @@ impl Core {
         });
     }
 
+    /// Clears messages from before the event in hand: toasts from the session
+    /// before do not stay up over a sign-in or waiting cover.
+    pub(crate) fn clear_prior_messages(&mut self) {
+        let keep_from = self.inner.event_message_start;
+        self.inner.messages.retain(|id, _| *id >= keep_from);
+        let before = self.view.messages.len();
+        self.view.messages.retain(|message| message.id >= keep_from);
+        if self.view.messages.len() != before {
+            self.touch(Change::Messages);
+        }
+    }
+
     fn message_gone(&mut self, id: u64) {
         self.inner.messages.remove(&id);
         let before = self.view.messages.len();
@@ -885,6 +998,9 @@ impl Core {
     }
 
     fn message_action(&mut self, id: u64) {
+        if self.waiting_cover().is_some() || self.has_locked_modal() {
+            return;
+        }
         let Some(about) = self.inner.messages.get(&id).cloned() else {
             return;
         };
@@ -1564,6 +1680,7 @@ impl Core {
     pub(crate) fn session_ended(&mut self, under: ScreenId, href: &str) {
         // Nobody may be signed in any more, wherever the way in leads.
         self.who_may_have_changed(false);
+        self.clear_prior_messages();
         if let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&under),
             self.inner.screens.get_mut(&under),
@@ -2192,27 +2309,57 @@ impl Core {
     }
 
     fn refresh(&mut self, id: ScreenId) {
-        self.acted_on(id);
-        if self.waiting_cover() == Some(id) {
-            if let Some(timer) = self.inner.shell_timer.take() {
-                self.cancel_timer(timer);
+        if let Some(cover) = self.waiting_cover() {
+            if id == cover {
+                self.acted_on(id);
+                if let Some(timer) = self.inner.shell_timer.take() {
+                    self.cancel_timer(timer);
+                }
+                self.inner.shell_nudged = false;
+                self.fetch_shell();
             }
-            self.inner.shell_nudged = false;
-            return self.fetch_shell();
+            return;
         }
+        self.acted_on(id);
         self.shell_again();
         self.fetch_page(id, true);
     }
 
-    fn cancel_screen_timers(&mut self, inner: ScreenInner) {
-        let timers = inner
-            .query_timers
+    fn take_timers_of(inner: &mut ScreenInner) -> Vec<u64> {
+        let mut timers: Vec<u64> = std::mem::take(&mut inner.query_timers)
             .into_values()
-            .chain(inner.live.into_values().filter_map(|sub| sub.timer));
-        let timers = timers
-            .chain(inner.live_lists.into_values().filter_map(|sub| sub.timer))
-            .chain(inner.options.into_values().filter_map(|ask| ask.timer));
-        for timer in timers {
+            .collect();
+        for sub in inner.live.values_mut() {
+            sub.busy = false;
+            if let Some(timer) = sub.timer.take() {
+                timers.push(timer);
+            }
+        }
+        for sub in inner.live_lists.values_mut() {
+            sub.busy = false;
+            if let Some(timer) = sub.timer.take() {
+                timers.push(timer);
+            }
+        }
+        for ask in inner.options.values_mut() {
+            if let Some(timer) = ask.timer.take() {
+                timers.push(timer);
+            }
+        }
+        timers
+    }
+
+    pub(crate) fn cancel_timers_of(&mut self, id: ScreenId) {
+        let Some(inner) = self.inner.screens.get_mut(&id) else {
+            return;
+        };
+        for timer in Self::take_timers_of(inner) {
+            self.cancel_timer(timer);
+        }
+    }
+
+    fn cancel_screen_timers(&mut self, mut inner: ScreenInner) {
+        for timer in Self::take_timers_of(&mut inner) {
             self.cancel_timer(timer);
         }
     }
@@ -2313,6 +2460,7 @@ impl Core {
                 inner.stale = true;
                 self.touch_screen(id);
             }
+            self.cancel_timers_of(id);
             self.drop_pending(|purpose| purpose.screen() == Some(id) && !purpose.writes());
         }
     }
@@ -2357,6 +2505,7 @@ impl Core {
                     self.touch_screen(id);
                 }
             }
+            self.cancel_timers_of(id);
             self.drop_pending(|purpose| purpose.screen() == Some(id) && !purpose.writes());
         }
     }
@@ -2466,6 +2615,7 @@ impl Core {
                 id
             }
         };
+        self.clear_prior_messages();
         self.park_screens(id);
         id
     }
@@ -2930,6 +3080,7 @@ impl Core {
         shown: Option<Shown>,
     ) {
         self.who_may_have_changed(false);
+        self.clear_prior_messages();
         self.park_web_screens();
         if let (Some(view), Some(inner)) = (
             self.view.screens.get_mut(&under),
@@ -7639,6 +7790,270 @@ mod tests {
         }));
         assert_eq!(reports(&update), ["shell: a path"]);
         assert_eq!(core.view.destinations.len(), 1);
+    }
+
+    /// Armed screen timers are cancelled when screens are parked under a
+    /// waiting cover, and stale timer or background screen events never fetch
+    /// or un-blank screens underneath the waiting cover.
+    #[test]
+    fn armed_screen_timers_and_background_screen_events_never_fire_under_the_waiting_cover() {
+        let bytes = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30";
+        let config: Config = serde_json::from_value(serde_json::json!({
+            "origin": "https://shop.example",
+            "app_id": "com.charkha.supply",
+            "client": {"platform": "ios", "form": "phone", "vocab": 0, "text_percent": 100, "caps": ["auth_session"]},
+        }))
+        .expect("config");
+        let mut core = Core::new(config);
+        core.send(Event::Start);
+        core.send(native(
+            1,
+            include_str!("../transcripts/fixtures/made/shell-app.json"),
+            None,
+            false,
+        ));
+        let orders = include_str!("../transcripts/fixtures/store/orders.json");
+        core.send(native(2, orders, None, false));
+
+        // Arm both a live-region timer (via SSE event) and a debounced query timer on screen 1.
+        let live_update = core.send(Event::Stream {
+            stream: 1,
+            state: crate::event::StreamState::Event,
+            name: Some("orders".to_owned()),
+            status: None,
+        });
+        let live_timer = live_update
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Timer { timer, .. } => Some(*timer),
+                _ => None,
+            })
+            .expect("live region timer armed");
+        let query_update = core.send(Event::Field {
+            screen: 1,
+            form: Some("orders-f".to_owned()),
+            field: "search".to_owned(),
+            value: crate::FieldValue::Text {
+                text: "Ludhiana".to_owned(),
+            },
+        });
+        let query_timer = query_update
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Timer { timer, .. } => Some(*timer),
+                _ => None,
+            })
+            .expect("query timer armed");
+
+        // Sign in through the hand-over session while both timers are still armed.
+        core.send(Event::Act {
+            screen: Some(1),
+            action: navree_native::Action::navigate("/sign-in"),
+            form: None,
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        core.send(Event::Random {
+            request: 1,
+            bytes: bytes.to_owned(),
+        });
+        let back = core.send(Event::SignInDone {
+            url: Some(
+                "https://shop.example/app/signed-in?code=Tq7uX0b2c9&state=ISIjJCUmJygpKissLS4vMA"
+                    .to_owned(),
+            ),
+        });
+        let ex_req = back
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("exchange request");
+        let exchanged = core.send(Event::Response(Response {
+            request: ex_req,
+            status: 200,
+            content_type: Some("application/json".to_owned()),
+            body: include_str!("../transcripts/fixtures/made/exchanged.json").to_owned(),
+            ..Response::default()
+        }));
+        assert!(
+            exchanged
+                .effects
+                .contains(&Effect::CancelTimer { timer: live_timer }),
+            "live timer was not cancelled on park: {exchanged:?}"
+        );
+        assert!(
+            exchanged
+                .effects
+                .contains(&Effect::CancelTimer { timer: query_timer }),
+            "query timer was not cancelled on park: {exchanged:?}"
+        );
+        let cover_id = core.waiting_cover().expect("waiting cover is up");
+
+        // Even if the host delivers late timer ticks or background-screen events before the shell answers, nothing fetches or un-blanks screen 1.
+        for stale in [
+            Event::Timer { timer: live_timer },
+            Event::Timer { timer: query_timer },
+            Event::Refresh { screen: 1 },
+            Event::RegionRetry {
+                screen: 1,
+                region: "orders".to_owned(),
+            },
+            Event::More {
+                screen: 1,
+                id: "orders".to_owned(),
+                before: false,
+            },
+            Event::RegionGo {
+                screen: 1,
+                region: "orders".to_owned(),
+                href: "/orders?page=2".to_owned(),
+            },
+        ] {
+            let out = core.send(stale);
+            assert!(
+                out.effects.is_empty(),
+                "stale event under waiting cover triggered effects: {out:?}"
+            );
+            assert!(matches!(core.view.screens[&1].content, Content::Blank));
+            assert_eq!(core.waiting_cover(), Some(cover_id));
+        }
+    }
+
+    /// Prior messages are cleared when a session-end cover or waiting cover
+    /// goes up, while a toast carried by the session-ending answer itself
+    /// stays; and neither `Event::MessageAction` nor destination/`root` links
+    /// can dismiss or navigate underneath a locked modal.
+    #[test]
+    fn prior_messages_clear_when_a_cover_goes_up_and_locked_modals_cannot_be_dismissed_or_bypassed()
+    {
+        let shell_routes = include_str!("../transcripts/fixtures/made/shell-routes.json");
+        let home = include_str!("../transcripts/fixtures/made/home.json");
+        let order = include_str!("../transcripts/fixtures/store/order.json");
+        let ended_post = include_str!("../transcripts/fixtures/made/session-ended-post.json");
+        let sign_in_page = include_str!("../transcripts/fixtures/made/sign-in.json");
+
+        let mut core = signed_in_as(None, shell_routes);
+        core.send(native(2, home, None, false));
+        core.send(Event::Select { destination: 1 });
+        core.send(native(3, order, None, false));
+
+        // Harpreet Sandhu receives a toast with an Undo POST action before her session ends.
+        core.send(Event::Act {
+            screen: Some(2),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),
+            form: Some("refund".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let undo_toast = r#"{"navree":1,"build":"152bd84abf4d","vocab":0,"ops":[{"op":"toast","tone":"success","text":"Refunded ₹4,200 to Gurpreet Singh","action":{"label":"Undo","href":"/orders/20481/undo","post":true}}]}"#;
+        core.send(native(4, undo_toast, None, false));
+        assert_eq!(core.view.messages.len(), 1);
+        let prior_id = core.view.messages[0].id;
+
+        // Next submit hits 401 with its own session-ended toast: prior toast goes, new toast stays.
+        core.send(Event::Act {
+            screen: Some(2),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),
+            form: Some("refund".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        core.send(Event::Response(Response {
+            request: 5,
+            status: 401,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: ended_post.to_owned(),
+            ..Response::default()
+        }));
+        assert_eq!(core.view.messages.len(), 1);
+        assert_ne!(core.view.messages[0].id, prior_id);
+        assert_eq!(
+            core.view.messages[0].text.as_deref(),
+            Some("Your session ended. Sign in to continue.")
+        );
+
+        let cover_id = core.front().expect("locked sign-in cover");
+        core.send(native(6, sign_in_page, None, false));
+
+        // Tapping a destination link ("/") or `present: root` on a locked sign-in cover never dismisses the locked cover or navigates underneath it.
+        let nav_root = core.send(Event::Act {
+            screen: Some(cover_id),
+            action: navree_native::Action::navigate("/"),
+            form: None,
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        assert!(nav_root.effects.is_empty(), "{nav_root:?}");
+        assert_eq!(core.view.modals.len(), 1);
+        assert!(core.view.modals[0].locked);
+
+        let nav_present_root = core.send(Event::Act {
+            screen: Some(cover_id),
+            action: serde_json::from_value(
+                serde_json::json!({"t": "navigate", "href": "/reports", "present": "root"}),
+            )
+            .expect("action"),
+            form: None,
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        assert!(nav_present_root.effects.is_empty(), "{nav_present_root:?}");
+        assert_eq!(core.view.modals.len(), 1);
+        assert!(core.view.modals[0].locked);
+
+        // MessageAction is also ignored while a locked modal is up.
+        let toast_id = core.view.messages[0].id;
+        let msg_act = core.send(Event::MessageAction { id: toast_id });
+        assert!(msg_act.effects.is_empty());
+
+        // Signing in puts up `waiting_cover` and clears the sign-in cover's prior toast too.
+        let post = core.send(Event::Act {
+            screen: Some(cover_id),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),
+            form: Some("sign-in".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let post_req = post
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("sign-in post");
+        let signed = core.send(Event::Response(Response {
+            request: post_req,
+            status: 303,
+            location: Some("/orders".to_owned()),
+            ..Response::default()
+        }));
+        assert!(signed.changed.contains(&Change::Messages));
+        assert!(core.view.messages.is_empty());
+        assert_eq!(core.waiting_cover(), Some(cover_id));
     }
 
     /// Every `open_url` effect is made in one place, and no address is
