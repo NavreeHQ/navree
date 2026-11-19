@@ -34,11 +34,13 @@ public sealed record PlaceResult(PlaceOutcome Outcome, string? Why = null)
 /// <item>PNG (PlacePng.cs) and WebP (PlaceWebp.cs): the EXIF and XMP chunks, the text chunks, and chunks this code does not know.</item>
 /// <item>XMP anywhere (PlaceXmp.cs): a packet that holds any property about a place goes whole.</item>
 /// <item>GIF, BMP and SVG: searched for a property about a place, and refused when one is found.</item>
+/// <item>MP4, M4V, MOV and 3GP videos (PlaceVideo.cs): location atoms, keys, items, XMP boxes and non-zero padding are stripped and chunk offsets shifted; telemetry tracks and other video containers are refused.</item>
 /// </list>
-/// Refused by their bytes: HEIC, HEIF, AVIF, JPEG XL, JPEG 2000, JPEG XR, BigTIFF, a Photoshop, GIMP or OpenRaster document, and the raw
-/// pictures whose first bytes say what they are. Refused by their name, when their bytes say nothing this code knows: a file named as a
-/// picture, as a camera's raw picture, or as a picture editor's document. A file that is none of these by its bytes or its name is not
-/// looked into and is sent as it is. Not looked into either: words a person wrote (a caption, a comment), a video.
+/// Refused by their bytes: HEIC, HEIF, AVIF, JPEG XL, JPEG 2000, JPEG XR, BigTIFF, WebM, Matroska, AVI, Windows Media, FLV, MPEG and Ogg videos,
+/// a Photoshop, GIMP or OpenRaster document, and the raw pictures whose first bytes say what they are. Refused by their name, when their bytes say
+/// nothing this code knows: a file named as a picture, as a video, as a camera's raw picture, or as a picture editor's document. A file that is
+/// none of these by its bytes or its name is not looked into and is sent as it is. Not looked into either: words a person wrote (a caption, a comment)
+/// that name no coordinate or place property.
 /// </summary>
 public static partial class PlaceRules
 {
@@ -131,7 +133,7 @@ public static partial class PlaceRules
 
                     break;
                 case PictureKind.NotAPicture:
-                    VideoKind video = PlaceKinds.VideoOf(head);
+                    VideoKind video = PlaceKinds.VideoOf(file);
                     if (video == VideoKind.IsoBmff)
                     {
                         IsoBmffVideo(work);

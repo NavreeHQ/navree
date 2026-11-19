@@ -124,9 +124,20 @@ public sealed class PickedFiles
 
             // What the file is comes from its first bytes, whatever its name says: a photo or video with no extension is still known by its bytes.
             byte[] head = await HeadAsync(path, cancel).ConfigureAwait(false);
+            PictureKind pictureKind = PlaceKinds.KindOf(head);
+            VideoKind videoKind = pictureKind == PictureKind.NotAPicture ? PlaceKinds.VideoOf(head) : VideoKind.NotAVideo;
+            if (pictureKind == PictureKind.NotAPicture && videoKind == VideoKind.NotAVideo && PlaceKinds.MayStartHeaderlessQuickTime(head, info.Length))
+            {
+                await using FileStream probe = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                if (PlaceKinds.HasHeaderlessQuickTimeMoov(probe))
+                {
+                    videoKind = VideoKind.IsoBmff;
+                }
+            }
+
             string type = FileRules.MediaTypeOf(name);
             if (type == FileRules.Unknown
-                && (PlaceKinds.MediaTypeOf(PlaceKinds.KindOf(head)) ?? PlaceKinds.VideoMediaTypeOf(PlaceKinds.VideoOf(head), head)) is { } read)
+                && (PlaceKinds.MediaTypeOf(pictureKind) ?? PlaceKinds.VideoMediaTypeOf(videoKind, head)) is { } read)
             {
                 type = read;
             }
@@ -140,7 +151,7 @@ public sealed class PickedFiles
             string at = path;
             bool copy = false;
             long size = info.Length;
-            if (!rule.KeepLocation && PlaceRules.MustLook(head, name, type))
+            if (!rule.KeepLocation && (videoKind != VideoKind.NotAVideo || PlaceRules.MustLook(head, name, type)))
             {
                 byte[] bytes = await File.ReadAllBytesAsync(path, cancel).ConfigureAwait(false);
                 PlaceResult result = PlaceRules.TakeOut(bytes, name);

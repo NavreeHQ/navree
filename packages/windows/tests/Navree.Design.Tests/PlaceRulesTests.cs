@@ -655,6 +655,97 @@ public sealed class PlaceRulesTests
         Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([.. ftyp, 0, 0, 0, 50, .. "moov"u8.ToArray()], "truncated.mp4").Outcome);
     }
 
+    [TestMethod]
+    public void Video_artwork_sony_xml_utf16_padding_saio_telemetry_and_camera_brands_are_cleaned_or_refused()
+    {
+        byte[] samples = [0x00, 0x00, 0x01, 0x65, 0x44, 0x55, 0x66, 0x77];
+        (byte[] gpsExif, _, _, _) = Exif(little: true, withGps: true);
+        byte[] geotaggedJpeg = Jpeg(gpsExif);
+
+        // 1. Vendor-branded camera .MOV/.MP4 (Canon CAEP, Nikon niko, Sony XAVC) are classified as videos (not OtherMedia), while Canon CR3 stays OtherMedia.
+        byte[] canonMovFtyp = Mp4Box("ftyp", "qt  "u8.ToArray(), [0, 0, 2, 0], "qt  CAEP"u8.ToArray());
+        byte[] nikonMovFtyp = Mp4Box("ftyp", "qt  "u8.ToArray(), [0, 0, 2, 0], "qt  niko"u8.ToArray());
+        Assert.AreEqual(PictureKind.NotAPicture, PlaceKinds.KindOf(canonMovFtyp));
+        Assert.AreEqual(VideoKind.IsoBmff, PlaceKinds.VideoOf(canonMovFtyp));
+        Assert.AreEqual(VideoKind.IsoBmff, PlaceKinds.VideoOf(nikonMovFtyp));
+
+        // 2. QuickTime mdta ilst with geotagged JPEG artwork (type 13) and UTF-16BE coordinates (type 2): JPEG GPS is stripped in place, UTF-16BE item goes.
+        byte[] artworkKey = MdtaKey("com.apple.quicktime.artwork");
+        byte[] customTextKey = MdtaKey("com.vendor.note");
+        byte[] titleKey = MdtaKey("com.apple.quicktime.title");
+        byte[] keysBox = Mp4Box("keys", [0, 0, 0, 0, 0, 0, 0, 3], artworkKey, customTextKey, titleKey);
+        byte[] artworkItem = MdtaTypedIlstItem(1, 13, geotaggedJpeg);
+        byte[] utf16Coords = Encoding.BigEndianUnicode.GetBytes("+30.9010+075.8573/");
+        byte[] utf16Item = MdtaTypedIlstItem(2, 2, utf16Coords);
+        byte[] titleItem = MdtaTypedIlstItem(3, 1, "Amritsar workshop"u8.ToArray());
+        byte[] mdtaMeta = Mp4Box("meta", Mp4Hdlr("mdta"), keysBox, Mp4Box("ilst", artworkItem, utf16Item, titleItem));
+        byte[] mdatFirst = Mp4Box("mdat", samples);
+        byte[] mdtaMoov = BuildMoovWithTrack("vide", "avc1", useCo64: false, chunkOffset: (uint)(canonMovFtyp.Length + 8), mdtaMeta);
+        byte[] canonMov = [.. canonMovFtyp, .. mdatFirst, .. mdtaMoov];
+
+        PlaceResult cleanedMdta = PlaceRules.TakeOut([.. canonMov], "MVI_0104.MOV");
+        Assert.AreEqual(PlaceOutcome.Removed, cleanedMdta.Outcome, cleanedMdta.Why);
+        Assert.IsNotNull(cleanedMdta.Bytes);
+        Assert.AreEqual(-1, Find(cleanedMdta.Bytes, utf16Coords), "UTF-16BE coordinates survived in mdta");
+        Assert.AreEqual(-1, Find(cleanedMdta.Bytes, [0x25, 0x88]), "EXIF GPS pointer survived in mdta JPEG artwork");
+        StringAssert.Contains(Encoding.Latin1.GetString(cleanedMdta.Bytes), "Charkha", "cleaned JPEG artwork maker tag should remain");
+        StringAssert.Contains(Encoding.Latin1.GetString(cleanedMdta.Bytes), "Amritsar workshop");
+        Assert.AreEqual(PlaceOutcome.None, PlaceRules.TakeOut([.. cleanedMdta.Bytes], "MVI_0104.MOV").Outcome);
+
+        // 3. Sony NonRealTimeMeta XML (<Group name="ExifGPS"><Item name="Latitude" .../>) and 3GPP UTF-16BE dscp are stripped.
+        string sonyXml = "<NonRealTimeMeta xmlns=\"urn:schemas-professionalDisc:nonRealTimeMeta:ver.2.00\"><Group name=\"ExifGPS\"><Item name=\"Latitude\" value=\"30;54;3.600\"/><Item name=\"Longitude\" value=\"75;51;26.580\"/></Group></NonRealTimeMeta>";
+        Assert.IsTrue(PlaceRules.HoldsPlace(Encoding.UTF8.GetBytes(sonyXml)), "Sony NonRealTimeMeta ExifGPS XML must be recognised as holding a place");
+        byte[] xmlMeta = Mp4Box("meta", [0, 0, 0, 0], Mp4Hdlr("meta"), Mp4Box("xml ", [0, 0, 0, 0], Encoding.UTF8.GetBytes(sonyXml)));
+        byte[] utf16Dscp = Mp4Box("dscp", [0, 0, 0, 0, 0x15, 0xC7, 0xFE, 0xFF], utf16Coords, [0, 0]);
+        byte[] sonyMoov = BuildMoovWithTrack("vide", "avc1", useCo64: false, chunkOffset: (uint)(canonMovFtyp.Length + 8), xmlMeta, Mp4Box("udta", utf16Dscp));
+        PlaceResult cleanedSony = PlaceRules.TakeOut([.. canonMovFtyp, .. mdatFirst, .. sonyMoov], "C0001.MP4");
+        Assert.AreEqual(PlaceOutcome.Removed, cleanedSony.Outcome, cleanedSony.Why);
+        Assert.IsNotNull(cleanedSony.Bytes);
+        Assert.IsFalse(Encoding.Latin1.GetString(cleanedSony.Bytes).Contains("ExifGPS", StringComparison.Ordinal));
+
+        // 4. Non-zero nested free/skip boxes (tombstoned ©xyz / EXIF) are zeroed while zero-filled free boxes stay byte-for-byte; saio shifts with mdat.
+        byte[] tombstonedFree = Mp4Box("free", "+30.9010+075.8573/"u8.ToArray(), gpsExif);
+        byte[] xyz = Mp4Box("\u00A9xyz", [0, 18, 0x15, 0xC7], "+30.9010+075.8573/"u8.ToArray());
+        byte[] dummySaioMoov = BuildMoovWithSaio(chunkOffset: 0, saioOffset: 0, Mp4Box("udta", xyz), tombstonedFree);
+        uint oldSampleOffset = (uint)(canonMovFtyp.Length + dummySaioMoov.Length + 8);
+        byte[] realSaioMoov = BuildMoovWithSaio(chunkOffset: oldSampleOffset, saioOffset: oldSampleOffset + 2, Mp4Box("udta", xyz), tombstonedFree);
+        byte[] saioMp4 = [.. canonMovFtyp, .. realSaioMoov, .. mdatFirst];
+
+        PlaceResult cleanedSaio = PlaceRules.TakeOut([.. saioMp4], "aux.mp4");
+        Assert.AreEqual(PlaceOutcome.Removed, cleanedSaio.Outcome, cleanedSaio.Why);
+        Assert.IsNotNull(cleanedSaio.Bytes);
+        Assert.IsFalse(Encoding.Latin1.GetString(cleanedSaio.Bytes).Contains("+30.9010+075.8573", StringComparison.Ordinal));
+        int saioPos = Find(cleanedSaio.Bytes, "saio"u8.ToArray());
+        Assert.IsTrue(saioPos >= 4);
+        // Version 0 + flags 1 (4B) + aux_info_type/param (8B) + count=1 (4B) => entry at saioPos + 4 + 16 = saioPos + 20.
+        uint shiftedSaio = BinaryPrimitives.ReadUInt32BigEndian(cleanedSaio.Bytes.AsSpan(saioPos + 20, 4));
+        int newMdatPos = Find(cleanedSaio.Bytes, "mdat"u8.ToArray()) - 4;
+        Assert.AreEqual((uint)(newMdatPos + 8 + 2), shiftedSaio, "saio offset must shift alongside mdat");
+
+        // 5. DJI djmd, fdsc, klv , GPS-named handler, NMEA $GPRMC subtitle mdat, and 192-byte BDAV .m2ts are all refused.
+        foreach (string telemetry in new[] { "djmd", "dbgi", "fdsc", "klv " })
+        {
+            byte[] tMoov = BuildMoovWithTrack(telemetry, telemetry, useCo64: false, chunkOffset: (uint)(canonMovFtyp.Length + 8));
+            Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([.. canonMovFtyp, .. mdatFirst, .. tMoov], "drone.mp4").Outcome, telemetry);
+        }
+
+        byte[] gpsNamedHdlr = Mp4Box("hdlr", new byte[8], "vide"u8.ToArray(), new byte[12], "GPS Metadata\0"u8.ToArray());
+        byte[] gpsHdlrMdia = Mp4Box("mdia", Mp4Box("mdhd", new byte[24]), gpsNamedHdlr, Mp4Box("minf", Mp4Box("vmhd", new byte[12]), Mp4Box("stbl", Mp4Box("stsd", [0, 0, 0, 0, 0, 0, 0, 1], Mp4Box("avc1", new byte[8])), Mp4Box("stco", [0, 0, 0, 0, 0, 0, 0, 1], [0, 0, 0, 32]))));
+        byte[] gpsHdlrMoov = Mp4Box("moov", Mp4Box("mvhd", new byte[100]), Mp4Box("trak", Mp4Box("tkhd", new byte[84]), gpsHdlrMdia));
+        Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([.. canonMovFtyp, .. mdatFirst, .. gpsHdlrMoov], "cam.mp4").Outcome);
+
+        byte[] nmeaMdat = Mp4Box("mdat", "$GPRMC,123519,A,3054.060,N,07551.438,E,022.4,084.4,230394,003.1,W*6A"u8.ToArray());
+        byte[] sbtlMoov = BuildMoovWithTrack("sbtl", "tx3g", useCo64: false, chunkOffset: (uint)(canonMovFtyp.Length + 8));
+        Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([.. canonMovFtyp, .. nmeaMdat, .. sbtlMoov], "dashcam.mp4").Outcome);
+
+        byte[] m2ts = new byte[576];
+        m2ts[4] = 0x47;
+        m2ts[196] = 0x47;
+        m2ts[388] = 0x47;
+        Assert.AreEqual(VideoKind.Mpeg, PlaceKinds.VideoOf(m2ts));
+        Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut(m2ts, "00000").Outcome);
+    }
+
     private static byte[] Mp4Box(string kind, params byte[][] payloads)
     {
         int length = 8 + payloads.Sum(p => p.Length);
@@ -684,14 +775,38 @@ public sealed class PlaceRulesTests
         return raw;
     }
 
-    private static byte[] MdtaIlstItem(uint index, byte[] utf8Value)
+    private static byte[] MdtaIlstItem(uint index, byte[] utf8Value) =>
+        MdtaTypedIlstItem(index, 1, utf8Value);
+
+    private static byte[] MdtaTypedIlstItem(uint index, uint dataType, byte[] rawValue)
     {
-        byte[] dataBox = Mp4Box("data", [0, 0, 0, 1, 0, 0, 0, 0], utf8Value);
+        byte[] typeHeader = new byte[8];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(typeHeader.AsSpan(0, 4), dataType);
+        byte[] dataBox = Mp4Box("data", typeHeader, rawValue);
         byte[] item = new byte[8 + dataBox.Length];
         System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(item.AsSpan(0, 4), (uint)item.Length);
         System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(item.AsSpan(4, 4), index);
         dataBox.CopyTo(item.AsSpan(8));
         return item;
+    }
+
+    private static byte[] BuildMoovWithSaio(uint chunkOffset, uint saioOffset, params byte[][] extraMoovBoxes)
+    {
+        byte[] stcoOff = new byte[4];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(stcoOff, chunkOffset);
+        byte[] stco = Mp4Box("stco", [0, 0, 0, 0, 0, 0, 0, 1], stcoOff);
+
+        byte[] saioOff = new byte[4];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(saioOff, saioOffset);
+        // FullBox version 0, flags 1 (aux_info_type present): 4B version/flags + 8B aux_info_type/param + 4B count=1 + 4B offset.
+        byte[] saio = Mp4Box("saio", [0, 0, 0, 1], "cenc\0\0\0\0"u8.ToArray(), [0, 0, 0, 1], saioOff);
+
+        byte[] stsd = Mp4Box("stsd", [0, 0, 0, 0, 0, 0, 0, 1], Mp4Box("avc1", new byte[8]));
+        byte[] stbl = Mp4Box("stbl", stsd, stco, saio);
+        byte[] minf = Mp4Box("minf", Mp4Box("vmhd", new byte[12]), stbl);
+        byte[] mdia = Mp4Box("mdia", Mp4Box("mdhd", new byte[24]), Mp4Hdlr("vide"), minf);
+        byte[] trak = Mp4Box("trak", Mp4Box("tkhd", new byte[84]), mdia);
+        return Mp4Box("moov", [Mp4Box("mvhd", new byte[100]), trak, .. extraMoovBoxes]);
     }
 
     private static byte[] BuildMoovWithTrack(string handler, string sampleEntry, bool useCo64, ulong chunkOffset, params byte[][] extraMoovBoxes)

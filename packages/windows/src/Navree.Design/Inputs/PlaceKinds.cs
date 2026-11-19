@@ -116,12 +116,16 @@ public static class PlaceKinds
         "pred", "tmap", "MiAB", "MiAC", "MiAn", "MiBu", "MiCm", "MiHA", "MiHB", "MiHE", "MiPr",
     };
 
-    // Brands of plain video and sound in ISO media files (same page): such a file is not a picture.
+    // Major brands of ISO base media still/raw image containers that are not HEIF (for example Canon CR3 'crx ').
+    private static readonly HashSet<string> OtherIsoMajorBrands = new(StringComparer.Ordinal) { "crx ", "CRAW" };
+
+    // Brands of plain video and sound in ISO media files (mp4ra.org and camera MP4/MOV vendor brands): such a file is not a picture.
     private static readonly HashSet<string> MovingBrands = new(StringComparer.Ordinal)
     {
         "isom", "iso2", "iso3", "iso4", "iso5", "iso6", "iso7", "iso8", "iso9", "mp41", "mp42", "qt  ", "avc1", "hev1", "hvc1", "av01", "vp09",
         "M4V ", "M4A ", "M4P ", "M4B ", "3gp4", "3gp5", "3gp6", "3gp7", "3gp8", "3gp9", "3g2a", "3g2b", "3g2c", "dash", "mmp4", "MSNV", "XAVC",
-        "f4v ", "f4a ", "mp71",
+        "f4v ", "f4a ", "mp71", "CAEP", "caqv", "niko", "pana", "SONY", "mqt ", "NDSS", "NDSC", "NDSH", "NDSM", "NDSP", "NDXC", "NDXH", "NDXM",
+        "NDXP", "NDXS",
     };
 
     /// <summary>What kind of file this is, from its first bytes.</summary>
@@ -292,7 +296,8 @@ public static class PlaceKinds
         }
 
         if (head.StartsWith((ReadOnlySpan<byte>)[0x00, 0x00, 0x01, 0xBA])
-            || (head.Length >= 377 && head[0] == 0x47 && head[188] == 0x47 && head[376] == 0x47))
+            || (head.Length >= 377 && head[0] == 0x47 && head[188] == 0x47 && head[376] == 0x47)
+            || (head.Length >= 389 && head[4] == 0x47 && head[196] == 0x47 && head[388] == 0x47))
         {
             return VideoKind.Mpeg;
         }
@@ -343,43 +348,187 @@ public static class PlaceKinds
         _ => "video",
     };
 
-    // Classic QuickTime movies may begin directly with moov, wide, mdat, free or pnot with no ftyp box ahead of them.
+    /// <summary>
+    /// Whether the first bytes of a file begin with a leading QuickTime <c>mdat</c>, <c>free</c> or <c>skip</c> box whose size leaves room
+    /// for a later <c>moov</c> box past <paramref name="head"/>.
+    /// </summary>
+    /// <param name="head">The file's first bytes.</param>
+    /// <param name="fileLength">The file's total length in bytes.</param>
+    /// <returns>True when probing top-level box headers may find a headerless QuickTime movie.</returns>
+    public static bool MayStartHeaderlessQuickTime(ReadOnlySpan<byte> head, long fileLength)
+    {
+        if (!TryReadQuickTimeBoxHeader(head, out long boxSize, out ReadOnlySpan<byte> first))
+        {
+            return false;
+        }
+
+        return boxSize > 0
+            && boxSize < fileLength
+            && (first.SequenceEqual("mdat"u8) || first.SequenceEqual("free"u8) || first.SequenceEqual("skip"u8));
+    }
+
+    /// <summary>
+    /// Walks top-level box headers in <paramref name="stream"/> to check whether a file without an <c>ftyp</c> box is a QuickTime movie
+    /// whose <c>moov</c> sits past a large leading <c>mdat</c>, <c>free</c> or <c>skip</c> box.
+    /// </summary>
+    /// <param name="stream">A seekable stream over the file.</param>
+    /// <returns>True when the top-level boxes are valid QuickTime atoms including <c>moov</c>.</returns>
+    public static bool HasHeaderlessQuickTimeMoov(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        if (!stream.CanSeek || stream.Length < 16)
+        {
+            return false;
+        }
+
+        long length = stream.Length;
+        long pos = 0;
+        Span<byte> header = stackalloc byte[16];
+        bool sawMoov = false;
+        for (int hops = 0; hops < 32 && pos < length; hops++)
+        {
+            if (length - pos < 8)
+            {
+                return false;
+            }
+
+            stream.Position = pos;
+            int toRead = (int)Math.Min(16, length - pos);
+            int got = 0;
+            while (got < toRead)
+            {
+                int n = stream.Read(header[got..toRead]);
+                if (n == 0)
+                {
+                    break;
+                }
+
+                got += n;
+            }
+
+            if (!TryReadQuickTimeBoxHeader(header[..got], out long boxSize, out ReadOnlySpan<byte> kind))
+            {
+                return false;
+            }
+
+            if (!IsHeaderlessQuickTimeTopAtom(kind))
+            {
+                return false;
+            }
+
+            if (kind.SequenceEqual("moov"u8))
+            {
+                sawMoov = true;
+            }
+
+            if (boxSize == 0)
+            {
+                pos = length;
+                break;
+            }
+
+            if (pos + boxSize > length)
+            {
+                return false;
+            }
+
+            pos += boxSize;
+        }
+
+        return sawMoov && pos == length;
+    }
+
+    // Classic QuickTime movies may begin directly with moov, wide, mdat, free, skip or pnot with no ftyp box ahead of them.
     private static bool LooksLikeHeaderlessQuickTime(ReadOnlySpan<byte> head)
     {
-        if (head.Length < 8)
+        if (!TryReadQuickTimeBoxHeader(head, out long firstSize, out ReadOnlySpan<byte> first))
         {
             return false;
         }
 
-        uint size = BinaryPrimitives.ReadUInt32BigEndian(head);
-        if (size is > 0 and < 8 && size != 1)
-        {
-            return false;
-        }
-
-        if (size == 1 && (head.Length < 16 || BinaryPrimitives.ReadUInt64BigEndian(head[8..16]) < 16))
-        {
-            return false;
-        }
-
-        ReadOnlySpan<byte> first = head[4..8];
         if (first.SequenceEqual("moov"u8) || first.SequenceEqual("wide"u8) || first.SequenceEqual("pnot"u8))
         {
             return true;
         }
 
-        if (first.SequenceEqual("mdat"u8) || first.SequenceEqual("free"u8) || first.SequenceEqual("skip"u8))
+        if (!(first.SequenceEqual("mdat"u8) || first.SequenceEqual("free"u8) || first.SequenceEqual("skip"u8)) || firstSize <= 0)
         {
-            long next = size == 1 ? (long)BinaryPrimitives.ReadUInt64BigEndian(head[8..16]) : size;
-            if (next >= 8 && next + 8 <= head.Length)
+            return false;
+        }
+
+        long pos = firstSize;
+        for (int hops = 0; hops < 16 && pos + 8 <= head.Length; hops++)
+        {
+            if (!TryReadQuickTimeBoxHeader(head[(int)pos..], out long nextSize, out ReadOnlySpan<byte> kind))
             {
-                ReadOnlySpan<byte> second = head.Slice((int)next + 4, 4);
-                return second.SequenceEqual("moov"u8) || second.SequenceEqual("mdat"u8) || second.SequenceEqual("wide"u8) || second.SequenceEqual("free"u8);
+                return false;
             }
+
+            if (kind.SequenceEqual("moov"u8) || kind.SequenceEqual("wide"u8) || kind.SequenceEqual("pnot"u8) || kind.SequenceEqual("mdat"u8))
+            {
+                return true;
+            }
+
+            if (!(kind.SequenceEqual("free"u8) || kind.SequenceEqual("skip"u8)) || nextSize <= 0)
+            {
+                return false;
+            }
+
+            pos += nextSize;
         }
 
         return false;
     }
+
+    private static bool TryReadQuickTimeBoxHeader(ReadOnlySpan<byte> span, out long size, out ReadOnlySpan<byte> kind)
+    {
+        size = 0;
+        kind = default;
+        if (span.Length < 8)
+        {
+            return false;
+        }
+
+        uint size32 = BinaryPrimitives.ReadUInt32BigEndian(span[..4]);
+        if (size32 is > 0 and < 8 && size32 != 1)
+        {
+            return false;
+        }
+
+        if (size32 == 1)
+        {
+            if (span.Length < 16)
+            {
+                return false;
+            }
+
+            ulong size64 = BinaryPrimitives.ReadUInt64BigEndian(span[8..16]);
+            if (size64 < 16 || size64 > long.MaxValue)
+            {
+                return false;
+            }
+
+            size = (long)size64;
+        }
+        else
+        {
+            size = size32;
+        }
+
+        kind = span[4..8];
+        return true;
+    }
+
+    private static bool IsHeaderlessQuickTimeTopAtom(ReadOnlySpan<byte> kind) =>
+        kind.SequenceEqual("moov"u8)
+        || kind.SequenceEqual("mdat"u8)
+        || kind.SequenceEqual("free"u8)
+        || kind.SequenceEqual("skip"u8)
+        || kind.SequenceEqual("wide"u8)
+        || kind.SequenceEqual("pnot"u8)
+        || kind.SequenceEqual("udta"u8)
+        || kind.SequenceEqual("meta"u8)
+        || kind.SequenceEqual("uuid"u8);
 
     // An OpenRaster document is a ZIP archive: "The first file in the archive must be called `mimetype`", "It must be STORED without
     // compression", and it "must contain the string `image/openraster`" (the OpenRaster file layout specification, openraster.org). In a
@@ -458,7 +607,14 @@ public static class PlaceKinds
             return PictureKind.Heif;
         }
 
-        return brands.Where(brand => brand != "\0\0\0\0").All(MovingBrands.Contains) ? PictureKind.NotAPicture : PictureKind.OtherMedia;
+        if (OtherIsoMajorBrands.Contains(brands[0]))
+        {
+            return PictureKind.OtherMedia;
+        }
+
+        return MovingBrands.Contains(brands[0]) || brands.Where(brand => brand != "\0\0\0\0").All(MovingBrands.Contains)
+            ? PictureKind.NotAPicture
+            : PictureKind.OtherMedia;
     }
 
     // An SVG is XML text whose first element is svg: the head, past a byte order mark, white space, the XML declaration and comments, holds "<svg".

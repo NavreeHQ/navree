@@ -35,12 +35,12 @@ public static partial class PlaceRules
         "\u00A9xyz", "loci", "LOCI", "xyz ", "\u00A9loc", "gps ", "GPS ", "GPMF", "djmd", "dbgi", "CNTH", "CNCV", "CNMN", "WLOC",
     };
 
-    // Standard non-location user-data atoms kept when their payload holds no coordinates or XMP place properties.
+    // Standard non-location user-data atoms kept when their payload holds no coordinates, embedded pictures or XMP place properties.
     private static readonly HashSet<string> UdtaSafeBoxes = new(StringComparer.Ordinal)
     {
         "\u00A9nam", "\u00A9cmt", "\u00A9day", "\u00A9ART", "\u00A9too", "\u00A9alb", "\u00A9wrt", "\u00A9cpy", "\u00A9gen", "\u00A9grp",
         "\u00A9lyr", "\u00A9mak", "\u00A9mod", "\u00A9swr", "\u00A9enc", "name", "titl", "dscp", "cprt", "auth", "perf", "gnre", "yrrc",
-        "albm", "hnti", "hinf", "AllF", "SelO", "LOOP", "ptv ", "chpl", "free", "skip", "wide", "smta",
+        "albm", "hnti", "hinf", "AllF", "SelO", "LOOP", "ptv ", "chpl", "wide", "smta",
     };
 
     // Boxes inside moov / trak / mdia / minf / stbl that hold timing, codec descriptors and sample tables (never location metadata).
@@ -48,7 +48,7 @@ public static partial class PlaceRules
     {
         "mvhd", "iods", "mvex", "ipmc", "pssh", "tkhd", "tref", "edts", "tapt", "load", "imap", "matt", "kmat", "clip", "crgn", "mdhd",
         "elng", "hdlr", "vmhd", "smhd", "hmhd", "nmhd", "gmhd", "dinf", "stsd", "stts", "ctts", "cslg", "stsc", "stsz", "stz2", "stco",
-        "co64", "stss", "stsh", "padb", "stdp", "sdtp", "sbgp", "sgpd", "subs", "saiz", "saio", "free", "skip", "wide",
+        "co64", "stss", "stsh", "padb", "stdp", "sdtp", "sbgp", "sgpd", "subs", "saiz", "wide",
     };
 
     private readonly record struct BoxHeader(int Start, int Data, int End, string Kind, byte[]? Uuid);
@@ -107,18 +107,8 @@ public static partial class PlaceRules
                     slices.Add(Slice(file, box));
                     break;
                 case "free" or "skip":
-                    ReadOnlySpan<byte> freePayload = file.AsSpan(box.Data, box.End - box.Data);
-                    if (freePayload.ContainsAnyExcept((byte)0) && PayloadMentionsPlace(freePayload))
-                    {
-                        byte[] zeroed = new byte[freePayload.Length];
-                        slices.Add(BuildBox(box.Kind, zeroed));
-                        changed = true;
-                    }
-                    else
-                    {
-                        slices.Add(Slice(file, box));
-                    }
-
+                    slices.Add(CleanFreeOrSkipBox(file, box, out bool freeChanged));
+                    changed |= freeChanged;
                     break;
                 case "moov":
                     byte[] cleanedMoov = CleanMoovBox(file, box, depth: 1, ref hasSubtitleTrack, out bool moovChanged);
@@ -276,6 +266,10 @@ public static partial class PlaceRules
                     parts.Add(xmp);
                     changed |= xmpChanged;
                     break;
+                case "free" or "skip":
+                    parts.Add(CleanFreeOrSkipBox(file, child, out bool moovFreeChanged));
+                    changed |= moovFreeChanged;
+                    break;
                 default:
                     if (SafeMovieLeafBoxes.Contains(child.Kind) || child.Kind is "cmov" or "prfl" or "ctab" or "colr")
                     {
@@ -336,6 +330,10 @@ public static partial class PlaceRules
                     parts.Add(xmp);
                     changed |= xmpChanged;
                     break;
+                case "free" or "skip":
+                    parts.Add(CleanFreeOrSkipBox(file, child, out bool trakFreeChanged));
+                    changed |= trakFreeChanged;
+                    break;
                 default:
                     if (SafeMovieLeafBoxes.Contains(child.Kind))
                     {
@@ -359,13 +357,15 @@ public static partial class PlaceRules
         changed = false;
         List<BoxHeader> children = ReadBoxes(file, mdia.Data, mdia.End, topLevel: false, allowZeroTerminator: false, allowRawTypes: false);
         string? handler = null;
+        string handlerName = string.Empty;
+        byte[] handlerNameBytes = [];
         BoxHeader? minfBox = null;
 
         foreach (BoxHeader child in children)
         {
             if (child.Kind == "hdlr")
             {
-                handler = ReadHandlerType(file, child);
+                (handler, handlerNameBytes, handlerName) = ReadHandlerInfo(file, child);
             }
             else if (child.Kind == "minf")
             {
@@ -373,20 +373,37 @@ public static partial class PlaceRules
             }
         }
 
-        // Timed telemetry tracks multiplex coordinates into mdat samples, which cannot be stripped without remuxing.
-        if (handler is "gpmd" or "camm" or "rtmd")
+        if (handler is null)
+        {
+            throw Doubted(Doubt.VideoUnreadable);
+        }
+
+        if (IsVideoPlaceKey(string.Empty, handlerName) || PayloadMentionsPlace(handlerNameBytes) || ContainsGpsCallout(handlerNameBytes))
         {
             throw Doubted(Doubt.VideoTrack);
         }
 
-        if (handler is "text" or "sbtl" or "subt" or "subp")
+        // Only media, checked subtitle and checked metadata handlers may pass; timed telemetry tracks (gpmd, camm, rtmd, djmd, dbgi, fdsc, klv , etc.) are refused.
+        switch (handler)
         {
-            hasSubtitleTrack = true;
+            case "vide" or "soun" or "tmcd" or "clcp" or "auxv":
+                break;
+            case "text" or "sbtl" or "subt" or "subp":
+                hasSubtitleTrack = true;
+                break;
+            case "meta":
+                break;
+            default:
+                throw Doubted(Doubt.VideoTrack);
         }
 
         if (minfBox is BoxHeader presentMinf)
         {
             InspectMinfSampleEntries(file, presentMinf, handler);
+        }
+        else if (handler == "meta")
+        {
+            throw Doubted(Doubt.VideoTrack);
         }
 
         List<byte[]> parts = new(children.Count);
@@ -413,6 +430,10 @@ public static partial class PlaceRules
                     byte[] uuid = CleanUuidBox(file, child, out bool uuidChanged);
                     parts.Add(uuid);
                     changed |= uuidChanged;
+                    break;
+                case "free" or "skip":
+                    parts.Add(CleanFreeOrSkipBox(file, child, out bool mdiaFreeChanged));
+                    changed |= mdiaFreeChanged;
                     break;
                 default:
                     if (SafeMovieLeafBoxes.Contains(child.Kind))
@@ -459,6 +480,10 @@ public static partial class PlaceRules
                     parts.Add(CleanUuidBox(file, child, out bool uuidChanged));
                     changed |= uuidChanged;
                     break;
+                case "free" or "skip":
+                    parts.Add(CleanFreeOrSkipBox(file, child, out bool minfFreeChanged));
+                    changed |= minfFreeChanged;
+                    break;
                 default:
                     if (SafeMovieLeafBoxes.Contains(child.Kind))
                     {
@@ -499,6 +524,14 @@ public static partial class PlaceRules
                     parts.Add(CleanUuidBox(file, child, out bool uuidChanged));
                     changed |= uuidChanged;
                     break;
+                case "saio":
+                    ValidateSaio(file, child);
+                    parts.Add(Slice(file, child));
+                    break;
+                case "free" or "skip":
+                    parts.Add(CleanFreeOrSkipBox(file, child, out bool stblFreeChanged));
+                    changed |= stblFreeChanged;
+                    break;
                 default:
                     if (SafeMovieLeafBoxes.Contains(child.Kind))
                     {
@@ -517,8 +550,9 @@ public static partial class PlaceRules
         return changed ? BuildContainerBox("stbl", parts) : Slice(file, stbl);
     }
 
-    private static void InspectMinfSampleEntries(byte[] file, BoxHeader minf, string? handler)
+    private static void InspectMinfSampleEntries(byte[] file, BoxHeader minf, string handler)
     {
+        bool sawStsd = false;
         List<BoxHeader> minfChildren = ReadBoxes(file, minf.Data, minf.End, topLevel: false, allowZeroTerminator: false, allowRawTypes: false);
         foreach (BoxHeader child in minfChildren)
         {
@@ -532,13 +566,19 @@ public static partial class PlaceRules
             {
                 if (table.Kind == "stsd")
                 {
+                    sawStsd = true;
                     InspectStsdBox(file, table, handler);
                 }
             }
         }
+
+        if (handler == "meta" && !sawStsd)
+        {
+            throw Doubted(Doubt.VideoTrack);
+        }
     }
 
-    private static void InspectStsdBox(byte[] file, BoxHeader stsd, string? handler)
+    private static void InspectStsdBox(byte[] file, BoxHeader stsd, string handler)
     {
         if (stsd.End - stsd.Data < 8)
         {
@@ -546,13 +586,23 @@ public static partial class PlaceRules
         }
 
         uint count = BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(stsd.Data + 4, 4));
-        int at = stsd.Data + 8;
-        for (uint i = 0; i < count && at < stsd.End; i++)
+        if (count == 0 && handler == "meta")
         {
+            throw Doubted(Doubt.VideoTrack);
+        }
+
+        int at = stsd.Data + 8;
+        for (uint i = 0; i < count; i++)
+        {
+            if (at >= stsd.End)
+            {
+                throw Doubted(Doubt.VideoUnreadable);
+            }
+
             BoxHeader entry = ReadSingleBox(file, at, stsd.End, topLevel: false, allowRawTypes: true);
             at = entry.End;
 
-            if (entry.Kind is "gpmd" or "camm" or "rtmd" or "mett" or "metx" or "urim")
+            if (entry.Kind is "gpmd" or "camm" or "rtmd" or "djmd" or "dbgi" or "fdsc" or "klv " or "mett" or "metx" or "urim")
             {
                 throw Doubted(Doubt.VideoTrack);
             }
@@ -565,17 +615,24 @@ public static partial class PlaceRules
                     throw Doubted(Doubt.VideoUnreadable);
                 }
 
+                bool sawKeys = false;
                 List<BoxHeader> mebxChildren = ReadBoxes(file, entry.Data + 8, entry.End, topLevel: false, allowZeroTerminator: true, allowRawTypes: false);
                 foreach (BoxHeader mebxChild in mebxChildren)
                 {
                     if (mebxChild.Kind == "keys")
                     {
+                        sawKeys = true;
                         List<(string Namespace, string Value, byte[] Raw)> keys = ParseMdtaKeys(file, mebxChild);
                         if (keys.Any(k => IsVideoPlaceKey(k.Namespace, k.Value)))
                         {
                             throw Doubted(Doubt.VideoTrack);
                         }
                     }
+                }
+
+                if (!sawKeys)
+                {
+                    throw Doubted(Doubt.VideoTrack);
                 }
             }
             else if (handler == "meta")
@@ -627,6 +684,11 @@ public static partial class PlaceRules
                             trafParts.Add(CleanUuidBox(file, trafChild, out bool idChanged));
                             trafChanged |= idChanged;
                         }
+                        else if (trafChild.Kind is "free" or "skip")
+                        {
+                            trafParts.Add(CleanFreeOrSkipBox(file, trafChild, out bool trafFreeChanged));
+                            trafChanged |= trafFreeChanged;
+                        }
                         else
                         {
                             trafParts.Add(Slice(file, trafChild));
@@ -647,6 +709,10 @@ public static partial class PlaceRules
                 case "uuid":
                     parts.Add(CleanUuidBox(file, child, out bool uuidChanged));
                     changed |= uuidChanged;
+                    break;
+                case "free" or "skip":
+                    parts.Add(CleanFreeOrSkipBox(file, child, out bool moofFreeChanged));
+                    changed |= moofFreeChanged;
                     break;
                 default:
                     parts.Add(Slice(file, child));
@@ -673,6 +739,13 @@ public static partial class PlaceRules
             if (UdtaLocationBoxes.Contains(child.Kind))
             {
                 changed = true;
+                continue;
+            }
+
+            if (child.Kind is "free" or "skip")
+            {
+                kept.Add(CleanFreeOrSkipBox(file, child, out bool udtaFreeChanged));
+                changed |= udtaFreeChanged;
                 continue;
             }
 
@@ -713,13 +786,15 @@ public static partial class PlaceRules
             }
 
             ReadOnlySpan<byte> payload = file.AsSpan(child.Data, child.End - child.Data);
-            if (UdtaSafeBoxes.Contains(child.Kind) && !PayloadMentionsPlace(payload))
+            ReadOnlySpan<byte> head = payload[..Math.Min(payload.Length, PlaceKinds.Head)];
+            bool embeddedMedia = PlaceKinds.KindOf(head) != PictureKind.NotAPicture || PlaceKinds.VideoOf(payload) != VideoKind.NotAVideo;
+            if (UdtaSafeBoxes.Contains(child.Kind) && !embeddedMedia && !PayloadMentionsPlace(payload))
             {
                 kept.Add(Slice(file, child));
             }
             else
             {
-                // Either a safe text box whose value holds coordinates/place properties, or an unrecognised vendor user-data atom.
+                // Either a safe text box whose value holds coordinates/place properties/embedded media, or an unrecognised vendor user-data atom.
                 changed = true;
             }
         }
@@ -817,6 +892,7 @@ public static partial class PlaceRules
             ? ReadBoxes(file, ilstHeader.Data, ilstHeader.End, topLevel: false, allowZeroTerminator: true, allowRawTypes: true)
             : [];
 
+        List<(BoxHeader Item, uint OldIndex, byte[] Body, bool BodyChanged)> preparedItems = new(ilstItems.Count);
         foreach (BoxHeader item in ilstItems)
         {
             uint keyIndex = BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(item.Start + 4, 4));
@@ -825,10 +901,19 @@ public static partial class PlaceRules
                 throw Doubted(Doubt.VideoUnreadable);
             }
 
-            if (!dropKey[keyIndex] && IlstItemHoldsPlace(file, item))
+            if (dropKey[keyIndex])
+            {
+                continue;
+            }
+
+            byte[] cleanedBody = CleanIlstItemBody(file, item, out bool bodyChanged, out bool dropWholeItem);
+            if (dropWholeItem)
             {
                 dropKey[keyIndex] = true;
+                continue;
             }
+
+            preparedItems.Add((item, keyIndex, cleanedBody, bodyChanged));
         }
 
         int[] remap = new int[keys.Count + 1];
@@ -857,8 +942,12 @@ public static partial class PlaceRules
         {
             switch (child.Kind)
             {
-                case "hdlr" or "free" or "skip" or "ctry" or "lang":
+                case "hdlr" or "ctry" or "lang":
                     parts.Add(Slice(file, child));
+                    break;
+                case "free" or "skip":
+                    parts.Add(CleanFreeOrSkipBox(file, child, out bool mdtaFreeChanged));
+                    changed |= mdtaFreeChanged;
                     break;
                 case "keys":
                     if (keptKeys.Count > 0)
@@ -869,9 +958,8 @@ public static partial class PlaceRules
                     break;
                 case "ilst":
                     List<byte[]> keptItems = [];
-                    foreach (BoxHeader item in ilstItems)
+                    foreach ((BoxHeader item, uint oldIndex, byte[] body, bool bodyChanged) in preparedItems)
                     {
-                        uint oldIndex = BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(item.Start + 4, 4));
                         int newIndex = remap[oldIndex];
                         if (newIndex == 0)
                         {
@@ -879,9 +967,20 @@ public static partial class PlaceRules
                             continue;
                         }
 
-                        byte[] rawItem = RebuildMdtaIlstItem(file, item, (uint)newIndex, out bool itemChanged);
-                        changed |= itemChanged;
-                        keptItems.Add(rawItem);
+                        if (!bodyChanged && oldIndex == (uint)newIndex && item.Data - item.Start == 8)
+                        {
+                            keptItems.Add(Slice(file, item));
+                        }
+                        else
+                        {
+                            changed = true;
+                            byte[] rebuilt = new byte[8 + body.Length];
+                            BinaryPrimitives.WriteUInt32BigEndian(rebuilt.AsSpan(0, 4), (uint)rebuilt.Length);
+                            BinaryPrimitives.WriteUInt32BigEndian(rebuilt.AsSpan(4, 4), (uint)newIndex);
+                            body.CopyTo(rebuilt.AsSpan(8));
+                            keptItems.Add(rebuilt);
+                        }
+
                         hasMeaningfulPayload = true;
                     }
 
@@ -949,8 +1048,12 @@ public static partial class PlaceRules
         {
             switch (child.Kind)
             {
-                case "hdlr" or "free" or "skip":
+                case "hdlr":
                     parts.Add(Slice(file, child));
+                    break;
+                case "free" or "skip":
+                    parts.Add(CleanFreeOrSkipBox(file, child, out bool mdirFreeChanged));
+                    changed |= mdirFreeChanged;
                     break;
                 case "ilst":
                     List<BoxHeader> items = ReadBoxes(file, child.Data, child.End, topLevel: false, allowZeroTerminator: true, allowRawTypes: true);
@@ -963,39 +1066,29 @@ public static partial class PlaceRules
                             continue;
                         }
 
-                        if (item.Kind == "----")
-                        {
-                            if (ReverseDnsItemIsPlace(file, item))
-                            {
-                                changed = true;
-                                continue;
-                            }
-
-                            keptItems.Add(Slice(file, item));
-                            hasMeaningfulPayload = true;
-                            continue;
-                        }
-
-                        if (item.Kind == "covr")
-                        {
-                            byte[] cleanedCover = CleanCoverItem(file, item, out bool coverChanged);
-                            changed |= coverChanged;
-                            if (cleanedCover.Length > 0)
-                            {
-                                keptItems.Add(cleanedCover);
-                                hasMeaningfulPayload = true;
-                            }
-
-                            continue;
-                        }
-
-                        if (IlstItemHoldsPlace(file, item))
+                        if (item.Kind == "----" && ReverseDnsHeaderNamesPlace(file, item))
                         {
                             changed = true;
                             continue;
                         }
 
-                        keptItems.Add(Slice(file, item));
+                        byte[] cleanedBody = CleanIlstItemBody(file, item, out bool bodyChanged, out bool dropWholeItem);
+                        if (dropWholeItem)
+                        {
+                            changed = true;
+                            continue;
+                        }
+
+                        if (!bodyChanged)
+                        {
+                            keptItems.Add(Slice(file, item));
+                        }
+                        else
+                        {
+                            changed = true;
+                            keptItems.Add(BuildBox(item.Kind, cleanedBody));
+                        }
+
                         hasMeaningfulPayload = true;
                     }
 
@@ -1049,73 +1142,167 @@ public static partial class PlaceRules
         return !hasMeaningfulPayload ? [] : BuildContainerBox("meta", parts);
     }
 
-    private static byte[] CleanCoverItem(byte[] file, BoxHeader item, out bool changed)
+    // Cleans the sub-boxes of an 'ilst' item (in QuickTime 'mdta', iTunes 'mdir', 'covr', or '----'): strips embedded pictures, drops refused
+    // embedded media, and marks the whole item to be dropped when a text/binary value holds location metadata or all 'data' sub-boxes were dropped.
+    private static byte[] CleanIlstItemBody(byte[] file, BoxHeader item, out bool changed, out bool dropWholeItem)
     {
         changed = false;
-        List<BoxHeader> dataBoxes = ReadBoxes(file, item.Data, item.End, topLevel: false, allowZeroTerminator: false, allowRawTypes: false);
-        List<byte[]> kept = new(dataBoxes.Count);
-
-        foreach (BoxHeader sub in dataBoxes)
+        dropWholeItem = false;
+        ReadOnlySpan<byte> body = file.AsSpan(item.Data, item.End - item.Data);
+        if (body.Length < 8)
         {
-            if (sub.Kind != "data" || sub.End - sub.Data < 8)
+            if (PayloadMentionsPlace(body))
             {
+                dropWholeItem = true;
+                return [];
+            }
+
+            return body.ToArray();
+        }
+
+        List<BoxHeader> subs = [];
+        int scan = item.Data;
+        bool structured = true;
+        while (scan < item.End)
+        {
+            if (item.End - scan == 4 && BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(scan, 4)) == 0)
+            {
+                break;
+            }
+
+            if (scan + 8 > item.End)
+            {
+                structured = false;
+                break;
+            }
+
+            uint subSize = BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(scan, 4));
+            if (subSize < 8 || scan + (long)subSize > item.End || !IsBoxType(file.AsSpan(scan + 4, 4)))
+            {
+                structured = false;
+                break;
+            }
+
+            subs.Add(new BoxHeader(scan, scan + 8, scan + (int)subSize, Encoding.Latin1.GetString(file.AsSpan(scan + 4, 4)), null));
+            scan += (int)subSize;
+        }
+
+        if (!structured || subs.Count == 0)
+        {
+            if (PayloadMentionsPlace(body))
+            {
+                dropWholeItem = true;
+                return [];
+            }
+
+            return body.ToArray();
+        }
+
+        List<byte[]> kept = new(subs.Count);
+        bool sawData = false;
+        int keptDataCount = 0;
+
+        foreach (BoxHeader sub in subs)
+        {
+            if (sub.Kind is "free" or "skip")
+            {
+                kept.Add(CleanFreeOrSkipBox(file, sub, out bool subFreeChanged));
+                changed |= subFreeChanged;
+                continue;
+            }
+
+            if (sub.Kind != "data")
+            {
+                ReadOnlySpan<byte> subPayload = file.AsSpan(sub.Data, sub.End - sub.Data);
+                if (sub.Kind is not ("mean" or "name") && PayloadMentionsPlace(subPayload))
+                {
+                    dropWholeItem = true;
+                    return [];
+                }
+
                 kept.Add(Slice(file, sub));
                 continue;
             }
 
-            byte[] picture = file.AsSpan(sub.Data + 8, sub.End - sub.Data - 8).ToArray();
-            ReadOnlySpan<byte> head = picture.AsSpan(0, Math.Min(picture.Length, PlaceKinds.Head));
-            if (!MustLook(head, "cover.jpg", "image/jpeg"))
+            sawData = true;
+            if (sub.End - sub.Data < 8)
             {
+                if (PayloadMentionsPlace(file.AsSpan(sub.Data, sub.End - sub.Data)))
+                {
+                    dropWholeItem = true;
+                    return [];
+                }
+
                 kept.Add(Slice(file, sub));
+                keptDataCount++;
                 continue;
             }
 
-            PlaceResult result = TakeOut(picture, "cover.jpg");
-            if (result.Outcome == PlaceOutcome.Refused || result.Bytes is not { } clean)
+            uint dataType = BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(sub.Data, 4)) & 0x00FFFFFFu;
+            ReadOnlySpan<byte> rawValue = file.AsSpan(sub.Data + 8, sub.End - sub.Data - 8);
+            ReadOnlySpan<byte> head = rawValue[..Math.Min(rawValue.Length, PlaceKinds.Head)];
+            bool isEmbeddedMedia = dataType is 13 or 14 or 27
+                || PlaceKinds.KindOf(head) != PictureKind.NotAPicture
+                || PlaceKinds.VideoOf(rawValue) != VideoKind.NotAVideo;
+
+            if (isEmbeddedMedia)
             {
-                changed = true;
+                string mediaName = dataType == 14 ? "embedded.png" : dataType == 27 ? "embedded.bmp" : "embedded.jpg";
+                PlaceResult mediaResult = TakeOut(rawValue.ToArray(), mediaName);
+                if (mediaResult.Outcome == PlaceOutcome.Refused || mediaResult.Bytes is not { } cleanMedia)
+                {
+                    changed = true;
+                    continue;
+                }
+
+                if (mediaResult.Outcome == PlaceOutcome.Removed)
+                {
+                    byte[] rebuiltData = new byte[8 + cleanMedia.Length];
+                    file.AsSpan(sub.Data, 8).CopyTo(rebuiltData);
+                    cleanMedia.CopyTo(rebuiltData.AsSpan(8));
+                    kept.Add(BuildBox("data", rebuiltData));
+                    changed = true;
+                }
+                else
+                {
+                    kept.Add(Slice(file, sub));
+                }
+
+                keptDataCount++;
                 continue;
             }
 
-            if (result.Outcome == PlaceOutcome.Removed)
+            if (DataValueMentionsPlace(rawValue, dataType))
             {
-                byte[] rebuiltData = new byte[8 + clean.Length];
-                file.AsSpan(sub.Data, 8).CopyTo(rebuiltData);
-                clean.CopyTo(rebuiltData.AsSpan(8));
-                kept.Add(BuildBox("data", rebuiltData));
-                changed = true;
+                dropWholeItem = true;
+                return [];
             }
-            else
-            {
-                kept.Add(Slice(file, sub));
-            }
+
+            kept.Add(Slice(file, sub));
+            keptDataCount++;
+        }
+
+        if (sawData && keptDataCount == 0)
+        {
+            dropWholeItem = true;
+            return [];
         }
 
         if (!changed)
         {
-            return Slice(file, item);
+            return body.ToArray();
         }
 
-        return kept.Count == 0 ? [] : BuildContainerBox(item.Kind, kept);
-    }
-
-    private static byte[] RebuildMdtaIlstItem(byte[] file, BoxHeader item, uint newIndex, out bool changed)
-    {
-        uint oldIndex = BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(item.Start + 4, 4));
-        ReadOnlySpan<byte> body = file.AsSpan(item.Data, item.End - item.Data);
-        if (oldIndex == newIndex && item.Data - item.Start == 8)
+        int totalLen = kept.Sum(part => part.Length);
+        byte[] output = new byte[totalLen];
+        int cursor = 0;
+        foreach (byte[] part in kept)
         {
-            changed = false;
-            return Slice(file, item);
+            part.CopyTo(output.AsSpan(cursor));
+            cursor += part.Length;
         }
 
-        changed = oldIndex != newIndex;
-        byte[] result = new byte[8 + body.Length];
-        BinaryPrimitives.WriteUInt32BigEndian(result.AsSpan(0, 4), (uint)result.Length);
-        BinaryPrimitives.WriteUInt32BigEndian(result.AsSpan(4, 4), newIndex);
-        body.CopyTo(result.AsSpan(8));
-        return result;
+        return output;
     }
 
     private static List<(string Namespace, string Value, byte[] Raw)> ParseMdtaKeys(byte[] file, BoxHeader keysBox)
@@ -1177,7 +1364,7 @@ public static partial class PlaceRules
         return BuildBox("keys", payload);
     }
 
-    private static bool ReverseDnsItemIsPlace(byte[] file, BoxHeader item)
+    private static bool ReverseDnsHeaderNamesPlace(byte[] file, BoxHeader item)
     {
         List<BoxHeader> subs = ReadBoxes(file, item.Data, item.End, topLevel: false, allowZeroTerminator: false, allowRawTypes: false);
         string mean = string.Empty;
@@ -1192,45 +1379,9 @@ public static partial class PlaceRules
             {
                 name = Encoding.UTF8.GetString(file.AsSpan(sub.Data + 4, sub.End - sub.Data - 4));
             }
-            else if (sub.Kind == "data" && sub.End - sub.Data >= 8 && PayloadMentionsPlace(file.AsSpan(sub.Data + 8, sub.End - sub.Data - 8)))
-            {
-                return true;
-            }
         }
 
         return IsVideoPlaceKey(mean, name);
-    }
-
-    private static bool IlstItemHoldsPlace(byte[] file, BoxHeader item)
-    {
-        ReadOnlySpan<byte> body = file.AsSpan(item.Data, item.End - item.Data);
-        if (body.Length < 8)
-        {
-            return PayloadMentionsPlace(body);
-        }
-
-        int at = item.Data;
-        while (at + 8 <= item.End)
-        {
-            uint size = BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(at, 4));
-            if (size < 8 || at + (long)size > item.End)
-            {
-                return PayloadMentionsPlace(body);
-            }
-
-            string kind = Encoding.Latin1.GetString(file.AsSpan(at + 4, 4));
-            ReadOnlySpan<byte> subPayload = kind == "data" && size >= 16
-                ? file.AsSpan(at + 16, (int)size - 16)
-                : file.AsSpan(at + 8, (int)size - 8);
-            if (PayloadMentionsPlace(subPayload))
-            {
-                return true;
-            }
-
-            at += (int)size;
-        }
-
-        return false;
     }
 
     private static byte[] CleanFullXmlBox(byte[] file, BoxHeader xmlBox, out bool changed)
@@ -1342,8 +1493,85 @@ public static partial class PlaceRules
                 case "co64":
                     AdjustCo64(moovBytes, child, mdats, newStarts);
                     break;
+                case "saio":
+                    AdjustSaio(moovBytes, child, mdats, newStarts);
+                    break;
                 default:
                     break;
+            }
+        }
+    }
+
+    private static void ValidateSaio(byte[] file, BoxHeader saio)
+    {
+        int length = saio.End - saio.Data;
+        if (length < 8)
+        {
+            throw Doubted(Doubt.VideoUnreadable);
+        }
+
+        byte version = file[saio.Data];
+        if (version > 1)
+        {
+            throw Doubted(Doubt.VideoUnreadable);
+        }
+
+        uint flags = BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(saio.Data, 4)) & 0x00FFFFFFu;
+        int pos = saio.Data + 4 + ((flags & 1u) != 0 ? 8 : 0);
+        if (pos + 4 > saio.End)
+        {
+            throw Doubted(Doubt.VideoUnreadable);
+        }
+
+        uint count = BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan(pos, 4));
+        pos += 4;
+        long entrySize = version == 0 ? 4L : 8L;
+        if (pos + (entrySize * count) != saio.End)
+        {
+            throw Doubted(Doubt.VideoUnreadable);
+        }
+    }
+
+    private static void AdjustSaio(byte[] moovBytes, BoxHeader saio, List<MdatRange> mdats, int[] newStarts)
+    {
+        ValidateSaio(moovBytes, saio);
+        byte version = moovBytes[saio.Data];
+        uint flags = BinaryPrimitives.ReadUInt32BigEndian(moovBytes.AsSpan(saio.Data, 4)) & 0x00FFFFFFu;
+        int pos = saio.Data + 4 + ((flags & 1u) != 0 ? 8 : 0);
+        uint count = BinaryPrimitives.ReadUInt32BigEndian(moovBytes.AsSpan(pos, 4));
+        pos += 4;
+
+        if (version == 0)
+        {
+            for (uint i = 0; i < count; i++, pos += 4)
+            {
+                long oldOffset = BinaryPrimitives.ReadUInt32BigEndian(moovBytes.AsSpan(pos, 4));
+                long shifted = ShiftMdatOffset(oldOffset, mdats, newStarts);
+                if (shifted is < 0 or > uint.MaxValue)
+                {
+                    throw Doubted(Doubt.VideoSaid);
+                }
+
+                BinaryPrimitives.WriteUInt32BigEndian(moovBytes.AsSpan(pos, 4), (uint)shifted);
+            }
+        }
+        else
+        {
+            for (uint i = 0; i < count; i++, pos += 8)
+            {
+                ulong raw = BinaryPrimitives.ReadUInt64BigEndian(moovBytes.AsSpan(pos, 8));
+                if (raw > long.MaxValue)
+                {
+                    throw Doubted(Doubt.VideoSaid);
+                }
+
+                long shifted = ShiftMdatOffset((long)raw, mdats, newStarts);
+                if (shifted < 0)
+                {
+                    throw Doubted(Doubt.VideoSaid);
+                }
+
+                BinaryPrimitives.WriteUInt64BigEndian(moovBytes.AsSpan(pos, 8), (ulong)shifted);
             }
         }
     }
@@ -1423,14 +1651,44 @@ public static partial class PlaceRules
         throw Doubted(Doubt.VideoSaid);
     }
 
-    private static string ReadHandlerType(byte[] file, BoxHeader hdlr)
+    private static byte[] CleanFreeOrSkipBox(byte[] file, BoxHeader box, out bool changed)
+    {
+        ReadOnlySpan<byte> payload = file.AsSpan(box.Data, box.End - box.Data);
+        if (!payload.ContainsAnyExcept((byte)0))
+        {
+            changed = false;
+            return Slice(file, box);
+        }
+
+        changed = true;
+        byte[] zeroed = new byte[box.End - box.Start];
+        file.AsSpan(box.Start, box.Data - box.Start).CopyTo(zeroed);
+        return zeroed;
+    }
+
+    private static string ReadHandlerType(byte[] file, BoxHeader hdlr) => ReadHandlerInfo(file, hdlr).Subtype;
+
+    private static (string Subtype, byte[] NameBytes, string Name) ReadHandlerInfo(byte[] file, BoxHeader hdlr)
     {
         if (hdlr.End - hdlr.Data < 12)
         {
             throw Doubted(Doubt.VideoUnreadable);
         }
 
-        return Encoding.Latin1.GetString(file.AsSpan(hdlr.Data + 8, 4));
+        string subtype = Encoding.Latin1.GetString(file.AsSpan(hdlr.Data + 8, 4));
+        if (hdlr.End - hdlr.Data <= 24)
+        {
+            return (subtype, [], string.Empty);
+        }
+
+        ReadOnlySpan<byte> rawName = file.AsSpan(hdlr.Data + 24, hdlr.End - hdlr.Data - 24);
+        if (rawName.Length >= 2 && rawName[0] == rawName.Length - 1)
+        {
+            rawName = rawName[1..];
+        }
+
+        rawName = rawName.TrimEnd((byte)0);
+        return (subtype, rawName.ToArray(), Encoding.UTF8.GetString(rawName));
     }
 
     private static bool IsVideoPlaceKey(string ns, string name)
@@ -1464,19 +1722,137 @@ public static partial class PlaceRules
         return trimmed is "xyz" or "loc" or "loci" or "gps" || IsPlace(trimmed);
     }
 
+    private static bool DataValueMentionsPlace(ReadOnlySpan<byte> payload, uint dataType)
+    {
+        if (PayloadMentionsPlace(payload))
+        {
+            return true;
+        }
+
+        if (dataType is 2 or 4 or 5 && payload.Length >= 2)
+        {
+            byte[] utf8 = DecodeUtf16ToUtf8(payload, bigEndian: true);
+            if (LooksLikeIso6709(utf8) || HoldsPlace(utf8) || ContainsGpsCallout(utf8))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool PayloadMentionsPlace(ReadOnlySpan<byte> payload) =>
-        LooksLikeIso6709(payload) || LooksLikeEmbeddedExif(payload) || HoldsPlace(payload);
+        LooksLikeIso6709(payload) || LooksLikeEmbeddedExif(payload) || HoldsPlace(payload) || Utf16MentionsPlace(payload);
+
+    private static bool Utf16MentionsPlace(ReadOnlySpan<byte> payload)
+    {
+        // Check UTF-16 BOMs at common box offsets (0 for raw strings, 4 after QuickTime string header, 6 after 3GPP version/flags+language).
+        foreach (int offset in (ReadOnlySpan<int>)[0, 4, 6])
+        {
+            if (offset + 6 <= payload.Length)
+            {
+                ReadOnlySpan<byte> slice = payload[offset..];
+                if (slice[0] == 0xFE && slice[1] == 0xFF)
+                {
+                    byte[] utf8 = DecodeUtf16ToUtf8(slice[2..], bigEndian: true);
+                    if (LooksLikeIso6709(utf8) || HoldsPlace(utf8) || ContainsGpsCallout(utf8))
+                    {
+                        return true;
+                    }
+                }
+                else if (slice[0] == 0xFF && slice[1] == 0xFE)
+                {
+                    byte[] utf8 = DecodeUtf16ToUtf8(slice[2..], bigEndian: false);
+                    if (LooksLikeIso6709(utf8) || HoldsPlace(utf8) || ContainsGpsCallout(utf8))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // Also detect BOM-less UTF-16BE / UTF-16LE ASCII runs (for example '+30.9010+075.8573/' with interleaved NUL bytes).
+        if (payload.Length >= 16 && payload.Length <= 65536)
+        {
+            foreach (int offset in (ReadOnlySpan<int>)[0, 4, 6])
+            {
+                if (offset + 16 > payload.Length)
+                {
+                    continue;
+                }
+
+                ReadOnlySpan<byte> slice = payload[offset..];
+                if (LooksLikeInterleavedAscii(slice, nulEven: true))
+                {
+                    byte[] utf8 = DecodeUtf16ToUtf8(slice, bigEndian: true);
+                    if (LooksLikeIso6709(utf8) || HoldsPlace(utf8) || ContainsGpsCallout(utf8))
+                    {
+                        return true;
+                    }
+                }
+                else if (LooksLikeInterleavedAscii(slice, nulEven: false))
+                {
+                    byte[] utf8 = DecodeUtf16ToUtf8(slice, bigEndian: false);
+                    if (LooksLikeIso6709(utf8) || HoldsPlace(utf8) || ContainsGpsCallout(utf8))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool LooksLikeInterleavedAscii(ReadOnlySpan<byte> bytes, bool nulEven)
+    {
+        int pairs = Math.Min(bytes.Length / 2, 16);
+        if (pairs < 6)
+        {
+            return false;
+        }
+
+        int asciiPairs = 0;
+        for (int i = 0; i < pairs; i++)
+        {
+            byte nulByte = bytes[(i * 2) + (nulEven ? 0 : 1)];
+            byte charByte = bytes[(i * 2) + (nulEven ? 1 : 0)];
+            if (nulByte == 0 && charByte is >= 0x20 and <= 0x7E)
+            {
+                asciiPairs++;
+            }
+        }
+
+        return asciiPairs >= 6;
+    }
+
+    private static byte[] DecodeUtf16ToUtf8(ReadOnlySpan<byte> bytes, bool bigEndian)
+    {
+        int evenLen = bytes.Length & ~1;
+        if (evenLen == 0)
+        {
+            return [];
+        }
+
+        Encoding utf16 = bigEndian ? Encoding.BigEndianUnicode : Encoding.Unicode;
+        return Encoding.UTF8.GetBytes(utf16.GetString(bytes[..evenLen]));
+    }
 
     private static bool LooksLikeEmbeddedExif(ReadOnlySpan<byte> payload) =>
-        payload.StartsWith("Exif\0\0"u8)
-        || payload.StartsWith("II*\0"u8)
-        || payload.StartsWith("MM\0*"u8)
+        payload.IndexOf("Exif\0\0"u8) >= 0
+        || payload.IndexOf("II*\0"u8) >= 0
+        || payload.IndexOf("MM\0*"u8) >= 0
         || payload.IndexOf("GPMF"u8) >= 0;
 
     private static bool ContainsGpsCallout(ReadOnlySpan<byte> payload) =>
         IndexOfAsciiIgnoreCase(payload, "gps("u8) >= 0
         || IndexOfAsciiIgnoreCase(payload, "latitude"u8) >= 0
-        || IndexOfAsciiIgnoreCase(payload, "longitude"u8) >= 0;
+        || IndexOfAsciiIgnoreCase(payload, "longitude"u8) >= 0
+        || IndexOfAsciiIgnoreCase(payload, "$gprmc"u8) >= 0
+        || IndexOfAsciiIgnoreCase(payload, "$gpgga"u8) >= 0
+        || IndexOfAsciiIgnoreCase(payload, "$gnrmc"u8) >= 0
+        || IndexOfAsciiIgnoreCase(payload, "$gngga"u8) >= 0
+        || IndexOfAsciiIgnoreCase(payload, "$gpgll"u8) >= 0;
 
     // Recognises ISO 6709 coordinate strings such as "+30.9010+075.8573/" or "-33.8688+151.2093+012.3/" (including after a 4-byte QuickTime string header).
     private static bool LooksLikeIso6709(ReadOnlySpan<byte> bytes)

@@ -23,10 +23,16 @@ public static partial class PlaceRules
         "address", "postalcode", "streetaddress", "lat", "lon", "lng", "long",
     };
 
-    // Endings that make a name a place: exif:GPSDestLatitude, drone-dji:AbsoluteAltitude, xmpDM:shotLocation, prism:location and the like.
-    private static readonly string[] PlaceEndings = ["latitude", "longitude", "longtitude", "altitude", "location"];
+    // Endings that make a name a place: exif:GPSDestLatitude, drone-dji:AbsoluteAltitude, xmpDM:shotLocation, prism:location, Sony ExifGPS and the like.
+    private static readonly string[] PlaceEndings = ["latitude", "longitude", "longtitude", "altitude", "location", "gps"];
 
-    /// <summary>Whether XMP text holds a property about a place.</summary>
+    // XML attribute names whose quoted value names a metadata group or item (for example Sony NonRealTimeMeta <Group name="ExifGPS"><Item name="Latitude" .../>).
+    private static readonly HashSet<string> NamingAttributes = new(StringComparer.Ordinal)
+    {
+        "name", "key", "property", "field", "tag",
+    };
+
+    /// <summary>Whether XMP or camera XML text holds a property about a place.</summary>
     /// <param name="text">The packet's bytes, UTF-8.</param>
     /// <returns>True when it does.</returns>
     public static bool HoldsPlace(ReadOnlySpan<byte> text)
@@ -72,7 +78,72 @@ public static partial class PlaceRules
 
             bool closing = before == '/' && start >= 2 && text[start - 2] == '<';
             bool named = before is (byte)':' or (byte)'<' || closing || (next < text.Length && text[next] == '=');
-            if (named && IsPlace(Lower(name)))
+            if (named)
+            {
+                string lower = Lower(name);
+                if (IsPlace(lower))
+                {
+                    return true;
+                }
+
+                if (next < text.Length && text[next] == '=' && NamingAttributes.Contains(lower) && QuotedValueNamesPlace(text, next + 1))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool QuotedValueNamesPlace(ReadOnlySpan<byte> text, int afterEquals)
+    {
+        int pos = afterEquals;
+        while (pos < text.Length && IsSpace(text[pos]))
+        {
+            pos++;
+        }
+
+        if (pos >= text.Length || text[pos] is not ((byte)'"' or (byte)'\''))
+        {
+            return false;
+        }
+
+        byte quote = text[pos++];
+        int end = pos;
+        while (end < text.Length && text[end] != quote)
+        {
+            end++;
+        }
+
+        if (end >= text.Length)
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> value = text[pos..end];
+        string whole = Lower(value);
+        if (IsPlace(whole) || whole is "geo.position" or "geo.placename" or "geo.region" or "icbm")
+        {
+            return true;
+        }
+
+        int i = 0;
+        while (i < value.Length)
+        {
+            if (!IsNameStart(value[i]))
+            {
+                i++;
+                continue;
+            }
+
+            int wordStart = i;
+            while (i < value.Length && (IsNameStart(value[i]) || value[i] is >= (byte)'0' and <= (byte)'9'))
+            {
+                i++;
+            }
+
+            if (IsPlace(Lower(value[wordStart..i])))
             {
                 return true;
             }

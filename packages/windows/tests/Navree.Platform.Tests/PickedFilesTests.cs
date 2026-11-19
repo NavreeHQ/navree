@@ -513,6 +513,25 @@ public sealed class PickedFilesTests
         Picked refusedCorrupt = await files.AddAsync(Write("Broken.mp4", [1, 2, 3, 4, 5]), Rule(accept: "video/*"), 0, CancellationToken.None);
         Assert.IsNull(refusedCorrupt.File);
         StringAssert.Contains(refusedCorrupt.Refusal, "Broken.mp4:");
+
+        // 3. Extensionless headerless QuickTime .mov whose leading mdat exceeds PlaceKinds.Head (4096 B) is still detected and stripped,
+        //    and an extensionless 192-byte BDAV .m2ts transport stream is detected and refused.
+        byte[] bigSamples = Bytes(5000, 7);
+        byte[] headerlessMov = HeaderlessQuickTimeWithPlace(bigSamples);
+        Picked cleanedHeaderless = await files.AddAsync(Write("Ludhiana-headerless-clip", headerlessMov), Rule(accept: "video/*"), 0, CancellationToken.None);
+        Assert.IsNull(cleanedHeaderless.Refusal, cleanedHeaderless.Refusal);
+        Assert.IsNotNull(cleanedHeaderless.File);
+        Assert.AreEqual("video/quicktime", cleanedHeaderless.File.MediaType);
+        byte[] headerlessSent = await SentAsync(files, cleanedHeaderless);
+        Assert.IsFalse(Encoding.Latin1.GetString(headerlessSent).Contains("+30.9010+075.8573", StringComparison.Ordinal));
+
+        byte[] bdavM2ts = new byte[576];
+        bdavM2ts[4] = 0x47;
+        bdavM2ts[196] = 0x47;
+        bdavM2ts[388] = 0x47;
+        Picked refusedM2ts = await files.AddAsync(Write("00001", bdavM2ts), Rule(accept: null), 0, CancellationToken.None);
+        Assert.IsNull(refusedM2ts.File);
+        StringAssert.Contains(refusedM2ts.Refusal, "MPEG");
     }
 
     [TestMethod]
@@ -591,5 +610,35 @@ public sealed class PickedFilesTests
         byte[] placeholderMoov = MakeMoov(0);
         uint sampleStart = (uint)(ftyp.Length + placeholderMoov.Length + 8);
         return [.. ftyp, .. MakeMoov(sampleStart), .. Box("mdat", samples)];
+    }
+
+    private static byte[] HeaderlessQuickTimeWithPlace(byte[] samples)
+    {
+        static byte[] Box(string kind, params byte[][] parts)
+        {
+            int total = 8 + parts.Sum(p => p.Length);
+            byte[] bytes = new byte[total];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(0, 4), (uint)total);
+            Encoding.Latin1.GetBytes(kind).CopyTo(bytes.AsSpan(4, 4));
+            int at = 8;
+            foreach (byte[] part in parts)
+            {
+                part.CopyTo(bytes.AsSpan(at));
+                at += part.Length;
+            }
+
+            return bytes;
+        }
+
+        byte[] mdat = Box("mdat", samples);
+        byte[] xyz = Box("\u00A9xyz", [0, 18, 0x15, 0xC7], "+30.9010+075.8573/"u8.ToArray());
+        byte[] stco = Box("stco", [0, 0, 0, 0, 0, 0, 0, 1], [0, 0, 0, 8]);
+        byte[] stsd = Box("stsd", [0, 0, 0, 0, 0, 0, 0, 1], Box("avc1", new byte[8]));
+        byte[] stbl = Box("stbl", stsd, stco);
+        byte[] minf = Box("minf", Box("vmhd", new byte[12]), stbl);
+        byte[] mdia = Box("mdia", Box("mdhd", new byte[24]), Box("hdlr", new byte[8], "vide"u8.ToArray(), new byte[12]), minf);
+        byte[] trak = Box("trak", Box("tkhd", new byte[84]), mdia);
+        byte[] moov = Box("moov", Box("mvhd", new byte[100]), trak, Box("udta", xyz));
+        return [.. mdat, .. moov];
     }
 }
