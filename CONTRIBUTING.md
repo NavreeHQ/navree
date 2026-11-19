@@ -49,6 +49,9 @@ packages, the docs and the example apps:
 - `packages/js/`: the front-end npm packages (`@navree/client`,
   `@navree/bff`, `@navree/next`, `@navree/nuxt`, `@navree/theme`), a pnpm
   workspace, with `deepmerge`, a private helper they share.
+- `plugins/`: example plugins that are not published: `geo` (a map component),
+  `notices` (a notice board that uses every extension point), `dakiya` (a mail
+  transport), `godam` (a storage driver).
 - `apps/`: apps that are not published.
   - `board-demo`, `store-demo` and `inbox-demo`: example apps on Navree UI.
     A board of 20,000 cards that move by mouse, touch or keys; a store's
@@ -582,6 +585,7 @@ You do not need this section to contribute. It says how a release happens.
 | `docs/` | The documentation (MDX), and `docs/ui-data/`, which `apps/ui-docs` writes |
 | `skills/` | The agent skills, one `SKILL.md` per directory |
 | `packages/js` | The front-end npm packages: `@navree/client`, `@navree/bff`, `@navree/next`, `@navree/nuxt`, `@navree/theme` |
+| `plugins/*` | Example plugins on the facade, copyable into an app |
 | `apps/*-demo`, `apps/ui-*` | Example apps on Navree UI, the docs data writer and the pages the browser tests drive |
 | `apps/system-app` | The system app: a Navree application wiring every package and tool, with domain models and seeders, for the system tests |
 | `e2e/` | The system tests: the compose stack (`docker/`), the system app's Dockerfile, k6 load profiles and scenarios (`load/`), HTTP check rows (`checks/`), browser screenshots (`browser/`), the browser tests (`ui/`) and `run.sh` |

@@ -592,6 +592,12 @@ const HIERARCHY: &[Rule] = &[
     rule("ui-table-proof", 9, &["navree"]),
     // The worked example of a plugin's own UI components (plugins/geo): one crate on the facade.
     rule("navree-plugin-geo", 9, &["navree"]),
+    // A worked example of a plugin (plugins/notices): one crate on the facade.
+    rule("navree-plugin-notices", 9, &["navree"]),
+    // A worked example of a plugin (plugins/dakiya): one crate on the facade.
+    rule("navree-plugin-dakiya", 9, &["navree"]),
+    // A worked example of a plugin (plugins/godam): one crate on the facade.
+    rule("navree-plugin-godam", 9, &["navree"]),
     // The example apps on the `navree` facade: a store's operations, a support inbox
     // and a product team's board.
     rule("store-demo", 9, &["navree"]),
@@ -1539,4 +1545,191 @@ fn the_kernels_framework_crates_are_the_workspaces_library_names() {
         listed,
         libraries.iter().map(String::as_str).collect::<Vec<_>>()
     );
+}
+
+#[test]
+fn proof_plugin_manifests_inherit_nothing_from_the_workspace_and_name_the_workspaces_versions() {
+    fn uses_workspace_inheritance(value: &toml::Value) -> bool {
+        match value {
+            toml::Value::Table(tbl) => {
+                tbl.get("workspace").and_then(toml::Value::as_bool) == Some(true)
+                    || tbl.values().any(uses_workspace_inheritance)
+            }
+            toml::Value::Array(arr) => arr.iter().any(uses_workspace_inheritance),
+            _ => false,
+        }
+    }
+
+    fn dep_req(val: &toml::Value) -> (Option<&str>, bool) {
+        match val {
+            toml::Value::String(ver) => (Some(ver.as_str()), true),
+            toml::Value::Table(tbl) => {
+                let ver = tbl.get("version").and_then(toml::Value::as_str);
+                let default_features = tbl
+                    .get("default-features")
+                    .and_then(toml::Value::as_bool)
+                    .unwrap_or(true);
+                (ver, default_features)
+            }
+            _ => (None, true),
+        }
+    }
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root_text =
+        std::fs::read_to_string(root.join("Cargo.toml")).expect("root Cargo.toml is readable");
+    let root_toml: toml::Table = root_text.parse().expect("root Cargo.toml parses");
+    let ws_pkg = root_toml["workspace"]["package"]
+        .as_table()
+        .expect("[workspace.package] table");
+    let ws_deps = root_toml["workspace"]["dependencies"]
+        .as_table()
+        .expect("[workspace.dependencies] table");
+
+    let mut dirs = vec!["plugins/notices", "plugins/dakiya", "plugins/godam"];
+    let geo_path = root.join("plugins/geo/Cargo.toml");
+    if let Ok(geo_text) = std::fs::read_to_string(&geo_path) {
+        let geo_toml: toml::Value = geo_text.parse().expect("plugins/geo/Cargo.toml parses");
+        if !uses_workspace_inheritance(&geo_toml) {
+            dirs.push("plugins/geo");
+        }
+    }
+
+    for rel in dirs {
+        let manifest_path = root.join(rel).join("Cargo.toml");
+        let manifest_text = std::fs::read_to_string(&manifest_path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", manifest_path.display()));
+        let manifest: toml::Value = manifest_text
+            .parse()
+            .unwrap_or_else(|e| panic!("cannot parse {}: {e}", manifest_path.display()));
+
+        assert!(
+            !uses_workspace_inheritance(&manifest),
+            "{rel}/Cargo.toml must inherit nothing from the workspace (`workspace = true`)"
+        );
+
+        let pkg = manifest
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .unwrap_or_else(|| panic!("{rel}/Cargo.toml lacks [package]"));
+        assert_eq!(
+            pkg.get("publish").and_then(toml::Value::as_bool),
+            Some(false),
+            "{rel}/Cargo.toml must set `publish = false`"
+        );
+        for key in ["edition", "rust-version", "license"] {
+            assert_eq!(
+                pkg.get(key).and_then(toml::Value::as_str),
+                ws_pkg.get(key).and_then(toml::Value::as_str),
+                "{rel}/Cargo.toml [package] `{key}` must equal root [workspace.package]"
+            );
+        }
+
+        let rust_lints = manifest
+            .get("lints")
+            .and_then(|l| l.get("rust"))
+            .and_then(toml::Value::as_table)
+            .unwrap_or_else(|| panic!("{rel}/Cargo.toml lacks [lints.rust]"));
+        assert_eq!(
+            rust_lints.get("unsafe_code").and_then(toml::Value::as_str),
+            Some("forbid"),
+            "{rel}/Cargo.toml must forbid unsafe_code"
+        );
+        assert_eq!(
+            rust_lints.get("missing_docs").and_then(toml::Value::as_str),
+            Some("warn"),
+            "{rel}/Cargo.toml must warn on missing_docs"
+        );
+
+        let normal_deps = manifest
+            .get("dependencies")
+            .and_then(toml::Value::as_table)
+            .unwrap_or_else(|| panic!("{rel}/Cargo.toml lacks [dependencies]"));
+        assert!(
+            normal_deps.contains_key("navree"),
+            "{rel}/Cargo.toml [dependencies] must depend on `navree`"
+        );
+
+        for (section, is_dev) in [
+            ("dependencies", false),
+            ("dev-dependencies", true),
+            ("build-dependencies", false),
+        ] {
+            let Some(deps) = manifest.get(section).and_then(toml::Value::as_table) else {
+                continue;
+            };
+            for (dep_key, dep_val) in deps {
+                let pkg_name = dep_val
+                    .as_table()
+                    .and_then(|t| t.get("package"))
+                    .and_then(toml::Value::as_str)
+                    .unwrap_or(dep_key.as_str());
+
+                if pkg_name == "navree" {
+                    let tbl = dep_val.as_table().unwrap_or_else(|| {
+                        panic!("{rel} [{section}]: `navree` must be a table with `path`")
+                    });
+                    assert_eq!(
+                        tbl.get("path").and_then(toml::Value::as_str),
+                        Some("../../crates/navree"),
+                        "{rel} [{section}]: `navree` must point at `../../crates/navree`"
+                    );
+                    assert!(
+                        !tbl.contains_key("version"),
+                        "{rel} [{section}]: `navree` must be a `path` only"
+                    );
+                    continue;
+                }
+
+                let is_workspace_crate = pkg_name.starts_with("navree-")
+                    || ws_deps
+                        .get(pkg_name)
+                        .and_then(toml::Value::as_table)
+                        .is_some_and(|t| t.contains_key("path"));
+
+                if is_workspace_crate {
+                    assert!(
+                        is_dev,
+                        "{rel} [{section}]: `{pkg_name}` is a lower workspace crate and may appear only in [dev-dependencies]"
+                    );
+                    let tbl = dep_val.as_table().unwrap_or_else(|| {
+                        panic!("{rel} [{section}]: `{pkg_name}` must be a table with `path`")
+                    });
+                    let expected_path = format!("../../crates/{pkg_name}");
+                    assert_eq!(
+                        tbl.get("path").and_then(toml::Value::as_str),
+                        Some(expected_path.as_str()),
+                        "{rel} [{section}]: `{pkg_name}` must point at `{expected_path}`"
+                    );
+                    assert!(
+                        !tbl.contains_key("version"),
+                        "{rel} [{section}]: `{pkg_name}` must be a `path` only"
+                    );
+                    continue;
+                }
+
+                let ws_entry = ws_deps.get(pkg_name).unwrap_or_else(|| {
+                    panic!(
+                        "{rel} [{section}]: external dependency `{pkg_name}` is not in root [workspace.dependencies]"
+                    )
+                });
+                if let Some(tbl) = dep_val.as_table() {
+                    assert!(
+                        !tbl.contains_key("path") && !tbl.contains_key("git"),
+                        "{rel} [{section}]: external dependency `{pkg_name}` must specify a version requirement"
+                    );
+                }
+                let (got_ver, got_df) = dep_req(dep_val);
+                let (want_ver, want_df) = dep_req(ws_entry);
+                assert!(
+                    got_ver.is_some() && got_ver == want_ver,
+                    "{rel} [{section}]: `{pkg_name}` version {got_ver:?} does not match workspace {want_ver:?}"
+                );
+                assert_eq!(
+                    got_df, want_df,
+                    "{rel} [{section}]: `{pkg_name}` default-features ({got_df}) does not match workspace ({want_df})"
+                );
+            }
+        }
+    }
 }

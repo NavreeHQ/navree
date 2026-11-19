@@ -108,9 +108,9 @@ env:
     navree-access navree-ai navree-audit navree-auth navree-billing
     navree-directory navree-domains navree-flags navree-fleet navree-helm
     navree-i18n navree-integrations navree-lighthouse navree-logbook
-    navree-media navree-notify navree-oauth navree-queue navree-search
-    navree-settings navree-sheets navree-social navree-sso navree-webhooks
-    navree-workflows navree-workspace
+    navree-media navree-notify navree-oauth navree-plugin-notices navree-queue
+    navree-search navree-settings navree-sheets navree-social navree-sso
+    navree-webhooks navree-workflows navree-workspace
   # The crates with code or tests that only exist when a feature is off.
   FEATURE_OFF_CRATES: >-
     navree-documents navree-helm navree-logbook navree-media navree-micro
