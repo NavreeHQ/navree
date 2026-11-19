@@ -1,0 +1,96 @@
+---
+title: "Releasing a plugin"
+description: "Name a community plugin crate, include the crates.io keywords and non-official notice that every community plugin carries, and manage semantic versions across Navree 1.x."
+---
+
+A Navree plugin is a standard Rust library crate published to [crates.io](https://crates.io) (or kept in a Git repository or workspace folder). Following the naming, metadata and versioning conventions that `navree make:plugin` writes ensures `navree plugin:add` installs the crate cleanly and keeps official framework packages distinct from community plugins.
+
+## Naming
+
+Name a community plugin crate `navree-plugin-<name>`, using lower-case ASCII words separated by `-`. `navree::plugin_info!()` strips the leading `navree-plugin-` prefix and turns `-` into `_` to form the default namespace:
+
+| Package name | Library target | Default namespace |
+|---|---|---|
+| `navree-plugin-notices` | `navree_plugin_notices` | `notices` |
+| `navree-plugin-dakiya` | `navree_plugin_dakiya` | `dakiya` |
+| `navree-plugin-godam` | `navree_plugin_godam` | `godam` |
+| `navree-plugin-notice-board` | `navree_plugin_notice_board` | `notice_board` |
+
+A crate published under an organization prefix of your own, such as `khata-ledger`, works the same way (its default namespace is `khata_ledger`, or whatever you pass to `plugin_info!(namespace = "..")`). Never name a community crate `navree-<name>` without `plugin-`, and never override `[lib] name` to start with `navree_` when the package name does not match: `navree-<name>` belongs to the framework's own packages, and `navree check` and `navree plugin:list` warn whenever a dependency's library name impersonates a framework crate.
+
+The framework also reserves its own configuration and permission prefixes (`app`, `auth`, `billing`, `cache`, `flags`, `helm`, `http`, `mail`, `mongo`, `queue`, `social`, `storage`, `ui`, `views`, Windows device words and the rest). `navree make:plugin`, `navree plugin:add` and the kernel's boot checks all reject a community plugin that claims a reserved namespace.
+
+End `package.description` in `Cargo.toml` with `Not an official Navree package.`:
+
+```toml title="Cargo.toml"
+# plugins/notices/Cargo.toml
+[package]
+name = "navree-plugin-notices"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+description = "A notice board for a housing society or office. Not an official Navree package."
+license = "MIT OR Apache-2.0"
+keywords = ["navree-plugin", "navree"]
+readme = "README.md"
+```
+
+The repository's own example crates set `publish = false` so they are never uploaded from the workspace. Remove `publish = false` and set `repository` (plus `homepage` and `documentation` if you host them) before running `cargo publish`.
+
+## The navree-plugin keyword
+
+Include both `"navree-plugin"` and `"navree"` in `package.keywords`:
+
+```toml title="Cargo.toml"
+keywords = ["navree-plugin", "navree"]
+```
+
+crates.io accepts up to five keywords per crate, leaving three slots for domain terms such as `"mail"`, `"storage"` or `"payments"`. Keeping `"navree-plugin"` on every community plugin lets people browse all community plugins on crates.io in one search.
+
+## The line every community plugin carries
+
+Every community plugin carries this exact sentence near the top of its `README.md`, matching the `Not an official Navree package.` ending of `package.description`:
+
+```markdown title="README.md"
+It is not an official Navree package.
+```
+
+`navree make:plugin` writes both lines automatically, and `navree plugin:add` prints the same reminder when an app installs a community crate (`It is not an official Navree package: read its code before you deploy it.`). Because crates.io renders `README.md` on the package's landing page and `package.description` in search results, anyone evaluating the crate sees right away that it is maintained independently of the Navree team.
+
+If your plugin includes [Navree UI components](/docs/plugins/ui-components/) that ask for external hosts in `[package.metadata.navree.plugin.policy]`, list each origin and why the component contacts it in `README.md` as well so app owners know what uncommenting `config/ui.policy.toml` permits.
+
+## Versions
+
+Version your plugin with Semantic Versioning (`0.1.0` while iterating, `1.0.0` once stable), and depend on `navree` with a caret version requirement and `default-features = false`, listing only the features your code uses:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1.4", default-features = false, features = ["http-client", "mail"] }
+```
+
+A requirement such as `navree = "1.4"` (or `"1.3"` if your crate uses only APIs introduced in 1.3) accepts every later `1.x` release of Navree, so apps can upgrade Navree minor and patch releases without waiting for a new release of your plugin.
+
+Keep `[package.metadata.navree.plugin]` in step with `[dependencies].navree`:
+
+- **Adding an entry to `features`** in `[package.metadata.navree.plugin]` causes `navree plugin:add` to turn that feature on in the installing app's `Cargo.toml`, changing what the app compiles and links. Treat adding a feature to the manifest as at least a **minor** version bump (`0.1.0` to `0.2.0`, or `1.1.0` to `1.2.0`), never a patch.
+- **Renaming the namespace, a configuration section, a permission, a route or a migration** breaks existing apps' configuration files, role grants or database tables, so ship those changes only in a **major** version bump with upgrade notes.
+
+Downstream apps install the latest compatible release by default or pin a version range with `--version`:
+
+```sh
+navree plugin:add navree-plugin-dakiya
+navree plugin:add navree-plugin-dakiya --version "^0.2"
+```
+
+<LinkCards>
+  <LinkCard href="/docs/plugins/installing/" title="Installing, listing and removing">
+    How navree plugin:add reads the manifest, wires the module and records grants and env keys.
+  </LinkCard>
+  <LinkCard href="/docs/plugins/writing/" title="Writing a plugin">
+    The full `[package.metadata.navree.plugin]` table and every extension point.
+  </LinkCard>
+  <LinkCard href="/docs/plugins/testing/" title="Testing a plugin">
+    Booting in TestApp, testing custom drivers and testing plugin:publish.
+  </LinkCard>
+</LinkCards>

@@ -1,0 +1,321 @@
+---
+title: "Testing a plugin"
+description: "Boot a plugin in TestApp, verify a custom driver through the framework's public service types, and test published templates, translations and settings in a temporary directory."
+---
+
+Every plugin scaffolded with `navree make:plugin` starts with an integration test in `tests/boots.rs` and `[dev-dependencies]` turning on `testing` and `sqlite` on `navree`. Because a plugin is a set of [modules](/docs/architecture/modules/), you test it the same way you test an application: validate its module graph with `plugin_report()`, boot it in `TestApp` beside the framework modules it uses, exercise its routes or drivers through the public facade, and publish its files into a temporary directory.
+
+## Booting it in TestApp
+
+`Navree::app().module(..).plugin_report()` validates the module graph and plugin rules without starting a runtime or opening a database. `TestApp::builder()` goes the rest of the way: `.temp_database()` creates an isolated SQLite database and runs every registered migration on boot, `.config(key, value)` sets configuration keys in memory, and `app.ctx().plugins()` returns the live `PluginsReport`:
+
+```rust title="tests/boots.rs"
+// plugins/notices/tests/boots.rs
+#[tokio::test]
+async fn the_plugin_boots_and_is_listed() {
+    let standalone = Navree::app()
+        .module(NoticesModule::from_config())
+        .plugin_report()
+        .expect("valid plugin graph");
+    assert_eq!(standalone.plugins.len(), 1);
+    assert_eq!(standalone.plugins[0].info.name, "navree-plugin-notices");
+    assert_eq!(standalone.plugins[0].info.namespace, "notices");
+    assert_eq!(standalone.plugins[0].info.title, Some("Notice board"));
+
+    let app = TestApp::builder()
+        .temp_database()
+        .module(DatabaseModule::from_config())
+        .module(OrmModule)
+        .module(ViewModule::from_config())
+        .module(UiModule)
+        .module(AccessModule::for_root(AccessOptions::default()))
+        .module(NoticesModule::from_config())
+        .build()
+        .await;
+    let report = app.ctx().plugins();
+    let plugin = report
+        .plugins
+        .iter()
+        .find(|plugin| plugin.info.name == "navree-plugin-notices")
+        .expect("navree-plugin-notices is listed in plugins");
+    assert_eq!(plugin.info.namespace, "notices");
+    assert_eq!(plugin.info.title, Some("Notice board"));
+    app.shutdown().await.expect("clean shutdown");
+}
+```
+
+Once the app is running, call routes as specific users with `app.acting_as(principal(user_id))` (`navree::testing::principal`). Remember that describing a permission with `m.permissions(..)` grants it to nobody except a workspace `owner` and the super-admin role: test both that an ungranted `member` receives `403`, and that setting `.config("workspace.roles.member.permissions", json!(["notices.read"]))` lets Meera Sharma open `/notices`.
+
+Also boot the plugin once under a `tracing` subscriber capturing `WARN` and `ERROR` events to verify that none of its configuration sections, routes or static assets logs a startup warning (see `plugins/notices/tests/boots.rs` in the repository).
+
+## Testing a driver
+
+A plugin that registers a driver (`m.disk_driver`, `m.mail_transport`, `m.cache_store` and the other kinds on the [drivers](/docs/plugins/drivers/) page) is tested through the public service type that sits in front of the driver (`Disk`, `Mailer`, `Cache`), never by calling the trait methods in isolation alone. Booting the framework module proves that the driver name is accepted, the settings table deserializes cleanly, and the service layer maps the driver's return values and errors as documented.
+
+Each driver trait documents the exact invariants its methods must uphold (`DiskDriver`, `MailTransport`, `CacheBackend` and the rest). Navree's internal repository conformance suite is not part of the public API; instead, write an integration test that selects your driver in `TestApp` and exercises the public operations and edge cases.
+
+For a storage driver, a memory-backed `DiskDriver` registered under `"sanduk"` and six calls through `Disk` (`put`, `get`, `exists`, `size`, `list`, `delete`, followed by `get` of a missing path) verify the core round-trip:
+
+```rust title="tests/disk_driver.rs"
+use std::collections::BTreeMap;
+use std::ops::Range;
+use std::sync::{Arc, Mutex};
+
+use chrono::{DateTime, Utc};
+use navree::http::body::Bytes;
+use navree::kernel::BoxFuture;
+use navree::plugin::prelude::*;
+use navree::prelude::*;
+use navree::storage::{
+    Disk, DiskDriver, DiskDriverError, DiskUpload, FileMeta, OpenedFile, StorageError,
+    StorageModule,
+};
+use navree::testing::TestApp;
+
+type Files = Arc<Mutex<BTreeMap<String, (Bytes, DateTime<Utc>)>>>;
+
+#[derive(Clone, Default)]
+struct Sanduk {
+    files: Files,
+}
+
+impl Sanduk {
+    fn file(&self, path: &str) -> Result<(Bytes, DateTime<Utc>), DiskDriverError> {
+        let files = self.files.lock().unwrap();
+        files.get(path).cloned().ok_or(DiskDriverError::NotFound)
+    }
+}
+
+impl DiskDriver for Sanduk {
+    fn describe(&self) -> String {
+        "sanduk disk in memory".to_owned()
+    }
+
+    fn put<'a>(
+        &'a self,
+        path: &'a str,
+        contents: Bytes,
+    ) -> BoxFuture<'a, Result<(), DiskDriverError>> {
+        self.files
+            .lock()
+            .unwrap()
+            .insert(path.to_owned(), (contents, Utc::now()));
+        Box::pin(async { Ok(()) })
+    }
+
+    fn begin_upload<'a>(
+        &'a self,
+        path: &'a str,
+    ) -> BoxFuture<'a, Result<Box<dyn DiskUpload>, DiskDriverError>> {
+        let upload = SandukUpload {
+            files: self.files.clone(),
+            path: path.to_owned(),
+            buffer: Vec::new(),
+        };
+        Box::pin(async move { Ok(Box::new(upload) as Box<dyn DiskUpload>) })
+    }
+
+    fn read<'a>(
+        &'a self,
+        path: &'a str,
+        range: Option<Range<u64>>,
+    ) -> BoxFuture<'a, Result<Bytes, DiskDriverError>> {
+        let read = self.file(path).map(|(contents, _)| match range {
+            Some(range) => {
+                let end = usize::try_from(range.end)
+                    .map_or(contents.len(), |end| end.min(contents.len()));
+                let start = usize::try_from(range.start).map_or(end, |start| start.min(end));
+                contents.slice(start..end)
+            }
+            None => contents,
+        });
+        Box::pin(async move { read })
+    }
+
+    fn open<'a>(&'a self, path: &'a str) -> BoxFuture<'a, Result<OpenedFile, DiskDriverError>> {
+        let opened = self.file(path).map(|(contents, _)| {
+            let size = contents.len() as u64;
+            OpenedFile::new(size, Box::pin(tokio_stream::once(Ok(contents))))
+        });
+        Box::pin(async move { opened })
+    }
+
+    fn head<'a>(&'a self, path: &'a str) -> BoxFuture<'a, Result<FileMeta, DiskDriverError>> {
+        let meta = self.file(path).map(|(contents, last_modified)| FileMeta {
+            path: path.to_owned(),
+            size: contents.len() as u64,
+            last_modified,
+        });
+        Box::pin(async move { meta })
+    }
+
+    fn delete<'a>(&'a self, path: &'a str) -> BoxFuture<'a, Result<(), DiskDriverError>> {
+        let removed = self.files.lock().unwrap().remove(path);
+        Box::pin(async move { removed.map(drop).ok_or(DiskDriverError::NotFound) })
+    }
+
+    fn list<'a>(
+        &'a self,
+        prefix: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<FileMeta>, DiskDriverError>> {
+        let folder = format!("{prefix}/");
+        let files: Vec<FileMeta> = self
+            .files
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(path, _)| prefix.is_empty() || path.starts_with(&folder))
+            .map(|(path, (contents, last_modified))| FileMeta {
+                path: path.clone(),
+                size: contents.len() as u64,
+                last_modified: *last_modified,
+            })
+            .collect();
+        Box::pin(async move { Ok(files) })
+    }
+}
+
+struct SandukUpload {
+    files: Files,
+    path: String,
+    buffer: Vec<u8>,
+}
+
+impl DiskUpload for SandukUpload {
+    fn write<'a>(&'a mut self, chunk: Bytes) -> BoxFuture<'a, Result<(), DiskDriverError>> {
+        self.buffer.extend_from_slice(&chunk);
+        Box::pin(async { Ok(()) })
+    }
+
+    fn finish(self: Box<Self>) -> BoxFuture<'static, Result<(), DiskDriverError>> {
+        let SandukUpload {
+            files,
+            path,
+            buffer,
+        } = *self;
+        files
+            .lock()
+            .unwrap()
+            .insert(path, (Bytes::from(buffer), Utc::now()));
+        Box::pin(async { Ok(()) })
+    }
+
+    fn abort(self: Box<Self>) -> BoxFuture<'static, Result<(), DiskDriverError>> {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+pub struct SandukModule;
+
+impl Module for SandukModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(navree::plugin_info!(namespace = "sanduk", title = "Sanduk storage"))
+            .disk_driver("sanduk", |_| async { Ok(Sanduk::default()) });
+    }
+}
+
+#[tokio::test]
+async fn the_driver_serves_the_six_disk_calls() {
+    let app = TestApp::builder()
+        .config("storage.default", "invoices")
+        .config("storage.disks.invoices.driver", "sanduk")
+        .module(StorageModule::from_config())
+        .module(SandukModule)
+        .build()
+        .await;
+
+    let disk = app.get::<Disk>().await;
+    disk.put("hello.txt", "hello").await.unwrap();
+    assert_eq!(disk.get("hello.txt").await.unwrap(), "hello");
+    assert!(disk.exists("hello.txt").await.unwrap());
+    assert_eq!(disk.size("hello.txt").await.unwrap(), 5);
+    assert_eq!(disk.list("").await.unwrap(), ["hello.txt"]);
+
+    disk.delete("hello.txt").await.unwrap();
+    assert!(!disk.exists("hello.txt").await.unwrap());
+    assert!(matches!(
+        disk.get("hello.txt").await,
+        Err(StorageError::NotFound { .. })
+    ));
+
+    app.shutdown().await.unwrap();
+}
+```
+
+Add targeted assertions for the trait's boundary rules too: for `DiskDriver`, check that `read` cuts a range at the end of the file and returns empty bytes when the range starts past the end, that `list("docs")` includes `"docs/a.txt"` without matching `"docs2/b.txt"`, and that a failed `put_stream` aborts the upload and leaves no partial file (`plugins/godam/tests/contract.rs`). For drivers that hold credentials, verify with `HttpClient::fake()` and a `tracing` subscriber that neither a failed HTTP response echoing the key, nor an invalid setting value, nor `Debug` formatting ever prints the secret (`plugins/dakiya/tests/secrets.rs`).
+
+## Testing what it publishes
+
+`plugin:publish` writes into the current working directory (`resources/views/<namespace>/`, `locales/<locale>/<namespace>/`, `resources/<namespace>/` and `config/<section>.toml`). Because Rust's test harness runs tests on multiple threads that share the process working directory, invoke `run_with_args` in a child process rooted at a `tempfile::TempDir` (or serialize working-directory changes behind a mutex):
+
+```rust title="tests/resources.rs"
+use std::fs;
+use std::path::Path;
+use std::process::Command;
+
+use navree::prelude::*;
+use navree_plugin_notices::NoticesModule;
+
+const CHILD_ENV: &str = "NOTICES_PUBLISH_TEST_ARGS";
+
+fn run_in(dir: &Path, args: &[&str]) -> String {
+    let encoded = serde_json::to_string(&args).expect("encode args");
+    let output = Command::new(std::env::current_exe().expect("test binary"))
+        .arg("--exact")
+        .arg("published_views_are_written_once_and_kept_on_rerun")
+        .arg("--nocapture")
+        .current_dir(dir)
+        .env(CHILD_ENV, encoded)
+        .output()
+        .expect("spawn child process");
+    assert!(output.status.success());
+    String::from_utf8(output.stdout).expect("utf-8 stdout")
+}
+
+#[tokio::test]
+async fn published_views_are_written_once_and_kept_on_rerun() {
+    if let Ok(encoded) = std::env::var(CHILD_ENV) {
+        let args: Vec<String> = serde_json::from_str(&encoded).unwrap();
+        Navree::app()
+            .module(ConfigModule::for_root(ConfigSources::new()))
+            .module(NoticesModule::from_config())
+            .run_with_args(args)
+            .await
+            .unwrap();
+        return;
+    }
+
+    let temp = tempfile::tempdir().unwrap();
+    fs::write(
+        temp.path().join("Cargo.toml"),
+        "[package]\nname = \"ludhiana-society\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+
+    run_in(temp.path(), &["plugin:publish", "notices", "--tag", "views"]);
+    let list_html = temp.path().join("resources/views/notices/list.html");
+    assert!(list_html.is_file());
+
+    fs::write(&list_html, "<section><h2>Model Town Society</h2></section>\n").unwrap();
+    let second = run_in(temp.path(), &["plugin:publish", "notices", "--tag", "views"]);
+    assert!(second.contains("exists, kept"));
+    assert_eq!(
+        fs::read_to_string(&list_html).unwrap(),
+        "<section><h2>Model Town Society</h2></section>\n"
+    );
+}
+```
+
+Checking two consecutive runs — writing the files on the first run, editing one in place, and confirming the second run keeps the edited copy unless `--force` is passed — proves both that your embedded paths are valid and that app customizations survive upgrades.
+
+<LinkCards>
+  <LinkCard href="/docs/plugins/releasing/" title="Releasing a plugin">
+    Package naming, keywords, README notice and semantic versioning for crates.io.
+  </LinkCard>
+  <LinkCard href="/docs/plugins/drivers/" title="Drivers">
+    Registering and testing cache, queue, session, mail, storage and other drivers.
+  </LinkCard>
+  <LinkCard href="/docs/plugins/resources/" title="Templates, translations and files">
+    How embedded files are published and which copy wins at boot.
+  </LinkCard>
+</LinkCards>
