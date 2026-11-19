@@ -436,7 +436,11 @@ use navree::testing::TestApp;
 async fn plugin_and_disk_recipe_compile() {
     let app = TestApp::builder()
         .temp_database()
+        .config("storage.disks.invoices.driver", "memory")
         .module(DatabaseModule::from_config())
+        .module(navree::orm::OrmModule)
+        .module(navree::view::ViewModule::from_config())
+        .module(navree::ui::UiModule)
         .module(AccessModule::for_root(AccessOptions::default()))
         .module(StorageModule::from_config())
         .module(NoticesModule::from_config())

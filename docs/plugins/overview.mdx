@@ -272,7 +272,7 @@ The boot checks what every plugin registers, and stops with a message when a che
 
 The rules below hold for a plugin that is not one of the framework's own packages. A plugin of your own is not one of them. The boot decides by itself which plugins are the framework's own: there is no setting for it, and `plugins --json` shows the answer as `first_party`.
 
-A rule holds for every module that acts for the plugin: a module that names it, a module of its crate that does not, and a generic module that only the plugin's modules import. `plugins` lists them under the plugin. See [which modules act for a plugin](/docs/security/authorization/#which-modules-act-for-a-plugin).
+A rule holds for every module that acts for the plugin: a module that names it, a module of its crate that does not, a generic module that only the plugin's modules import, and a non-generic module of another non-framework crate that names no plugin and that only community plugins' modules import. `plugins` lists them under the plugin. See [which modules act for a plugin](/docs/security/authorization/#which-modules-act-for-a-plugin).
 
 ### The plugin itself
 
@@ -289,7 +289,7 @@ A plugin whose package is `navree-plugin-mail` gets the namespace `mail`, which 
 plugin `navree-plugin-mail` uses the namespace `mail`, which the framework keeps for itself; remove the plugin or update it to a version that uses another namespace
 ```
 
-The kernel makes these checks from the module graph, so `check` and `plugins` report them without starting the app. It makes four of the checks below the same way: a configured module, a provider that stands for the whole app, a hook on a model and a command's name. The other checks run as the app boots, each in the module it belongs to. Without `AccessModule`, for one, nothing checks the permissions and subjects that modules describe.
+The kernel makes these checks from the module graph, so `check` and `plugins` report them without starting the app. It makes five of the checks below the same way: a configured module, a provider that stands for the whole app, a provider that another module also registers, a hook on a model and a command's name. The other checks run as the app boots, each in the module it belongs to. Without `AccessModule`, for one, nothing checks the permissions and subjects that modules describe.
 
 ### What stays inside the namespace
 
@@ -342,7 +342,8 @@ impl Module for AppModule {
 | Scope a model of another crate to workspaces (`m.workspace_scoped`) | [Data isolation](/docs/workspaces/isolation/#records-checked-by-route) |
 | Register a global scope, an observer or a listener on a model of another crate | [Global scopes](/docs/orm/scopes-and-soft-deletes/#global-scopes), [observers](/docs/orm/events-and-observers/#observers) |
 | Replace a template or a document file of the app or of the framework | [Where templates live](/docs/digging-deeper/views/#where-templates-live), [documents](/docs/packages/documents/#templates-in-modules) |
-| Register a command named `check`, `help`, `list`, `introspect`, `plugins`, `plugin:publish`, `--help` or `-h` | [The built-in commands](/docs/digging-deeper/cli/#the-built-in-commands) |
+| Export a non-multi provider that another module also registers (or whose outer type belongs to a framework crate) | [Modules](/docs/architecture/modules/) |
+| Register a command with the name of any built-in or framework module command (`check`, `help`, `list`, `introspect`, `plugins`, `plugin:publish`, `--help`, `-h`, `migrate`, `serve`, `routes`, `config:publish` and the rest) | [The built-in commands](/docs/digging-deeper/cli/#the-built-in-commands) |
 
 A plugin still serves its own routes and mounts, with layers of their own, maps the error types of its own crate, registers scopes and hooks on its own models, registers a backplane as a driver with `m.backplane`, and registers a sign-in policy, which can only refuse a sign-in.
 
@@ -353,7 +354,7 @@ A name that two modules use is a warning between two modules of your app: an emb
 The names under a plugin's namespace are the plugin's, so the rule runs the other way too. Beside a plugin whose namespace is `chat`, the boot stops when a module of your app:
 
 - describes a permission under `chat` (`chat.export`);
-- has a route, or another handler (a mount, a message handler, a gRPC method, an MCP tool, resource or prompt, a GraphQL field), that requires a permission under `chat` that the plugin does not describe, or checks a subject under `chat` that is not registered as the plugin's;
+- has a route, another handler (a mount, a message handler, a gRPC method, an MCP tool, resource or prompt, a GraphQL field), or an item carrying a permission or subject as a value (a sidebar link, a Helm link or card, an agent tool, a settings group, a sheet import or export) that requires a permission under `chat` that the plugin does not describe, or checks a subject under `chat` that is not registered as the plugin's;
 - registers a subject whose permission prefix starts with the word `chat`, or a subject of another crate named under `chat`;
 - authorizes a realtime channel whose first segment is `chat` (`chat.support`);
 - contributes a UI extension under `chat`.
@@ -366,16 +367,16 @@ Your app still decides what happens under a plugin's namespace in these ways:
 - a message of your own with a plugin's id wins over the plugin's;
 - your configuration sets the plugin's sections, and allows the sources its pages ask for;
 - your abilities function runs after a plugin's policies, so a `cannot` there overrides them;
-- a route or another handler of yours may require a permission the plugin describes, and check a subject registered as the plugin's: you use the plugin's own name on purpose, and you grant it to your roles;
+- a route, another handler or a gated link, tool, settings group or sheet of yours may require a permission the plugin describes, and check a subject registered as the plugin's: you use the plugin's own name on purpose, and you grant it to your roles;
 - a handler of yours may check a plugin's permission in code, with `permitted`.
 
 ## What a plugin cannot do
 
-A plugin is code you compile into your app, so it is not a sandbox. But the framework's registration APIs give a plugin that is not one of Navree's own packages no way to change who may do what without a line in your app. A module of such a plugin, or a module that acts for it (a module of its crate, or a generic module that no module of your app imports), stops the boot when it registers a policy with rules beyond the plugin's own subjects or on `all`; registers a subject named outside the plugin's namespace; configures a module of another crate; provides a permission check, the route authorizer, the authenticator, a sign-in strategy, the workspace gate, the options of access, workspaces, authentication or the admin panel, or your app's shell; adds a layer that runs on every request; decides who works as staff in the admin panel; authorizes a realtime channel outside its namespace; scopes a subject that is not its own to workspaces; or registers a global scope or a model hook on a model of another crate. To use any of these, register the plugin's piece from a module of your app.
+A plugin is code you compile into your app, so it is not a sandbox. But the framework's registration APIs give a plugin that is not one of Navree's own packages no way to change who may do what without a line in your app. A module of such a plugin, or a module that acts for it (a module of its crate, a generic module that no module of your app imports, or a non-generic module of another non-framework crate that names no plugin and that only community plugins' modules import), stops the boot when it registers a policy with rules beyond the plugin's own subjects or on `all`; registers a subject named outside the plugin's namespace; configures a module of another crate; provides a permission check, the route authorizer, the authenticator, a sign-in strategy, the workspace gate, where native clients sign in, the clock, an observer of every commit, the audit sink, the realtime backplane as a provider, the fake that silences model listeners, the options of access, workspaces, sign-in or the admin panel, or your app's shell; exports a non-multi provider that another module also registers; adds a layer that runs on every request; answers the app's errors or maps an error type of another crate; decides who works as staff in the admin panel; authorizes a realtime channel outside its namespace; scopes a subject that is not its own to workspaces; registers a global scope or a model hook on a model of another crate; or registers a command with the name of a built-in or framework module command. To use any of these, register the plugin's piece from a module of your app.
 
 ## What is not enforced
 
-A plugin's rules on its own subjects are its decision (your abilities function can override them). Code a plugin runs (its handlers, jobs and migrations) can call `AccessService` like any code, and its own routes, tools and MCP items may be public. A module of a third crate that names no plugin counts as yours wherever it is imported, with what it registers; a generic module, such as the one `AccessModule::for_policy` makes, is yours only when a module of your app imports it.
+A plugin's rules on its own subjects are its decision (your abilities function can override them). Code a plugin runs (its handlers, jobs and migrations) can call `AccessService` like any code, and its own routes, tools and MCP items may be public. A non-generic module of a third crate that names no plugin counts as yours when a module of your app imports it, with what it registers, and acts for a community plugin when only community plugins' modules import it; a generic module, such as the one `AccessModule::for_policy` makes, is yours only when a module of your app imports it.
 
 ## The commands
 

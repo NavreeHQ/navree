@@ -54,7 +54,7 @@ A plugin that registers a driver (`m.disk_driver`, `m.mail_transport`, `m.cache_
 
 Each driver trait documents the exact invariants its methods must uphold (`DiskDriver`, `MailTransport`, `CacheBackend` and the rest). Navree's internal repository conformance suite is not part of the public API; instead, write an integration test that selects your driver in `TestApp` and exercises the public operations and edge cases.
 
-For a storage driver, a memory-backed `DiskDriver` registered under `"sanduk"` and six calls through `Disk` (`put`, `get`, `exists`, `size`, `list`, `delete`, followed by `get` of a missing path) verify the core round-trip:
+For a storage driver, a memory-backed `DiskDriver` registered under `"sanduk"` and six calls through `Disk` (`put`, `get`, `exists`, `size`, `list`, `delete`, followed by `get` of a missing path) verify the core round-trip. Add `chrono` and `tokio-stream` alongside the `[dev-dependencies]` that `navree make:plugin` writes (`chrono = "0.4"`, `tokio-stream = "0.1"`, plus `"storage"` and `"http"` on `navree`):
 
 ```rust title="tests/disk_driver.rs"
 use std::collections::BTreeMap;
@@ -246,7 +246,7 @@ Add targeted assertions for the trait's boundary rules too: for `DiskDriver`, ch
 
 ## Testing what it publishes
 
-`plugin:publish` writes into the current working directory (`resources/views/<namespace>/`, `locales/<locale>/<namespace>/`, `resources/<namespace>/` and `config/<section>.toml`). Because Rust's test harness runs tests on multiple threads that share the process working directory, invoke `run_with_args` in a child process rooted at a `tempfile::TempDir` (or serialize working-directory changes behind a mutex):
+`plugin:publish` writes into the current working directory (`resources/views/<namespace>/`, `locales/<locale>/<namespace>/`, `resources/<namespace>/` and `config/<section>.toml`). Because Rust's test harness runs tests on multiple threads that share the process working directory, invoke `run_with_args` in a child process rooted at a `tempfile::TempDir` (or serialize working-directory changes behind a mutex), adding `serde_json = "1"` and `tempfile = "3"` under `[dev-dependencies]`:
 
 ```rust title="tests/resources.rs"
 use std::fs;

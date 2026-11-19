@@ -31,23 +31,29 @@ const WHAT_A_PLUGIN_CANNOT_DO: &str = "\
 A plugin is code you compile into your app, so it is not a sandbox. But the framework's \
 registration APIs give a plugin that is not one of Navree's own packages no way to change who \
 may do what without a line in your app. A module of such a plugin, or a module that acts for it \
-(a module of its crate, or a generic module that no module of your app imports), stops the boot \
-when it registers a policy with rules beyond the plugin's own subjects or on `all`; registers a \
-subject named outside the plugin's namespace; configures a module of another crate; provides a \
-permission check, the route authorizer, the authenticator, a sign-in strategy, the workspace \
-gate, the options of access, workspaces, authentication or the admin panel, or your app's \
-shell; adds a layer that runs on every request; decides who works as staff in the admin panel; \
-authorizes a realtime channel outside its namespace; scopes a subject that is not its own to \
-workspaces; or registers a global scope or a model hook on a model of another crate. To use any \
-of these, register the plugin's piece from a module of your app.";
+(a module of its crate, a generic module that no module of your app imports, or a non-generic \
+module of another non-framework crate that names no plugin and that only community plugins' \
+modules import), stops the boot when it registers a policy with rules beyond the plugin's own \
+subjects or on `all`; registers a subject named outside the plugin's namespace; configures a \
+module of another crate; provides a permission check, the route authorizer, the authenticator, a \
+sign-in strategy, the workspace gate, where native clients sign in, the clock, an observer of \
+every commit, the audit sink, the realtime backplane as a provider, the fake that silences model \
+listeners, the options of access, workspaces, sign-in or the admin panel, or your app's shell; \
+exports a non-multi provider that another module also registers; adds a layer that runs on every \
+request; answers the app's errors or maps an error type of another crate; decides who works as \
+staff in the admin panel; authorizes a realtime channel outside its namespace; scopes a subject \
+that is not its own to workspaces; registers a global scope or a model hook on a model of \
+another crate; or registers a command with the name of a built-in or framework module command. \
+To use any of these, register the plugin's piece from a module of your app.";
 
 const WHAT_IS_NOT_ENFORCED: &str = "\
 A plugin's rules on its own subjects are its decision (your abilities function can override \
 them). Code a plugin runs (its handlers, jobs and migrations) can call `AccessService` like any \
-code, and its own routes, tools and MCP items may be public. A module of a third crate that \
-names no plugin counts as yours wherever it is imported, with what it registers; a generic \
-module, such as the one `AccessModule::for_policy` makes, is yours only when a module of your \
-app imports it.";
+code, and its own routes, tools and MCP items may be public. A non-generic module of a third \
+crate that names no plugin counts as yours when a module of your app imports it, with what it \
+registers, and acts for a community plugin when only community plugins' modules import it; a \
+generic module, such as the one `AccessModule::for_policy` makes, is yours only when a module of \
+your app imports it.";
 
 fn normalise_whitespace(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
