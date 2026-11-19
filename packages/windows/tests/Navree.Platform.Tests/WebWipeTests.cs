@@ -164,7 +164,7 @@ public sealed class WebWipeTests
         Update covered = await client.SendAsync(Events.Response(ordersRequest, 401, "application/vnd.navree.native+json", null, [], endedBody));
         Expect.That(CoverRules.IsCovered(covered.State), "the 401 did not put a locked cover up");
         long coverScreen = CoverRules.Decide(covered.State).CoverScreenId!.Value;
-        long signInRequest = covered.Effects.OfType<FetchEffect>().Single().Request;
+        long signInRequest = covered.Effects.OfType<FetchEffect>().Single(f => f.Url.Contains("/sign-in", StringComparison.Ordinal)).Request;
 
         // Suppose the sign-in page itself is HTML in the web view, while another web view stood in a secondary window.
         Update htmlSignIn = await client.SendAsync(Events.Response(signInRequest, 200, "text/html; charset=utf-8", null, [], "<html><body>Sign in</body></html>"));

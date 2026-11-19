@@ -583,6 +583,27 @@ impl Core {
 
     /// A link was tapped in the web view.
     pub(crate) fn web_link(&mut self, id: ScreenId, url: &str) {
+        if let Target::Inside(inside) = self.resolve(url, id)
+            && self
+                .view
+                .screens
+                .get(&id)
+                .is_none_or(|view| view.url != inside)
+            && self.front() == Some(id)
+            && let Some((at, route)) = self.cover_modal_of(id)
+        {
+            if !self.stays_in_way_in(&route, &inside) {
+                if self.under_cover_url(Some(at)).as_deref() != Some(inside.as_str()) {
+                    self.inner.land = Some(inside);
+                }
+                self.way_in_done(id);
+                return;
+            }
+            if self.view.modals.get(at).is_some_and(|modal| modal.locked) {
+                self.advance_way_in(at, id, &inside, None);
+                return;
+            }
+        }
         // The page it came from shares the cookies: the session may have changed there.
         self.session_unsure();
         match self.resolve(url, id) {

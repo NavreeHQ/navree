@@ -687,7 +687,8 @@ public sealed class PlaceRulesTests
         Assert.AreEqual(PlaceOutcome.Removed, cleanedMdta.Outcome, cleanedMdta.Why);
         Assert.IsNotNull(cleanedMdta.Bytes);
         Assert.AreEqual(-1, Find(cleanedMdta.Bytes, utf16Coords), "UTF-16BE coordinates survived in mdta");
-        Assert.AreEqual(-1, Find(cleanedMdta.Bytes, [0x25, 0x88]), "EXIF GPS pointer survived in mdta JPEG artwork");
+        Assert.AreEqual(-1, Find(cleanedMdta.Bytes, [30, 0, 0, 0, 1, 0, 0, 0, 54, 0, 0, 0]), "EXIF GPS latitude survived in mdta JPEG artwork");
+        Assert.AreEqual(-1, Find(cleanedMdta.Bytes, "N\0\0\0"u8.ToArray()), "EXIF GPS hemisphere survived in mdta JPEG artwork");
         StringAssert.Contains(Encoding.Latin1.GetString(cleanedMdta.Bytes), "Charkha", "cleaned JPEG artwork maker tag should remain");
         StringAssert.Contains(Encoding.Latin1.GetString(cleanedMdta.Bytes), "Amritsar workshop");
         Assert.AreEqual(PlaceOutcome.None, PlaceRules.TakeOut([.. cleanedMdta.Bytes], "MVI_0104.MOV").Outcome);

@@ -198,17 +198,17 @@ test("a fresh page's toasts are not shown on a plain page that overtook it", asy
 
   // A fresh page overtaken by a plain page keeps its toasts to itself.
   const freshSlow = held();
-  page.answers.push(() => freshSlow.promise, answer(html("Deal 7"), { headers: PAGE }));
+  page.answers.push(
+    { ...answer("", { headers: { ...PAGE, "x-navree-fresh": "1" } }), text: () => freshSlow.promise },
+    answer(html("Deal 7"), { headers: PAGE }),
+  );
   $("to-sign-in").click();
   await settle(2);
   $("seven").click();
   await settle();
   assert.equal($("main").textContent, "Deal 7");
   freshSlow.release(
-    answer(
-      `<!doctype html><html data-build="b1" data-ui-fresh-page><head><title>Sign in</title></head><body data-ui-boost><main id="main">Sign in</main>${toaster("Code sent to Meera Sharma")}</body></html>`,
-      { headers: { ...PAGE, "x-navree-fresh": "1" } },
-    ),
+    `<!doctype html><html data-build="b1" data-ui-fresh-page><head><title>Sign in</title></head><body data-ui-boost><main id="main">Sign in</main>${toaster("Code sent to Meera Sharma")}</body></html>`,
   );
   await settle();
   assert.equal(toasts().includes("Code sent to Meera Sharma"), false, "a fresh page's toast was shown on a plain page");
@@ -216,16 +216,16 @@ test("a fresh page's toasts are not shown on a plain page that overtook it", asy
   // An overtaken plain page still hands its toast over to the plain page that overtook it.
   $("main").innerHTML = `<a id="seven" href="/deals/7">7</a><a id="eight" href="/deals/8">8</a>`;
   const plainSlow = held();
-  page.answers.push(() => plainSlow.promise, answer(html("Deal 8"), { headers: PAGE }));
+  page.answers.push(
+    { ...answer("", { headers: PAGE }), text: () => plainSlow.promise },
+    answer(html("Deal 8"), { headers: PAGE }),
+  );
   $("seven").click();
   await settle(2);
   $("eight").click();
   await settle();
   plainSlow.release(
-    answer(
-      `<!doctype html><html data-build="b1"><head><title>Deal 7</title></head><body data-ui-boost><main id="main">Deal 7</main>${toaster("Deal 7 saved for Gurpreet Singh")}</body></html>`,
-      { headers: PAGE },
-    ),
+    `<!doctype html><html data-build="b1"><head><title>Deal 7</title></head><body data-ui-boost><main id="main">Deal 7</main>${toaster("Deal 7 saved for Gurpreet Singh")}</body></html>`,
   );
   await settle();
   assert.equal(toasts().includes("Deal 7 saved for Gurpreet Singh"), true);

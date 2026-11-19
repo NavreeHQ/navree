@@ -87,15 +87,15 @@ test("Enter in a textarea inside stored or sealed markup does not send the compo
 
 test("choosing or dropping a file inside stored or sealed markup does not upload to the area around it", async () => {
   uploaded.length = 0;
-  const receipt = { name: "receipt.pdf", size: 512, type: "application/pdf" };
+  const receipt = new File(["x".repeat(512)], "receipt.pdf", { type: "application/pdf" });
 
   $("sealed-file").files = [receipt];
   fire($("sealed-file"), "change");
 
   const dataTransfer = { types: ["Files"], files: [receipt], dropEffect: "copy" };
-  fire($("sealed-drop"), "dragenter", { extra: { dataTransfer } });
+  fire($("sealed-drop"), "dragenter", { dataTransfer });
   assert.equal($("upload").hasAttribute("data-drag"), false);
-  const droppedInSealed = fire($("sealed-drop"), "drop", { extra: { dataTransfer } });
+  const droppedInSealed = fire($("sealed-drop"), "drop", { dataTransfer });
   assert.equal(droppedInSealed.defaultPrevented, true);
   await settle();
   assert.deepEqual(uploaded, []);
@@ -106,9 +106,9 @@ test("choosing or dropping a file inside stored or sealed markup does not upload
   await settle();
   assert.deepEqual(uploaded, ["/assistant/files:receipt.pdf"]);
 
-  const challan = { name: "challan.pdf", size: 640, type: "application/pdf" };
+  const challan = new File(["x".repeat(640)], "challan.pdf", { type: "application/pdf" });
   const ownTransfer = { types: ["Files"], files: [challan], dropEffect: "copy" };
-  fire($("own-drop"), "drop", { extra: { dataTransfer: ownTransfer } });
+  fire($("own-drop"), "drop", { dataTransfer: ownTransfer });
   await settle();
   assert.deepEqual(uploaded, ["/assistant/files:receipt.pdf", "/assistant/files:challan.pdf"]);
 });

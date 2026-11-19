@@ -1388,12 +1388,12 @@ impl Core {
             // What the server held of the device's token was the session's before.
             self.push_forget();
         }
-        let covered_launch = (!from_device
-            && (self.waiting_cover().is_some() || self.has_locked_modal()))
-        .then(|| self.inner.launch.take())
-        .flatten();
         if another_person {
             // Another person: nothing of the one before stays, not even where they were.
+            let covered_launch = (!from_device
+                && (self.waiting_cover().is_some() || self.has_locked_modal()))
+            .then(|| self.inner.launch.take())
+            .flatten();
             self.wipe();
             if covered_launch.is_some() {
                 self.inner.launch = covered_launch;
@@ -7996,7 +7996,7 @@ mod tests {
         let query_update = core.send(Event::Field {
             screen: 1,
             form: Some("orders-f".to_owned()),
-            field: "search".to_owned(),
+            field: "orders-f.search".to_owned(),
             value: crate::FieldValue::Text {
                 text: "Ludhiana".to_owned(),
             },
@@ -8397,7 +8397,7 @@ mod tests {
         // 1. `Answer::Html` on an unlocked `/sign-in` modal puts up `waiting_cover` without showing `Content::Web` under Ravneet's user.
         let mut core = signed_in_as(Some(RAVNEET), shell_routes);
         core.send(native(2, home, Some(RAVNEET), false));
-        core.send(Event::Act {
+        let opened_signin = core.send(Event::Act {
             screen: Some(1),
             action: navree_native::Action::navigate("/sign-in"),
             form: None,
@@ -8407,9 +8407,29 @@ mod tests {
             ask: None,
             from: None,
         });
-        let signin_get = core.inner.next.request;
-        core.send(native(signin_get, sign_in_page, None, false));
+        let signin_get = opened_signin
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("sign-in get");
+        core.send(native(signin_get, sign_in_page, Some(RAVNEET), false));
         let cover_id = core.front().expect("sign-in modal");
+        for (field, text) in [
+            ("sign-in.email", "harpreet.singh@example.com"),
+            ("sign-in.password", "kesar"),
+        ] {
+            core.send(Event::Field {
+                screen: cover_id,
+                form: Some("sign-in".to_owned()),
+                field: field.to_owned(),
+                value: crate::FieldValue::Text {
+                    text: text.to_owned(),
+                },
+            });
+        }
         let post = core.send(Event::Act {
             screen: Some(cover_id),
             action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),

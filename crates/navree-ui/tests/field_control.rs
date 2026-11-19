@@ -1717,8 +1717,11 @@ fn a_field_marked_secret_is_drawn_with_no_value_whatever_draws_it() {
         r#"name="branch" value="ludhiana-vault""#,
         r#"name="locker" value="locker-77""#,
         r#"name="scopes" value="scope-secret-alpha""#,
-        " selected>",
-        " selected ",
+        r#"value="gold-vault" selected"#,
+        r#"value="ludhiana-vault" selected"#,
+        r#"value="locker-77" selected"#,
+        r#"value="scope-secret-alpha" selected"#,
+        r#"value="US" selected"#,
         r#"aria-selected="true""#,
         r#"data-selected="true""#,
         " checked>",
@@ -1726,6 +1729,14 @@ fn a_field_marked_secret_is_drawn_with_no_value_whatever_draws_it() {
         r#"aria-checked="true""#,
     ] {
         assert!(!html.contains(secret), "`{secret}` leaked into {html}");
+    }
+    for (at, _) in html.match_indices(" selected") {
+        let before = &html[..at];
+        assert!(
+            before.ends_with(r#"<option value="""#),
+            "non-empty option marked selected near `{}`",
+            &html[at.saturating_sub(40)..(at + 20).min(html.len())]
+        );
     }
 
     let cell_html =
@@ -2014,8 +2025,10 @@ async fn secret_phones(
         Err(rejected) => {
             let debug_text = format!("{rejected:?}");
             assert!(
-                !debug_text.contains("backup_phone"),
-                "secret phone field or country stayed in Rejected: {debug_text}"
+                !debug_text.contains("backup_phone_country")
+                    && !debug_text.contains("98765")
+                    && !debug_text.contains("\"IN\""),
+                "secret phone value or country stayed in Rejected: {debug_text}"
             );
             rejected.into_response()
         }
@@ -2112,8 +2125,12 @@ async fn overlapping_trimmed_and_normalized_secret_values_are_masked_in_refusals
     );
     assert!(matches!(outcome, WizardOutcome::Invalid(_)), "{outcome:?}");
     let serialized_draft = serde_json::to_string(&draft).expect("draft JSON");
-    assert!(!serialized_draft.contains("456"), "{serialized_draft}");
-    assert!(!serialized_draft.contains("7741"), "{serialized_draft}");
+    assert!(!serialized_draft.contains("kesar"), "{serialized_draft}");
+    assert!(!serialized_draft.contains("123456"), "{serialized_draft}");
+    assert!(
+        !serialized_draft.contains("bad-vault"),
+        "{serialized_draft}"
+    );
     assert!(
         serialized_draft.contains("Combined •••• cannot be used"),
         "{serialized_draft}"

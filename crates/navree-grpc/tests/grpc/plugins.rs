@@ -191,6 +191,23 @@ async fn a_wrapped_tonic_server_under_a_plugins_namespace_is_read_as_a_route_is(
         .expect("a wrapped server's method may require a permission the plugin describes");
 }
 
+mod navree_plugin_mapper {
+    use navree_http::{AppError, ModuleBuilderHttpExt};
+    use navree_kernel::{Module, ModuleBuilder, PluginInfo};
+
+    const MAPPER: PluginInfo =
+        PluginInfo::new("navree-plugin-mapper", module_path!(), "mapper", "1.0.0");
+
+    pub struct MapperPlugin;
+
+    impl Module for MapperPlugin {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(MAPPER)
+                .map_error::<std::io::Error>(|_| Some(AppError::forbidden()));
+        }
+    }
+}
+
 #[tokio::test]
 async fn a_plugins_mapping_of_another_crates_error_is_refused_in_an_app_with_no_http_module() {
     use std::any::type_name;
@@ -198,23 +215,6 @@ async fn a_plugins_mapping_of_another_crates_error_is_refused_in_an_app_with_no_
     use navree_grpc::{GrpcModule, GrpcOptions};
     use navree_http::HttpOptions;
     use navree_kernel::Navree;
-
-    mod navree_plugin_mapper {
-        use navree_http::{AppError, ModuleBuilderHttpExt};
-        use navree_kernel::{Module, ModuleBuilder, PluginInfo};
-
-        const MAPPER: PluginInfo =
-            PluginInfo::new("navree-plugin-mapper", module_path!(), "mapper", "1.0.0");
-
-        pub struct MapperPlugin;
-
-        impl Module for MapperPlugin {
-            fn register(&self, m: &mut ModuleBuilder) {
-                m.plugin(MAPPER)
-                    .map_error::<std::io::Error>(|_| Some(AppError::forbidden()));
-            }
-        }
-    }
 
     // Plain `GrpcModule` with neither `HttpModule` nor `HttpOptions` refuses to boot at once.
     let no_http = Navree::app()

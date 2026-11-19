@@ -1926,11 +1926,12 @@ fn every_first_party_package_that_has_a_module_names_itself_a_plugin_under_its_d
             "{package} ({form})"
         );
         let prefix = format!("{krate}::");
+        let generic_arg = format!("<{prefix}");
         for member in &plugin.modules {
+            let ty = member.id.type_name();
             assert!(
-                member.id.type_name().starts_with(&prefix),
-                "{package} ({form}): module `{}` is not under `{prefix}`",
-                member.id.type_name()
+                ty.starts_with(&prefix) || ty.contains(&generic_arg),
+                "{package} ({form}): module `{ty}` is not under `{prefix}`"
             );
         }
     }

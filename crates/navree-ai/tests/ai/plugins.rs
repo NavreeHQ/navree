@@ -159,6 +159,46 @@ async fn an_agent_tool_that_requires_a_permission_under_a_plugins_namespace_the_
     app.shutdown().await.unwrap();
 }
 
+mod navree_plugin_agent {
+    use super::*;
+
+    const AGENT_PLUGIN: PluginInfo =
+        PluginInfo::new("navree-plugin-agent", module_path!(), "agent_demo", "1.0.0");
+
+    pub struct PluginAgent;
+
+    impl Injectable for PluginAgent {
+        fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+            Box::pin(async { Ok(Self) })
+        }
+    }
+
+    impl Agent for PluginAgent {
+        const NAME: &'static str = "agent-demo";
+
+        fn instructions(&self, _run: &AgentRun) -> String {
+            "Assist Meera Sharma.".to_owned()
+        }
+
+        fn tool_specs() -> Vec<ToolSpec> {
+            vec![
+                ToolSpec::new("inspect", "Inspect demo", json!({"type": "object"}))
+                    .access(ToolAccess::permissions(&["agent_demo.inspect"])),
+            ]
+        }
+    }
+
+    pub struct AgentPluginModule;
+
+    impl Module for AgentPluginModule {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(AGENT_PLUGIN)
+                .permissions(&[Permission::new("agent_demo.inspect", "Inspect demo")])
+                .agent::<PluginAgent>();
+        }
+    }
+}
+
 #[tokio::test]
 async fn an_agent_registered_only_as_a_provider_cannot_run_and_agent_registration_hides_declared_access()
  {
@@ -171,46 +211,6 @@ async fn an_agent_registered_only_as_a_provider_cannot_run_and_agent_registratio
         fn register(&self, m: &mut ModuleBuilder) {
             m.provider::<CloseLedgerAssistant>()
                 .exports::<CloseLedgerAssistant>();
-        }
-    }
-
-    mod navree_plugin_agent {
-        use super::*;
-
-        const AGENT_PLUGIN: PluginInfo =
-            PluginInfo::new("navree-plugin-agent", module_path!(), "agent_demo", "1.0.0");
-
-        pub struct PluginAgent;
-
-        impl Injectable for PluginAgent {
-            fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
-                Box::pin(async { Ok(Self) })
-            }
-        }
-
-        impl Agent for PluginAgent {
-            const NAME: &'static str = "agent-demo";
-
-            fn instructions(&self, _run: &AgentRun) -> String {
-                "Assist Meera Sharma.".to_owned()
-            }
-
-            fn tool_specs() -> Vec<ToolSpec> {
-                vec![
-                    ToolSpec::new("inspect", "Inspect demo", json!({"type": "object"}))
-                        .access(ToolAccess::permissions(&["agent_demo.inspect"])),
-                ]
-            }
-        }
-
-        pub struct AgentPluginModule;
-
-        impl Module for AgentPluginModule {
-            fn register(&self, m: &mut ModuleBuilder) {
-                m.plugin(AGENT_PLUGIN)
-                    .permissions(&[Permission::new("agent_demo.inspect", "Inspect demo")])
-                    .agent::<PluginAgent>();
-            }
         }
     }
 

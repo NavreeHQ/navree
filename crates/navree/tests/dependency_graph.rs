@@ -1589,7 +1589,8 @@ fn proof_plugin_manifests_inherit_nothing_from_the_workspace_and_name_the_worksp
     let mut dirs = vec!["plugins/notices", "plugins/dakiya", "plugins/godam"];
     let geo_path = root.join("plugins/geo/Cargo.toml");
     if let Ok(geo_text) = std::fs::read_to_string(&geo_path) {
-        let geo_toml: toml::Value = geo_text.parse().expect("plugins/geo/Cargo.toml parses");
+        let geo_table: toml::Table = geo_text.parse().expect("plugins/geo/Cargo.toml parses");
+        let geo_toml = toml::Value::Table(geo_table);
         if !uses_workspace_inheritance(&geo_toml) {
             dirs.push("plugins/geo");
         }
@@ -1599,9 +1600,10 @@ fn proof_plugin_manifests_inherit_nothing_from_the_workspace_and_name_the_worksp
         let manifest_path = root.join(rel).join("Cargo.toml");
         let manifest_text = std::fs::read_to_string(&manifest_path)
             .unwrap_or_else(|e| panic!("cannot read {}: {e}", manifest_path.display()));
-        let manifest: toml::Value = manifest_text
+        let manifest_table: toml::Table = manifest_text
             .parse()
             .unwrap_or_else(|e| panic!("cannot parse {}: {e}", manifest_path.display()));
+        let manifest = toml::Value::Table(manifest_table);
 
         assert!(
             !uses_workspace_inheritance(&manifest),

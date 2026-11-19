@@ -1836,15 +1836,16 @@ mod tests {
         write_local_plugin(outside.path(), "navree-plugin-khata");
 
         fs::create_dir_all(app_tmp.path().join("plugins")).expect("create plugins/");
-        let junction = app_tmp.path().join("plugins/khata");
+        let junction = app_tmp.path().join("plugins").join("khata");
+        let backslashed = |path: &Path| path.to_string_lossy().replace('/', "\\");
+        // Test code beside the code it tests (the rules exempt tests in `tests/`): `mklink` is
+        // a builtin of `cmd`, so there is no program to start in its place, the command is
+        // fixed, and each path is an argument of its own.
+        // nosemgrep: navree-shell-command-string
         let status = std::process::Command::new("cmd")
-            .args([
-                "/C",
-                "mklink",
-                "/J",
-                &junction.to_string_lossy(),
-                &outside.path().to_string_lossy(),
-            ])
+            .args(["/C", "mklink", "/J"])
+            .arg(backslashed(&junction))
+            .arg(backslashed(outside.path()))
             .output()
             .expect("run mklink /J");
         assert!(status.status.success(), "mklink /J failed");
