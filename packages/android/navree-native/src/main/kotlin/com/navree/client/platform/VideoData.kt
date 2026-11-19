@@ -17,8 +17,9 @@ import java.io.RandomAccessFile
  * embedded image or Exif items inside `ilst`, ISO binary XML (`bxml`), and XMP
  * or XML boxes (`XMP_`, `xml `, `uuid`) whose elements or naming attributes
  * name a place ([PictureData.namesPlace], Sony `NonRealTimeMeta` `ExifGPS`) are
- * overwritten in place as `free` boxes of the very same byte length, leaving
- * every sample and chunk offset (`stco`, `co64`, `tfhd`, `sidx`) intact. ISO
+ * overwritten in place as `free` boxes of the very same byte length, and any
+ * existing `free` or `skip` tombstones with non-zero bytes are zeroed in place,
+ * leaving every sample and chunk offset (`stco`, `co64`, `tfhd`, `sidx`) intact. ISO
  * `meta` item tables (`iinf`, `iloc`, `idat`, `iref`, `pitm`) and malformed
  * metadata tables mark [Found.broken] so the file is refused rather than sent.
  * Tracks that are neither video nor audio (`mdia` -> `hdlr` other than `vide`
@@ -175,10 +176,12 @@ internal object VideoData {
         val xmpWithPlace: Int = 0,
         /** Tracks whose `mdia` handler is neither `vide` nor `soun` (timed metadata, subtitles, telemetry). */
         val nonMediaTracks: Int = 0,
+        /** Existing `free` or `skip` boxes whose payload still holds non-zero bytes (such as tombstoned metadata). */
+        val nonZeroFreeBoxes: Int = 0,
         /** The container's boxes did not read cleanly, or held unrewritable item tables. */
         val broken: Boolean = false,
     ) {
-        val clean: Boolean get() = !broken && locationBoxes == 0 && xmpWithPlace == 0 && nonMediaTracks == 0
+        val clean: Boolean get() = !broken && locationBoxes == 0 && xmpWithPlace == 0 && nonMediaTracks == 0 && nonZeroFreeBoxes == 0
     }
 
     private data class Erase(val start: Long, val length: Long)
@@ -313,6 +316,7 @@ internal object VideoData {
         var locationBoxes = 0
         var xmpWithPlace = 0
         var nonMediaTracks = 0
+        var nonZeroFreeBoxes = 0
         var broken = false
         var sawTopBox = false
 
@@ -325,9 +329,17 @@ internal object VideoData {
                     locationBoxes = locationBoxes,
                     xmpWithPlace = xmpWithPlace,
                     nonMediaTracks = nonMediaTracks,
+                    nonZeroFreeBoxes = nonZeroFreeBoxes,
                     broken = broken,
                 ),
             )
+        }
+
+        fun inspectFreeOrSkipBox(box: BoxHeader) {
+            if (boxBodyHasNonZeroByte(input, box)) {
+                nonZeroFreeBoxes++
+                erases += Erase(box.start, box.length)
+            }
         }
 
         fun inspectXmlOrUuidBox(box: BoxHeader) {
@@ -411,6 +423,7 @@ internal object VideoData {
             for (child in children) {
                 if (broken) return
                 when {
+                    child.type == "free" || child.type == "skip" -> inspectFreeOrSkipBox(child)
                     child.type in DIRECT_LOCATION_BOXES -> {
                         locationBoxes++
                         erases += Erase(child.start, child.length)
@@ -423,15 +436,21 @@ internal object VideoData {
                                 broken = true
                                 return
                             }
-                            val keyIndex = be32(item.typeBytes, 0).toInt()
-                            val isLocationItem = item.type in DIRECT_LOCATION_BOXES ||
-                                (keyIndex in locationIndices && item.type != "free" && item.type != "skip") ||
-                                (item.type == "----" && freeformItemNamesPlace(item)) ||
-                                (item.type != "free" && item.type != "skip" && ilstItemHoldsImageOrExif(item))
-                            if (broken) return
-                            if (isLocationItem) {
-                                locationBoxes++
-                                erases += Erase(item.start, item.length)
+                            if (item.type == "free" || item.type == "skip") {
+                                inspectFreeOrSkipBox(item)
+                            } else {
+                                val keyIndex = be32(item.typeBytes, 0).toInt()
+                                val isLocationItem = item.type in DIRECT_LOCATION_BOXES ||
+                                    keyIndex in locationIndices ||
+                                    (item.type == "----" && freeformItemNamesPlace(item)) ||
+                                    ilstItemHoldsImageOrExif(item)
+                                if (broken) return
+                                if (isLocationItem) {
+                                    locationBoxes++
+                                    erases += Erase(item.start, item.length)
+                                } else {
+                                    inspectKeptIlstItem(item)
+                                }
                             }
                             itemCursor = item.end
                         }
@@ -439,6 +458,15 @@ internal object VideoData {
                     child.type == "udta" -> parseContainer(child.type, child.bodyStart, child.end, depth + 1)
                     child.type == "meta" -> parseMeta(child, depth + 1)
                 }
+            }
+        }
+
+        fun inspectKeptIlstItem(item: BoxHeader) {
+            var cursor = item.bodyStart
+            while (cursor < item.end && !broken) {
+                val sub = readBoxHeader(input, cursor, item.end) ?: return
+                if (sub.type == "free" || sub.type == "skip") inspectFreeOrSkipBox(sub)
+                cursor = sub.end
             }
         }
 
@@ -521,6 +549,7 @@ internal object VideoData {
                 }
                 if (parentType == null) sawTopBox = true
                 when {
+                    box.type == "free" || box.type == "skip" -> inspectFreeOrSkipBox(box)
                     box.type in DIRECT_LOCATION_BOXES -> {
                         locationBoxes++
                         erases += Erase(box.start, box.length)
@@ -664,6 +693,23 @@ internal object VideoData {
             val attrValue = text.substring(valStart, at)
             if (at < text.length) at++
             if (attrName in NAMING_XML_ATTRS && isLocationKeyName(attrValue)) return true
+        }
+        return false
+    }
+
+    private fun boxBodyHasNonZeroByte(input: RandomAccessFile, box: BoxHeader): Boolean {
+        var left = box.bodyLength
+        if (left <= 0L) return false
+        input.seek(box.bodyStart)
+        val buf = ByteArray(minOf(BUFFER.toLong(), left).toInt())
+        while (left > 0L) {
+            val step = minOf(buf.size.toLong(), left).toInt()
+            val read = input.read(buf, 0, step)
+            if (read <= 0) return true
+            for (i in 0 until read) {
+                if (buf[i] != 0.toByte()) return true
+            }
+            left -= read
         }
         return false
     }

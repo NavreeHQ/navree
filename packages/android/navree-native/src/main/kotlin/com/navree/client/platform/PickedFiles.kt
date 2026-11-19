@@ -156,7 +156,7 @@ class PickedFiles internal constructor(private val folder: File) {
                 if (reading.silentFor() >= mostWaitMs) break
             }
         } catch (e: CancellationException) {
-            giveUp(reading)
+            giveUp(reading)?.let { drop(it.token) }
             reader.interrupt()
             throw e
         }

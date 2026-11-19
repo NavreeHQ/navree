@@ -95,7 +95,7 @@ class WebRulesTest {
         assertTrue("a failure of the check empties the document too", script.endsWith("catch(e){stop()}})();"))
         assertTrue("a document with no origin of its own is judged by its address", script.contains("o!=='null'") && script.contains("location.href"))
         assertTrue("only a web address can pass", script.contains("if(s!=='http:'&&s!=='https:')return false"))
-        assertTrue("it is short: it holds up every load", script.length < 2_400)
+        assertTrue("it is short: it holds up every load", script.length < 3_400)
     }
 
     @Test
@@ -141,8 +141,8 @@ class WebRulesTest {
         for (getter in listOf("G(U.prototype,'href')", "G(U.prototype,'protocol')", "G(U.prototype,'hostname')", "G(U.prototype,'port')", "G(Node.prototype,'baseURI')")) {
             assertTrue("$getter is taken at the start", script.contains(getter))
         }
-        // What runs when a page's script calls a wrapper: the check, the copy of the options and the wrapper itself.
-        val called = listOf("var at=function(a){", "var T=function(v){", "var cp=function(q,s){", "var N=function(u,q){").map { start ->
+        // What runs when a page's script calls a wrapper or dispatches a drop or paste: the check, the copy of the options, the wrapper, and the file-transfer guard.
+        val called = listOf("var at=function(a){", "var T=function(v){", "var cp=function(q,s){", "var N=function(u,q){", "var hf=function(t){", "var bf=function(e){").map { start ->
             val from = script.indexOf(start)
             assertTrue("$start is in the script", from >= 0)
             script.substring(from, script.indexOf("};", from) + 2)
@@ -190,6 +190,15 @@ class WebRulesTest {
         assertTrue("and before the origin is checked: $wrappers $origin", wrappers in 0 until origin)
         assertTrue("whose handler empties the document, after both: $origin $handler", origin in 0 until handler)
         assertFalse("one try holds the wrappers and the check", script.substring(guarded + 4, handler).contains("try{"))
+    }
+
+    @Test
+    fun a_drop_or_a_paste_that_carries_a_file_is_stopped_in_capture_phase_before_the_page_sees_it() {
+        val script = WebRules.documentScript(Origins("https://shop.example").documentOrigins())
+        assertTrue("capture listeners are registered for dragover, drop and paste", script.contains("var ev=['dragover','drop','paste'];for(var i=0;i<3;i++)A(L,W,[ev[i],bf,true]);"))
+        assertTrue("registered before the early return for allowed origins and about: frames", script.indexOf("ev=['dragover'") < script.indexOf("var o=W.origin"))
+        assertTrue("cancels default and stops immediate propagation on file transfers", script.contains("if(hf(") && script.contains("{A(PD,e,[]);A(SP,e,[])}"))
+        assertTrue("checks DataTransfer files, file-kind items and Files type", script.contains("G(DT,'files')") && script.contains("==='file'") && script.contains("['Files']"))
     }
 
     @Test

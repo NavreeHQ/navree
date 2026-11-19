@@ -233,6 +233,11 @@ object WebRules {
      * window the script never ran in. It does not reach into a worker: a script
      * that already runs in a worker from one of the app's addresses opens what
      * it likes, and so does a service worker.
+     *
+     * It also puts capture-phase listeners on `window` for `dragover`, `drop`
+     * and `paste` that cancel any drop or clipboard paste carrying files while
+     * leaving plain-text and HTML paste untouched, so files enter a document
+     * only through the web view's checked file chooser.
      */
     fun documentScript(origins: List<Triple<String, String, Int>>): String {
         val rules = buildJsonArray {
@@ -258,9 +263,14 @@ object WebRules {
             // getter the page replaces afterwards is never what the check uses. The check and the wrappers are
             // one `try`: a failure of either empties the document.
             "try{var A=Reflect.apply,K=Reflect.construct,S=String,U=URL,E=DOMException,D=document,W=self,F=Array.from,Y=Array," +
-            "G=function(o,p){return Object.getOwnPropertyDescriptor(o,p).get}," +
-            "H=G(U.prototype,'href'),P=G(U.prototype,'protocol'),M=G(U.prototype,'hostname'),O=G(U.prototype,'port'),B=G(Node.prototype,'baseURI'),Z=S.prototype.endsWith;" +
-            "if(!H||!P||!M||!O||!B||!Z)throw 0;" +
+            "G=function(o,p){var d=o&&Object.getOwnPropertyDescriptor(o,p);return d&&d.get},Q=function(c){return c&&c.prototype}," +
+            "H=G(U.prototype,'href'),P=G(U.prototype,'protocol'),M=G(U.prototype,'hostname'),O=G(U.prototype,'port'),B=G(Node.prototype,'baseURI'),Z=S.prototype.endsWith," +
+            "IP=Object.prototype.isPrototypeOf,IX=Y.prototype.indexOf," +
+            "L=EventTarget.prototype.addEventListener,PD=Event.prototype.preventDefault,SP=Event.prototype.stopImmediatePropagation," +
+            "DP=Q(W.DragEvent),DG=G(DP,'dataTransfer'),CP=Q(W.ClipboardEvent),CG=G(CP,'clipboardData')," +
+            "DT=Q(W.DataTransfer),DF=G(DT,'files'),DI=G(DT,'items'),DTY=G(DT,'types')," +
+            "FL=G(Q(W.FileList),'length'),IL=G(Q(W.DataTransferItemList),'length'),IK=G(Q(W.DataTransferItem),'kind');" +
+            "if(!H||!P||!M||!O||!B||!Z||!L||!PD||!SP)throw 0;" +
             "for(var i=0;i<r.length;i++){var n=r[i][1];r[i][3]=n.indexOf('*.')===0?n.slice(1):''}" +
             "var at=function(a){var u=K(U,[a]),s=A(P,u,[]);if(s==='ws:')s='http:';else if(s==='wss:')s='https:';if(s!=='http:'&&s!=='https:')return false;" +
             "var h=A(M,u,[]),p=A(O,u,[]);p=p===''?(s==='http:'?80:443):+p;" +
@@ -282,6 +292,11 @@ object WebRules {
             "if(!at(a))throw K(E,['Not allowed','SecurityError']);return o===undefined?K(C,[a]):K(C,[a,o])};" +
             "N.prototype=C.prototype;C.prototype.constructor=N;var c=['CONNECTING','OPEN','CLOSING','CLOSED'];for(var j=0;j<c.length;j++)if(c[j] in C)N[c[j]]=C[c[j]];W[k]=N};" +
             "wrap('WebSocket',1);wrap('WebSocketStream',2);wrap('Worker');wrap('SharedWorker');" +
+            "var hf=function(t){if(!t)return false;var f=DF&&A(DF,t,[]);if(f&&FL&&A(FL,f,[])>0)return true;" +
+            "var m=DI&&A(DI,t,[]);if(m&&IL&&IK)for(var i=0,n=A(IL,m,[]);i<n;i++)if(m[i]&&A(IK,m[i],[])==='file')return true;" +
+            "var y=DTY&&A(DTY,t,[]);return !!(y&&A(IX,y,['Files'])>=0)};" +
+            "var bf=function(e){if(hf(DP&&A(IP,DP,[e])?A(DG,e,[]):CP&&A(IP,CP,[e])?A(CG,e,[]):0)){A(PD,e,[]);A(SP,e,[])}};" +
+            "var ev=['dragover','drop','paste'];for(var i=0;i<3;i++)A(L,W,[ev[i],bf,true]);" +
             "var o=W.origin;if(o!=='null'){if(!at(o))stop();else{var J=W.$SEEN;if(J)J.postMessage('')}return}" +
             "var l=location.href;if(l.indexOf('about:')===0)return;if(!at(l))stop()}catch(e){stop()}})();"
     }

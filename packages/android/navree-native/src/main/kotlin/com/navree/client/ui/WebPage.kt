@@ -3,6 +3,7 @@ package com.navree.client.ui
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.net.Uri
+import android.view.DragEvent
 import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
 import android.webkit.ValueCallback
@@ -251,7 +252,9 @@ internal fun WebPage(
                     modifier = Modifier.fillMaxSize(),
                     factory = { context ->
                         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
-                        WebView(context).apply {
+                        object : WebView(context) {
+                            override fun onDragEvent(event: DragEvent?): Boolean = false
+                        }.apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
                             settings.allowFileAccess = false

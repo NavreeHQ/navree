@@ -248,4 +248,31 @@ class VideoDataTest {
         val paddedFile = File(folder, "padded.bin").apply { writeBytes(paddedMp4) }
         assertEquals(Video.Iso, VideoData.kindOf(paddedFile, null))
     }
+
+    @Test
+    fun non_zero_free_and_skip_boxes_are_zeroed_in_place_without_moving_sample_offsets() {
+        val ftyp = box("ftyp", "mp42\u0000\u0000\u0000\u0000isommp42".toByteArray(Charsets.ISO_8859_1))
+        val tombstonedMoov = box("free", "+30.9010+075.8573/Ludhiana".toByteArray(Charsets.ISO_8859_1))
+        val tombstonedUdta = box("skip", "+31.6340+074.8723/Amritsar".toByteArray(Charsets.ISO_8859_1))
+        val zeroFree = box("free", ByteArray(16))
+        val mdat = box("mdat", "SAMPLES".toByteArray(Charsets.ISO_8859_1))
+        val raw = ftyp + tombstonedMoov + box("moov", box("udta", tombstonedUdta, zeroFree)) + mdat
+        val mdatOffset = raw.size - mdat.size
+        val source = File(folder, "tombstoned.mp4").apply { writeBytes(raw) }
+        val cleaned = File(folder, "tombstoned-clean.mp4")
+
+        val before = VideoData.inspect(source)
+        assertFalse(before.broken)
+        assertEquals(2, before.nonZeroFreeBoxes)
+        assertFalse(before.clean)
+
+        VideoData.clean(source, cleaned)
+        val cleanedBytes = cleaned.readBytes()
+        assertEquals(raw.size, cleanedBytes.size)
+        assertEquals(String(mdat, Charsets.ISO_8859_1), String(cleanedBytes, mdatOffset, mdat.size, Charsets.ISO_8859_1))
+        val cleanedText = String(cleanedBytes, Charsets.ISO_8859_1)
+        assertFalse(cleanedText.contains("Ludhiana"))
+        assertFalse(cleanedText.contains("Amritsar"))
+        assertTrue(VideoData.inspect(cleaned).clean)
+    }
 }
