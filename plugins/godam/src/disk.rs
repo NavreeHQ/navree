@@ -4,7 +4,7 @@ use std::fmt;
 use std::ops::Range;
 use std::sync::Arc;
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use futures_util::{StreamExt, TryStreamExt};
 use navree::kernel::BoxFuture;
 use navree::prelude::BoxError;
@@ -55,6 +55,10 @@ impl GodamDisk {
     }
 }
 
+/// Minimum multipart chunk size (5 MiB), matching S3 and Cloudflare R2 rules
+/// for every part before the final tail part.
+const PART_BYTES: usize = 5 * 1024 * 1024;
+
 fn operation_failed(operation: &'static str) -> DiskDriverError {
     DiskDriverError::Failed(format!("godam {operation} failed").into())
 }
@@ -68,10 +72,14 @@ fn driver_error(operation: &'static str, error: object_store::Error) -> DiskDriv
 
 fn file_location(path: &str, operation: &'static str) -> Result<ObjectPath, DiskDriverError> {
     if path.is_empty()
+        || path.len() > 1024
         || path.starts_with('/')
         || path.ends_with('/')
         || path.contains('\\')
         || path.chars().any(char::is_control)
+        || path
+            .split('/')
+            .any(|segment| segment.is_empty() || segment.chars().all(|c| c == '.' || c == ' '))
     {
         return Err(operation_failed(operation));
     }
@@ -111,13 +119,12 @@ impl DiskDriver for GodamDisk {
     ) -> BoxFuture<'a, Result<Box<dyn DiskUpload>, DiskDriverError>> {
         Box::pin(async move {
             let location = file_location(path, "upload")?;
-            let upload = self
-                .store
-                .put_multipart(&location)
-                .await
-                .map_err(|error| driver_error("upload", error))?;
             Ok(Box::new(GodamUpload {
-                upload: Some(upload),
+                store: self.store.clone(),
+                location,
+                upload: None,
+                buffer: BytesMut::new(),
+                closed: false,
             }) as Box<dyn DiskUpload>)
         })
     }
@@ -234,51 +241,96 @@ impl DiskDriver for GodamDisk {
     }
 }
 
-/// Multipart upload in progress: parts stay hidden until [`DiskUpload::finish`]
-/// completes, and [`DiskUpload::abort`] or dropping leaves no file behind.
+/// Buffered upload in progress: buffers up to 5 MiB before starting multipart
+/// upload so small or empty streams use a single `put` and multipart uploads
+/// emit uniform 5 MiB non-final parts.
 struct GodamUpload {
+    store: Arc<dyn ObjectStore>,
+    location: ObjectPath,
     upload: Option<Box<dyn MultipartUpload>>,
+    buffer: BytesMut,
+    closed: bool,
 }
 
 impl DiskUpload for GodamUpload {
-    fn write<'a>(&'a mut self, chunk: Bytes) -> BoxFuture<'a, Result<(), DiskDriverError>> {
+    fn write<'a>(&'a mut self, mut chunk: Bytes) -> BoxFuture<'a, Result<(), DiskDriverError>> {
         Box::pin(async move {
-            if chunk.is_empty() {
-                return Ok(());
-            }
-            let Some(mut upload) = self.upload.take() else {
+            if self.closed {
                 return Err(operation_failed("upload"));
-            };
-            match upload.put_part(chunk.into()).await {
-                Ok(()) => {
-                    self.upload = Some(upload);
-                    Ok(())
-                }
-                Err(error) => {
-                    let _ = upload.abort().await;
-                    Err(driver_error("upload", error))
+            }
+            while !chunk.is_empty() {
+                let remaining = PART_BYTES - self.buffer.len();
+                let take = chunk.len().min(remaining);
+                self.buffer.extend_from_slice(&chunk.split_to(take));
+
+                if self.buffer.len() == PART_BYTES {
+                    if self.upload.is_none() {
+                        match self.store.put_multipart(&self.location).await {
+                            Ok(started) => self.upload = Some(started),
+                            Err(error) => {
+                                self.buffer.clear();
+                                self.closed = true;
+                                return Err(driver_error("upload", error));
+                            }
+                        }
+                    }
+                    let part = self.buffer.split().freeze();
+                    let mut upload = self.upload.take().expect("multipart upload initialized");
+                    match upload.put_part(part.into()).await {
+                        Ok(()) => {
+                            self.upload = Some(upload);
+                        }
+                        Err(error) => {
+                            self.buffer.clear();
+                            self.closed = true;
+                            let _ = upload.abort().await;
+                            return Err(driver_error("upload", error));
+                        }
+                    }
                 }
             }
+            Ok(())
         })
     }
 
     fn finish(mut self: Box<Self>) -> BoxFuture<'static, Result<(), DiskDriverError>> {
-        let upload = self.upload.take();
         Box::pin(async move {
-            let Some(mut upload) = upload else {
+            if self.closed {
                 return Err(operation_failed("upload"));
-            };
-            match upload.complete().await {
-                Ok(_) => Ok(()),
-                Err(error) => {
-                    let _ = upload.abort().await;
-                    Err(driver_error("upload", error))
+            }
+            self.closed = true;
+            match self.upload.take() {
+                None => {
+                    let payload = self.buffer.freeze();
+                    self.store
+                        .put(&self.location, payload.into())
+                        .await
+                        .map(drop)
+                        .map_err(|error| driver_error("upload", error))
+                }
+                Some(mut upload) => {
+                    if !self.buffer.is_empty() {
+                        let tail = self.buffer.freeze();
+                        if let Err(error) = upload.put_part(tail.into()).await {
+                            let _ = upload.abort().await;
+                            return Err(driver_error("upload", error));
+                        }
+                    }
+                    match upload.complete().await {
+                        Ok(_) => Ok(()),
+                        Err(error) => {
+                            let _ = upload.abort().await;
+                            Err(driver_error("upload", error))
+                        }
+                    }
                 }
             }
         })
     }
 
     fn abort(mut self: Box<Self>) -> BoxFuture<'static, Result<(), DiskDriverError>> {
+        self.buffer.clear();
+        self.closed = true;
         let upload = self.upload.take();
         Box::pin(async move {
             let Some(mut upload) = upload else {

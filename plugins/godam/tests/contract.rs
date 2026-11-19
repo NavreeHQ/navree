@@ -21,7 +21,7 @@ use object_store::memory::InMemory;
 use object_store::path::Path as ObjectPath;
 use object_store::{
     CopyOptions, GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore,
-    PutMultipartOptions, PutOptions, PutPayload, PutResult,
+    PutMultipartOptions, PutOptions, PutPayload, PutResult, UploadPart,
 };
 use serde_json::json;
 
@@ -515,4 +515,287 @@ async fn listing_a_folder_stops_at_its_boundary() {
 
         assert!(driver.list("missing").await.unwrap().is_empty());
     }
+}
+
+#[derive(Debug, Default)]
+struct PartMetrics {
+    single_puts: usize,
+    multipart_starts: usize,
+    multipart_completes: usize,
+    multipart_aborts: usize,
+    completed_part_sizes: Vec<Vec<usize>>,
+}
+
+#[derive(Clone, Default)]
+struct StrictPartStore {
+    inner: InMemory,
+    metrics: Arc<Mutex<PartMetrics>>,
+}
+
+impl fmt::Debug for StrictPartStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StrictPartStore").finish_non_exhaustive()
+    }
+}
+
+impl fmt::Display for StrictPartStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("StrictPartStore")
+    }
+}
+
+#[derive(Debug)]
+struct StrictMultipartUpload {
+    inner: Box<dyn MultipartUpload>,
+    part_sizes: Vec<usize>,
+    metrics: Arc<Mutex<PartMetrics>>,
+}
+
+#[async_trait::async_trait]
+impl MultipartUpload for StrictMultipartUpload {
+    fn put_part(&mut self, data: PutPayload) -> UploadPart {
+        self.part_sizes.push(data.content_length());
+        self.inner.put_part(data)
+    }
+
+    async fn complete(&mut self) -> object_store::Result<PutResult> {
+        const FIVE_MIB: usize = 5 * 1024 * 1024;
+        if self.part_sizes.is_empty() {
+            return Err(object_store::Error::Generic {
+                store: "StrictPartStore",
+                source: "zero-part multipart completion refused".into(),
+            });
+        }
+        for &size in &self.part_sizes[..self.part_sizes.len() - 1] {
+            if size != FIVE_MIB {
+                return Err(object_store::Error::Generic {
+                    store: "StrictPartStore",
+                    source: "non-final part must be 5 MiB".into(),
+                });
+            }
+        }
+        let result = self.inner.complete().await?;
+        let mut metrics = self.metrics.lock().unwrap();
+        metrics.multipart_completes += 1;
+        metrics
+            .completed_part_sizes
+            .push(std::mem::take(&mut self.part_sizes));
+        Ok(result)
+    }
+
+    async fn abort(&mut self) -> object_store::Result<()> {
+        self.metrics.lock().unwrap().multipart_aborts += 1;
+        self.inner.abort().await
+    }
+}
+
+#[async_trait::async_trait]
+impl ObjectStore for StrictPartStore {
+    async fn put_opts(
+        &self,
+        location: &ObjectPath,
+        payload: PutPayload,
+        opts: PutOptions,
+    ) -> object_store::Result<PutResult> {
+        self.metrics.lock().unwrap().single_puts += 1;
+        self.inner.put_opts(location, payload, opts).await
+    }
+
+    async fn put_multipart_opts(
+        &self,
+        location: &ObjectPath,
+        opts: PutMultipartOptions,
+    ) -> object_store::Result<Box<dyn MultipartUpload>> {
+        self.metrics.lock().unwrap().multipart_starts += 1;
+        let inner = self.inner.put_multipart_opts(location, opts).await?;
+        Ok(Box::new(StrictMultipartUpload {
+            inner,
+            part_sizes: Vec::new(),
+            metrics: self.metrics.clone(),
+        }))
+    }
+
+    async fn get_opts(
+        &self,
+        location: &ObjectPath,
+        options: GetOptions,
+    ) -> object_store::Result<GetResult> {
+        self.inner.get_opts(location, options).await
+    }
+
+    fn delete_stream(
+        &self,
+        locations: BoxStream<'static, object_store::Result<ObjectPath>>,
+    ) -> BoxStream<'static, object_store::Result<ObjectPath>> {
+        self.inner.delete_stream(locations)
+    }
+
+    fn list(
+        &self,
+        prefix: Option<&ObjectPath>,
+    ) -> BoxStream<'static, object_store::Result<ObjectMeta>> {
+        self.inner.list(prefix)
+    }
+
+    async fn list_with_delimiter(
+        &self,
+        prefix: Option<&ObjectPath>,
+    ) -> object_store::Result<ListResult> {
+        self.inner.list_with_delimiter(prefix).await
+    }
+
+    async fn copy_opts(
+        &self,
+        from: &ObjectPath,
+        to: &ObjectPath,
+        options: CopyOptions,
+    ) -> object_store::Result<()> {
+        self.inner.copy_opts(from, to, options).await
+    }
+}
+
+struct StrictGodamModule {
+    driver: GodamDisk,
+}
+
+impl Module for StrictGodamModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        let driver = self.driver.clone();
+        m.disk_driver("godam_strict", move |_| {
+            let driver = driver.clone();
+            async move { Ok(driver) }
+        });
+    }
+}
+
+#[tokio::test]
+async fn uploads_buffer_small_chunks_into_a_single_put_and_split_large_uploads_into_five_mib_parts()
+{
+    let store = StrictPartStore::default();
+    let driver = GodamDisk::from_store(Arc::new(store.clone()));
+
+    let app = TestApp::builder()
+        .config("storage.default", "uploads")
+        .config("storage.disks.uploads", json!({ "driver": "godam_strict" }))
+        .module(StorageModule::from_config())
+        .module(StrictGodamModule {
+            driver: driver.clone(),
+        })
+        .build()
+        .await;
+    let disk = app.get::<Disk>().await;
+
+    // Zero-byte stream upload uses a single put rather than zero-part multipart.
+    let written = disk
+        .put_stream(
+            "ledger/empty.bin",
+            stream::iter(Vec::<std::result::Result<Bytes, std::io::Error>>::new()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(written, 0);
+    assert_eq!(disk.size("ledger/empty.bin").await.unwrap(), 0);
+
+    // Small-chunk stream (64 x 1 KiB < 5 MiB) buffers into a single put.
+    let small_chunks: Vec<std::result::Result<Bytes, std::io::Error>> = (0..64u8)
+        .map(|index| Ok(Bytes::from(vec![index; 1024])))
+        .collect();
+    let written = disk
+        .put_stream("ledger/small.bin", stream::iter(small_chunks))
+        .await
+        .unwrap();
+    assert_eq!(written, 64 * 1024);
+    let small_bytes = disk.get("ledger/small.bin").await.unwrap();
+    assert_eq!(small_bytes.len(), 64 * 1024);
+    assert!(small_bytes[..1024].iter().all(|&b| b == 0));
+    assert!(small_bytes[63 * 1024..].iter().all(|&b| b == 63));
+
+    {
+        let metrics = store.metrics.lock().unwrap();
+        assert_eq!(metrics.single_puts, 2);
+        assert_eq!(metrics.multipart_starts, 0);
+    }
+
+    // Large stream (6 x 1 MiB = 6 MiB) flushes one 5 MiB part and one 1 MiB tail part.
+    let one_mib = 1024 * 1024;
+    let large_chunks: Vec<std::result::Result<Bytes, std::io::Error>> = (1..=6u8)
+        .map(|index| Ok(Bytes::from(vec![index; one_mib])))
+        .collect();
+    let written = disk
+        .put_stream("ledger/large.bin", stream::iter(large_chunks))
+        .await
+        .unwrap();
+    assert_eq!(written, 6 * one_mib as u64);
+    assert_eq!(
+        disk.size("ledger/large.bin").await.unwrap(),
+        6 * one_mib as u64
+    );
+
+    // Aborted upload after crossing 5 MiB aborts the started multipart upload.
+    let mut aborted = driver
+        .begin_upload("ledger/aborted-large.bin")
+        .await
+        .unwrap();
+    for _ in 0..5 {
+        aborted
+            .write(Bytes::from(vec![7u8; one_mib]))
+            .await
+            .unwrap();
+    }
+    aborted.write(Bytes::from(vec![8u8; 1024])).await.unwrap();
+    aborted.abort().await.unwrap();
+    assert!(!disk.exists("ledger/aborted-large.bin").await.unwrap());
+
+    {
+        let metrics = store.metrics.lock().unwrap();
+        assert_eq!(metrics.multipart_starts, 2);
+        assert_eq!(metrics.multipart_completes, 1);
+        assert_eq!(metrics.multipart_aborts, 1);
+        assert_eq!(
+            metrics.completed_part_sizes,
+            vec![vec![5 * one_mib, one_mib]]
+        );
+    }
+
+    app.shutdown().await.expect("clean shutdown");
+}
+
+#[tokio::test]
+async fn direct_driver_calls_enforce_length_and_dot_space_segment_rules_while_keeping_colons() {
+    let driver = GodamDisk::new(GodamSettings::default()).unwrap();
+
+    let overlong = "a".repeat(1025);
+    for invalid in [
+        overlong.as_str(),
+        "docs/.../a.txt",
+        "docs/.. /a.txt",
+        "docs/   /a.txt",
+    ] {
+        assert!(
+            matches!(
+                driver.put(invalid, Bytes::from_static(b"x")).await,
+                Err(DiskDriverError::Failed(_))
+            ),
+            "{invalid:?}"
+        );
+        assert!(
+            matches!(driver.list(invalid).await, Err(DiskDriverError::Failed(_))),
+            "{invalid:?}"
+        );
+    }
+
+    driver
+        .put(
+            "events/2026-11-19T10:30:00Z.json",
+            Bytes::from_static(b"{\"city\":\"Ludhiana\"}"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        driver
+            .read("events/2026-11-19T10:30:00Z.json", None)
+            .await
+            .unwrap(),
+        Bytes::from_static(b"{\"city\":\"Ludhiana\"}")
+    );
 }
