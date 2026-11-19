@@ -215,6 +215,22 @@ pub trait ModuleBuilderAssistantExt {
 
 impl ModuleBuilderAssistantExt for ModuleBuilder {
     fn assistant<A: Agent>(&mut self, config: AssistantConfig) -> &mut Self {
+        if let Some(catalog) = &config.catalog {
+            let tools: Vec<(&'static str, &'static str, String)> = catalog
+                .all_tools()
+                .into_iter()
+                .filter_map(|tool| {
+                    tool.can
+                        .map(|(action, subject)| (action, subject, tool.name))
+                })
+                .collect();
+            if !tools.is_empty() {
+                self.contribute(crate::module::AssistantCatalogRegistration {
+                    agent: A::NAME,
+                    tools,
+                });
+            }
+        }
         self.factory(
             Factory::<Assistant<A>>::new(move |r: Resolver| {
                 let config = config.clone();

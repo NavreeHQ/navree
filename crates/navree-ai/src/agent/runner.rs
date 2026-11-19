@@ -287,6 +287,16 @@ impl<A: Agent> AgentRunBuilder<A> {
         let ctx = ai
             .app()
             .ok_or_else(|| AiError::config("agents run inside an app: add AiModule"))?;
+        let registered = ctx
+            .contributions::<crate::module::AgentRegistration>()
+            .iter()
+            .any(|entry| entry.value.type_id == std::any::TypeId::of::<A>());
+        if !registered {
+            return Err(AiError::config(format!(
+                "agent `{}` is not registered (m.agent::<A>())",
+                A::NAME
+            )));
+        }
         let agent = ctx.get::<A>().await.map_err(|error| {
             AiError::config(format!(
                 "agent `{}` is not registered (m.agent::<A>()): {error}",

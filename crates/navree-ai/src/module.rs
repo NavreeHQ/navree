@@ -160,7 +160,86 @@ fn register(m: &mut ModuleBuilder, options: Option<AiOptions>) {
         .exports::<Conversations>()
         .migrations(memory::migrations())
         .map_error::<AiError>(map_ai_error)
+        .contribute(navree_http::__private::AccessDeclarations::new(
+            declared_ai_access,
+        ))
         .command(prune_command());
+}
+
+/// Records that `m.agent::<A>()` registered agent `A`, with its tool specs.
+pub(crate) struct AgentRegistration {
+    pub(crate) type_id: std::any::TypeId,
+    pub(crate) name: &'static str,
+    pub(crate) tools: Vec<crate::agent::ToolSpec>,
+}
+
+/// Records component tools of an assistant's generative UI catalogue that
+/// declare a `can(action, subject)` check.
+#[cfg(feature = "ui")]
+pub(crate) struct AssistantCatalogRegistration {
+    pub(crate) agent: &'static str,
+    pub(crate) tools: Vec<(&'static str, &'static str, String)>,
+}
+
+fn declared_ai_access(
+    ctx: AppContext,
+) -> BoxFuture<'static, Result<Vec<navree_http::__private::DeclaredAccess>, BoxError>> {
+    Box::pin(async move {
+        let mut declared = Vec::new();
+        for contributed in ctx.contributions::<AgentRegistration>() {
+            let module = &contributed.module;
+            for tool in &contributed.value.tools {
+                let owner = format!("{}.{}", contributed.value.name, tool.name);
+                let mut required = Vec::new();
+                for rule in &tool.access {
+                    match rule {
+                        crate::agent::ToolAccess::Permissions(list) => {
+                            required.extend(list.iter().map(|s| (*s).to_owned()));
+                        }
+                        crate::agent::ToolAccess::Can { action, subject } => {
+                            declared.push(
+                                navree_http::__private::DeclaredAccess::value_can(
+                                    "agent tool",
+                                    &owner,
+                                    *action,
+                                    *subject,
+                                )
+                                .in_module(module.id, module.name),
+                            );
+                        }
+                        crate::agent::ToolAccess::Roles(_) => {}
+                    }
+                }
+                if !required.is_empty() {
+                    declared.push(
+                        navree_http::__private::DeclaredAccess::value_permissions(
+                            "agent tool",
+                            owner,
+                            required,
+                        )
+                        .in_module(module.id, module.name),
+                    );
+                }
+            }
+        }
+        #[cfg(feature = "ui")]
+        for contributed in ctx.contributions::<AssistantCatalogRegistration>() {
+            let module = &contributed.module;
+            for (action, subject, tool_name) in &contributed.value.tools {
+                let owner = format!("{}.{tool_name}", contributed.value.agent);
+                declared.push(
+                    navree_http::__private::DeclaredAccess::value_can(
+                        "agent tool",
+                        owner,
+                        *action,
+                        *subject,
+                    )
+                    .in_module(module.id, module.name),
+                );
+            }
+        }
+        Ok(declared)
+    })
 }
 
 /// Creates the declared collections at boot (pgvector, Qdrant).
@@ -195,35 +274,11 @@ pub trait ModuleBuilderAiExt {
 
 impl ModuleBuilderAiExt for ModuleBuilder {
     fn agent<A: Agent>(&mut self) -> &mut Self {
-        self.provider::<A>();
-        for tool in A::tool_specs() {
-            let owner = format!("{}.{}", A::NAME, tool.name);
-            let mut required = Vec::new();
-            for rule in tool.access {
-                match rule {
-                    crate::agent::ToolAccess::Permissions(list) => {
-                        required.extend(list.into_iter().map(str::to_owned));
-                    }
-                    crate::agent::ToolAccess::Can { action, subject } => {
-                        self.contribute(navree_http::__private::DeclaredAccess::value_can(
-                            "agent tool",
-                            &owner,
-                            action,
-                            subject,
-                        ));
-                    }
-                    crate::agent::ToolAccess::Roles(_) => {}
-                }
-            }
-            if !required.is_empty() {
-                self.contribute(navree_http::__private::DeclaredAccess::value_permissions(
-                    "agent tool",
-                    owner,
-                    required,
-                ));
-            }
-        }
-        self
+        self.provider::<A>().contribute(AgentRegistration {
+            type_id: std::any::TypeId::of::<A>(),
+            name: A::NAME,
+            tools: A::tool_specs(),
+        })
     }
 
     fn vector_collection(&mut self, collection: VectorCollection) -> &mut Self {

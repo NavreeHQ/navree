@@ -527,6 +527,9 @@ async fn a_sidebar_link_that_requires_such_a_permission_fails_the_boot() {
     // does not describe it: boot fails naming the sidebar link and its module.
     let error = boot_error(
         workspace_app()
+            .module(navree::access::AccessModule::for_root(
+                navree::access::AccessOptions::default(),
+            ))
             .module(UiModule)
             .module(RosterModule(|_| {}))
             .module(AppRosterLink),
@@ -540,6 +543,9 @@ async fn a_sidebar_link_that_requires_such_a_permission_fails_the_boot() {
 
     // When the plugin describes `roster.audit`, the app's sidebar link may require it.
     let app = workspace_app()
+        .module(navree::access::AccessModule::for_root(
+            navree::access::AccessOptions::default(),
+        ))
         .module(UiModule)
         .module(RosterModule(|m| {
             m.permissions(&[Permission::new(

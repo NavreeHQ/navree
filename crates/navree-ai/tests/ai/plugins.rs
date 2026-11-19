@@ -158,3 +158,99 @@ async fn an_agent_tool_that_requires_a_permission_under_a_plugins_namespace_the_
         .await;
     app.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn an_agent_registered_only_as_a_provider_cannot_run_and_agent_registration_hides_declared_access()
+ {
+    use navree_ai::{Ai, AiError};
+    use uuid::Uuid;
+
+    struct ProviderOnlyAgent;
+
+    impl Module for ProviderOnlyAgent {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.provider::<CloseLedgerAssistant>()
+                .exports::<CloseLedgerAssistant>();
+        }
+    }
+
+    mod navree_plugin_agent {
+        use super::*;
+
+        const AGENT_PLUGIN: PluginInfo =
+            PluginInfo::new("navree-plugin-agent", module_path!(), "agent_demo", "1.0.0");
+
+        pub struct PluginAgent;
+
+        impl Injectable for PluginAgent {
+            fn construct(_r: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+                Box::pin(async { Ok(Self) })
+            }
+        }
+
+        impl Agent for PluginAgent {
+            const NAME: &'static str = "agent-demo";
+
+            fn instructions(&self, _run: &AgentRun) -> String {
+                "Assist Meera Sharma.".to_owned()
+            }
+
+            fn tool_specs() -> Vec<ToolSpec> {
+                vec![
+                    ToolSpec::new("inspect", "Inspect demo", json!({"type": "object"}))
+                        .access(ToolAccess::permissions(&["agent_demo.inspect"])),
+                ]
+            }
+        }
+
+        pub struct AgentPluginModule;
+
+        impl Module for AgentPluginModule {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(AGENT_PLUGIN)
+                    .permissions(&[Permission::new("agent_demo.inspect", "Inspect demo")])
+                    .agent::<PluginAgent>();
+            }
+        }
+    }
+
+    let app = agent_app()
+        .module(ProviderOnlyAgent)
+        .module(navree_plugin_agent::AgentPluginModule)
+        .build()
+        .await;
+
+    // 1. Registering an Agent via `m.provider::<A>()` without `m.agent::<A>()` cannot run it.
+    let err = app
+        .get::<Ai>()
+        .await
+        .agent::<CloseLedgerAssistant>()
+        .acting_as_user(Uuid::now_v7())
+        .prompt("close the ledger")
+        .await
+        .expect_err("provider-only agent must be refused");
+    assert!(
+        matches!(&err, AiError::Config { message } if message.contains("agent `khata-assistant` is not registered (m.agent::<A>())")),
+        "{err:?}"
+    );
+
+    // 2. `navree plugins` sees `AgentRegistration`, never the hidden `DeclaredAccess`.
+    let report = app.ctx().plugins();
+    let plugin = report
+        .plugins
+        .iter()
+        .find(|p| p.info.name == "navree-plugin-agent")
+        .expect("navree-plugin-agent listed");
+    for module in &plugin.modules {
+        assert!(
+            !module
+                .contributions
+                .iter()
+                .any(|(key, _)| key.contains("DeclaredAccess")),
+            "unexpected hidden contribution in {:?}",
+            module.contributions
+        );
+    }
+
+    app.shutdown().await.unwrap();
+}
