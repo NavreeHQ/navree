@@ -1,6 +1,6 @@
 ---
 name: navree-native-design
-description: "Makes a Navree screen belong on every system without writing it twice: the rules that hold on iPhone, iPad, Android phones and tablets, each with its reason, a check and a right and a wrong example in Navree UI code (one main action with a role, creation as a role, destructive actions that say so and are never the main action, cancel and confirm as roles, records as lists or tables with column roles, a form's own submit, a task versus a glance, search, filters and sort as the table's query, empty, loading and error states from the toolkit, named icons, a brand that gives an accent and nothing else, text that scales, layouts that mirror, labelled controls), and the review method: where to get each system's screenshots, and how to judge them beside the system's own apps, in light and dark, at the largest text and right to left. Use when designing or reviewing any screen of a Navree app that has a native client, when a native screen looks like a web page, or before calling a native screen done. Load `navree-native` first for the words an author has, then `navree-native-apple` or `navree-native-android` for one system's checklist."
+description: "Makes a Navree screen belong on every system without writing it twice: the rules that hold on iPhone, iPad, Android phones and tablets, each with its reason, a check and a right and a wrong example in Navree UI code (one main action with a role, creation as a role, destructive actions that say so and are never the main action, cancel and confirm as roles, records as lists or tables with column roles, a form's own submit, a task versus a glance, search, filters and sort as the table's query, empty, loading and error states from the toolkit, named icons, a brand that gives an accent and nothing else, text that scales, layouts that mirror, labelled controls), and the review method: where to get each system's screenshots, and how to judge them beside the system's own apps, in light and dark, at the largest text and right to left. Use when designing or reviewing any screen of a Navree app that has a native client, when a native screen looks like a web page, or before calling a native screen done. Load `navree-native` first for the words an author has, then `navree-native-apple`, `navree-native-android` or `navree-native-windows` for one system's checklist."
 ---
 
 # Native design rules
@@ -421,8 +421,8 @@ with a tone). Use `Stack`, `Row` and `Grid`, which reflow; do not fix widths.
    Gmail, Google Play, Contacts and Settings on Android. Does a person who
    knows that system find every control where they expect it?
 4. **Run the system skill's checklist**: the yes/no checks in
-   `navree-native-apple` and `navree-native-android`. Every "no" is a defect
-   unless the check says otherwise.
+   `navree-native-apple`, `navree-native-android` and `navree-native-windows`.
+   Every "no" is a defect unless the check says otherwise.
 5. **Run it in every look**: light and dark; the largest text; right to left;
    and, on Apple, Increase Contrast and Reduce Transparency. A screen that
    passes only in light is not done.
