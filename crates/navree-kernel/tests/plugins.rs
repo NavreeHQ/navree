@@ -1732,6 +1732,100 @@ async fn a_boxed_module_keeps_its_concrete_type_for_first_party_and_framework_ch
     );
 }
 
+#[test]
+fn two_modules_from_different_crates_returning_one_module_id_fail_the_boot() {
+    use navree_kernel::__private::{ConfiguredPlainModule, PlainModule};
+    use navree_plugin_khata::KhataModule;
+
+    // A module in a second crate (`plugins`) returning `PlainModule`'s id (`navree_kernel`)
+    // cannot coalesce with `PlainModule` or `ConfiguredPlainModule` in either order: doing so
+    // would suppress `PlainModule::register` and inherit the app's import edge.
+    struct FakePlain(bool);
+    impl Module for FakePlain {
+        fn id(&self) -> ModuleId {
+            ModuleId::of::<PlainModule>()
+        }
+
+        fn is_configured(&self) -> bool {
+            self.0
+        }
+
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.command(CommandSpec::new("serve", "Fake", |_, _| async { Ok(()) }));
+        }
+    }
+
+    struct AppImportsPlain;
+    impl Module for AppImportsPlain {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.import(PlainModule);
+        }
+    }
+
+    let plain_type = std::any::type_name::<PlainModule>();
+    let configured_plain_type = std::any::type_name::<ConfiguredPlainModule>();
+    let fake_type = std::any::type_name::<FakePlain>();
+
+    // Plugin's `FakePlain` before app's `PlainModule` (plain-vs-plain).
+    assert_eq!(
+        errors(
+            Navree::app()
+                .module(KhataModule(|m| {
+                    m.import(FakePlain(false));
+                }))
+                .module(AppImportsPlain)
+        ),
+        format!(
+            "module id `PlainModule` (`{plain_type}`) is claimed by modules in two crates (`{fake_type}` and `{plain_type}`); each module id belongs to one crate"
+        )
+    );
+
+    // App's `PlainModule` before plugin's `FakePlain` (plain-vs-plain and plain-vs-configured).
+    let import_plain: fn(&mut ModuleBuilder) = |m| {
+        m.import(FakePlain(false));
+    };
+    let import_configured: fn(&mut ModuleBuilder) = |m| {
+        m.import(FakePlain(true));
+    };
+    for register in [import_plain, import_configured] {
+        assert_eq!(
+            errors(
+                Navree::app()
+                    .module(AppImportsPlain)
+                    .module(KhataModule(register))
+            ),
+            format!(
+                "module id `PlainModule` (`{plain_type}`) is claimed by modules in two crates (`{plain_type}` and `{fake_type}`); each module id belongs to one crate"
+            )
+        );
+    }
+
+    // Configured-vs-plain across crates.
+    assert_eq!(
+        errors(
+            Navree::app()
+                .module(PlainModule::from_config())
+                .module(KhataModule(|m| {
+                    m.import(FakePlain(false));
+                }))
+        ),
+        format!(
+            "module id `PlainModule` (`{plain_type}`) is claimed by modules in two crates (`{configured_plain_type}` and `{fake_type}`); each module id belongs to one crate"
+        )
+    );
+
+    // Same-crate plain + `configured_module!` (`PlainModule` + `ConfiguredPlainModule`) and
+    // same-crate plain + `ConfiguredModule<M, O>` (`Ledger` + `Ledger::for_root`) coalesce as
+    // before.
+    Navree::app()
+        .module(PlainModule)
+        .module(PlainModule::from_config())
+        .module(Ledger)
+        .module(Ledger::for_root(LedgerOptions { city: "Amritsar" }))
+        .validate()
+        .expect("same-crate plain and configured forms coalesce");
+}
+
 // A plugin's second crate.
 
 /// A second crate that names no plugin, such as a plugin's `-core` crate.

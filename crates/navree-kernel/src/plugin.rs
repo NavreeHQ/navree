@@ -521,6 +521,55 @@ pub(crate) fn is_framework_crate(type_name: &str) -> bool {
     FRAMEWORK_CRATES.binary_search(&krate).is_ok()
 }
 
+/// The crate stem of a module value's `type_name`: peeled through wrappers and
+/// trait objects ([`module_path`]), and through the kernel's
+/// [`ConfiguredModule`](crate::ConfiguredModule) wrapper to its first type
+/// parameter's crate stem, so a plain module and its `ConfiguredModule` form
+/// share one crate stem. `None` when the path names an erased `dyn Module` or
+/// has no crate segment.
+pub(crate) fn module_crate(type_name: &str) -> Option<&str> {
+    let read = module_path(type_name);
+    let target = match read.strip_prefix("navree_kernel::module::ConfiguredModule<") {
+        Some(rest) => module_path(first_type_arg(rest)),
+        None => read,
+    };
+    if target.starts_with("dyn ") {
+        return None;
+    }
+    let outer = target.split_once('<').map_or(target, |(outer, _)| outer);
+    outer.split_once("::").map(|(krate, _)| krate)
+}
+
+/// The first generic type argument before a top-level `,` or closing `>` in
+/// `s`, ignoring `,` and `>` inside nested brackets and ignoring `->`.
+fn first_type_arg(s: &str) -> &str {
+    let bytes = s.as_bytes();
+    let mut angles = 0_usize;
+    let mut parens = 0_usize;
+    let mut brackets = 0_usize;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'<' => angles += 1,
+            b'>' if i > 0 && bytes[i - 1] == b'-' => {}
+            b'>' if angles == 0 && parens == 0 && brackets == 0 => {
+                return s[..i].trim();
+            }
+            b'>' => angles = angles.saturating_sub(1),
+            b'(' => parens += 1,
+            b')' => parens = parens.saturating_sub(1),
+            b'[' => brackets += 1,
+            b']' => brackets = brackets.saturating_sub(1),
+            b',' if angles == 0 && parens == 0 && brackets == 0 => {
+                return s[..i].trim();
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    s.trim()
+}
+
 /// The namespaces the framework keeps for itself, sorted: a plugin that is
 /// not first-party may not use one. They are the first words of the
 /// framework's configuration sections, of its permission prefixes and of the
@@ -1110,6 +1159,30 @@ mod tests {
         assert!(!is_framework_crate(
             "navree_plugin_khata_core::KhataCoreModule"
         ));
+        assert!(
+            std::any::type_name::<crate::ConfiguredModule<u8, ()>>()
+                .starts_with("navree_kernel::module::ConfiguredModule<")
+        );
+        assert_eq!(
+            module_crate("navree_ui::module::UiOnDemand"),
+            Some("navree_ui")
+        );
+        assert_eq!(
+            module_crate(
+                "navree_kernel::module::ConfiguredModule<navree_cache::module::CacheModule, navree_cache::options::CacheOptions>"
+            ),
+            Some("navree_cache")
+        );
+        assert_eq!(
+            module_crate(
+                "navree_kernel::module::ConfiguredModule<plugins::Holder<fn(&str) -> &str>, ()>"
+            ),
+            Some("plugins")
+        );
+        assert_eq!(
+            module_crate("alloc::boxed::Box<dyn navree_kernel::module::Module>"),
+            None
+        );
         assert_eq!(RESERVED_NAMESPACES.len(), 87);
         assert!(RESERVED_NAMESPACES.windows(2).all(|w| w[0] < w[1]));
         assert!(RESERVED_NAMESPACES.iter().all(|ns| is_namespace(ns)));

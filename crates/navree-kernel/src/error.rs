@@ -311,6 +311,20 @@ pub enum KernelError {
         /// parentheses after a space; empty when it names it.
         reason: String,
     },
+    /// Two module values from different crates return the same [`ModuleId`](crate::ModuleId).
+    #[error(
+        "module id `{module}` (`{id_type}`) is claimed by modules in two crates (`{first}` and `{second}`); each module id belongs to one crate"
+    )]
+    DuplicateModuleId {
+        /// The readable name of the module id.
+        module: &'static str,
+        /// The type path recorded in the module id.
+        id_type: &'static str,
+        /// The full type path of the first module value that returned the id.
+        first: &'static str,
+        /// The full type path of the other crate's module value that returned the id.
+        second: &'static str,
+    },
     /// A module that acts for a plugin that is not first-party exports a
     /// non-multi provider key that another module also registers and exports,
     /// which leaves the key out of the service locator so app-wide lookups of

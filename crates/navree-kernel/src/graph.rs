@@ -955,10 +955,12 @@ struct Twice {
     importer: ModuleId,
 }
 
-/// What a walk registered, and the configured instances it dropped.
+/// What a walk registered, the configured instances it dropped, and any
+/// cross-crate `ModuleId` collisions it refused.
 struct Walked {
     registered: Vec<Registered>,
     twice: Vec<Twice>,
+    conflicts: Vec<KernelError>,
 }
 
 /// A module value to register: a root module borrowed from the app builder or
@@ -996,7 +998,12 @@ fn walk(roots: &[(&dyn Module, &'static str)]) -> Result<Walked, BootErrors> {
     let mut deferred = HashSet::new();
     loop {
         match Walker::new(&deferred).run(roots) {
-            Ok(walked) => return Ok(walked),
+            Ok(walked) => {
+                if !walked.conflicts.is_empty() {
+                    return Err(BootErrors(walked.conflicts));
+                }
+                return Ok(walked);
+            }
             Err(Restart(id, name)) => {
                 if !deferred.insert(id) {
                     // Only the plain instance's own imports lead to the configured
@@ -1017,11 +1024,15 @@ struct Walker<'a, 'd> {
     configured: HashSet<ModuleId>,
     /// The module that imported the first configured instance of each id.
     configured_by: HashMap<ModuleId, ModuleId>,
+    /// The crate stem and full type name of the first module value seen for each id.
+    seen_crates: HashMap<ModuleId, (Option<&'static str>, &'static str)>,
     configured_queue: VecDeque<Source<'a>>,
     plain: Vec<(ModuleId, Source<'a>)>,
     out: Vec<Registered>,
     /// The configured instances dropped because one of their id came first.
     twice: Vec<Twice>,
+    /// Cross-crate `ModuleId` collisions found during the walk.
+    conflicts: Vec<KernelError>,
 }
 
 impl<'a, 'd> Walker<'a, 'd> {
@@ -1031,10 +1042,12 @@ impl<'a, 'd> Walker<'a, 'd> {
             registered: HashSet::new(),
             configured: HashSet::new(),
             configured_by: HashMap::new(),
+            seen_crates: HashMap::new(),
             configured_queue: VecDeque::new(),
             plain: Vec::new(),
             out: Vec::new(),
             twice: Vec::new(),
+            conflicts: Vec::new(),
         }
     }
 
@@ -1043,9 +1056,12 @@ impl<'a, 'd> Walker<'a, 'd> {
         let mut root = ModuleBuilder::new(root_id, root_id.name());
         root.global = true;
         self.registered.insert(root_id);
+        let root_type = std::any::type_name::<AppRoot>();
+        self.seen_crates
+            .insert(root_id, (crate::plugin::module_crate(root_type), root_type));
         self.out.push(Registered {
             builder: root,
-            type_name: std::any::type_name::<AppRoot>(),
+            type_name: root_type,
             configured_by: None,
             import_ids: roots.iter().map(|(m, _)| m.id()).collect(),
         });
@@ -1064,6 +1080,7 @@ impl<'a, 'd> Walker<'a, 'd> {
         Ok(Walked {
             registered: self.out,
             twice: self.twice,
+            conflicts: self.conflicts,
         })
     }
 
@@ -1072,6 +1089,37 @@ impl<'a, 'd> Walker<'a, 'd> {
     fn enqueue(&mut self, source: Source<'a>, importer: ModuleId) -> Result<(), Restart> {
         let module = source.module();
         let id = module.id();
+        let type_name = source.type_name();
+        let krate = crate::plugin::module_crate(type_name);
+        if let Some(&(first_krate, first_type)) = self.seen_crates.get(&id) {
+            let same_crate = match (first_krate, krate) {
+                (Some(a), Some(b)) => a == b,
+                _ => first_type == type_name && krate.is_some(),
+            };
+            if !same_crate {
+                let already = self.conflicts.iter().any(|err| {
+                    matches!(
+                        err,
+                        KernelError::DuplicateModuleId {
+                            first,
+                            second,
+                            ..
+                        } if *first == first_type && *second == type_name
+                    )
+                });
+                if !already {
+                    self.conflicts.push(KernelError::DuplicateModuleId {
+                        module: module.name(),
+                        id_type: id.type_name(),
+                        first: first_type,
+                        second: type_name,
+                    });
+                }
+                return Ok(());
+            }
+        } else {
+            self.seen_crates.insert(id, (krate, type_name));
+        }
         if module.is_configured() {
             if !self.configured.insert(id) {
                 self.twice.push(Twice {
