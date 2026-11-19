@@ -325,10 +325,17 @@ internal sealed class WebPage : Grid, ILiveWebView
     }
 
     // Says over the page that a download it started was not saved.
-    private void ShowRefusedDownload()
+    private void ShowRefusedDownload() => ShowWebNotice("Download not saved", "The app does not save files from its web pages.");
+
+    // Says over the page why a file picker cannot open inside the web view.
+    private void ShowRefusedFilePicker() => ShowWebNotice("File upload unavailable here", WebData.FilePickerOffReason);
+
+    private void ShowWebNotice(string title, string message)
     {
         if (Children.OfType<InfoBar>().FirstOrDefault() is InfoBar shown)
         {
+            shown.Title = title;
+            shown.Message = message;
             shown.IsOpen = true;
             return;
         }
@@ -338,8 +345,8 @@ internal sealed class WebPage : Grid, ILiveWebView
             IsOpen = true,
             IsClosable = true,
             Severity = InfoBarSeverity.Informational,
-            Title = "Download not saved",
-            Message = "The app does not save files from its web pages.",
+            Title = title,
+            Message = message,
             VerticalAlignment = VerticalAlignment.Top,
         };
         Children.Add(bar);
@@ -448,8 +455,22 @@ internal sealed class WebPage : Grid, ILiveWebView
         };
 
         // The layer that sees what a callback does not: a document that is not the app's own is emptied before anything in it runs, and
-        // file inputs, programmatic file pickers, file drops and file pastes are turned off with an explanation in the page.
+        // file inputs, programmatic file pickers, file drops and file pastes are turned off with an explanation in the page. The browser
+        // process's own file-chooser dialog interception is turned on beside it as a backstop so no OS file dialog ever opens.
         _ = await web.AddScriptToExecuteOnDocumentCreatedAsync(WebData.DocumentGuardScript(host.Origins.Documents));
+        try
+        {
+            _ = await web.CallDevToolsProtocolMethodAsync("Page.setInterceptFileChooserDialog", "{\"enabled\":true}");
+            web.GetDevToolsProtocolEventReceiver("Page.fileChooserOpened").DevToolsProtocolEventReceived += (_, _) =>
+            {
+                ShowRefusedFilePicker();
+                host.ReportProblem("a file picker a web page asked for was refused");
+            };
+        }
+        catch (Exception problem) when (problem is not OutOfMemoryException)
+        {
+            // Runtimes that refuse the DevTools command remain guarded by the document script and drop handlers.
+        }
 
         // Every request is asked of the app first, whichever part of the page made it: the page, its frames, and its workers of every kind (a
         // service worker or a shared worker is raised only through this overload, with all its source kinds). A runtime without the overload shows

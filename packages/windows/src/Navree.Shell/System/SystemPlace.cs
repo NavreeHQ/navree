@@ -150,9 +150,9 @@ public sealed class SystemPlace : IDisposable
 
         // What waited when the last run ended. One that is a person's is kept only when this start can say that it is that person what
         // is kept is kept for: a start that read no mark can say so of nobody, and lets go of every one that is a person's here, before
-        // anything is armed. One that does not say whose it is was not read. When the start read a person's mark, what is kept is kept
-        // for them, so one that is nobody's is theirs too. What stays is a person's, and held until they are named as signed in; or it is
-        // nobody's, and no mark of a person is kept.
+        // anything is armed. One that does not say whose it is was not read. When the start read a person's mark, any reminder that waited
+        // for nobody is dropped too so a reminder asked while nobody was named never goes to the person before; what stays is a person's
+        // and held until they are named as signed in, or it is nobody's on a start that kept no mark of a person.
         string? keptText = host.Recall(PendingKey);
         schedule = NotificationSchedule.Read(keptText);
         int letGo = schedule.KeepFor(host.KeptFor);
@@ -332,15 +332,10 @@ public sealed class SystemPlace : IDisposable
     }
 
     /// <summary>
-    /// A person became the one signed in with no change of person: the first since a sign-out or since a start that kept nothing of a
-    /// person, or the person named before, signed in again after nobody was. Every notification that waits and is nobody's is theirs from
-    /// now on (one they asked for between their sign-in and the shell's answer that names them, or a visitor's before them). It is shown
-    /// only while they are signed in, and no longer to whoever is there.
+    /// The first person since a sign-out or since a start that kept nothing of a person became the one signed in. Every notification that
+    /// waits and is nobody's (asked during their sign-in or before anyone had ever signed in) is theirs from now on, shown only while they
+    /// are signed in; reminders asked while nobody is named after a prior person was kept are dropped instead, never handed to anyone.
     /// </summary>
-    /// <remarks>
-    /// A host that makes its place only after the first person was named misses this call, and loses nothing by it: <see cref="Start"/>
-    /// reads what waits with that person already the one what is kept is kept for, and gives them what is nobody's there.
-    /// </remarks>
     /// <param name="owner">The person's mark.</param>
     internal void GiveWaitingTo(string owner)
     {
@@ -774,7 +769,9 @@ public sealed class SystemPlace : IDisposable
     // ---- what the core holds that the system shows ---------------------------------------------------------
 
     private IReadOnlyList<PlaceDestination> Places() =>
-        [.. host.State.Nav.Destinations.Select(destination => new PlaceDestination(destination.Label, destination.Href, destination.Badge))];
+        Navree.Platform.CoverRules.IsCovered(host.State)
+            ? []
+            : [.. host.State.Nav.Destinations.Select(destination => new PlaceDestination(destination.Label, destination.Href, destination.Badge))];
 
     private void OnState(ViewState state)
     {

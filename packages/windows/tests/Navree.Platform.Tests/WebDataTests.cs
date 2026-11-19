@@ -121,9 +121,14 @@ public sealed class WebDataTests
         Expect.That(originReturn > 0 && fileGuard > originReturn, "the origin guard must precede the file guards without skipping them on about:srcdoc or blob documents");
         Assert.IsFalse(script.Contains("location.protocol==='about:'||location.protocol==='data:'){return;}", StringComparison.Ordinal), "about:srcdoc frames must not skip the file guards");
 
-        StringAssert.Contains(script, "list[i].disabled=true");
+        StringAssert.Contains(script, "el.disabled=true");
+        StringAssert.Contains(script, "HTMLElement.prototype.click");
         StringAssert.Contains(script, "HTMLInputElement.prototype.click");
         StringAssert.Contains(script, "HTMLInputElement.prototype.showPicker");
+        StringAssert.Contains(script, "Element.prototype.attachShadow");
+        StringAssert.Contains(script, "e.composedPath");
+        StringAssert.Contains(script, "configurable:false,writable:false");
+        StringAssert.Contains(script, "observeRoot(document);");
         StringAssert.Contains(script, "showOpenFilePicker");
         StringAssert.Contains(script, "showDirectoryPicker");
         StringAssert.Contains(script, "showSaveFilePicker");
