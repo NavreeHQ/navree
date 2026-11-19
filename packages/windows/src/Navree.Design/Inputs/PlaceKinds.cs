@@ -67,6 +67,37 @@ public enum PictureKind
     JpegXr,
 }
 
+/// <summary>What kind of video container a file is, read from its first bytes.</summary>
+public enum VideoKind
+{
+    /// <summary>None of the video containers below.</summary>
+    NotAVideo,
+
+    /// <summary>ISO base media file format or QuickTime movie (MP4, M4V, MOV, 3GP).</summary>
+    IsoBmff,
+
+    /// <summary>WebM.</summary>
+    Webm,
+
+    /// <summary>Matroska (MKV).</summary>
+    Matroska,
+
+    /// <summary>AVI (RIFF AVI).</summary>
+    Avi,
+
+    /// <summary>ASF / Windows Media Video (WMV).</summary>
+    Asf,
+
+    /// <summary>Flash Video (FLV).</summary>
+    Flv,
+
+    /// <summary>MPEG program or transport stream.</summary>
+    Mpeg,
+
+    /// <summary>Ogg video (Theora).</summary>
+    Ogg,
+}
+
 /// <summary>Reads what kind of file a file is from its first bytes.</summary>
 public static class PlaceKinds
 {
@@ -88,8 +119,9 @@ public static class PlaceKinds
     // Brands of plain video and sound in ISO media files (same page): such a file is not a picture.
     private static readonly HashSet<string> MovingBrands = new(StringComparer.Ordinal)
     {
-        "isom", "iso2", "iso3", "iso4", "iso5", "iso6", "iso7", "iso8", "iso9", "mp41", "mp42", "qt  ", "avc1", "M4V ", "M4A ", "M4P ", "M4B ",
-        "3gp4", "3gp5", "3gp6", "3gp7", "3gp8", "3gp9", "3g2a", "3g2b", "3g2c", "dash", "mmp4", "MSNV", "f4v ", "f4a ",
+        "isom", "iso2", "iso3", "iso4", "iso5", "iso6", "iso7", "iso8", "iso9", "mp41", "mp42", "qt  ", "avc1", "hev1", "hvc1", "av01", "vp09",
+        "M4V ", "M4A ", "M4P ", "M4B ", "3gp4", "3gp5", "3gp6", "3gp7", "3gp8", "3gp9", "3g2a", "3g2b", "3g2c", "dash", "mmp4", "MSNV", "XAVC",
+        "f4v ", "f4a ", "mp71",
     };
 
     /// <summary>What kind of file this is, from its first bytes.</summary>
@@ -222,6 +254,132 @@ public static class PlaceKinds
         PictureKind.Raw => "raw",
         _ => kind.ToString().ToUpperInvariant(),
     };
+
+    /// <summary>What kind of video container this is, from its first bytes.</summary>
+    /// <param name="head">The file's first bytes.</param>
+    /// <returns>The video container kind.</returns>
+    public static VideoKind VideoOf(ReadOnlySpan<byte> head)
+    {
+        if (head.Length >= 12 && (head[4..8].SequenceEqual("ftyp"u8) || head[4..8].SequenceEqual("styp"u8)))
+        {
+            return Brands(head) == PictureKind.NotAPicture ? VideoKind.IsoBmff : VideoKind.NotAVideo;
+        }
+
+        if (LooksLikeHeaderlessQuickTime(head))
+        {
+            return VideoKind.IsoBmff;
+        }
+
+        if (head.StartsWith((ReadOnlySpan<byte>)[0x1A, 0x45, 0xDF, 0xA3]))
+        {
+            ReadOnlySpan<byte> ebml = head[..Math.Min(head.Length, 128)];
+            return IndexOfIgnoringCase(ebml, "webm"u8) >= 0 ? VideoKind.Webm : VideoKind.Matroska;
+        }
+
+        if (head.StartsWith("RIFF"u8) && head.Length >= 12 && (head[8..12].SequenceEqual("AVI "u8) || head[8..12].SequenceEqual("AVIX"u8)))
+        {
+            return VideoKind.Avi;
+        }
+
+        if (head.StartsWith((ReadOnlySpan<byte>)[0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0x00, 0xAA, 0x00, 0x62, 0xCE, 0x6C]))
+        {
+            return VideoKind.Asf;
+        }
+
+        if (head.StartsWith("FLV\u0001"u8))
+        {
+            return VideoKind.Flv;
+        }
+
+        if (head.StartsWith((ReadOnlySpan<byte>)[0x00, 0x00, 0x01, 0xBA])
+            || (head.Length >= 377 && head[0] == 0x47 && head[188] == 0x47 && head[376] == 0x47))
+        {
+            return VideoKind.Mpeg;
+        }
+
+        if (head.StartsWith("OggS"u8) && IndexOfIgnoringCase(head[..Math.Min(head.Length, 128)], "theora"u8) >= 0)
+        {
+            return VideoKind.Ogg;
+        }
+
+        return VideoKind.NotAVideo;
+    }
+
+    /// <summary>The media type of a video read from its first bytes, or null when it is not a video.</summary>
+    /// <param name="kind">The video kind.</param>
+    /// <param name="head">The file's first bytes.</param>
+    /// <returns>The media type.</returns>
+    public static string? VideoMediaTypeOf(VideoKind kind, ReadOnlySpan<byte> head) => kind switch
+    {
+        VideoKind.IsoBmff when head.Length >= 12 && head[4..8].SequenceEqual("ftyp"u8) && head[8..12].SequenceEqual("qt  "u8) => "video/quicktime",
+        VideoKind.IsoBmff when head.Length >= 12 && head[4..8].SequenceEqual("ftyp"u8) && head[8..11].SequenceEqual("3gp"u8) => "video/3gpp",
+        VideoKind.IsoBmff when head.Length >= 12 && head[4..8].SequenceEqual("ftyp"u8) && head[8..11].SequenceEqual("3g2"u8) => "video/3gpp2",
+        VideoKind.IsoBmff when head.Length >= 12 && head[4..8].SequenceEqual("ftyp"u8) && head[8..12].SequenceEqual("M4A "u8) => "audio/mp4",
+        VideoKind.IsoBmff when !(head.Length >= 8 && head[4..8].SequenceEqual("ftyp"u8)) => "video/quicktime",
+        VideoKind.IsoBmff => "video/mp4",
+        VideoKind.Webm => "video/webm",
+        VideoKind.Matroska => "video/x-matroska",
+        VideoKind.Avi => "video/x-msvideo",
+        VideoKind.Asf => "video/x-ms-wmv",
+        VideoKind.Flv => "video/x-flv",
+        VideoKind.Mpeg => "video/mpeg",
+        VideoKind.Ogg => "video/ogg",
+        _ => null,
+    };
+
+    /// <summary>The video kind's name in the words said at a field.</summary>
+    /// <param name="kind">The video kind.</param>
+    /// <returns>A readable name such as <c>WebM</c> or <c>Matroska</c>.</returns>
+    public static string NamedVideo(VideoKind kind) => kind switch
+    {
+        VideoKind.IsoBmff => "MP4",
+        VideoKind.Webm => "WebM",
+        VideoKind.Matroska => "Matroska",
+        VideoKind.Avi => "AVI",
+        VideoKind.Asf => "Windows Media",
+        VideoKind.Flv => "FLV",
+        VideoKind.Mpeg => "MPEG",
+        VideoKind.Ogg => "Ogg",
+        _ => "video",
+    };
+
+    // Classic QuickTime movies may begin directly with moov, wide, mdat, free or pnot with no ftyp box ahead of them.
+    private static bool LooksLikeHeaderlessQuickTime(ReadOnlySpan<byte> head)
+    {
+        if (head.Length < 8)
+        {
+            return false;
+        }
+
+        uint size = BinaryPrimitives.ReadUInt32BigEndian(head);
+        if (size is > 0 and < 8 && size != 1)
+        {
+            return false;
+        }
+
+        if (size == 1 && (head.Length < 16 || BinaryPrimitives.ReadUInt64BigEndian(head[8..16]) < 16))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> first = head[4..8];
+        if (first.SequenceEqual("moov"u8) || first.SequenceEqual("wide"u8) || first.SequenceEqual("pnot"u8))
+        {
+            return true;
+        }
+
+        if (first.SequenceEqual("mdat"u8) || first.SequenceEqual("free"u8) || first.SequenceEqual("skip"u8))
+        {
+            long next = size == 1 ? (long)BinaryPrimitives.ReadUInt64BigEndian(head[8..16]) : size;
+            if (next >= 8 && next + 8 <= head.Length)
+            {
+                ReadOnlySpan<byte> second = head.Slice((int)next + 4, 4);
+                return second.SequenceEqual("moov"u8) || second.SequenceEqual("mdat"u8) || second.SequenceEqual("wide"u8) || second.SequenceEqual("free"u8);
+            }
+        }
+
+        return false;
+    }
 
     // An OpenRaster document is a ZIP archive: "The first file in the archive must be called `mimetype`", "It must be STORED without
     // compression", and it "must contain the string `image/openraster`" (the OpenRaster file layout specification, openraster.org). In a

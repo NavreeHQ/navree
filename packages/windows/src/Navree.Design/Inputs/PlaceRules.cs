@@ -68,26 +68,38 @@ public static partial class PlaceRules
     /// <returns>True for a picture.</returns>
     public static bool IsPicture(string mediaType) => mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Whether a media type is a video.</summary>
+    /// <param name="mediaType">The media type.</param>
+    /// <returns>True for a video.</returns>
+    public static bool IsVideo(string mediaType) => mediaType.StartsWith("video/", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
-    /// Whether a file must be looked into before it is sent from a field that does not keep the place: a picture by its bytes or by its name, or
-    /// a camera's raw picture or a picture editor's document by its name. A file that is none of these is not looked into and is sent as it is.
+    /// Whether a file must be looked into before it is sent from a field that does not keep the place: a picture or video by its bytes or
+    /// by its name, or a camera's raw picture or a picture editor's document by its name. A file that is none of these is not looked into
+    /// and is sent as it is.
     /// </summary>
     /// <param name="head">The file's first bytes (<see cref="PlaceKinds.Head"/> of them, or all of a shorter file).</param>
     /// <param name="name">The file's name.</param>
     /// <param name="mediaType">The media type its name says.</param>
     /// <returns>True when it must be looked into.</returns>
     public static bool MustLook(ReadOnlySpan<byte> head, string name, string mediaType) =>
-        PlaceKinds.KindOf(head) != PictureKind.NotAPicture || IsPicture(mediaType) || IsRawName(name) || IsEditorName(name);
+        PlaceKinds.KindOf(head) != PictureKind.NotAPicture
+        || PlaceKinds.VideoOf(head) != VideoKind.NotAVideo
+        || IsPicture(mediaType)
+        || IsVideo(mediaType)
+        || IsRawName(name)
+        || IsEditorName(name);
 
-    /// <summary>Takes the place out of a picture.</summary>
+    /// <summary>Takes the place out of a picture or video.</summary>
     /// <param name="file">The whole file. It may be changed in place; when the outcome is a refusal it must not be sent.</param>
-    /// <param name="name">The file's name, which can only make the code more careful: it never makes a picture be read as another kind.</param>
+    /// <param name="name">The file's name, which can only make the code more careful: it never makes a file be read as another kind.</param>
     /// <returns>What became of the place, and what to send.</returns>
     public static PlaceResult TakeOut(byte[] file, string name)
     {
         ArgumentNullException.ThrowIfNull(file);
         ArgumentNullException.ThrowIfNull(name);
-        PictureKind kind = PlaceKinds.KindOf(file.AsSpan(0, Math.Min(file.Length, PlaceKinds.Head)));
+        ReadOnlySpan<byte> head = file.AsSpan(0, Math.Min(file.Length, PlaceKinds.Head));
+        PictureKind kind = PlaceKinds.KindOf(head);
         Cleaning work = new(file);
         try
         {
@@ -119,6 +131,18 @@ public static partial class PlaceRules
 
                     break;
                 case PictureKind.NotAPicture:
+                    VideoKind video = PlaceKinds.VideoOf(head);
+                    if (video == VideoKind.IsoBmff)
+                    {
+                        IsoBmffVideo(work);
+                        break;
+                    }
+
+                    if (video != VideoKind.NotAVideo)
+                    {
+                        return RefuseVideo(video);
+                    }
+
                     if (IsRawName(name))
                     {
                         return Refused(Doubt.Raw);
@@ -129,10 +153,15 @@ public static partial class PlaceRules
                         return RefuseDocument("a picture editor's");
                     }
 
-                    // Not a picture by its bytes: a file whose name says it is one may still hold a place nobody here can see.
-                    if (IsPicture(FileRules.MediaTypeOf(name)))
+                    string claimedType = FileRules.MediaTypeOf(name);
+                    if (IsPicture(claimedType))
                     {
                         return Refused(Doubt.Unknown);
+                    }
+
+                    if (IsVideo(claimedType))
+                    {
+                        return Refused(Doubt.VideoUnknown);
                     }
 
                     break;
@@ -194,6 +223,13 @@ public static partial class PlaceRules
         return new PlaceResult(PlaceOutcome.Refused, "The place it was taken cannot be taken out of " + article + named + " picture here, so it was not added. Save it as a JPEG or PNG picture and choose that.");
     }
 
+    private static PlaceResult RefuseVideo(VideoKind kind)
+    {
+        string named = PlaceKinds.NamedVideo(kind);
+        string article = named[0] is 'A' or 'E' or 'I' or 'O' or 'U' ? "an " : "a ";
+        return new PlaceResult(PlaceOutcome.Refused, "The place a video was made cannot be taken out of " + article + named + " video here, so it was not added. Save it as an MP4 or MOV video and choose that.");
+    }
+
     private static PlaceResult Refused(Doubt why) => new(PlaceOutcome.Refused, why switch
     {
         Doubt.Video => "This photo holds a short video (a motion photo), and the video can hold the place it was taken, so it was not added. Save the photo as a still, without its video, and choose that.",
@@ -201,13 +237,17 @@ public static partial class PlaceRules
         Doubt.Raw => "The place it was taken cannot be taken out of a camera's raw picture here, so it was not added. Save it as a JPEG or PNG picture and choose that.",
         Doubt.Said => "This picture says where it was taken in a way that cannot be taken out here, so it was not added. Save it as a JPEG or PNG picture and choose that.",
         Doubt.Unknown => "The place it was taken cannot be looked for in this file here, because its bytes are not those of a picture this client reads, so it was not added. Save it as a JPEG or PNG picture and choose that.",
-        Doubt.Fault => "The place it was taken could not be looked for in this picture, because reading it failed here, so it was not added. Save it again as a JPEG or PNG picture and choose that.",
+        Doubt.VideoUnknown => "The place this video was made cannot be looked for here, because its bytes are not those of an MP4 or MOV container this client reads, so it was not added. Save it as an MP4 or MOV video and choose that.",
+        Doubt.VideoUnreadable => "The place this video was made cannot be taken out safely because part of its MP4 or MOV container could not be read here, so it was not added. Export it again as an MP4 or MOV video and choose that.",
+        Doubt.VideoTrack => "This video records location data along its timeline in a track that cannot be stripped here without re-encoding, so it was not added. Export a copy without location tracks and choose that.",
+        Doubt.VideoSaid => "This video holds location metadata in a container structure whose offsets cannot be rewritten safely here, so it was not added. Export it again without location metadata and choose that.",
+        Doubt.Fault => "The place it was taken could not be looked for in this file, because reading it failed here, so it was not added.",
         _ => "The place it was taken cannot be looked for in this picture, because a part of it cannot be read here, so it was not added. Save it again as a JPEG or PNG picture and choose that.",
     });
 
     private static PlaceDoubtException Doubted(Doubt why = Doubt.Unreadable) => new(why);
 
-    /// <summary>Why a picture is refused.</summary>
+    /// <summary>Why a picture or video is refused.</summary>
     private enum Doubt
     {
         // A part of it cannot be read: cut short, a structure that does not hold together, a packet that is not UTF-8.
@@ -227,6 +267,18 @@ public static partial class PlaceRules
 
         // The name says picture and the bytes say nothing this code reads.
         Unknown,
+
+        // The name says video and the bytes are not an MP4 or MOV container this code reads.
+        VideoUnknown,
+
+        // Part of an MP4 or MOV box structure is truncated or malformed.
+        VideoUnreadable,
+
+        // A timed metadata or subtitle track in mdat carries GPS / location telemetry.
+        VideoTrack,
+
+        // Location metadata sits alongside absolute item/fragment offsets that cannot be rewritten safely.
+        VideoSaid,
 
         // Reading it failed in a way nothing here expects.
         Fault,

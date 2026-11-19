@@ -471,4 +471,125 @@ public sealed class PickedFilesTests
             Expect.That(picked.File is null || !files.Available(picked.File.Token), "round " + round + ": a file of the session that ended is still held");
         }
     }
+
+    [TestMethod]
+    public async Task AVideoIsSentWithoutThePlaceItWasMadeOrNotAtAll()
+    {
+        PickedFiles files = new(copies);
+        byte[] samples = [0x00, 0x00, 0x01, 0x65, 0xAA, 0xBB, 0xCC, 0xDD];
+
+        // 1. MP4 with ©xyz coordinates and a non-location ©nam title: sent without the place, with mdat and title intact, and original untouched.
+        byte[] mp4WithPlace = VideoClip(withPlace: true, telemetryTrack: false, samples);
+        string mp4Path = Write("Ludhiana-dispatch.mp4", mp4WithPlace);
+        Picked cleaned = await files.AddAsync(mp4Path, Rule(accept: "video/*"), 0, CancellationToken.None);
+
+        Assert.IsNull(cleaned.Refusal, cleaned.Refusal);
+        Assert.IsNotNull(cleaned.File);
+        Assert.AreEqual("video/mp4", cleaned.File.MediaType);
+        CollectionAssert.AreEqual(mp4WithPlace, File.ReadAllBytes(mp4Path), "the person's original video on disk was modified");
+
+        byte[] sent = await SentAsync(files, cleaned);
+        Assert.AreEqual(cleaned.File.Size, sent.Length);
+        Assert.IsFalse(Encoding.Latin1.GetString(sent).Contains("+30.9010+075.8573", StringComparison.Ordinal), "the GPS coordinates remained in the video sent");
+        Assert.IsFalse(Encoding.Latin1.GetString(sent).Contains("\u00A9xyz", StringComparison.Ordinal), "the ©xyz box remained in the video sent");
+        StringAssert.Contains(Encoding.Latin1.GetString(sent), "Ludhiana dispatch");
+
+        // 2. Videos whose location cannot be stripped cleanly (in-stream telemetry track, WebM/Matroska/AVI containers, or broken MP4) are refused.
+        byte[] telemetryMp4 = VideoClip(withPlace: false, telemetryTrack: true, samples);
+        Picked refusedTelemetry = await files.AddAsync(Write("Amritsar-route.mp4", telemetryMp4), Rule(accept: "video/*"), 0, CancellationToken.None);
+        Assert.IsNull(refusedTelemetry.File);
+        StringAssert.Contains(refusedTelemetry.Refusal, "Amritsar-route.mp4:");
+
+        byte[] webm = [0x1A, 0x45, 0xDF, 0xA3, .. "webm"u8.ToArray(), 1, 2, 3, 4];
+        Picked refusedWebm = await files.AddAsync(Write("Pune-demo.webm", webm), Rule(accept: "video/*"), 0, CancellationToken.None);
+        Assert.IsNull(refusedWebm.File);
+        StringAssert.Contains(refusedWebm.Refusal, "WebM");
+
+        byte[] avi = [.. "RIFF"u8.ToArray(), 16, 0, 0, 0, .. "AVI "u8.ToArray(), 0, 0, 0, 0];
+        Picked refusedAvi = await files.AddAsync(Write("Warehouse.avi", avi), Rule(accept: "video/*"), 0, CancellationToken.None);
+        Assert.IsNull(refusedAvi.File);
+        StringAssert.Contains(refusedAvi.Refusal, "AVI");
+
+        Picked refusedCorrupt = await files.AddAsync(Write("Broken.mp4", [1, 2, 3, 4, 5]), Rule(accept: "video/*"), 0, CancellationToken.None);
+        Assert.IsNull(refusedCorrupt.File);
+        StringAssert.Contains(refusedCorrupt.Refusal, "Broken.mp4:");
+    }
+
+    [TestMethod]
+    public async Task AVideoWithNothingOfAPlaceIsSentByteForByte()
+    {
+        PickedFiles files = new(copies);
+        byte[] samples = Bytes(4096, 42);
+        byte[] cleanVideo = VideoClip(withPlace: false, telemetryTrack: false, samples);
+        string path = Write("Chandigarh-packing.mp4", cleanVideo);
+
+        Picked picked = await files.AddAsync(path, Rule(accept: "video/*"), 0, CancellationToken.None);
+
+        Assert.IsNull(picked.Refusal, picked.Refusal);
+        Assert.IsNotNull(picked.File);
+        Assert.AreEqual(cleanVideo.Length, picked.File.Size);
+        byte[] sent = await SentAsync(files, picked);
+        CollectionAssert.AreEqual(cleanVideo, sent, "a video with nothing of a place was altered instead of being sent byte for byte");
+    }
+
+    [TestMethod]
+    public async Task AFieldThatAsksForThePlaceIsSentTheVideoAsItIs()
+    {
+        PickedFiles files = new(copies);
+        byte[] samples = [9, 8, 7, 6, 5, 4, 3, 2];
+        byte[] geotaggedMp4 = VideoClip(withPlace: true, telemetryTrack: false, samples);
+        byte[] webm = [0x1A, 0x45, 0xDF, 0xA3, .. "webm"u8.ToArray(), 10, 20, 30, 40];
+
+        Picked keptMp4 = await files.AddAsync(Write("Ludhiana-site.mp4", geotaggedMp4), Rule(accept: "video/*", keep: true), 0, CancellationToken.None);
+        Picked keptWebm = await files.AddAsync(Write("Pune-site.webm", webm), Rule(accept: "video/*", keep: true), 0, CancellationToken.None);
+
+        Assert.IsNull(keptMp4.Refusal, keptMp4.Refusal);
+        Assert.IsNull(keptWebm.Refusal, keptWebm.Refusal);
+        CollectionAssert.AreEqual(geotaggedMp4, await SentAsync(files, keptMp4), "a field with keep_location did not receive the geotagged MP4 as it is");
+        CollectionAssert.AreEqual(webm, await SentAsync(files, keptWebm), "a field with keep_location did not receive the WebM video as it is");
+        Assert.AreEqual(0, CopiesOnDisk(), "a field with keep_location made an unnecessary copy");
+    }
+
+    private static byte[] VideoClip(bool withPlace, bool telemetryTrack, byte[] samples)
+    {
+        static byte[] Box(string kind, params byte[][] parts)
+        {
+            int total = 8 + parts.Sum(p => p.Length);
+            byte[] bytes = new byte[total];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(0, 4), (uint)total);
+            Encoding.Latin1.GetBytes(kind).CopyTo(bytes.AsSpan(4, 4));
+            int at = 8;
+            foreach (byte[] part in parts)
+            {
+                part.CopyTo(bytes.AsSpan(at));
+                at += part.Length;
+            }
+
+            return bytes;
+        }
+
+        byte[] ftyp = Box("ftyp", "isom"u8.ToArray(), [0, 0, 2, 0], "isommp42"u8.ToArray());
+        string handler = telemetryTrack ? "gpmd" : "vide";
+        string sampleFourCc = telemetryTrack ? "gpmd" : "avc1";
+        byte[] title = Box("\u00A9nam", [0, 17, 0x15, 0xC7], "Ludhiana dispatch"u8.ToArray());
+        byte[] xyz = Box("\u00A9xyz", [0, 18, 0x15, 0xC7], "+30.9010+075.8573/"u8.ToArray());
+        byte[] udta = withPlace ? Box("udta", xyz, title) : Box("udta", title);
+
+        byte[] MakeMoov(uint offset)
+        {
+            byte[] off = new byte[4];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(off, offset);
+            byte[] stco = Box("stco", [0, 0, 0, 0, 0, 0, 0, 1], off);
+            byte[] stsd = Box("stsd", [0, 0, 0, 0, 0, 0, 0, 1], Box(sampleFourCc, new byte[8]));
+            byte[] stbl = Box("stbl", stsd, stco);
+            byte[] minf = Box("minf", Box("vmhd", new byte[12]), stbl);
+            byte[] mdia = Box("mdia", Box("mdhd", new byte[24]), Box("hdlr", new byte[8], Encoding.Latin1.GetBytes(handler), new byte[12]), minf);
+            byte[] trak = Box("trak", Box("tkhd", new byte[84]), mdia);
+            return Box("moov", Box("mvhd", new byte[100]), trak, udta);
+        }
+
+        byte[] placeholderMoov = MakeMoov(0);
+        uint sampleStart = (uint)(ftyp.Length + placeholderMoov.Length + 8);
+        return [.. ftyp, .. MakeMoov(sampleStart), .. Box("mdat", samples)];
+    }
 }

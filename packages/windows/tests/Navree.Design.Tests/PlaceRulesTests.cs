@@ -568,4 +568,153 @@ public sealed class PlaceRulesTests
         byte[] file = Jpeg(block[..^20]);
         Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut(file, "cut.jpg").Outcome);
     }
+
+    [TestMethod]
+    public void Iso_bmff_and_quicktime_videos_strip_udta_mdta_mdir_and_xmp_locations_and_shift_chunk_offsets()
+    {
+        byte[] samples = [0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0x21, 0xA0];
+        byte[] ftyp = Mp4Box("ftyp", "isom"u8.ToArray(), [0, 0, 2, 0], "isommp42"u8.ToArray());
+        byte[] xyz = Mp4Box("\u00A9xyz", [0, 18, 0x15, 0xC7], "+30.9010+075.8573/"u8.ToArray());
+        byte[] loci = Mp4Box("loci", [0, 0, 0, 0, 0x15, 0xC7], "Ludhiana\0"u8.ToArray(), [0], [0, 0x3C, 0, 0, 0, 0x97, 0, 0, 0, 0, 0, 0], "Punjab\0\0"u8.ToArray());
+        byte[] title = Mp4Box("\u00A9nam", [0, 13, 0x15, 0xC7], "Ludhiana loom"u8.ToArray());
+
+        // 1. Fast-start MP4 (moov before mdat) with stco, ©xyz, loci, and ©nam: location boxes go, ©nam stays, and stco shifts to match mdat.
+        byte[] udta = Mp4Box("udta", xyz, loci, title);
+        byte[] dummyMoov = BuildMoovWithTrack("vide", "avc1", useCo64: false, chunkOffset: 0, udta);
+        uint originalSampleOffset = (uint)(ftyp.Length + dummyMoov.Length + 8);
+        byte[] realMoov = BuildMoovWithTrack("vide", "avc1", useCo64: false, chunkOffset: originalSampleOffset, udta);
+        byte[] mp4 = [.. ftyp, .. realMoov, .. Mp4Box("mdat", samples)];
+
+        PlaceResult cleaned = PlaceRules.TakeOut([.. mp4], "loom.mp4");
+        Assert.AreEqual(PlaceOutcome.Removed, cleaned.Outcome, cleaned.Why);
+        Assert.IsNotNull(cleaned.Bytes);
+        Assert.IsLessThan(mp4.Length, cleaned.Bytes.Length);
+        Assert.IsFalse(Encoding.Latin1.GetString(cleaned.Bytes).Contains("+30.9010+075.8573", StringComparison.Ordinal));
+        Assert.IsFalse(Encoding.Latin1.GetString(cleaned.Bytes).Contains("loci", StringComparison.Ordinal));
+        StringAssert.Contains(Encoding.Latin1.GetString(cleaned.Bytes), "Ludhiana loom");
+
+        int stcoPos = Encoding.Latin1.GetString(cleaned.Bytes).IndexOf("stco", StringComparison.Ordinal);
+        Expect.That(stcoPos >= 4, "stco box missing in cleaned MP4");
+        uint newOffset = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(cleaned.Bytes.AsSpan(stcoPos + 12, 4));
+        CollectionAssert.AreEqual(samples, cleaned.Bytes.AsSpan((int)newOffset, samples.Length).ToArray(), "stco offset did not follow mdat after moov shrank");
+
+        // 2. QuickTime MOV with co64 and mdta keys + ilst: location keys are removed and surviving keys renumbered.
+        byte[] qtFtyp = Mp4Box("ftyp", "qt  "u8.ToArray(), [0, 0, 0, 0], "qt  \0\0\0\0"u8.ToArray());
+        byte[] keyMake = MdtaKey("com.apple.quicktime.make");
+        byte[] keyIso = MdtaKey("com.apple.quicktime.location.ISO6709");
+        byte[] keyAcc = MdtaKey("com.apple.quicktime.location.accuracy.horizontal");
+        byte[] keyModel = MdtaKey("com.apple.quicktime.model");
+        byte[] keysBox = Mp4Box("keys", [0, 0, 0, 0, 0, 0, 0, 4], keyMake, keyIso, keyAcc, keyModel);
+        byte[] ilstBox = Mp4Box(
+            "ilst",
+            MdtaIlstItem(1, "Apple"u8.ToArray()),
+            MdtaIlstItem(2, "+31.6340+074.8723+234.0/"u8.ToArray()),
+            MdtaIlstItem(3, "5.000000"u8.ToArray()),
+            MdtaIlstItem(4, "iPhone 15"u8.ToArray()));
+        byte[] qtMeta = Mp4Box("meta", Mp4Hdlr("mdta"), keysBox, ilstBox);
+        byte[] dummyMovMoov = BuildMoovWithTrack("vide", "hvc1", useCo64: true, chunkOffset: 0, qtMeta);
+        ulong movSampleOffset = (ulong)(qtFtyp.Length + dummyMovMoov.Length + 8);
+        byte[] movMoov = BuildMoovWithTrack("vide", "hvc1", useCo64: true, chunkOffset: movSampleOffset, qtMeta);
+        byte[] mov = [.. qtFtyp, .. movMoov, .. Mp4Box("mdat", samples)];
+
+        PlaceResult cleanedMov = PlaceRules.TakeOut([.. mov], "amritsar.mov");
+        Assert.AreEqual(PlaceOutcome.Removed, cleanedMov.Outcome, cleanedMov.Why);
+        string movText = Encoding.Latin1.GetString(cleanedMov.Bytes!);
+        Assert.IsFalse(movText.Contains("ISO6709", StringComparison.Ordinal));
+        Assert.IsFalse(movText.Contains("+31.6340", StringComparison.Ordinal));
+        StringAssert.Contains(movText, "com.apple.quicktime.make");
+        StringAssert.Contains(movText, "com.apple.quicktime.model");
+        StringAssert.Contains(movText, "iPhone 15");
+
+        int co64Pos = movText.IndexOf("co64", StringComparison.Ordinal);
+        ulong updatedCo64 = System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(cleanedMov.Bytes.AsSpan(co64Pos + 12, 8));
+        CollectionAssert.AreEqual(samples, cleanedMov.Bytes.AsSpan((int)updatedCo64, samples.Length).ToArray());
+
+        // 3. Top-level XMP UUID box holding place is removed; XMP UUID with no place is left byte for byte.
+        byte[] xmpUuid = [0xBE, 0x7A, 0xCF, 0xCB, 0x97, 0xA9, 0x42, 0xE8, 0x9C, 0x71, 0x99, 0x94, 0x91, 0xE3, 0xAF, 0xAC];
+        byte[] placeXmp = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:Description photoshop:City=\"Pune\"/></x:xmpmeta>"u8.ToArray();
+        byte[] cleanXmp = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:Description dc:title=\"Workshop\"/></x:xmpmeta>"u8.ToArray();
+        byte[] mdatFirst = Mp4Box("mdat", samples);
+        byte[] cleanTrackMoov = BuildMoovWithTrack("vide", "avc1", useCo64: false, chunkOffset: (uint)(ftyp.Length + 8));
+
+        byte[] withPlaceXmp = [.. ftyp, .. mdatFirst, .. cleanTrackMoov, .. Mp4Box("uuid", xmpUuid, placeXmp)];
+        PlaceResult xmpRemoved = PlaceRules.TakeOut([.. withPlaceXmp], "pune.mp4");
+        Assert.AreEqual(PlaceOutcome.Removed, xmpRemoved.Outcome);
+        Assert.IsFalse(Encoding.UTF8.GetString(xmpRemoved.Bytes!).Contains("Pune", StringComparison.Ordinal));
+
+        byte[] withCleanXmp = [.. ftyp, .. mdatFirst, .. cleanTrackMoov, .. Mp4Box("uuid", xmpUuid, cleanXmp)];
+        PlaceResult untouched = PlaceRules.TakeOut([.. withCleanXmp], "workshop.mp4");
+        Assert.AreEqual(PlaceOutcome.None, untouched.Outcome);
+        CollectionAssert.AreEqual(withCleanXmp, untouched.Bytes);
+
+        // 4. Telemetry tracks (gpmd / camm), non-BMFF video containers, and truncated MP4 boxes are refused.
+        byte[] telemetryMoov = BuildMoovWithTrack("gpmd", "gpmd", useCo64: false, chunkOffset: (uint)(ftyp.Length + 8));
+        byte[] goproMp4 = [.. ftyp, .. mdatFirst, .. telemetryMoov];
+        Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut(goproMp4, "gopro.mp4").Outcome);
+        Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([0x1A, 0x45, 0xDF, 0xA3, .. "webm"u8.ToArray()], "clip.webm").Outcome);
+        Assert.AreEqual(PlaceOutcome.Refused, PlaceRules.TakeOut([.. ftyp, 0, 0, 0, 50, .. "moov"u8.ToArray()], "truncated.mp4").Outcome);
+    }
+
+    private static byte[] Mp4Box(string kind, params byte[][] payloads)
+    {
+        int length = 8 + payloads.Sum(p => p.Length);
+        byte[] box = new byte[length];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(box.AsSpan(0, 4), (uint)length);
+        Encoding.Latin1.GetBytes(kind).CopyTo(box.AsSpan(4, 4));
+        int at = 8;
+        foreach (byte[] p in payloads)
+        {
+            p.CopyTo(box.AsSpan(at));
+            at += p.Length;
+        }
+
+        return box;
+    }
+
+    private static byte[] Mp4Hdlr(string subtype) =>
+        Mp4Box("hdlr", new byte[8], Encoding.Latin1.GetBytes(subtype), new byte[12]);
+
+    private static byte[] MdtaKey(string name)
+    {
+        byte[] utf8 = Encoding.UTF8.GetBytes(name);
+        byte[] raw = new byte[8 + utf8.Length];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(raw.AsSpan(0, 4), (uint)raw.Length);
+        "mdta"u8.CopyTo(raw.AsSpan(4, 4));
+        utf8.CopyTo(raw.AsSpan(8));
+        return raw;
+    }
+
+    private static byte[] MdtaIlstItem(uint index, byte[] utf8Value)
+    {
+        byte[] dataBox = Mp4Box("data", [0, 0, 0, 1, 0, 0, 0, 0], utf8Value);
+        byte[] item = new byte[8 + dataBox.Length];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(item.AsSpan(0, 4), (uint)item.Length);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(item.AsSpan(4, 4), index);
+        dataBox.CopyTo(item.AsSpan(8));
+        return item;
+    }
+
+    private static byte[] BuildMoovWithTrack(string handler, string sampleEntry, bool useCo64, ulong chunkOffset, params byte[][] extraMoovBoxes)
+    {
+        byte[] chunkBox;
+        if (useCo64)
+        {
+            byte[] off = new byte[8];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt64BigEndian(off, chunkOffset);
+            chunkBox = Mp4Box("co64", [0, 0, 0, 0, 0, 0, 0, 1], off);
+        }
+        else
+        {
+            byte[] off = new byte[4];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(off, (uint)chunkOffset);
+            chunkBox = Mp4Box("stco", [0, 0, 0, 0, 0, 0, 0, 1], off);
+        }
+
+        byte[] stsd = Mp4Box("stsd", [0, 0, 0, 0, 0, 0, 0, 1], Mp4Box(sampleEntry, new byte[8]));
+        byte[] stbl = Mp4Box("stbl", stsd, chunkBox);
+        byte[] minf = Mp4Box("minf", Mp4Box("vmhd", new byte[12]), stbl);
+        byte[] mdia = Mp4Box("mdia", Mp4Box("mdhd", new byte[24]), Mp4Hdlr(handler), minf);
+        byte[] trak = Mp4Box("trak", Mp4Box("tkhd", new byte[84]), mdia);
+        return Mp4Box("moov", [Mp4Box("mvhd", new byte[100]), trak, .. extraMoovBoxes]);
+    }
 }

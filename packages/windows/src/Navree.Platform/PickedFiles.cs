@@ -122,10 +122,11 @@ public sealed class PickedFiles
                 return new Picked(null, name + " could not be read, so it was not added.");
             }
 
-            // What the file is comes from its first bytes, whatever its name says: a photo saved as .jfif, or with no extension at all, is a photo.
+            // What the file is comes from its first bytes, whatever its name says: a photo or video with no extension is still known by its bytes.
             byte[] head = await HeadAsync(path, cancel).ConfigureAwait(false);
             string type = FileRules.MediaTypeOf(name);
-            if (type == FileRules.Unknown && PlaceKinds.MediaTypeOf(PlaceKinds.KindOf(head)) is { } read)
+            if (type == FileRules.Unknown
+                && (PlaceKinds.MediaTypeOf(PlaceKinds.KindOf(head)) ?? PlaceKinds.VideoMediaTypeOf(PlaceKinds.VideoOf(head), head)) is { } read)
             {
                 type = read;
             }
