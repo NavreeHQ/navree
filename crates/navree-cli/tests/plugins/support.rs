@@ -372,6 +372,23 @@ impl ScriptedCargo {
             .find(|pkg| canonical_name(&pkg.name) == wanted)
     }
 
+    fn find_registered_package_ver(
+        &self,
+        name: &str,
+        version: Option<&str>,
+    ) -> Option<&RegisteredPackage> {
+        let wanted = canonical_name(name);
+        if let Some(ver) = version
+            && let Some(exact) = self
+                .packages
+                .iter()
+                .find(|pkg| canonical_name(&pkg.name) == wanted && pkg.version == ver)
+        {
+            return Some(exact);
+        }
+        self.find_registered_package(name)
+    }
+
     fn find_registered_path_package(
         &self,
         run_dir: &Path,
@@ -431,7 +448,7 @@ impl ScriptedCargo {
                 Some((n, r)) => (n, Some(r)),
                 None => (spec.as_str(), None),
             };
-            if let Some(reg) = self.find_registered_package(raw_name) {
+            if let Some(reg) = self.find_registered_package_ver(raw_name, req_opt) {
                 (reg.name.clone(), format!("\"{}\"", reg.version))
             } else {
                 let name = raw_name.replace('_', "-");
@@ -631,22 +648,45 @@ impl ScriptedCargo {
         let navree_id = "registry+https://github.com/rust-lang/crates.io-index#navree@1.4.0";
 
         let Some(pkg_table) = doc.get("package") else {
+            let mut virtual_packages = vec![json!({
+                "id": navree_id,
+                "name": "navree",
+                "version": "1.4.0",
+                "source": "registry+https://github.com/rust-lang/crates.io-index",
+                "manifest_path": "/cargo-cache/navree-1.4.0/Cargo.toml",
+                "targets": [{ "kind": ["lib"], "name": "navree" }],
+                "features": navree_features,
+                "metadata": null
+            })];
+            let mut virtual_nodes = Vec::new();
+            for reg in &self.transitive_packages {
+                let source = "registry+https://github.com/rust-lang/crates.io-index";
+                let pkg_id = format!("{source}#{}@{}", reg.name, reg.version);
+                let targets = match &reg.lib_name {
+                    Some(lib) => json!([{ "kind": ["lib"], "name": lib }]),
+                    None => json!([]),
+                };
+                virtual_packages.push(json!({
+                    "id": pkg_id,
+                    "name": reg.name,
+                    "version": reg.version,
+                    "source": source,
+                    "manifest_path": format!("/cargo-cache/{}-{}/Cargo.toml", reg.name, reg.version),
+                    "targets": targets,
+                    "features": {},
+                    "metadata": reg.metadata
+                }));
+                virtual_nodes.push(json!({
+                    "id": pkg_id,
+                    "deps": [],
+                    "features": []
+                }));
+            }
             let virtual_json = json!({
-                "packages": [
-                    {
-                        "id": navree_id,
-                        "name": "navree",
-                        "version": "1.4.0",
-                        "source": "registry+https://github.com/rust-lang/crates.io-index",
-                        "manifest_path": "/cargo-cache/navree-1.4.0/Cargo.toml",
-                        "targets": [{ "kind": ["lib"], "name": "navree" }],
-                        "features": navree_features,
-                        "metadata": null
-                    }
-                ],
+                "packages": virtual_packages,
                 "resolve": {
                     "root": null,
-                    "nodes": []
+                    "nodes": virtual_nodes
                 }
             });
             return Ok(virtual_json.to_string());
@@ -791,22 +831,32 @@ impl ScriptedCargo {
                     } else {
                         "registry+https://github.com/rust-lang/crates.io-index".to_owned()
                     };
-                    let (pkg_name, pkg_ver, metadata, lib_name) =
-                        if let Some(reg) = self.find_registered_package(dep_key) {
-                            (
-                                reg.name.clone(),
-                                reg.version.clone(),
-                                reg.metadata.clone(),
-                                reg.lib_name.clone(),
-                            )
-                        } else {
-                            let ver = dep_val
-                                .as_str()
-                                .or_else(|| dep_val.get("version").and_then(toml::Value::as_str))
-                                .unwrap_or("0.1.0")
-                                .to_owned();
-                            (dep_key.clone(), ver, None, Some(dep_key.replace('-', "_")))
-                        };
+                    let explicit_pkg = dep_val
+                        .as_table()
+                        .and_then(|t| t.get("package"))
+                        .and_then(toml::Value::as_str);
+                    let lookup_name = explicit_pkg.unwrap_or(dep_key.as_str());
+                    let asked_ver = dep_val
+                        .as_str()
+                        .or_else(|| dep_val.get("version").and_then(toml::Value::as_str));
+                    let (pkg_name, pkg_ver, metadata, lib_name) = if let Some(reg) =
+                        self.find_registered_package_ver(lookup_name, asked_ver)
+                    {
+                        (
+                            reg.name.clone(),
+                            reg.version.clone(),
+                            reg.metadata.clone(),
+                            reg.lib_name.clone(),
+                        )
+                    } else {
+                        let ver = asked_ver.unwrap_or("0.1.0").to_owned();
+                        (
+                            lookup_name.to_owned(),
+                            ver,
+                            None,
+                            Some(lookup_name.replace('-', "_")),
+                        )
+                    };
                     let pkg_id = format!("{source}#{pkg_name}@{pkg_ver}");
                     let targets = match &lib_name {
                         Some(lib) => json!([{ "kind": ["lib"], "name": lib }]),
@@ -824,8 +874,13 @@ impl ScriptedCargo {
                             "metadata": metadata
                         }));
                     }
+                    let extern_name = if explicit_pkg.is_some() {
+                        dep_key.replace('-', "_")
+                    } else {
+                        lib_name.unwrap_or_else(|| pkg_name.replace('-', "_"))
+                    };
                     root_deps.push(json!({
-                        "name": lib_name.unwrap_or_else(|| pkg_name.replace('-', "_")),
+                        "name": extern_name,
                         "pkg": pkg_id,
                         "dep_kinds": [{ "kind": null, "target": null }]
                     }));

@@ -7,7 +7,8 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::forward::Runner;
-use crate::plugin::files::{Snapshot, Written, find_app, read_src};
+use crate::plugin::files::{AppFiles, Snapshot, Written, find_app, read_src};
+use crate::plugin::grants;
 use crate::plugin::index::{Index, IndexKind};
 use crate::plugin::manifest::{self, AppFacts, ModulePath, shown};
 use crate::plugin::metadata::{self, Metadata, Package};
@@ -87,6 +88,18 @@ pub(crate) fn navree_library_warnings(metadata: &Metadata) -> Vec<String> {
 /// Computes the rows of `plugin:list`. A `Metadata` with no root package (a workspace
 /// run at its virtual root) lists nothing.
 pub(crate) fn listed(metadata: &Metadata, index: &Index, src: &[(String, String)]) -> Vec<Listed> {
+    listed_with_roles(metadata, index, src, BTreeSet::new(), None)
+}
+
+/// Computes the rows of `plugin:list` using the workspace roles and demo guest role
+/// configured by the app.
+pub(crate) fn listed_with_roles(
+    metadata: &Metadata,
+    index: &Index,
+    src: &[(String, String)],
+    roles: BTreeSet<String>,
+    demo_guest_role: Option<String>,
+) -> Vec<Listed> {
     if metadata.root_dir().is_none() {
         return Vec::new();
     }
@@ -105,8 +118,8 @@ pub(crate) fn listed(metadata: &Metadata, index: &Index, src: &[(String, String)
         navree_features,
         allowed_features: index.manifest_features.iter().cloned().collect(),
         reserved: index.reserved.iter().cloned().collect(),
-        roles: BTreeSet::new(),
-        demo_guest_role: None,
+        roles,
+        demo_guest_role,
         granted: Vec::new(),
     };
 
@@ -253,12 +266,29 @@ pub fn run(
     runner: &mut dyn Runner,
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
+    let process_env: Vec<(String, String)> = std::env::vars().collect();
+    run_with_env(cwd, options, &process_env, runner, out)
+}
+
+/// Lists the plugins this app depends on using `process_env` when scanning configured roles.
+pub fn run_with_env(
+    cwd: &Path,
+    options: &ListOptions,
+    process_env: &[(String, String)],
+    runner: &mut dyn Runner,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
     let roots = find_app(cwd).map_err(|msg| anyhow::anyhow!("{msg}"))?;
     let snapshot = Snapshot::take(&roots)?;
 
     let (ok, stdout, stderr) = runner.capture_both(&metadata::invocation(), &roots.package)?;
     if !ok {
-        let _ = snapshot.restore(&roots, &Default::default(), &Written::default());
+        let _ = snapshot.restore(
+            &roots,
+            &Default::default(),
+            &Written::default(),
+            snapshot.cargo_toml_bytes(),
+        );
         anyhow::bail!(
             "cargo metadata failed: {}; nothing was changed",
             metadata::cargo_error_line(&stderr)
@@ -267,7 +297,12 @@ pub fn run(
     let meta = match Metadata::parse(&stdout) {
         Ok(parsed) => parsed,
         Err(err) => {
-            let _ = snapshot.restore(&roots, &Default::default(), &Written::default());
+            let _ = snapshot.restore(
+                &roots,
+                &Default::default(),
+                &Written::default(),
+                snapshot.cargo_toml_bytes(),
+            );
             anyhow::bail!(
                 "cargo metadata failed: {}; nothing was changed",
                 shown(&err)
@@ -275,11 +310,25 @@ pub fn run(
         }
     };
 
-    let src = match meta.root_dir() {
-        Some(pkg_dir) => read_src(pkg_dir)?,
+    let rows = match meta.root_dir() {
+        Some(pkg_dir) => {
+            let app_roots = find_app(pkg_dir).unwrap_or_else(|_| roots.clone());
+            if let Ok(files) = AppFiles::read(&app_roots) {
+                let role_sources = grants::scan(&files, process_env);
+                listed_with_roles(
+                    &meta,
+                    Index::embedded(),
+                    &files.src,
+                    role_sources.roles(),
+                    role_sources.demo_guest_role(),
+                )
+            } else {
+                let src = read_src(pkg_dir)?;
+                listed(&meta, Index::embedded(), &src)
+            }
+        }
         None => Vec::new(),
     };
-    let rows = listed(&meta, Index::embedded(), &src);
 
     if options.json {
         let json_rows: Vec<JsonRow> = rows

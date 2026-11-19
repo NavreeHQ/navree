@@ -987,3 +987,267 @@ fn the_geo_example_plugins_manifest_passes_the_grammar() {
     );
     assert!(!parsed.policy.wasm);
 }
+
+#[test]
+fn plugin_add_preserves_concurrent_cargo_toml_edits_during_metadata_and_publish() {
+    // 1. Concurrent `Cargo.toml` edit during `cargo metadata` when `Cargo.toml` IS in `planned.edits`:
+    //    leaves the owner's edit and `cargo add`'s dependency, and reports `Cargo.toml` in `not_put_back`
+    //    rather than claiming `nothing was changed`.
+    let tmp1 = tempfile::tempdir().expect("tempdir");
+    let root1 = support::app(tmp1.path(), APP_CARGO_TOML);
+    let toml_path1 = root1.join("Cargo.toml");
+    let toml_for_hook1 = toml_path1.clone();
+    let mut runner1 = ScriptedCargo::new()
+        .package(
+            "navree-plugin-announcements",
+            "1.0.0",
+            ANNOUNCEMENTS_MANIFEST,
+            "navree_plugin_announcements",
+        )
+        .during("cargo metadata", move || {
+            let mut cur = fs::read_to_string(&toml_for_hook1).unwrap();
+            cur.push_str("tracing = \"0.1\"\n");
+            fs::write(&toml_for_hook1, cur).unwrap();
+        });
+    let err1 = add::run(
+        &root1,
+        &AddOptions {
+            package: Some("navree-plugin-announcements".to_owned()),
+            ..AddOptions::default()
+        },
+        &mut runner1,
+        &mut Vec::new(),
+    )
+    .unwrap_err()
+    .to_string();
+    assert_eq!(
+        err1,
+        "Cargo.toml changed while plugin:add ran; these files could not be put back: Cargo.toml"
+    );
+    let disk1 = fs::read_to_string(&toml_path1).unwrap();
+    assert!(disk1.contains("tracing = \"0.1\""));
+
+    // 2. Concurrent `Cargo.toml` edit during `cargo metadata` when `Cargo.toml` is NOT in `planned.edits`:
+    //    stops before Step 9 writes `src/app.rs`, preserving the owner's edit.
+    let tmp2 = tempfile::tempdir().expect("tempdir");
+    let root2 = support::app(tmp2.path(), APP_CARGO_TOML);
+    let before_app_rs2 = fs::read_to_string(root2.join("src/app.rs")).unwrap();
+    let toml_path2 = root2.join("Cargo.toml");
+    let toml_for_hook2 = toml_path2.clone();
+    let mut runner2 = ScriptedCargo::new()
+        .package(
+            "navree-plugin-khata",
+            "1.0.0",
+            r#"module = "KhataModule::from_config()""#,
+            "navree_plugin_khata",
+        )
+        .during("cargo metadata", move || {
+            let mut cur = fs::read_to_string(&toml_for_hook2).unwrap();
+            cur.push_str("tracing = \"0.1\"\n");
+            fs::write(&toml_for_hook2, cur).unwrap();
+        });
+    let err2 = add::run(
+        &root2,
+        &AddOptions {
+            package: Some("navree-plugin-khata".to_owned()),
+            ..AddOptions::default()
+        },
+        &mut runner2,
+        &mut Vec::new(),
+    )
+    .unwrap_err()
+    .to_string();
+    assert_eq!(
+        err2,
+        "Cargo.toml changed while plugin:add ran; these files could not be put back: Cargo.toml"
+    );
+    assert_eq!(
+        fs::read_to_string(root2.join("src/app.rs")).unwrap(),
+        before_app_rs2
+    );
+    assert!(
+        fs::read_to_string(&toml_path2)
+            .unwrap()
+            .contains("tracing = \"0.1\"")
+    );
+
+    // 3. Concurrent `Cargo.toml` edit during Step 10 (`config:publish`) when Step 10 fails:
+    //    puts `src/app.rs` back while leaving the owner's `Cargo.toml` edit intact.
+    let tmp3 = tempfile::tempdir().expect("tempdir");
+    let root3 = support::app(tmp3.path(), APP_CARGO_TOML);
+    let before_app_rs3 = fs::read_to_string(root3.join("src/app.rs")).unwrap();
+    let toml_path3 = root3.join("Cargo.toml");
+    let toml_for_hook3 = toml_path3.clone();
+    let mut runner3 = ScriptedCargo::new()
+        .package(
+            "navree-plugin-khata",
+            "1.0.0",
+            r#"module = "KhataModule::from_config()""#,
+            "navree_plugin_khata",
+        )
+        .during("cargo run --quiet -- config:publish", move || {
+            let mut cur = fs::read_to_string(&toml_for_hook3).unwrap();
+            cur.push_str("tracing = \"0.1\"\n");
+            fs::write(&toml_for_hook3, cur).unwrap();
+        })
+        .fail(
+            "cargo run --quiet -- config:publish",
+            "error: build failed\n",
+        );
+    let err3 = add::run(
+        &root3,
+        &AddOptions {
+            package: Some("navree-plugin-khata".to_owned()),
+            publish_config: true,
+            ..AddOptions::default()
+        },
+        &mut runner3,
+        &mut Vec::new(),
+    )
+    .unwrap_err()
+    .to_string();
+    assert_eq!(
+        err3,
+        "navree-plugin-khata: config:publish --plugin khata failed (its output is above); these files could not be put back: Cargo.toml"
+    );
+    assert_eq!(
+        fs::read_to_string(root3.join("src/app.rs")).unwrap(),
+        before_app_rs3
+    );
+    assert!(
+        fs::read_to_string(&toml_path3)
+            .unwrap()
+            .contains("tracing = \"0.1\"")
+    );
+}
+
+#[test]
+fn plugin_add_resolves_two_versions_underscore_keys_and_renamed_dependencies() {
+    // 1. Two versions in the graph: `khata_legacy` (0.1.0) + adding `navree-plugin-khata` 0.2.0
+    //    reads 0.2.0's manifest rather than 0.1.0's.
+    let tmp1 = tempfile::tempdir().expect("tempdir");
+    let cargo_with_legacy = format!(
+        "{APP_CARGO_TOML}khata_legacy = {{ package = \"navree-plugin-khata\", version = \"0.1.0\" }}\n"
+    );
+    let root1 = support::app(tmp1.path(), &cargo_with_legacy);
+    let mut runner1 = ScriptedCargo::new()
+        .package(
+            "navree-plugin-khata",
+            "0.1.0",
+            "module = \"LegacyModule\"\ngrants = { member = [\"khata.export_all\"] }",
+            "navree_plugin_khata",
+        )
+        .package(
+            "navree-plugin-khata",
+            "0.2.0",
+            r#"module = "KhataModule::from_config()""#,
+            "navree_plugin_khata",
+        );
+    add::run(
+        &root1,
+        &AddOptions {
+            package: Some("navree-plugin-khata".to_owned()),
+            version: Some("0.2.0".to_owned()),
+            ..AddOptions::default()
+        },
+        &mut runner1,
+        &mut Vec::new(),
+    )
+    .expect("0.2.0 install succeeds");
+    let app_rs1 = fs::read_to_string(root1.join("src/app.rs")).unwrap();
+    assert!(app_rs1.contains(".module(navree_plugin_khata::KhataModule::from_config())"));
+    assert!(!app_rs1.contains("LegacyModule"));
+    assert!(!root1.join("config/workspace.toml").exists());
+
+    // 2. Underscore key `navree_plugin_khata = "1.0.0"` already in `Cargo.toml` derives default
+    //    namespace `khata` while printing `kept navree_plugin_khata 1.0.0 is already in Cargo.toml`.
+    let tmp2 = tempfile::tempdir().expect("tempdir");
+    let cargo_underscore = format!("{APP_CARGO_TOML}navree_plugin_khata = \"1.0.0\"\n");
+    let root2 = support::app(tmp2.path(), &cargo_underscore);
+    let mut runner2 = ScriptedCargo::new().package(
+        "navree-plugin-khata",
+        "1.0.0",
+        "module = \"KhataModule::from_config()\"\nconfig = [\"khata\"]\ngrants = { member = [\"khata.read\"] }",
+        "navree_plugin_khata",
+    );
+    let mut out2 = Vec::new();
+    add::run(
+        &root2,
+        &AddOptions {
+            package: Some("navree-plugin-khata".to_owned()),
+            ..AddOptions::default()
+        },
+        &mut runner2,
+        &mut out2,
+    )
+    .expect("underscore-keyed present dependency succeeds");
+    let text2 = String::from_utf8(out2).unwrap();
+    assert!(text2.contains("  kept     navree_plugin_khata 1.0.0 is already in Cargo.toml\n"));
+    let ws2 = fs::read_to_string(root2.join("config/workspace.toml")).unwrap();
+    assert!(ws2.contains("# plugin:add navree-plugin-khata"));
+
+    // 3. Renamed dependency `ledger = { package = "navree-plugin-khata", version = "1.0.0" }`
+    //    wires `.module(ledger::KhataModule::from_config())`.
+    let tmp3 = tempfile::tempdir().expect("tempdir");
+    let cargo_renamed = format!(
+        "{APP_CARGO_TOML}ledger = {{ package = \"navree-plugin-khata\", version = \"1.0.0\" }}\n"
+    );
+    let root3 = support::app(tmp3.path(), &cargo_renamed);
+    let mut runner3 = ScriptedCargo::new().package(
+        "navree-plugin-khata",
+        "1.0.0",
+        r#"module = "KhataModule::from_config()""#,
+        "navree_plugin_khata",
+    );
+    add::run(
+        &root3,
+        &AddOptions {
+            package: Some("ledger".to_owned()),
+            ..AddOptions::default()
+        },
+        &mut runner3,
+        &mut Vec::new(),
+    )
+    .expect("renamed dependency succeeds");
+    let app_rs3 = fs::read_to_string(root3.join("src/app.rs")).unwrap();
+    assert!(app_rs3.contains(".module(ledger::KhataModule::from_config())"));
+}
+
+#[test]
+fn plugin_add_refuses_when_a_transitive_dependency_names_its_library_like_navree() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let root = support::app(tmp.path(), APP_CARGO_TOML);
+    let before = support::files(&root);
+
+    let mut runner = ScriptedCargo::new()
+        .package(
+            "navree-plugin-khata",
+            "1.0.0",
+            r#"module = "KhataModule::from_config()""#,
+            "navree_plugin_khata",
+        )
+        .transitive_package("ludhiana-ledger", "0.1.0", "navree_billing");
+
+    let err = add::run(
+        &root,
+        &AddOptions {
+            package: Some("navree-plugin-khata".to_owned()),
+            publish_config: true,
+            ..AddOptions::default()
+        },
+        &mut runner,
+        &mut Vec::new(),
+    )
+    .unwrap_err()
+    .to_string();
+
+    assert_eq!(
+        err,
+        "ludhiana-ledger 0.1.0 names its library `navree_billing` (not `ludhiana_ledger`), like a `navree` crate: remove or replace the dependency; nothing was changed"
+    );
+    assert_eq!(support::files(&root), before);
+    assert!(
+        !runner.ran.iter().any(|c| c.starts_with("cargo run")),
+        "must not run the app when a transitive library impersonates navree"
+    );
+}

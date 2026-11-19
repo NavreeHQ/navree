@@ -19,6 +19,8 @@ pub(crate) struct Metadata {
     packages: Vec<Package>,
     root_id: Option<String>,
     direct_normal_deps: BTreeSet<String>,
+    unconditional_normal_deps: BTreeSet<String>,
+    root_dep_by_extern: BTreeMap<String, (String, bool)>,
     resolved_ids: BTreeSet<String>,
     resolved_features: BTreeMap<String, BTreeSet<String>>,
 }
@@ -205,6 +207,8 @@ impl Metadata {
             .ok_or_else(|| "`resolve.nodes` must be an array".to_owned())?;
 
         let mut direct_normal_deps = BTreeSet::new();
+        let mut unconditional_normal_deps = BTreeSet::new();
+        let mut root_dep_by_extern: BTreeMap<String, (String, bool)> = BTreeMap::new();
         let mut resolved_ids = BTreeSet::new();
         let mut resolved_features = BTreeMap::new();
 
@@ -231,21 +235,46 @@ impl Metadata {
                         let Some(pkg_id) = dep.get("pkg").and_then(Value::as_str) else {
                             continue;
                         };
-                        let is_normal = match dep.get("dep_kinds").and_then(Value::as_array) {
-                            None => true,
-                            Some(kinds) if kinds.is_empty() => true,
-                            Some(kinds) => kinds.iter().any(|dk| {
-                                dk["kind"].is_null() || dk["kind"].as_str() == Some("normal")
-                            }),
+                        let (is_normal, is_unconditional) = match dep
+                            .get("dep_kinds")
+                            .and_then(Value::as_array)
+                        {
+                            None => (true, true),
+                            Some(kinds) if kinds.is_empty() => (true, true),
+                            Some(kinds) => {
+                                let normal = kinds.iter().any(|dk| {
+                                    dk["kind"].is_null() || dk["kind"].as_str() == Some("normal")
+                                });
+                                let uncond = kinds.iter().any(|dk| {
+                                    (dk["kind"].is_null() || dk["kind"].as_str() == Some("normal"))
+                                        && dk["target"].is_null()
+                                });
+                                (normal, uncond)
+                            }
                         };
                         if is_normal {
                             direct_normal_deps.insert(pkg_id.to_owned());
+                            if is_unconditional {
+                                unconditional_normal_deps.insert(pkg_id.to_owned());
+                            }
+                            if let Some(extern_name) = dep.get("name").and_then(Value::as_str) {
+                                match root_dep_by_extern.get(extern_name) {
+                                    Some((_, true)) if !is_unconditional => {}
+                                    _ => {
+                                        root_dep_by_extern.insert(
+                                            extern_name.to_owned(),
+                                            (pkg_id.to_owned(), is_unconditional),
+                                        );
+                                    }
+                                }
+                            }
                         }
                     }
                 } else if let Some(deps) = node.get("dependencies").and_then(Value::as_array) {
                     for dep in deps {
                         if let Some(pkg_id) = dep.as_str() {
                             direct_normal_deps.insert(pkg_id.to_owned());
+                            unconditional_normal_deps.insert(pkg_id.to_owned());
                         }
                     }
                 }
@@ -256,6 +285,8 @@ impl Metadata {
             packages,
             root_id,
             direct_normal_deps,
+            unconditional_normal_deps,
+            root_dep_by_extern,
             resolved_ids,
             resolved_features,
         })
@@ -275,32 +306,71 @@ impl Metadata {
         &self.packages
     }
 
-    /// Every resolved package when there is a root package (`None`/empty for a virtual workspace).
+    /// Every package present in `resolve.nodes` (virtual workspaces included).
     pub(crate) fn resolved_packages(&self) -> Vec<&Package> {
-        if self.root_id.is_none() {
-            return Vec::new();
-        }
         self.packages
             .iter()
             .filter(|pkg| self.resolved_ids.contains(&pkg.id))
             .collect()
     }
 
+    /// A direct normal dependency of the root by key (`-` and `_` are one), from a registry or git
+    /// source, paired with the extern crate identifier Cargo bound on the root package.
+    pub(crate) fn dependency_with_extern(&self, name: &str) -> Option<(&Package, String)> {
+        let wanted = canonical_name(name);
+        if let Some((pkg_id, _)) = self.root_dep_by_extern.get(&wanted)
+            && let Some(pkg) = self
+                .packages
+                .iter()
+                .find(|pkg| &pkg.id == pkg_id && pkg.source.is_some())
+        {
+            return Some((pkg, wanted));
+        }
+        let pkg = self
+            .packages
+            .iter()
+            .find(|pkg| {
+                self.unconditional_normal_deps.contains(&pkg.id)
+                    && pkg.source.is_some()
+                    && canonical_name(&pkg.name) == wanted
+            })
+            .or_else(|| {
+                self.packages.iter().find(|pkg| {
+                    self.direct_normal_deps.contains(&pkg.id)
+                        && pkg.source.is_some()
+                        && canonical_name(&pkg.name) == wanted
+                })
+            })?;
+        Some((pkg, pkg.name.replace('-', "_")))
+    }
+
     /// A direct normal dependency of the root by name (`-` and `_` are one), from a registry or git source.
     pub(crate) fn dependency(&self, name: &str) -> Option<&Package> {
-        let wanted = canonical_name(name);
-        self.packages.iter().find(|pkg| {
-            self.direct_normal_deps.contains(&pkg.id)
-                && pkg.source.is_some()
-                && canonical_name(&pkg.name) == wanted
-        })
+        self.dependency_with_extern(name).map(|(pkg, _)| pkg)
+    }
+
+    /// A direct normal dependency whose manifest folder is `dir`, paired with its extern crate name.
+    pub(crate) fn dependency_at_with_extern(&self, dir: &Path) -> Option<(&Package, String)> {
+        let pkg = self.packages.iter().find(|pkg| {
+            self.direct_normal_deps.contains(&pkg.id) && same_dir(&pkg.manifest_dir, dir)
+        })?;
+        let extern_name = self
+            .root_dep_by_extern
+            .iter()
+            .find(|(_, (pkg_id, uncond))| pkg_id == &pkg.id && *uncond)
+            .or_else(|| {
+                self.root_dep_by_extern
+                    .iter()
+                    .find(|(_, (pkg_id, _))| pkg_id == &pkg.id)
+            })
+            .map(|(ext, _)| ext.clone())
+            .unwrap_or_else(|| pkg.name.replace('-', "_"));
+        Some((pkg, extern_name))
     }
 
     /// A direct normal dependency whose manifest folder is `dir` (both canonicalised).
     pub(crate) fn dependency_at(&self, dir: &Path) -> Option<&Package> {
-        self.packages.iter().find(|pkg| {
-            self.direct_normal_deps.contains(&pkg.id) && same_dir(&pkg.manifest_dir, dir)
-        })
+        self.dependency_at_with_extern(dir).map(|(pkg, _)| pkg)
     }
 
     /// The `navree` facade package for this app; `None` for a virtual workspace.
@@ -621,7 +691,84 @@ mod tests {
         assert!(metadata.plugin_dependencies().is_empty());
         assert!(metadata.navree().is_none());
         assert!(metadata.navree_enabled().is_empty());
-        assert!(metadata.resolved_packages().is_empty());
+        assert_eq!(metadata.resolved_packages().len(), 2);
+    }
+
+    #[test]
+    fn dependency_matches_root_extern_name_when_two_versions_or_renamed_deps_exist() {
+        let raw = json!({
+            "packages": [
+                {
+                    "id": "app#0.1.0",
+                    "name": "kesar",
+                    "version": "0.1.0",
+                    "source": null,
+                    "manifest_path": "/kesar/Cargo.toml",
+                    "targets": [{ "kind": ["bin"], "name": "kesar" }],
+                    "features": {},
+                    "metadata": null
+                },
+                {
+                    "id": "registry+https://github.com/rust-lang/crates.io-index#navree-plugin-khata@0.1.0",
+                    "name": "navree-plugin-khata",
+                    "version": "0.1.0",
+                    "source": "registry+https://github.com/rust-lang/crates.io-index",
+                    "manifest_path": "/cache/khata-0.1.0/Cargo.toml",
+                    "targets": [{ "kind": ["lib"], "name": "navree_plugin_khata" }],
+                    "features": {},
+                    "metadata": { "navree": { "plugin": { "module": "LegacyModule" } } }
+                },
+                {
+                    "id": "registry+https://github.com/rust-lang/crates.io-index#navree-plugin-khata@0.2.0",
+                    "name": "navree-plugin-khata",
+                    "version": "0.2.0",
+                    "source": "registry+https://github.com/rust-lang/crates.io-index",
+                    "manifest_path": "/cache/khata-0.2.0/Cargo.toml",
+                    "targets": [{ "kind": ["lib"], "name": "navree_plugin_khata" }],
+                    "features": {},
+                    "metadata": { "navree": { "plugin": { "module": "KhataModule::from_config()" } } }
+                }
+            ],
+            "resolve": {
+                "root": "app#0.1.0",
+                "nodes": [
+                    {
+                        "id": "app#0.1.0",
+                        "deps": [
+                            {
+                                "name": "khata_legacy",
+                                "pkg": "registry+https://github.com/rust-lang/crates.io-index#navree-plugin-khata@0.1.0",
+                                "dep_kinds": [{ "kind": null, "target": null }]
+                            },
+                            {
+                                "name": "navree_plugin_khata",
+                                "pkg": "registry+https://github.com/rust-lang/crates.io-index#navree-plugin-khata@0.1.0",
+                                "dep_kinds": [{ "kind": null, "target": "cfg(unix)" }]
+                            },
+                            {
+                                "name": "navree_plugin_khata",
+                                "pkg": "registry+https://github.com/rust-lang/crates.io-index#navree-plugin-khata@0.2.0",
+                                "dep_kinds": [{ "kind": null, "target": null }]
+                            }
+                        ],
+                        "features": []
+                    }
+                ]
+            }
+        });
+
+        let metadata = Metadata::parse(&raw.to_string()).expect("metadata parses");
+        let (main_pkg, main_ext) = metadata
+            .dependency_with_extern("navree-plugin-khata")
+            .expect("unconditional 0.2.0 chosen");
+        assert_eq!(main_pkg.version, "0.2.0");
+        assert_eq!(main_ext, "navree_plugin_khata");
+
+        let (legacy_pkg, legacy_ext) = metadata
+            .dependency_with_extern("khata_legacy")
+            .expect("renamed 0.1.0 chosen");
+        assert_eq!(legacy_pkg.version, "0.1.0");
+        assert_eq!(legacy_ext, "khata_legacy");
     }
 
     #[test]

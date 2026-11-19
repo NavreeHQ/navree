@@ -8,9 +8,12 @@ use std::path::{Component, Path, PathBuf};
 use crate::forward::{Runner, forward};
 use crate::plugin::block;
 use crate::plugin::cargo_toml::{self, DepTable, Source};
-use crate::plugin::files::{AppFiles, AppRoots, Snapshot, Written, find_app, write_all};
+use crate::plugin::files::{
+    AppFiles, AppRoots, Snapshot, Written, find_app, verify_unchanged, write_all,
+};
 use crate::plugin::grants;
 use crate::plugin::index::{Index, IndexEntry, IndexKind};
+use crate::plugin::list::navree_library_warnings;
 use crate::plugin::manifest::{self, AppFacts, ModulePath, shown};
 use crate::plugin::metadata::{self, Metadata};
 use crate::plugin::policy;
@@ -111,7 +114,9 @@ pub(crate) fn choose(
         };
     }
 
-    if let Some((existing_name, existing_source)) = dependency_entry(&files.cargo_toml, given) {
+    if let Some((existing_name, existing_source)) =
+        dependency_entry(&files.cargo_toml, given, options.version.is_some())
+    {
         if existing_source != Source::Registry {
             return Err(format!(
                 "{existing_name} is already a dependency of this app from {}; run navree plugin:remove {existing_name} first to add it from the registry",
@@ -241,7 +246,9 @@ fn choose_path(
         ));
     }
 
-    if let Some((existing_name, existing_source)) = dependency_entry(&files.cargo_toml, found) {
+    if let Some((existing_name, existing_source)) =
+        dependency_entry(&files.cargo_toml, found, false)
+    {
         let same_path = matches!(
             &existing_source,
             Source::Path(existing_dir) if normalize_rel_dir(existing_dir) == rel_dir
@@ -325,9 +332,19 @@ fn describe_source(source: &Source) -> String {
     }
 }
 
-fn dependency_entry(cargo_toml: &str, package: &str) -> Option<(String, Source)> {
+fn dependency_entry(
+    cargo_toml: &str,
+    package: &str,
+    skip_renamed_registry: bool,
+) -> Option<(String, Source)> {
     let parsed: toml::Table = cargo_toml.parse().ok()?;
     let deps = parsed.get("dependencies")?.as_table()?;
+    for (key, _) in deps {
+        if same_package_name(key, package) {
+            let source = crate::plugin::cargo_toml::dependency_source(cargo_toml, key)?;
+            return Some((key.clone(), source));
+        }
+    }
     for (key, value) in deps {
         let actual = value
             .as_table()
@@ -335,7 +352,10 @@ fn dependency_entry(cargo_toml: &str, package: &str) -> Option<(String, Source)>
             .and_then(toml::Value::as_str)
             .unwrap_or(key.as_str());
         if same_package_name(actual, package) {
-            let source = crate::plugin::cargo_toml::dependency_source(cargo_toml, package)?;
+            let source = crate::plugin::cargo_toml::dependency_source(cargo_toml, key)?;
+            if skip_renamed_registry && source == Source::Registry {
+                continue;
+            }
             return Some((key.clone(), source));
         }
     }
@@ -373,11 +393,13 @@ fn is_lexical_strict_subpath(dir: &Path, root: &Path) -> bool {
 /// What package resolution and `cargo metadata` settled; `plan` reads it.
 #[derive(Clone, Debug)]
 pub(crate) struct Chosen {
-    /// Name used in printed lines: the package as Cargo wrote it, or a first-party short name.
+    /// Canonical package name (`pkg.name`), or a first-party short name.
     pub name: String,
+    /// Dependency key written in `Cargo.toml` when `already_present` is true, else `name`.
+    pub display_dep_key: String,
     /// Version Cargo resolved; for a first-party package, `navree`'s version.
     pub version: String,
-    /// Package name with `-` turned into `_`.
+    /// Extern crate identifier on the root package (`dep.name`, or `pkg.name` with `_`).
     pub crate_name: String,
     /// Library target name from `cargo metadata`.
     pub lib_name: Option<String>,
@@ -407,6 +429,10 @@ pub(crate) fn plan(
     options: &AddOptions,
 ) -> Result<Plan, String> {
     if let Some(entry) = &chosen.entry {
+        if let Some(warn_line) = navree_library_warnings(metadata).into_iter().next() {
+            let reason = warn_line.strip_prefix("warning  ").unwrap_or(&warn_line);
+            return Err(format!("{reason}; nothing was changed"));
+        }
         return plan_first_party(files, entry, metadata, options);
     }
 
@@ -426,14 +452,15 @@ pub(crate) fn plan(
         )
     })?;
 
+    let expected_lib = chosen.name.replace('-', "_");
     if let Some(lib_name) = &chosen.lib_name {
-        if lib_name != &chosen.crate_name {
+        if lib_name != &expected_lib {
             return Err(format!(
                 "{} {}: its library is named `{}`, not `{}`; nothing was changed",
                 shown(&chosen.name),
                 shown(&chosen.version),
                 shown(lib_name),
-                shown(&chosen.crate_name)
+                shown(&expected_lib)
             ));
         }
     } else {
@@ -441,8 +468,13 @@ pub(crate) fn plan(
             "{} {}: its library is named ``, not `{}`; nothing was changed",
             shown(&chosen.name),
             shown(&chosen.version),
-            shown(&chosen.crate_name)
+            shown(&expected_lib)
         ));
+    }
+
+    if let Some(warn_line) = navree_library_warnings(metadata).into_iter().next() {
+        let reason = warn_line.strip_prefix("warning  ").unwrap_or(&warn_line);
+        return Err(format!("{reason}; nothing was changed"));
     }
 
     let mut edits = Vec::new();
@@ -452,7 +484,7 @@ pub(crate) fn plan(
     if chosen.already_present {
         lines.push(format!(
             "  kept     {} {} is already in Cargo.toml",
-            shown(&chosen.name),
+            shown(&chosen.display_dep_key),
             shown(&chosen.version)
         ));
     } else {
@@ -867,7 +899,10 @@ pub fn run(
             match runner.capture_both(&invocation, &roots.package) {
                 Ok((true, _, _)) => true,
                 Ok((false, _, stderr)) => {
-                    let not_put_back = snapshot.restore(&roots, &files, &Written::default());
+                    let on_disk_toml =
+                        fs::read(roots.package.join("Cargo.toml")).unwrap_or_default();
+                    let not_put_back =
+                        snapshot.restore(&roots, &files, &Written::default(), &on_disk_toml);
                     let last = metadata::cargo_error_line(&stderr);
                     return Err(anyhow::anyhow!(
                         "cargo add failed: {last}; {}",
@@ -875,7 +910,10 @@ pub fn run(
                     ));
                 }
                 Err(err) => {
-                    let not_put_back = snapshot.restore(&roots, &files, &Written::default());
+                    let on_disk_toml =
+                        fs::read(roots.package.join("Cargo.toml")).unwrap_or_default();
+                    let not_put_back =
+                        snapshot.restore(&roots, &files, &Written::default(), &on_disk_toml);
                     return Err(anyhow::anyhow!(
                         "cargo add failed: {}; {}",
                         shown(&err.to_string()),
@@ -890,7 +928,12 @@ pub fn run(
         match fs::read_to_string(roots.package.join("Cargo.toml")) {
             Ok(updated_toml) => files.cargo_toml = updated_toml,
             Err(err) => {
-                let not_put_back = snapshot.restore(&roots, &files, &Written::default());
+                let not_put_back = snapshot.restore(
+                    &roots,
+                    &files,
+                    &Written::default(),
+                    files.cargo_toml.as_bytes(),
+                );
                 return Err(anyhow::anyhow!(
                     "Cargo.toml cannot be read: {err}; {}",
                     rollback_tail(&not_put_back)
@@ -903,7 +946,12 @@ pub fn run(
     let metadata_json = match runner.capture_both(&metadata_inv, &roots.package) {
         Ok((true, stdout, _)) => stdout,
         Ok((false, _, stderr)) => {
-            let not_put_back = snapshot.restore(&roots, &files, &Written::default());
+            let not_put_back = snapshot.restore(
+                &roots,
+                &files,
+                &Written::default(),
+                files.cargo_toml.as_bytes(),
+            );
             let last = metadata::cargo_error_line(&stderr);
             return Err(anyhow::anyhow!(
                 "cargo metadata failed: {last}; {}",
@@ -911,7 +959,12 @@ pub fn run(
             ));
         }
         Err(err) => {
-            let not_put_back = snapshot.restore(&roots, &files, &Written::default());
+            let not_put_back = snapshot.restore(
+                &roots,
+                &files,
+                &Written::default(),
+                files.cargo_toml.as_bytes(),
+            );
             return Err(anyhow::anyhow!(
                 "cargo metadata failed: {}; {}",
                 shown(&err.to_string()),
@@ -923,7 +976,12 @@ pub fn run(
     let metadata = match Metadata::parse(&metadata_json) {
         Ok(parsed) => parsed,
         Err(err) => {
-            let not_put_back = snapshot.restore(&roots, &files, &Written::default());
+            let not_put_back = snapshot.restore(
+                &roots,
+                &files,
+                &Written::default(),
+                files.cargo_toml.as_bytes(),
+            );
             return Err(anyhow::anyhow!(
                 "cargo metadata failed: {}; {}",
                 shown(&err),
@@ -935,7 +993,12 @@ pub fn run(
     let chosen = match build_chosen(&roots, &files, &choice, &metadata) {
         Ok(c) => c,
         Err(msg) => {
-            let not_put_back = snapshot.restore(&roots, &files, &Written::default());
+            let not_put_back = snapshot.restore(
+                &roots,
+                &files,
+                &Written::default(),
+                files.cargo_toml.as_bytes(),
+            );
             return Err(anyhow::anyhow!("{msg}; {}", rollback_tail(&not_put_back)));
         }
     };
@@ -960,7 +1023,12 @@ pub fn run(
     let planned = match plan(&files, &chosen, &facts, &metadata, options) {
         Ok(p) => p,
         Err(msg) => {
-            let not_put_back = snapshot.restore(&roots, &files, &Written::default());
+            let not_put_back = snapshot.restore(
+                &roots,
+                &files,
+                &Written::default(),
+                files.cargo_toml.as_bytes(),
+            );
             if not_put_back.is_empty() {
                 return Err(anyhow::anyhow!("{msg}"));
             }
@@ -969,26 +1037,35 @@ pub fn run(
         }
     };
 
+    if !planned.edits.iter().any(|(path, _)| path == "Cargo.toml")
+        && let Err(mut failed) = verify_unchanged(&roots, &files, "Cargo.toml")
+    {
+        let extra = snapshot.restore(
+            &roots,
+            &files,
+            &Written::default(),
+            files.cargo_toml.as_bytes(),
+        );
+        for item in extra {
+            if !failed.not_put_back.contains(&item) {
+                failed.not_put_back.push(item);
+            }
+        }
+        return Err(anyhow::anyhow!("{}", failed.message("plugin:add")));
+    }
+
     let written = match write_all(&roots, &files, &planned.edits) {
         Ok(w) => w,
         Err(mut failed) => {
-            let cargo_toml_on_disk = fs::read(roots.package.join("Cargo.toml")).ok();
-            if cargo_toml_on_disk.as_deref() == Some(files.cargo_toml.as_bytes()) {
-                let extra = snapshot.restore(&roots, &files, &Written::default());
-                for item in extra {
-                    if !failed.not_put_back.contains(&item) {
-                        failed.not_put_back.push(item);
-                    }
-                }
-            } else {
-                let guard = Written {
-                    files: vec![("Cargo.toml".to_owned(), Vec::new())],
-                };
-                let extra = snapshot.restore(&roots, &files, &guard);
-                for item in extra {
-                    if item != "Cargo.toml" && !failed.not_put_back.contains(&item) {
-                        failed.not_put_back.push(item);
-                    }
+            let extra = snapshot.restore(
+                &roots,
+                &files,
+                &Written::default(),
+                files.cargo_toml.as_bytes(),
+            );
+            for item in extra {
+                if !failed.not_put_back.contains(&item) {
+                    failed.not_put_back.push(item);
                 }
             }
             return Err(anyhow::anyhow!("{}", failed.message("plugin:add")));
@@ -1005,7 +1082,8 @@ pub fn run(
         let publish_out = match runner.capture(&publish_inv, &roots.config) {
             Ok((true, stdout)) => stdout,
             _ => {
-                let not_put_back = snapshot.restore(&roots, &files, &written);
+                let not_put_back =
+                    snapshot.restore(&roots, &files, &written, files.cargo_toml.as_bytes());
                 return Err(anyhow::anyhow!(
                     "{}: config:publish --plugin {ns} failed (its output is above); {}",
                     shown(&chosen.name),
@@ -1118,6 +1196,7 @@ fn build_chosen(
             let crate_name = entry.krate.replace('-', "_");
             Ok(Chosen {
                 name: entry.name.clone(),
+                display_dep_key: entry.name.clone(),
                 version: navree_version,
                 lib_name: Some(crate_name.clone()),
                 crate_name,
@@ -1128,32 +1207,31 @@ fn build_chosen(
         }
         Choice::Community { package, how } => {
             let pkg_opt = match how {
-                How::Path { dir } => metadata.dependency_at(&roots.package.join(dir)),
-                How::Registry { .. } => metadata.dependency(package),
+                How::Path { dir } => metadata.dependency_at_with_extern(&roots.package.join(dir)),
+                How::Registry { .. } => metadata.dependency_with_extern(package),
                 How::Present => match cargo_toml::dependency_source(&files.cargo_toml, package) {
-                    Some(Source::Path(rel)) => {
-                        metadata.dependency_at(&roots.package.join(normalize_rel_dir(&rel)))
-                    }
-                    _ => metadata.dependency(package),
+                    Some(Source::Path(rel)) => metadata
+                        .dependency_at_with_extern(&roots.package.join(normalize_rel_dir(&rel))),
+                    _ => metadata.dependency_with_extern(package),
                 },
             };
-            let Some(pkg) = pkg_opt else {
+            let Some((pkg, extern_crate_name)) = pkg_opt else {
                 return Err(format!(
                     "cargo metadata failed: dependency `{}` was not found",
                     shown(package)
                 ));
             };
             let already_present = matches!(how, How::Present);
-            let name = if already_present {
+            let display_dep_key = if already_present {
                 package.clone()
             } else {
                 pkg.name.clone()
             };
-            let crate_name = pkg.name.replace('-', "_");
             Ok(Chosen {
-                name,
+                name: pkg.name.clone(),
+                display_dep_key,
                 version: pkg.version.clone(),
-                crate_name,
+                crate_name: extern_crate_name,
                 lib_name: pkg.lib_name.clone(),
                 entry: None,
                 table: pkg.plugin_table.clone(),
@@ -1944,6 +2022,7 @@ pub fn app(sources: ConfigSources) -> AppBuilder {
         let parsed: toml::Value = toml::from_str(table_toml).expect("valid TOML");
         Chosen {
             name: "navree-plugin-announcements".to_owned(),
+            display_dep_key: "navree-plugin-announcements".to_owned(),
             version: "1.0.0".to_owned(),
             crate_name: "navree_plugin_announcements".to_owned(),
             lib_name: Some("navree_plugin_announcements".to_owned()),
@@ -2182,6 +2261,7 @@ navree = { version = \"1.4.0\", default-features = false, features = [\"billing\
         let billing_entry = Index::embedded().find("billing").unwrap().clone();
         let billing_chosen = Chosen {
             name: "billing".to_owned(),
+            display_dep_key: "billing".to_owned(),
             version: "1.4.0".to_owned(),
             crate_name: "navree_billing".to_owned(),
             lib_name: Some("navree_billing".to_owned()),
@@ -2358,6 +2438,7 @@ navree-plugin-notices = \"0.1.0\"
                 .unwrap();
         let chosen = Chosen {
             name: "navree-plugin-notices".to_owned(),
+            display_dep_key: "navree-plugin-notices".to_owned(),
             version: "0.1.0".to_owned(),
             crate_name: "navree_plugin_notices".to_owned(),
             lib_name: Some("navree_plugin_notices".to_owned()),

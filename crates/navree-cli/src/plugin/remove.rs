@@ -25,23 +25,41 @@ fn canonical_name(name: &str) -> String {
     name.replace('-', "_")
 }
 
+fn dependency_key(cargo_toml: &str, package: &str) -> Option<String> {
+    let parsed: toml::Table = cargo_toml.parse().ok()?;
+    let deps = parsed.get("dependencies")?.as_table()?;
+    let wanted = canonical_name(package);
+    for (key, val) in deps {
+        let actual = val
+            .as_table()
+            .and_then(|tbl| tbl.get("package"))
+            .and_then(toml::Value::as_str)
+            .unwrap_or(key.as_str());
+        if canonical_name(key) == wanted || canonical_name(actual) == wanted {
+            return Some(key.clone());
+        }
+    }
+    None
+}
+
 fn find_resolved_dependency<'a>(
     metadata: &'a Metadata,
     roots: &AppRoots,
     package: &str,
     source: &Source,
-) -> Option<&'a Package> {
+) -> Option<(&'a Package, String)> {
     match source {
         Source::Path(rel_dir) => metadata
-            .dependency_at(&roots.package.join(rel_dir))
+            .dependency_at_with_extern(&roots.package.join(rel_dir))
             .or_else(|| {
                 let wanted = canonical_name(package);
                 metadata
                     .resolved_packages()
                     .into_iter()
                     .find(|pkg| pkg.source.is_none() && canonical_name(&pkg.name) == wanted)
+                    .map(|pkg| (pkg, wanted))
             }),
-        Source::Registry | Source::Git(_) => metadata.dependency(package),
+        Source::Registry | Source::Git(_) => metadata.dependency_with_extern(package),
         Source::Workspace => {
             let wanted = canonical_name(package);
             metadata
@@ -54,6 +72,7 @@ fn find_resolved_dependency<'a>(
                         .iter()
                         .find(|pkg| canonical_name(&pkg.name) == wanted)
                 })
+                .map(|pkg| (pkg, wanted))
         }
     }
 }
@@ -197,6 +216,18 @@ pub fn run(
     runner: &mut dyn Runner,
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
+    let process_env: Vec<(String, String)> = std::env::vars().collect();
+    run_with_env(cwd, options, &process_env, runner, out)
+}
+
+/// Unwires and removes a plugin using `process_env` when scanning configured roles.
+pub fn run_with_env(
+    cwd: &Path,
+    options: &RemoveOptions,
+    process_env: &[(String, String)],
+    runner: &mut dyn Runner,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
     let roots = find_app(cwd).map_err(|msg| anyhow::anyhow!("{msg}"))?;
 
     if options.package == "navree" {
@@ -265,7 +296,12 @@ pub fn run(
     let (meta_ok, meta_stdout, meta_stderr) =
         runner.capture_both(&metadata::invocation(), &roots.package)?;
     if !meta_ok {
-        let _ = snapshot.restore(&roots, &files, &Written::default());
+        let _ = snapshot.restore(
+            &roots,
+            &files,
+            &Written::default(),
+            files.cargo_toml.as_bytes(),
+        );
         anyhow::bail!(
             "cargo metadata failed: {}; nothing was changed",
             metadata::cargo_error_line(&meta_stderr)
@@ -274,7 +310,12 @@ pub fn run(
     let meta = match Metadata::parse(&meta_stdout) {
         Ok(parsed) => parsed,
         Err(err) => {
-            let _ = snapshot.restore(&roots, &files, &Written::default());
+            let _ = snapshot.restore(
+                &roots,
+                &files,
+                &Written::default(),
+                files.cargo_toml.as_bytes(),
+            );
             anyhow::bail!(
                 "cargo metadata failed: {}; nothing was changed",
                 shown(&err)
@@ -282,8 +323,15 @@ pub fn run(
         }
     };
 
-    let Some(pkg) = find_resolved_dependency(&meta, &roots, &options.package, &dep_source) else {
-        let _ = snapshot.restore(&roots, &files, &Written::default());
+    let Some((pkg, extern_crate_name)) =
+        find_resolved_dependency(&meta, &roots, &options.package, &dep_source)
+    else {
+        let _ = snapshot.restore(
+            &roots,
+            &files,
+            &Written::default(),
+            files.cargo_toml.as_bytes(),
+        );
         anyhow::bail!(
             "{} is not a dependency of this app",
             shown(&options.package)
@@ -291,7 +339,12 @@ pub fn run(
     };
 
     let Some(ref plugin_table) = pkg.plugin_table else {
-        let _ = snapshot.restore(&roots, &files, &Written::default());
+        let _ = snapshot.restore(
+            &roots,
+            &files,
+            &Written::default(),
+            files.cargo_toml.as_bytes(),
+        );
         anyhow::bail!(
             "{} {} declares no plugin ([package.metadata.navree.plugin] is missing); nothing was changed",
             shown(&pkg.name),
@@ -299,7 +352,18 @@ pub fn run(
         );
     };
 
-    let role_sources = grants::scan(&files, &[]);
+    let role_sources = grants::scan(&files, process_env);
+    let mut roles = role_sources.roles();
+    if let Some(grants_obj) = plugin_table
+        .get("grants")
+        .and_then(serde_json::Value::as_object)
+    {
+        for role in grants_obj.keys() {
+            if role != "owner" {
+                roles.insert(role.clone());
+            }
+        }
+    }
     let navree_pkg = meta.navree();
     let navree_features: BTreeSet<String> = match navree_pkg {
         Some(n) if !n.features.is_empty() => n.features.keys().cloned().collect(),
@@ -313,23 +377,31 @@ pub fn run(
         navree_features,
         allowed_features: index.manifest_features.iter().cloned().collect(),
         reserved: index.reserved.iter().cloned().collect(),
-        roles: role_sources.roles(),
-        demo_guest_role: role_sources.demo_guest_role(),
+        roles,
+        demo_guest_role: None,
         granted: Vec::new(),
     };
 
     let checked_manifest = manifest::read(&pkg.name, plugin_table, &facts).ok();
-    let crate_name = pkg.name.replace('-', "_");
-    let lib_matches = pkg.lib_name.as_deref() == Some(crate_name.as_str());
+    let expected_lib = pkg.name.replace('-', "_");
+    let lib_matches = pkg.lib_name.as_deref() == Some(expected_lib.as_str());
 
     let (written, wire_line) = match (&checked_manifest, lib_matches) {
         (Some(manifest), true) => {
-            let line = module_line(&format!("{crate_name}::{}", manifest.module.as_str()));
+            let line = module_line(&format!(
+                "{extern_crate_name}::{}",
+                manifest.module.as_str()
+            ));
             if let Some(updated) = files.app_rs.as_deref().and_then(|app| unwire(app, &line)) {
                 match write_all(&roots, &files, &[("src/app.rs".to_owned(), updated)]) {
                     Ok(written) => (written, format!("  unwired  {line} (src/app.rs)")),
                     Err(err) => {
-                        let _ = snapshot.restore(&roots, &files, &Written::default());
+                        let _ = snapshot.restore(
+                            &roots,
+                            &files,
+                            &Written::default(),
+                            files.cargo_toml.as_bytes(),
+                        );
                         anyhow::bail!("{}", err.message("plugin:remove"));
                     }
                 }
@@ -346,10 +418,15 @@ pub fn run(
         ),
     };
 
-    let (rm_ok, _, rm_stderr) =
-        runner.capture_both(&metadata::cargo(&["remove", &pkg.name]), &roots.package)?;
+    let dep_key_for_remove =
+        dependency_key(&files.cargo_toml, &options.package).unwrap_or_else(|| pkg.name.clone());
+    let (rm_ok, _, rm_stderr) = runner.capture_both(
+        &metadata::cargo(&["remove", &dep_key_for_remove]),
+        &roots.package,
+    )?;
     if !rm_ok {
-        let not_put_back = snapshot.restore(&roots, &files, &written);
+        let on_disk_toml = std::fs::read(roots.package.join("Cargo.toml")).unwrap_or_default();
+        let not_put_back = snapshot.restore(&roots, &files, &written, &on_disk_toml);
         let err_line = metadata::cargo_error_line(&rm_stderr);
         if not_put_back.is_empty() {
             anyhow::bail!("cargo remove failed: {err_line}; nothing was changed");

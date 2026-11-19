@@ -215,20 +215,20 @@ impl AppFiles {
 
         let mut config = BTreeMap::new();
         let config_dir = roots.config.join("config");
-        if fs::symlink_metadata(&config_dir).is_ok_and(|meta| meta.is_dir()) {
+        if fs::metadata(&config_dir).is_ok_and(|meta| meta.is_dir()) {
             read_config_dir(&config_dir, "config", true, &mut config)?;
             let env_dir = config_dir.join("env");
-            if fs::symlink_metadata(&env_dir).is_ok_and(|meta| meta.is_dir()) {
+            if fs::metadata(&env_dir).is_ok_and(|meta| meta.is_dir()) {
                 read_config_dir(&env_dir, "config/env", false, &mut config)?;
             }
         }
 
         let mut dot_env = BTreeMap::new();
-        if fs::symlink_metadata(&roots.config).is_ok_and(|meta| meta.is_dir()) {
+        if fs::metadata(&roots.config).is_ok_and(|meta| meta.is_dir()) {
             for entry in fs::read_dir(&roots.config)? {
                 let entry = entry?;
                 let path = entry.path();
-                let Ok(meta) = fs::symlink_metadata(&path) else {
+                let Ok(meta) = fs::metadata(&path) else {
                     continue;
                 };
                 if !meta.is_file() {
@@ -296,7 +296,7 @@ fn read_config_dir(
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
-        let Ok(meta) = fs::symlink_metadata(&path) else {
+        let Ok(meta) = fs::metadata(&path) else {
             continue;
         };
         if !meta.is_file() {
@@ -363,15 +363,23 @@ impl Snapshot {
         })
     }
 
+    /// The bytes `Cargo.toml` held when the snapshot was taken.
+    pub(crate) fn cargo_toml_bytes(&self) -> &[u8] {
+        self.cargo_toml.as_deref().unwrap_or_default()
+    }
+
     /// Puts `Cargo.toml` and the workspace's `Cargo.lock` back from the snapshot (deleting a lock
     /// that was absent), and restores every other file in `written` to the text `read` holds for it
     /// (deleting one that was absent). Any file in `written` is restored only if it still holds the
-    /// exact bytes `write_all` wrote; otherwise it is left untouched and returned in the list.
+    /// exact bytes `write_all` wrote; when `Cargo.toml` was not in `written` and differs from the
+    /// snapshot, it is restored only when it still holds `expected_cargo_toml`; otherwise it is
+    /// left untouched and returned in the list.
     pub(crate) fn restore(
         &self,
         roots: &AppRoots,
         read: &AppFiles,
         written: &Written,
+        expected_cargo_toml: &[u8],
     ) -> Vec<String> {
         let mut not_put_back = Vec::new();
         let mut cargo_toml_written: Option<&[u8]> = None;
@@ -395,9 +403,15 @@ impl Snapshot {
             {
                 not_put_back.push("Cargo.toml".to_owned());
             }
-        } else if !restore_snapshot_entry(&roots.package, "Cargo.toml", self.cargo_toml.as_deref())
-        {
-            not_put_back.push("Cargo.toml".to_owned());
+        } else if self.cargo_toml.as_deref() != Some(expected_cargo_toml) {
+            let dest = roots.package.join("Cargo.toml");
+            let unchanged = check_no_link(&roots.package, "Cargo.toml").is_ok()
+                && fs::read(&dest).ok().as_deref() == Some(expected_cargo_toml);
+            if !unchanged
+                || !restore_snapshot_entry(&roots.package, "Cargo.toml", self.cargo_toml.as_deref())
+            {
+                not_put_back.push("Cargo.toml".to_owned());
+            }
         }
 
         if !restore_snapshot_entry(&roots.workspace, "Cargo.lock", self.cargo_lock.as_deref()) {
@@ -453,6 +467,31 @@ fn restore_written_file(
         }
         None => remove_file_if_present(&dest).is_ok(),
     }
+}
+
+/// Verifies that `rel_path` has no link on its path and still holds the text `read` recorded.
+pub(crate) fn verify_unchanged(
+    roots: &AppRoots,
+    read: &AppFiles,
+    rel_path: &str,
+) -> Result<(), WriteFailed> {
+    let base = roots.root_of(rel_path);
+    if let Err(link_path) = check_no_link(base, rel_path) {
+        return Err(WriteFailed {
+            path: link_path,
+            problem: WriteProblem::Link,
+            not_put_back: Vec::new(),
+        });
+    }
+    let dest = join_rel(base, rel_path);
+    if let Err(problem) = check_unchanged_precheck(&dest, read.text(rel_path)) {
+        return Err(WriteFailed {
+            path: rel_path.to_owned(),
+            problem,
+            not_put_back: Vec::new(),
+        });
+    }
+    Ok(())
 }
 
 /// Writes each `(relative path, text)` by sibling temporary file and rename, creating missing
@@ -974,13 +1013,11 @@ mod tests {
         let read = AppFiles::read(&roots).expect("read app");
         let snap = Snapshot::take(&roots).expect("take snapshot");
 
+        let after_add = "[package]\nname = \"kesar\"\nversion = \"0.1.0\"\n\n[dependencies]\nnavree = \"1.4.0\"\nnavree-plugin-khata = \"0.1.0\"\n";
         write_str(&roots.workspace.join("Cargo.lock"), "# generated lock\n");
-        write_str(
-            &roots.package.join("Cargo.toml"),
-            "[package]\nname = \"kesar\"\nversion = \"0.1.0\"\n\n[dependencies]\nnavree = \"1.4.0\"\nnavree-plugin-khata = \"0.1.0\"\n",
-        );
+        write_str(&roots.package.join("Cargo.toml"), after_add);
 
-        let not_put_back = snap.restore(&roots, &read, &Written::default());
+        let not_put_back = snap.restore(&roots, &read, &Written::default(), after_add.as_bytes());
         assert!(not_put_back.is_empty());
         assert!(!roots.workspace.join("Cargo.lock").exists());
         assert_eq!(
@@ -1007,13 +1044,11 @@ mod tests {
         let read = AppFiles::read(&roots).expect("read app");
         let snap = Snapshot::take(&roots).expect("snapshot");
 
-        write_str(
-            &svc.join("Cargo.toml"),
-            &format!("{original_toml}navree-plugin-khata = \"0.1.0\"\n"),
-        );
+        let after_add = format!("{original_toml}navree-plugin-khata = \"0.1.0\"\n");
+        write_str(&svc.join("Cargo.toml"), &after_add);
         write_str(&root.join("Cargo.lock"), "# changed lock\n");
 
-        let not_put_back = snap.restore(&roots, &read, &Written::default());
+        let not_put_back = snap.restore(&roots, &read, &Written::default(), after_add.as_bytes());
         assert!(not_put_back.is_empty());
         assert_eq!(
             fs::read_to_string(root.join("Cargo.lock")).unwrap(),
@@ -1235,10 +1270,8 @@ mod tests {
         let read = AppFiles::read(&roots).expect("read app");
         let snap = Snapshot::take(&roots).expect("snapshot");
 
-        write_str(
-            &roots.package.join("Cargo.toml"),
-            &format!("{orig_toml}navree-plugin-khata = \"0.1.0\"\n"),
-        );
+        let after_add = format!("{orig_toml}navree-plugin-khata = \"0.1.0\"\n");
+        write_str(&roots.package.join("Cargo.toml"), &after_add);
         write_str(&roots.workspace.join("Cargo.lock"), "# updated lock\n");
 
         let written = write_all(
@@ -1251,7 +1284,7 @@ mod tests {
         // Owner edits `src/app.rs` after `write_all` wrote it.
         write_str(&roots.package.join("src/app.rs"), "// Simran Kaur's edit\n");
 
-        let not_put_back = snap.restore(&roots, &read, &written);
+        let not_put_back = snap.restore(&roots, &read, &written, after_add.as_bytes());
         assert_eq!(not_put_back, vec!["src/app.rs".to_owned()]);
         assert_eq!(
             fs::read_to_string(roots.package.join("src/app.rs")).unwrap(),
@@ -1439,5 +1472,87 @@ mod tests {
         );
         assert!(!stale.exists());
         assert!(!has_temp_files(dir.path()));
+    }
+
+    #[test]
+    fn a_snapshot_leaves_cargo_toml_when_it_changed_after_cargo_add() {
+        let dir = temp_dir();
+        let roots = roots(dir.path());
+        let orig_toml = "[package]\nname = \"kesar\"\nversion = \"0.1.0\"\n\n[dependencies]\nnavree = \"1.4.0\"\n";
+        write_str(&roots.package.join("Cargo.toml"), orig_toml);
+        let read = AppFiles::read(&roots).expect("read app");
+        let snap = Snapshot::take(&roots).expect("snapshot");
+
+        let after_cargo_add = format!("{orig_toml}navree-plugin-khata = \"0.1.0\"\n");
+        let owner_edited = format!("{after_cargo_add}tracing = \"0.1\"\n");
+        write_str(&roots.package.join("Cargo.toml"), &owner_edited);
+        write_str(&roots.workspace.join("Cargo.lock"), "# lock\n");
+
+        let not_put_back = snap.restore(
+            &roots,
+            &read,
+            &Written::default(),
+            after_cargo_add.as_bytes(),
+        );
+        assert_eq!(not_put_back, vec!["Cargo.toml".to_owned()]);
+        assert_eq!(
+            fs::read_to_string(roots.package.join("Cargo.toml")).unwrap(),
+            owner_edited
+        );
+        assert!(!roots.workspace.join("Cargo.lock").exists());
+    }
+
+    #[test]
+    fn linked_config_and_dotenv_files_are_read_while_writes_still_refuse_links() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+
+            let dir = temp_dir();
+            let roots1 = roots(dir.path());
+            write_str(
+                &roots1.package.join("Cargo.toml"),
+                "[package]\nname = \"kesar\"\nversion = \"0.1.0\"\n\n[dependencies]\nnavree = \"1.4.0\"\n",
+            );
+            let shared = temp_dir();
+            write_str(
+                &shared.path().join("app.toml"),
+                "[workspace.roles.member]\npermissions = [\"khata.internal\"]\n",
+            );
+            write_str(
+                &shared.path().join("shared.env"),
+                "APP_WORKSPACE__ROLES__SUPPORT__PERMISSIONS=tickets.reply\n",
+            );
+            fs::create_dir_all(roots1.config.join("config")).unwrap();
+            symlink(
+                shared.path().join("app.toml"),
+                roots1.config.join("config/app.toml"),
+            )
+            .unwrap();
+            symlink(shared.path().join("shared.env"), roots1.config.join(".env")).unwrap();
+
+            let files = AppFiles::read(&roots1).expect("read app with symlinked config and .env");
+            assert!(files.config.contains_key("config/app.toml"));
+            assert!(files.dot_env.contains_key(".env"));
+        }
+
+        #[cfg(windows)]
+        {
+            let dir = temp_dir();
+            let roots1 = roots(dir.path());
+            write_str(
+                &roots1.package.join("Cargo.toml"),
+                "[package]\nname = \"kesar\"\nversion = \"0.1.0\"\n\n[dependencies]\nnavree = \"1.4.0\"\n",
+            );
+            let shared_cfg = temp_dir();
+            write_str(
+                &shared_cfg.path().join("app.toml"),
+                "[workspace.roles.member]\npermissions = [\"khata.internal\"]\n",
+            );
+            make_junction(&roots1.config.join("config"), shared_cfg.path());
+
+            let files = AppFiles::read(&roots1).expect("read app with junction config");
+            assert!(files.config.contains_key("config/app.toml"));
+        }
     }
 }

@@ -523,3 +523,67 @@ policy = { img_src = [\"https://tile.openstreetmap.org\"] }
     );
     assert!(geo_dir.join("Cargo.toml").is_file());
 }
+
+#[test]
+fn plugin_remove_succeeds_with_unmarked_owner_grants_and_process_env_roles() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let cargo_toml = "\
+[package]
+name = \"kesar\"
+version = \"0.1.0\"
+edition = \"2024\"
+
+[workspace]
+
+[dependencies]
+navree = { version = \"1.4.0\", default-features = false, features = [\"postgres\", \"workspace\"] }
+navree-plugin-khata = \"1.0.0\"
+";
+    let root = support::app(tmp.path(), cargo_toml);
+    let app_rs = std::fs::read_to_string(root.join("src/app.rs")).unwrap();
+    std::fs::write(
+        root.join("src/app.rs"),
+        app_rs.replace(
+            "    // navree:modules",
+            "        .module(navree_plugin_khata::KhataModule::from_config())\n    // navree:modules",
+        ),
+    )
+    .unwrap();
+    // Owner added an unmarked `khata.escalate` permission in `config/workspace.toml`, and `support`
+    // is defined only in `process_env` (or even deleted).
+    std::fs::create_dir_all(root.join("config")).unwrap();
+    std::fs::write(
+        root.join("config/workspace.toml"),
+        "[roles.admin]\npermissions = [\"khata.escalate\"]\n",
+    )
+    .unwrap();
+
+    let mut runner = ScriptedCargo::new().package(
+        "navree-plugin-khata",
+        "1.0.0",
+        "module = \"KhataModule::from_config()\"\ngrants = { support = [\"khata.reply\"] }",
+        "navree_plugin_khata",
+    );
+    let mut out = Vec::new();
+    remove::run_with_env(
+        &root,
+        &RemoveOptions {
+            package: "navree-plugin-khata".to_owned(),
+        },
+        &[(
+            "APP_WORKSPACE__ROLES__SUPPORT__PERMISSIONS".to_owned(),
+            "tickets.reply".to_owned(),
+        )],
+        &mut runner,
+        &mut out,
+    )
+    .expect("remove succeeds despite unmarked grant and custom role");
+
+    let printed = String::from_utf8(out).unwrap();
+    assert!(
+        printed.starts_with(
+            "  unwired  .module(navree_plugin_khata::KhataModule::from_config()) (src/app.rs)\n"
+        ),
+        "{printed}"
+    );
+}

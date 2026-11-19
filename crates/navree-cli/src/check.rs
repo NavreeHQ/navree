@@ -9,9 +9,10 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::forward::{Invocation, Runner, forward};
-use crate::plugin::files::read_src;
+use crate::plugin::files::{AppFiles, find_app, read_src};
+use crate::plugin::grants;
 use crate::plugin::index::Index;
-use crate::plugin::list::{listed, navree_library_warnings, unwired_warnings};
+use crate::plugin::list::{listed, listed_with_roles, navree_library_warnings, unwired_warnings};
 use crate::plugin::metadata::{self, Metadata};
 
 /// The app command that runs the conformity checks.
@@ -38,6 +39,7 @@ impl CheckOptions {
 
 fn write_plugin_warnings(
     root: &Path,
+    extra_env: &[(String, String)],
     runner: &mut dyn Runner,
     out: &mut dyn Write,
 ) -> std::io::Result<()> {
@@ -47,14 +49,29 @@ fn write_plugin_warnings(
     let Ok(meta) = Metadata::parse(&json) else {
         return Ok(());
     };
-    let Some(pkg_dir) = meta.root_dir() else {
-        return Ok(());
-    };
-    let src = read_src(pkg_dir).unwrap_or_default();
     for line in navree_library_warnings(&meta) {
         writeln!(out, "{line}")?;
     }
-    let rows = listed(&meta, Index::embedded(), &src);
+    let Some(pkg_dir) = meta.root_dir() else {
+        return Ok(());
+    };
+    let rows = if let Ok(app_roots) = find_app(pkg_dir)
+        && let Ok(files) = AppFiles::read(&app_roots)
+    {
+        let mut proc_env: Vec<(String, String)> = std::env::vars().collect();
+        proc_env.extend(extra_env.iter().cloned());
+        let role_sources = grants::scan(&files, &proc_env);
+        listed_with_roles(
+            &meta,
+            Index::embedded(),
+            &files.src,
+            role_sources.roles(),
+            role_sources.demo_guest_role(),
+        )
+    } else {
+        let src = read_src(pkg_dir).unwrap_or_default();
+        listed(&meta, Index::embedded(), &src)
+    };
     for line in unwired_warnings(&rows) {
         writeln!(out, "{line}")?;
     }
@@ -73,7 +90,7 @@ pub fn run_check(
         return Ok(runner.run(&options.app("check", vec!["--graph".into()]), root)?);
     }
     if !options.json {
-        write_plugin_warnings(root, runner, out)?;
+        write_plugin_warnings(root, &options.env, runner, out)?;
     }
     let graph = options.app("check", Vec::new());
     let graph_ok = if options.json {
@@ -316,5 +333,53 @@ pub(crate) mod tests {
     fn commands_are_read_from_the_help_output() {
         assert_eq!(app_commands(HELP), ["serve", "conformity:check", "migrate"]);
         assert!(app_commands("Usage\n").is_empty());
+    }
+
+    #[test]
+    fn a_virtual_workspace_still_warns_when_a_resolved_package_names_its_library_like_navree() {
+        let virtual_with_spoof = r#"{
+            "packages": [
+                {
+                    "id": "svc#0.1.0",
+                    "name": "svc",
+                    "version": "0.1.0",
+                    "source": null,
+                    "manifest_path": "/ws/crates/svc/Cargo.toml",
+                    "targets": [{ "kind": ["bin"], "name": "svc" }],
+                    "features": {},
+                    "metadata": null
+                },
+                {
+                    "id": "impostor#0.1.0",
+                    "name": "ludhiana-ledger",
+                    "version": "0.1.0",
+                    "source": "registry+https://github.com/rust-lang/crates.io-index",
+                    "manifest_path": "/cache/ludhiana-ledger/Cargo.toml",
+                    "targets": [{ "kind": ["lib"], "name": "navree_billing" }],
+                    "features": {},
+                    "metadata": null
+                }
+            ],
+            "resolve": {
+                "root": null,
+                "nodes": [
+                    { "id": "svc#0.1.0", "deps": [], "features": [] },
+                    { "id": "impostor#0.1.0", "deps": [], "features": [] }
+                ]
+            }
+        }"#;
+        let mut runner = FakeRunner::default()
+            .answer(
+                "cargo metadata --format-version 1",
+                true,
+                virtual_with_spoof,
+            )
+            .answer("cargo run --quiet -- help", true, HELP);
+        let (ok, out) = check(&CheckOptions::default(), &mut runner);
+        assert!(ok);
+        assert_eq!(
+            out,
+            "warning  ludhiana-ledger 0.1.0 names its library `navree_billing` (not `ludhiana_ledger`), like a `navree` crate: remove or replace the dependency\n"
+        );
     }
 }

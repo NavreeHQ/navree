@@ -294,14 +294,19 @@ pub(crate) fn closure(
 pub(crate) fn dependency_source(cargo_toml: &str, package: &str) -> Option<Source> {
     let parsed: toml::Table = cargo_toml.parse().ok()?;
     let deps = parsed.get("dependencies")?.as_table()?;
-    let (_, value) = deps.iter().find(|(key, val)| {
-        let actual = val
-            .as_table()
-            .and_then(|tbl| tbl.get("package"))
-            .and_then(toml::Value::as_str)
-            .unwrap_or(key.as_str());
-        same_package_name(actual, package)
-    })?;
+    let (_, value) = deps
+        .iter()
+        .find(|(key, _)| same_package_name(key, package))
+        .or_else(|| {
+            deps.iter().find(|(key, val)| {
+                let actual = val
+                    .as_table()
+                    .and_then(|tbl| tbl.get("package"))
+                    .and_then(toml::Value::as_str)
+                    .unwrap_or(key.as_str());
+                same_package_name(actual, package)
+            })
+        })?;
     source_from_value(value)
 }
 

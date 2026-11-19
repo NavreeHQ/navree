@@ -461,3 +461,80 @@ ludhiana-ledger  0.1.0  warning    library is `navree_billing` (not `ludhiana_le
         ])
     );
 }
+
+#[test]
+fn plugin_list_and_check_accept_custom_roles_configured_in_files_or_env() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = temp.path();
+    let cargo_toml = "\
+[package]
+name = \"kesar\"
+version = \"0.1.0\"
+edition = \"2024\"
+
+[dependencies]
+navree = { version = \"1.4.0\", default-features = false, features = [\"postgres\", \"workspace\"] }
+navree-plugin-khata = \"1.0.0\"
+
+[workspace]
+";
+    support::app(root, cargo_toml);
+    let app_rs = std::fs::read_to_string(root.join("src/app.rs")).unwrap();
+    std::fs::write(
+        root.join("src/app.rs"),
+        app_rs.replace(
+            "    // navree:modules",
+            "        .module(navree_plugin_khata::KhataModule::from_config())\n    // navree:modules",
+        ),
+    )
+    .unwrap();
+    std::fs::create_dir_all(root.join("config")).unwrap();
+    std::fs::write(
+        root.join("config/workspace.toml"),
+        "[roles.support]\npermissions = [\n    \"khata.reply\", # plugin:add navree-plugin-khata\n    \"khata.escalate\",\n]\n",
+    )
+    .unwrap();
+
+    let mut runner = ScriptedCargo::new().package(
+        "navree-plugin-khata",
+        "1.0.0",
+        "module = \"KhataModule::from_config()\"\ngrants = { support = [\"khata.reply\"], auditor = [\"khata.audit\"] }",
+        "navree_plugin_khata",
+    );
+    let env = vec![(
+        "APP_WORKSPACE__ROLES__AUDITOR__PERMISSIONS".to_owned(),
+        "deals.read".to_owned(),
+    )];
+
+    let mut out = Vec::new();
+    list::run_with_env(
+        root,
+        &ListOptions { json: false },
+        &env,
+        &mut runner,
+        &mut out,
+    )
+    .expect("plugin:list succeeds");
+    assert_eq!(
+        String::from_utf8(out).unwrap(),
+        "navree-plugin-khata  1.0.0  wired      src/app.rs\n"
+    );
+
+    let mut check_out = Vec::new();
+    let ok = run_check(
+        root,
+        &CheckOptions {
+            env,
+            ..CheckOptions::default()
+        },
+        &mut runner,
+        &mut check_out,
+    )
+    .expect("run_check succeeds");
+    assert!(ok);
+    let check_text = String::from_utf8(check_out).unwrap();
+    assert!(
+        !check_text.contains("nothing under src/ wires it"),
+        "unexpected unwired warning: {check_text}"
+    );
+}
