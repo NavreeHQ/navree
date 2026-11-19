@@ -346,7 +346,8 @@ pub enum KernelError {
         also_exported: bool,
     },
     /// A module that acts for a plugin that is not first-party exports a
-    /// non-multi provider whose outer type belongs to a framework crate.
+    /// non-multi provider whose outer type belongs to a framework crate and
+    /// names no type of the plugin's own crate.
     #[error(
         "plugin `{plugin}` exports `{provider}` in `{module}`{reason}, a provider type of the framework; only a framework or app module exports `{provider}`: remove the plugin or update it to a version that leaves `{provider}` to the framework and registers its drivers or extensions through the module builder"
     )]

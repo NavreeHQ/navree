@@ -2200,8 +2200,8 @@ async fn a_plugin_may_not_export_a_provider_another_module_exports() {
 #[tokio::test]
 async fn a_plugins_private_provider_stays_out_of_app_wide_lookups_and_it_may_not_export_a_framework_type()
  {
-    use navree_kernel::{CodeConfigured, KernelError, ProviderKey};
-    use navree_plugin_khata::KhataModule;
+    use navree_kernel::{CodeConfigured, KernelError, Lazy, ProviderKey};
+    use navree_plugin_khata::{KhataModule, Open};
     use navree_plugin_khata_core::KhataCoreModule;
 
     // 1. An unexported provider of a community plugin does not leak into `get` or `try_get`
@@ -2267,6 +2267,64 @@ async fn a_plugins_private_provider_stays_out_of_app_wide_lookups_and_it_may_not
         }))),
         format!(
             "plugin `navree-plugin-khata` exports `{framework_type}(\"khata\")` in `KhataCoreModule` (only the plugin's modules import it), a provider type of the framework; only a framework or app module exports `{framework_type}(\"khata\")`: remove the plugin or update it to a version that leaves `{framework_type}(\"khata\")` to the framework and registers its drivers or extensions through the module builder"
+        )
+    );
+
+    // 3. A framework generic wrapper parameterized by a non-plugin type (`Lazy<ShopBanner>`) is
+    // still refused, whereas one parameterized by a type of the plugin's own crate (`Lazy<Open>`,
+    // as `m.assistant::<PluginAgent>(..)` exports `Assistant<PluginAgent>`) is allowed unless
+    // another module also provides that key.
+    let foreign_generic = std::any::type_name::<Lazy<ShopBanner>>();
+    assert_eq!(
+        errors(Navree::app().module(KhataModule(|m| {
+            m.value(ShopBanner("khata"))
+                .factory(Factory::<Lazy<ShopBanner>>::new(|r| async move {
+                    Ok(Arc::new(r.lazy::<ShopBanner>()))
+                }))
+                .exports::<Lazy<ShopBanner>>();
+        }))),
+        format!(
+            "plugin `navree-plugin-khata` exports `{foreign_generic}` in `KhataModule`, a provider type of the framework; only a framework or app module exports `{foreign_generic}`: remove the plugin or update it to a version that leaves `{foreign_generic}` to the framework and registers its drivers or extensions through the module builder"
+        )
+    );
+
+    let app = Navree::app()
+        .module(KhataModule(|m| {
+            m.value(Open)
+                .factory(Factory::<Lazy<Open>>::new(|r| async move {
+                    Ok(Arc::new(r.lazy::<Open>()))
+                }))
+                .exports::<Lazy<Open>>();
+        }))
+        .boot()
+        .await
+        .expect("framework generic of plugin's own type boots");
+    let lazy_open = app
+        .ctx()
+        .try_get::<Lazy<Open>>()
+        .await
+        .expect("exported Lazy<Open> resolves");
+    assert!(lazy_open.get().await.is_ok());
+
+    struct AppLazyOpen;
+    impl Module for AppLazyOpen {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.factory(Factory::<Lazy<Open>>::new(|r| async move {
+                Ok(Arc::new(r.lazy::<Open>()))
+            }));
+        }
+    }
+    let own_generic = std::any::type_name::<Lazy<Open>>();
+    assert_eq!(
+        errors(Navree::app().module(AppLazyOpen).module(KhataModule(|m| {
+            m.value(Open)
+                .factory(Factory::<Lazy<Open>>::new(|r| async move {
+                    Ok(Arc::new(r.lazy::<Open>()))
+                }))
+                .exports::<Lazy<Open>>();
+        }))),
+        format!(
+            "plugin `navree-plugin-khata` exports `{own_generic}` in `KhataModule`, which `AppLazyOpen` also provides; exporting `{own_generic}` would replace `AppLazyOpen`'s provider in app-wide lookups: remove the plugin or update it to a version that keeps `{own_generic}` private to `KhataModule` or registers it under a name"
         )
     );
 }

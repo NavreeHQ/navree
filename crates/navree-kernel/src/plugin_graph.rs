@@ -388,9 +388,10 @@ impl Graph {
         }
 
         // Step 14. A module acting for a community plugin may not export a
-        // non-multi provider whose outer type belongs to a framework crate, nor
-        // export a non-multi provider key that any other module also registers
-        // (exported or unexported).
+        // non-multi provider whose outer type belongs to a framework crate
+        // without naming a type of the plugin's own crate, nor export a
+        // non-multi provider key that any other module also registers (exported
+        // or unexported).
         let mut framework_refused: Vec<(usize, ProviderKey)> = Vec::new();
         let mut registered_by: Vec<(ProviderKey, Vec<usize>)> = Vec::new();
         for m in self.import_order() {
@@ -403,12 +404,14 @@ impl Graph {
                 if def.multi || APP_ONLY_PROVIDERS.contains(&def.key.type_name()) {
                     continue;
                 }
-                if is_framework_crate(def.key.type_name()) {
-                    if module.exports.contains(&def.key)
-                        && let Some(info) = self.community_plugin(m)
-                        && !framework_refused
-                            .iter()
-                            .any(|(seen_m, seen_k)| *seen_m == m && *seen_k == def.key)
+                if module.exports.contains(&def.key)
+                    && is_framework_crate(def.key.type_name())
+                    && let Some(info) = self.community_plugin(m)
+                    && !names_crate(def.key.type_name(), info.crate_name)
+                {
+                    if !framework_refused
+                        .iter()
+                        .any(|(seen_m, seen_k)| *seen_m == m && *seen_k == def.key)
                     {
                         framework_refused.push((m, def.key.clone()));
                         errors.push(KernelError::PluginExportsFrameworkProvider {
