@@ -26,7 +26,7 @@ The macro takes two optional keys, in any order. `namespace = ".."` sets another
 m.plugin(navree::plugin_info!(namespace = "notice_board", title = "Notice board"));
 ```
 
-A namespace is a lower-case letter followed by up to 63 lower-case letters, digits or `_`. Any other namespace does not compile, and neither does a package whose name gives none: `acme-crm` gives `acme_crm`, but `navree-plugin-2fa` gives `2fa`, so that crate sets one with `namespace = ".."`.
+A namespace is a lower-case letter followed by up to 63 lower-case letters, digits or `_`. Any other namespace does not compile, and neither does a package whose name gives none: `khata-crm` gives `khata_crm`, but `navree-plugin-2fa` gives `2fa`, so that crate sets one with `namespace = ".."`.
 
 The namespace is what the plugin's names start with. For `announcements`:
 
@@ -105,6 +105,8 @@ That is a whole plugin. Three things to know about it:
 - **Write the line in the plugin's own crate.** Call `m.plugin(..)` once in a module's `register`. Several modules of one crate may each call it with the same `plugin_info!(..)`, and are then one plugin. Every module of the crate acts for the plugin, also one that does not name it, so don't write the line in an app's own crate.
 - **A route says who may call it.** This one is `#[public]`. A plugin's routes declare their access as an app's do: see [access control](/docs/basics/access-control/).
 
+See [writing a plugin](/docs/plugins/writing/) for a complete plugin scaffolded with `navree make:plugin` (configuration, migrations, permissions, pages, links, commands and scheduled jobs), [testing a plugin](/docs/plugins/testing/) for running it in `TestApp`, and [releasing a plugin](/docs/plugins/releasing/) for publishing it to crates.io.
+
 ## Adding a plugin to an app
 
 When the plugin carries a `[package.metadata.navree.plugin]` table in its `Cargo.toml`, one command adds the dependency, turns on any `navree` features it asks for, wires its module above `// navree:modules` in `src/app.rs`, and writes its environment variable names, suggested grants and page-policy sources where you can read them:
@@ -166,8 +168,8 @@ use navree::plugin::prelude::*;
 use navree::prelude::*;
 ```
 
-- **Templates.** `m.plugin_templates(navree::embed_templates!("views"))` embeds the crate's `views/` folder in the binary, under the namespace: `views/list.html` is the template `announcements/list.html`. A file of that name in the app's template folder wins. Needs the `view` feature. See [templates a plugin ships](/docs/digging-deeper/views/#templates-a-plugin-ships).
-- **Translations.** `m.locales(navree::embed_locales!("locales"))` adds the crate's Fluent files after the app's own. Each message id starts with the namespace (`announcements-title`), the app's own message of the same id wins, and the plugin needs no `i18n` feature. See [translations a plugin ships](/docs/packages/localization/#translations-a-plugin-ships).
+- **Templates.** `m.plugin_templates(navree::embed_templates!("views"))` embeds the crate's `views/` folder in the binary, under the namespace: `views/list.html` is the template `announcements/list.html`. A file of that name in the app's template folder wins. Needs the `view` feature. See [templates, translations and files](/docs/plugins/resources/) and [templates a plugin ships](/docs/digging-deeper/views/#templates-a-plugin-ships).
+- **Translations.** `m.locales(navree::embed_locales!("locales"))` adds the crate's Fluent files after the app's own. Each message id starts with the namespace (`announcements-title`), the app's own message of the same id wins, and the plugin needs no `i18n` feature. See [templates, translations and files](/docs/plugins/resources/#embed_locales-and-mlocales) and [translations a plugin ships](/docs/packages/localization/#translations-a-plugin-ships).
 - **Static files.** An `AppSheet`, an `AppFont`, an `AppImage` or an island script built with `.namespace("announcements")` is served as `{namespace}.{name}`, so it never meets a file of the app's with the same name. See [files of a plugin](/docs/ui/app-styles/#files-of-a-plugin).
 - **Files for the app to keep.** A `Publishable` (in `navree::plugin`) holds other files (styles, images, scripts) under the tag `files`. A module contributes it with `m.contribute(..)`, and `plugin:publish` copies the files to `resources/<namespace>/`. See [publishing a plugin's files](#publishing-a-plugins-files).
 - **Configuration sections.** `m.config::<T>()` reads a typed section, keyed by the namespace (`announcements`) or below it (`announcements.digest`). Derive `ConfigSection`, so the configuration's commands know its keys. See [your own section](/docs/configuration/environments-and-files/#your-own-section).
@@ -175,13 +177,13 @@ use navree::prelude::*;
 - **Commands.** `m.command(CommandSpec::new(..))` adds a console command. A command name is one in the whole app, so start yours with the namespace (`announcements:prune`). See [writing commands](/docs/digging-deeper/cli/#writing-commands).
 - **Pages and resources of the admin panel.** `m.resource::<R>()` and `m.helm_page(..)` add a resource and a page to Helm, and `m.helm_nav(..)` and `m.helm_widget(..)` a link in its menu and a card on its dashboard. A plugin's page and card render an HTML template. See [Helm](/docs/tools/helm/#links-and-cards-from-other-modules).
 - **Sidebar links.** `m.nav_item(ShellNavItem::new("Announcements", "/announcements").permission("announcements.read"))` adds a link to the app's sidebar. A shell built with `Shell::contributed()` draws it, only for people who hold its permission. See [links other modules add](/docs/ui/app-shell/#links-other-modules-add).
-- **UI components of its own.** A `UiExtension` names a component's script and stylesheet under the namespace, a `FieldControl` is a form field with a server check of its own, and an island script built with `.namespace(..)` is a plugin's island. See [build your own component](/docs/ui/your-own-components/), [the browser contract](/docs/ui/extension-contract/) and [a plugin's island](/docs/ui/islands/#a-plugins-island).
+- **UI components of its own.** A `UiExtension` names a component's script and stylesheet under the namespace, a `FieldControl` is a form field with a server check of its own, and an island script built with `.namespace(..)` is a plugin's island. See [components for Navree UI](/docs/plugins/ui-components/), [build your own component](/docs/ui/your-own-components/), [the browser contract](/docs/ui/extension-contract/) and [a plugin's island](/docs/ui/islands/#a-plugins-island).
 - **Access rules, channels and events.** A plugin registers subjects and policies named under its namespace, authorizes the realtime channels under `announcements.`, and emits telemetry events of its own. See [what a plugin may not grant](/docs/security/authorization/#what-a-plugin-may-not-grant), [authorizing channels](/docs/digging-deeper/broadcasting/#authorizing-channels) and [a custom event](/docs/digging-deeper/telemetry/#a-custom-event).
 - **Existing crates.** `ClientModule` makes a client crate a module, `FallibleLayer` wraps a tower layer whose service can fail, `m.mount(..)` serves a tower service under a path and `m.tonic_service(..)` serves a tonic server, behind the app's access checks. See [connecting an existing crate](/docs/plugins/existing-crates/).
 
 ### Drivers
 
-A plugin registers a driver under a name of its own, and the app selects it by that name in its configuration, as it selects a built-in one. Each page says where the driver reads its own settings.
+A plugin registers a driver under a name of its own, and the app selects it by that name in its configuration, as it selects a built-in one. [Drivers](/docs/plugins/drivers/) has a working registration for each kind, and each kind's own page says where the driver reads its settings.
 
 | Driver | The plugin calls | The app sets | Read more |
 |---|---|---|---|
@@ -252,6 +254,17 @@ impl Module for AnnouncementsModule {
     }
 }
 ```
+
+## First-party packages are plugins too
+
+Navree's own packages that have a module name themselves plugins too, such as [feature flags](/docs/packages/feature-flags/) (`navree-flags`, namespace `flags`) and [social sign-in](/docs/packages/social-sign-in/) (`navree-social`, namespace `social`). Installing an opt-in package with `plugin:add` turns its feature on in `Cargo.toml`, wires its module in `src/app.rs` and writes its configuration section:
+
+```sh
+navree plugin:add flags
+navree plugin:add social
+```
+
+`navree plugins` lists them alongside community plugins, and `plugins --json` marks them with `"first_party": true`. An app that already uses `FlagsModule` or `SocialModule` changes in nothing else. Because the kernel checks that a first-party package matches its own version, patching one Navree crate to another version makes it a community plugin and stops the boot on its reserved namespace.
 
 ## What the boot checks
 
@@ -356,28 +369,37 @@ Your app still decides what happens under a plugin's namespace in these ways:
 - a route or another handler of yours may require a permission the plugin describes, and check a subject registered as the plugin's: you use the plugin's own name on purpose, and you grant it to your roles;
 - a handler of yours may check a plugin's permission in code, with `permitted`.
 
+## What a plugin cannot do
+
+A plugin is code you compile into your app, so it is not a sandbox. But the framework's registration APIs give a plugin that is not one of Navree's own packages no way to change who may do what without a line in your app. A module of such a plugin, or a module that acts for it (a module of its crate, or a generic module that no module of your app imports), stops the boot when it registers a policy with rules beyond the plugin's own subjects or on `all`; registers a subject named outside the plugin's namespace; configures a module of another crate; provides a permission check, the route authorizer, the authenticator, a sign-in strategy, the workspace gate, the options of access, workspaces, authentication or the admin panel, or your app's shell; adds a layer that runs on every request; decides who works as staff in the admin panel; authorizes a realtime channel outside its namespace; scopes a subject that is not its own to workspaces; or registers a global scope or a model hook on a model of another crate. To use any of these, register the plugin's piece from a module of your app.
+
+## What is not enforced
+
+A plugin's rules on its own subjects are its decision (your abilities function can override them). Code a plugin runs (its handlers, jobs and migrations) can call `AccessService` like any code, and its own routes, tools and MCP items may be public. A module of a third crate that names no plugin counts as yours wherever it is imported, with what it registers; a generic module, such as the one `AccessModule::for_policy` makes, is yours only when a module of your app imports it.
+
 ## The commands
 
 Two built-in commands work with plugins. Neither starts the app. Through the CLI they are `navree plugins` and `navree plugin:publish`; without it, `cargo run -- plugins`. When a module of your app registers a command of one of these names, that command runs instead.
 
 ### Listing plugins
 
-`plugins` prints every plugin of the app and what each of its modules adds. For the example with files:
+`plugins` prints every plugin of the app and what each of its modules adds. For the [notice board](/docs/plugins/writing/) example (`plugins/notices` in the repository):
 
 ```sh
 navree plugins
 ```
 
 ```text
-announcements  navree-plugin-announcements 1.0.0  Announcements
-  AnnouncementsModule  navree_plugin_announcements::AnnouncementsModule
-    adds      1 ControllerRegistration, 1 EmbeddedLocales, 1 EmbeddedTemplates, 1 Permissions, 2 Publishable, 1 SectionRegistration
-    publishes 1 views, 1 locales
+notices  navree-plugin-notices 0.1.0  Notice board
+  NoticesModule  navree_plugin_notices::NoticesModule
+    commands  notices:expire
+    adds      1 AppSheet, 1 ControllerRegistration, 1 EmbeddedLocales, 1 EmbeddedTemplates, 2 JobRegistration, 1 LinkRegistration, 1 MigrationSet, 1 Permissions, 2 Publishable, 1 Schedule, 1 SectionRegistration, 1 ShellNavItem
+    publishes 2 views, 2 locales
 ```
 
 A plugin's first line is its namespace, its name and version, and its title when it has one. Then each module that acts for it follows, with its type. `commands` lists the commands the module registers, `adds` counts what it contributes by type, and `publishes` counts the files it ships for `plugin:publish`; a line with nothing to say is left out. With no plugin, the command prints `No plugins: no module of this app calls m.plugin(..).`
 
-`plugins --json` prints the same as one line of JSON, for tools. Here it is on several lines:
+`plugins --json` prints the same shape as one line of JSON, for tools. For the announcements example above, formatted across several lines:
 
 ```json
 {

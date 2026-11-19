@@ -30,6 +30,15 @@ use navree::workspace::{Members, NewWorkspace, WorkspaceRole, Workspaces};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+#[path = "plugins_docs/overview_page.rs"]
+mod overview_page;
+#[path = "plugins_docs/resources_page.rs"]
+mod resources_page;
+#[path = "plugins_docs/section.rs"]
+mod section;
+#[path = "plugins_docs/testing_page.rs"]
+mod testing_page;
+
 // ---------------------------------------------------------------------------
 // existing-crates: a ledger plugin that connects an existing crate
 // ---------------------------------------------------------------------------
