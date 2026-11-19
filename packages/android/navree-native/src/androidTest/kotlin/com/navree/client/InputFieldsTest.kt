@@ -1073,11 +1073,12 @@ class InputFieldsTest {
             <html><head><meta charset="utf-8"><title>Web upload</title></head>
             <body style="margin:0;padding:0">
               <input id="f" type="file" accept="image/*,video/*,.pdf" multiple style="position:fixed;top:-200px">
-              <button id="go" type="button" style="position:fixed;inset:0;width:100vw;height:100vh;border:0"
-                onclick="var i=document.getElementById('f');i.value='';i.click()">Choose</button>
+              <label id="go" for="f" style="position:fixed;inset:0;width:100vw;height:100vh;display:block;margin:0;cursor:pointer">Choose</label>
               <script>
                 var R = function(m){ fetch('/web-note?m=' + encodeURIComponent(m)).catch(function(){}) };
-                document.getElementById('f').addEventListener('change', function(){
+                var f = document.getElementById('f');
+                f.addEventListener('click', function(){ this.value = '' });
+                f.addEventListener('change', function(){
                   var files = Array.prototype.slice.call(this.files);
                   var fd = new FormData();
                   files.forEach(function(file){ fd.append('files', file, file.name) });
@@ -1085,7 +1086,9 @@ class InputFieldsTest {
                     R('sent:' + files.map(function(f){ return f.name + ':' + f.type + ':' + f.size }).join(','));
                   }, function(e){ R('err:' + e) });
                 });
-                window.addEventListener('load', function(){ R('ready') });
+                window.addEventListener('load', function(){
+                  requestAnimationFrame(function(){ requestAnimationFrame(function(){ R('ready') }) });
+                });
               </script>
             </body></html>
         """.trimIndent()
@@ -1137,23 +1140,40 @@ class InputFieldsTest {
             fun tapWebChooser(vararg uris: Uri) {
                 picker.next = uris.toList()
                 val before = picker.launches.get()
+                val inst = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                var attempts = 0
                 val deadline = System.currentTimeMillis() + 15_000L
                 while (picker.launches.get() == before && System.currentTimeMillis() < deadline) {
+                    var point: Pair<Float, Float>? = null
                     compose.runOnUiThread {
                         val web = findWebView(compose.activity.window.decorView)
-                        if (web != null && web.width > 0 && web.height > 0) {
-                            val now = android.os.SystemClock.uptimeMillis()
-                            val x = web.width / 2f
-                            val y = web.height / 2f
-                            val down = android.view.MotionEvent.obtain(now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0)
-                            down.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
-                            val up = android.view.MotionEvent.obtain(now, now + 20L, android.view.MotionEvent.ACTION_UP, x, y, 0)
-                            up.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
-                            web.dispatchTouchEvent(down)
-                            web.dispatchTouchEvent(up)
-                            down.recycle()
-                            up.recycle()
+                        if (web != null && web.isShown && web.width > 0 && web.height > 0) {
+                            web.requestFocus()
+                            val loc = IntArray(2)
+                            web.getLocationOnScreen(loc)
+                            point = (loc[0] + web.width / 2f) to (loc[1] + web.height / 2f)
                         }
+                    }
+                    val target = point
+                    if (target != null) {
+                        if (attempts % 2 == 0) {
+                            val downTime = android.os.SystemClock.uptimeMillis()
+                            val down = android.view.MotionEvent.obtain(downTime, downTime, android.view.MotionEvent.ACTION_DOWN, target.first, target.second, 0).apply {
+                                source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                            }
+                            runCatching { inst.sendPointerSync(down) }
+                            down.recycle()
+                            Thread.sleep(60)
+                            val upTime = android.os.SystemClock.uptimeMillis()
+                            val up = android.view.MotionEvent.obtain(downTime, upTime, android.view.MotionEvent.ACTION_UP, target.first, target.second, 0).apply {
+                                source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                            }
+                            runCatching { inst.sendPointerSync(up) }
+                            up.recycle()
+                        } else {
+                            Shots.shell("input tap ${target.first.toInt()} ${target.second.toInt()}")
+                        }
+                        attempts++
                     }
                     try {
                         compose.waitUntil(1_500) { picker.launches.get() > before }

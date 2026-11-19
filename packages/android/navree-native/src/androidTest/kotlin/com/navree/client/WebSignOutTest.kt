@@ -936,7 +936,7 @@ class WebSignOutTest {
                     .addHeader("x-navree-person", "0193a4b2-0000-7000-8000-00000000hs01")
                     .body(shell)
                     .build()
-                "/" -> if (expired.compareAndSet(true, false)) {
+                "/" -> if (expired.get()) {
                     MockResponse.Builder().code(401).addHeader("Content-Type", "application/vnd.navree.native+json").body(ended).build()
                 } else {
                     page(if (inspect.get()) looks else stores, "0193a4b2-0000-7000-8000-00000000hs01")
@@ -947,6 +947,7 @@ class WebSignOutTest {
                     MockResponse.Builder().code(204).build()
                 }
                 "/sign-in" -> if (request.method == "POST") {
+                    expired.set(false)
                     MockResponse.Builder()
                         .code(303)
                         .addHeader("Location", "/")

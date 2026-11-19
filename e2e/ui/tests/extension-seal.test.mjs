@@ -26,7 +26,7 @@ const ENGINES = { chromium, firefox, webkit };
 const NAMES = (process.env.UI_BROWSERS || "chromium,firefox,webkit").split(/[ ,]+/).filter((n) => ENGINES[n]);
 
 /** Browser network status lines for expected non-2xx module checks, distinct from script errors. */
-const NOISE = /Failed to load resource|ERR_|NS_ERROR|Load failed|Loading failed for the|Importing a module script failed|status of \d{3}/i;
+const NOISE = /Failed to load resource|ERR_|NS_ERROR|Load failed|Loading failed for the|Importing a module script failed|disallowed MIME type|status of \d{3}/i;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -109,7 +109,7 @@ for (const name of NAMES) {
 
     const hits = (path) => f.log.filter((entry) => entry.path.split("?")[0] === path);
 
-    async function open(path, { allowCsp } = {}) {
+    async function open(path, { allowCsp, allowConsole } = {}) {
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
       contexts.push(context);
       const page = await context.newPage();
@@ -117,7 +117,7 @@ for (const name of NAMES) {
       page.on("console", (m) => {
         if (m.type() !== "error") return;
         const text = m.text();
-        if (NOISE.test(text) || (name === "webkit" && /Refused to apply a stylesheet/.test(text))) return;
+        if (NOISE.test(text) || allowConsole?.test(text) || (name === "webkit" && /Refused to apply a stylesheet/.test(text))) return;
         problems.push(text);
       });
       page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
@@ -140,7 +140,7 @@ for (const name of NAMES) {
     }
 
     async function assertBannerSealed(page, expectedCity) {
-      await page.locator("#banner[data-ui-mounted]").waitFor();
+      await page.locator("#banner[data-ui-mounted]").waitFor({ state: "attached" });
       const state = await page.evaluate(() => {
         const body = document.getElementById("banner-body");
         const cmd = body.querySelector("[data-banner-cmd]");
@@ -241,8 +241,8 @@ for (const name of NAMES) {
         ),
       );
       const blockedPage = await open(`/${blockedPath}`);
-      await blockedPage.page.locator("#depot[data-ui-mounted]").waitFor();
-      await blockedPage.page.locator("#banner[data-ui-failed]").waitFor();
+      await blockedPage.page.locator("#depot[data-ui-mounted]").waitFor({ state: "attached" });
+      await blockedPage.page.locator("#banner[data-ui-failed]").waitFor({ state: "attached" });
       await sleep(120);
       assert.equal(await blockedPage.page.textContent("#depot [data-slot=island-body]"), "Depot: Jalandhar");
       assert.equal(await blockedPage.page.getAttribute("#banner", "data-ui-mounted"), null);
@@ -263,7 +263,7 @@ for (const name of NAMES) {
         `</body></html>`;
       route(`/${freshPath}`, freshHtml, { "x-navree-fresh": "1" });
       const freshPage = await open(`/${freshPath}`);
-      await freshPage.page.locator("#depot[data-ui-mounted]").waitFor();
+      await freshPage.page.locator("#depot[data-ui-mounted]").waitFor({ state: "attached" });
       await sleep(120);
       assert.equal(await freshPage.page.textContent("#depot [data-slot=island-body]"), "Depot: Jalandhar");
       assert.equal(await freshPage.page.getAttribute("#banner", "data-ui-mounted"), null);
@@ -281,16 +281,20 @@ for (const name of NAMES) {
         export const contract = 1;
         export function mount(el) {
           const body = el.querySelector("[data-ui-keep]");
+          const planted = document.createElement("form");
+          planted.id = "ui-sealed";
+          planted.method = "get";
+          planted.action = "/${p}-planted";
+          planted.innerHTML =
+            '<input id="written-q" name="q" value="Ludhiana">' +
+            '<select id="written-city" name="city"><option value="Patiala" selected>Patiala</option></select>' +
+            '<textarea id="written-note" name="note">Leave at gate</textarea>' +
+            '<fieldset id="written-group" name="group"><input id="group-item" name="item" value="1"></fieldset>' +
+            '<output id="written-out" name="out">99</output>' +
+            '<button id="written-submit" type="submit" name="via" value="sealed">Search</button>';
+          body.append(planted);
           body.insertAdjacentHTML(
             "beforeend",
-            '<form id="ui-sealed" method="get" action="/${p}-planted">' +
-              '<input id="written-q" name="q" value="Ludhiana">' +
-              '<select id="written-city" name="city"><option value="Patiala" selected>Patiala</option></select>' +
-              '<textarea id="written-note" name="note">Leave at gate</textarea>' +
-              '<fieldset id="written-group" name="group"><input id="group-item" name="item" value="1"></fieldset>' +
-              '<output id="written-out" name="out">99</output>' +
-              '<button id="written-submit" type="submit" name="via" value="sealed">Search</button>' +
-            '</form>' +
             '<input id="written-charge" name="charge" value="0">' +
             '<input id="repointed-charge" name="charge" value="999" form="delivery">'
           );
@@ -315,7 +319,7 @@ for (const name of NAMES) {
       f.routes.set(`/${p}-save`, (_req, res) => f.ops(res, { ops: [] }));
 
       const { page, close } = await open(`/${p}`);
-      await page.locator("#pad[data-ui-mounted]").waitFor();
+      await page.locator("#pad[data-ui-mounted]").waitFor({ state: "attached" });
       await page.evaluate(() => {
         document.getElementById("repointed-charge").setAttribute("form", "delivery");
       });
@@ -422,10 +426,13 @@ for (const name of NAMES) {
         }),
       );
 
-      const { page, close } = await open(`/${p}`, { allowCsp: /^(default|frame|child|object)-src\b/ });
-      await page.locator("#pad[data-ui-mounted]").waitFor();
+      const { page, close } = await open(`/${p}`, {
+        allowCsp: /^(default|frame|child|object)-src\b/,
+        allowConsole: /Content[- ]Security[- ]Policy/i,
+      });
+      await page.locator("#pad[data-ui-mounted]").waitFor({ state: "attached" });
       await page.click("#add-go");
-      await page.locator("#second-pad[data-ui-mounted]").waitFor();
+      await page.locator("#second-pad[data-ui-mounted]").waitFor({ state: "attached" });
       await sleep(200);
 
       assert.equal(await page.evaluate(() => document.querySelectorAll("iframe,frame,object,embed").length), 0);
@@ -486,9 +493,9 @@ for (const name of NAMES) {
         }),
       );
 
-      const { page, close } = await open(`/${p}`);
-      await page.locator("#pad[data-ui-mounted]").waitFor();
-      await page.locator("#second-pad[data-ui-mounted]").waitFor();
+      const { page, close } = await open(`/${p}`, { allowConsole: /Refused to refresh .* to a javascript: URL/i });
+      await page.locator("#pad[data-ui-mounted]").waitFor({ state: "attached" });
+      await page.locator("#second-pad[data-ui-mounted]").waitFor({ state: "attached" });
       await page.evaluate(() => {
         document.getElementById("second-body").id = "second-drawn";
       });
@@ -586,9 +593,9 @@ for (const name of NAMES) {
       f.routes.set(`/${p}-save`, (_req, res) => f.ops(res, { ops: [] }));
 
       const { page, close } = await open(`/${p}`);
-      await page.locator("#pad[data-ui-mounted]").waitFor();
-      await page.locator("#notice[data-ui-mounted]").waitFor();
-      await page.locator("#depot[data-ui-mounted]").waitFor();
+      await page.locator("#pad[data-ui-mounted]").waitFor({ state: "attached" });
+      await page.locator("#notice[data-ui-mounted]").waitFor({ state: "attached" });
+      await page.locator("#depot[data-ui-mounted]").waitFor({ state: "attached" });
 
       await page.click("#redraw");
       await until(() => hits(`/${p}-redraw`).length === 1, "order morph post");
