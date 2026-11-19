@@ -3,6 +3,8 @@ package com.navree.client.ui
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.view.DragEvent
 import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
@@ -55,7 +57,9 @@ private const val NOT_GUARDED = "not guarded"
 
 /**
  * One pending `WebChromeClient.onShowFileChooser` request. Its callback must be
- * answered at most once on every path, whether with chosen URIs or with null.
+ * answered at most once on every path, whether with chosen URIs or with null,
+ * and always on the main thread (`WebView`'s native callback checks the UI
+ * thread).
  */
 private class ChooserCall(
     val accept: String?,
@@ -66,7 +70,12 @@ private class ChooserCall(
 
     fun finish(uris: Array<Uri>?) {
         if (settled.compareAndSet(false, true)) {
-            callback.onReceiveValue(uris)
+            val main = Looper.getMainLooper()
+            if (main == null || Looper.myLooper() == main) {
+                callback.onReceiveValue(uris)
+            } else {
+                Handler(main).post { callback.onReceiveValue(uris) }
+            }
         }
     }
 }
