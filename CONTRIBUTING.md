@@ -90,7 +90,7 @@ other sideways. `crates/navree/tests/dependency_graph.rs` checks every edge on
 each test run.
 
 ```
-L9+ apps/ (example apps and the system app, built on the facade)
+L9+ apps/ and plugins/ (example apps, the system app, and example plugins, built on the facade)
 L8  navree (facade: re-exports + prelude)       navree-cli (binary `navree`; no runtime navree deps, uses navree-dock, navree-harbor and navree-navigator)
 L7  navree-billing  navree-search  navree-lighthouse  navree-logbook  navree-fleet  navree-helm  navree-workflows  navree-media  navree-directory  navree-domains (packages built on other packages)
 L6  navree-social  navree-sso  navree-webhooks  navree-integrations  navree-sheets  navree-oauth  navree-flags  navree-settings  navree-graphql  navree-grpc  navree-mcp  navree-ai  navree-micro  navree-i18n  navree-documents (ecosystem libraries)
