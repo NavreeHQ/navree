@@ -34,6 +34,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.navree.client.BuildConfig
 import com.navree.client.R
 import com.navree.client.core.Failure
+import com.navree.client.core.FileRef
 import com.navree.client.design.FileRules
 import com.navree.client.platform.ClientLog
 import com.navree.client.platform.OriginWebClient
@@ -45,7 +46,6 @@ import com.navree.client.platform.WorkerGuard
 import com.navree.client.platform.guardDocuments
 import com.navree.client.webViewToken
 import kotlinx.coroutines.launch
-import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -103,10 +103,10 @@ internal val LocalWebGuards = staticCompositionLocalOf { WebGuards() }
  * requests' cookies (the system store is the one store), carries the
  * protocol's token at the end of its user agent so the server leaves out its
  * web chrome, and has no bridge to the app: no script interface, no file or
- * content access, no pop-ups, no mixed content. A `<input type="file">` on an
- * app-origin document opens the client's own picker and passes each chosen
- * file through [PickedFiles] (with `keepLocation = false`) before handing a
- * read-only `content://` handle to the web view.
+ * content access, no pop-ups, no mixed content. A `<input type="file">` while
+ * the page is on the app's origins opens the client's own picker and passes
+ * each chosen file through [PickedFiles] (with `keepLocation = false`) before
+ * handing a read-only `content://` handle to the web view.
  *
  * The page stays on the app's origins, and what it loads inside it is asked
  * for only from them or from the app's web hosts, by the first address of each
@@ -135,7 +135,6 @@ internal fun WebPage(
     val guards = LocalWebGuards.current
     val appContext = LocalContext.current.applicationContext
     val store = remember(appContext) { PickedFiles.of(appContext) }
-    val scope = rememberCoroutineScope()
     val link by rememberUpdatedState(onLink)
     val title by rememberUpdatedState(onTitle)
     // A new web view for each attempt: one whose process ended can no longer be used.
@@ -178,8 +177,9 @@ internal fun WebPage(
             }
         } else {
             key(attempt) {
+                val scope = rememberCoroutineScope()
                 val slot = remember { ChooserSlot() }
-                val webTokens = remember { Collections.synchronizedSet(HashSet<String>()) }
+                val webTokens = remember { HashSet<String>() }
                 val launcher = rememberLauncherForActivityResult(remember { PickFiles() }) { uris ->
                     val call = slot.active ?: return@rememberLauncherForActivityResult
                     slot.active = null
@@ -190,19 +190,35 @@ internal fun WebPage(
                     scope.launch {
                         try {
                             val chosen = if (call.multiple) uris else uris.take(1)
+                            val kept = ArrayList<FileRef>()
+                            val refused = ArrayList<PickedFiles.Result.Refused>()
                             var total = 0L
-                            val results = chosen.map { uri ->
-                                store.keep(appContext.contentResolver, uri, call.accept, keepLocation = false, held = total)
-                                    .also { if (it is PickedFiles.Result.Kept) total += it.file.size }
+                            for (uri in chosen) {
+                                if (slot.disposed.get()) break
+                                when (val result = store.keep(appContext.contentResolver, uri, call.accept, keepLocation = false, held = total)) {
+                                    is PickedFiles.Result.Kept -> {
+                                        val dropNow = synchronized(webTokens) {
+                                            if (slot.disposed.get()) {
+                                                true
+                                            } else {
+                                                webTokens.add(result.file.token)
+                                                false
+                                            }
+                                        }
+                                        if (dropNow) {
+                                            thread(name = "navree-web-picked-drop", isDaemon = true) { store.drop(result.file.token) }
+                                            break
+                                        }
+                                        total += result.file.size
+                                        kept += result.file
+                                    }
+                                    is PickedFiles.Result.Refused -> refused += result
+                                }
                             }
-                            val refused = results.filterIsInstance<PickedFiles.Result.Refused>()
-                            val kept = results.filterIsInstance<PickedFiles.Result.Kept>().map { it.file }
                             if (slot.disposed.get()) {
-                                if (kept.isNotEmpty()) thread(name = "navree-web-picked-drop", isDaemon = true) { kept.forEach { store.drop(it.token) } }
                                 call.finish(null)
                                 return@launch
                             }
-                            kept.forEach { webTokens.add(it.token) }
                             if (refused.isNotEmpty()) {
                                 val text = refused.joinToString("\n") { refusalWords(appContext, it.why) }
                                 launch { ui.snackbars.showSnackbar(text) }
@@ -220,10 +236,12 @@ internal fun WebPage(
                 val latestLauncher by rememberUpdatedState(launcher)
                 DisposableEffect(Unit) {
                     onDispose {
-                        slot.disposed.set(true)
+                        val tokens = synchronized(webTokens) {
+                            slot.disposed.set(true)
+                            webTokens.toList().also { webTokens.clear() }
+                        }
                         slot.active?.finish(null)
                         slot.active = null
-                        val tokens = synchronized(webTokens) { webTokens.toList().also { webTokens.clear() } }
                         if (tokens.isNotEmpty()) {
                             thread(name = "navree-web-picked-drop", isDaemon = true) { tokens.forEach(store::drop) }
                         }
@@ -291,10 +309,13 @@ internal fun WebPage(
                                     slot.active = call
                                     try {
                                         latestLauncher.launch(plan)
-                                    } catch (_: ActivityNotFoundException) {
+                                    } catch (failure: Throwable) {
+                                        if (failure is VirtualMachineError) throw failure
                                         slot.active = null
                                         call.finish(null)
-                                        scope.launch { ui.snackbars.showSnackbar(appContext.getString(R.string.navree_file_no_picker)) }
+                                        if (failure is ActivityNotFoundException || failure is SecurityException) {
+                                            scope.launch { ui.snackbars.showSnackbar(appContext.getString(R.string.navree_file_no_picker)) }
+                                        }
                                     }
                                     return true
                                 }

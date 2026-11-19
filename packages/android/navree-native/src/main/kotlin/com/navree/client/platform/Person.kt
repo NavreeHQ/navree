@@ -24,16 +24,16 @@ internal enum class Heard {
  * it knows when.
  *
  * Two people are told apart by the key the core gives the person it names:
- * the same for one person and another for two accounts, whatever their names
- * (the core makes it from the id the app's server gave the person, where it
- * gave one). A core that gives no key leaves the client what the app's part
- * of the view state says of a person, the name and email, and two people are
- * then told apart only as far as those tell them. Either comes from the
- * shell the app's server answered; nothing a page says is heard. While the
- * core names nobody, nothing is heard: the person named before may sign in
- * again and find everything as it was. A sign-out forgets who was named
- * ([signedOut]), since it takes everything away itself, so whoever is named
- * after one is the first.
+ * made from the id the app's server gave the person where it gave one (kept
+ * across changes of name and email, and distinct for two accounts of one name),
+ * or from the name and email where no id was given (with answers that carry an
+ * id and answers that carry none never sharing a key). A caller that gives no
+ * key at all leaves the client the name and email, and two people are then told
+ * apart only as far as those tell them. Either comes from the shell the app's
+ * server answered; nothing a page says is heard. While the core names nobody,
+ * nothing is heard: the person named before may sign in again and find
+ * everything as it was. A sign-out forgets who was named ([signedOut]), since
+ * it takes everything away itself, so whoever is named after one is the first.
  *
  * What is remembered is a mark, made from the key ([markOfKey]) or, without
  * one, from the name and email ([markOf]): it tells two people apart and

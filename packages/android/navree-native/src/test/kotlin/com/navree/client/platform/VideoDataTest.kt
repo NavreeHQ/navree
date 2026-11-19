@@ -171,4 +171,81 @@ class VideoDataTest {
         val truncated = File(folder, "truncated.mp4").apply { writeBytes(ftyp + byteArrayOf(0, 0, 1, 0, 'm'.code.toByte(), 'o'.code.toByte(), 'o'.code.toByte(), 'v'.code.toByte())) }
         assertTrue(VideoData.inspect(truncated).broken)
     }
+
+    @Test
+    fun sony_non_real_time_meta_xml_and_binary_xml_and_canon_and_nikon_gps_boxes_are_cleaned_and_iso_item_tables_or_malformed_keys_fail_closed() {
+        val ftyp = box("ftyp", "mp42\u0000\u0000\u0000\u0000isommp42".toByteArray(Charsets.ISO_8859_1))
+        val sonyXml = """
+            <NonRealTimeMeta xmlns="urn:schemas-professionalDisc:nonRealTimeMeta:ver.2.00">
+              <AcquisitionRecord>
+                <Group name="ExifGPS">
+                  <Item name="LatitudeRef" value="N"/>
+                  <Item name="Latitude" value="30:54:3.600"/>
+                  <Item name="LongitudeRef" value="E"/>
+                  <Item name="Longitude" value="75:51:26.280"/>
+                </Group>
+              </AcquisitionRecord>
+            </NonRealTimeMeta>
+        """.trimIndent().toByteArray(Charsets.UTF_8)
+        val sonyMeta = box("meta", ByteArray(4), hdlr("nrtm"), box("xml ", ByteArray(4), sonyXml))
+        val bxmlMeta = box("meta", ByteArray(4), hdlr("mp7b"), box("bxml", ByteArray(4), byteArrayOf(1, 2, 3, 4, 5)))
+        val canonUuid = box(
+            "uuid",
+            byteArrayOf(
+                0x85.toByte(), 0xC0.toByte(), 0xB6.toByte(), 0x87.toByte(),
+                0x82.toByte(), 0x0F, 0x11, 0xE0.toByte(),
+                0x81.toByte(), 0x11, 0xF4.toByte(), 0xCE.toByte(),
+                0x46, 0x2B, 0x6A, 0x48,
+            ),
+            box("CMT4", "II*\u0000+30.9010".toByteArray(Charsets.ISO_8859_1)),
+        )
+        val nikonUdta = box("udta", box("NCDT", "+31.6340+074.8723/".toByteArray(Charsets.ISO_8859_1)))
+        val freeformMean = box(
+            "----",
+            box("mean", ByteArray(4), "com.apple.quicktime.location".toByteArray(Charsets.UTF_8)),
+            box("name", ByteArray(4), "note".toByteArray(Charsets.UTF_8)),
+            box("data", be32(1), ByteArray(4), "Patiala".toByteArray(Charsets.UTF_8)),
+        )
+        val meanMeta = box("meta", ByteArray(4), hdlr("mdir"), box("ilst", freeformMean))
+        val cameraBytes = ftyp + box("moov", sonyMeta, bxmlMeta, nikonUdta, meanMeta) + canonUuid + box("mdat", ByteArray(32))
+        val cameraFile = File(folder, "camera.mp4").apply { writeBytes(cameraBytes) }
+        val cameraCleaned = File(folder, "camera-clean.mp4")
+
+        val before = VideoData.inspect(cameraFile)
+        assertFalse(before.broken)
+        assertEquals(3, before.locationBoxes)
+        assertEquals(2, before.xmpWithPlace)
+        VideoData.clean(cameraFile, cameraCleaned)
+        assertTrue(VideoData.inspect(cameraCleaned).clean)
+        val cleanedText = String(cameraCleaned.readBytes(), Charsets.ISO_8859_1)
+        assertFalse(cleanedText.contains("30:54:3.600"))
+        assertFalse(cleanedText.contains("30.9010"))
+        assertFalse(cleanedText.contains("31.6340"))
+        assertFalse(cleanedText.contains("Patiala"))
+
+        // ISO `meta` item tables (`iinf`/`iloc`) fail closed (`broken = true`) so binary `Exif` extents cannot slip through.
+        val exifItemMeta = ftyp + box("moov", box("meta", ByteArray(4), hdlr("pict"), box("iinf", ByteArray(6))))
+        assertTrue(VideoData.inspect(File(folder, "exif-item.mp4").apply { writeBytes(exifItemMeta) }).broken)
+
+        // Malformed or oversize QuickTime `keys` count fails closed (`broken = true`) rather than leaving `ilst` untouched.
+        val badKeys = box(
+            "keys",
+            ByteArray(4),
+            be32(100_001),
+            be32(40), "mdta".toByteArray(Charsets.ISO_8859_1), "com.apple.quicktime.location.ISO6709".toByteArray(Charsets.UTF_8),
+        )
+        val badKeysMp4 = ftyp + box("moov", box("meta", hdlr("mdta", "mhlr"), badKeys))
+        assertTrue(VideoData.inspect(File(folder, "bad-keys.mov").apply { writeBytes(badKeysMp4) }).broken)
+    }
+
+    @Test
+    fun a_classic_quicktime_movie_with_a_large_leading_mdat_or_padding_box_is_still_seen_as_iso_video_without_a_video_mime() {
+        val leadingMdatMov = box("mdat", ByteArray(4_096) { 0x5A }) + box("moov", box("mvhd", ByteArray(16)))
+        val movFile = File(folder, "classic.bin").apply { writeBytes(leadingMdatMov) }
+        assertEquals(Video.Iso, VideoData.kindOf(movFile, "application/octet-stream"))
+
+        val paddedMp4 = box("free", ByteArray(2_048)) + box("ftyp", "isom\u0000\u0000\u0002\u0000isommp42".toByteArray(Charsets.ISO_8859_1)) + box("mdat", ByteArray(32))
+        val paddedFile = File(folder, "padded.bin").apply { writeBytes(paddedMp4) }
+        assertEquals(Video.Iso, VideoData.kindOf(paddedFile, null))
+    }
 }

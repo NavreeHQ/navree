@@ -1,5 +1,6 @@
 package com.navree.client.ui
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -60,6 +61,7 @@ import com.navree.client.design.FileRules
 import com.navree.client.design.FormRules
 import com.navree.client.platform.PickedFiles
 import com.navree.protocol.Navree
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -77,10 +79,8 @@ internal class PickFiles : ActivityResultContract<FileRules.Plan, List<Uri>>() {
     private val manyPhotos = ActivityResultContracts.PickMultipleVisualMedia()
     private val oneDocument = ActivityResultContracts.OpenDocument()
     private val manyDocuments = ActivityResultContracts.OpenMultipleDocuments()
-    private var lastPlan: FileRules.Plan? = null
 
     override fun createIntent(context: Context, input: FileRules.Plan): Intent {
-        lastPlan = input
         val photos = input.source == FileRules.Source.Photos
         return when {
             photos && input.multiple -> manyPhotos.createIntent(context, request(input))
@@ -91,15 +91,16 @@ internal class PickFiles : ActivityResultContract<FileRules.Plan, List<Uri>>() {
     }
 
     override fun parseResult(resultCode: Int, intent: Intent?): List<Uri> {
-        val plan = lastPlan
-        val photos = plan?.source == FileRules.Source.Photos
-        val multiple = plan?.multiple == true
-        return when {
-            photos && multiple -> manyPhotos.parseResult(resultCode, intent)
-            photos -> listOfNotNull(onePhoto.parseResult(resultCode, intent))
-            multiple -> manyDocuments.parseResult(resultCode, intent)
-            else -> listOfNotNull(oneDocument.parseResult(resultCode, intent))
+        if (resultCode != Activity.RESULT_OK || intent == null) return emptyList()
+        val uris = LinkedHashSet<Uri>()
+        intent.data?.let(uris::add)
+        val clip = intent.clipData
+        if (clip != null) {
+            for (index in 0 until clip.itemCount) {
+                clip.getItemAt(index)?.uri?.let(uris::add)
+            }
         }
+        return uris.toList()
     }
 
     private fun request(plan: FileRules.Plan): PickVisualMediaRequest = PickVisualMediaRequest(
@@ -177,12 +178,24 @@ internal fun FileFieldView(field: Navree.Field, input: Navree.FileInput, place: 
         if (uris.isNotEmpty()) {
             scope.launch {
                 busy = true
+                val keptSoFar = ArrayList<FileRef>()
                 val results = try {
                     // With several files the total obeys the limit too: each is checked against what the field holds and what came before it.
                     var total = if (input.multiple) latestHeld.sumOf { it.size } else 0L
                     uris.map { uri ->
-                        store.keep(context.contentResolver, uri, input.accept, input.keepLocation, total).also { if (it is PickedFiles.Result.Kept) total += it.file.size }
+                        store.keep(context.contentResolver, uri, input.accept, input.keepLocation, total).also {
+                            if (it is PickedFiles.Result.Kept) {
+                                keptSoFar += it.file
+                                total += it.file.size
+                            }
+                        }
                     }
+                } catch (cancelled: CancellationException) {
+                    if (keptSoFar.isNotEmpty()) {
+                        val dropTokens = keptSoFar.map { it.token }
+                        thread(name = "navree-picked-drop", isDaemon = true) { dropTokens.forEach(store::drop) }
+                    }
+                    throw cancelled
                 } finally {
                     busy = false
                 }
@@ -246,6 +259,10 @@ internal fun FileFieldView(field: Navree.Field, input: Navree.FileInput, place: 
                     try {
                         launcher.launch(plan)
                     } catch (_: ActivityNotFoundException) {
+                        notice = context.getString(R.string.navree_file_no_picker)
+                    } catch (_: SecurityException) {
+                        notice = context.getString(R.string.navree_file_no_picker)
+                    } catch (_: IllegalStateException) {
                         notice = context.getString(R.string.navree_file_no_picker)
                     }
                 },

@@ -10,27 +10,43 @@ import java.io.RandomAccessFile
  * (MP4, MOV, M4V, 3GP) that can say where it was made. Plain Kotlin over files
  * and bytes, so every rule is tested without a device.
  *
- * Location boxes (`©xyz`, 3GPP `loci`, `gps `, `GPS `, `GPMF`), QuickTime
+ * Location boxes (`©xyz`, `xyz `, 3GPP `loci`/`LOCI`, `gps `, `GPS `, `GPMF`,
+ * Canon `CMT4`/`CNTH` and Canon's metadata `uuid`, Nikon `NCDT`), QuickTime
  * metadata items keyed to a place (`com.apple.quicktime.location.ISO6709` and
  * its companions in `keys` and `ilst`), iTunes freeform place items (`----`),
- * and XMP or XML boxes (`XMP_`, `xml `, `bxml`, `uuid`) whose packet names a
- * place ([PictureData.namesPlace]) are overwritten in place as `free` boxes of
- * the very same byte length, leaving every sample and chunk offset (`stco`,
- * `co64`, `tfhd`, `sidx`) intact. Tracks that are neither video nor audio
- * (`mdia` -> `hdlr` other than `vide` or `soun`, such as timed GPS or camera
- * metadata tracks) are counted in [Found.nonMediaTracks] so [PickedFiles] can
- * remux video and audio tracks alone before cleaning.
+ * embedded image or Exif items inside `ilst`, ISO binary XML (`bxml`), and XMP
+ * or XML boxes (`XMP_`, `xml `, `uuid`) whose elements or naming attributes
+ * name a place ([PictureData.namesPlace], Sony `NonRealTimeMeta` `ExifGPS`) are
+ * overwritten in place as `free` boxes of the very same byte length, leaving
+ * every sample and chunk offset (`stco`, `co64`, `tfhd`, `sidx`) intact. ISO
+ * `meta` item tables (`iinf`, `iloc`, `idat`, `iref`, `pitm`) and malformed
+ * metadata tables mark [Found.broken] so the file is refused rather than sent.
+ * Tracks that are neither video nor audio (`mdia` -> `hdlr` other than `vide`
+ * or `soun`) are counted in [Found.nonMediaTracks] so [PickedFiles] remuxes
+ * video and audio tracks alone before cleaning.
  */
 internal object VideoData {
     const val HEAD = 512
 
     private val CLASSIC_QT_BOXES = setOf("moov", "mdat", "wide", "free", "skip", "pnot")
+    private val LEADING_ISO_BOXES = setOf("mdat", "free", "skip", "wide", "pnot", "pdin", "udta", "meta", "uuid", "XMP_")
     private val CONTAINER_BOXES = setOf("moov", "trak", "edts", "mdia", "minf", "dinf", "stbl", "udta", "moof", "traf", "mfra")
-    private val DIRECT_LOCATION_BOXES = setOf("\u00A9xyz", "loci", "gps ", "GPS ", "GPMF")
-    private val XML_BOXES = setOf("XMP_", "xml ", "bxml", "uuid")
+    private val DIRECT_LOCATION_BOXES = setOf("\u00A9xyz", "xyz ", "loci", "LOCI", "gps ", "GPS ", "GPMF", "CMT4", "CNTH", "NCDT")
+    private val META_ITEM_TABLE_BOXES = setOf("iinf", "iloc", "idat", "iref", "pitm")
+    private val NAMING_XML_ATTRS = setOf("name", "key", "property", "id", "tag", "field", "group", "item", "type", "about", "scheme")
+
+    /** Canon's QuickTime/MP4 camera metadata `uuid` (`85c0b687-820f-11e0-8111-f4ce462b6a48`), which holds `CNTH`, `CMT1`..`CMT4` (Exif GPS) and `THMB`. */
+    private val CANON_UUID = byteArrayOf(
+        0x85.toByte(), 0xC0.toByte(), 0xB6.toByte(), 0x87.toByte(),
+        0x82.toByte(), 0x0F, 0x11, 0xE0.toByte(),
+        0x81.toByte(), 0x11, 0xF4.toByte(), 0xCE.toByte(),
+        0x46, 0x2B, 0x6A, 0x48,
+    )
+    private val EXIF_HEADER = "Exif\u0000\u0000".toByteArray(Charsets.ISO_8859_1)
 
     /** Most bytes of an XML or UUID box read to check whether it names a place; larger boxes are treated as naming one. */
     private const val MOST_XML = 16L * 1024 * 1024
+    private const val MAX_TOP_BOXES = 64
     private const val MAX_DEPTH = 32
     private const val BUFFER = 64 * 1024
 
@@ -54,18 +70,25 @@ internal object VideoData {
             at(0, 0x46, 0x4C, 0x56, 0x01) -> Video.Other
             // ASF / WMV.
             at(0, 0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11) -> Video.Other
-            // Ogg container: treat as video when named as video or Ogg video (`theora` / `fishead` / `video/`).
+            // Ogg container: treat as video when named as video or Ogg video (`theora` / ` daala`).
             text(0, "OggS") && (isVideoMime || containsAscii(head, "theora") || containsAscii(head, " daala")) -> Video.Other
-            // MPEG program stream (`00 00 01 BA`) or video elementary stream (`00 00 01 B3`).
+            // MPEG program stream (`00 00 01 BA`).
             at(0, 0x00, 0x00, 0x01, 0xBA) -> Video.Other
-            // MPEG transport stream (three 188-byte sync bytes `0x47`).
-            head.size >= 377 && head[0] == 0x47.toByte() && head[188] == 0x47.toByte() && head[376] == 0x47.toByte() -> Video.Other
+            // MPEG transport stream (188-byte or 192-byte BDAV sync bytes `0x47`).
+            (head.size >= 377 && head[0] == 0x47.toByte() && head[188] == 0x47.toByte() && head[376] == 0x47.toByte()) ||
+                (head.size >= 389 && head[4] == 0x47.toByte() && head[196] == 0x47.toByte() && head[388] == 0x47.toByte()) -> Video.Other
             isVideoMime -> Video.Other
             else -> null
         }
     }
 
-    /** The kind of video [file] is, by its own first bytes and [mime]. */
+    /**
+     * The kind of video [file] is, by its own bytes and [mime]. When the first
+     * [HEAD] bytes begin with a classic QuickTime or padding box (`mdat`,
+     * `free`, `skip`, `wide`) longer than [HEAD], walks top-level box headers
+     * across the file so a headerless `.mov` or padded `.mp4` is still seen as
+     * [Video.Iso] even under a generic media type.
+     */
     fun kindOf(file: File, mime: String? = null): Video? {
         if (PictureData.kindOf(file) != null) return null
         val head = ByteArray(HEAD)
@@ -78,7 +101,10 @@ internal object VideoData {
             }
             total
         }
-        return kindOf(head.copyOf(read), file.length(), mime)
+        val slice = head.copyOf(read)
+        val total = file.length()
+        if (isIsoVideoFile(file, slice, total)) return Video.Iso
+        return kindOf(slice, total, mime)
     }
 
     private fun isIsoVideo(head: ByteArray, fileLength: Long): Boolean {
@@ -104,6 +130,34 @@ internal object VideoData {
         return false
     }
 
+    private fun isIsoVideoFile(file: File, head: ByteArray, total: Long): Boolean {
+        if (head.size < 8 || total < 8L) return false
+        if (isIsoVideo(head, total)) return true
+        val firstType = String(head, 4, 4, Charsets.ISO_8859_1)
+        if (firstType !in LEADING_ISO_BOXES) return false
+        return try {
+            RandomAccessFile(file, "r").use { input ->
+                var cursor = 0L
+                var count = 0
+                while (cursor < total && count < MAX_TOP_BOXES) {
+                    val box = readBoxHeader(input, cursor, total) ?: return false
+                    when {
+                        box.type == "ftyp" || box.type == "styp" -> return box.length in 8L..4096L
+                        box.type == "moov" -> {
+                            return box.bodyLength >= 8L && (box.end == total || readBoxHeader(input, box.end, total) != null)
+                        }
+                        box.type !in LEADING_ISO_BOXES -> return false
+                    }
+                    cursor = box.end
+                    count++
+                }
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun containsAscii(bytes: ByteArray, needle: String): Boolean {
         val target = needle.toByteArray(Charsets.ISO_8859_1)
         if (bytes.size < target.size) return false
@@ -117,11 +171,11 @@ internal object VideoData {
     data class Found(
         /** Location boxes and QuickTime / iTunes metadata items naming a place. */
         val locationBoxes: Int = 0,
-        /** XMP, XML or UUID boxes whose packet names a place. */
+        /** XMP, XML, binary XML or UUID boxes whose packet names a place. */
         val xmpWithPlace: Int = 0,
         /** Tracks whose `mdia` handler is neither `vide` nor `soun` (timed metadata, subtitles, telemetry). */
         val nonMediaTracks: Int = 0,
-        /** The container's boxes did not read cleanly to the end of the file. */
+        /** The container's boxes did not read cleanly, or held unrewritable item tables. */
         val broken: Boolean = false,
     ) {
         val clean: Boolean get() = !broken && locationBoxes == 0 && xmpWithPlace == 0 && nonMediaTracks == 0
@@ -276,6 +330,48 @@ internal object VideoData {
             )
         }
 
+        fun inspectXmlOrUuidBox(box: BoxHeader) {
+            when (box.type) {
+                "bxml" -> {
+                    // ISO Binary MPEG XML is tokenized binary; overwrite unconditionally.
+                    xmpWithPlace++
+                    erases += Erase(box.start, box.length)
+                }
+                "xml " -> {
+                    if (box.bodyLength < 4L) {
+                        broken = true
+                        return
+                    }
+                    if (payloadNamesPlace(input, box.bodyStart + 4L, box.bodyLength - 4L)) {
+                        xmpWithPlace++
+                        erases += Erase(box.start, box.length)
+                    }
+                }
+                "XMP_" -> {
+                    if (payloadNamesPlace(input, box.bodyStart, box.bodyLength)) {
+                        xmpWithPlace++
+                        erases += Erase(box.start, box.length)
+                    }
+                }
+                "uuid" -> {
+                    if (box.bodyLength < 16L) {
+                        broken = true
+                        return
+                    }
+                    input.seek(box.bodyStart)
+                    val uuid = ByteArray(16)
+                    input.readFully(uuid)
+                    if (uuid.contentEquals(CANON_UUID)) {
+                        locationBoxes++
+                        erases += Erase(box.start, box.length)
+                    } else if (payloadNamesPlace(input, box.bodyStart + 16L, box.bodyLength - 16L)) {
+                        xmpWithPlace++
+                        erases += Erase(box.start, box.length)
+                    }
+                }
+            }
+        }
+
         fun parseMeta(box: BoxHeader, depth: Int) {
             if (depth > MAX_DEPTH) {
                 broken = true
@@ -286,7 +382,6 @@ internal object VideoData {
                 broken = true
                 return
             }
-            // First pass: collect children and any 1-based QuickTime `keys` table.
             val children = ArrayList<BoxHeader>()
             var cursor = childrenStart
             while (cursor < box.end) {
@@ -299,25 +394,31 @@ internal object VideoData {
             }
             val locationIndices = HashSet<Int>()
             for (child in children) {
+                if (child.type in META_ITEM_TABLE_BOXES) {
+                    // Item-addressed ISO `meta` tables (`iinf`/`iloc`/`idat`) can hold binary `Exif` GPS extents in `mdat`; fail closed.
+                    broken = true
+                    return
+                }
                 if (child.type == "keys") {
-                    locationIndices += parseQuickTimeLocationKeyIndices(input, child)
+                    val parsed = parseQuickTimeLocationKeyIndices(input, child)
+                    if (parsed == null) {
+                        broken = true
+                        return
+                    }
+                    locationIndices += parsed
                 }
             }
             for (child in children) {
+                if (broken) return
                 when {
                     child.type in DIRECT_LOCATION_BOXES -> {
                         locationBoxes++
                         erases += Erase(child.start, child.length)
                     }
-                    child.type in XML_BOXES -> {
-                        if (xmlNamesPlace(input, child)) {
-                            xmpWithPlace++
-                            erases += Erase(child.start, child.length)
-                        }
-                    }
+                    child.type == "bxml" || child.type == "xml " || child.type == "XMP_" || child.type == "uuid" -> inspectXmlOrUuidBox(child)
                     child.type == "ilst" -> {
                         var itemCursor = child.bodyStart
-                        while (itemCursor < child.end) {
+                        while (itemCursor < child.end && !broken) {
                             val item = readBoxHeader(input, itemCursor, child.end) ?: run {
                                 broken = true
                                 return
@@ -325,7 +426,9 @@ internal object VideoData {
                             val keyIndex = be32(item.typeBytes, 0).toInt()
                             val isLocationItem = item.type in DIRECT_LOCATION_BOXES ||
                                 (keyIndex in locationIndices && item.type != "free" && item.type != "skip") ||
-                                (item.type == "----" && freeformItemNamesPlace(input, item))
+                                (item.type == "----" && freeformItemNamesPlace(item)) ||
+                                (item.type != "free" && item.type != "skip" && ilstItemHoldsImageOrExif(item))
+                            if (broken) return
                             if (isLocationItem) {
                                 locationBoxes++
                                 erases += Erase(item.start, item.length)
@@ -337,6 +440,67 @@ internal object VideoData {
                     child.type == "meta" -> parseMeta(child, depth + 1)
                 }
             }
+        }
+
+        fun freeformItemNamesPlace(item: BoxHeader): Boolean {
+            var cursor = item.bodyStart
+            var matched = false
+            while (cursor < item.end) {
+                val sub = readBoxHeader(input, cursor, item.end) ?: run {
+                    broken = true
+                    return true
+                }
+                if (sub.type == "mean" || sub.type == "name") {
+                    if (sub.bodyLength < 4L) {
+                        broken = true
+                        return true
+                    }
+                    val textLength = sub.bodyLength - 4L
+                    if (textLength > 4096L) {
+                        matched = true
+                    } else if (textLength > 0L) {
+                        input.seek(sub.bodyStart + 4L)
+                        val bytes = ByteArray(textLength.toInt())
+                        input.readFully(bytes)
+                        if (isLocationKeyName(String(bytes, Charsets.UTF_8))) matched = true
+                    }
+                } else if (sub.type == "data" && dataSubBoxHoldsImageOrPlace(sub)) {
+                    matched = true
+                }
+                cursor = sub.end
+            }
+            if (cursor != item.end) {
+                broken = true
+                return true
+            }
+            return matched
+        }
+
+        fun ilstItemHoldsImageOrExif(item: BoxHeader): Boolean {
+            if (item.type == "covr") return true
+            var cursor = item.bodyStart
+            while (cursor < item.end) {
+                val sub = readBoxHeader(input, cursor, item.end) ?: return false
+                if (sub.type == "data" && dataSubBoxHoldsImageOrPlace(sub)) return true
+                cursor = sub.end
+            }
+            return false
+        }
+
+        fun dataSubBoxHoldsImageOrPlace(sub: BoxHeader): Boolean {
+            // QuickTime / iTunes `data` box: 4-byte type indicator + 4-byte locale + value bytes.
+            if (sub.bodyLength <= 8L) return false
+            input.seek(sub.bodyStart)
+            val typeIndicator = input.readInt()
+            // Type 13 = JPEG, 14 = PNG, 27 = BMP.
+            if (typeIndicator == 13 || typeIndicator == 14 || typeIndicator == 27) return true
+            val valueStart = sub.bodyStart + 8L
+            val valueLen = sub.bodyLength - 8L
+            val headLen = minOf(valueLen, PictureData.HEAD.toLong()).toInt()
+            input.seek(valueStart)
+            val head = ByteArray(headLen)
+            input.readFully(head)
+            return PictureData.kindOf(head) != null || looksLikeBinaryExif(head)
         }
 
         fun parseContainer(parentType: String?, from: Long, end: Long, depth: Int) {
@@ -361,12 +525,7 @@ internal object VideoData {
                         locationBoxes++
                         erases += Erase(box.start, box.length)
                     }
-                    box.type in XML_BOXES -> {
-                        if (xmlNamesPlace(input, box)) {
-                            xmpWithPlace++
-                            erases += Erase(box.start, box.length)
-                        }
-                    }
+                    box.type == "bxml" || box.type == "xml " || box.type == "XMP_" || box.type == "uuid" -> inspectXmlOrUuidBox(box)
                     parentType == "mdia" && box.type == "hdlr" -> {
                         val handler = readHandlerType(input, box)
                         if (handler == null) {
@@ -406,19 +565,25 @@ internal object VideoData {
         return cursor == end
     }
 
-    /** Parses a QuickTime `keys` box and returns the 1-based indices whose key names a place. */
-    private fun parseQuickTimeLocationKeyIndices(input: RandomAccessFile, keysBox: BoxHeader): Set<Int> {
-        if (keysBox.bodyLength < 8L) return emptySet()
-        input.seek(keysBox.bodyStart + 4L)
+    /**
+     * Parses a QuickTime `keys` box and returns the 1-based indices whose key
+     * names a place, or null when the `keys` box is malformed or truncated so
+     * the caller fails closed.
+     */
+    private fun parseQuickTimeLocationKeyIndices(input: RandomAccessFile, keysBox: BoxHeader): Set<Int>? {
+        if (keysBox.bodyLength < 8L) return null
+        input.seek(keysBox.bodyStart)
+        val versionAndFlags = input.readInt()
+        if (((versionAndFlags ushr 24) and 0xFF) != 0) return null
         val count = input.readInt()
-        if (count <= 0 || count > 100_000) return emptySet()
+        if (count < 0 || count > 100_000) return null
         val matched = HashSet<Int>()
         var cursor = keysBox.bodyStart + 8L
         for (index in 1..count) {
-            if (cursor + 8L > keysBox.end) break
+            if (cursor + 8L > keysBox.end) return null
             input.seek(cursor)
             val keySize = input.readInt().toLong() and 0xFFFFFFFFL
-            if (keySize < 8L || cursor + keySize > keysBox.end) break
+            if (keySize < 8L || keySize > 1_048_576L || cursor + keySize > keysBox.end) return null
             input.skipBytes(4) // namespace (`mdta`)
             val nameBytes = ByteArray((keySize - 8L).toInt())
             input.readFully(nameBytes)
@@ -426,49 +591,81 @@ internal object VideoData {
             if (isLocationKeyName(keyName)) matched += index
             cursor += keySize
         }
+        if (cursor != keysBox.end) return null
         return matched
-    }
-
-    /** Checks whether an iTunes `----` freeform item inside `ilst` names a place in its `name` sub-box. */
-    private fun freeformItemNamesPlace(input: RandomAccessFile, item: BoxHeader): Boolean {
-        var cursor = item.bodyStart
-        while (cursor < item.end) {
-            val sub = readBoxHeader(input, cursor, item.end) ?: return true
-            if (sub.type == "name" && sub.bodyLength > 4L && sub.bodyLength <= 4096L) {
-                input.seek(sub.bodyStart + 4L)
-                val bytes = ByteArray((sub.bodyLength - 4L).toInt())
-                input.readFully(bytes)
-                if (isLocationKeyName(String(bytes, Charsets.UTF_8))) return true
-            }
-            cursor = sub.end
-        }
-        return false
     }
 
     internal fun isLocationKeyName(raw: String): Boolean {
         val cleaned = raw.trim().lowercase()
         if (cleaned.isEmpty()) return false
-        if (PictureData.isPlace(cleaned)) return true
+        if (PictureData.isPlace(cleaned) || cleaned.endsWith("gps")) return true
         val tokens = cleaned.split('.', '/', ':', '_', '-', ' ').filter { it.isNotEmpty() }
         return tokens.any { token ->
-            PictureData.isPlace(token) || token == "iso6709" || token == "coordinates" || token == "coord" || token == "coords" || token == "geolocation"
+            PictureData.isPlace(token) ||
+                token.endsWith("gps") ||
+                token == "iso6709" ||
+                token == "coordinates" ||
+                token == "coord" ||
+                token == "coords" ||
+                token == "geolocation"
         }
     }
 
-    private fun xmlNamesPlace(input: RandomAccessFile, box: BoxHeader): Boolean {
-        val offset = when (box.type) {
-            // ISO `xml ` and `bxml` are FullBoxes (4-byte version/flags); `uuid` starts with a 16-byte UUID.
-            "xml ", "bxml" -> 4L
-            "uuid" -> 16L
-            else -> 0L
-        }
-        val payloadLength = box.bodyLength - offset
-        if (payloadLength <= 0L) return false
-        if (payloadLength > MOST_XML) return true
-        input.seek(box.bodyStart + offset)
-        val bytes = ByteArray(payloadLength.toInt())
+    private fun payloadNamesPlace(input: RandomAccessFile, start: Long, length: Long): Boolean {
+        if (length <= 0L) return false
+        if (length > MOST_XML) return true
+        input.seek(start)
+        val bytes = ByteArray(length.toInt())
         input.readFully(bytes)
-        return PictureData.namesPlace(bytes)
+        return looksLikeBinaryExif(bytes) || PictureData.namesPlace(bytes) || xmlAttributesNamePlace(bytes)
+    }
+
+    private fun looksLikeBinaryExif(bytes: ByteArray): Boolean {
+        if (bytes.size >= EXIF_HEADER.size && EXIF_HEADER.indices.all { bytes[it] == EXIF_HEADER[it] }) return true
+        if (bytes.size >= 4) {
+            val b0 = bytes[0].toInt() and 0xFF
+            val b1 = bytes[1].toInt() and 0xFF
+            val b2 = bytes[2].toInt() and 0xFF
+            val b3 = bytes[3].toInt() and 0xFF
+            if ((b0 == 0x49 && b1 == 0x49 && b2 == 0x2A && b3 == 0x00) || (b0 == 0x4D && b1 == 0x4D && b2 == 0x00 && b3 == 0x2A)) return true
+        }
+        return false
+    }
+
+    /**
+     * Scans XML attribute values on naming attributes (`name="ExifGPS"`,
+     * `name="Latitude"`, `key="com.apple.quicktime.location.ISO6709"`) so
+     * schemas like Sony `NonRealTimeMeta` that put field names in attribute
+     * values rather than element names are caught alongside XMP.
+     */
+    internal fun xmlAttributesNamePlace(raw: ByteArray): Boolean {
+        val text = String(raw.filter { it != 0.toByte() }.toByteArray(), Charsets.ISO_8859_1)
+        var at = 0
+        while (at < text.length) {
+            val ch = text[at]
+            if (!(ch in 'a'..'z' || ch in 'A'..'Z' || ch == '_')) {
+                at++
+                continue
+            }
+            val attrStart = at
+            while (at < text.length && (text[at] in 'a'..'z' || text[at] in 'A'..'Z' || text[at] in '0'..'9' || text[at] == '_' || text[at] == '-' || text[at] == '.' || text[at] == ':')) {
+                at++
+            }
+            val attrName = text.substring(attrStart, at).substringAfterLast(':').lowercase()
+            while (at < text.length && text[at].isWhitespace()) at++
+            if (at >= text.length || text[at] != '=') continue
+            at++
+            while (at < text.length && text[at].isWhitespace()) at++
+            if (at >= text.length || (text[at] != '"' && text[at] != '\'')) continue
+            val quote = text[at]
+            at++
+            val valStart = at
+            while (at < text.length && text[at] != quote) at++
+            val attrValue = text.substring(valStart, at)
+            if (at < text.length) at++
+            if (attrName in NAMING_XML_ATTRS && isLocationKeyName(attrValue)) return true
+        }
+        return false
     }
 
     private fun readHandlerType(input: RandomAccessFile, hdlr: BoxHeader): String? {

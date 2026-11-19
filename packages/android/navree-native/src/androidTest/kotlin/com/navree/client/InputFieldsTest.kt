@@ -1147,6 +1147,7 @@ class InputFieldsTest {
             waitFor("the refusal snackbar for the wrong type") {
                 compose.onAllNodes(hasText("Notes.txt is not a kind of file", substring = true)).fetchSemanticsNodes().isNotEmpty()
             }
+            runCatching { compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss)).onFirst().performSemanticsAction(SemanticsActions.Dismiss) }
             assertTrue("nothing was handed to the page", webPosts.isEmpty())
 
             // Picture with an unremovable place: refused, and nothing handed to the page.
@@ -1156,6 +1157,7 @@ class InputFieldsTest {
             waitFor("the refusal snackbar for a picture with a place") {
                 compose.onAllNodes(hasText("Kapurthala.heic has the place", substring = true)).fetchSemanticsNodes().isNotEmpty()
             }
+            runCatching { compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss)).onFirst().performSemanticsAction(SemanticsActions.Dismiss) }
             assertTrue("nothing was handed to the page", webPosts.isEmpty())
 
             // Leaving the picker empty cancels cleanly without wedging the input.
