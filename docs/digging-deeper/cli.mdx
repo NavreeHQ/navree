@@ -51,6 +51,8 @@ Commands:
   make:page          Generate a Navree UI page in a module (pages/NAME.rs): a GET route in the app's shell, with its test
   make:form          Generate a form in a module (forms/NAME.rs): a struct with its rules, and the handlers that draw and read it
   make:table         Generate a data table in a module (tables/NAME.rs): a row with sortable, searchable and filterable columns, and its handler
+  make:plugin        Write a plugin crate: its manifest, a module that names itself, its options and a test that boots it
+  make:component     Write a Navree UI component of your own: its Rust side, its script and stylesheet, and its tests
   dev                Serve the app, rebuilding and restarting it when the code changes
   check              Check the app: its module graph, then the conformity checks (routes documented, entities classified, workspace isolation, translations, migrations)
   gate               Run fmt, clippy, the tests, navree check, config:check and the front end's typecheck, tests and build, one gate at a time on this machine
@@ -76,6 +78,9 @@ Commands:
   openapi:client     Export the OpenAPI document and generate the front end's typed client schema (schema.d.ts)
   native:coverage    Ask each page route as a native client and print its grade (idiom, layout or web) and what is missing; --fail-on makes it a gate
   native:doctor      Check what a native build needs, without changing anything: the native preview feature, the settings for links, passkeys, push and sign-in, the Android and Apple toolchains
+  plugin:add         Install a plugin: add the crate (or turn on a first-party package's feature), wire its module, and write what it suggests where you can read it
+  plugin:remove      Unwire a plugin and remove its crate; its configuration, grants and data stay
+  plugin:list        List the plugins this app depends on and whether each is wired
   help               Print this message or the help of the given subcommand(s)
 
 Options:

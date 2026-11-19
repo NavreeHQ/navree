@@ -99,7 +99,10 @@ impl Site {
             cell_value: "Sarabha Nagar, Ludhiana".to_owned(),
         }];
         let query = TableQuery::<DeliveryRow, NoFilter>::parse("/cells", "");
-        View::new("Deliveries").body(DataTable::new("deliveries", &query, &rows).cell(
+        View::new("Deliveries").body(
+            DataTable::new("deliveries", &query, &rows)
+                .keyboard_grid()
+                .cell(
             "cell_value",
             |row| {
                 EditCell::control(

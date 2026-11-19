@@ -224,6 +224,8 @@ pub fn make_component(cwd: &Path, options: &ComponentOptions) -> anyhow::Result<
     let mut wired = false;
     let mut missing_wire_marker = false;
     let mut cargo_edit = None;
+    let mut main_feature_added = false;
+    let mut dev_feature_added = false;
 
     if has_extension {
         let contribute_stmt = format!("m.contribute(ui::{snake}::{screaming});");
@@ -244,6 +246,9 @@ pub fn make_component(cwd: &Path, options: &ComponentOptions) -> anyhow::Result<
                 }
                 None => {
                     missing_wire_marker = true;
+                    if let Edit::Changed(with_mod) = declare_module(&lib_src, "pub mod ui;") {
+                        lib_edit = Some(with_mod);
+                    }
                 }
             },
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -255,12 +260,27 @@ pub fn make_component(cwd: &Path, options: &ComponentOptions) -> anyhow::Result<
             }
         }
 
-        cargo_edit = turn_on(
+        let main_edit = turn_on(
             &cargo_toml,
             DepTable::Dependencies,
             &["ui-extension-files".to_owned()],
         )
         .map_err(|reason| anyhow::anyhow!("Cargo.toml: {reason}"))?;
+        main_feature_added = main_edit.is_some();
+
+        let dev_edit = if options.script {
+            let base_toml = main_edit.as_deref().unwrap_or(&cargo_toml);
+            turn_on(
+                base_toml,
+                DepTable::DevDependencies,
+                &["browser".to_owned()],
+            )
+            .map_err(|reason| anyhow::anyhow!("Cargo.toml: {reason}"))?
+        } else {
+            None
+        };
+        dev_feature_added = dev_edit.is_some();
+        cargo_edit = dev_edit.or(main_edit);
     }
 
     let mut hints = vec![format!(
@@ -339,7 +359,11 @@ pub fn make_component(cwd: &Path, options: &ComponentOptions) -> anyhow::Result<
 
     if let Some(contents) = &cargo_edit {
         write_file(&cargo_toml_path, contents)?;
-        lines.push("  feature  navree: ui-extension-files (Cargo.toml)".to_owned());
+        if main_feature_added {
+            lines.push("  feature  navree: ui-extension-files (Cargo.toml)".to_owned());
+        } else if dev_feature_added {
+            lines.push("  feature  navree: browser ([dev-dependencies] in Cargo.toml)".to_owned());
+        }
     }
 
     for hint in &hints {

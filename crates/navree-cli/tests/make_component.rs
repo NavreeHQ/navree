@@ -178,6 +178,7 @@ fn make_component_writes_a_component_its_assets_its_tests_turns_on_the_feature_a
         .expect("browser_drop_point.rs");
     assert!(browser_rs.contains("#[ignore"), "{browser_rs}");
     assert!(browser_rs.contains("kit::stored_twin"), "{browser_rs}");
+    assert!(browser_rs.contains(".keyboard_grid()"), "{browser_rs}");
     assert!(
         browser_rs.contains("assert_no_policy_violations"),
         "{browser_rs}"
@@ -198,6 +199,7 @@ fn make_component_writes_a_component_its_assets_its_tests_turns_on_the_feature_a
         cargo_toml.contains(r#""ui-extension-files""#),
         "{cargo_toml}"
     );
+    assert!(cargo_toml.contains(r#""browser""#), "{cargo_toml}");
 
     // `--force` replaces the existing files and adds the field control when `--field` is asked.
     let replaced = make_component(
@@ -380,10 +382,14 @@ fn make_component_in_an_app_takes_the_namespace_app_and_prints_the_line_without_
         "{:?}",
         unwired_report.lines
     );
-    assert_eq!(
-        std::fs::read_to_string(without_marker.join("src/lib.rs")).expect("read lib.rs"),
-        untouched_lib
-    );
+    let updated_lib =
+        std::fs::read_to_string(without_marker.join("src/lib.rs")).expect("read lib.rs");
+    assert!(updated_lib.contains("pub mod modules;"), "{updated_lib}");
+    assert!(updated_lib.contains("pub mod ui;"), "{updated_lib}");
+    assert!(!updated_lib.contains("m.contribute("), "{updated_lib}");
+    let app_cargo_toml =
+        std::fs::read_to_string(without_marker.join("Cargo.toml")).expect("read Cargo.toml");
+    assert!(app_cargo_toml.contains(r#""browser""#), "{app_cargo_toml}");
     assert_eq!(
         unwired_report.lines.last().map(String::as_str),
         Some(
