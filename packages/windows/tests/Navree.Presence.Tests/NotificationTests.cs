@@ -365,6 +365,151 @@ public sealed class NotificationTests
     }
 
     [TestMethod]
+    public async Task AReminderDueAfterALongSilenceAsksTheShellBeforeItIsShown()
+    {
+        Assert.AreEqual(TimeSpan.FromMinutes(15), NotifyRules.DefaultSilence);
+        TimeSpan configuredSilence = TimeSpan.FromMinutes(10);
+
+        // Heard two minutes ago (inside the configured silence): a due reminder is shown at once without asking the shell.
+        NotificationSchedule recent = new();
+        _ = recent.Add(new PendingNotification("call-meera", "Call Meera Sharma in Amritsar", null, "/orders/1", null, Now, null, null) { Owner = Simran });
+        int shellAsked = 0;
+        IReadOnlyList<PendingNotification> shownWithoutAsk = await recent.TakeReadyAsync(
+            Now.AddMinutes(1),
+            India,
+            () => Simran,
+            lastHeardAt: Now.AddMinutes(-1),
+            configuredSilence,
+            _ =>
+            {
+                shellAsked++;
+                return Task.FromResult(ReminderCheckOutcome.Show);
+            });
+        Assert.AreEqual(0, shellAsked, "a reminder due shortly after the server answered still asked the shell");
+        Assert.AreEqual("call-meera", shownWithoutAsk.Single().Id);
+
+        // Heard twenty minutes ago (past the configured silence): the shell is asked before taking the reminder.
+        string? personHere = Simran;
+        NotificationSchedule silent = new();
+        _ = silent.Add(new PendingNotification("gst-filing", "Send Ludhiana branch GST summary", null, "/reports", null, Now, null, null) { Owner = Simran });
+
+        // 1. Shell names nobody: held, and stays in Waiting.
+        IReadOnlyList<PendingNotification> heldForNobody = await silent.TakeReadyAsync(
+            Now.AddMinutes(1),
+            India,
+            () => personHere,
+            lastHeardAt: Now.AddMinutes(-20),
+            configuredSilence,
+            expected =>
+            {
+                shellAsked++;
+                personHere = null;
+                ShellCheckReply reply = new(NetworkError: false, Status: 200, ContentType: "application/vnd.navree.native+json", PersonHereAfter: null, StateNamesAPerson: false);
+                return Task.FromResult(NotifyRules.DecideShellCheck(expected, reply));
+            });
+        Assert.AreEqual(1, shellAsked);
+        Assert.AreEqual(0, heldForNobody.Count, "a reminder was shown though the shell answered that nobody is signed in");
+        Assert.AreEqual("gst-filing", silent.Waiting.Single().Id, "a held reminder was lost when the shell named nobody");
+
+        // 2. Shell answers 401 (or a non-shell HTML page) when the server WAS reached: also held.
+        personHere = Simran;
+        IReadOnlyList<PendingNotification> heldOn401 = await silent.TakeReadyAsync(
+            Now.AddMinutes(2),
+            India,
+            () => personHere,
+            lastHeardAt: Now.AddMinutes(-20),
+            configuredSilence,
+            expected =>
+            {
+                shellAsked++;
+                ShellCheckReply reply = new(NetworkError: false, Status: 401, ContentType: "text/html", PersonHereAfter: Simran, StateNamesAPerson: true);
+                return Task.FromResult(NotifyRules.DecideShellCheck(expected, reply));
+            });
+        Assert.AreEqual(2, shellAsked);
+        Assert.AreEqual(0, heldOn401.Count, "a reminder was shown though the shell answered 401");
+        Assert.AreEqual("gst-filing", silent.Waiting.Single().Id);
+
+        // 3. Shell names another person: held (and never given to the other person).
+        personHere = Simran;
+        IReadOnlyList<PendingNotification> heldForAnother = await silent.TakeReadyAsync(
+            Now.AddMinutes(3),
+            India,
+            () => personHere,
+            lastHeardAt: Now.AddMinutes(-20),
+            configuredSilence,
+            expected =>
+            {
+                shellAsked++;
+                personHere = Manpreet;
+                ShellCheckReply reply = new(NetworkError: false, Status: 200, ContentType: "application/vnd.navree.native+json", PersonHereAfter: Manpreet, StateNamesAPerson: true);
+                return Task.FromResult(NotifyRules.DecideShellCheck(expected, reply));
+            });
+        Assert.AreEqual(3, shellAsked);
+        Assert.AreEqual(0, heldForAnother.Count, "Simran's reminder was shown when the shell named Manpreet");
+
+        // 4. Shell names the same person: shown!
+        personHere = Simran;
+        IReadOnlyList<PendingNotification> shownToSame = await silent.TakeReadyAsync(
+            Now.AddMinutes(4),
+            India,
+            () => personHere,
+            lastHeardAt: Now.AddMinutes(-20),
+            configuredSilence,
+            expected =>
+            {
+                shellAsked++;
+                ShellCheckReply reply = new(NetworkError: false, Status: 200, ContentType: "application/vnd.navree.native+json", PersonHereAfter: Simran, StateNamesAPerson: true);
+                return Task.FromResult(NotifyRules.DecideShellCheck(expected, reply));
+            });
+        Assert.AreEqual(4, shellAsked);
+        Assert.AreEqual("gst-filing", shownToSame.Single().Id);
+        Assert.AreEqual(0, silent.Waiting.Count);
+    }
+
+    [TestMethod]
+    public async Task AReminderIsShownWhenTheServerCannotBeReached()
+    {
+        // When a reminder comes due after a long silence and the shell cannot be reached (offline, timeout, 502/503 gateway failure, or 429
+        // load shedding), the reminder is shown to the signed-in person rather than held back while they have no connection.
+        ShellCheckReply[] unreachableReplies =
+        [
+            new(NetworkError: true, Status: 0, ContentType: null, PersonHereAfter: Simran, StateNamesAPerson: true),
+            new(NetworkError: false, Status: 503, ContentType: "text/plain", PersonHereAfter: Simran, StateNamesAPerson: true),
+            new(NetworkError: false, Status: 429, ContentType: null, PersonHereAfter: Simran, StateNamesAPerson: true),
+        ];
+
+        int index = 0;
+        foreach (ShellCheckReply reply in unreachableReplies)
+        {
+            index++;
+            NotificationSchedule schedule = new();
+            string id = "offline-" + index;
+            _ = schedule.Add(new PendingNotification(id, "Check cold storage temperature in Pune", null, null, null, Now, null, null) { Owner = Simran });
+
+            int checks = 0;
+            IReadOnlyList<PendingNotification> due = await schedule.TakeReadyAsync(
+                Now.AddMinutes(1),
+                India,
+                () => Simran,
+                lastHeardAt: Now.AddHours(-2),
+                NotifyRules.DefaultSilence,
+                expected =>
+                {
+                    checks++;
+                    return Task.FromResult(NotifyRules.DecideShellCheck(expected, reply));
+                });
+
+            Assert.AreEqual(1, checks, "the shell check did not run after two hours of silence");
+            Assert.AreEqual(id, due.Single().Id, "the reminder was held back when the server could not be reached");
+            Assert.AreEqual(0, schedule.Waiting.Count);
+        }
+
+        // If the person signed out locally while the offline check was in flight, nothing is shown.
+        ShellCheckReply signedOutMeanwhile = new(NetworkError: true, Status: 0, ContentType: null, PersonHereAfter: null, StateNamesAPerson: false);
+        Assert.AreEqual(ReminderCheckOutcome.Hold, NotifyRules.DecideShellCheck(Simran, signedOutMeanwhile));
+    }
+
+    [TestMethod]
     public void ASnapshotThatHoldsNobodyIsNotKept()
     {
         Assert.IsFalse(SnapshotRules.ShouldKeep("{\"version\":1,\"person_unknown\":true}"));

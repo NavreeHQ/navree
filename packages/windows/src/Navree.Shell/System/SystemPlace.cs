@@ -32,6 +32,8 @@ public sealed class SystemPlace : IDisposable
     private readonly List<string> log = [];
     private NotificationSchedule schedule = new();
     private string? armedFor;
+    private bool delivering;
+    private DateTimeOffset? holdRetryUntil;
     private TrayIcon? tray;
     private TrayWindow? small;
     private nint appIcon;
@@ -428,6 +430,7 @@ public sealed class SystemPlace : IDisposable
     private async Task TakeAwayAsync(string why)
     {
         timer.Stop();
+        holdRetryUntil = null;
         schedule = new NotificationSchedule();
         Remember();
         Count = null;
@@ -460,22 +463,55 @@ public sealed class SystemPlace : IDisposable
             return;
         }
 
-        TimeSpan wait = next - DateTimeOffset.Now;
+        DateTimeOffset target = holdRetryUntil is DateTimeOffset retry && retry > next ? retry : next;
+        TimeSpan wait = target - DateTimeOffset.Now;
         timer.Interval = wait < TimeSpan.FromMilliseconds(200) ? TimeSpan.FromMilliseconds(200) : wait > TimeSpan.FromHours(1) ? TimeSpan.FromHours(1) : wait;
         timer.Start();
     }
 
-    // What is due is shown, but for what is a person's who is not the one signed in now: that waits as it is until they are.
-    private void Deliver()
+    // What is due is shown, asking the shell first when the app has heard nothing from its server for a long while.
+    private void Deliver() => _ = DeliverAsync();
+
+    private async Task DeliverAsync()
     {
-        foreach (PendingNotification due in schedule.Take(DateTimeOffset.Now, TimeZoneInfo.Local, host.PersonHere))
+        if (delivering)
         {
-            bool shown = NotificationSurface.Show(due);
-            Say("the notification " + due.Id + (shown ? " was shown" : " could not be shown"));
+            return;
         }
 
-        Remember();
-        Arm();
+        delivering = true;
+        try
+        {
+            bool checkedAndHeld = false;
+            IReadOnlyList<PendingNotification> due = await schedule.TakeReadyAsync(
+                DateTimeOffset.Now,
+                TimeZoneInfo.Local,
+                () => host.PersonHere,
+                host.LastHeardFromServer,
+                host.Options.Place.ReminderSilence,
+                async expected =>
+                {
+                    Say("asking the shell before showing a reminder after silence");
+                    ReminderCheckOutcome outcome = await host.CheckShellForReminderAsync(expected).ConfigureAwait(true);
+                    checkedAndHeld = outcome == ReminderCheckOutcome.Hold;
+                    Say("the shell check before showing a reminder answered " + outcome);
+                    return outcome;
+                }).ConfigureAwait(true);
+
+            foreach (PendingNotification item in due)
+            {
+                bool shown = NotificationSurface.Show(item);
+                Say("the notification " + item.Id + (shown ? " was shown" : " could not be shown"));
+            }
+
+            holdRetryUntil = checkedAndHeld ? DateTimeOffset.Now.AddMinutes(1) : null;
+            Remember();
+            Arm();
+        }
+        finally
+        {
+            delivering = false;
+        }
     }
 
     // Who is signed in by the state the windows were just given, which the host heard before it gave it. When that is somebody else than
@@ -491,6 +527,7 @@ public sealed class SystemPlace : IDisposable
             return;
         }
 
+        holdRetryUntil = null;
         int held = schedule.HeldBack(DateTimeOffset.Now, here);
         if (held > 0)
         {

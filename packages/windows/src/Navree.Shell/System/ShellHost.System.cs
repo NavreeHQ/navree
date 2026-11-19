@@ -61,6 +61,103 @@ public sealed partial class ShellHost
     /// <summary>The mark of the person who is signed in now, by the state shown last; null while nobody is (<see cref="PersonChange.Here"/>).</summary>
     internal string? PersonHere => people.Here;
 
+    /// <summary>When the app last received a native answer from its server; null before it has heard any in this run.</summary>
+    internal DateTimeOffset? LastHeardFromServer { get; private set; }
+
+    /// <summary>
+    /// Asks the shell who is signed in before showing a due reminder after a long silence, and returns whether due reminders for
+    /// <paramref name="expectedPerson"/> may be shown.
+    /// </summary>
+    /// <param name="expectedPerson">The mark of the person the reminder belongs to.</param>
+    /// <returns>Whether to show or hold due reminders.</returns>
+    internal async Task<ReminderCheckOutcome> CheckShellForReminderAsync(string expectedPerson)
+    {
+        if (stopped.IsCancellationRequested || Wiping || ShowsSomeoneLeaving || !string.Equals(PersonHere, expectedPerson, StringComparison.Ordinal))
+        {
+            return ReminderCheckOutcome.Hold;
+        }
+
+        TaskCompletionSource<FetchResult> waiter = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        pendingShellChecks.Add(waiter);
+
+        if (runningShellRequests.Count == 0)
+        {
+            try
+            {
+                _ = await client.SendAsync(Events.Start).ConfigureAwait(true);
+            }
+            catch (ObjectDisposedException)
+            {
+                _ = pendingShellChecks.Remove(waiter);
+                return ReminderCheckOutcome.Hold;
+            }
+
+            if (!await YieldDispatcherAsync().ConfigureAwait(true) || (!waiter.Task.IsCompleted && runningShellRequests.Count == 0))
+            {
+                _ = pendingShellChecks.Remove(waiter);
+                return ReminderCheckOutcome.Hold;
+            }
+        }
+
+        FetchResult result;
+        using CancellationTokenSource bound = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
+        bound.CancelAfter(TimeSpan.FromSeconds(35));
+        try
+        {
+            result = await waiter.Task.WaitAsync(bound.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            _ = pendingShellChecks.Remove(waiter);
+            if (stopped.IsCancellationRequested)
+            {
+                return ReminderCheckOutcome.Hold;
+            }
+
+            result = new FetchResult(0, null, null, [], string.Empty, "timeout");
+        }
+
+        ShellCheckReply reply = new(
+            NetworkError: result.Error is not null,
+            Status: result.Status,
+            ContentType: result.ContentType,
+            PersonHereAfter: PersonHere,
+            StateNamesAPerson: State.App?.User is not null);
+        return NotifyRules.DecideShellCheck(expectedPerson, reply);
+    }
+
+    private bool IsMainOrigin(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)
+        && Uri.TryCreate(Options.Origin, UriKind.Absolute, out Uri? appOrigin)
+        && Uri.Compare(uri, appOrigin, UriComponents.SchemeAndServer, UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) == 0;
+
+    private bool IsShellRequest(FetchEffect fetch) =>
+        string.Equals(fetch.Method, "get", StringComparison.OrdinalIgnoreCase)
+        && IsMainOrigin(fetch.Url)
+        && Uri.TryCreate(fetch.Url, UriKind.Absolute, out Uri? uri)
+        && string.Equals(uri.AbsolutePath, "/_navree/native/shell", StringComparison.Ordinal);
+
+    private void CompleteShellChecks(FetchResult result)
+    {
+        TaskCompletionSource<FetchResult>[] waiters = [.. pendingShellChecks];
+        pendingShellChecks.Clear();
+        foreach (TaskCompletionSource<FetchResult> waiter in waiters)
+        {
+            _ = waiter.TrySetResult(result);
+        }
+    }
+
+    private Task<bool> YieldDispatcherAsync()
+    {
+        TaskCompletionSource<bool> queued = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!dispatcher.TryEnqueue(() => queued.SetResult(true)))
+        {
+            queued.SetResult(false);
+        }
+
+        return queued.Task;
+    }
+
     /// <summary>
     /// Keeps what the core says it needs to start again where the person was. A snapshot that says it holds nobody (<c>person_unknown</c>) is not
     /// kept, so a visitor's blank one never replaces a person's; nor is one asked for while a sign-out is under way, or one whose session ended

@@ -34,6 +34,29 @@ public sealed record PendingNotification(
     public bool Repeats => Hour is not null && Minute is not null;
 }
 
+/// <summary>What the shell check decided when a due reminder asked who is signed in after a long silence.</summary>
+public enum ReminderCheckOutcome
+{
+    /// <summary>The same person is named by the shell, or the server could not be reached: show what is due for them.</summary>
+    Show,
+
+    /// <summary>Nobody is named, another person is named, or the server did not answer with a shell for them: hold what is due.</summary>
+    Hold,
+}
+
+/// <summary>What one request to the shell route came back with when checking whether a due reminder may be shown.</summary>
+/// <param name="NetworkError">Whether the request failed before an HTTP response arrived (offline, timeout, connection failure).</param>
+/// <param name="Status">The HTTP status code when an answer arrived.</param>
+/// <param name="ContentType">The answer's content-type header, when any.</param>
+/// <param name="PersonHereAfter">The mark of the person taken to be signed in after the core handled the answer.</param>
+/// <param name="StateNamesAPerson">Whether the core's view state names a signed-in user after handling the answer.</param>
+public sealed record ShellCheckReply(
+    bool NetworkError,
+    int Status,
+    string? ContentType,
+    string? PersonHereAfter,
+    bool StateNamesAPerson);
+
 /// <summary>When a notification the core asked for is due, as plain rules.</summary>
 public static class NotifyRules
 {
@@ -43,8 +66,86 @@ public static class NotifyRules
     /// <summary>How late a moment that has passed may be and still be shown: a notification asked for a time already gone a day ago is not news.</summary>
     public static readonly TimeSpan Stale = TimeSpan.FromDays(1);
 
+    /// <summary>How long the app may hear nothing from its server before a due reminder for a signed-in person asks the shell first.</summary>
+    public static readonly TimeSpan DefaultSilence = TimeSpan.FromMinutes(15);
+
     /// <summary>The most notifications waiting at once.</summary>
     public const int MostWaiting = 64;
+
+    /// <summary>Whether a media type is the native protocol's JSON media type.</summary>
+    /// <param name="contentType">The content-type header value.</param>
+    /// <returns>Whether it names <c>application/vnd.navree.native+json</c>.</returns>
+    public static bool IsNativeMediaType(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            return false;
+        }
+
+        int semi = contentType.IndexOf(';');
+        ReadOnlySpan<char> media = (semi < 0 ? contentType.AsSpan() : contentType.AsSpan(0, semi)).Trim();
+        return media.Equals("application/vnd.navree.native+json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Whether showing a due reminder for <paramref name="here"/> must ask the shell first because the app has not heard from its server
+    /// within <paramref name="silence"/>.
+    /// </summary>
+    /// <param name="here">The mark of the person signed in now; null while nobody is.</param>
+    /// <param name="lastHeardAt">When the app last received a native answer from its server, or null if it has not.</param>
+    /// <param name="now">The current time.</param>
+    /// <param name="silence">The configured silence threshold.</param>
+    /// <returns>Whether the shell must be asked before showing due reminders.</returns>
+    public static bool NeedsShellCheck(string? here, DateTimeOffset? lastHeardAt, DateTimeOffset now, TimeSpan silence)
+    {
+        if (here is null)
+        {
+            return false;
+        }
+
+        if (silence <= TimeSpan.Zero)
+        {
+            return true;
+        }
+
+        if (lastHeardAt is not DateTimeOffset heard)
+        {
+            return true;
+        }
+
+        return now - heard >= silence;
+    }
+
+    /// <summary>
+    /// Decides whether a due reminder for <paramref name="expectedPerson"/> may be shown after asking the shell: shown when the same
+    /// person is named or when the server cannot be reached, and held when nobody or another person is named (or when the server answered
+    /// with something other than a shell naming that person).
+    /// </summary>
+    /// <param name="expectedPerson">The mark of the person the reminder belongs to.</param>
+    /// <param name="reply">What the shell request answered and who is here after it.</param>
+    /// <returns>Whether to show or hold due reminders.</returns>
+    public static ReminderCheckOutcome DecideShellCheck(string expectedPerson, ShellCheckReply reply)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(expectedPerson);
+        ArgumentNullException.ThrowIfNull(reply);
+
+        if (reply.NetworkError || reply.Status is >= 500 or 429)
+        {
+            return string.Equals(reply.PersonHereAfter, expectedPerson, StringComparison.Ordinal)
+                ? ReminderCheckOutcome.Show
+                : ReminderCheckOutcome.Hold;
+        }
+
+        if (reply.Status is >= 200 and < 300
+            && IsNativeMediaType(reply.ContentType)
+            && reply.StateNamesAPerson
+            && string.Equals(reply.PersonHereAfter, expectedPerson, StringComparison.Ordinal))
+        {
+            return ReminderCheckOutcome.Show;
+        }
+
+        return ReminderCheckOutcome.Hold;
+    }
 
     /// <summary>What the core asked for, as something that waits for its time.</summary>
     /// <param name="notify">The call.</param>
@@ -169,6 +270,56 @@ public sealed class NotificationSchedule
     {
         ArgumentNullException.ThrowIfNull(item);
         return string.Equals(item.Owner, here, StringComparison.Ordinal);
+    }
+
+    /// <summary>Whether any notification that may be shown to <paramref name="here"/> is due at <paramref name="now"/>.</summary>
+    /// <param name="now">The time.</param>
+    /// <param name="here">The mark of the person who is signed in now; null while nobody is.</param>
+    /// <returns>Whether at least one due notification waits for them.</returns>
+    public bool HasDue(DateTimeOffset now, string? here) => waiting.Any(item => item.At <= now && MayShow(item, here));
+
+    /// <summary>
+    /// Takes what is due for the person signed in now, asking the shell first when the app has heard nothing from its server for at
+    /// least <paramref name="silence"/>. When the shell says nobody or another person is signed in, nothing is taken: what is a person's
+    /// stays held (or has been wiped by the change of person). When the same person is named, or the server cannot be reached, what is
+    /// due is taken and shown.
+    /// </summary>
+    /// <param name="now">The time.</param>
+    /// <param name="zone">The person's time zone.</param>
+    /// <param name="personHere">Reads the mark of the person signed in now.</param>
+    /// <param name="lastHeardAt">When the app last heard from its server.</param>
+    /// <param name="silence">How long silence may last before asking the shell.</param>
+    /// <param name="checkShellAsync">Asks the shell who is signed in now and returns whether due reminders may be shown.</param>
+    /// <returns>What to show now.</returns>
+    public async Task<IReadOnlyList<PendingNotification>> TakeReadyAsync(
+        DateTimeOffset now,
+        TimeZoneInfo zone,
+        Func<string?> personHere,
+        DateTimeOffset? lastHeardAt,
+        TimeSpan silence,
+        Func<string, Task<ReminderCheckOutcome>> checkShellAsync)
+    {
+        ArgumentNullException.ThrowIfNull(personHere);
+        ArgumentNullException.ThrowIfNull(checkShellAsync);
+
+        string? here = personHere();
+        if (!HasDue(now, here))
+        {
+            return [];
+        }
+
+        if (here is string expected && NotifyRules.NeedsShellCheck(expected, lastHeardAt, now, silence))
+        {
+            ReminderCheckOutcome outcome = await checkShellAsync(expected).ConfigureAwait(false);
+            if (outcome != ReminderCheckOutcome.Show || !string.Equals(personHere(), expected, StringComparison.Ordinal))
+            {
+                return [];
+            }
+
+            return Take(now, zone, expected);
+        }
+
+        return Take(now, zone, here);
     }
 
     /// <summary>

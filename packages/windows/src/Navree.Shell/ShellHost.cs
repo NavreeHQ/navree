@@ -21,6 +21,8 @@ public sealed partial class ShellHost : IDisposable
     private readonly IFetcher fetcher;
     private readonly HttpFetcher? network;
     private readonly Dictionary<long, CancellationTokenSource> running = [];
+    private readonly HashSet<long> runningShellRequests = [];
+    private readonly List<TaskCompletionSource<FetchResult>> pendingShellChecks = [];
     private readonly Dictionary<long, CancellationTokenSource> timers = [];
     private readonly Dictionary<long, CancellationTokenSource> streams = [];
     private readonly SessionKeeper session;
@@ -524,8 +526,14 @@ public sealed partial class ShellHost : IDisposable
 
     private async Task FetchAsync(FetchEffect fetch, long mark)
     {
+        bool isShell = IsShellRequest(fetch);
         CancellationTokenSource work = CancellationTokenSource.CreateLinkedTokenSource(stopped.Token);
         running[fetch.Request] = work;
+        if (isShell)
+        {
+            _ = runningShellRequests.Add(fetch.Request);
+        }
+
         FetchResult? result = null;
         try
         {
@@ -548,6 +556,11 @@ public sealed partial class ShellHost : IDisposable
         }
 
         running.Remove(fetch.Request);
+        if (isShell)
+        {
+            _ = runningShellRequests.Remove(fetch.Request);
+        }
+
         work.Dispose();
 
         // An answer to a request of a person who signed out meanwhile is told to nobody, and nothing of it is kept. The one answer the core
@@ -556,12 +569,49 @@ public sealed partial class ShellHost : IDisposable
         bool last = asked.LastEnded(fetch.Request);
         if (result is null || stopped.IsCancellationRequested || !(asked.Live(mark) || last))
         {
+            if (isShell && pendingShellChecks.Count > 0)
+            {
+                CompleteShellChecks(new FetchResult(0, null, null, [], string.Empty, "cancelled"));
+            }
+
             return;
+        }
+
+        if (result.Error is null
+            && result.Status is >= 200 and < 300
+            && IsMainOrigin(fetch.Url)
+            && Navree.Presence.NotifyRules.IsNativeMediaType(result.ContentType))
+        {
+            LastHeardFromServer = DateTimeOffset.Now;
         }
 
         string answer = result.Error is not null
             ? Events.ResponseFailed(fetch.Request, result.Error)
             : Events.Response(fetch.Request, result.Status, result.ContentType, result.Location, result.Headers, result.Body);
+
+        if (isShell && pendingShellChecks.Count > 0)
+        {
+            // A due reminder is waiting for this shell answer: wait for the core to handle it and for the UI thread to hear who is signed in
+            // before waking the reminder check.
+            try
+            {
+                _ = await client.SendAsync(answer).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            if (!await OnDispatcherAsync())
+            {
+                return;
+            }
+
+            await YieldDispatcherAsync().ConfigureAwait(true);
+            session.KeepCookies();
+            CompleteShellChecks(result);
+            return;
+        }
+
         client.Send(answer);
 
         // What the cookie store holds is kept for the next launch, protected for the Windows user (see KeptStore for what that does and does not keep out).
@@ -800,6 +850,8 @@ public sealed partial class ShellHost : IDisposable
         // The pictures drawn for the person are let go of now, again just before the core is told when the client ends the session (the
         // person's screens are up until then), and in the windows' own step: they are held by their address alone, and an address may be
         // the same for whoever comes next (a person's own picture at one address for everyone).
+        runningShellRequests.Clear();
+        CompleteShellChecks(new FetchResult(0, null, null, [], string.Empty, "cancelled"));
         PictureCache.Clear();
         Place?.HoldSnapshots(true);
     }

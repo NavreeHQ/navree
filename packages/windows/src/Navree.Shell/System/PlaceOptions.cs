@@ -20,6 +20,12 @@ public sealed record PlaceOptions
     /// <summary>The most entries the jump list has.</summary>
     public int JumpListLimit { get; init; } = 4;
 
+    /// <summary>
+    /// How long the app may hear nothing from its server before a reminder that comes due for a signed-in person asks the shell first;
+    /// fifteen minutes when left out.
+    /// </summary>
+    public TimeSpan ReminderSilence { get; init; } = NotifyRules.DefaultSilence;
+
     /// <summary>What confirms a person with the device's own means; none is proven, so the default confirms nobody.</summary>
     public IDeviceAuthenticator Authenticator { get; init; } = new NoAuthenticator();
 }
