@@ -358,12 +358,15 @@ impl Core {
         {
             asked.ended_session = true;
         }
+        if asked.url.starts_with('/') && made_for.is_some() {
+            asked.changed_person = true;
+        }
         response
             .headers
             .retain(|(name, _)| !name.eq_ignore_ascii_case(navree_native::KEEP_HEADER));
         let said = if asked.url.starts_with('/') {
             self.disown();
-            self.who_may_have_changed(true);
+            self.who_may_have_changed(response.status != 401);
             "an answer was made for another person than the shell named: what was kept was emptied, and the shell is asked again"
         } else {
             // Another origin's word is not the shell's: it only says that the
@@ -389,6 +392,15 @@ impl Core {
             && app.user.take().is_some()
         {
             self.touch(Change::App);
+        }
+        let mut cleared_badge = false;
+        for destination in &mut self.view.destinations {
+            if destination.badge.take().is_some() {
+                cleared_badge = true;
+            }
+        }
+        if cleared_badge {
+            self.touch(Change::Nav);
         }
         // Only a request asked before the event that brought this: one asked
         // while it is handled was asked as things are now.

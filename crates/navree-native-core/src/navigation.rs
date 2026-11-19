@@ -368,6 +368,9 @@ impl Core {
         else {
             return;
         };
+        if self.view.modals[at..].iter().any(|modal| modal.locked) {
+            return;
+        }
         self.take_modals_from(at);
     }
 
@@ -421,6 +424,18 @@ impl Core {
             return id;
         }
         if self.view.in_modal(id) {
+            if self
+                .view
+                .modals
+                .iter()
+                .any(|modal| modal.locked && modal.stack.contains(&id))
+            {
+                if let Some(view) = self.view.screens.get_mut(&id) {
+                    view.url = url.to_owned();
+                }
+                self.settle_on(id, url, shown);
+                return id;
+            }
             // The presented screen has done its work: it goes, and what is under it carries on.
             self.dismissed(id);
             let under = self.front();
@@ -502,15 +517,10 @@ impl Core {
         else {
             return;
         };
-        if !self.inner.has_shell || self.waiting_cover().is_some() {
-            // Asked before the shell is here: it opens when the shell does.
-            if !self.inner.has_shell
-                || self.destination_at(&url).is_some()
-                || self.route(&url).is_some()
-                || self.config.deep_links != DeepLinks::Routes
-            {
-                self.inner.launch = Some(url);
-            }
+        if !self.inner.has_shell || self.waiting_cover().is_some() || self.has_locked_modal() {
+            // Asked before the shell is here, or while a cover holds the app:
+            // it is checked against the shell and opens when the shell does.
+            self.inner.launch = Some(url);
             return;
         }
         let destination = self.destination_at(&url);

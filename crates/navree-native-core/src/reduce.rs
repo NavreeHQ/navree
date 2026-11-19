@@ -651,6 +651,7 @@ impl Core {
             hops: 0,
             region: Some(part.to_owned()),
             ended_session: false,
+            changed_person: false,
         });
     }
 
@@ -681,6 +682,7 @@ impl Core {
             hops: 0,
             region: None,
             ended_session: false,
+            changed_person: false,
         });
     }
 
@@ -701,6 +703,7 @@ impl Core {
             hops: 0,
             region: None,
             ended_session: false,
+            changed_person: false,
         });
         true
     }
@@ -838,16 +841,27 @@ impl Core {
                     && self.view.holds(screen)
                     && self.front() == Some(screen)
                     && let Some((at, route)) = self.cover_modal_of(screen)
-                    && !self.inner.origin.on_route(&route, &url)
                 {
-                    if self.inner.write_may_have_run {
-                        self.wrote(screen);
+                    if !self.stays_in_way_in(&route, &url) {
+                        if self.inner.write_may_have_run {
+                            self.wrote(screen);
+                        }
+                        if self.under_cover_url(Some(at)).as_deref() != Some(url.as_str()) {
+                            self.inner.land = Some(url);
+                        }
+                        self.way_in_done(screen);
+                        return None;
                     }
-                    if self.under_cover_url(Some(at)).as_deref() != Some(url.as_str()) {
-                        self.inner.land = Some(url);
+                    let next_route = self.way_in_route_of(&url);
+                    if let Some(&first) = self
+                        .view
+                        .modals
+                        .get(at)
+                        .and_then(|modal| modal.stack.first())
+                        && let Some(inner) = self.inner.screens.get_mut(&first)
+                    {
+                        inner.cover = Some(next_route);
                     }
-                    self.way_in_done(screen);
-                    return None;
                 }
                 self.ask(Asked {
                     purpose: asked.purpose.clone(),
@@ -860,6 +874,7 @@ impl Core {
                     hops: asked.hops + 1,
                     region: asked.region.clone(),
                     ended_session: asked.ended_session,
+                    changed_person: asked.changed_person,
                 });
                 None
             }
@@ -1092,7 +1107,9 @@ impl Core {
             self.view.failure = Some(failure);
             return self.touch(Change::Nav);
         }
-        if (self.inner.who_unsure || self.waiting_cover().is_some())
+        if (self.inner.who_unsure
+            || self.waiting_cover().is_some()
+            || self.inner.cache.named.is_none())
             && matches!(
                 failure,
                 Failure::Offline | Failure::Timeout | Failure::Server
@@ -1371,9 +1388,16 @@ impl Core {
             // What the server held of the device's token was the session's before.
             self.push_forget();
         }
+        let covered_launch = (!from_device
+            && (self.waiting_cover().is_some() || self.has_locked_modal()))
+        .then(|| self.inner.launch.take())
+        .flatten();
         if another_person {
             // Another person: nothing of the one before stays, not even where they were.
             self.wipe();
+            if covered_launch.is_some() {
+                self.inner.launch = covered_launch;
+            }
             self.forget_all();
         } else if left {
             // Nobody is signed in any more: what the screens showed is
@@ -2375,6 +2399,84 @@ impl Core {
         self.touch(Change::Nav);
     }
 
+    /// Whether `url` stays inside a way-in modal started at `current_route`:
+    /// it matches that route, the shell's `sign_in.second_step`, or another
+    /// route the shell presents with no chrome over the app.
+    pub(crate) fn stays_in_way_in(&self, current_route: &str, url: &str) -> bool {
+        if self.inner.origin.on_route(current_route, url) {
+            return true;
+        }
+        if self
+            .inner
+            .sign_in
+            .as_ref()
+            .and_then(|sign_in| sign_in.second_step.as_ref())
+            .is_some_and(|step| self.inner.origin.on_route(step.as_str(), url))
+        {
+            return true;
+        }
+        self.route(url).is_some_and(|route| {
+            !route.chrome
+                && matches!(
+                    route.present,
+                    Some(Present::Full | Present::Sheet | Present::Task)
+                )
+        })
+    }
+
+    /// The route pattern a way-in modal tracks for `url`.
+    pub(crate) fn way_in_route_of(&self, url: &str) -> String {
+        if let Some(step) = self
+            .inner
+            .sign_in
+            .as_ref()
+            .and_then(|sign_in| sign_in.second_step.as_ref())
+            .filter(|step| self.inner.origin.on_route(step.as_str(), url))
+        {
+            return step.as_str().to_owned();
+        }
+        self.route(url)
+            .map(|route| route.matches.clone())
+            .unwrap_or_else(|| self.inner.origin.where_of(url))
+    }
+
+    /// Updates a way-in modal to show or fetch `url` in place without leaving
+    /// cover mode.
+    pub(crate) fn advance_way_in(
+        &mut self,
+        modal_at: usize,
+        id: ScreenId,
+        url: &str,
+        shown: Option<Shown>,
+    ) {
+        let next_route = self.way_in_route_of(url);
+        if let Some(&first) = self
+            .view
+            .modals
+            .get(modal_at)
+            .and_then(|modal| modal.stack.first())
+            && let Some(inner) = self.inner.screens.get_mut(&first)
+        {
+            inner.cover = Some(next_route);
+        }
+        if let Some(inner) = self.inner.screens.get_mut(&id)
+            && self.view.screens.get(&id).is_some_and(|view| {
+                self.inner.origin.where_of(&view.url) != self.inner.origin.where_of(url)
+            })
+        {
+            inner.dirty.clear();
+        }
+        if let Some(view) = self.view.screens.get_mut(&id) {
+            view.url = url.to_owned();
+            view.chrome = false;
+        }
+        self.close_overlays(id);
+        match shown {
+            Some(shown) => self.show(id, url, shown),
+            None => self.fetch_page(id, false),
+        }
+    }
+
     /// The modal index that turns into a waiting cover when a write on `screen`
     /// leaves a way in, and the route of that way in.
     pub(crate) fn cover_modal_of(&self, screen: ScreenId) -> Option<(usize, String)> {
@@ -2927,6 +3029,65 @@ impl Core {
         // answer it.
         if asked.purpose == Pending::PushGone {
             return self.push_gone_answered();
+        }
+        if asked.changed_person
+            && !self.inner.signing_out
+            && !matches!(
+                asked.purpose,
+                Pending::Shell
+                    | Pending::BeforeCall { .. }
+                    | Pending::SignIn { .. }
+                    | Pending::Exchange
+                    | Pending::PushPut { .. }
+            )
+        {
+            if self.inner.write_may_have_run
+                && let Some(id) = asked.purpose.screen()
+            {
+                self.wrote(id);
+            }
+            if let Pending::Send {
+                screen, ref key, ..
+            } = asked.purpose
+                && let (Some(view), Some(inner)) = (
+                    self.view.screens.get_mut(&screen),
+                    self.inner.screens.get_mut(&screen),
+                )
+            {
+                inner.sending.remove(key);
+                inner.busy.retain(|(sent, _)| sent != key);
+                inner.waiting.remove(key);
+                if let Some(form) = view.forms.get_mut(key) {
+                    form.pending = false;
+                }
+            }
+            if matches!(asked.purpose, Pending::Page { .. } | Pending::Send { .. }) {
+                let target = response
+                    .location
+                    .as_deref()
+                    .filter(|_| matches!(response.status, 301 | 302 | 303 | 307 | 308))
+                    .and_then(|loc| match self.inner.origin.resolve(loc, &asked.url) {
+                        Target::Inside(next) => Some(next),
+                        _ => None,
+                    })
+                    .or_else(|| {
+                        (!response.url.is_empty())
+                            .then(
+                                || match self.inner.origin.resolve(&response.url, &asked.url) {
+                                    Target::Inside(next) => Some(next),
+                                    _ => None,
+                                },
+                            )
+                            .flatten()
+                    })
+                    .unwrap_or_else(|| asked.url.clone());
+                if self.under_cover_url(None).as_deref() != Some(target.as_str()) {
+                    self.inner.land = Some(target);
+                }
+            }
+            self.who_may_have_changed(true);
+            self.await_shell_cover(None, false);
+            return;
         }
         let Some(response) = self.follow(&asked, response) else {
             return;
@@ -8054,6 +8215,380 @@ mod tests {
         assert!(signed.changed.contains(&Change::Messages));
         assert!(core.view.messages.is_empty());
         assert_eq!(core.waiting_cover(), Some(cover_id));
+    }
+
+    /// A two-step form sign-in (`POST /sign-in` redirecting to `second_step`
+    /// `/sign-in/two-factor`) stays inside the locked sign-in cover without
+    /// asking the shell early or wiping parked work, and puts up the waiting
+    /// cover once the second step finishes.
+    #[test]
+    fn a_two_step_form_sign_in_stays_inside_the_cover_until_the_second_step_finishes() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        let shell_app = include_str!("../transcripts/fixtures/made/shell-app.json");
+        let order = include_str!("../transcripts/fixtures/store/order.json");
+        let ended = include_str!("../transcripts/fixtures/made/session-ended.json");
+        let sign_in_page = include_str!("../transcripts/fixtures/made/sign-in.json");
+        let two_factor_page = include_str!("../transcripts/fixtures/made/two-factor.json");
+
+        let mut core = signed_in_as(Some(RAVNEET), shell_app);
+        core.send(native(2, order, Some(RAVNEET), false));
+        core.send(Event::Field {
+            screen: 1,
+            form: Some("refund".to_owned()),
+            field: "refund-amount".to_owned(),
+            value: crate::FieldValue::Text {
+                text: "250".to_owned(),
+            },
+        });
+        assert_eq!(core.view.destinations[1].badge.as_deref(), Some("12"));
+
+        // Session ends with 401 -> `/sign-in?next=%2Forders%2F1`: no shell fetch is sent yet, and destination badges clear.
+        core.send(Event::Refresh { screen: 1 });
+        let ended_up = core.send(Event::Response(Response {
+            request: 3,
+            status: 401,
+            content_type: Some(CONTENT_TYPE.to_owned()),
+            body: ended.to_owned(),
+            ..Response::default()
+        }));
+        assert!(
+            ended_up
+                .effects
+                .iter()
+                .all(|effect| asks_for_the_shell(effect).is_none()),
+            "a 401 with a way in asked for the shell before sign-in finished: {ended_up:?}"
+        );
+        assert_eq!(core.view.destinations[1].badge, None);
+        let signin_get = ended_up
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("sign-in get");
+        core.send(native(signin_get, sign_in_page, None, false));
+        let cover_id = core.front().expect("locked sign-in cover");
+
+        // Step 1 (`POST /sign-in` -> `303 /sign-in/two-factor`) stays inside the locked modal and keeps screen 1's draft intact.
+        let post_1 = core.send(Event::Act {
+            screen: Some(cover_id),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),
+            form: Some("sign-in".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let post_1_req = post_1
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("step 1 post");
+        let step_2_redirect = core.send(Event::Response(Response {
+            request: post_1_req,
+            status: 303,
+            location: Some("/sign-in/two-factor".to_owned()),
+            ..Response::default()
+        }));
+        assert!(
+            step_2_redirect
+                .effects
+                .iter()
+                .all(|effect| asks_for_the_shell(effect).is_none()),
+            "step 1 redirect to second_step asked for the shell early: {step_2_redirect:?}"
+        );
+        assert!(core.waiting_cover().is_none());
+        let step_2_get = step_2_redirect
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) if req.url == "https://shop.example/sign-in/two-factor" => {
+                    Some(req.request)
+                }
+                _ => None,
+            })
+            .expect("step 2 get");
+        let step_2_shown = core.send(native(step_2_get, two_factor_page, None, false));
+        assert!(
+            step_2_shown
+                .effects
+                .iter()
+                .all(|effect| asks_for_the_shell(effect).is_none()),
+            "showing second_step asked for the shell early: {step_2_shown:?}"
+        );
+        assert_eq!(core.view.modals.len(), 1);
+        assert!(core.view.modals[0].locked);
+        assert_eq!(core.view.modals[0].stack, vec![cover_id]);
+        assert!(!core.view.screens[&cover_id].chrome);
+        assert_eq!(
+            core.view.screens[&1].forms["refund"].fields["refund-amount"].value,
+            crate::FieldValue::Text {
+                text: "250".to_owned()
+            }
+        );
+
+        // Step 2 (`POST /sign-in/two-factor` -> `303 /orders/1`) finishes sign-in, puts up `waiting_cover`, and restores Ravneet's draft once the shell names her.
+        let post_2 = core.send(Event::Act {
+            screen: Some(cover_id),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),
+            form: Some("two-factor".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let post_2_req = post_2
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("step 2 post");
+        let done = core.send(Event::Response(Response {
+            request: post_2_req,
+            status: 303,
+            location: Some("/orders/1".to_owned()),
+            ..Response::default()
+        }));
+        let shell_req = done
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("shell asked after step 2");
+        assert_eq!(core.waiting_cover(), Some(cover_id));
+        assert!(matches!(core.view.screens[&1].content, Content::Blank));
+
+        let restored = core.send(native(shell_req, shell_app, Some(RAVNEET), false));
+        assert!(core.waiting_cover().is_none());
+        assert_eq!(
+            core.view.screens[&1].forms["refund"].fields["refund-amount"].value,
+            crate::FieldValue::Text {
+                text: "250".to_owned()
+            }
+        );
+        assert!(restored.effects.iter().any(|effect| matches!(
+            effect,
+            Effect::Fetch(req) if req.url == "https://shop.example/orders/1"
+        )));
+    }
+
+    /// An HTML answer to a write on a sign-in cover, and a page answer whose
+    /// `x-navree-person` differs from who the shell named, both put up the
+    /// locked waiting cover instead of showing the page before the shell names
+    /// the new person.
+    #[test]
+    fn html_sign_in_answers_and_person_mismatch_answers_wait_for_the_shell_before_showing() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        const HARPREET: &str = "0193a4b2-0000-7000-8000-00000000hs02";
+        let shell_routes = include_str!("../transcripts/fixtures/made/shell-routes.json");
+        let shell_other = include_str!("../transcripts/fixtures/made/shell-other.json");
+        let home = include_str!("../transcripts/fixtures/made/home.json");
+        let sign_in_page = include_str!("../transcripts/fixtures/made/sign-in.json");
+
+        // 1. `Answer::Html` on an unlocked `/sign-in` modal puts up `waiting_cover` without showing `Content::Web` under Ravneet's user.
+        let mut core = signed_in_as(Some(RAVNEET), shell_routes);
+        core.send(native(2, home, Some(RAVNEET), false));
+        core.send(Event::Act {
+            screen: Some(1),
+            action: navree_native::Action::navigate("/sign-in"),
+            form: None,
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let signin_get = core.inner.next.request;
+        core.send(native(signin_get, sign_in_page, None, false));
+        let cover_id = core.front().expect("sign-in modal");
+        let post = core.send(Event::Act {
+            screen: Some(cover_id),
+            action: serde_json::from_value(serde_json::json!({"t": "submit"})).expect("submit"),
+            form: Some("sign-in".to_owned()),
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let post_req = post
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(req) => Some(req.request),
+                _ => None,
+            })
+            .expect("sign-in post");
+        let html_ans = core.send(Event::Response(Response {
+            request: post_req,
+            status: 200,
+            url: "https://shop.example/orders/1".to_owned(),
+            content_type: Some("text/html".to_owned()),
+            body: "<html><body>Dashboard</body></html>".to_owned(),
+            ..Response::default()
+        }));
+        assert!(core.view.app.as_ref().unwrap().user.is_none());
+        assert_eq!(core.waiting_cover(), Some(cover_id));
+        assert!(
+            core.view
+                .screens
+                .values()
+                .all(|s| matches!(s.content, Content::Blank)),
+            "an HTML page was loaded before the shell named who signed in"
+        );
+        let shell_req = html_ans
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("shell asked");
+        core.send(native(shell_req, shell_other, Some(HARPREET), false));
+        assert!(core.waiting_cover().is_none());
+        assert_eq!(
+            core.view
+                .app
+                .as_ref()
+                .and_then(|app| app.user.as_ref())
+                .map(|u| u.name.as_str()),
+            Some("Harpreet Singh")
+        );
+
+        // 2. A page answer with `x-navree-person: HARPREET` while `named` is `RAVNEET` covers the app instead of rendering.
+        let mut core = signed_in_as(Some(RAVNEET), shell_routes);
+        core.send(native(2, home, Some(RAVNEET), false));
+        core.send(Event::Select { destination: 1 });
+        let mismatch = core.send(native(
+            3,
+            include_str!("../transcripts/fixtures/store/orders.json"),
+            Some(HARPREET),
+            false,
+        ));
+        assert!(core.view.app.as_ref().unwrap().user.is_none());
+        assert!(core.waiting_cover().is_some());
+        assert!(matches!(core.view.screens[&1].content, Content::Blank));
+        assert!(matches!(core.view.screens[&2].content, Content::Blank));
+        assert!(
+            !mismatch
+                .effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::StreamOpen { .. })),
+            "Harpreet's page opened a live stream before the shell named Harpreet: {mismatch:?}"
+        );
+    }
+
+    /// A return address or deep link received while a waiting cover is up is
+    /// validated against the new shell and survives `another_person`'s wipe.
+    #[test]
+    fn a_link_received_under_the_waiting_cover_survives_another_persons_wipe_and_checks_the_new_shell()
+     {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        const GURPREET: &str = "0193a4b2-0000-7000-8000-00000000gs04";
+        let config: Config = serde_json::from_value(serde_json::json!({
+            "origin": "https://shop.example",
+            "client": {"platform": "ios", "form": "phone", "vocab": 0, "text_percent": 100, "caps": ["auth_session"]},
+            "sign_in": {"callback": "charkha", "paths": ["/sso"]},
+        }))
+        .expect("config");
+        let mut core = Core::new(config);
+        core.send(Event::Start);
+        // Ravneet's initial shell (`store/shell.json`) has no `/deliveries` route.
+        core.send(native(
+            1,
+            include_str!("../transcripts/fixtures/store/shell.json"),
+            Some(RAVNEET),
+            false,
+        ));
+        core.send(native(
+            2,
+            include_str!("../transcripts/fixtures/made/home.json"),
+            Some(RAVNEET),
+            false,
+        ));
+
+        // Gurpreet Singh signs in through `/sso` and returns `charkha://deliveries/9`.
+        core.send(Event::Act {
+            screen: Some(1),
+            action: navree_native::Action::navigate("/sso"),
+            form: None,
+            overlay: None,
+            text: None,
+            now: None,
+            ask: None,
+            from: None,
+        });
+        let returned = core.send(Event::SignInDone {
+            url: Some("charkha://deliveries/9".to_owned()),
+        });
+        assert!(core.waiting_cover().is_some());
+        let shell_req = returned
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("shell asked");
+
+        // Gurpreet's shell includes `/deliveries/*`: `another_person` wipes Ravneet's screens and still opens `/deliveries/9` for Gurpreet.
+        let gurpreet_shell = include_str!("../transcripts/fixtures/made/shell-other.json")
+            .replace("Harpreet Singh", "Gurpreet Singh")
+            .replace("harpreet.singh@example.com", "gurpreet@charkha.in")
+            .replace(r#""match": "/orders/*""#, r#""match": "/deliveries/*""#);
+        let landed = core.send(native(shell_req, &gurpreet_shell, Some(GURPREET), false));
+        assert!(core.waiting_cover().is_none());
+        assert!(
+            landed.effects.iter().any(|effect| matches!(
+                effect,
+                Effect::Fetch(req) if req.url == "https://shop.example/deliveries/9"
+            )),
+            "Gurpreet's return link was lost across another_person's wipe: {landed:?}"
+        );
+    }
+
+    /// When `session_unsure` (`Event::Foreground`) clears `cache.named` and its
+    /// shell request fails transiently (`Offline`), `shell_unreached` schedules
+    /// a retry timer so the shell is asked again without waiting for another
+    /// background cycle.
+    #[test]
+    fn a_failed_shell_check_after_coming_to_the_front_schedules_a_retry_timer() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        let store_shell = include_str!("../transcripts/fixtures/store/shell.json");
+        let home = include_str!("../transcripts/fixtures/made/home.json");
+
+        let mut core = signed_in_as(Some(RAVNEET), store_shell);
+        core.send(native(2, home, Some(RAVNEET), false));
+        core.send(Event::Background);
+        let fg = core.send(Event::Foreground);
+        let shell_req = fg
+            .effects
+            .iter()
+            .find_map(asks_for_the_shell)
+            .expect("foreground asks for shell");
+
+        let failed = core.send(Event::Response(Response {
+            request: shell_req,
+            error: Some(TransportError::Offline),
+            ..Response::default()
+        }));
+        let timer = failed
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Timer { timer, ms: 2000 } => Some(*timer),
+                _ => None,
+            })
+            .expect("retry timer scheduled when cache.named is None");
+        let retried = core.send(Event::Timer { timer });
+        assert!(
+            retried
+                .effects
+                .iter()
+                .any(|effect| asks_for_the_shell(effect).is_some()),
+            "timer did not re-fetch shell: {retried:?}"
+        );
     }
 
     /// Every `open_url` effect is made in one place, and no address is

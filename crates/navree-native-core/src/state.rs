@@ -744,6 +744,8 @@ pub(crate) struct Asked {
     pub region: Option<String>,
     /// An earlier hop of this request already showed that the session ended.
     pub ended_session: bool,
+    /// An answer to this request named another person than the shell named.
+    pub changed_person: bool,
 }
 
 /// What a timer the core asked for is for.

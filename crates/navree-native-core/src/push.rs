@@ -111,6 +111,7 @@ impl Core {
             hops: 0,
             region: None,
             ended_session: false,
+            changed_person: false,
         });
     }
 
@@ -205,6 +206,7 @@ impl Core {
                     hops: 0,
                     region: None,
                     ended_session: false,
+                    changed_person: false,
                 });
                 // After the removal's request, which has taken its cookies.
                 self.effects.push(Effect::SessionEnding);

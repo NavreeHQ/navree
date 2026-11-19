@@ -1382,13 +1382,24 @@ impl Core {
                 if alive && front {
                     let shown = crate::reduce::Shown::Web {
                         url: url.clone(),
-                        title: None,
+                        title: Option::None,
                         why: vec!["html".to_owned()],
                     };
-                    match self.covers(asked, &url) {
-                        Some(route) => self.cover(id, route, &url, Some(shown)),
-                        None => {
-                            self.arrive(id, &url, shown);
+                    if write && let Some((at, route)) = cover.as_ref() {
+                        if self.stays_in_way_in(route, &url) {
+                            self.advance_way_in(*at, id, &url, Some(shown));
+                        } else {
+                            if self.under_cover_url(Some(*at)).as_deref() != Some(url.as_str()) {
+                                self.inner.land = Some(url);
+                            }
+                            self.way_in_done(id);
+                        }
+                    } else {
+                        match self.covers(asked, &url) {
+                            Some(route) => self.cover(id, route, &url, Some(shown)),
+                            Option::None => {
+                                self.arrive(id, &url, shown);
+                            }
                         }
                     }
                 }
@@ -1419,7 +1430,7 @@ impl Core {
                 }
                 let worked = status < 400;
                 // A screen with no chrome is a sign-in or the like: who is signed in may have changed.
-                if write && worked && !chrome {
+                if write && worked && !chrome && cover.is_none() {
                     self.fetch_shell();
                 }
                 let reload = read.reload;
@@ -1433,6 +1444,18 @@ impl Core {
                                 | navree_native::Op::NavigateExternal { .. }
                         )
                     });
+                let leaves_way_in = cover.as_ref().is_some_and(|(_, route)| {
+                    let away = ops.iter().any(|op| match op {
+                        navree_native::Op::Navigate { href, .. } => match self.resolve(href, id) {
+                            Target::Inside(next) => !self.stays_in_way_in(route, &next),
+                            Target::Outside(_) => true,
+                            Target::Refused => false,
+                        },
+                        navree_native::Op::NavigateExternal { .. } => true,
+                        _ => false,
+                    });
+                    away || (shown.is_some() && !self.stays_in_way_in(route, &url))
+                });
                 if !alive || !front {
                     // The person has moved on: the answer changes its own screen's
                     // tree, says what it has to say, and takes them nowhere.
@@ -1456,24 +1479,22 @@ impl Core {
                     } else {
                         for op in quiet {
                             match op {
-                                navree_native::Op::Toast(toast) => self.toast(None, toast),
+                                navree_native::Op::Toast(toast) => self.toast(Option::None, toast),
                                 // Signing out is no less so for having left the screen it was asked from.
                                 navree_native::Op::SignedOut => self.signed_out_on_purpose(),
                                 _ => {}
                             }
                         }
                     }
-                } else if let Some((at, _)) = cover.as_ref().filter(|(_, route)| {
-                    write
-                        && worked
-                        && leaves(&self.inner.origin, route, &url, shown.is_some(), &ops)
-                }) {
+                } else if let Some((at, _)) =
+                    cover.as_ref().filter(|_| write && worked && leaves_way_in)
+                {
                     // The way in has done its work: wait for the shell to name
                     // who signed in before showing or fetching where it led.
                     let at = *at;
                     for op in &ops {
                         if let navree_native::Op::Toast(toast) = op {
-                            self.toast(None, toast.clone());
+                            self.toast(Option::None, toast.clone());
                         }
                     }
                     let target = ops
@@ -1482,10 +1503,10 @@ impl Core {
                             navree_native::Op::Navigate { href, .. } => {
                                 match self.resolve(href, id) {
                                     Target::Inside(next) => Some(next),
-                                    _ => None,
+                                    _ => Option::None,
                                 }
                             }
-                            _ => None,
+                            _ => Option::None,
                         })
                         .or_else(|| shown.is_some().then(|| url.clone()));
                     if let Some(target) = target
@@ -1494,6 +1515,45 @@ impl Core {
                         self.inner.land = Some(target);
                     }
                     self.way_in_done(id);
+                } else if let Some((at, _)) = cover.as_ref().filter(|_| write) {
+                    let at = *at;
+                    let step_next = worked
+                        .then(|| {
+                            ops.iter().find_map(|op| match op {
+                                navree_native::Op::Navigate { href, .. } => {
+                                    match self.resolve(href, id) {
+                                        Target::Inside(next) => Some(next),
+                                        _ => Option::None,
+                                    }
+                                }
+                                _ => Option::None,
+                            })
+                        })
+                        .flatten();
+                    if let Some(next) = step_next {
+                        let rest: Vec<navree_native::Op> = ops
+                            .into_iter()
+                            .filter(|op| !matches!(op, navree_native::Op::Navigate { .. }))
+                            .collect();
+                        self.apply_ops(id, rest, false);
+                        self.advance_way_in(at, id, &next, Option::None);
+                    } else if let Some(shown) = shown {
+                        self.advance_way_in(at, id, &url, Some(shown));
+                        let left = self.apply_ops(id, ops, true);
+                        if reload && !left {
+                            self.fetch_page(id, false);
+                        }
+                    } else {
+                        if !worked && ops.is_empty() {
+                            self.notice(Notice::Failed, Some(id));
+                            told = true;
+                        }
+                        let left = self.apply_ops(id, ops, true);
+                        kept = !left;
+                        if reload && !left {
+                            self.fetch_page(id, false);
+                        }
+                    }
                 } else if let Some(route) = self.covers(asked, &url).filter(|_| shown.is_some()) {
                     self.cover(id, route, &url, shown);
                     self.apply_ops(self.front().unwrap_or(id), ops, false);
@@ -1538,23 +1598,6 @@ impl Core {
             }
         }
     }
-}
-
-/// Whether an answer leads away from the route `pattern`: it navigates to
-/// an address the route does not name, or brings a screen from one.
-fn leaves(
-    origin: &crate::origin::Origin,
-    pattern: &str,
-    url: &str,
-    showed: bool,
-    ops: &[navree_native::Op],
-) -> bool {
-    let away = ops.iter().any(|op| match op {
-        navree_native::Op::Navigate { href, .. } => !origin.on_route(pattern, href),
-        navree_native::Op::NavigateExternal { .. } => true,
-        _ => false,
-    });
-    away || (showed && !origin.on_route(pattern, url))
 }
 
 /// What a field holds when a tree first says so.
