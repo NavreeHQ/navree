@@ -1,0 +1,381 @@
+---
+title: "Writing a plugin"
+description: "Scaffold a plugin crate with navree make:plugin, keep every name under its namespace, wire its options, manifest, permissions, pages, commands and jobs, and leave app-wide registrations to the app."
+---
+
+Every example on this page comes from `plugins/notices`, a worked community plugin in the Navree repository that adds a notice board for a housing society or office in Ludhiana. It depends on the public `navree` crate alone, inherits nothing from a workspace, and uses every plugin extension point: a typed configuration section, a portable migration and model, permissions, embedded templates and translations, a namespaced stylesheet, a Navree UI page and sidebar item, a Helm link, a CLI command, and a daily scheduled job. See [Plugins](/docs/plugins/overview/) for what a plugin is and what the boot checks.
+
+## make:plugin
+
+Start a new plugin crate inside an app (or in a standalone directory) with `navree make:plugin`:
+
+```sh
+navree make:plugin notices
+navree make:plugin khata --path crates --wrap reqwest
+```
+
+| Argument or option | What it sets |
+|---|---|
+| `NAME` | Snake-case plugin name (`notices`): creates package `navree-plugin-notices`, default namespace `notices`, and module `NoticesModule`. |
+| `--path DIR` | Parent directory where `DIR/NAME/` is created (`plugins` by default). |
+| `--wrap CRATE` | Adds `CRATE` to `[dependencies]` and writes `src/client.rs` wrapping its client in a [`ClientModule`](/docs/plugins/existing-crates/#a-client-crate-with-clientmodule). |
+
+Running `navree make:plugin notices` writes eight files under `plugins/notices/` (nine with `--wrap`):
+
+- `Cargo.toml` — package metadata, the `navree-plugin` keyword, `[package.metadata.navree.plugin]`, and `navree` dependencies pinned to your app's version or path.
+- `src/lib.rs` — `NoticesModule`, `NoticesModule::from_config()`, `m.plugin(navree::plugin_info!())`, `m.config_section::<NoticesOptions>()`, and the `// navree:wire` marker for `make:component`.
+- `src/options.rs` — `NoticesOptions` derived with `ConfigSection` under `#[config(key = "notices")]`.
+- `src/client.rs` — written only when `--wrap CRATE` is passed.
+- `tests/boots.rs` — an integration test that boots `NoticesModule::from_config()` in `TestApp` and checks `app.ctx().plugins()`.
+- `README.md` — install instructions and the community-package notice (`It is not an official Navree package.`).
+- `LICENSE-MIT` and `LICENSE-APACHE` — dual licence files for publishing the crate on its own.
+- `.github/workflows/ci.yml` — formatting, Clippy (`-D warnings`), and test workflow.
+
+*(The worked examples under `plugins/` in the Navree repository omit `LICENSE-MIT`, `LICENSE-APACHE`, and `.github/workflows/ci.yml` because the repository root provides them.)*
+
+Wire the new crate into your app right away with [`navree plugin:add`](/docs/plugins/installing/):
+
+```sh
+navree plugin:add --path plugins/notices
+```
+
+## plugin_info! and the namespace
+
+Every module of your plugin that registers plugin metadata calls `m.plugin(navree::plugin_info!(..))` first in `register`. By default, `plugin_info!()` derives the namespace from `[package].name` by stripping `navree-plugin-` (or `navree-`) and replacing `-` with `_`, so `navree-plugin-notices` gets `notices`. Pass `namespace = ".."` when the package name does not start with a letter or needs a different word, and `title = ".."` to give `navree plugins` a human-readable heading:
+
+```rust title="plugins/notices/src/lib.rs"
+// plugins/notices/src/lib.rs
+/// Permission required to view the notice board (`notices.read`).
+pub const READ: Permission = Permission::new("notices.read", "Read the society's notices");
+
+/// Permission required to post or delete a notice (`notices.publish`).
+pub const PUBLISH: Permission = Permission::new("notices.publish", "Post a notice to the society");
+
+/// Stylesheet served for the notice board under the `notices` namespace (`notices.board`).
+pub const BOARD_SHEET: AppSheet =
+    AppSheet::new("board", include_bytes!("../assets/board.css"), 4_000).namespace("notices");
+
+/// Registers the `notices` plugin: its `[notices]` settings, `notices_notices`
+/// migration, permissions, templates, translations, stylesheet, routes, sidebar
+/// link, Helm panel link, CLI command, job, and daily IST schedule.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoticesModule;
+
+impl NoticesModule {
+    /// Builds the module reading its `[notices]` settings from the app configuration.
+    pub fn from_config() -> NoticesModule {
+        NoticesModule
+    }
+}
+
+impl Module for NoticesModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.plugin(navree::plugin_info!(title = "Notice board"));
+        m.config_section::<NoticesOptions>();
+        m.migrations(migration::migrations());
+        m.permissions(&[READ, PUBLISH]);
+        m.locales(navree::embed_locales!("locales"));
+        m.plugin_templates(navree::embed_templates!("views"));
+        m.contribute(BOARD_SHEET);
+        m.controller::<NoticesController>();
+        m.nav_item(
+            ShellNavItem::new("Notices", "/notices")
+                .group("Society")
+                .permission("notices.read"),
+        );
+        m.helm_nav(HelmLink::new("Notices", "/admin/notices").can("manage", "notices.Notice"));
+        m.command(expire_command());
+        m.job::<ExpireNotices>();
+        m.schedule(|s| {
+            s.job(ExpireNotices)
+                .daily_at("02:30")
+                .in_zone("Asia/Kolkata");
+        });
+        // navree:wire
+    }
+}
+```
+
+Keep a plugin in one crate where you can, as `navree-plugin-notices` does. Every module defined in that crate acts for the plugin automatically, whether or not it calls `m.plugin(..)` itself, and so does any generic module imported only by the plugin's modules. If you split a plugin across two crates (for example, `navree-plugin-notices` and a companion `notices-core` crate), any non-generic module of that second crate that names no plugin and is not a framework crate also acts for the plugin whenever only community-plugin modules import it: `navree plugins` lists it under the plugin, and the boot holds it to the same namespace and app-only rules as `NoticesModule`. When a module of the app imports that companion module directly, it stays the app's.
+
+When you copy an example plugin to build your own, update every file where the namespace appears. In `plugins/notices`, these eleven files carry `notices` (`src/pages.rs` and `assets/board.css` refer only to `BOARD_SHEET` and CSS class names):
+
+```text title="Names that carry the namespace"
+Cargo.toml                navree-plugin-notices, config, env, grants
+src/lib.rs                plugin_info!, the permissions, the sheet, the links
+src/options.rs            #[config(key = "notices")], APP_NOTICES__DIGEST_FROM
+src/model.rs              notices_notices, subject notices.Notice, prefix notices
+src/migration.rs          migration set notices, table notices_notices
+src/controller.rs         routes /notices and /api/notices, template notices/list.html
+src/jobs.rs               job notices.expire, command notices:expire
+locales/en/notices.ftl    message ids notices-heading, notices-empty, notices-posted-by
+locales/pa-IN/notices.ftl Punjabi translations under the same notices- ids
+views/list.html           notices-heading, notices-empty, notices/notice.html
+views/notice.html         notices-posted-by
+```
+
+## Options and the config section
+
+Derive `ConfigSection` on your options struct under a key equal to your namespace (or `<namespace>.<subkey>`) and register it with `m.config_section::<NoticesOptions>()`:
+
+```rust title="plugins/notices/src/options.rs"
+// plugins/notices/src/options.rs
+/// Settings read from the `[notices]` table of the app configuration.
+#[derive(Clone, Debug, Deserialize, Serialize, ConfigSection)]
+#[config(key = "notices")]
+#[serde(default)]
+pub struct NoticesOptions {
+    /// Whether the `notices` plugin is active.
+    pub enabled: bool,
+    /// How many days a notice stays on the board before expiry removes it.
+    pub keep_days: u32,
+    /// Sender address used for daily notice digests (`APP_NOTICES__DIGEST_FROM`).
+    pub digest_from: String,
+}
+
+impl Default for NoticesOptions {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            keep_days: 30,
+            digest_from: "notices@ludhiana-society.example".to_owned(),
+        }
+    }
+}
+```
+
+Registering the section with `m.config_section::<NoticesOptions>()` teaches `navree config:check`, `navree config:show`, and `navree config:publish --plugin notices` every key and default without forcing an app in a minimal test to load `ConfigModule` unless it wants overrides. Inside handlers and jobs, resolve `Config` with `app.try_get::<Config>().await` and fall back to `NoticesOptions::default()` when no `ConfigModule` is present.
+
+## The manifest
+
+`navree plugin:add` reads `[package.metadata.navree.plugin]` from `Cargo.toml` before touching any file in the target app:
+
+```toml title="plugins/notices/Cargo.toml"
+# plugins/notices/Cargo.toml
+[package]
+name = "navree-plugin-notices"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+description = "A notice board for a housing society or office. Not an official Navree package."
+license = "MIT OR Apache-2.0"
+keywords = ["navree-plugin", "navree"]
+readme = "README.md"
+
+[package.metadata.navree.plugin]
+title = "Notice board"
+module = "NoticesModule::from_config()"
+features = ["helm", "orm", "queue", "schedule", "ui", "view"]
+config = ["notices"]
+env = ["APP_NOTICES__DIGEST_FROM"]
+grants = { member = ["notices.read"], admin = ["notices.read", "notices.publish"] }
+```
+
+| Key | Required | Rule |
+|---|---|---|
+| `namespace` | optional | Lower-case `[a-z][a-z0-9_]{0,63}`, not reserved by the framework, and matching `plugin_info!(namespace = "..")` when set. Defaults to the package name without `navree-plugin-` or `navree-` (`-` turned into `_`). |
+| `title` | optional | Display title (1 to 64 characters, no control characters). |
+| `module` | **required** | Rust path to the module value (`NoticesModule` or `NoticesModule::from_config()`), ASCII, no spaces, no Rust keywords, at most 200 characters. |
+| `features` | optional | Up to 32 `navree` module features from the manifest allow-list (the module crates of `navree`, plus `documents-native` and `documents-docx`). Keep this list equal to `[dependencies].navree.features`. Features that choose a database driver (`postgres`, `mysql`, `sqlite`, `mongo`), headless Chrome (`documents`, `browser`), build-time macros (`ui-extension-files`), tools (`dock`, `harbor`, `navigator`), `testing`, or `full` belong to the app owner and are refused here. |
+| `config` | optional | Up to 16 configuration section keys under `<namespace>` (`notices`, `notices.digest`). |
+| `env` | optional | Up to 32 environment variable names starting with `APP_<NS>__` (`APP_NOTICES__DIGEST_FROM`), appended to `.env.example`. |
+| `grants` | optional | Role-to-permissions table suggesting permissions under `<namespace>.` for `admin`, `member`, `viewer`, or roles already in the app's `workspace.roles` (never `owner` or the demo guest role). |
+| `policy` | optional | Page-policy sources (`img_src`, `media_src`, `connect_src`, `font_src`, `wasm`) written commented out to `config/ui.policy.toml`; see [Components for Navree UI](/docs/plugins/ui-components/). |
+
+Any unknown key, disallowed feature, out-of-namespace config or grant, or malformed `module` path stops `plugin:add` before any edit commits, leaving the app byte-for-byte as it was.
+
+## Permissions and suggested grants
+
+`m.permissions(&[READ, PUBLISH])` registers human-readable descriptions for `navree access:explain` and Helm's role screens — describing a permission grants it to nobody. Routes enforce permissions explicitly with `.permissions(&[..])`, and ORM models keep both `subject` and `permission_prefix` under the plugin's namespace:
+
+```rust title="plugins/notices/src/model.rs"
+// plugins/notices/src/model.rs
+/// The `notice` entity (`notices_notices` table, subject `notices.Notice`).
+pub mod notice {
+    use chrono::{DateTime, Utc};
+    use serde::{Deserialize, Serialize};
+    use uuid::Uuid;
+
+    /// One notice posted to the board.
+    #[derive(Clone, Debug, Default, PartialEq, Eq, navree::orm::Model, Serialize, Deserialize)]
+    #[model(
+        table = "notices_notices",
+        timestamps(created_at = "created_at", updated_at = false),
+        subject = "notices.Notice",
+        permission_prefix = "notices"
+    )]
+    pub struct Model {
+        /// Primary key.
+        pub id: i64,
+        /// Short heading of the notice (1 to 120 characters).
+        pub title: String,
+        /// Body text of the notice (up to 4,000 characters).
+        pub body: String,
+        /// Identifier of the user who posted the notice.
+        pub posted_by: Uuid,
+        /// Instant when the notice expires.
+        pub expires_at: DateTime<Utc>,
+        /// Instant when the notice was created.
+        pub created_at: DateTime<Utc>,
+    }
+}
+```
+
+```rust title="plugins/notices/src/controller.rs"
+// plugins/notices/src/controller.rs
+impl Controller for NoticesController {
+    fn prefix(&self) -> &'static str {
+        ""
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        let page_ctrl = self.clone();
+        let create_ctrl = self.clone();
+        vec![
+            RouteDef::on(
+                Method::GET,
+                "!/notices",
+                move |shell: AppShell, uow: Uow| {
+                    let ctrl = page_ctrl.clone();
+                    async move { ctrl.board(shell, uow).await }
+                },
+            )
+            .page()
+            .permissions(&["notices.read"]),
+            RouteDef::on(Method::GET, "/notices", list_json).permissions(&["notices.read"]),
+            RouteDef::on(
+                Method::POST,
+                "/notices",
+                move |principal: CurrentPrincipal, uow: Uow, input: Valid<Json<NewNotice>>| {
+                    let ctrl = create_ctrl.clone();
+                    async move { ctrl.create(principal, uow, input).await }
+                },
+            )
+            .permissions(&["notices.publish"]),
+            RouteDef::on(Method::DELETE, "/notices/{id}", remove).permissions(&["notices.publish"]),
+        ]
+    }
+}
+```
+
+Three rules keep access predictable:
+
+- **Suggested grants stay editable.** `plugin:add` writes the manifest's `grants` into `config/workspace.toml` with a `# plugin:add navree-plugin-notices` comment on each line so the app owner can inspect, narrow, or delete them.
+- **Links without a permission are public in the menu.** `ShellNavItem::new("Notices", "/notices")` without `.permission(..)` (and `HelmLink::new(..)` without `.permission(..)` or `.can(..)`) is shown to everyone who can see that menu; always attach the matching permission or ability check to the link as well as the route.
+- **The one standing exception.** A workspace `owner` holds every workspace permission automatically, and the app-wide super-admin role holds every permission across the app. Never guard an internal staff-only action behind a workspace permission that every workspace owner receives.
+
+## Pages, links and the admin panel
+
+`NoticesController::board` renders `notices/list.html` inside the app's `AppShell` and attaches `BOARD_SHEET` (served at `/_navree/ui/app/notices.board-<hash>.css`; see [Templates, translations and files](/docs/plugins/resources/)):
+
+```rust title="plugins/notices/src/pages.rs"
+// plugins/notices/src/pages.rs
+/// Wraps rendered board markup inside the app's `AppShell` and links [`BOARD_SHEET`].
+pub fn board_page(shell: AppShell, title: &'static str, html: String) -> AppPage {
+    shell
+        .page(title)
+        .stylesheet(&BOARD_SHEET)
+        .body(SafeHtml::trusted(html))
+}
+```
+
+- **Sidebar link (`ShellNavItem`).** `m.nav_item(ShellNavItem::new("Notices", "/notices").group("Society").permission("notices.read"))` adds "Notices" under the "Society" group for users who hold `notices.read`. Apps generated with `navree new` already call `.contributed()` on `Shell::new(..)` in `src/ui/shell.rs`; in an older app whose shell predates Navree 1.3, add `.contributed()` to `Shell::new(..)` (as `plugin:add` reminds you) so contributed links appear.
+- **Admin panel link (`HelmLink`).** `m.helm_nav(HelmLink::new("Notices", "/admin/notices").can("manage", "notices.Notice"))` adds a link to Helm's navigation for staff who can `manage` `notices.Notice`.
+
+## Commands, jobs and schedules
+
+`ExpireNotices` (`notices.expire`) and `expire_command` (`notices:expire`) share `expire_notices`, which deletes rows past `expires_at` or older than `notices.keep_days`. `NoticesModule` schedules `ExpireNotices` daily at `02:30` in `Asia/Kolkata` (IST):
+
+```rust title="plugins/notices/src/jobs.rs"
+// plugins/notices/src/jobs.rs
+/// Queued and scheduled job that removes notices past `keep_days` or `expires_at`.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct ExpireNotices;
+
+impl Job for ExpireNotices {
+    const NAME: &'static str = "notices.expire";
+
+    async fn handle(self, ctx: JobContext) -> Result<(), BoxError> {
+        expire_notices(&ctx.app).await?;
+        Ok(())
+    }
+}
+
+/// Deletes notices whose `expires_at` has passed or whose `created_at` is older
+/// than `notices.keep_days`, returning how many rows were removed.
+pub async fn expire_notices(app: &AppContext) -> Result<u64, BoxError> {
+    let settings = options::load(app).await?;
+    let now = match app.try_get::<dyn Clock>().await {
+        Some(clock) => clock.now(),
+        None => Utc::now(),
+    };
+    let cutoff = now - TimeDelta::days(i64::from(settings.keep_days));
+    let db = app.get::<Db>().await?;
+    let uow = db.uow(None, None).await;
+    let removed = notice::Model::query()
+        .where_group(|g| {
+            g.where_(notice::Model::EXPIRES_AT.lte(now))
+                .or_where(notice::Model::CREATED_AT.lt(cutoff))
+        })
+        .delete(&uow)
+        .await?;
+    uow.commit().await?;
+    Ok(removed)
+}
+
+/// Builds the `notices:expire` CLI command, which deletes expired rows and
+/// prints `Removed N notices.`
+pub fn expire_command() -> CommandSpec {
+    CommandSpec::new(
+        "notices:expire",
+        "Remove notices older than notices.keep_days",
+        |ctx, _args| async move {
+            let removed = expire_notices(&ctx).await?;
+            println!("Removed {removed} notices.");
+            Ok(())
+        },
+    )
+}
+```
+
+Start your command names with `<namespace>:` (`notices:expire`) and your job names with `<namespace>.` (`notices.expire`). A community plugin cannot take a command name owned by the framework (`migrate`, `serve`, `check`, `routes`, `plugins`, and the rest of the framework's built-in commands).
+
+## What the app registers for a plugin
+
+A community plugin cannot register pieces that decide access, middleware, sign-in, workspace scoping, or model hooks for the whole app or for another crate's models — ship a public type or function from your plugin crate instead. To use any of these, register the plugin's piece from a module of your app:
+
+| To | The line in a module of your app |
+|---|---|
+| apply its policy | `.import(AccessModule::for_policy::<khata::InvoicePolicy>())` |
+| register its subject | `.import(AccessModule::for_subject::<khata::Ledger>())` |
+| configure a module it uses | `AccessModule::for_root(..)` in your app's root (the plugin imports `AccessModule`) |
+| add its permission check | `m.multi(khata::permission_check())` |
+| add its sign-in strategy | `m.strategy::<khata::LedgerStrategy>()` |
+| add its middleware | `m.http_layer(khata::timeout())` |
+| let it decide Helm's staff | `m.helm_staff_workspaces(khata::may_enter)` |
+| use its channel authorizer | `m.channel("orders.{id}", notices::authorize)` |
+| scope its model | `m.workspace_scoped::<notices::Notice>()` |
+| apply its scope or hook to your model | `m.global_scope::<Deal>("open", khata::open)`, `m.on_model::<Deal, _>(ModelEvent::Saving, khata::stamp)` |
+
+Putting the whole notice board into an app takes one `.module(NoticesModule::from_config())` line beside the modules it builds on:
+
+```rust title="src/app.rs"
+use navree::orm::OrmModule;
+use navree::prelude::*;
+use navree::ui::UiModule;
+use navree::view::ViewModule;
+use navree_plugin_notices::NoticesModule;
+
+pub fn app(sources: ConfigSources) -> AppBuilder {
+    Navree::app()
+        .module(ConfigModule::for_root(sources))
+        .module(HttpModule::from_config())
+        .module(DatabaseModule::from_config())
+        .module(OrmModule)
+        .module(ViewModule::from_config())
+        .module(UiModule)
+        .module(AccessModule::for_root(AccessOptions::default()))
+        .module(NoticesModule::from_config())
+}
+```
