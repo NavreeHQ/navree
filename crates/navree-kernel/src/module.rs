@@ -30,6 +30,87 @@ pub trait Module: Send + Sync + 'static {
 
     /// Registers everything the module contributes.
     fn register(&self, m: &mut ModuleBuilder);
+
+    /// The concrete type name of `self` when erased behind `dyn Module`.
+    /// Sealed by an unnameable parameter so crates outside `navree-kernel`
+    /// cannot override it. Not public API.
+    #[doc(hidden)]
+    #[allow(private_interfaces)]
+    fn __module_type(&self, _: sealed::Witness<'_>) -> sealed::ModuleType {
+        sealed::ModuleType {
+            type_name: std::any::type_name::<Self>(),
+        }
+    }
+}
+
+mod sealed {
+    use std::marker::PhantomData;
+
+    #[derive(Clone, Copy)]
+    pub struct Witness<'a>(PhantomData<fn(&'a ()) -> &'a ()>);
+
+    impl Witness<'_> {
+        pub(super) fn new() -> Self {
+            Self(PhantomData)
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    pub struct ModuleType {
+        pub(super) type_name: &'static str,
+    }
+}
+
+impl Module for Box<dyn Module> {
+    fn id(&self) -> ModuleId {
+        (**self).id()
+    }
+
+    fn name(&self) -> &'static str {
+        (**self).name()
+    }
+
+    fn is_configured(&self) -> bool {
+        (**self).is_configured()
+    }
+
+    fn register(&self, m: &mut ModuleBuilder) {
+        (**self).register(m);
+    }
+
+    #[allow(private_interfaces)]
+    fn __module_type(&self, witness: sealed::Witness<'_>) -> sealed::ModuleType {
+        (**self).__module_type(witness)
+    }
+}
+
+impl Module for std::pin::Pin<Box<dyn Module>> {
+    fn id(&self) -> ModuleId {
+        self.as_ref().get_ref().id()
+    }
+
+    fn name(&self) -> &'static str {
+        self.as_ref().get_ref().name()
+    }
+
+    fn is_configured(&self) -> bool {
+        self.as_ref().get_ref().is_configured()
+    }
+
+    fn register(&self, m: &mut ModuleBuilder) {
+        self.as_ref().get_ref().register(m);
+    }
+
+    #[allow(private_interfaces)]
+    fn __module_type(&self, witness: sealed::Witness<'_>) -> sealed::ModuleType {
+        self.as_ref().get_ref().__module_type(witness)
+    }
+}
+
+/// Unwraps erased `dyn Module` wrappers (`Box`, `Pin`) and returns the inner
+/// value's `std::any::type_name`.
+pub(crate) fn resolved_type_name(module: &dyn Module) -> &'static str {
+    module.__module_type(sealed::Witness::new()).type_name
 }
 
 /// The configured form of module `M`: what `M::for_root(options)` and
@@ -234,7 +315,30 @@ mod sample {
     /// A module of the kernel that registers nothing, for the doctests of
     /// [`configured_module!`](crate::configured_module) and the plugin tests.
     /// Not public API.
+    ///
+    /// Outside `navree-kernel`, `Module::__module_type` cannot be overridden:
+    ///
+    /// ```compile_fail
+    /// use navree_kernel::{Module, ModuleBuilder};
+    ///
+    /// struct OutsideModule;
+    ///
+    /// impl Module for OutsideModule {
+    ///     fn register(&self, _: &mut ModuleBuilder) {}
+    ///
+    ///     fn __module_type(&self, _: _) -> _ {
+    ///         unreachable!()
+    ///     }
+    /// }
+    /// ```
     pub struct PlainModule;
+
+    impl PlainModule {
+        /// Configured form of [`PlainModule`], for plugin tests.
+        pub fn from_config() -> ConfiguredPlainModule {
+            ConfiguredPlainModule::from_config()
+        }
+    }
 
     impl crate::Module for PlainModule {
         fn register(&self, _: &mut crate::ModuleBuilder) {}

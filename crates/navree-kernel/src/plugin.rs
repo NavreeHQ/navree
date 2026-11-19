@@ -758,8 +758,9 @@ pub(crate) fn module_path(type_name: &str) -> &str {
     }
 }
 
-/// The trait a trait object's type name stands for: `dyn x::Part` and
-/// `dyn x::Part + core::marker::Sync` are `x::Part`, a path of the trait's
+/// The trait a trait object's type name stands for: `dyn x::Part`, a
+/// higher-ranked `dyn for.. x::Part`, and `dyn x::Part + core::marker::Sync`
+/// are `x::Part` (with any generic arguments on `Part`), a path of the trait's
 /// crate, which is the only crate that can make such a type a module. The
 /// kernel's own `dyn Module` stands for a module of any crate, so it is
 /// returned as it is, with no crate to read; and so is a name that is no
@@ -768,13 +769,76 @@ fn object_trait(path: &str) -> &str {
     let Some(object) = path.strip_prefix("dyn ") else {
         return path;
     };
-    let principal = object.split(" + ").next().unwrap_or(object).trim();
+    let unquantified = strip_for_binder(object.trim_start());
+    let principal = principal_trait(unquantified);
     let any_module = std::any::type_name::<dyn crate::Module>();
     if any_module.strip_prefix("dyn ") == Some(principal) {
         path
     } else {
         principal
     }
+}
+
+/// Strips a leading higher-ranked `for` binder from `s`, matching nested angle
+/// brackets while ignoring `->` in function types.
+fn strip_for_binder(s: &str) -> &str {
+    let Some(after_for) = s.strip_prefix("for") else {
+        return s;
+    };
+    let trimmed = after_for.trim_start();
+    if !trimmed.starts_with('<') {
+        return s;
+    }
+    let bytes = trimmed.as_bytes();
+    let mut depth = 0_usize;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'<' => depth += 1,
+            b'>' if i > 0 && bytes[i - 1] == b'-' => {}
+            b'>' => {
+                depth -= 1;
+                if depth == 0 {
+                    return trimmed[i + 1..].trim_start();
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    s
+}
+
+/// The principal trait before any top-level ` + ` auto-trait bounds in `s`,
+/// ignoring ` + ` inside angle brackets, parentheses or square brackets, and
+/// ignoring `->` when counting angle brackets.
+fn principal_trait(s: &str) -> &str {
+    let bytes = s.as_bytes();
+    let mut angles = 0_usize;
+    let mut parens = 0_usize;
+    let mut brackets = 0_usize;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'<' => angles += 1,
+            b'>' if i > 0 && bytes[i - 1] == b'-' => {}
+            b'>' => angles = angles.saturating_sub(1),
+            b'(' => parens += 1,
+            b')' => parens = parens.saturating_sub(1),
+            b'[' => brackets += 1,
+            b']' => brackets = brackets.saturating_sub(1),
+            b' ' if angles == 0
+                && parens == 0
+                && brackets == 0
+                && bytes[i..].starts_with(b" + ") =>
+            {
+                return s[..i].trim();
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    s.trim()
 }
 
 /// Whether the plugin `info`, whose modules have the types `type_names`, is
@@ -943,6 +1007,34 @@ mod tests {
         assert_eq!(
             module_path(std::any::type_name::<Box<dyn crate::Module>>()),
             std::any::type_name::<dyn crate::Module>()
+        );
+        // Higher-ranked trait objects and nested ` + ` or `->` inside generic arguments or
+        // function parentheses peel cleanly to the principal trait.
+        assert_eq!(
+            module_path("&dyn for<'a> navree_plugin_khata::Part<'a>"),
+            "navree_plugin_khata::Part<'a>"
+        );
+        assert_eq!(
+            module_path(
+                "alloc::boxed::Box<dyn for<'a> navree_plugin_khata::Part<fn(&'a str) -> &'a str> + core::marker::Send + core::marker::Sync>"
+            ),
+            "navree_plugin_khata::Part<fn(&'a str) -> &'a str>"
+        );
+        assert_eq!(
+            module_path(
+                "&dyn for<'a> navree_plugin_khata::Call(&'a (dyn core::marker::Send + core::marker::Sync)) -> &'a str + core::marker::Sync"
+            ),
+            "navree_plugin_khata::Call(&'a (dyn core::marker::Send + core::marker::Sync)) -> &'a str"
+        );
+        assert_eq!(
+            module_path("&dyn forecast::Part + core::marker::Sync"),
+            "forecast::Part"
+        );
+        assert_eq!(
+            module_path(
+                "alloc::boxed::Box<dyn for<'a> navree_kernel::module::Module + core::marker::Send>"
+            ),
+            "dyn for<'a> navree_kernel::module::Module + core::marker::Send"
         );
         // First-party reads the module's type the same way.
         let listed = [("navree-flags", "navree_flags")];

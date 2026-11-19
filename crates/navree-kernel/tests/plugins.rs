@@ -1534,6 +1534,204 @@ fn a_module_typed_as_a_trait_object_acts_for_the_plugin_of_the_traits_crate() {
     );
 }
 
+// Higher-ranked trait object modules and boxed `dyn Module` values.
+
+mod navree_plugin_higher_parts {
+    use navree_kernel::{CommandSpec, Module, ModuleBuilder, ModuleId, PluginInfo};
+
+    const HIGHER: PluginInfo =
+        PluginInfo::new("navree-plugin-higher", module_path!(), "higher", "1.0.0");
+
+    /// A lifetime-generic trait of the plugin's crate.
+    pub trait HigherPart<'a>: Send + Sync {
+        fn command(&self, label: &'a str) -> &'static str;
+    }
+
+    /// A trait with a type parameter that carries function arrows and nested trait bounds.
+    pub trait HigherFnPart<F>: Send + Sync {
+        fn command(&self) -> &'static str;
+    }
+
+    pub struct HigherGear;
+
+    impl<'a> HigherPart<'a> for HigherGear {
+        fn command(&self, _label: &'a str) -> &'static str {
+            "check"
+        }
+    }
+
+    impl<F> HigherFnPart<F> for HigherGear {
+        fn command(&self) -> &'static str {
+            "serve"
+        }
+    }
+
+    pub static THE_HIGHER_PART: &dyn for<'a> HigherPart<'a> = &HigherGear;
+
+    impl Module for &'static dyn for<'a> HigherPart<'a> {
+        fn id(&self) -> ModuleId {
+            ModuleId::named::<String>("higher-ref")
+        }
+
+        fn register(&self, m: &mut ModuleBuilder) {
+            let cmd = CommandSpec::new(self.command("ludhiana"), "Higher", |_, _| async { Ok(()) });
+            m.command(cmd);
+        }
+    }
+
+    impl Module
+        for Box<
+            dyn for<'a> HigherFnPart<fn(&'a (dyn Send + Sync)) -> &'a (dyn Send + Sync)>
+                + Send
+                + Sync,
+        >
+    {
+        fn id(&self) -> ModuleId {
+            ModuleId::named::<String>("higher-box")
+        }
+
+        fn register(&self, m: &mut ModuleBuilder) {
+            let cmd = CommandSpec::new(self.command(), "Higher fn", |_, _| async { Ok(()) });
+            m.command(cmd);
+        }
+    }
+
+    pub struct HigherPlugin;
+
+    impl Module for HigherPlugin {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(HIGHER);
+        }
+    }
+
+    pub fn boxed_fn_part() -> Box<
+        dyn for<'a> HigherFnPart<fn(&'a (dyn Send + Sync)) -> &'a (dyn Send + Sync)> + Send + Sync,
+    > {
+        Box::new(HigherGear)
+    }
+}
+
+#[test]
+fn a_higher_ranked_trait_object_module_acts_for_the_plugin_of_its_traits_crate() {
+    use navree_plugin_higher_parts::{HigherPlugin, THE_HIGHER_PART, boxed_fn_part};
+
+    // Passed directly to the app root or in a tuple from an app module (`importers` is the
+    // app, not the plugin!): `for<'a>` and `->` and nested `dyn Send + Sync` are peeled to the
+    // trait's crate, so both act for `navree-plugin-higher` and are refused.
+    assert_eq!(
+        errors(Navree::app().module(HigherPlugin).module(THE_HIGHER_PART)),
+        "plugin `navree-plugin-higher` registers the command `check` in `higher-ref` (a module of the plugin's crate `plugins::navree_plugin_higher_parts`), a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise"
+    );
+
+    struct AppTupleImporter;
+    impl Module for AppTupleImporter {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.imports((HigherPlugin, boxed_fn_part()));
+        }
+    }
+    assert_eq!(
+        errors(Navree::app().module(AppTupleImporter)),
+        "plugin `navree-plugin-higher` registers the command `serve` in `higher-box` (a module of the plugin's crate `plugins::navree_plugin_higher_parts`), a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise"
+    );
+}
+
+#[tokio::test]
+async fn a_boxed_module_keeps_its_concrete_type_for_first_party_and_framework_checks() {
+    use navree_kernel::__private::{PlainModule, is_app_module};
+    use navree_plugin_khata::KhataModule;
+
+    // A plain framework module (`PlainModule`), or its configured wrapper, imported only by a
+    // community plugin inside `Vec<Box<dyn Module>>`, nested `Box<dyn Module>` or
+    // `Pin<Box<dyn Module>>` recovers its `navree_kernel::..` type and still acts for no plugin.
+    let app = Navree::app()
+        .module(KhataModule(|m| {
+            let nested: Box<dyn Module> = Box::new(Box::new(PlainModule) as Box<dyn Module>);
+            let mods: Vec<Box<dyn Module>> = vec![nested];
+            m.imports(mods);
+        }))
+        .boot()
+        .await
+        .expect("boxed framework module boots");
+    let plain = ModuleId::of::<PlainModule>();
+    assert_eq!(acting_for(&app, plain), None);
+    assert!(is_app_module(app.ctx(), plain));
+
+    let pinned: std::pin::Pin<Box<dyn Module>> = Box::pin(PlainModule::from_config());
+    let app = Navree::app()
+        .module(pinned)
+        .module(KhataModule(|_| {}))
+        .boot()
+        .await
+        .expect("pinned configured framework module boots");
+    assert_eq!(acting_for(&app, plain), None);
+
+    // A community plugin's unnamed helper passed to the app as `Box<dyn Module>` with a
+    // `String`-typed id still recovers its concrete crate type and acts for its plugin.
+    mod navree_plugin_khata_boxed {
+        use navree_kernel::{CommandSpec, Module, ModuleBuilder, ModuleId, PluginInfo};
+
+        pub const INFO: PluginInfo = PluginInfo::new(
+            "navree-plugin-khata-boxed",
+            module_path!(),
+            "khata_boxed",
+            "1.0.0",
+        );
+
+        pub struct BoxedPlugin;
+        impl Module for BoxedPlugin {
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.plugin(INFO);
+            }
+        }
+
+        pub struct ErasedHelper;
+        impl Module for ErasedHelper {
+            fn id(&self) -> ModuleId {
+                ModuleId::named::<String>("erased-helper")
+            }
+            fn register(&self, m: &mut ModuleBuilder) {
+                m.command(CommandSpec::new("serve", "Erased", |_, _| async { Ok(()) }));
+            }
+        }
+    }
+    let erased: Box<dyn Module> = Box::new(navree_plugin_khata_boxed::ErasedHelper);
+    assert_eq!(
+        errors(
+            Navree::app()
+                .module(navree_plugin_khata_boxed::BoxedPlugin)
+                .module(erased)
+        ),
+        format!(
+            "plugin `navree-plugin-khata-boxed` registers the command `serve` in `erased-helper` (a module of the plugin's crate `{}`), a command of the framework's own; only a module of the app may take its name: remove the plugin or update it to a version that names its command otherwise",
+            navree_plugin_khata_boxed::INFO.crate_name
+        )
+    );
+
+    // A boxed module in another crate returning a framework module's `ModuleId` and naming a
+    // first-party plugin still has its own concrete type recovered through the sealed method and
+    // is refused in a reserved namespace.
+    struct SpoofedFlags;
+    impl Module for SpoofedFlags {
+        fn id(&self) -> ModuleId {
+            ModuleId::of::<PlainModule>()
+        }
+
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(PluginInfo::new(
+                "navree-flags",
+                "plugins",
+                "flags",
+                env!("CARGO_PKG_VERSION"),
+            ));
+        }
+    }
+    let spoofed: Box<dyn Module> = Box::new(SpoofedFlags);
+    assert_eq!(
+        errors(Navree::app().module(spoofed)),
+        "plugin `navree-flags` uses the namespace `flags`, which the framework keeps for itself; remove the plugin or update it to a version that uses another namespace"
+    );
+}
+
 // A plugin's second crate.
 
 /// A second crate that names no plugin, such as a plugin's `-core` crate.

@@ -258,16 +258,20 @@ impl Graph {
     }
 
     /// [`build_passed`](Graph::build_passed) for root modules passed already
-    /// boxed: each has the type `Box<dyn Module>`.
+    /// boxed: each recovers its concrete type.
     #[cfg(test)]
     pub(crate) fn build(
         roots: &[Box<dyn Module>],
         overrides: &[ProviderDef],
     ) -> Result<Graph, BootErrors> {
-        let boxed = std::any::type_name::<Box<dyn Module>>();
         let roots: Vec<(&dyn Module, &'static str)> = roots
             .iter()
-            .map(|module| (module.as_ref(), boxed))
+            .map(|module| {
+                (
+                    module.as_ref(),
+                    crate::module::resolved_type_name(module.as_ref()),
+                )
+            })
             .collect();
         Self::build_from(&roots, overrides)
     }

@@ -73,20 +73,21 @@ pub struct PassedModule {
 }
 
 impl PassedModule {
-    /// `module`, passed as a value of type `M`: it records `M`'s type.
+    /// `module`, passed as a value of type `M`: it records `M`'s concrete type
+    /// (unwrapping erased `dyn Module` wrappers).
     pub fn of<M: Module>(module: M) -> PassedModule {
+        let type_name = crate::module::resolved_type_name(&module);
         PassedModule {
             module: Box::new(module),
-            type_name: std::any::type_name::<M>(),
+            type_name,
         }
     }
 
-    /// `module`, passed already boxed: it records the type `Box<dyn Module>`.
+    /// `module`, passed already boxed: it recovers the inner module's concrete
+    /// type.
     pub(crate) fn boxed(module: Box<dyn Module>) -> PassedModule {
-        PassedModule {
-            module,
-            type_name: std::any::type_name::<Box<dyn Module>>(),
-        }
+        let type_name = crate::module::resolved_type_name(module.as_ref());
+        PassedModule { module, type_name }
     }
 
     /// The module's readable name.
@@ -502,14 +503,26 @@ mod tests {
         assert_eq!(recorded(ModuleId::of::<Single>()), type_name::<Single>());
         assert_eq!(recorded(ModuleId::of::<First>()), type_name::<First>());
         assert_eq!(recorded(ModuleId::of::<Second>()), type_name::<Second>());
-        assert_eq!(
-            recorded(ModuleId::of::<Boxed>()),
-            type_name::<Box<dyn Module>>()
-        );
+        assert_eq!(recorded(ModuleId::of::<Boxed>()), type_name::<Boxed>());
         assert_eq!(
             recorded(ModuleId::of::<Configured>()),
             type_name::<ConfiguredModule<Configured, ()>>()
         );
+
+        // Nested `Box<dyn Module>` and `Pin<Box<dyn Module>>` wrappers recover the inner
+        // concrete module type as well.
+        let nested_box: Box<dyn Module> = Box::new(Box::new(Single) as Box<dyn Module>);
+        assert_eq!(
+            PassedModule::boxed(nested_box).type_name,
+            type_name::<Single>()
+        );
+        let direct_box: Box<dyn Module> = Box::new(Single);
+        assert_eq!(
+            PassedModule::of(direct_box).type_name,
+            type_name::<Single>()
+        );
+        let pinned: std::pin::Pin<Box<dyn Module>> = Box::pin(Single);
+        assert_eq!(PassedModule::of(pinned).type_name, type_name::<Single>());
     }
 
     #[test]

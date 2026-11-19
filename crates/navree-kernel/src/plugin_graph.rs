@@ -901,17 +901,23 @@ mod tests {
             Some(0)
         );
 
-        // In a module graph: a boxed module with a first-party module's id is never given to
-        // the first-party plugin; imported by the app it stays the app's, and imported only by
-        // a community plugin it acts for that community plugin.
+        // In a module graph: a boxed module with a first-party module's id recovers its own
+        // crate's type and is never given to the first-party plugin; imported by the app it
+        // stays the app's, and imported only by a community plugin from a non-framework crate
+        // it acts for that community plugin.
+        struct FirstPartyProbe;
+        impl Module for FirstPartyProbe {
+            fn register(&self, _: &mut ModuleBuilder) {}
+        }
+
         mod other_crate {
-            use super::{FirstPartyModule, Module, ModuleBuilder, ModuleId};
+            use crate::{Module, ModuleBuilder, ModuleId};
 
-            pub struct TakesFirstPartyId;
+            pub struct TakesFirstPartyId<M>(pub std::marker::PhantomData<M>);
 
-            impl Module for TakesFirstPartyId {
+            impl<M: Send + Sync + 'static> Module for TakesFirstPartyId<M> {
                 fn id(&self) -> ModuleId {
-                    ModuleId::named::<FirstPartyModule>("sneak")
+                    ModuleId::named::<M>("sneak")
                 }
 
                 fn register(&self, _: &mut ModuleBuilder) {}
@@ -922,31 +928,39 @@ mod tests {
         impl Module for CommunityBoxed {
             fn register(&self, m: &mut ModuleBuilder) {
                 m.imports(vec![
-                    Box::new(other_crate::TakesFirstPartyId) as Box<dyn Module>
+                    Box::new(other_crate::TakesFirstPartyId::<FirstPartyProbe>(
+                        std::marker::PhantomData,
+                    )) as Box<dyn Module>,
                 ]);
             }
         }
 
-        let sneak_id = ModuleId::named::<FirstPartyModule>("sneak");
-        let graph = Graph::build_passed(
+        let first_party_crate_name = "navree_flags";
+        let sneak_id = ModuleId::named::<FirstPartyProbe>("sneak");
+        let mut graph = Graph::build_passed(
             &[
-                PassedModule::of(FirstPartyModule),
+                PassedModule::of(FirstPartyProbe),
                 PassedModule::of(CommunityBoxed),
             ],
             &[],
         )
         .expect("valid");
         let first_party = graph
-            .module_of(ModuleId::of::<FirstPartyModule>())
+            .module_of(ModuleId::of::<FirstPartyProbe>())
             .expect("in the graph");
         let community = graph
             .module_of(ModuleId::of::<CommunityBoxed>())
             .expect("in the graph");
         let sneak = graph.module_of(sneak_id).expect("in the graph");
+        assert_eq!(
+            graph.modules[sneak].type_name,
+            std::any::type_name::<other_crate::TakesFirstPartyId<FirstPartyProbe>>()
+        );
+        graph.modules[sneak].type_name = "khata_extra::TakesFirstPartyId";
         let groups = [
             PluginGroup {
                 first: first_party,
-                crate_name: module_path!(),
+                crate_name: first_party_crate_name,
                 first_party: true,
                 members: vec![first_party],
             },
@@ -957,29 +971,26 @@ mod tests {
                 members: vec![community],
             },
         ];
-        assert_eq!(
-            graph.modules[sneak].type_name,
-            std::any::type_name::<Box<dyn Module>>()
-        );
         let acts_for = graph.attribution(&groups);
         assert_eq!(acts_for[sneak], Some(community));
 
-        let mut app_graph = Graph::build_passed(
+        let app_graph = Graph::build_passed(
             &[
-                PassedModule::of(FirstPartyModule),
-                PassedModule::boxed(Box::new(other_crate::TakesFirstPartyId)),
+                PassedModule::of(FirstPartyProbe),
+                PassedModule::boxed(Box::new(other_crate::TakesFirstPartyId::<FirstPartyProbe>(
+                    std::marker::PhantomData,
+                ))),
             ],
             &[],
         )
         .expect("valid");
         let first_party = app_graph
-            .module_of(ModuleId::of::<FirstPartyModule>())
+            .module_of(ModuleId::of::<FirstPartyProbe>())
             .expect("in the graph");
         let sneak = app_graph.module_of(sneak_id).expect("in the graph");
-        app_graph.modules[sneak].type_name = "khata_extra::TakesFirstPartyId";
         let only_first = [PluginGroup {
             first: first_party,
-            crate_name: module_path!(),
+            crate_name: first_party_crate_name,
             first_party: true,
             members: vec![first_party],
         }];
