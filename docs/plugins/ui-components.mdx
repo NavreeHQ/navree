@@ -1,0 +1,122 @@
+---
+title: "Components for Navree UI"
+description: "Ship a server-rendered component, its scoped stylesheet, its browser module and the page-policy sources it asks for inside a plugin, scaffolded with navree make:component."
+---
+
+A plugin can ship typed [Navree UI](/docs/ui/overview/) components alongside its server routes and configuration. `plugins/geo` in the Navree repository is the worked example: it ships `MapView` (a server-rendered place card enhanced by a Leaflet map in the browser) and `LOCATION` (a `FieldControl` for picking coordinates inside Ludhiana, Jalandhar, and Amritsar). See [Build your own component](/docs/ui/your-own-components/) for the Rust authoring macros and [The browser contract](/docs/ui/extension-contract/) for how an extension script runs in the browser.
+
+## Components in a plugin
+
+A plugin component is a plain Rust struct that renders to a `Node` on the server (`navree::ui::component_methods!` and `component_node!`), paired with an optional `UiExtension` static that embeds its browser module and stylesheet at compile time:
+
+```rust title="plugins/geo/src/ui/map.rs"
+// plugins/geo/src/ui/map.rs
+pub static MAP: UiExtension = UiExtension::new("geo", "map")
+    .script(extension_script!("assets/map.js", 200 * 1024))
+    .sheet(extension_sheet!("assets/map.css", "geo", 32 * 1024))
+    .contract(1)
+    .keeps(&["data-moving"])
+    .routes(&["/geo/"]);
+```
+
+To read, scope, and content-hash component files when the plugin crate compiles, turn on `ui-extension-files` in the plugin crate's own `[dependencies]`:
+
+```toml title="Cargo.toml"
+[dependencies]
+navree = { version = "1.4", default-features = false, features = ["ui", "ui-extension-files"] }
+```
+
+Every part of the component stays inside the plugin's namespace (`geo`; see [Plugins](/docs/plugins/overview/)):
+
+- **Extension stem.** `UiExtension::new("geo", "map")` serves its files under `/_navree/ui/ext/geo.map-<hash>.js` and `.css`, and a page links and preloads them only when an element on that page attaches `.extension(&MAP)` or `.extension_with(&MAP, &props)`.
+- **Slots.** Every element's `data-slot` starts with `geo:` (`geo:map`, `geo:map-body`, `geo:place`). An owned body marked `.flag("data-ui-keep", true)` is sealed before the script mounts so a third-party library drawing inside it cannot inject runtime directives or form controls.
+- **Scoped stylesheet.** `extension_sheet!("assets/map.css", "geo", 32 * 1024)` parses the CSS at compile time, wraps selectors inside `:where([data-slot^="geo:"])`, and requires hoisted `@keyframes` (`geo--spin`) and `@property` / timeline names (`--geo--pin`) to carry the `geo` prefix.
+- **Callable routes.** `.routes(&["/geo/"])` declares which server prefixes `ui.call(..)` may reach from the browser module; keep them under `/<namespace>/`.
+
+## make:component
+
+Scaffold a component (and optionally its browser script, scoped stylesheet, browser test, and `FieldControl`) inside a plugin crate with `navree make:component`:
+
+```sh
+navree make:component drop_point --path plugins/geo --script --sheet --field
+```
+
+| Argument or option | What it does |
+|---|---|
+| `NAME` | Component name in `snake_case` (`drop_point`): generates struct `DropPoint`, extension `"drop-point"`, slot `geo:drop-point`, and static `DROP_POINT`. |
+| `--path DIR` | Target crate directory (`.` by default). Reads the namespace from `[package.metadata.navree.plugin]` (or `[package].name`), falling back to `app` in an app crate. |
+| `--script` | Adds `extension_script!("assets/drop-point.js", ..)`, `.contract(1)`, and `.routes(&["/geo/"])`, writes the contract-1 skeleton in `assets/drop-point.js`, and creates the ignored Chrome test `tests/browser_drop_point.rs`. |
+| `--sheet` | Adds `extension_sheet!("assets/drop-point.css", "geo", ..)` and writes `assets/drop-point.css`. |
+| `--field` | Also generates `DROP_POINT_CONTROL: FieldControl` and its control-rules unit test. |
+| `--dry-run`, `--force` | Print every file without writing, or overwrite existing generated files. |
+
+When `--script` or `--sheet` is passed, `make:component` declares `pub mod drop_point;` in `src/ui/mod.rs`, enables `ui-extension-files` on `navree` in `Cargo.toml`, and inserts `m.contribute(ui::drop_point::DROP_POINT);` directly above `// navree:wire` in `src/lib.rs`:
+
+```text
+  created  src/ui/drop_point.rs
+  created  assets/drop-point.js
+  created  assets/drop-point.css
+  created  tests/browser_drop_point.rs
+  edited   src/ui/mod.rs
+  wired    m.contribute(ui::drop_point::DROP_POINT) (src/lib.rs)
+  feature  navree: ui-extension-files (Cargo.toml)
+  next     cargo test the_drop_point_follows_the_component_rules
+```
+
+If `// navree:wire` was removed from `src/lib.rs`, `make:component` leaves `src/lib.rs` untouched and prints the `m.contribute(..)` line to add yourself.
+
+## Page sources and plugin:add
+
+Navree UI serves every page with a strict `Content-Security-Policy` that blocks third-party hosts by default (see [The page policy](/docs/ui/page-policy/)). When a plugin's component needs images, media, `fetch` connections, fonts, or WebAssembly, its module contributes `PageSources` in `register`:
+
+```rust title="plugins/geo/src/lib.rs"
+// plugins/geo/src/lib.rs
+        m.contribute(ui::map::MAP);
+        // Asking allows nothing: the app's `ui.policy` section decides.
+        m.contribute(PageSources::new().ask(
+            Directive::ImgSrc,
+            "https://tile.openstreetmap.org",
+            "map tiles",
+        ));
+        m.controller::<routes::GeoController>();
+```
+
+Asking for a source never opens the page policy on its own:
+
+- **Before the app allows it**, the `Content-Security-Policy` header stays unchanged, the component renders its server fallback (`Map unavailable` alongside the place name and coordinates), and the boot logs a warning naming the exact key to set:
+
+  ```text wrap
+  page policy: plugin `geo` asks for img-src https://tile.openstreetmap.org (map tiles), which the app does not allow; what needs it shows its fallback (allow it with ui.policy.allow.geo.img_src)
+  ```
+
+- **When `navree plugin:add` installs the plugin** (see [Installing, listing and removing](/docs/plugins/installing/)), it writes the requested sources **commented out** in `config/ui.policy.toml`:
+
+  ```toml title="config/ui.policy.toml"
+  # Sources every page may load beyond Navree UI's own policy: /docs/ui/page-policy/
+  [allow.geo]
+  # plugin:add navree-plugin-geo asks for these. Uncomment a line to allow it on every page.
+  # img_src = ["https://tile.openstreetmap.org"]
+  ```
+
+- **Once the app owner uncomments the line**, non-fresh pages include `https://tile.openstreetmap.org` in `img-src`, and fresh pages (`.fresh()`, such as sign-in and password screens) continue to exclude all plugin scripts and sources.
+- **WebAssembly is one switch for every page.** `PageSources::new().ask_wasm("barcode decoder")` asks for `wasm-unsafe-eval`, which the app allows with `ui.policy.wasm = true` — opening WebAssembly for every script on every non-fresh page.
+
+## Releasing a component
+
+Before publishing a component plugin (see [Releasing a plugin](/docs/plugins/releasing/)), check four things in its `Cargo.toml` and `README.md`:
+
+```toml title="plugins/geo/Cargo.toml"
+# plugins/geo/Cargo.toml
+[package.metadata.navree.plugin]
+namespace = "geo"
+title = "Maps and places"
+module = "GeoModule"
+features = ["ui"]
+config = ["geo"]
+policy = { img_src = ["https://tile.openstreetmap.org"] }
+```
+
+1. **List `features = ["ui"]` in `[package.metadata.navree.plugin]`.** Keep `ui-extension-files` in your plugin crate's own `[dependencies]` only — the app needs `ui` to serve `ExtensionFile`s and never needs to run your compile-time CSS scoper itself.
+2. **Mirror `PageSources` in `policy`.** Declare the same `img_src`, `media_src`, `connect_src`, `font_src`, or `wasm` entries in `[package.metadata.navree.plugin].policy` that your module asks for with `PageSources`, so `navree plugin:add` writes them into `config/ui.policy.toml`.
+3. **Commit built assets.** If you bundle a library into `assets/map.js` and `assets/map.css`, commit the built files and include them in the published crate so users never need Node or a bundler to compile your plugin.
+4. **Document external origins in `README.md`.** State every origin the component asks to contact, what data reaches that origin (for example, map tile coordinates), what fallback renders when the app leaves it blocked, and the community-package line (`It is not an official Navree package.`).
