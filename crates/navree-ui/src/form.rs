@@ -197,7 +197,7 @@ impl Widget {
 /// assert!(control.check("141001", &cx).is_ok());
 /// assert_eq!(control.check("14100", &cx), Err("Enter a six-digit pin code".to_owned()));
 /// ```
-pub trait FieldControl: std::any::Any + Send + Sync + RefUnwindSafe {
+pub trait FieldControl: Send + Sync + RefUnwindSafe {
     /// The control's name: the namespace of the plugin that ships it, a dot and a name of its
     /// own, like `geo.location`.
     fn name(&self) -> &'static str;
@@ -246,6 +246,11 @@ pub trait FieldControl: std::any::Any + Send + Sync + RefUnwindSafe {
     /// it is not one.
     fn secret(&self) -> bool {
         false
+    }
+
+    #[doc(hidden)]
+    fn __navree_control_type(&self) -> &'static str {
+        std::any::type_name::<Self>()
     }
 }
 
@@ -367,16 +372,16 @@ impl Control {
         self.0.parse_error(value, cx)
     }
 
-    /// The concrete type of the control behind the reference.
-    pub(crate) fn type_id(&self) -> std::any::TypeId {
-        std::any::Any::type_id(self.0)
+    /// The concrete type name of the control behind the reference.
+    pub(crate) fn type_name(&self) -> &'static str {
+        self.0.__navree_control_type()
     }
 }
 
 /// Two controls are the same when their names and concrete types are.
 impl PartialEq for Control {
     fn eq(&self, other: &Self) -> bool {
-        self.name() == other.name() && self.type_id() == other.type_id()
+        self.name() == other.name() && self.type_name() == other.type_name()
     }
 }
 

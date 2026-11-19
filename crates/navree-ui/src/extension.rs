@@ -1144,7 +1144,7 @@ pub(crate) fn checked_controls(ctx: &AppContext) -> Result<(), String> {
     }
     let plugins = ctx.plugins().plugins;
     let mut errors: Vec<String> = Vec::new();
-    let mut firsts: Vec<(String, std::any::TypeId, &'static str)> = Vec::new();
+    let mut firsts: Vec<(String, &'static str, &'static str)> = Vec::new();
 
     for entry in &contributed {
         let control = *entry.value;
@@ -1215,7 +1215,7 @@ pub(crate) fn checked_controls(ctx: &AppContext) -> Result<(), String> {
         if let Some((_, earlier_type, earlier_module)) =
             firsts.iter().find(|(earlier, _, _)| earlier == full)
         {
-            if *earlier_type != control.type_id() {
+            if *earlier_type != control.type_name() {
                 note(
                     &mut errors,
                     format!(
@@ -1226,7 +1226,7 @@ pub(crate) fn checked_controls(ctx: &AppContext) -> Result<(), String> {
             }
             continue;
         }
-        firsts.push((full.to_owned(), control.type_id(), module.name));
+        firsts.push((full.to_owned(), control.type_name(), module.name));
     }
 
     if errors.is_empty() {
