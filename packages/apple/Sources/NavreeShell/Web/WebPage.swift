@@ -367,6 +367,7 @@ struct WebPageView {
 
             let config = parent.configuration
             guard !dismantled, isCurrent,
+                !ModalRules.isUnderLockedCover(parent.screen, in: parent.client.nav),
                 WebFileRules.allowsPanel(
                     frameURL: frameURL, mainFrame: mainFrame, site: config.site,
                     hosts: config.webHosts, directoryRequested: allowsDirectories
@@ -382,7 +383,9 @@ struct WebPageView {
                     self.finishPanel(with: nil)
                     return
                 }
-                guard !self.dismantled, self.isCurrent else {
+                guard !self.dismantled, self.isCurrent,
+                    !ModalRules.isUnderLockedCover(self.parent.screen, in: self.parent.client.nav)
+                else {
                     self.finishPanel(with: nil)
                     return
                 }
@@ -391,7 +394,12 @@ struct WebPageView {
                 let prepared = await store.prepareForWeb(
                     chosen, multiple: multiple, filmExporter: self.filmExporter
                 )
-                guard !self.dismantled, self.isCurrent else {
+                guard !self.dismantled, self.isCurrent,
+                    !ModalRules.isUnderLockedCover(self.parent.screen, in: self.parent.client.nav)
+                else {
+                    for url in prepared.kept {
+                        try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+                    }
                     self.finishPanel(with: nil)
                     return
                 }

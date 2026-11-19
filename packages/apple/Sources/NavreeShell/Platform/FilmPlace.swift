@@ -311,6 +311,7 @@ enum FilmPlace {
                 headerLen = 16
                 guard boxSize >= 16 else { return false }
             } else if size32 == 0 {
+                guard kind == "mdat" else { return false }
                 boxSize = totalSize - cursor
                 headerLen = 8
                 guard boxSize >= 8 else { return false }
