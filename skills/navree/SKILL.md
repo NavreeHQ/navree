@@ -103,6 +103,7 @@ commands, `mcp`, `skills:install`, `browser:install`, `openapi:client`,
 |---|---|
 | Start a project, run it, understand the generated files | `navree-new-app` |
 | Add or wire a service, module, import/export; boot errors such as "cannot resolve" or "private to module" | `navree-modules-and-di` |
+| Installing, writing, testing or releasing a plugin; a driver under a name of your own; connecting an existing crate | `navree-plugins` |
 | Add an endpoint, controller, path/query parameter, response type; 401/403/404/405 on a route | `navree-controllers-and-routing` |
 | Request DTOs, validation rules, `unique`/`exists`, custom messages | `navree-validation` |
 | Return a status or error, map an error type, headers, downloads, API resources | `navree-errors-and-responses` |

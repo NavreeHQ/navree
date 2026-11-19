@@ -22,6 +22,7 @@ conventions, and says which skill to load for each task.
 | [`navree`](navree/SKILL.md) | Understand a Navree app and pick the right skill |
 | [`navree-new-app`](navree-new-app/SKILL.md) | Create an app with `navree new`, set the key, run `navree dev` |
 | [`navree-modules-and-di`](navree-modules-and-di/SKILL.md) | Define modules and providers, wire dependencies, fix graph errors |
+| [`navree-plugins`](navree-plugins/SKILL.md) | Plugins: install, write, test and release one, drivers under a name, existing crates, components |
 | [`navree-controllers-and-routing`](navree-controllers-and-routing/SKILL.md) | Add controllers, routes, extractors and access attributes |
 | [`navree-validation`](navree-validation/SKILL.md) | Validate request bodies and query strings |
 | [`navree-errors-and-responses`](navree-errors-and-responses/SKILL.md) | Return errors in Navree's JSON shape, map error types, shape responses |
