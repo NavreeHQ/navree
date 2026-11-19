@@ -2,7 +2,7 @@
 
 Notice board for a Navree app. It is not an official Navree package.
 
-This crate is in the Navree repository as a worked example, built from the public API only. To use it in your own app, copy the folder and set the `navree` line to `navree = { version = "1.4", features = ["helm", "orm", "queue", "schedule", "ui", "view"] }`, with the same features.
+This crate is in the Navree repository as a worked example, built from the public API only. To use it in your own app, copy the folder and update both `navree` entries in its `Cargo.toml` (`[dependencies]` and `[dev-dependencies]`) to `version = "1.4", default-features = false`, keeping each entry's `features` list.
 
 ## Install
 
@@ -12,10 +12,10 @@ In your app:
 navree plugin:add --path plugins/notices
 ```
 
-Or wire it by hand in `Cargo.toml` and `src/app.rs`:
+Or wire it by hand in `Cargo.toml` (adding `notices`'s six features alongside the `navree` features your app already uses) and `src/app.rs`:
 
 ```toml
-navree = { version = "1.4", features = ["helm", "orm", "queue", "schedule", "ui", "view"] }
+navree = { version = "1.4", features = ["helm", "orm", "queue", "schedule", "ui", "view"] } # plus your app's own features
 navree-plugin-notices = { path = "plugins/notices" }
 ```
 
@@ -25,10 +25,9 @@ navree-plugin-notices = { path = "plugins/notices" }
 
 ## Configuration
 
-Section `[notices]` in `config/notices.toml` (published by `navree config:publish --plugin notices`):
+Keys in `config/notices.toml` (published by `navree config:publish --plugin notices`; `config/notices.toml` is already scoped to `[notices]`, so keys sit at the top level):
 
 ```toml
-[notices]
 enabled = true
 keep_days = 30
 digest_from = "notices@ludhiana-society.example"

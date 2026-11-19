@@ -2,7 +2,7 @@
 
 Godam disks plugin for Navree apps. It is not an official Navree package.
 
-This crate is in the Navree repository as a worked example, built from the public API only. To use it in your own app, copy the folder and set the `navree` line to `navree = { version = "1.4", features = ["storage"] }`, with the same features. When copying the folder outside the Navree repository, also remove `tests/conformance.rs` and the four `navree-*` path entries in `[dev-dependencies]` (`tests/boots.rs` and `tests/contract.rs` depend on `navree` alone).
+This crate is in the Navree repository as a worked example, built from the public API only. To use it in your own app, copy the folder and update both `navree` entries in its `Cargo.toml` (`[dependencies]` and `[dev-dependencies]`) to `version = "1.4", default-features = false`, keeping each entry's `features` list. When copying the folder outside the Navree repository, also remove `tests/conformance.rs` and the four `navree-*` path entries in `[dev-dependencies]` (`tests/boots.rs` and `tests/contract.rs` depend on `navree` alone).
 
 ## Install
 

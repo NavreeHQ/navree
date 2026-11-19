@@ -56,7 +56,9 @@ impl Controller for NoticesController {
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         let page_ctrl = self.clone();
+        let list_ctrl = self.clone();
         let create_ctrl = self.clone();
+        let remove_ctrl = self;
         vec![
             RouteDef::on(
                 Method::GET,
@@ -68,7 +70,11 @@ impl Controller for NoticesController {
             )
             .page()
             .permissions(&["notices.read"]),
-            RouteDef::on(Method::GET, "/notices", list_json).permissions(&["notices.read"]),
+            RouteDef::on(Method::GET, "/notices", move |uow: Uow| {
+                let ctrl = list_ctrl.clone();
+                async move { ctrl.list_json(uow).await }
+            })
+            .permissions(&["notices.read"]),
             RouteDef::on(
                 Method::POST,
                 "/notices",
@@ -78,13 +84,30 @@ impl Controller for NoticesController {
                 },
             )
             .permissions(&["notices.publish"]),
-            RouteDef::on(Method::DELETE, "/notices/{id}", remove).permissions(&["notices.publish"]),
+            RouteDef::on(
+                Method::DELETE,
+                "/notices/{id}",
+                move |id: Path<i64>, uow: Uow| {
+                    let ctrl = remove_ctrl.clone();
+                    async move { ctrl.remove(id, uow).await }
+                },
+            )
+            .permissions(&["notices.publish"]),
         ]
     }
 }
 
 impl NoticesController {
+    async fn active_options(&self) -> Result<options::NoticesOptions> {
+        let settings = options::load(&self.app).await.map_err(AppError::internal)?;
+        if !settings.enabled {
+            return Err(AppError::not_found());
+        }
+        Ok(settings)
+    }
+
     async fn board(&self, shell: AppShell, uow: Uow) -> Result<AppPage> {
+        self.active_options().await?;
         let notices = notice::Model::query()
             .latest()
             .get(&uow)
@@ -98,13 +121,24 @@ impl NoticesController {
         Ok(pages::board_page(shell, "Notices", html))
     }
 
+    async fn list_json(&self, uow: Uow) -> Result<Json<Vec<notice::Model>>> {
+        self.active_options().await?;
+        let rows = notice::Model::query()
+            .latest()
+            .get(&uow)
+            .await
+            .map_err(AppError::internal)?
+            .into_models();
+        Ok(Json(rows))
+    }
+
     async fn create(
         &self,
         CurrentPrincipal(principal): CurrentPrincipal,
         uow: Uow,
         Valid(Json(input)): Valid<Json<NewNotice>>,
     ) -> Result<Created<notice::Model>> {
-        let settings = options::load(&self.app).await.map_err(AppError::internal)?;
+        let settings = self.active_options().await?;
         let now = match self.app.try_get::<dyn Clock>().await {
             Some(clock) => clock.now(),
             None => Utc::now(),
@@ -122,27 +156,18 @@ impl NoticesController {
         let row = record.into_inner();
         Ok(Created(format!("/api/notices/{}", row.id), row))
     }
-}
 
-async fn list_json(uow: Uow) -> Result<Json<Vec<notice::Model>>> {
-    let rows = notice::Model::query()
-        .latest()
-        .get(&uow)
-        .await
-        .map_err(AppError::internal)?
-        .into_models();
-    Ok(Json(rows))
-}
-
-async fn remove(Path(id): Path<i64>, uow: Uow) -> Result<NoContent> {
-    let deleted = notice::Model::query()
-        .where_key(id)
-        .delete(&uow)
-        .await
-        .map_err(AppError::internal)?;
-    if deleted == 0 {
-        return Err(AppError::not_found());
+    async fn remove(&self, Path(id): Path<i64>, uow: Uow) -> Result<NoContent> {
+        self.active_options().await?;
+        let deleted = notice::Model::query()
+            .where_key(id)
+            .delete(&uow)
+            .await
+            .map_err(AppError::internal)?;
+        if deleted == 0 {
+            return Err(AppError::not_found());
+        }
+        uow.commit().await.map_err(AppError::internal)?;
+        Ok(NoContent)
     }
-    uow.commit().await.map_err(AppError::internal)?;
-    Ok(NoContent)
 }

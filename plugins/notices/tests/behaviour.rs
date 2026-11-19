@@ -902,3 +902,87 @@ async fn its_sheet_is_served_under_its_namespace() {
 
     app.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn setting_notices_enabled_false_disables_routes_and_expiry() {
+    let grant_all = AccessOptions {
+        abilities: |_, rules| {
+            rules.can(MANAGE, ALL);
+        },
+        super_admin_role: None,
+    };
+
+    let app = servers::database(TestApp::builder())
+        .config("app.key", generate_key())
+        .config("http.per_ip_rate_limit", Value::Null)
+        .config("notices.enabled", false)
+        .config("notices.keep_days", 7)
+        .module(CryptoModule)
+        .module(DatabaseModule::from_config())
+        .module(OrmModule)
+        .module(AccessModule::for_root(grant_all))
+        .module(ViewModule::from_config())
+        .module(UiModule)
+        .module(SocietyShell)
+        .module(NoticesModule::from_config())
+        .build()
+        .await;
+
+    let simran = Uuid::now_v7();
+    let db = app.get::<Db>().await;
+    let uow = db.uow(None, None).await;
+    let old = Utc.with_ymd_and_hms(2026, 10, 1, 6, 0, 0).unwrap();
+    let mut row = Record::new(notice::Model {
+        id: 0,
+        title: "Lift maintenance in Block C".to_owned(),
+        body: "Scheduled inspection at Model Town, Ludhiana.".to_owned(),
+        posted_by: simran,
+        expires_at: old + TimeDelta::days(1),
+        created_at: old,
+    });
+    row.save(&uow).await.expect("insert expired notice");
+    uow.commit().await.expect("commit notice");
+
+    // Every page and API route returns 404 when `notices.enabled = false`.
+    app.acting_as(principal(simran))
+        .get("/notices")
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(404);
+    app.acting_as(principal(simran))
+        .get("/api/notices")
+        .send()
+        .await
+        .assert_status(404);
+    app.acting_as(principal(simran))
+        .post("/api/notices")
+        .json(&json!({
+            "title": "Water supply off on Sunday",
+            "body": "Tank cleaning at Model Town, Ludhiana, from 6 am to 10 am IST."
+        }))
+        .send()
+        .await
+        .assert_status(404);
+    app.acting_as(principal(simran))
+        .delete(&format!("/api/notices/{}", row.id))
+        .send()
+        .await
+        .assert_status(404);
+
+    // `expire_notices` does nothing while `notices.enabled = false`, leaving existing rows intact.
+    let removed = navree_plugin_notices::expire_notices(app.ctx())
+        .await
+        .expect("expire_notices succeeds when disabled");
+    assert_eq!(removed, 0);
+
+    let uow = db.uow(None, None).await;
+    assert!(
+        notice::Model::find(&uow, row.id)
+            .await
+            .expect("query notice")
+            .is_some()
+    );
+
+    app.shutdown().await.unwrap();
+}

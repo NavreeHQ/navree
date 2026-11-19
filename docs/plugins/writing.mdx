@@ -231,7 +231,9 @@ impl Controller for NoticesController {
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
         let page_ctrl = self.clone();
+        let list_ctrl = self.clone();
         let create_ctrl = self.clone();
+        let remove_ctrl = self;
         vec![
             RouteDef::on(
                 Method::GET,
@@ -243,7 +245,11 @@ impl Controller for NoticesController {
             )
             .page()
             .permissions(&["notices.read"]),
-            RouteDef::on(Method::GET, "/notices", list_json).permissions(&["notices.read"]),
+            RouteDef::on(Method::GET, "/notices", move |uow: Uow| {
+                let ctrl = list_ctrl.clone();
+                async move { ctrl.list_json(uow).await }
+            })
+            .permissions(&["notices.read"]),
             RouteDef::on(
                 Method::POST,
                 "/notices",
@@ -253,7 +259,15 @@ impl Controller for NoticesController {
                 },
             )
             .permissions(&["notices.publish"]),
-            RouteDef::on(Method::DELETE, "/notices/{id}", remove).permissions(&["notices.publish"]),
+            RouteDef::on(
+                Method::DELETE,
+                "/notices/{id}",
+                move |id: Path<i64>, uow: Uow| {
+                    let ctrl = remove_ctrl.clone();
+                    async move { ctrl.remove(id, uow).await }
+                },
+            )
+            .permissions(&["notices.publish"]),
         ]
     }
 }
@@ -306,6 +320,9 @@ impl Job for ExpireNotices {
 /// than `notices.keep_days`, returning how many rows were removed.
 pub async fn expire_notices(app: &AppContext) -> Result<u64, BoxError> {
     let settings = options::load(app).await?;
+    if !settings.enabled {
+        return Ok(0);
+    }
     let now = match app.try_get::<dyn Clock>().await {
         Some(clock) => clock.now(),
         None => Utc::now(),

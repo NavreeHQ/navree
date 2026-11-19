@@ -27,6 +27,9 @@ impl Job for ExpireNotices {
 /// than `notices.keep_days`, returning how many rows were removed.
 pub async fn expire_notices(app: &AppContext) -> Result<u64, BoxError> {
     let settings = options::load(app).await?;
+    if !settings.enabled {
+        return Ok(0);
+    }
     let now = match app.try_get::<dyn Clock>().await {
         Some(clock) => clock.now(),
         None => Utc::now(),
