@@ -67,6 +67,12 @@ criteria = "safe-to-deploy"
 delta = "0.14.4 -> 0.14.6"
 notes = "Diff reviewed. Bumps prost and html_root_url to 0.14.6; no library code changes, no build script, no unsafe, no I/O. Published from github:tokio-rs/prost."
 
+[[audits.rand]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.10.3 -> 0.10.4"
+notes = "Checked the diff from 0.10.3 to 0.10.4. Replaces derived Deserialize on UniformDuration with a manual impl (and switches UniformDurationMode::Large::secs from Uniform<u64> to UniformInt<u64>) that validates offset < 1_000_000_000, checked_add carry bounds in Small and Large modes, and secs.max() == max_secs && secs.range != 1 in Large mode so sampling a deserialized Uniform<Duration> cannot panic on Duration::new overflow or stall in rejection sampling; unaliases chacha20::ChaCha12Rng in StdRng and expands StdRng and ThreadRng fork and snapshot doc comments; adds deserialization tests. No new dependencies, no build script, no unsafe added, no I/O. Published from github:rust-random/rand."
+
 [[audits.rc4]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
