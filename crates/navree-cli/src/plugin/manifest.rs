@@ -62,6 +62,7 @@ pub const RESERVED_NAMESPACES: &[&str] = &[
     "mcp",
     "media",
     "micro",
+    "mongo",
     "navree",
     "notify",
     "nul",
@@ -840,14 +841,18 @@ pub(crate) fn source_problem(key: &str, source: &str) -> Option<&'static str> {
     if taken { None } else { Some(directive.forms()) }
 }
 
-/// Whether `authority` is a host name in lower case with at least two labels, which may start
-/// with `*.` and have a port after it.
+/// Whether `authority` is a host name in lower case with at least two labels (not an address in
+/// numbers), which may start with `*.` and have a port after it.
 fn is_origin(authority: &str) -> bool {
     let Some((host, _)) = host_and_port(authority) else {
         return false;
     };
     let name = host.strip_prefix("*.").unwrap_or(host);
-    name.len() <= 253 && name.split('.').count() >= 2 && name.split('.').all(is_label)
+    let top = name.rsplit('.').next().unwrap_or_default();
+    name.len() <= 253
+        && name.split('.').count() >= 2
+        && name.split('.').all(is_label)
+        && top.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
 }
 
 /// Whether `authority` is this machine, with a port or without: `localhost` or `127.0.0.1`.
@@ -1339,7 +1344,7 @@ policy = { img_src = ["https://tile.openstreetmap.org"] }"#,
     #[test]
     fn the_manifest_refuses_a_reserved_namespace_for_a_community_crate() {
         let app = facts();
-        assert_eq!(RESERVED_NAMESPACES.len(), 87);
+        assert_eq!(RESERVED_NAMESPACES.len(), 88);
 
         for ns in [
             "app",
@@ -1351,6 +1356,7 @@ policy = { img_src = ["https://tile.openstreetmap.org"] }"#,
             "subscriptions",
             "operations",
             "automations",
+            "mongo",
         ] {
             let src = format!(r#"namespace = "{ns}""#);
             assert_eq!(
@@ -1519,7 +1525,7 @@ grants = { member = ["all.*"] }"#
                 other => panic!("line {}: unexpected verdict {other:?}", index + 1),
             }
         }
-        assert_eq!(count, 136);
+        assert_eq!(count, 156);
     }
 
     #[test]

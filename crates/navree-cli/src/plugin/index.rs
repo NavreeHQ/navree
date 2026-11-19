@@ -215,7 +215,7 @@ mod tests {
             }
         }
 
-        assert_eq!(index.reserved.len(), 87);
+        assert_eq!(index.reserved.len(), 88);
         let sorted_reserved: Vec<String> = index
             .reserved
             .iter()
