@@ -91,11 +91,11 @@ fn plugin_remove_unwires_and_keeps_config_and_data() {
     .expect("remove announcements succeeds");
 
     let printed = String::from_utf8(out).expect("utf8 output");
-    let expected = "\
-  unwired  .module(navree_plugin_announcements::AnnouncementsModule::from_config()) (src/app.rs)
-  removed  navree-plugin-announcements (Cargo.toml)
-  kept     config/announcements.toml, the grants in config/workspace.toml, APP_ANNOUNCEMENTS__SIGNING_KEY in .env.example, the features navree: workspace, ui, and the plugin's tables and rows
-";
+    let expected = concat!(
+        "  unwired  .module(navree_plugin_announcements::AnnouncementsModule::from_config()) (src/app.rs)\n",
+        "  removed  navree-plugin-announcements (Cargo.toml)\n",
+        "  kept     config/announcements.toml, the grants in config/workspace.toml, APP_ANNOUNCEMENTS__SIGNING_KEY in .env.example, the features navree: workspace, ui, and the plugin's tables and rows\n",
+    );
     assert_eq!(printed, expected);
     assert_eq!(
         std::fs::read_to_string(root.join("src/app.rs")).expect("read app.rs after"),
@@ -150,10 +150,10 @@ navree = { version = \"1.4.0\", default-features = false, features = [\"postgres
 
     assert_eq!(
         String::from_utf8(fp_out).unwrap(),
-        "\
-  unwired  .module(navree::billing::BillingModule::from_config()) (src/app.rs)
-  kept     the feature navree: billing (other code may use it)
-"
+        concat!(
+            "  unwired  .module(navree::billing::BillingModule::from_config()) (src/app.rs)\n",
+            "  kept     the feature navree: billing (other code may use it)\n",
+        )
     );
     assert_eq!(
         std::fs::read_to_string(fp_root.join("src/app.rs")).unwrap(),
@@ -511,11 +511,11 @@ policy = { img_src = [\"https://tile.openstreetmap.org\"] }
     let printed = String::from_utf8(out).unwrap();
     assert_eq!(
         printed,
-        "\
-  unwired  .module(navree_plugin_geo::GeoModule::from_config()) (src/app.rs)
-  removed  navree-plugin-geo (Cargo.toml)
-  kept     config/geo.toml, the page sources in config/ui.policy.toml, the features navree: ui, plugins/geo/, and the plugin's tables and rows
-"
+        concat!(
+            "  unwired  .module(navree_plugin_geo::GeoModule::from_config()) (src/app.rs)\n",
+            "  removed  navree-plugin-geo (Cargo.toml)\n",
+            "  kept     config/geo.toml, the page sources in config/ui.policy.toml, the features navree: ui, plugins/geo/, and the plugin's tables and rows\n",
+        )
     );
     assert_eq!(
         std::fs::read_to_string(root.join("config/ui.policy.toml")).unwrap(),

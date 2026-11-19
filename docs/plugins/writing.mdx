@@ -187,7 +187,7 @@ Any unknown key, disallowed feature, out-of-namespace config or grant, or malfor
 
 ## Permissions and suggested grants
 
-`m.permissions(&[READ, PUBLISH])` registers human-readable descriptions for `navree access:explain` and Helm's role screens — describing a permission grants it to nobody. Routes enforce permissions explicitly with `.permissions(&[..])`, and ORM models keep both `subject` and `permission_prefix` under the plugin's namespace:
+`m.permissions(&[READ, PUBLISH])` registers human-readable descriptions for `navree access:explain` and Helm's role screens — describing a permission grants it to nobody. Routes enforce permissions explicitly through a guard backed by `navree::contracts::permitted` and `RequestWorkspace` (so both app-wide roles and workspace grants apply without coupling the plugin to `navree-workspace`), and ORM models keep both `subject` and `permission_prefix` under the plugin's namespace:
 
 ```rust title="plugins/notices/src/model.rs"
 // plugins/notices/src/model.rs
@@ -230,6 +230,8 @@ impl Controller for NoticesController {
     }
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        let read_guard = self.require("notices.read");
+        let publish_guard = self.require("notices.publish");
         let page_ctrl = self.clone();
         let list_ctrl = self.clone();
         let create_ctrl = self.clone();
@@ -244,12 +246,14 @@ impl Controller for NoticesController {
                 },
             )
             .page()
-            .permissions(&["notices.read"]),
+            .authenticated()
+            .guard(read_guard.clone()),
             RouteDef::on(Method::GET, "/notices", move |uow: Uow| {
                 let ctrl = list_ctrl.clone();
                 async move { ctrl.list_json(uow).await }
             })
-            .permissions(&["notices.read"]),
+            .authenticated()
+            .guard(read_guard),
             RouteDef::on(
                 Method::POST,
                 "/notices",
@@ -258,7 +262,8 @@ impl Controller for NoticesController {
                     async move { ctrl.create(principal, uow, input).await }
                 },
             )
-            .permissions(&["notices.publish"]),
+            .authenticated()
+            .guard(publish_guard.clone()),
             RouteDef::on(
                 Method::DELETE,
                 "/notices/{id}",
@@ -267,7 +272,8 @@ impl Controller for NoticesController {
                     async move { ctrl.remove(id, uow).await }
                 },
             )
-            .permissions(&["notices.publish"]),
+            .authenticated()
+            .guard(publish_guard),
         ]
     }
 }

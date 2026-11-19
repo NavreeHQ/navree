@@ -992,19 +992,62 @@ mod tests {
 
     #[test]
     fn a_statement_that_does_not_render_back_is_refused() {
-        // The tree as the parser read it, taken past the visitor: rendered, it
-        // becomes several statements, so it is not sent.
-        for (sql, dialect) in [
-            (RENDER_SMUGGLING[0], Dialect::Sqlite),
-            (RENDER_SMUGGLING[1], Dialect::Sqlite),
-            (RENDER_SMUGGLING[4], Dialect::Postgres),
+        use sqlparser::ast::{SelectItem, SetExpr};
+
+        fn select_literal(value: Value, dialect: Dialect) -> Statement {
+            let mut parsed = parse("SELECT 'ok'", dialect).unwrap();
+            let Statement::Query(query) = &mut parsed[0] else {
+                unreachable!()
+            };
+            let SetExpr::Select(select) = query.body.as_mut() else {
+                unreachable!()
+            };
+            let SelectItem::UnnamedExpr(Expr::Value(holder)) = &mut select.projection[0] else {
+                unreachable!()
+            };
+            holder.value = value;
+            parsed.remove(0)
+        }
+
+        // Trees whose literals the renderer writes back unescaped, taken past
+        // the visitor: rendered, they become several statements, so they are
+        // not sent.
+        for (statement, dialect) in [
+            (
+                select_literal(
+                    Value::TripleSingleQuotedString(
+                        "'''; PRAGMA query_only = OFF; DROP TABLE users; --".to_owned(),
+                    ),
+                    Dialect::Sqlite,
+                ),
+                Dialect::Sqlite,
+            ),
+            (
+                select_literal(
+                    Value::DollarQuotedString(DollarQuotedString {
+                        value: "$$; COMMIT; BEGIN READ WRITE; DROP TABLE users; SELECT $$"
+                            .to_owned(),
+                        tag: None,
+                    }),
+                    Dialect::Postgres,
+                ),
+                Dialect::Postgres,
+            ),
+            (
+                select_literal(
+                    Value::DollarQuotedString(DollarQuotedString {
+                        value: "1; PRAGMA query_only = OFF".to_owned(),
+                        tag: None,
+                    }),
+                    Dialect::Sqlite,
+                ),
+                Dialect::Sqlite,
+            ),
         ] {
-            let parsed = parse(sql, dialect).unwrap();
-            assert_eq!(parsed.len(), 1, "{sql}");
             assert_eq!(
-                rendered(&parsed[0], dialect),
+                rendered(&statement, dialect),
                 Err(Refusal::Rendering),
-                "{sql}"
+                "{statement}"
             );
         }
         let parsed = parse("SELECT 'it''s'", Dialect::Sqlite).unwrap();

@@ -137,11 +137,13 @@ mod tests {
     }
 
     mod navree_plugin_khata_core {
+        use std::marker::PhantomData;
+
         use crate::{CommandSpec, Module, ModuleBuilder};
 
-        pub struct KhataCoreModule(pub Option<&'static str>);
+        pub struct KhataGeneric<T>(pub Option<&'static str>, pub PhantomData<T>);
 
-        impl Module for KhataCoreModule {
+        impl<T: Send + Sync + 'static> Module for KhataGeneric<T> {
             fn register(&self, m: &mut ModuleBuilder) {
                 if let Some(name) = self.0 {
                     m.command(CommandSpec::new(name, "Core", |_, _| async { Ok(()) }));
@@ -159,12 +161,15 @@ mod tests {
 
     #[tokio::test]
     async fn the_reason_a_module_acts_for_a_plugin_is_the_clause_the_kernels_refusals_give() {
+        use std::marker::PhantomData;
+
         use navree_plugin_khata::{KHATA, KhataHelper, KhataModule};
-        use navree_plugin_khata_core::KhataCoreModule;
+        use navree_plugin_khata_core::KhataGeneric;
 
         let app = Navree::app()
             .module(KhataModule(|m| {
-                m.import(KhataHelper(None)).import(KhataCoreModule(None));
+                m.import(KhataHelper(None))
+                    .import(KhataGeneric::<KhataModule>(None, PhantomData));
             }))
             .module(AppModule)
             .boot()
@@ -174,7 +179,7 @@ mod tests {
 
         let naming = ModuleId::of::<KhataModule>();
         let helper = ModuleId::of::<KhataHelper>();
-        let second = ModuleId::of::<KhataCoreModule>();
+        let second = ModuleId::of::<KhataGeneric<KhataModule>>();
         let app_mod = ModuleId::of::<AppModule>();
         let missing = ModuleId::of::<Unwired>();
 
@@ -231,14 +236,15 @@ mod tests {
 
         let by_import = Navree::app()
             .module(KhataModule(|m| {
-                m.import(KhataCoreModule(Some("check")));
+                m.import(KhataGeneric::<KhataModule>(Some("check"), PhantomData));
             }))
             .validate()
             .expect_err("refused")
             .to_string();
         assert!(
             by_import.contains(&format!(
-                "in `KhataCoreModule`{},",
+                "in `{}`{},",
+                second.name(),
                 acts_for_reason(ctx, second)
             )),
             "{by_import}"

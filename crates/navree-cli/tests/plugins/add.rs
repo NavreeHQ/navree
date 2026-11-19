@@ -102,18 +102,18 @@ fn plugin_add_writes_the_lines_the_installing_page_shows() {
     )
     .expect("plugin:add succeeds");
 
-    let expected = "\
-  added    navree-plugin-announcements 1.0.0 (Cargo.toml)
-  feature  navree: workspace, ui (Cargo.toml)
-  wired    .module(navree_plugin_announcements::AnnouncementsModule::from_config()) (src/app.rs)
-  env      APP_ANNOUNCEMENTS__SIGNING_KEY (.env.example)
-  next     navree config:publish --plugin announcements
-  grant    member: announcements.read (config/workspace.toml)
-  next     navree migrate
-  next     show plugin links in the sidebar: add .contributed() to Shell::new(..) in src/ui/shell.rs
-  next     navree plugins, to see what navree-plugin-announcements registers (it builds and runs the app)
-Installed navree-plugin-announcements 1.0.0. It is not an official Navree package: read its code before you deploy it.
-";
+    let expected = concat!(
+        "  added    navree-plugin-announcements 1.0.0 (Cargo.toml)\n",
+        "  feature  navree: workspace, ui (Cargo.toml)\n",
+        "  wired    .module(navree_plugin_announcements::AnnouncementsModule::from_config()) (src/app.rs)\n",
+        "  env      APP_ANNOUNCEMENTS__SIGNING_KEY (.env.example)\n",
+        "  next     navree config:publish --plugin announcements\n",
+        "  grant    member: announcements.read (config/workspace.toml)\n",
+        "  next     navree migrate\n",
+        "  next     show plugin links in the sidebar: add .contributed() to Shell::new(..) in src/ui/shell.rs\n",
+        "  next     navree plugins, to see what navree-plugin-announcements registers (it builds and runs the app)\n",
+        "Installed navree-plugin-announcements 1.0.0. It is not an official Navree package: read its code before you deploy it.\n",
+    );
     assert_eq!(String::from_utf8(out).unwrap(), expected);
 
     let installing_page = fs::read_to_string(
@@ -168,24 +168,24 @@ Installed navree-plugin-announcements 1.0.0. It is not an official Navree packag
     )
     .expect("plugin:add --publish-config succeeds");
 
-    let expected_pub = "\
-  run      cargo run --quiet -- config:publish --plugin announcements (builds and runs the app)
-  added    navree-plugin-announcements 1.0.0 (Cargo.toml)
-  feature  navree: workspace, ui (Cargo.toml)
-  wired    .module(navree_plugin_announcements::AnnouncementsModule::from_config()) (src/app.rs)
-  env      APP_ANNOUNCEMENTS__SIGNING_KEY (.env.example)
-  wrote    config/announcements.toml
-  grant    member: announcements.read (config/workspace.toml)
-  next     navree migrate
-  next     show plugin links in the sidebar: add .contributed() to Shell::new(..) in src/ui/shell.rs
-
-announcements  navree-plugin-announcements 1.0.0  Announcements
-  AnnouncementsModule  navree_plugin_announcements::AnnouncementsModule
-    commands  announcements:prune
-    adds      1 ControllerRegistration, 1 MigrationSet, 1 Permissions, 2 Publishable, 1 SectionRegistration
-    publishes 3 views, 2 locales
-Installed navree-plugin-announcements 1.0.0. It is not an official Navree package: read its code before you deploy it.
-";
+    let expected_pub = concat!(
+        "  run      cargo run --quiet -- config:publish --plugin announcements (builds and runs the app)\n",
+        "  added    navree-plugin-announcements 1.0.0 (Cargo.toml)\n",
+        "  feature  navree: workspace, ui (Cargo.toml)\n",
+        "  wired    .module(navree_plugin_announcements::AnnouncementsModule::from_config()) (src/app.rs)\n",
+        "  env      APP_ANNOUNCEMENTS__SIGNING_KEY (.env.example)\n",
+        "  wrote    config/announcements.toml\n",
+        "  grant    member: announcements.read (config/workspace.toml)\n",
+        "  next     navree migrate\n",
+        "  next     show plugin links in the sidebar: add .contributed() to Shell::new(..) in src/ui/shell.rs\n",
+        "\n",
+        "announcements  navree-plugin-announcements 1.0.0  Announcements\n",
+        "  AnnouncementsModule  navree_plugin_announcements::AnnouncementsModule\n",
+        "    commands  announcements:prune\n",
+        "    adds      1 ControllerRegistration, 1 MigrationSet, 1 Permissions, 2 Publishable, 1 SectionRegistration\n",
+        "    publishes 3 views, 2 locales\n",
+        "Installed navree-plugin-announcements 1.0.0. It is not an official Navree package: read its code before you deploy it.\n",
+    );
     assert_eq!(String::from_utf8(out_pub).unwrap(), expected_pub);
 
     // 3. With shell calling `for_request(`.
@@ -254,18 +254,18 @@ Installed navree-plugin-announcements 1.0.0. It is not an official Navree packag
         &mut out_bill,
     )
     .expect("plugin:add billing succeeds");
-    let expected_bill = "\
-  run      cargo run --quiet -- config:publish --plugin billing (builds and runs the app)
-  feature  navree: billing (Cargo.toml)
-  wired    .module(navree::billing::BillingModule::from_config()) (src/app.rs)
-  wrote    config/billing.toml
-  next     navree migrate
-
-billing  navree-billing 1.4.0
-  BillingModule  navree_billing::BillingModule
-    adds      1 SectionRegistration
-Installed billing.
-";
+    let expected_bill = concat!(
+        "  run      cargo run --quiet -- config:publish --plugin billing (builds and runs the app)\n",
+        "  feature  navree: billing (Cargo.toml)\n",
+        "  wired    .module(navree::billing::BillingModule::from_config()) (src/app.rs)\n",
+        "  wrote    config/billing.toml\n",
+        "  next     navree migrate\n",
+        "\n",
+        "billing  navree-billing 1.4.0\n",
+        "  BillingModule  navree_billing::BillingModule\n",
+        "    adds      1 SectionRegistration\n",
+        "Installed billing.\n",
+    );
     assert_eq!(String::from_utf8(out_bill).unwrap(), expected_bill);
 
     // 5. First-party `browser` (dev-dependency feature).

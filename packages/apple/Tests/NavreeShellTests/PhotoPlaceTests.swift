@@ -426,7 +426,7 @@ struct PhotoPlaceTests {
         // holding hex-encoded Exif GPS coordinates of Amritsar: Image I/O reports no
         // `{GPS}` group and no XMP mark appears in the raw bytes.
         let profiled = try Self.pngWithProfileChunk(plain)
-        #expect(!try Self.groups(of: profiled).contains("{GPS}"))
+        #expect(try !Self.groups(of: profiled).contains("{GPS}"))
         #expect(!PhotoPlace.holdsPacket(profiled))
         #expect(Self.holds(profiled, "Raw profile type exif"))
         #expect(!PhotoPlace.isBare(profiled))
@@ -450,7 +450,7 @@ struct PhotoPlaceTests {
 
         // 1. Maker trailer after EOI carrying India's mobile country code (MCC 404).
         let trailed = Self.jpegWithMakerTrailer(base)
-        #expect(!try Self.groups(of: trailed).contains("{GPS}"))
+        #expect(try !Self.groups(of: trailed).contains("{GPS}"))
         #expect(!PhotoPlace.holdsPacket(trailed))
         #expect(!PhotoPlace.isBare(trailed))
 
@@ -463,7 +463,7 @@ struct PhotoPlaceTests {
         // 2. Motion photo: a clean JPEG followed after EOI by an MP4 container carrying
         // QuickTime `©xyz` coordinates for Amritsar, with no XMP mark in the JPEG.
         let motion = Self.motionPhoto(base)
-        #expect(!try Self.groups(of: motion).contains("{GPS}"))
+        #expect(try !Self.groups(of: motion).contains("{GPS}"))
         #expect(!PhotoPlace.holdsPacket(motion))
         #expect(!PhotoPlace.isBare(motion))
 

@@ -123,6 +123,8 @@ async fn an_app_that_uses_flags_and_social_boots_with_no_warning_and_lists_them_
     );
 
     let app = TestApp::builder()
+        .sources(ConfigSources::new())
+        .fake_auth()
         .temp_database()
         .config("app.key", generate_key())
         .config("http.per_ip_rate_limit", Value::Null)
@@ -177,12 +179,12 @@ async fn an_app_that_uses_flags_and_social_boots_with_no_warning_and_lists_them_
     );
 
     // Both packages answer on their documented routes as before.
-    app.client()
+    app.acting_as(navree::testing::principal(uuid::Uuid::now_v7()))
         .get("/api/flags")
         .send()
         .await
         .assert_status(200)
-        .assert_json_path("flags.new-pipeline", json!(true));
+        .assert_json_path("new-pipeline", json!(true));
 
     let redirect = app
         .client()
@@ -209,6 +211,8 @@ impl Module for DealsAndAccounts {
 #[tokio::test]
 async fn a_module_that_imports_for_feature_stays_the_apps_own() {
     let app = TestApp::builder()
+        .sources(ConfigSources::new())
+        .fake_auth()
         .temp_database()
         .config("app.key", generate_key())
         .config("http.per_ip_rate_limit", Value::Null)
@@ -278,6 +282,11 @@ async fn an_app_that_keeps_its_own_flags_configuration_and_names_boots_as_before
     let _guard = warnings.install();
 
     let sources = ConfigSources::new()
+        .set("app.key", generate_key())
+        .set("database.url", "sqlite::memory:")
+        .set("database.max_connections", 1)
+        .set("database.min_connections", 1)
+        .set("database.migrate_on_boot", true)
         .set("http.per_ip_rate_limit", Value::Null)
         .set(
             "flags",
@@ -292,10 +301,12 @@ async fn an_app_that_keeps_its_own_flags_configuration_and_names_boots_as_before
     let builder = || {
         Navree::app()
             .module(ConfigModule::for_root(sources.clone()))
+            .module(CryptoModule::from_config())
             .module(HttpModule::from_config())
             .module(DatabaseModule::from_config())
             .module(UiModule::from_config())
             .module(AccessModule::for_root(AccessOptions::default()))
+            .module(AuthModule::from_config())
             .module(FlagsModule::for_feature::<NewPipeline>())
             .module(FlagsModule::from_config())
             .module(AppFlagsPermissions)
@@ -475,6 +486,8 @@ async fn an_app_that_configures_a_package_in_code_boots_and_lists_it_first_party
     social_options.routes = false;
 
     let app = TestApp::builder()
+        .sources(ConfigSources::new())
+        .fake_auth()
         .temp_database()
         .config("app.key", generate_key())
         .config("http.per_ip_rate_limit", Value::Null)
@@ -636,9 +649,10 @@ async fn the_localization_packages_app_wide_layer_is_not_refused_once_it_names_i
     let shown = locales_dir.path().to_string_lossy().replace('\\', "/");
 
     let app = TestApp::builder()
+        .sources(ConfigSources::new())
         .config("http.per_ip_rate_limit", Value::Null)
         .config("i18n.dir", shown.as_str())
-        .config("i18n.supported", json!(["en", "pa-IN"]))
+        .config("i18n.locales", json!(["en", "pa-IN"]))
         .module(I18nModule::from_config())
         .module(GreetingModule)
         .build()
@@ -674,6 +688,7 @@ async fn the_audit_packages_sink_and_the_real_time_packages_backplane_are_not_re
     let _guard = warnings.install();
 
     let app = TestApp::builder()
+        .sources(ConfigSources::new())
         .temp_database()
         .config("http.per_ip_rate_limit", Value::Null)
         .module(DatabaseModule::from_config())

@@ -132,6 +132,13 @@ class DocumentScriptTest(unittest.TestCase):
     def test_a_document_of_the_app_says_once_where_it_is(self):
         self.assertEqual([""], self.seen["posted"])
 
+    def test_file_drops_and_file_pastes_are_stopped_while_plain_text_paste_stays_open(self):
+        for change, seen in self.runs.items():
+            with self.subTest(change=change):
+                self.assertTrue(seen["fileDropBlocked"], change)
+                self.assertTrue(seen["filePasteBlocked"], change)
+                self.assertTrue(seen["textPasteAllowed"], change)
+
     def test_what_a_page_replaces_after_the_script_ran_never_lets_a_socket_or_a_worker_go_elsewhere(self):
         for change, seen in self.runs.items():
             with self.subTest(change=change):

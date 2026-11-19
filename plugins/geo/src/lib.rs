@@ -82,7 +82,8 @@ impl Module for GeoModule {
                 None => GeoOptions::default(),
             };
             Ok(Arc::new(options))
-        }));
+        }))
+        .exports::<GeoOptions>();
         m.contribute(ui::map::MAP);
         m.contribute(navree::ui::form::Control::new(&ui::location::LOCATION));
         // Asking allows nothing: the app's `ui.policy` section decides.

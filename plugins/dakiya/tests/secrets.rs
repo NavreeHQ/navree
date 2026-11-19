@@ -346,7 +346,7 @@ async fn the_key_never_reaches_a_debug_print_or_a_log_line() {
     let (client, server) = HttpClient::fake();
     server.on_sequence(
         Method::POST,
-        "https://api.dakiya.example/*",
+        "https://*api.dakiya.example/*",
         [
             FakeResponse::new(200).json(&json!({ "id": "dak-ludhiana-2502" })),
             FakeResponse::new(401).json(&json!({ "error": format!("bad key {key}") })),
@@ -354,7 +354,7 @@ async fn the_key_never_reaches_a_debug_print_or_a_log_line() {
     );
     server.on(
         Method::GET,
-        "https://api.dakiya.example/v1/ping",
+        "https://*api.dakiya.example/v1/ping",
         FakeResponse::new(200).json(&json!({ "ok": true })),
     );
 
@@ -675,7 +675,7 @@ async fn url_credentials_and_query_tokens_are_scrubbed_from_provider_replies() {
     let (client, server) = HttpClient::fake();
     server.on_sequence(
         Method::POST,
-        "https://api.dakiya.example/*",
+        "https://*api.dakiya.example/*",
         [
             FakeResponse::new(200)
                 .json(&json!({ "id": "dak-id-harpreet-dak-word-dak-query" })),

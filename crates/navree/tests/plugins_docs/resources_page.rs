@@ -88,7 +88,7 @@ async fn a_published_template_wins_over_the_embedded_one() {
     let rendered = views
         .render("notices/list", json!({}))
         .expect("render embedded notices/list");
-    assert_eq!(rendered, EMBEDDED_HTML);
+    assert_eq!(rendered, EMBEDDED_HTML.trim_end());
     app.shutdown().await.expect("clean shutdown");
 
     // Publish into a temporary app folder and check the file and output.

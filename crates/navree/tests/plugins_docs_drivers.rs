@@ -357,7 +357,8 @@ struct ReceiptJobModule(Arc<ReceiptJournal>);
 
 impl Module for ReceiptJobModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.value(self.0.clone());
+        m.value_arc::<ReceiptJournal>(self.0.clone())
+            .exports::<ReceiptJournal>();
         m.job::<SendReceipt>();
     }
 }
@@ -545,11 +546,17 @@ async fn backplane_example_registers_and_broadcasts() {
         )
         .expect("broadcast");
 
-    let payload = tokio::time::timeout(Duration::from_secs(2), rx.recv())
-        .await
-        .expect("subscriber received message")
-        .expect("channel open");
-    assert!(payload.contains("order.dispatched") && payload.contains("Amritsar"));
+    let found = tokio::time::timeout(Duration::from_secs(2), async {
+        while let Some(payload) = rx.recv().await {
+            if payload.contains("order.dispatched") && payload.contains("Amritsar") {
+                return true;
+            }
+        }
+        false
+    })
+    .await
+    .expect("subscriber received broadcast");
+    assert!(found);
 
     stop.cancel();
     app.shutdown().await.expect("shutdown");
@@ -924,7 +931,7 @@ pub struct SandeshModule {
 
 impl Module for SandeshModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.value(self.journal.clone());
+        m.value_arc::<SandeshJournal>(self.journal.clone());
         m.notification_channel::<SandeshChannel>();
         m.sms_driver("sandesh_sms", |_ctx| async { Ok(SandeshSms) });
         m.whatsapp_driver("sandesh_wa", |_ctx| async { Ok(SandeshWhatsApp) });

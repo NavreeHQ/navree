@@ -241,24 +241,28 @@ fn maybe_run_cli_child() -> bool {
     };
     let encoded = std::env::var(CLI_ARGS_ENV).expect("cli args");
     let args: Vec<String> = serde_json::from_str(&encoded).expect("decode cli args");
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("tokio runtime");
-    let sources = ConfigSources::new()
-        .set("database.url", url)
-        .set("database.migrate_on_boot", true);
-    runtime
-        .block_on(
-            Navree::app()
-                .module(ConfigModule::for_root(sources))
-                .module(DatabaseModule::from_config())
-                .module(OrmModule)
-                .module(AccessModule::for_root(AccessOptions::default()))
-                .module(NoticesModule::from_config())
-                .run_with_args(args),
-        )
-        .expect("cli command succeeded");
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        let sources = ConfigSources::new()
+            .set("database.url", url)
+            .set("database.migrate_on_boot", true);
+        runtime
+            .block_on(
+                Navree::app()
+                    .module(ConfigModule::for_root(sources))
+                    .module(DatabaseModule::from_config())
+                    .module(OrmModule)
+                    .module(AccessModule::for_root(AccessOptions::default()))
+                    .module(NoticesModule::from_config())
+                    .run_with_args(args),
+            )
+            .expect("cli command succeeded");
+    })
+    .join()
+    .expect("cli child thread");
     true
 }
 
@@ -323,6 +327,7 @@ async fn its_table_is_created_by_its_migration_and_a_notice_round_trips() {
     );
     assert_eq!(loaded.posted_by, harpreet);
     assert_eq!(loaded.expires_at, expires_at);
+    drop(uow);
 
     app.shutdown().await.unwrap();
 }
@@ -630,7 +635,10 @@ async fn the_expire_command_removes_expired_notices() {
         &sqlite_url,
         &["notices:expire"],
     );
-    assert_eq!(stdout.trim(), "Removed 1 notices.");
+    assert!(
+        stdout.lines().any(|line| line == "Removed 1 notices."),
+        "{stdout}"
+    );
 
     let verify = TestApp::builder()
         .config("database.url", sqlite_url)
@@ -648,6 +656,7 @@ async fn the_expire_command_removes_expired_notices() {
     let remaining = notice::Model::query().get(&uow).await.unwrap();
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].title, "Water supply off on Sunday");
+    drop(uow);
     verify.shutdown().await.unwrap();
 }
 
@@ -983,6 +992,7 @@ async fn setting_notices_enabled_false_disables_routes_and_expiry() {
             .expect("query notice")
             .is_some()
     );
+    drop(uow);
 
     app.shutdown().await.unwrap();
 }

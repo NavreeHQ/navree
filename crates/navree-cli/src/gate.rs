@@ -616,18 +616,19 @@ mod tests {
                 "cargo fmt --all -- --check",
                 "cargo clippy --workspace --all-targets -- -D warnings",
                 "cargo test --workspace",
+                "cargo metadata --format-version 1",
                 "cargo run --quiet -- check",
                 "cargo run --quiet -- help",
             ]
             .iter()
             .map(|s| (*s).to_owned())
-            .chain(std::iter::once(runner.ran[5].clone()))
+            .chain(std::iter::once(runner.ran[6].clone()))
             .chain(std::iter::once(
                 "cargo run --quiet -- config:check".to_owned()
             ))
             .collect::<Vec<_>>()
         );
-        assert!(runner.ran[5].starts_with("cargo run --quiet -- conformity:check --root "));
+        assert!(runner.ran[6].starts_with("cargo run --quiet -- conformity:check --root "));
         assert!(
             out.contains("[1/5] fmt: cargo fmt --all -- --check\n"),
             "{out}"
@@ -668,7 +669,7 @@ mod tests {
         };
         let (report, _) = gate(&options, &mut runner);
         assert!(!report.passed());
-        assert_eq!(runner.ran.len(), 7);
+        assert_eq!(runner.ran.len(), 8);
     }
 
     #[test]

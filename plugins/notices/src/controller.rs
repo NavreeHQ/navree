@@ -4,10 +4,12 @@ use std::sync::Arc;
 
 use chrono::{TimeDelta, Utc};
 use http::Method;
-use navree::contracts::Clock;
+use http::request::Parts;
+use navree::contracts::{Clock, permitted};
 use navree::db::Uow;
 use navree::http::{
-    AppError, Controller, Created, CurrentPrincipal, Json, NoContent, Path, Result, RouteDef,
+    AppError, Controller, Created, CurrentPrincipal, Guard, Json, NoContent, Path,
+    RequestWorkspace, Result, RouteDef,
 };
 use navree::kernel::{AppContext, BoxFuture, Injectable, KernelError, Resolver};
 use navree::orm::{Model as _, Record};
@@ -37,6 +39,31 @@ struct ListView {
     notices: Vec<notice::Model>,
 }
 
+#[derive(Debug)]
+struct RequirePermission {
+    app: AppContext,
+    permission: &'static str,
+}
+
+impl Guard for RequirePermission {
+    fn check<'a>(&'a self, parts: &'a mut Parts) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            let CurrentPrincipal(principal) = CurrentPrincipal::from_parts(parts)?;
+            let workspace = match self.app.try_get::<dyn RequestWorkspace>().await {
+                Some(resolver) => resolver.resolve(parts).await,
+                None => None,
+            };
+            let allowed = permitted(&self.app, &principal, self.permission, workspace)
+                .await
+                .map_err(AppError::internal)?;
+            if !allowed {
+                return Err(AppError::forbidden());
+            }
+            Ok(())
+        })
+    }
+}
+
 /// Serves `GET /notices` and the JSON routes under `/api/notices`.
 pub struct NoticesController {
     app: AppContext,
@@ -55,6 +82,8 @@ impl Controller for NoticesController {
     }
 
     fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        let read_guard = self.require("notices.read");
+        let publish_guard = self.require("notices.publish");
         let page_ctrl = self.clone();
         let list_ctrl = self.clone();
         let create_ctrl = self.clone();
@@ -69,12 +98,14 @@ impl Controller for NoticesController {
                 },
             )
             .page()
-            .permissions(&["notices.read"]),
+            .authenticated()
+            .guard(read_guard.clone()),
             RouteDef::on(Method::GET, "/notices", move |uow: Uow| {
                 let ctrl = list_ctrl.clone();
                 async move { ctrl.list_json(uow).await }
             })
-            .permissions(&["notices.read"]),
+            .authenticated()
+            .guard(read_guard),
             RouteDef::on(
                 Method::POST,
                 "/notices",
@@ -83,7 +114,8 @@ impl Controller for NoticesController {
                     async move { ctrl.create(principal, uow, input).await }
                 },
             )
-            .permissions(&["notices.publish"]),
+            .authenticated()
+            .guard(publish_guard.clone()),
             RouteDef::on(
                 Method::DELETE,
                 "/notices/{id}",
@@ -92,12 +124,19 @@ impl Controller for NoticesController {
                     async move { ctrl.remove(id, uow).await }
                 },
             )
-            .permissions(&["notices.publish"]),
+            .authenticated()
+            .guard(publish_guard),
         ]
     }
 }
 
 impl NoticesController {
+    fn require(&self, permission: &'static str) -> Arc<dyn Guard> {
+        Arc::new(RequirePermission {
+            app: self.app.clone(),
+            permission,
+        })
+    }
     async fn active_options(&self) -> Result<options::NoticesOptions> {
         let settings = options::load(&self.app).await.map_err(AppError::internal)?;
         if !settings.enabled {

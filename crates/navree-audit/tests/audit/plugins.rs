@@ -114,7 +114,7 @@ async fn an_app_adds_a_second_audit_sink_and_both_receive_every_record() {
     .unwrap();
     rolled_back.rollback().await.unwrap();
 
-    // 4. Committed unit of work: both ORM data changes (with secret fields stripped) and
+    // 4. Committed units of work: both ORM data changes (with secret fields stripped) and
     // `record_in` entries reach `audit_logs` and every added sink once committed.
     let committed = db.uow(Some(harpreet), Some("req-commit".into())).await;
     User::create(
@@ -130,13 +130,18 @@ async fn an_app_adds_a_second_audit_sink_and_both_receive_every_record() {
     )
     .await
     .unwrap();
+    committed.commit().await.unwrap();
+    log.flush().await;
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+
+    let closed = db.uow(Some(harpreet), Some("req-close".into())).await;
     log.record_in(
-        &committed,
+        &closed,
         AuditEntry::new(AuditKind::Custom, "ledger.closed").subject("Ledger", "7"),
     )
     .await
     .unwrap();
-    committed.commit().await.unwrap();
+    closed.commit().await.unwrap();
     log.flush().await;
 
     let expected = vec![
@@ -333,6 +338,8 @@ async fn a_plugins_sink_added_by_the_app_receives_records_beside_the_audit_log()
     sink.record(AuditEntry::new(AuditKind::Auth, "auth.login").actor(simran))
         .await
         .unwrap();
+    log.flush().await;
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     let db = app.get::<Db>().await;
     let uow = db.uow(Some(simran), Some("req-simran".into())).await;
     Note::create(&uow, new_note("Amritsar ledger"))

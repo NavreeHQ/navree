@@ -277,7 +277,7 @@ impl Injectable for SandeshChannel {
 // crates/navree/tests/plugins_docs_drivers.rs
 impl Module for SandeshModule {
     fn register(&self, m: &mut ModuleBuilder) {
-        m.value(self.journal.clone());
+        m.value_arc::<SandeshJournal>(self.journal.clone());
         m.notification_channel::<SandeshChannel>();
         m.sms_driver("sandesh_sms", |_ctx| async { Ok(SandeshSms) });
         m.whatsapp_driver("sandesh_wa", |_ctx| async { Ok(SandeshWhatsApp) });

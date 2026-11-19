@@ -1643,6 +1643,34 @@ fn a_higher_ranked_trait_object_module_acts_for_the_plugin_of_its_traits_crate()
     );
 }
 
+mod navree_plugin_khata_boxed {
+    use navree_kernel::{CommandSpec, Module, ModuleBuilder, ModuleId, PluginInfo};
+
+    pub const INFO: PluginInfo = PluginInfo::new(
+        "navree-plugin-khata-boxed",
+        module_path!(),
+        "khata_boxed",
+        "1.0.0",
+    );
+
+    pub struct BoxedPlugin;
+    impl Module for BoxedPlugin {
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.plugin(INFO);
+        }
+    }
+
+    pub struct ErasedHelper;
+    impl Module for ErasedHelper {
+        fn id(&self) -> ModuleId {
+            ModuleId::named::<String>("erased-helper")
+        }
+        fn register(&self, m: &mut ModuleBuilder) {
+            m.command(CommandSpec::new("serve", "Erased", |_, _| async { Ok(()) }));
+        }
+    }
+}
+
 #[tokio::test]
 async fn a_boxed_module_keeps_its_concrete_type_for_first_party_and_framework_checks() {
     use navree_kernel::__private::{PlainModule, is_app_module};
@@ -1675,33 +1703,6 @@ async fn a_boxed_module_keeps_its_concrete_type_for_first_party_and_framework_ch
 
     // A community plugin's unnamed helper passed to the app as `Box<dyn Module>` with a
     // `String`-typed id still recovers its concrete crate type and acts for its plugin.
-    mod navree_plugin_khata_boxed {
-        use navree_kernel::{CommandSpec, Module, ModuleBuilder, ModuleId, PluginInfo};
-
-        pub const INFO: PluginInfo = PluginInfo::new(
-            "navree-plugin-khata-boxed",
-            module_path!(),
-            "khata_boxed",
-            "1.0.0",
-        );
-
-        pub struct BoxedPlugin;
-        impl Module for BoxedPlugin {
-            fn register(&self, m: &mut ModuleBuilder) {
-                m.plugin(INFO);
-            }
-        }
-
-        pub struct ErasedHelper;
-        impl Module for ErasedHelper {
-            fn id(&self) -> ModuleId {
-                ModuleId::named::<String>("erased-helper")
-            }
-            fn register(&self, m: &mut ModuleBuilder) {
-                m.command(CommandSpec::new("serve", "Erased", |_, _| async { Ok(()) }));
-            }
-        }
-    }
     let erased: Box<dyn Module> = Box::new(navree_plugin_khata_boxed::ErasedHelper);
     assert_eq!(
         errors(

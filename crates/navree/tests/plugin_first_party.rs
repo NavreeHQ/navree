@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use http::Method;
 use navree::access::{AccessModule, AccessOptions, AccessService, Subject};
-use navree::config::ConfigSection;
+use navree::config::{ConfigSection, ConfigSources};
 use navree::contracts::{Job, JobContext};
 use navree::crypto::generate_key;
 use navree::db::{DatabaseModule, Db};
@@ -273,10 +273,11 @@ async fn a_first_party_plugins_view_hook_may_replace_a_filter() {
     let shown = locales_dir.path().to_string_lossy().replace('\\', "/");
 
     let app = TestApp::builder()
+        .sources(ConfigSources::new())
         .config("http.per_ip_rate_limit", Value::Null)
         .config("i18n.dir", shown.as_str())
-        .config("i18n.supported", json!(["en-IN"]))
-        .config("i18n.default", "en-IN")
+        .config("i18n.locales", json!(["en-IN"]))
+        .config("i18n.default_locale", "en-IN")
         .module(ViewModule::for_root(ViewOptions {
             dirs: Vec::new(),
             reload: false,
@@ -451,6 +452,7 @@ async fn a_first_party_plugins_namespace_is_not_compared_with_the_apps_handlers(
     let _guard = warnings.install();
 
     let app = TestApp::builder()
+        .sources(ConfigSources::new())
         .temp_database()
         .config("http.per_ip_rate_limit", Value::Null)
         .module(DatabaseModule::from_config())

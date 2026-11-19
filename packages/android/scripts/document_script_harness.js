@@ -48,7 +48,51 @@ class FakeNode {
   get baseURI() { return page.base; }
 }
 class FakeDocument extends FakeNode {}
+const listeners = [];
+class FakeEventTarget {
+  addEventListener(type, fn, capture) { push(listeners, { type: Str(type), fn, capture: !!capture }); }
+}
+class FakeEvent {
+  constructor(type) { this.type = type; this._prevented = false; this._stopped = false; }
+  preventDefault() { this._prevented = true; }
+  stopImmediatePropagation() { this._stopped = true; }
+}
+class FakeFileList {
+  constructor(n) { this._n = n; }
+  get length() { return this._n; }
+}
+class FakeDataTransferItem {
+  constructor(kind) { this._kind = kind; }
+  get kind() { return this._kind; }
+}
+class FakeDataTransferItemList {
+  constructor(items) { this._items = items; for (let i = 0; i < items.length; i++) this[i] = items[i]; }
+  get length() { return this._items.length; }
+}
+class FakeDataTransfer {
+  constructor(files, items, types) { this._files = files; this._items = items; this._types = types; }
+  get files() { return this._files; }
+  get items() { return this._items; }
+  get types() { return this._types; }
+}
+class FakeDragEvent extends FakeEvent {
+  constructor(type, dt) { super(type); this._dt = dt; }
+  get dataTransfer() { return this._dt; }
+}
+class FakeClipboardEvent extends FakeEvent {
+  constructor(type, cd) { super(type); this._cd = cd; }
+  get clipboardData() { return this._cd; }
+}
+Object.setPrototypeOf(global, FakeEventTarget.prototype);
 global.self = global;
+global.EventTarget = FakeEventTarget;
+global.Event = FakeEvent;
+global.DragEvent = FakeDragEvent;
+global.ClipboardEvent = FakeClipboardEvent;
+global.DataTransfer = FakeDataTransfer;
+global.FileList = FakeFileList;
+global.DataTransferItemList = FakeDataTransferItemList;
+global.DataTransferItem = FakeDataTransferItem;
 global.WebSocket = FakeWebSocket;
 global.Worker = FakeWorker;
 global.Node = FakeNode;
@@ -183,7 +227,21 @@ moving("base moved while the engine reads the list it is handed", () => {
   try { return new WebSocket("x2", ["a"]); } finally { Array.prototype[Symbol.iterator] = real; }
 });
 
+const dispatch = (evt) => {
+  for (let i = 0; i < listeners.length; i++) {
+    if (evt._stopped) break;
+    const entry = listeners[i];
+    if (entry.type === evt.type && entry.capture) apply(entry.fn, global, [evt]);
+  }
+  return evt._prevented && evt._stopped;
+};
+const fileDropBlocked = dispatch(new FakeDragEvent("drop", new FakeDataTransfer(new FakeFileList(1), new FakeDataTransferItemList([new FakeDataTransferItem("file")]), ["Files"])));
+const filePasteBlocked = dispatch(new FakeClipboardEvent("paste", new FakeDataTransfer(new FakeFileList(0), new FakeDataTransferItemList([new FakeDataTransferItem("file")]), [])));
+const textPasteEvt = new FakeClipboardEvent("paste", new FakeDataTransfer(new FakeFileList(0), new FakeDataTransferItemList([new FakeDataTransferItem("string")]), ["text/plain"]));
+dispatch(textPasteEvt);
+const textPasteAllowed = !textPasteEvt._prevented && !textPasteEvt._stopped;
+
 const kindsOf = (o) => each(keysOf(o), (k) => typeof o[k]);
 const plain = (o) => o !== undefined && o !== null && typeof o === "object" && !isArray(o) ? { plain: protoOf(o) === Object.prototype, keys: keysOf(o), kinds: kindsOf(o) } : o;
 const handed = each(given, (g) => (typeof g === "string" ? g : "not a string"));
-write(stringify({ change, results, sockets, workers, emptied, posted, given: handed, protocols: each(protocols, (q) => (isArray(q) ? q : plain(q))), options: each(options, plain), optionName: last && last.name }) + "\n");
+write(stringify({ change, results, sockets, workers, emptied, posted, fileDropBlocked, filePasteBlocked, textPasteAllowed, given: handed, protocols: each(protocols, (q) => (isArray(q) ? q : plain(q))), options: each(options, plain), optionName: last && last.name }) + "\n");
