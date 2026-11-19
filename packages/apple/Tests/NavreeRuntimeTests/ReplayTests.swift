@@ -79,3 +79,23 @@ func aConversationOfTheCoreLeavesTheModelAsTheCoreHoldsIt(_ name: String) throws
     }
     #expect(effects > 700)
 }
+
+/// The conversations for a person's key, an ended session on another origin,
+/// and the cover that waits for the shell after a sign-in are all present and
+/// leave the client's model matching the core at every step.
+@MainActor
+@Test func theSignInCoverAndPersonKeyConversationsReplay() throws {
+    let required = [
+        "person-key-steady",
+        "person-key-other-id",
+        "session-ended-outside",
+        "sign-in-cover",
+        "sign-in-another-person",
+        "sign-in-shell-fails",
+    ]
+    let known = Set(Transcripts.names)
+    for name in required {
+        #expect(known.contains(name), "\(name) is missing from transcripts")
+        try aConversationOfTheCoreLeavesTheModelAsTheCoreHoldsIt(name)
+    }
+}

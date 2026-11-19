@@ -80,6 +80,8 @@ struct WebPageView {
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         var parent: WebPageView
         private var title: NSKeyValueObservation?
+        private var loading: Task<Void, Never>?
+        private var dismantled = false
         private(set) var serial: Int?
         private var loaded: URL?
         /// Whether a page of this load has been shown.
@@ -115,6 +117,8 @@ struct WebPageView {
         /// Makes the store hold the session's cookies, then loads: from the
         /// network, or the markup the app supplies.
         func load(_ url: URL, serial: Int, in view: WKWebView) {
+            guard !dismantled else { return }
+            loading?.cancel()
             if serial != self.serial { ended = 0 }
             self.serial = serial
             loaded = url
@@ -122,24 +126,44 @@ struct WebPageView {
             let jar = (parent.client.effects as? SystemEffects)?.jar
             let content = parent.configuration.webContent
             let cookies = made.cookies
-            Task { @MainActor in
+            loading = Task { @MainActor in
                 // Nothing loads before the rules of what a page may load are
                 // in place: a page that cannot be held to them is a failed one.
+                guard !self.dismantled else { return }
                 guard await self.rule(view) else { return self.parent.failed() }
+                guard !self.dismantled else { return }
                 await jar?.ready(view.configuration.websiteDataStore.httpCookieStore, session: cookies)
-                // The session ended meanwhile: this web view is on its way out.
-                guard self.isCurrent else { return }
+                // The session ended or the view was taken down meanwhile.
+                guard !self.dismantled, self.isCurrent else { return }
                 switch content {
                 case .network:
                     view.load(URLRequest(url: url))
                 case .supplied(let supply):
                     let address = url.path.isEmpty ? "/" : url.path + (url.query.map { "?" + $0 } ?? "")
-                    if let html = await supply(address) {
+                    let html = await supply(address)
+                    guard !self.dismantled, self.isCurrent else { return }
+                    if let html {
                         view.loadHTMLString(html, baseURL: url)
                     } else {
                         view.load(URLRequest(url: url))
                     }
                 }
+            }
+        }
+
+        /// Stops the page and detaches the view when it leaves the window
+        /// (such as while a sign-in cover stands over the screen).
+        func tearDown(_ view: WKWebView) {
+            dismantled = true
+            loading?.cancel()
+            loading = nil
+            title?.invalidate()
+            title = nil
+            view.stopLoading()
+            view.navigationDelegate = nil
+            view.uiDelegate = nil
+            if let blank = URL(string: "about:blank") {
+                view.load(URLRequest(url: blank))
             }
         }
 
@@ -257,6 +281,9 @@ extension WebPageView: UIViewRepresentable {
         context.coordinator.parent = self
         if context.coordinator.serial != serial { context.coordinator.load(url, serial: serial, in: view) }
     }
+    static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
+        coordinator.tearDown(view)
+    }
 }
 #else
 extension WebPageView: NSViewRepresentable {
@@ -265,6 +292,9 @@ extension WebPageView: NSViewRepresentable {
     func updateNSView(_ view: WKWebView, context: Context) {
         context.coordinator.parent = self
         if context.coordinator.serial != serial { context.coordinator.load(url, serial: serial, in: view) }
+    }
+    static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
+        coordinator.tearDown(view)
     }
 }
 #endif

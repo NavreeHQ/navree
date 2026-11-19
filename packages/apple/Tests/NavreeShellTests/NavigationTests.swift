@@ -1,4 +1,5 @@
 import Foundation
+import NavreeCoreBridge
 import NavreeDesign
 import NavreeProtocol
 import NavreeRuntime
@@ -133,6 +134,52 @@ func modal(_ json: String) throws -> Modal {
     #expect(ModalRules.height(try modal(#"{"present":"sheet","stack":[4]}"#)) == .half)
     #expect(ModalRules.height(try modal(#"{"present":"task","stack":[4]}"#)) == .full)
     #expect(ModalRules.height(try modal(#"{"present":"sheet","locked":true,"stack":[4]}"#)) == .full)
+}
+
+@MainActor
+@Test func aTaskOrSheetThatTurnsIntoALockedCoverCoversTheWholeWindowWithoutDropping() throws {
+    let transcript = try Transcript("second-step")
+    let core = try #require(Core(config: transcript.config))
+    let client = NativeClient(core: core)
+    var problems: [String] = []
+    client.problem = { problems.append($0) }
+
+    for (at, step) in transcript.steps.enumerated() {
+        let event = Transcript.event(step)
+        let data = try JSONSerialization.data(withJSONObject: event)
+        client.send(json: data, tag: event["t"] as? String ?? "?")
+        if at == 6 {
+            // Step 7: the second step opens as an unlocked task sheet.
+            #expect(ModalRules.lockedIndex(in: client.nav.modals) == nil)
+            #expect(ModalRules.sheetModal(at: 0, in: client.nav.modals)?.stack == [2])
+            #expect(ModalRules.allowsDismissal(of: 2, in: client.nav.modals))
+            #expect(!ModalRules.isUnderLockedCover(1, in: client.nav))
+        }
+        if at == 10 {
+            // Step 11: the same modal turns into the locked waiting cover in one update.
+            // Its sheet goes away without telling the core it was dismissed, and the
+            // full-window cover takes over every destination and sidebar underneath.
+            #expect(ModalRules.lockedIndex(in: client.nav.modals) == 0)
+            #expect(ModalRules.sheetModal(at: 0, in: client.nav.modals) == nil)
+            #expect(!ModalRules.allowsDismissal(of: 2, in: client.nav.modals))
+            #expect(ModalRules.isUnderLockedCover(1, in: client.nav))
+            #expect(!ModalRules.isUnderLockedCover(2, in: client.nav))
+        }
+    }
+    #expect(client.nav.modals.isEmpty)
+    #expect(problems.isEmpty, "\(problems)")
+
+    // An unlocked sheet underneath a locked cover is hidden without dismissal,
+    // while an unlocked sheet opened from the locked cover itself still shows.
+    let under = try modal(#"{"present":"sheet","locked":false,"stack":[4]}"#)
+    let cover = try modal(#"{"present":"sheet","locked":true,"stack":[5]}"#)
+    let over = try modal(#"{"present":"sheet","locked":false,"stack":[6]}"#)
+    let stacked = [under, cover, over]
+    #expect(ModalRules.lockedIndex(in: stacked) == 1)
+    #expect(ModalRules.sheetModal(at: 0, in: stacked, underLocked: true) == nil)
+    #expect(!ModalRules.allowsDismissal(of: 4, in: stacked))
+    #expect(ModalRules.sheetModal(at: 2, in: stacked, underLocked: false)?.stack == [6])
+    #expect(ModalRules.allowsDismissal(of: 6, in: stacked))
 }
 
 @Test func aScreenThatShowsSomethingWhileItLoadsAgainHasASpinnerInItsBar() throws {

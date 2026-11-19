@@ -109,7 +109,12 @@ struct SettingsContent: View {
     var body: some View {
         switch client.nav.stage {
         case .ready:
-            if let href = SettingsRules.destination(in: client.app?.user?.menu ?? [])?.href {
+            if let locked = ModalRules.lockedIndex(in: client.nav.modals) {
+                LockedCoverView(
+                    modal: client.nav.modals[locked], nextLevel: locked + 1, client: client,
+                    configuration: configuration
+                )
+            } else if let href = SettingsRules.destination(in: client.app?.user?.menu ?? [])?.href {
                 let nav = client.nav
                 let stack = nav.destinations.indices.contains(nav.selected) ? nav.destinations[nav.selected].stack : []
                 ZStack {

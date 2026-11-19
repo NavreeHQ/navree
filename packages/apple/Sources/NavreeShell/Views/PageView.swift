@@ -122,16 +122,19 @@ extension NativeClient {
 }
 
 /// The screens presented over everything, each over the one before: a sheet,
-/// a task, or (on iPhone and iPad) a cover.
+/// a task, or (on iPhone and iPad) a cover. A locked cover stands over the
+/// whole window in ``LockedCoverView`` instead, so only unlocked presentations
+/// (and those opened from the locked cover itself) are presented here.
 struct Modals: ViewModifier {
     let level: Int
     let client: NativeClient
     let configuration: ShellConfiguration
+    var underLocked = true
     @Environment(\.navreeZoomSpace) private var zoomSpace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        let modal = level < client.nav.modals.count ? client.nav.modals[level] : nil
+        let modal = ModalRules.sheetModal(at: level, in: client.nav.modals, underLocked: underLocked)
         let style = modal.map { ModalRules.presentation($0.present) }
         #if os(iOS)
         content
@@ -145,11 +148,10 @@ struct Modals: ViewModifier {
 
     /// The presented stack, with the presentations over it.
     @ViewBuilder private var presented: some View {
-        if level < client.nav.modals.count {
-            let modal = client.nav.modals[level]
+        if let modal = ModalRules.sheetModal(at: level, in: client.nav.modals, underLocked: underLocked) {
             let height = ModalRules.height(modal)
             StackView(stack: modal.stack, client: client, configuration: configuration, modal: modal)
-                .modifier(Modals(level: level + 1, client: client, configuration: configuration))
+                .modifier(Modals(level: level + 1, client: client, configuration: configuration, underLocked: underLocked))
                 .interactiveDismissDisabled(!ModalRules.dismissible(modal, unsaved: unsaved(modal)))
                 .presentationDetents(height == .half ? [.medium, .large] : [.large])
                 .presentationDragIndicator(height == .half ? .visible : .automatic)
@@ -169,7 +171,9 @@ struct Modals: ViewModifier {
         return Binding(
             get: { item },
             set: { next in
-                if next == nil, let item { client.send(.dismissed(screen: item.id)) }
+                if next == nil, let item, ModalRules.allowsDismissal(of: item.id, in: client.nav.modals) {
+                    client.send(.dismissed(screen: item.id))
+                }
             }
         )
     }
@@ -190,6 +194,47 @@ public enum ModalRules {
     /// not know are sheets.
     public static func presentation(_ present: Navree.Present) -> Style {
         present == .full ? .cover : .sheet
+    }
+
+    /// The topmost locked presentation in `modals`, when one stands over the
+    /// window: a sign-in cover or the blank cover waiting for the shell.
+    /// Drawn over the whole window rather than as a sheet, so a sidebar or
+    /// screen underneath is never shown beside or behind it, and a task or
+    /// sheet that turns into a locked cover in one update is never dropped
+    /// while its sheet goes away.
+    public static func lockedIndex(in modals: [Modal]) -> Int? {
+        modals.lastIndex { $0.locked && !$0.stack.isEmpty }
+    }
+
+    /// The presentation shown as a sheet or full-screen cover at `level`.
+    /// Nothing at or under a locked cover is shown as a sheet (`underLocked`
+    /// is `true` on the destinations and `false` on the locked cover itself,
+    /// so an unlocked sheet opened from the locked cover still is).
+    public static func sheetModal(at level: Int, in modals: [Modal], underLocked: Bool = true) -> Modal? {
+        guard modals.indices.contains(level) else { return nil }
+        if let locked = lockedIndex(in: modals), underLocked || level <= locked {
+            return nil
+        }
+        return modals[level]
+    }
+
+    /// Whether a sheet's going away for `screen` is a dismissal the person
+    /// asked for: only while `screen` still heads an unlocked presentation
+    /// above any locked cover. A sheet taken down because it turned into or
+    /// fell under a locked cover never tells the core it was dismissed.
+    public static func allowsDismissal(of screen: ScreenID, in modals: [Modal]) -> Bool {
+        guard let index = modals.firstIndex(where: { $0.stack.first == screen }) else { return false }
+        if modals[index].locked { return false }
+        if let locked = lockedIndex(in: modals), index <= locked { return false }
+        return true
+    }
+
+    /// Whether `screen` stands underneath a locked cover: its web view is
+    /// taken down until the cover goes.
+    public static func isUnderLockedCover(_ screen: ScreenID, in nav: NavPart) -> Bool {
+        guard let locked = lockedIndex(in: nav.modals) else { return false }
+        let above = nav.modals[locked...].flatMap(\.stack)
+        return !above.contains(screen)
     }
 
     /// A glance rests at half height with a grabber and is swiped away; a
@@ -291,7 +336,7 @@ struct ScreenPage: View {
     private var screenDepth: ScreenDepth {
         guard depth == 0 else { return .pushed }
         guard let modal else { return .root }
-        return ModalRules.presentation(modal.present) == .cover ? .cover : .sheet
+        return modal.locked || ModalRules.presentation(modal.present) == .cover ? .cover : .sheet
     }
 
     /// The message the person sees, on the screen in front only.
@@ -308,9 +353,14 @@ struct ScreenPage: View {
                 appName: client.app?.name ?? "", notice: shown.notice, failure: shown.failure
             )
         case .web(let address, let title, _, let serial):
-            // Only an address of the origin is loaded; any other is a page
-            // that failed, as is a page the web view could not show.
-            if let url = configuration.site?.inside(address), webFailed != serial {
+            // While a locked cover stands over the window, a web view
+            // underneath is taken down until the cover goes.
+            if ModalRules.isUnderLockedCover(state.id, in: client.nav) {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let url = configuration.site?.inside(address), webFailed != serial {
+                // Only an address of the origin is loaded; any other is a page
+                // that failed, as is a page the web view could not show.
                 WebPageView(
                     url: url, serial: serial, screen: state.id, client: client, configuration: configuration,
                     failed: { webFailed = serial }
@@ -473,7 +523,11 @@ struct Chromeless: ViewModifier {
             content
         }
         #else
-        content
+        if hidden {
+            content.toolbarVisibility(.hidden, for: .windowToolbar)
+        } else {
+            content
+        }
         #endif
     }
 }

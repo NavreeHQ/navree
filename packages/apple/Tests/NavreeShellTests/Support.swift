@@ -36,20 +36,30 @@ final class FakeTransport: Transport {
 
     /// Answers written in the test itself, by address: asked before the recorded files.
     var pages: [String: String] = [:]
+    /// Redirects written in the test itself, by address.
+    var redirects: [String: (status: Int, location: String)] = [:]
+    /// Headers included on recorded answers.
+    var headers: [[String]] = []
 
     func fetch(_ request: FetchRequest, answer: @escaping @MainActor (Response) -> Void) {
         fetched.append(request)
         let components = URLComponents(string: request.url)
         let address = (components?.percentEncodedPath ?? "") + (components?.percentEncodedQuery.map { "?" + $0 } ?? "")
+        if let redirect = redirects[address] {
+            return answer(Response(
+                request: request.request, status: redirect.status, location: redirect.location, headers: headers
+            ))
+        }
         if let page = pages[address] {
             return answer(Response(
-                request: request.request, status: 200, contentType: "application/vnd.navree.native+json", body: page
+                request: request.request, status: 200, contentType: "application/vnd.navree.native+json",
+                headers: headers, body: page
             ))
         }
         guard let found = answers[address] else { return }
         answer(Response(
             request: request.request, status: found.status, contentType: "application/vnd.navree.native+json",
-            body: Fixtures.text(found.file)
+            headers: headers, body: Fixtures.text(found.file)
         ))
     }
 

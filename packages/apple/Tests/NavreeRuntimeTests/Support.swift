@@ -125,13 +125,13 @@ struct Harness {
 /// the model kept part by part, and the whole state read at once.
 func fingerprint(app: AppPart?, nav: NavPart, screens: [ScreenID: ScreenState], messages: [Message]) -> String {
     var lines: [String] = []
-    lines.append("app \(app?.name ?? "-") \(app?.user?.name ?? "-") \(app?.home ?? "-")")
+    lines.append("app \(app?.name ?? "-") \(app?.user?.name ?? "-") \(app?.user?.key ?? "-") \(app?.home ?? "-")")
     lines.append(
         "nav \(nav.stage) \(String(describing: nav.failure)) \(nav.selected) \(String(describing: nav.front)) "
             + "\(nav.canGoBack) \(nav.width)"
     )
     for destination in nav.destinations {
-        lines.append("  destination \(destination.href) \(destination.stack)")
+        lines.append("  destination \(destination.href) \(destination.badge ?? "-") \(destination.stack)")
     }
     for modal in nav.modals {
         lines.append("  modal \(modal.present) \(modal.locked) \(modal.stack)")

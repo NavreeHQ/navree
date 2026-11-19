@@ -269,16 +269,18 @@ struct ViewCommands: View {
     var body: some View {
         if let target {
             let nav = target.client.nav
+            let covered = ModalRules.lockedIndex(in: nav.modals) != nil
             ForEach(Array(nav.destinations.enumerated()), id: \.offset) { index, destination in
                 Toggle(isOn: Binding(get: { nav.selected == index }, set: { _ in target.client.send(.select(destination: index)) })) {
                     Text(destination.label)
                 }
+                .disabled(covered)
                 .modifier(OptionalShortcut(shortcut: CommandRules.destination(index)))
             }
             Divider()
             Button("Back") { target.client.send(.back) }
                 .keyboardShortcut(KeyCommand.equivalent(.back))
-                .disabled(!nav.canGoBack)
+                .disabled(!nav.canGoBack || covered)
             Button("Refresh") {
                 if let front = nav.front { target.client.send(.refresh(screen: front)) }
             }

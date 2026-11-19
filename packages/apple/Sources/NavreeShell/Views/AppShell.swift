@@ -508,11 +508,29 @@ struct Chrome: View {
                     .buttonStyle(.borderedProminent)
             }
         case .ready:
-            destinations
-                .modifier(Modals(level: 0, client: client, configuration: configuration))
-                .tint(TintRules.appliesAppAccent(bar: .current) ? ThemeColor.accent(client.app?.theme) : nil)
-                .modifier(WindowWidth(width: WindowRules.window(client.nav.width)))
-                .environment(\.navreeFind, commands?.finding ?? 0)
+            let locked = ModalRules.lockedIndex(in: client.nav.modals)
+            ZStack {
+                #if os(macOS)
+                if locked == nil {
+                    destinations
+                        .modifier(Modals(level: 0, client: client, configuration: configuration))
+                }
+                #else
+                destinations
+                    .modifier(Modals(level: 0, client: client, configuration: configuration))
+                    .accessibilityHidden(locked != nil)
+                    .allowsHitTesting(locked == nil)
+                #endif
+                if let locked {
+                    LockedCoverView(
+                        modal: client.nav.modals[locked], nextLevel: locked + 1, client: client,
+                        configuration: configuration
+                    )
+                }
+            }
+            .tint(TintRules.appliesAppAccent(bar: .current) ? ThemeColor.accent(client.app?.theme) : nil)
+            .modifier(WindowWidth(width: WindowRules.window(client.nav.width)))
+            .environment(\.navreeFind, commands?.finding ?? 0)
         }
     }
 
@@ -727,6 +745,28 @@ struct SidebarAccount: ViewModifier {
         #else
         content
         #endif
+    }
+}
+
+/// A locked cover (a sign-in a session's end put up, or the blank cover
+/// waiting for the shell), drawn over the whole window on an opaque background
+/// so nothing of the sidebar or the screens underneath shows beside or behind
+/// it, and a sheet that turns into one is never dropped.
+struct LockedCoverView: View {
+    let modal: Modal
+    let nextLevel: Int
+    let client: NativeClient
+    let configuration: ShellConfiguration
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.background)
+                .ignoresSafeArea()
+            StackView(stack: modal.stack, client: client, configuration: configuration, modal: modal)
+                .modifier(Modals(level: nextLevel, client: client, configuration: configuration, underLocked: false))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
