@@ -269,7 +269,11 @@ async fn a_plugins_template_outside_its_namespace_fails_the_boot() {
 
     // The exact name of a template that a module it imports registers is the replacement rule's:
     // its error, not this one. A name that module does not register is this rule's.
-    let error = boot_with(options(&[]), RegistersAfterImport("mail/welcome.html"))
+    let error = Navree::app()
+        .module(ViewModule::for_root(options(&[])))
+        .module(AppMail)
+        .module(RegistersAfterImport("mail/welcome.html"))
+        .boot()
         .await
         .expect_err("fails")
         .to_string();
@@ -283,7 +287,11 @@ async fn a_plugins_template_outside_its_namespace_fails_the_boot() {
         !error.contains("which is not under its namespace"),
         "{error}"
     );
-    let error = boot_with(options(&[]), RegistersAfterImport("mail/welcome.txt"))
+    let error = Navree::app()
+        .module(ViewModule::for_root(options(&[])))
+        .module(AppMail)
+        .module(RegistersAfterImport("mail/welcome.txt"))
+        .boot()
         .await
         .expect_err("fails")
         .to_string();

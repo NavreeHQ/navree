@@ -127,7 +127,14 @@ async fn the_app_may_authorize_any_channel_with_a_plugins_function() {
     assert_eq!(reply.json["auth"], signature(SOCKET, channel, None));
 
     // The module that authorizes `orders.{id}` is the app's: the plugin lists its own only.
-    let plugins = server.app.ctx().plugins().plugins;
+    let plugins: Vec<_> = server
+        .app
+        .ctx()
+        .plugins()
+        .plugins
+        .into_iter()
+        .filter(|plugin| !plugin.first_party)
+        .collect();
     assert_eq!(plugins.len(), 1);
     let modules: Vec<&str> = plugins[0]
         .modules

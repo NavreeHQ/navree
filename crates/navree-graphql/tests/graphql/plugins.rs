@@ -125,7 +125,13 @@ async fn a_graphql_field_under_a_plugins_namespace_is_read_as_a_route_is() {
 
     // Without the plugin the app boots as before.
     let app = builder(&audit).module(SalesModule).build().await;
-    assert!(app.ctx().plugins().plugins.is_empty());
+    assert!(
+        app.ctx()
+            .plugins()
+            .plugins
+            .iter()
+            .all(|plugin| plugin.first_party)
+    );
     app.shutdown().await.unwrap();
 }
 

@@ -122,7 +122,12 @@ async fn a_plugin_that_is_not_the_frameworks_own_does_not_collide_like_a_module_
     );
 
     // It may not take over a template of an app's module it imports.
-    let Err(error) = modules().module(NoticesShell).try_build().await else {
+    let Err(error) = modules()
+        .module(CrmModule)
+        .module(NoticesShell)
+        .try_build()
+        .await
+    else {
         panic!("fails")
     };
     let error = error.to_string();

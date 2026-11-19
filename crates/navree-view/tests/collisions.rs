@@ -323,7 +323,7 @@ async fn a_plugin_replacing_a_template_of_an_app_module_it_imports_fails_the_boo
     let capture = LogCapture::default();
     let _guard = capture.install();
 
-    let error = boot(vec![Box::new(PluginShellModule)])
+    let error = boot(vec![Box::new(CrmModule), Box::new(PluginShellModule)])
         .await
         .expect_err("fails")
         .to_string();
@@ -348,7 +348,7 @@ async fn a_plugin_replacing_a_template_of_an_app_module_it_imports_fails_the_boo
     let second = views_dir(&[]);
     let error = boot_with(
         options(&[dir.path(), second.path()]),
-        vec![Box::new(PluginShellModule)],
+        vec![Box::new(CrmModule), Box::new(PluginShellModule)],
     )
     .await
     .expect_err("fails")
@@ -382,7 +382,7 @@ async fn a_plugin_replacing_an_app_template_boots_when_a_template_folder_has_the
                 dirs: vec![dir.path().to_path_buf()],
                 reload,
             },
-            vec![Box::new(PluginShellModule)],
+            vec![Box::new(CrmModule), Box::new(PluginShellModule)],
         )
         .await
         .expect("boots");
@@ -408,7 +408,7 @@ async fn a_plugin_replacing_an_app_template_boots_when_a_template_folder_has_the
                     dirs: vec![other.path().to_path_buf()],
                     reload,
                 },
-                vec![Box::new(PluginShellModule)],
+                vec![Box::new(CrmModule), Box::new(PluginShellModule)],
             )
             .await
             .expect_err("fails")
@@ -431,6 +431,7 @@ async fn a_plugin_replacing_an_app_template_boots_when_a_module_of_the_app_regis
 
     // A module of the app registers the name after the plugin's module, with text of its own.
     let app = boot(vec![
+        Box::new(CrmModule),
         Box::new(PluginShellModule),
         Box::new(AppWelcomeModule("Welcome from the app")),
     ])
@@ -443,6 +444,7 @@ async fn a_plugin_replacing_an_app_template_boots_when_a_module_of_the_app_regis
     // Or with the plugin's own text: the app takes the plugin's version, and it is the app's
     // registration that is rendered.
     let app = boot(vec![
+        Box::new(CrmModule),
         Box::new(PluginShellModule),
         Box::new(AppWelcomeModule("Welcome from the plugin's shell")),
     ])
@@ -458,6 +460,7 @@ async fn a_plugin_replacing_an_app_template_boots_when_a_module_of_the_app_regis
     // Registered before the plugin's module, it does not: the plugin's version is the one
     // rendered.
     let error = boot(vec![
+        Box::new(CrmModule),
         Box::new(AppWelcomeModule("Welcome from the app")),
         Box::new(PluginShellModule),
     ])
@@ -479,6 +482,7 @@ async fn a_module_of_the_plugins_own_crate_that_names_no_plugin_does_not_settle_
     // The helper registers the plugin's own text after the plugin's module, and names no
     // plugin: it is in the plugin's crate, so it is not a module of the app.
     let error = boot(vec![
+        Box::new(CrmModule),
         Box::new(PluginShellModule),
         Box::new(PluginHelperModule),
     ])

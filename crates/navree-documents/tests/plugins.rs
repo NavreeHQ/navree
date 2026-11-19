@@ -252,6 +252,7 @@ async fn a_plugins_document_file_outside_its_namespace_fails_the_boot() {
 
     // The exact path of a module it imports is the replacement rule's: its error, not this one.
     let Err(error) = builder(dir.path())
+        .module(CrmDocuments)
         .module(PluginAfterImport("invoices/standard.html"))
         .try_build()
         .await
@@ -345,6 +346,7 @@ async fn a_plugin_replacing_an_app_document_file_fails_until_the_app_takes_it() 
     // Nothing takes the path: the plugin's version would be the one used, and the boot fails,
     // telling the folder to use.
     let Err(error) = builder(dir.path())
+        .module(CrmDocuments)
         .module(PluginAfterImport("invoices/standard.html"))
         .try_build()
         .await
@@ -368,6 +370,7 @@ async fn a_plugin_replacing_an_app_document_file_fails_until_the_app_takes_it() 
     )
     .unwrap();
     let app = builder(with_file.path())
+        .module(CrmDocuments)
         .module(PluginAfterImport("invoices/standard.html"))
         .build()
         .await;
@@ -388,6 +391,7 @@ async fn a_plugin_replacing_an_app_document_file_fails_until_the_app_takes_it() 
     // own or with the plugin's, clears it too.
     for (contents, used) in [("the app's invoice", 1), ("the plugin's invoice", 2)] {
         let app = builder(dir.path())
+            .module(CrmDocuments)
             .module(PluginAfterImport("invoices/standard.html"))
             .module(AppDocuments(contents))
             .build()
@@ -405,6 +409,7 @@ async fn a_plugin_replacing_an_app_document_file_fails_until_the_app_takes_it() 
 
     // A module of the plugin's own crate that names no plugin is not the app.
     let Err(error) = builder(dir.path())
+        .module(CrmDocuments)
         .module(PluginAfterImport("invoices/standard.html"))
         .module(PluginHelperDocuments)
         .try_build()

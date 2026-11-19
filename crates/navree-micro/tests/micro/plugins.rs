@@ -238,7 +238,13 @@ async fn the_service_may_add_a_plugins_layer() {
     assert_eq!(me, HARPREET);
 
     // The module that adds the layer is the service's: the plugin lists its own module only.
-    let plugins = app.ctx().plugins().plugins;
+    let plugins: Vec<_> = app
+        .ctx()
+        .plugins()
+        .plugins
+        .into_iter()
+        .filter(|plugin| !plugin.first_party)
+        .collect();
     assert_eq!(plugins.len(), 1);
     let modules: Vec<&str> = plugins[0]
         .modules
@@ -253,7 +259,13 @@ async fn the_service_may_add_a_plugins_layer() {
 async fn a_service_with_no_plugin_answers_as_before() {
     let micro = MicroFake::new();
     let app = TestApp::from_builder(service(&micro)).await;
-    assert!(app.ctx().plugins().plugins.is_empty());
+    assert!(
+        app.ctx()
+            .plugins()
+            .plugins
+            .iter()
+            .all(|plugin| plugin.first_party)
+    );
 
     // A guest is refused, and a caller who signed in is who signed in.
     micro
@@ -436,7 +448,13 @@ async fn a_message_pattern_under_a_plugins_namespace_is_read_without_http() {
     let (database, _keep) = temp_sqlite_url();
     let micro = MicroFake::new();
     let app = TestApp::from_builder(sales_service(&micro, &database)).await;
-    assert!(app.ctx().plugins().plugins.is_empty());
+    assert!(
+        app.ctx()
+            .plugins()
+            .plugins
+            .iter()
+            .all(|plugin| plugin.first_party)
+    );
     app.shutdown().await.unwrap();
 }
 

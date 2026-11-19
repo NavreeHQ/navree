@@ -234,8 +234,14 @@ async fn an_app_with_no_plugin_registers_through_every_route_as_before() {
         .build()
         .await;
 
-    // No module acts for a plugin, and nothing was refused or said about one.
-    assert!(app.ctx().plugins().plugins.is_empty());
+    // No module acts for a community plugin, and nothing was refused or said about one.
+    assert!(
+        app.ctx()
+            .plugins()
+            .plugins
+            .iter()
+            .all(|plugin| plugin.first_party)
+    );
     for (target, message) in &warnings.all() {
         assert_ne!(target, "navree::security", "{message}");
         assert!(!message.contains("plugin `"), "{message}");
@@ -427,7 +433,15 @@ async fn the_frameworks_audit_module_keeps_the_apps_audit_sink_beside_a_plugin()
         .module(RosterModule(|_| {}))
         .build()
         .await;
-    assert_eq!(app.ctx().plugins().plugins.len(), 1);
+    assert_eq!(
+        app.ctx()
+            .plugins()
+            .plugins
+            .iter()
+            .filter(|plugin| !plugin.first_party)
+            .count(),
+        1
+    );
     assert!(app.ctx().try_get::<dyn AuditSink>().await.is_some());
     app.shutdown().await.unwrap();
 }
