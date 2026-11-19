@@ -130,6 +130,13 @@ impl FieldSpec {
         self
     }
 
+    /// Marks the value a secret: drawn with no value and omitted when a refused form echoes its
+    /// fields.
+    pub fn secret(mut self, secret: bool) -> Self {
+        self.field.secret = secret;
+        self
+    }
+
     /// Must not be empty: `required` in the browser, whatever the widget.
     pub fn required(mut self) -> Self {
         self.rules.push(Rule::Required);

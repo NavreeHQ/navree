@@ -399,13 +399,19 @@ impl WizardStep {
 }
 
 /// What a step's passwords and files were in a post: the values that must never be kept,
-/// longest first so that one that holds another is hidden whole.
+/// including trimmed forms when whitespace surrounds a value.
 fn hidden_values<'a>(step: &WizardStep, all: &'a Pairs) -> Vec<&'a str> {
-    let mut hidden: Vec<&str> = all
-        .iter()
-        .filter(|(name, value)| step.secret.contains(name) && !value.is_empty())
-        .map(|(_, value)| value.as_str())
-        .collect();
+    let mut hidden: Vec<&str> = Vec::new();
+    for (name, value) in all {
+        if !step.secret.contains(name) || value.is_empty() {
+            continue;
+        }
+        hidden.push(value.as_str());
+        let trimmed = value.trim();
+        if !trimmed.is_empty() && trimmed != value.as_str() {
+            hidden.push(trimmed);
+        }
+    }
     hidden.sort_by_key(|value| std::cmp::Reverse(value.len()));
     hidden.dedup();
     hidden
@@ -413,9 +419,7 @@ fn hidden_values<'a>(step: &WizardStep, all: &'a Pairs) -> Vec<&'a str> {
 
 /// `words` with every hidden value in it replaced by dots.
 fn masked(words: &str, hidden: &[&str]) -> String {
-    hidden.iter().fold(words.to_owned(), |text, value| {
-        text.replace(value, "\u{2022}\u{2022}\u{2022}\u{2022}")
-    })
+    crate::form::mask_text(words, hidden)
 }
 
 /// A form in steps.

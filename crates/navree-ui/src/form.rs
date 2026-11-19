@@ -197,7 +197,7 @@ impl Widget {
 /// assert!(control.check("141001", &cx).is_ok());
 /// assert_eq!(control.check("14100", &cx), Err("Enter a six-digit pin code".to_owned()));
 /// ```
-pub trait FieldControl: Send + Sync + RefUnwindSafe + 'static {
+pub trait FieldControl: std::any::Any + Send + Sync + RefUnwindSafe {
     /// The control's name: the namespace of the plugin that ships it, a dot and a name of its
     /// own, like `geo.location`.
     fn name(&self) -> &'static str;
@@ -246,12 +246,6 @@ pub trait FieldControl: Send + Sync + RefUnwindSafe + 'static {
     /// it is not one.
     fn secret(&self) -> bool {
         false
-    }
-
-    /// Concrete type identity for duplicate-name checks. Not public API.
-    #[doc(hidden)]
-    fn __type_id(&self) -> std::any::TypeId {
-        std::any::TypeId::of::<Self>()
     }
 }
 
@@ -375,7 +369,7 @@ impl Control {
 
     /// The concrete type of the control behind the reference.
     pub(crate) fn type_id(&self) -> std::any::TypeId {
-        self.0.__type_id()
+        std::any::Any::type_id(self.0)
     }
 }
 
@@ -2747,9 +2741,12 @@ fn echo<T: Form>(values: Vec<(String, String)>) -> Vec<(String, String)> {
     values
         .into_iter()
         .filter(|(name, value)| {
-            let secret = T::FIELDS
-                .iter()
-                .any(|field| field.name == name && field.is_secret());
+            let secret = T::FIELDS.iter().any(|field| {
+                field.is_secret()
+                    && (field.name == name
+                        || (field.widget.is_phone()
+                            && name.strip_suffix("_country") == Some(field.name)))
+            });
             if secret || value.len() > left {
                 return false;
             }
@@ -2759,22 +2756,65 @@ fn echo<T: Form>(values: Vec<(String, String)>) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Non-empty values posted for secret fields in `fields`, longest first so a value containing
-/// another is masked whole.
+/// Non-empty values posted or normalized for secret fields in `fields`, including trimmed forms
+/// when whitespace surrounds a value.
 fn hidden_values<'a>(fields: &[FormField], pairs: &'a [(String, String)]) -> Vec<&'a str> {
-    let mut hidden: Vec<&str> = pairs
-        .iter()
-        .filter(|(name, value)| {
-            !value.is_empty()
-                && fields
-                    .iter()
-                    .any(|field| field.name == name && field.is_secret())
-        })
-        .map(|(_, value)| value.as_str())
-        .collect();
+    let mut hidden: Vec<&str> = Vec::new();
+    for (name, value) in pairs {
+        if value.is_empty()
+            || !fields
+                .iter()
+                .any(|field| field.name == name && field.is_secret())
+        {
+            continue;
+        }
+        hidden.push(value.as_str());
+        let trimmed = value.trim();
+        if !trimmed.is_empty() && trimmed != value.as_str() {
+            hidden.push(trimmed);
+        }
+    }
     hidden.sort_by_key(|value| std::cmp::Reverse(value.len()));
     hidden.dedup();
     hidden
+}
+
+/// Replaces every non-empty secret in `secrets` inside `message` with four dots, locating all
+/// spans in the original text first and merging overlapping spans so one secret never splits
+/// another.
+pub(crate) fn mask_text(message: &str, secrets: &[&str]) -> String {
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+    for &secret in secrets {
+        if secret.is_empty() {
+            continue;
+        }
+        for (start, matched) in message.match_indices(secret) {
+            spans.push((start, start + matched.len()));
+        }
+    }
+    if spans.is_empty() {
+        return message.to_owned();
+    }
+    spans.sort_by_key(|&(start, end)| (start, std::cmp::Reverse(end)));
+    let mut merged: Vec<(usize, usize)> = Vec::with_capacity(spans.len());
+    for (start, end) in spans {
+        if let Some(last) = merged.last_mut()
+            && start < last.1
+        {
+            last.1 = last.1.max(end);
+        } else {
+            merged.push((start, end));
+        }
+    }
+    let mut out = String::with_capacity(message.len());
+    let mut pos = 0;
+    for (start, end) in merged {
+        out.push_str(&message[pos..start]);
+        out.push_str("\u{2022}\u{2022}\u{2022}\u{2022}");
+        pos = end;
+    }
+    out.push_str(&message[pos..]);
+    out
 }
 
 /// Replaces every secret value in `errors` with four dots, as a wizard masks its step errors.
@@ -2784,11 +2824,7 @@ fn mask_errors(mut errors: FieldErrors, hidden: &[&str]) -> FieldErrors {
     }
     for list in errors.values_mut() {
         for message in list.iter_mut() {
-            for secret in hidden {
-                if message.contains(secret) {
-                    *message = message.replace(secret, "\u{2022}\u{2022}\u{2022}\u{2022}");
-                }
-            }
+            *message = mask_text(message, hidden);
         }
     }
     errors
@@ -3110,23 +3146,23 @@ where
 {
     let words = words::<T>(messages);
     let over = over_limit::<T>(pairs, &words);
-    let outcome = match decode_values::<T>(pairs, &words, local_words, app, config) {
-        Ok(value) if over.is_empty() => return Ok(value),
-        Ok(_) => over,
-        Err(mut errors) => {
-            for (name, texts) in over {
-                errors.entry(name).or_insert(texts);
-            }
-            errors
-        }
-    };
     let mut secret_pairs: Vec<(String, String)> = pairs.to_vec();
-    for (name, value) in pairs {
-        let normalized = browser_text::<T>(name, value);
-        if normalized != *value {
-            secret_pairs.push((name.clone(), normalized));
-        }
-    }
+    let outcome =
+        match decode_values::<T>(pairs, &words, local_words, app, config, &mut secret_pairs) {
+            Ok(value) if over.is_empty() => return Ok(value),
+            Ok(value) => {
+                for (name, text) in value.values() {
+                    secret_pairs.push((name.to_owned(), text));
+                }
+                over
+            }
+            Err(mut errors) => {
+                for (name, texts) in over {
+                    errors.entry(name).or_insert(texts);
+                }
+                errors
+            }
+        };
     let hidden = hidden_values(T::FIELDS, &secret_pairs);
     Err(mask_errors(outcome, &hidden))
 }
@@ -3163,9 +3199,10 @@ fn over_limit<T: Form>(pairs: &[(String, String)], words: &AppMessages) -> Field
 fn decode_values<T>(
     pairs: &[(String, String)],
     words: &AppMessages,
-    reader: &ReaderWords,
+    local_words: &ReaderWords,
     app: Option<&AppContext>,
     config: Option<&Config>,
+    secret_pairs: &mut Vec<(String, String)>,
 ) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
@@ -3174,11 +3211,17 @@ where
     // type reads `14:30:00` and `2026-11-04T14:30:00`.
     let pairs: Vec<(String, String)> = pairs
         .iter()
-        .map(|(name, value)| (name.clone(), browser_text::<T>(name, value)))
+        .map(|(name, value)| {
+            let normalized = browser_text::<T>(name, value);
+            if normalized != *value {
+                secret_pairs.push((name.clone(), normalized.clone()));
+            }
+            (name.clone(), normalized)
+        })
         .collect();
     let cx = ControlCx::new(words, app, config);
-    let refused = refused_by_pickers::<T>(&pairs, words, reader, &cx);
-    let outcome = read::<T>(&pairs, words, &cx, &refused);
+    let refused = refused_by_pickers::<T>(&pairs, words, local_words, &cx);
+    let outcome = read::<T>(&pairs, words, &cx, &refused, secret_pairs);
     if refused.is_empty() {
         return outcome;
     }
@@ -3217,12 +3260,17 @@ fn read<T>(
     words: &AppMessages,
     cx: &ControlCx<'_>,
     refused: &FieldErrors,
+    secret_pairs: &mut Vec<(String, String)>,
 ) -> Result<T, FieldErrors>
 where
     T: Form + DeserializeOwned + Validate,
 {
     #[cfg(feature = "phone")]
     let (phones, phone_errors) = read_phones::<T>(pairs, words);
+    #[cfg(feature = "phone")]
+    for (name, value) in &phones {
+        secret_pairs.push((name.clone(), value.clone()));
+    }
     #[cfg(feature = "phone")]
     let pairs = phones.as_slice();
     // A list field's values are read together: the deserializer takes a name once.
@@ -3326,8 +3374,20 @@ where
         }
     };
     match value.validate() {
-        Ok(()) => Ok(value),
-        Err(violations) => Err(rule_errors::<T>(&violations, words)),
+        Ok(()) => {
+            if !refused.is_empty() {
+                for (name, text) in value.values() {
+                    secret_pairs.push((name.to_owned(), text));
+                }
+            }
+            Ok(value)
+        }
+        Err(violations) => {
+            for (name, text) in value.values() {
+                secret_pairs.push((name.to_owned(), text));
+            }
+            Err(rule_errors::<T>(&violations, words))
+        }
     }
 }
 
@@ -3598,13 +3658,15 @@ impl<T: Form> Rejected<T> {
     /// `OptionSource::all_pickable`), a name that is taken. It answers as a failed
     /// rule does: the runtime gets ops that show `errors` under the fields, and
     /// without JavaScript the form comes back with what was sent. Take the request's
-    /// `Parts` beside `Submit` to give it.
+    /// `Parts` beside `Submit` to give it, and finish with [`for_request`](Self::for_request)
+    /// when it draws its own fallback page so the app's shell, language and fresh-page
+    /// policy apply as they do for [`Submit`].
     ///
     /// ```ignore
     /// async fn store(parts: Parts, uow: Uow, Submit(deal): Submit<NewDeal>) -> Result<Response> {
     ///     if !PEOPLE.all_pickable(Person::query(), &deal.owner_id, &uow, OptionSource::as_int).await? {
     ///         let errors = FieldErrors::from([("owner_id".to_owned(), vec!["Choose from the list.".to_owned()])]);
-    ///         return Ok(Rejected::after_decode(&deal, errors, &parts).into_response());
+    ///         return Ok(Rejected::after_decode(&deal, errors, &parts).for_request(&parts).await.into_response());
     ///     }
     ///     // ...
     /// }
@@ -4026,7 +4088,11 @@ where
             Ok(violations) if violations.is_empty() => Ok(Self(value)),
             Ok(violations) => {
                 let errors = rule_errors::<T>(&violations, &words::<T>(&language.messages));
-                let hidden = hidden_values(T::FIELDS, &values);
+                let mut secret_pairs = values.clone();
+                for (name, text) in value.values() {
+                    secret_pairs.push((name.to_owned(), text));
+                }
+                let hidden = hidden_values(T::FIELDS, &secret_pairs);
                 let errors = mask_errors(errors, &hidden);
                 let mut refused = rejected(echoed.unwrap_or(values), errors, action);
                 if !from_runtime {

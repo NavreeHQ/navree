@@ -382,6 +382,8 @@ impl Controller for Pages {
             RouteDef::on(Method::POST, "!/sign-ups", sign_ups).public(),
             RouteDef::on(Method::POST, "!/sign-ups/values", sign_up_values).public(),
             RouteDef::on(Method::POST, "!/vault-keys", vault_keys).public(),
+            #[cfg(feature = "phone")]
+            RouteDef::on(Method::POST, "!/secret-phones", secret_phones).public(),
             RouteDef::on(Method::POST, "!/deliveries/{id}/pin", pin_edit).public(),
             RouteDef::on(Method::POST, "!/deliveries/{id}/note", note_edit).public(),
             RouteDef::on(Method::POST, "!/deliveries/{id}/seats", seats_edit).public(),
@@ -1729,6 +1731,26 @@ fn a_field_marked_secret_is_drawn_with_no_value_whatever_draws_it() {
     let cell_html =
         render(&EditCell::control("482915", "/vault/42/code", Control::new(&ONE_TIME_CODE)).into());
     assert!(!cell_html.contains("482915"), "{cell_html}");
+
+    let described = navree_ui::described::DescribedForm::new("vault-described").field(
+        navree_ui::described::FieldSpec::new(
+            "api_key",
+            "API key",
+            Widget::Input(navree_ui::InputKind::Text),
+        )
+        .secret(true),
+    );
+    let described_html = render(
+        &described
+            .view()
+            .post("/vault")
+            .with_values(pairs(&[("api_key", "sk-live-amritsar-88")]))
+            .into(),
+    );
+    assert!(
+        !described_html.contains("sk-live-amritsar-88"),
+        "{described_html}"
+    );
 }
 
 /// Echoes the posted value in its error so tests prove the refusal masks it.
@@ -1884,4 +1906,265 @@ async fn a_refusal_never_repeats_a_secret_fields_value_in_its_words() {
         .read(Control::new(&ECHOING_SECRET), &Language::english())
         .unwrap_err();
     assert_eq!(cell_refused.message(), "Key •••• was revoked");
+}
+
+/// Trims surrounding whitespace before checking, echoing the trimmed secret on failure.
+struct TrimmingSecretControl;
+
+impl FieldControl for TrimmingSecretControl {
+    fn name(&self) -> &'static str {
+        "app.trimming-secret"
+    }
+
+    fn draw(&self, field: &ControlField<'_>) -> Node {
+        el("input")
+            .attr("type", "password")
+            .attr("name", field.name.to_owned())
+            .flag("disabled", field.disabled)
+            .into()
+    }
+
+    fn check(&self, value: &str, _cx: &ControlCx<'_>) -> Result<(), String> {
+        let trimmed = value.trim();
+        if trimmed.starts_with("bad-") {
+            Err(format!("Key {trimmed} was revoked"))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn secret(&self) -> bool {
+        true
+    }
+}
+
+static TRIMMING_SECRET: TrimmingSecretControl = TrimmingSecretControl;
+
+#[derive(Debug, Deserialize, Validate, Form)]
+struct OverlappingSecretsForm {
+    /// Current password
+    #[validate(skip)]
+    current_password: String,
+    /// New password
+    #[validate(custom(check_overlapping(&self.current_password)))]
+    new_password: String,
+    /// Backup key
+    #[validate(skip)]
+    #[form(control = TRIMMING_SECRET)]
+    backup_key: String,
+}
+
+fn check_overlapping<'a>(
+    current: &'a str,
+) -> impl FnOnce(&str) -> Result<(), navree_validation::Violation> + 'a {
+    move |next: &str| {
+        if current == "kesar123" && next == "123456" {
+            Err(navree_validation::Violation::text(
+                "Combined kesar123456 cannot be used",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[cfg(feature = "phone")]
+#[derive(Debug, Deserialize, Validate)]
+struct SecretPhoneForm {
+    #[validate(skip)]
+    holder: String,
+    #[validate(custom(check_secret_phone))]
+    backup_phone: String,
+}
+
+#[cfg(feature = "phone")]
+fn check_secret_phone(value: &str) -> Result<(), navree_validation::Violation> {
+    Err(navree_validation::Violation::text(format!(
+        "Phone {value} is already registered"
+    )))
+}
+
+#[cfg(feature = "phone")]
+impl navree_ui::form::Form for SecretPhoneForm {
+    const ID: &'static str = "secret-phone";
+    const FIELDS: &'static [FormField] = &[
+        FormField::new(
+            "holder",
+            "Holder",
+            Widget::Input(navree_ui::InputKind::Text),
+        ),
+        FormField::new("backup_phone", "Backup phone", Widget::PhoneText).secret(true),
+    ];
+    const RULES: &'static [navree_validation::FieldRules] = &[];
+
+    fn values(&self) -> Vec<(&'static str, String)> {
+        vec![
+            ("holder", self.holder.clone()),
+            ("backup_phone", self.backup_phone.clone()),
+        ]
+    }
+}
+
+#[cfg(feature = "phone")]
+async fn secret_phones(
+    submit: Result<Submit<SecretPhoneForm>, Rejected<SecretPhoneForm>>,
+) -> Response {
+    match submit {
+        Ok(Submit(_)) => "saved".into_response(),
+        Err(rejected) => {
+            let debug_text = format!("{rejected:?}");
+            assert!(
+                !debug_text.contains("backup_phone"),
+                "secret phone field or country stayed in Rejected: {debug_text}"
+            );
+            rejected.into_response()
+        }
+    }
+}
+
+#[tokio::test]
+async fn overlapping_trimmed_and_normalized_secret_values_are_masked_in_refusals() {
+    // 1. Overlapping secret spans (`"kesar123"` + `"123456"` inside `"kesar123456"`) merge into a
+    //    single masked span without leaking the trailing `"456"`.
+    let overlap_errors = decode::<OverlappingSecretsForm>(&pairs(&[
+        ("current_password", "kesar123"),
+        ("new_password", "123456"),
+        ("backup_key", "live-7741"),
+    ]))
+    .unwrap_err();
+    assert_eq!(
+        overlap_errors["new_password"],
+        ["Combined •••• cannot be used"]
+    );
+
+    let (parts, ()) = http::Request::builder()
+        .method(Method::POST)
+        .uri("/vault-overlap")
+        .header("x-navree-ui", "1")
+        .body(())
+        .expect("parts")
+        .into_parts();
+    let decoded_overlap = OverlappingSecretsForm {
+        current_password: "amritsar-key".to_owned(),
+        new_password: "key-9941".to_owned(),
+        backup_key: "  bad-vault-7741  ".to_owned(),
+    };
+    let after_errors = navree_ui::form::FieldErrors::from([(
+        "new_password".to_owned(),
+        vec!["Pair amritsar-key-9941 and bad-vault-7741 rejected".to_owned()],
+    )]);
+    let after = Rejected::after_decode(&decoded_overlap, after_errors, &parts);
+    assert_eq!(
+        after.errors()["new_password"],
+        ["Pair •••• and •••• rejected"]
+    );
+
+    // 2. Trimmed secret values (`"  bad-vault-7741  "`) are masked across `decode`,
+    //    `check_controls`, `EditedValue::read`, and `Wizard`.
+    let trimmed_errors = decode::<OverlappingSecretsForm>(&pairs(&[
+        ("current_password", "strong-pass-1"),
+        ("new_password", "strong-pass-2"),
+        ("backup_key", "  bad-vault-7741  "),
+    ]))
+    .unwrap_err();
+    assert_eq!(trimmed_errors["backup_key"], ["Key •••• was revoked"]);
+
+    let described = [FormField::new(
+        "backup_key",
+        "Backup key",
+        Widget::Control(Control::new(&TRIMMING_SECRET)),
+    )];
+    let ctrl_errors = check_controls(
+        &described,
+        &pairs(&[("backup_key", "  bad-vault-7741  ")]),
+        &Language::english(),
+    );
+    assert_eq!(ctrl_errors["backup_key"], ["Key •••• was revoked"]);
+
+    let cell_req = http::Request::builder()
+        .method(Method::POST)
+        .uri("/deliveries/42/vault")
+        .header("content-type", FORM)
+        .body(Body::from("value=++bad-vault-7741++"))
+        .expect("a post");
+    let cell_edit = EditedValue::<String>::from_request(cell_req)
+        .await
+        .expect("a posted edit");
+    let cell_refused = cell_edit
+        .read(Control::new(&TRIMMING_SECRET), &Language::english())
+        .unwrap_err();
+    assert_eq!(cell_refused.message(), "Key •••• was revoked");
+
+    let wizard = Wizard::new("vault-wizard")
+        .base("/vault-wizard")
+        .step(WizardStep::of::<OverlappingSecretsForm>("keys", "Keys"));
+    let mut draft = Draft::new("keys");
+    let outcome = wizard.submit(
+        &mut draft,
+        "keys",
+        &pairs(&[
+            ("_rev", "0"),
+            ("_wizard", "finish"),
+            ("current_password", "kesar123"),
+            ("new_password", "123456"),
+            ("backup_key", "  bad-vault-7741  "),
+        ]),
+    );
+    assert!(matches!(outcome, WizardOutcome::Invalid(_)), "{outcome:?}");
+    let serialized_draft = serde_json::to_string(&draft).expect("draft JSON");
+    assert!(!serialized_draft.contains("456"), "{serialized_draft}");
+    assert!(!serialized_draft.contains("7741"), "{serialized_draft}");
+    assert!(
+        serialized_draft.contains("Combined •••• cannot be used"),
+        "{serialized_draft}"
+    );
+    assert!(
+        serialized_draft.contains("Key •••• was revoked"),
+        "{serialized_draft}"
+    );
+
+    // 3. Normalized E.164 secret phone numbers (`"+91 98765 43210"` -> `"+919876543210"`) are
+    //    masked in `decode` and `Submit`, and `{name}_country` is dropped from `Rejected`.
+    #[cfg(feature = "phone")]
+    {
+        let phone_errors = decode::<SecretPhoneForm>(&pairs(&[
+            ("holder", "Gurpreet Singh"),
+            ("backup_phone", "98765 43210"),
+            ("backup_phone_country", "IN"),
+        ]))
+        .unwrap_err();
+        assert_eq!(
+            phone_errors["backup_phone"],
+            ["Phone •••• is already registered"]
+        );
+
+        let app = boot().await;
+        let res = post(
+            &app,
+            "/secret-phones",
+            "holder=Gurpreet+Singh&backup_phone=%2B91+98765+43210&backup_phone_country=IN",
+            true,
+        )
+        .await;
+        assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let raw = res.text();
+        assert!(!raw.contains("98765"), "{raw}");
+        assert_eq!(
+            res.json_value()["ops"][0]["fields"]["backup_phone"],
+            json!(["Phone •••• is already registered"])
+        );
+
+        let page_res = post(
+            &app,
+            "/secret-phones",
+            "holder=Gurpreet+Singh&backup_phone=98765+43210&backup_phone_country=IN",
+            false,
+        )
+        .await;
+        assert_eq!(page_res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let html = page_res.text();
+        assert!(!html.contains("98765"), "{html}");
+        assert!(html.contains("Phone •••• is already registered"), "{html}");
+        app.shutdown().await.unwrap();
+    }
 }
