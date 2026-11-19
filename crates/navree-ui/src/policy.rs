@@ -366,6 +366,9 @@ impl PagePolicy {
 
 /// Whether `listed`, a source of the policy, covers `asked`, a source written in lower case.
 fn covers(listed: &str, asked: &str) -> bool {
+    if asked.bytes().any(|byte| byte <= b' ') {
+        return false;
+    }
     if listed == "'self'" {
         return asked == listed;
     }
@@ -396,6 +399,12 @@ fn covers(listed: &str, asked: &str) -> bool {
     else {
         return false;
     };
+    if listed_host != "127.0.0.1"
+        && listed_host != "localhost"
+        && (host.is_empty() || !host.split('.').all(is_label))
+    {
+        return false;
+    }
     let default = match scheme {
         "https" | "wss" => Some(443),
         "http" | "ws" => Some(80),
@@ -450,7 +459,7 @@ fn is_origin(authority: &str) -> bool {
     name.len() <= 253
         && name.split('.').count() >= 2
         && name.split('.').all(is_label)
-        && !top.bytes().all(|byte| byte.is_ascii_digit())
+        && top.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
 }
 
 /// Whether `authority` is this machine, with a port or without: `localhost` or `127.0.0.1`.
@@ -606,6 +615,7 @@ pub(crate) async fn build(ctx: &AppContext) -> Result<PagePolicy, BoxError> {
 
     let plugins: Vec<&'static str> = plugin_reports
         .iter()
+        .filter(|plugin| !plugin.first_party)
         .map(|plugin| plugin.info.namespace)
         .collect();
     tell(&options, &asks, &wasm_asks, &plugins, &header);
@@ -854,6 +864,94 @@ pub(crate) async fn in_fresh_scope<F: std::future::Future>(future: F) -> F::Outp
     FRESH.scope(scope, future).await
 }
 
+/// The most unmatched addresses `FreshRoutes::plain` remembers, so missing paths cannot grow
+/// without bound.
+const MOST_PLAIN_PATHS: usize = 4_096;
+
+/// Strips the toolkit's flash-toast cookie (`navree_ui_flash`) from a `Cookie` header value so a
+/// fresh-route probe never consumes a pending toast.
+fn without_flash_cookie(value: &HeaderValue) -> Option<HeaderValue> {
+    let Ok(raw) = value.to_str() else {
+        return Some(value.clone());
+    };
+    let kept: Vec<&str> = raw
+        .split(';')
+        .map(str::trim)
+        .filter(|pair| !pair.is_empty())
+        .filter(|pair| {
+            let name = pair.split('=').next().unwrap_or_default().trim();
+            name != crate::shell::FLASH_COOKIE
+        })
+        .collect();
+    if kept.is_empty() {
+        None
+    } else {
+        HeaderValue::from_str(&kept.join("; ")).ok()
+    }
+}
+
+/// Builds a clean `GET` request for [`FreshRoutes`] probing: copies only `AppContext`, a known
+/// non-unspecified `ClientIp` (as `ConnectInfo` so the pipeline resolves that exact `ClientIp`
+/// and never spoofs loopback `127.0.0.1`), `Accept`, `Host`, `User-Agent`, and `Cookie` with
+/// `navree_ui_flash` stripped.
+fn probe_request(
+    ctx: &AppContext,
+    uri_path: &str,
+    headers: &http::HeaderMap,
+    client_ip: Option<std::net::IpAddr>,
+) -> Option<Request> {
+    let mut request = http::Request::builder()
+        .method(http::Method::GET)
+        .uri(uri_path)
+        .header(
+            http::header::ACCEPT,
+            HeaderValue::from_static("text/html,application/xhtml+xml"),
+        )
+        .body(navree_http::body::Body::empty())
+        .ok()?;
+    for value in headers.get_all(http::header::COOKIE) {
+        if let Some(cleaned) = without_flash_cookie(value) {
+            request.headers_mut().append(http::header::COOKIE, cleaned);
+        }
+    }
+    for kept in [http::header::HOST, http::header::USER_AGENT] {
+        for value in headers.get_all(&kept) {
+            request.headers_mut().append(kept.clone(), value.clone());
+        }
+    }
+    request.extensions_mut().insert(ctx.clone());
+    if let Some(ip) = client_ip.filter(|ip| !ip.is_unspecified()) {
+        let peer = std::net::SocketAddr::new(ip, 0);
+        request
+            .extensions_mut()
+            .insert(navree_http::serve::ConnectInfo(peer));
+        request.extensions_mut().insert(navree_http::ClientIp(ip));
+    }
+    Some(request)
+}
+
+/// Whether `response` is a redirect to the app's sign-in page (`sign_in` or `/login`).
+fn redirects_to_sign_in(response: &Response, sign_in: Option<&str>) -> bool {
+    if !response.status().is_redirection() {
+        return false;
+    }
+    let Some(location) = response
+        .headers()
+        .get(http::header::LOCATION)
+        .and_then(|value| value.to_str().ok())
+    else {
+        return false;
+    };
+    let matches_target = |target: &str| {
+        !target.is_empty()
+            && (location == target
+                || location
+                    .strip_prefix(target)
+                    .is_some_and(|rest| rest.starts_with(['?', '#', '/'])))
+    };
+    matches_target("/login") || sign_in.is_some_and(matches_target)
+}
+
 /// Remembers which route patterns answer with a fresh page in an app where pages that start clean
 /// are on, and probes `GET` once when an error page or refused form runs at an address whose
 /// `GET` handler has not run yet.
@@ -865,8 +963,36 @@ pub(crate) struct FreshRoutes {
 }
 
 impl FreshRoutes {
+    fn note_plain_route(&self, path: &str) {
+        let already_fresh = self
+            .fresh
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(path);
+        if !already_fresh {
+            self.plain
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(path.to_owned());
+        }
+    }
+
+    fn note_plain_path(&self, path: &str) {
+        let already_fresh = self
+            .fresh
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(path);
+        if !already_fresh {
+            let mut plain = self.plain.lock().unwrap_or_else(PoisonError::into_inner);
+            if plain.len() < MOST_PLAIN_PATHS {
+                plain.insert(path.to_owned());
+            }
+        }
+    }
+
     /// Records whether `response` answered a fresh page or a plain page on its route pattern.
-    pub(crate) fn note_response(&self, response: &Response) {
+    pub(crate) fn note_response(&self, is_get: bool, response: &Response) {
         let Some(route) = response.extensions().get::<Arc<RouteMeta>>() else {
             return;
         };
@@ -881,22 +1007,13 @@ impl FreshRoutes {
                 .unwrap_or_else(PoisonError::into_inner)
                 .insert(path.to_owned());
         } else if response.status().is_success()
-            && response
-                .extensions()
-                .get::<crate::view::ViewAnswer>()
-                .is_some()
+            && (is_get
+                || response
+                    .extensions()
+                    .get::<crate::view::ViewAnswer>()
+                    .is_some())
         {
-            let already_fresh = self
-                .fresh
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .contains(path);
-            if !already_fresh {
-                self.plain
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .insert(path.to_owned());
-            }
+            self.note_plain_route(path);
         }
     }
 
@@ -921,7 +1038,14 @@ impl FreshRoutes {
         None
     }
 
-    async fn probe(&self, ctx: &AppContext, request: Request) -> bool {
+    async fn probe(
+        &self,
+        ctx: &AppContext,
+        route_path: Option<&str>,
+        uri_path: &str,
+        request: Request,
+    ) -> bool {
+        use http::StatusCode;
         use std::time::Duration;
         use tower::ServiceExt;
 
@@ -937,13 +1061,47 @@ impl FreshRoutes {
         };
         let router = router.clone();
         let attempt = PROBING.scope((), router.oneshot(request));
-        match tokio::time::timeout(Duration::from_millis(500), attempt).await {
-            Ok(Ok(response)) => {
-                self.note_response(&response);
-                is_fresh_answer(&response)
+        let Ok(Ok(response)) = tokio::time::timeout(Duration::from_millis(500), attempt).await
+        else {
+            return false;
+        };
+        self.note_response(true, &response);
+        if is_fresh_answer(&response) {
+            if response.extensions().get::<Arc<RouteMeta>>().is_none()
+                && let Some(route_path) = route_path
+            {
+                self.plain
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .remove(route_path);
+                self.fresh
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .insert(route_path.to_owned());
             }
-            _ => false,
+            return true;
         }
+        let status = response.status();
+        let sign_in = ctx
+            .try_get::<crate::pages::PagesOptions>()
+            .await
+            .map(|options| options.sign_in.clone());
+        if status != StatusCode::UNAUTHORIZED
+            && !status.is_server_error()
+            && !redirects_to_sign_in(&response, sign_in.as_deref())
+        {
+            if let Some(matched) = response
+                .extensions()
+                .get::<Arc<RouteMeta>>()
+                .map(|route| route.full_path.as_str())
+                .or(route_path)
+            {
+                self.note_plain_route(matched);
+            } else {
+                self.note_plain_path(uri_path);
+            }
+        }
+        false
     }
 
     /// Whether the address of `parts` belongs to a fresh page, probing `GET` once if needed.
@@ -955,29 +1113,14 @@ impl FreshRoutes {
         if let Some(known) = self.is_known_fresh(route_path, parts.uri.path()) {
             return known;
         }
-        let Ok(uri) = http::Uri::try_from(parts.uri.path()) else {
+        let client_ip = parts
+            .extensions
+            .get::<navree_http::ClientIp>()
+            .map(|ip| ip.0);
+        let Some(request) = probe_request(ctx, parts.uri.path(), &parts.headers, client_ip) else {
             return false;
         };
-        let mut probe_parts = parts.clone();
-        probe_parts.method = http::Method::GET;
-        probe_parts.uri = uri;
-        let mut headers = http::HeaderMap::new();
-        headers.insert(
-            http::header::ACCEPT,
-            HeaderValue::from_static("text/html,application/xhtml+xml"),
-        );
-        for kept in [
-            http::header::COOKIE,
-            http::header::HOST,
-            http::header::USER_AGENT,
-        ] {
-            for value in parts.headers.get_all(&kept) {
-                headers.append(kept.clone(), value.clone());
-            }
-        }
-        probe_parts.headers = headers;
-        let request = Request::from_parts(probe_parts, navree_http::body::Body::empty());
-        self.probe(ctx, request).await
+        self.probe(ctx, route_path, parts.uri.path(), request).await
     }
 
     /// Whether the address of `error_ctx` belongs to a fresh page, probing `GET` once if needed.
@@ -990,32 +1133,21 @@ impl FreshRoutes {
         {
             return known;
         }
-        let Ok(mut builder) = http::Request::builder()
-            .method(http::Method::GET)
-            .uri(error_ctx.uri.path())
-            .header(
-                http::header::ACCEPT,
-                HeaderValue::from_static("text/html,application/xhtml+xml"),
-            )
-            .body(navree_http::body::Body::empty())
-        else {
+        let Some(request) = probe_request(
+            &error_ctx.ctx,
+            error_ctx.uri.path(),
+            &error_ctx.headers,
+            None,
+        ) else {
             return false;
         };
-        for kept in [
-            http::header::COOKIE,
-            http::header::HOST,
-            http::header::USER_AGENT,
-        ] {
-            for value in error_ctx.headers.get_all(&kept) {
-                builder.headers_mut().append(kept.clone(), value.clone());
-            }
-        }
-        let peer =
-            std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 49152);
-        builder
-            .extensions_mut()
-            .insert(navree_http::serve::ConnectInfo(peer));
-        self.probe(&error_ctx.ctx, builder).await
+        self.probe(
+            &error_ctx.ctx,
+            Some(route.full_path.as_str()),
+            error_ctx.uri.path(),
+            request,
+        )
+        .await
     }
 }
 
@@ -1108,9 +1240,10 @@ pub(crate) async fn fresh_layer(
     next: Next,
 ) -> Response {
     request.extensions_mut().insert(routes.clone());
+    let is_get = request.method() == http::Method::GET;
     let scope = Arc::new(Scope::default());
     let response = FRESH.scope(scope.clone(), next.run(request)).await;
-    routes.note_response(&response);
+    routes.note_response(is_get, &response);
     if PROBING.try_with(|_| ()).is_ok() {
         return response;
     }

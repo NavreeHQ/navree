@@ -152,7 +152,8 @@ fn register(m: &mut ModuleBuilder, always: bool, pages: Option<PagesOptions>) {
             };
             Ok(Arc::new(options.checked()))
         }
-    }));
+    }))
+    .exports::<PagesOptions>();
     // The policy every page is served with: the toolkit's own, widened only by what the app's
     // `ui.policy` section allows. A key or a source outside the rules stops the boot.
     m.factory(Factory::<PagePolicy>::new(|r: Resolver| async move {

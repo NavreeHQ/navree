@@ -1347,7 +1347,13 @@ fn the_scoper_refuses_every_attribute_that_holds_an_address() {
         "blocking",
         "target",
         "popovertarget",
+        "popovertargetaction",
+        "command",
         "commandfor",
+        "formnovalidate",
+        "download",
+        "data-key",
+        "data-genui",
         "xlink:href",
     ] {
         let list: &'static [&'static str] = Box::leak(Box::new([refused]));
@@ -1370,6 +1376,12 @@ fn an_extension_call_address_holds_no_dot_segment() {
         "/geo/drop/.",
         "/geo/drop/..",
         "/geo\\admin",
+        "/geo/..%2fadmin",
+        "/geo/..%2Fadmin",
+        "/geo/%2f/drop",
+        "/geo/%5cdrop",
+        "/geo/%5Cdrop",
+        "/geo/drop\t",
     ] {
         let html = navree_ui::render(
             &el("div")

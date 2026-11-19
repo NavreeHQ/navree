@@ -1326,9 +1326,13 @@ async fn a_source_whose_host_is_an_address_in_numbers_is_refused_unless_it_is_th
 
     for refused in [
         "https://203.0.113.10",
+        "https://203.0.113.0xa",
         "https://192.168.1.1:8443",
         "https://10.0.0.1",
         "https://127.0.0.1",
+        "https://127.0.0.0x1",
+        "https://127.0.0.0x1:8443",
+        "https://127.0.0.01",
         "https://*.168.1.1",
         "https://[::1]",
         "http://192.168.1.1",
@@ -1354,6 +1358,17 @@ async fn a_source_whose_host_is_an_address_in_numbers_is_refused_unless_it_is_th
         wss_err
             .contains("ui.policy.allow.geo.connect_src[0] is not a source the page policy takes"),
         "{wss_err}"
+    );
+
+    let wss_hex_err = boot_error(builder().module(Geo).config(
+        "ui.policy.allow.geo.connect_src",
+        json!(["wss://127.0.0.0x1"]),
+    ))
+    .await;
+    assert!(
+        wss_hex_err
+            .contains("ui.policy.allow.geo.connect_src[0] is not a source the page policy takes"),
+        "{wss_hex_err}"
     );
 
     // `http://127.0.0.1` (with or without a port) points at this machine and stays allowed outside
@@ -1407,6 +1422,215 @@ async fn allows_reads_an_address_with_a_backslash_as_a_browser_does() {
         r"https:/\tile.openstreetmap.org/15/1/2.png"
     ));
     assert!(policy.allows(Directive::ImgSrc, r"https://a.tiles.example\15\1\2.png"));
+
+    // Control characters, whitespace and invalid host labels are refused.
+    assert!(!policy.allows(
+        Directive::ImgSrc,
+        "https://\ttile.openstreetmap.org/15/1/2.png"
+    ));
+    assert!(!policy.allows(
+        Directive::ImgSrc,
+        "https://tile.openstreetmap.org/15/1/2.png\n"
+    ));
+    assert!(!policy.allows(Directive::ImgSrc, "https://bad_host!.tiles.example/1.png"));
+
+    app.shutdown().await.unwrap();
+}
+
+#[derive(Default)]
+struct ProbeObs {
+    internal_hits: usize,
+    internal_loopback: Option<bool>,
+    cookies_seen: Vec<String>,
+    plain_hits: usize,
+    after_hits: usize,
+}
+
+static PROBE_OBS: Mutex<Option<ProbeObs>> = Mutex::new(None);
+
+struct ProbeController;
+
+impl Injectable for ProbeController {
+    fn dependencies() -> Vec<ProviderKey> {
+        Vec::new()
+    }
+
+    fn construct(_: Resolver) -> BoxFuture<'static, Result<Self, KernelError>> {
+        Box::pin(async { Ok(Self) })
+    }
+}
+
+async fn after_decode_fresh(
+    parts: http::request::Parts,
+    submit: Result<Submit<CredentialsForm>, Rejected<CredentialsForm>>,
+) -> Response {
+    match submit {
+        Ok(Submit(form)) => {
+            let errors = navree_ui::form::FieldErrors::from([(
+                "email".to_owned(),
+                vec!["That address is already active.".to_owned()],
+            )]);
+            Rejected::after_decode(&form, errors, &parts)
+                .for_request(&parts)
+                .await
+                .into_response()
+        }
+        Err(rejected) => rejected.into_response(),
+    }
+}
+
+impl Controller for ProbeController {
+    fn prefix(&self) -> &'static str {
+        ""
+    }
+
+    fn routes(self: Arc<Self>) -> Vec<RouteDef> {
+        vec![
+            RouteDef::on(
+                Method::GET,
+                "!/internal-diagnostics",
+                |ip: navree_http::ClientIp, parts: http::request::Parts| async move {
+                    let mut guard = PROBE_OBS.lock().expect("probe observations");
+                    let obs = guard.get_or_insert_with(ProbeObs::default);
+                    obs.internal_hits += 1;
+                    obs.internal_loopback = Some(ip.0.is_loopback());
+                    for value in parts.headers.get_all(http::header::COOKIE) {
+                        if let Ok(text) = value.to_str() {
+                            obs.cookies_seen.push(text.to_owned());
+                        }
+                    }
+                    View::new("Diagnostics").body(el("p").child("Sarabha Nagar"))
+                },
+            )
+            .public()
+            .page(),
+            RouteDef::on(Method::POST, "!/post-only-action", credentials_submit).public(),
+            RouteDef::on(Method::GET, "!/plain-counted", || async {
+                let mut guard = PROBE_OBS.lock().expect("probe observations");
+                guard.get_or_insert_with(ProbeObs::default).plain_hits += 1;
+                View::new("Plain").body(el("p").child("Ludhiana"))
+            })
+            .public()
+            .page(),
+            RouteDef::on(Method::POST, "!/plain-counted", credentials_submit)
+                .public()
+                .page(),
+            RouteDef::on(
+                Method::GET,
+                "!/after-decode-fresh",
+                |parts: http::request::Parts| async move {
+                    let mut guard = PROBE_OBS.lock().expect("probe observations");
+                    let obs = guard.get_or_insert_with(ProbeObs::default);
+                    obs.after_hits += 1;
+                    for value in parts.headers.get_all(http::header::COOKIE) {
+                        if let Ok(text) = value.to_str() {
+                            obs.cookies_seen.push(text.to_owned());
+                        }
+                    }
+                    sign_in(true)
+                },
+            )
+            .public()
+            .page(),
+            RouteDef::on(Method::POST, "!/after-decode-fresh", after_decode_fresh)
+                .public()
+                .page(),
+        ]
+    }
+}
+
+struct ProbeModule;
+
+impl Module for ProbeModule {
+    fn register(&self, m: &mut ModuleBuilder) {
+        m.controller::<ProbeController>();
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn fresh_route_probes_never_spoof_loopback_strip_flash_cookies_and_cache_plain_routes() {
+    *PROBE_OBS.lock().expect("probe observations") = Some(ProbeObs::default());
+    let app = with_tiles()
+        .module(GeoWithMap)
+        .module(ProbeModule)
+        .build()
+        .await;
+
+    // 1. Error probe on `POST /internal-diagnostics` (405) never spoofs loopback `127.0.0.1`,
+    //    strips `navree_ui_flash` while keeping session cookies, and caches the plain route so a
+    //    second 405 does not probe `GET /internal-diagnostics` again.
+    for _ in 0..2 {
+        app.client()
+            .post("/internal-diagnostics")
+            .header("accept", BROWSER)
+            .header("cookie", "navree_ui_flash=saved-toast; session_id=simran")
+            .send()
+            .await
+            .assert_status(405);
+    }
+    {
+        let guard = PROBE_OBS.lock().expect("probe observations");
+        let obs = guard.as_ref().expect("recorded");
+        assert_eq!(obs.internal_hits, 1);
+        assert_eq!(obs.internal_loopback, Some(false));
+        assert_eq!(obs.cookies_seen, ["session_id=simran"]);
+    }
+
+    // 2. A plain GET+POST route and a POST-only route each settle on the first failed submission
+    //    and do not re-run the GET probe on later failures.
+    for _ in 0..3 {
+        app.client()
+            .post("/plain-counted")
+            .header("accept", BROWSER)
+            .header("sec-fetch-site", "same-origin")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body("email=bad&password=short")
+            .send()
+            .await
+            .assert_status(422);
+        app.client()
+            .post("/post-only-action")
+            .header("accept", BROWSER)
+            .header("sec-fetch-site", "same-origin")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body("email=bad&password=short")
+            .send()
+            .await
+            .assert_status(422);
+    }
+    {
+        let guard = PROBE_OBS.lock().expect("probe observations");
+        assert_eq!(guard.as_ref().expect("recorded").plain_hits, 1);
+    }
+
+    // 3. `Rejected::after_decode(...).for_request(&parts).await.into_response()` on an unvisited
+    //    fresh route probes once with `navree_ui_flash` stripped and marks the fallback page fresh.
+    let refused = app
+        .client()
+        .post("/after-decode-fresh")
+        .header("accept", BROWSER)
+        .header("sec-fetch-site", "same-origin")
+        .header("cookie", "navree_ui_flash=pending-notice")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("email=meera%40jalandhar.example&password=long-enough-secret")
+        .send()
+        .await
+        .assert_status(422);
+    assert_eq!(refused.header("x-navree-fresh"), Some("1"));
+    assert_eq!(refused.header("content-security-policy"), Some(PAGE_CSP));
+    assert!(root_tag(&refused.text()).ends_with(" data-ui-fresh-page"));
+    {
+        let guard = PROBE_OBS.lock().expect("probe observations");
+        let obs = guard.as_ref().expect("recorded");
+        assert_eq!(obs.after_hits, 1);
+        assert!(
+            obs.cookies_seen
+                .iter()
+                .all(|cookie| !cookie.contains("navree_ui_flash")),
+            "{:?}",
+            obs.cookies_seen
+        );
+    }
 
     app.shutdown().await.unwrap();
 }

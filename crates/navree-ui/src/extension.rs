@@ -47,11 +47,13 @@ const MOST_NAMED: usize = 8;
 /// id that could stand in for one of the page's, and every attribute that holds an address or
 /// directs a navigation or submission. (A name that starts with `data-ui-` or `on` is refused as
 /// well.)
-const REFUSED_KEPT: [&str; 35] = [
+const REFUSED_KEPT: [&str; 41] = [
     "style",
     "id",
     "name",
     "form",
+    "data-key",
+    "data-genui",
     "href",
     "src",
     "srcset",
@@ -62,6 +64,8 @@ const REFUSED_KEPT: [&str; 35] = [
     "formtarget",
     "formmethod",
     "formenctype",
+    "formnovalidate",
+    "download",
     "poster",
     "cite",
     "ping",
@@ -81,6 +85,8 @@ const REFUSED_KEPT: [&str; 35] = [
     "blocking",
     "target",
     "popovertarget",
+    "popovertargetaction",
+    "command",
     "commandfor",
     "xlink:href",
 ];

@@ -456,6 +456,13 @@ fn is_refused_attr(name: &str) -> bool {
             .is_some_and(|start| start.eq_ignore_ascii_case(b"on"))
 }
 
+/// Whether `path` holds an encoded slash or backslash (`%2f` or `%5c`, in any case).
+fn has_encoded_slash(path: &str) -> bool {
+    path.as_bytes()
+        .windows(3)
+        .any(|window| window.eq_ignore_ascii_case(b"%2f") || window.eq_ignore_ascii_case(b"%5c"))
+}
+
 /// Whether `path` holds a `.` or `..` segment, written plainly or with `%2e` in any case.
 fn has_dot_segment(path: &str) -> bool {
     path.split('/').any(|segment| {
@@ -849,7 +856,9 @@ impl Element {
         let path = href.as_str().split(['?', '#']).next().unwrap_or_default();
         if !path.starts_with('/')
             || path.contains('\\')
+            || path.bytes().any(|byte| byte <= b' ')
             || path.chars().any(char::is_whitespace)
+            || has_encoded_slash(path)
             || has_dot_segment(path)
         {
             return self;
