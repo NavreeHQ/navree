@@ -72,9 +72,11 @@ class TranscriptsTest {
             val fixture = File(fixturesDir, relative)
             assertTrue("missing transcript fixture $relative", fixture.isFile)
             if (relative.startsWith("store/") && relative.endsWith(".json") && relative != "store/shell.json") {
-                val root = Json.parseToJsonElement(fixture.readText()).jsonObject
-                val screen = Navree.json.decodeFromJsonElement(Navree.Screen.serializer(), root.getValue("screen"))
-                assertTrue("$relative has a screen", screen.title.isNotEmpty() || screen.body != null)
+                val envelope = Navree.json.decodeFromString(Navree.Envelope.serializer(), fixture.readText())
+                assertTrue(
+                    "$relative decodes as a non-empty envelope",
+                    envelope.screen != null || envelope.web != null || envelope.ops.isNotEmpty(),
+                )
             }
         }
     }

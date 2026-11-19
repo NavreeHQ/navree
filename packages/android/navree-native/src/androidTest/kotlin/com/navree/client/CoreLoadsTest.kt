@@ -226,7 +226,12 @@ class CoreLoadsTest {
                 }
                 val bodyPath = step["body"]?.jsonPrimitive?.content
                 if (bodyPath != null) {
-                    val fixture = assets.open("transcripts/fixtures/$bodyPath").use { it.readBytes().decodeToString() }
+                    val assetPath = if (bodyPath.startsWith("../../../navree-native/corpus/")) {
+                        bodyPath.removePrefix("../../../navree-native/corpus/")
+                    } else {
+                        "transcripts/fixtures/$bodyPath"
+                    }
+                    val fixture = assets.open(assetPath).use { it.readBytes().decodeToString() }
                     val tag = send.getValue("t").jsonPrimitive.content
                     val field = when (tag) {
                         "response" -> "body"
