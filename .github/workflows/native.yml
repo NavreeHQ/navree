@@ -12,6 +12,7 @@ on:
       - "apps/inbox-demo/**"
       - "apps/board-demo/**"
       - "packages/apple/**"
+      - "xtask/**"
       - ".github/workflows/native.yml"
   pull_request:
     paths:
@@ -23,6 +24,7 @@ on:
       - "apps/inbox-demo/**"
       - "apps/board-demo/**"
       - "packages/apple/**"
+      - "xtask/**"
       - ".github/workflows/native.yml"
 
 permissions:
@@ -67,7 +69,7 @@ jobs:
           flow='^\.github/workflows/native\.yml$'
           echo "core=$(flag "$crates|$flow")" >> "$GITHUB_OUTPUT"
           echo "android=$(flag "$crates|^packages/android/|$demos|$flow")" >> "$GITHUB_OUTPUT"
-          echo "apple=$(flag "$crates|^packages/apple/|$flow")" >> "$GITHUB_OUTPUT"
+          echo "apple=$(flag "$crates|^packages/apple/|^xtask/|$demos|$flow")" >> "$GITHUB_OUTPUT"
           echo "windows=$(flag "$crates|^packages/windows/|^xtask/|$demos|$flow")" >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
@@ -94,7 +96,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy
-          targets: aarch64-linux-android,x86_64-linux-android,aarch64-apple-ios,aarch64-apple-ios-sim
+          targets: aarch64-linux-android,x86_64-linux-android,aarch64-apple-ios,aarch64-apple-ios-sim,aarch64-apple-darwin
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       # The crate the core stands on: every example envelope read and held to
@@ -141,13 +143,13 @@ jobs:
             "$ndk/llvm-readelf" -dW "$library" | grep -q 'SONAME.*libnavree_native_core.so'
           done
 
-      # iOS: static libraries for a device and for a simulator on Apple silicon.
-      - name: iOS libraries
+      # Apple: static libraries for an iPhone, for a simulator on Apple silicon, and for a Mac on Apple silicon.
+      - name: Apple libraries
         run: |
           set -o pipefail
           # The NDK's tools read Apple's object files as well as Android's.
           ndk="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          for target in aarch64-apple-ios aarch64-apple-ios-sim; do
+          for target in aarch64-apple-ios aarch64-apple-ios-sim aarch64-apple-darwin; do
             library="target/$target/release/libnavree_native_core.a"
             cargo rustc -p navree-native-core --release --target "$target" --crate-type staticlib -- --print native-static-libs 2>&1 | tee "$target.log"
             # What an app links beside the library, as the compiler says it.
@@ -166,15 +168,17 @@ jobs:
       - name: Lay the libraries out
         run: |
           out=dist/navree-native-core
-          mkdir -p "$out/include" "$out/android/arm64-v8a" "$out/android/x86_64" "$out/ios/device" "$out/ios/simulator"
+          mkdir -p "$out/include" "$out/android/arm64-v8a" "$out/android/x86_64" "$out/ios/device" "$out/ios/simulator" "$out/macos"
           cp crates/navree-native-core/include/navree_core.h "$out/include/"
           cp target/aarch64-linux-android/release/libnavree_native_core.so "$out/android/arm64-v8a/"
           cp target/x86_64-linux-android/release/libnavree_native_core.so "$out/android/x86_64/"
           cp target/aarch64-apple-ios/release/libnavree_native_core.a "$out/ios/device/"
           cp target/aarch64-apple-ios-sim/release/libnavree_native_core.a "$out/ios/simulator/"
+          cp target/aarch64-apple-darwin/release/libnavree_native_core.a "$out/macos/"
           printf 'device: %s\nsimulator: %s\n' "$(cat aarch64-apple-ios.needs)" "$(cat aarch64-apple-ios-sim.needs)" > "$out/ios/links.txt"
+          printf 'macos: %s\n' "$(cat aarch64-apple-darwin.needs)" > "$out/macos/links.txt"
           echo "$GITHUB_SHA" > "$out/COMMIT"
-          (cd "$out" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS && cat SHA256SUMS && cat ios/links.txt && du -ah . | sort -k2)
+          (cd "$out" && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS && cat SHA256SUMS && cat ios/links.txt && cat macos/links.txt && du -ah . | sort -k2)
 
       - name: Keep the libraries
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -633,21 +637,18 @@ jobs:
           retention-days: 30
 
   # The Apple client: the core's libraries from the job above made into an
-  # XCFramework, the package's tests on the Mac (in an iPhone simulator while
-  # the core's artifact has no Mac library), the demo app built from its text
-  # project with the core linked, and its UI tests run
-  # in light, dark, the largest text size, right to left and an iPad's regular
-  # width, with what each screen looked like kept as an artifact. Once on the
-  # current Xcode and once on the one before, the two systems the client
-  # supports (the one before in fewer passes, as its runner is slower). The
-  # current Xcode's six passes take 13 to 16 minutes each on its runner, after
-  # 12 to 15 minutes of package tests, so its job is given 150 minutes.
+  # XCFramework (iPhone, simulator and Mac), the package's tests on the Mac
+  # and in an iPhone simulator, the Mac and menu-bar demo apps built, the
+  # protocol's screens drawn with NavreeShots, the live store, inbox and board
+  # demos walked on a Mac and on simulators, and the demo app's UI test passes
+  # run in light, dark, the largest text size, right to left and an iPad's
+  # regular width, once on the current Xcode and once on the one before.
   apple:
     name: Apple client (Xcode ${{ matrix.xcode }})
     needs: [changes, core]
     if: needs.changes.outputs.apple == 'true'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 150
+    timeout-minutes: 210
     concurrency:
       group: native-apple-${{ github.ref }}-${{ matrix.xcode }}
       cancel-in-progress: true
@@ -688,13 +689,14 @@ jobs:
           path: ${{ runner.temp }}/navree-native-core
       # The header and the artifact's libraries as one XCFramework, the
       # package's binary target (never committed): an iPhone's, the
-      # simulator's, and the Mac's when the artifact holds it.
+      # simulator's, and the Mac's.
       - name: The core as an XCFramework
         id: core
         run: |
           bash scripts/build-core.sh --from "$RUNNER_TEMP/navree-native-core"
           ls -R NavreeCore.xcframework | head -30
-          if [ -d NavreeCore.xcframework/macos-arm64 ]; then echo "mac=true"; else echo "mac=false"; fi >> "$GITHUB_OUTPUT"
+          test -d NavreeCore.xcframework/macos-arm64
+          echo "mac=true" >> "$GITHUB_OUTPUT"
       - name: Restore XcodeGen
         id: xcodegen
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -716,21 +718,28 @@ jobs:
       - name: Put XcodeGen on the path
         run: |
           echo "$HOME/xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
-      # The bridge to the core links on the Mac only with the core's Mac
-      # library. Without it the package's tests run in an iPhone simulator,
-      # against the simulator's library, and the Mac only compiles the targets
-      # that do not need the core.
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: apple-live-demos-${{ matrix.xcode }}
       - name: Package tests on the Mac
         if: steps.core.outputs.mac == 'true'
-        run: swift test 2>&1 | tee swift-test.log
-      - name: Package tests in an iPhone simulator
-        if: steps.core.outputs.mac != 'true'
         run: |
-          echo "::notice::The core's artifact has no Mac library: the package's tests run in an iPhone simulator."
-          swift build --target NavreeDesign 2>&1 | tee swift-build.log
+          mkdir -p build/logs
+          swift test 2>&1 | tee build/logs/swift-test.log
+      - name: Package tests in an iPhone simulator
+        run: |
+          mkdir -p build/logs
+          if [ "${{ steps.core.outputs.mac }}" != "true" ]; then
+            swift build --target NavreeDesign 2>&1 | tee build/logs/swift-build.log
+          fi
           bash scripts/test-in-simulator.sh
+      - name: Mac apps, NavreeShots, and live store, inbox and board walks
+        run: |
+          LIVE_IPAD="${{ matrix.xcode == '27.2' && 'true' || 'false' }}" bash scripts/verify-mac-and-live.sh
       - name: Demo app screens in an iPhone simulator
-        if: ${{ !cancelled() }}
         run: |
           xcodegen --version
           PASSES="${{ matrix.passes }}" bash scripts/demo-screens.sh
@@ -739,7 +748,12 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: apple-screens-xcode-${{ matrix.xcode }}
-          path: packages/apple/build/screens
+          path: |
+            packages/apple/build/screens
+            packages/apple/build/shots
+            packages/apple/build/mac-evidence
+            packages/apple/build/live-sim-evidence
+            packages/apple/build/live-walk
           if-no-files-found: warn
           retention-days: 30
       - name: Keep the logs and results
@@ -748,8 +762,6 @@ jobs:
         with:
           name: apple-results-xcode-${{ matrix.xcode }}
           path: |
-            packages/apple/swift-test.log
-            packages/apple/swift-build.log
             packages/apple/build/core/links.txt
             packages/apple/build/logs
             packages/apple/build/results

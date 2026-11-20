@@ -122,7 +122,6 @@ A copy the server marks as a secret stays on this device and goes after a minute
 
 ## What is not done yet
 
-- The repository's workflow builds the drawing (`NavreeDesign`) for a Mac, and everything else for an iPhone simulator only, where the tests run. The Mac's side of the shell and of the demo (what is behind `#if os(macOS)` in `NavreeShell`, `NavreeRuntime` and `Demo`) is compiled by no job, and no test runs on a Mac.
 - A form a web page posts to another site (a hosted payment page) is stopped and goes nowhere.
 - With a core that gives no key for the person signed in, people are told apart by name and address (see "A change of person with no sign-out").
 - A long list costs more with every page of it, and a list inside a designed screen is not laid out lazily.
