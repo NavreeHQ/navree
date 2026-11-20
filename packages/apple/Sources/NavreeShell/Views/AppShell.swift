@@ -540,25 +540,46 @@ struct Chrome: View {
         let stack = SplitRules.layout(
             shown.first.flatMap { client.screen($0)?.screen?.body }, width: WindowRules.window(client.nav.width)
         )
-        switch NavigationRules.window(destinations: items.count, sidebarOnly: WindowRules.sidebarOnly, stack: stack) {
-        case .sidebarListDetail:
-            ColumnsStack(
-                layout: stack, stack: shown, client: client, configuration: configuration,
-                sidebar: DestinationSidebar(client: client)
-            )
-        case .sidebarStack:
-            NavigationSplitView(columnVisibility: $columns) {
-                DestinationSidebar(client: client)
-                    .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
-            } detail: {
-                StackView(stack: shown, client: client, configuration: configuration)
-                    // In the window under an item in the menu bar the sidebar is
-                    // folded and the window keeps its own least size.
-                    .navigationSplitViewColumnWidth(min: compactWindow ? 0 : NavigationRules.detailMinimumWidth, ideal: 760)
+        if Self.awaitsInitialLayout(items: items, shown: shown, client: client) {
+            ProgressView()
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            switch NavigationRules.window(destinations: items.count, sidebarOnly: WindowRules.sidebarOnly, stack: stack) {
+            case .sidebarListDetail:
+                ColumnsStack(
+                    layout: stack, stack: shown, client: client, configuration: configuration,
+                    sidebar: DestinationSidebar(client: client)
+                )
+            case .sidebarStack:
+                NavigationSplitView(columnVisibility: $columns) {
+                    DestinationSidebar(client: client)
+                        .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
+                } detail: {
+                    StackView(stack: shown, client: client, configuration: configuration)
+                        // In the window under an item in the menu bar the sidebar is
+                        // folded and the window keeps its own least size.
+                        .navigationSplitViewColumnWidth(min: compactWindow ? 0 : NavigationRules.detailMinimumWidth, ideal: 760)
+                }
+                .onChange(of: compactWindow, initial: true) { _, compact in columns = compact ? .detailOnly : .automatic }
+            case .tabs:
+                tabs
             }
-            .onChange(of: compactWindow, initial: true) { _, compact in columns = compact ? .detailOnly : .automatic }
-        case .tabs:
-            tabs
+        }
+    }
+
+    /// On a Mac window with a sidebar, the first destination's screen decides
+    /// whether the split view has two columns or three: wait for that first
+    /// answer rather than building a two-column split view and replacing it a
+    /// moment later when a screen of panes arrives.
+    private static func awaitsInitialLayout(items: [Destination], shown: [ScreenID], client: NativeClient) -> Bool {
+        guard WindowRules.sidebarOnly, items.count > 1, let root = shown.first,
+            let state = client.screen(root), case .blank = state.content, state.loading
+        else { return false }
+        return items.allSatisfy { item in
+            guard let first = item.stack.first, let known = client.screen(first) else { return true }
+            if case .blank = known.content { return true }
+            return false
         }
     }
 
