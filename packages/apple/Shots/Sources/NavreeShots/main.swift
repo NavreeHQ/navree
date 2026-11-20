@@ -88,8 +88,10 @@ struct Screen: View {
                 switch SplitRules.layout(screen.body, width: window) {
                 case .panes(let panes):
                     SplitColumns(
-                        path: .constant([]), compactColumn: SplitRules.compactColumn(panes),
-                        inspectorTitle: panes.inspector?.title, choose: { _, _ in },
+                        path: ColumnPath(entries: [], key: "shots", follow: { _ in }),
+                        compactColumn: SplitRules.compactColumn(panes),
+                        inspectorTitle: panes.inspector?.title,
+                        choose: Choice(key: "shots", run: { _, _ in }),
                         list: { ScreenView(screen: SplitRules.screen(.list, of: screen, panes: panes), depth: .root) },
                         detail: { ScreenView(screen: SplitRules.screen(.detail, of: screen, panes: panes), depth: .pushed) },
                         inspector: panes.inspector == nil ? nil : {
@@ -99,7 +101,9 @@ struct Screen: View {
                     )
                 case .listBesideDetail where detail != nil:
                     SplitColumns(
-                        path: .constant([]), compactColumn: .detail, choose: { _, _ in },
+                        path: ColumnPath(entries: [], key: "shots", follow: { _ in }),
+                        compactColumn: .detail,
+                        choose: Choice(key: "shots", run: { _, _ in }),
                         list: { ScreenView(screen: screen, depth: .root) },
                         detail: {
                             if let opened = detail?.screen { ScreenView(screen: opened, depth: .pushed) } else { NothingChosen() }
@@ -134,6 +138,11 @@ struct Screen: View {
 
 @MainActor
 final class Shooter {
+    enum ShotFailure: Error {
+        case missingRootViewController
+        case missingPNGData
+    }
+
     let window: UIWindow
     let out: URL
 
@@ -142,7 +151,8 @@ final class Shooter {
         self.out = out
     }
 
-    func run(_ shots: [Shot]) async {
+    func run(_ shots: [Shot]) async -> Bool {
+        var ok = !shots.isEmpty
         for shot in shots {
             do {
                 let data = try Data(contentsOf: shot.file)
@@ -150,9 +160,11 @@ final class Shooter {
                 let detail = try shot.detail.map { try WireDecoder.decode(Navree.Envelope.self, from: Data(contentsOf: $0)) }
                 try await take(shot, envelope: envelope, detail: detail)
             } catch {
+                ok = false
                 FileHandle.standardError.write(Data("\(shot.file.lastPathComponent): \(error)\n".utf8))
             }
         }
+        return ok
     }
 
     private func take(_ shot: Shot, envelope: Navree.Envelope, detail: Navree.Envelope?) async throws {
@@ -160,7 +172,7 @@ final class Shooter {
         host.overrideUserInterfaceStyle = shot.dark ? .dark : .light
         host.traitOverrides.horizontalSizeClass = shot.window == .compact ? .compact : .regular
         host.traitOverrides.verticalSizeClass = .regular
-        guard let root = window.rootViewController else { return }
+        guard let root = window.rootViewController else { throw ShotFailure.missingRootViewController }
         root.addChild(host)
         root.view.addSubview(host.view)
         host.didMove(toParent: root)
@@ -206,7 +218,7 @@ final class Shooter {
                 view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
             }
         }
-        guard let png = image.pngData() else { return }
+        guard let png = image.pngData() else { throw ShotFailure.missingPNGData }
         try png.write(to: out.appendingPathComponent(name))
         print("wrote \(name) \(Int(view.bounds.width))x\(Int(view.bounds.height))")
     }
@@ -244,8 +256,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window.makeKeyAndVisible()
         self.window = window
         Task { @MainActor in
-            await Shooter(window: window, out: out).run(Plan.shots(files))
-            exit(0)
+            let ok = await Shooter(window: window, out: out).run(Plan.shots(files))
+            exit(ok ? 0 : 1)
         }
     }
 }

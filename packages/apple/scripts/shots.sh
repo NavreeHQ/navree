@@ -31,9 +31,22 @@ done
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
 
-sdk="$(xcrun --sdk macosx --show-sdk-path)"
-(cd "$here/Shots" && swift build --triple arm64-apple-ios26.0-macabi --sdk "$sdk" --product NavreeShots)
-binary="$(find "$here/Shots/.build" -path '*maccatalyst*' -name NavreeShots -type f -perm -u+x | head -1)"
+mkdir -p "$here/Shots/.build" "$here/build/logs"
+shots_log="$here/build/logs/build-shots.log"
+(
+    cd "$here/Shots"
+    xcodebuild build \
+        -scheme NavreeShots \
+        -destination "generic/platform=macOS,variant=Mac Catalyst" \
+        -derivedDataPath "$here/Shots/.build/DerivedData" \
+        ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
+        >"$shots_log" 2>&1 || {
+        tail -80 "$shots_log" >&2
+        exit 1
+    }
+)
+binary="$(find "$here/Shots/.build/DerivedData/Build/Products" -path '*maccatalyst*' -name NavreeShots -type f -perm -u+x | head -1)"
+test -n "$binary"
 
 app="$here/Shots/.build/NavreeShots.app"
 rm -rf "$app"
