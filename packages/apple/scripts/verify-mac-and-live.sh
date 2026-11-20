@@ -235,7 +235,7 @@ clean_mac_state
 NAVREE_ORIGIN="http://127.0.0.1:8095" run_with_timeout 180 "$charkha" \
     -NavreeSelect /orders \
     -NavreePictures "$build/mac-evidence/store" \
-    -NavreeSteps "wait:4;size:1440x900;wait:1;frame;menus;toolbar:toolbar-orders;elements:ax-orders;picture:orders-light;composed:orders-composed-light;appearance:dark;wait:1;picture:orders-dark;appearance:light;wait:1;drag:760x560;wait:1;picture:narrow;size:1440x900;wait:1;click:Dashboard;wait:2;picture:dashboard;click:Inventory;wait:2;picture:inventory;click:Orders;wait:2;choose:0;wait:2;picture:order-detail;about:about;icon:appicon;quit"
+    -NavreeSteps "wait:4;size:1440x900;wait:1;frame;menus;toolbar:toolbar-orders;elements:ax-orders;picture:orders-light;composed:orders-composed-light;appearance:dark;wait:1;picture:orders-dark;appearance:light;wait:1;drag:760x560;wait:1;picture:narrow;size:1440x900;wait:1;sidebar:0;wait:2;picture:dashboard;sidebar:2;wait:2;picture:inventory;sidebar:1;wait:2;choose:0;wait:2;picture:order-detail;about:about;icon:appicon;quit"
 
 sleep 1
 clean_mac_state
@@ -255,7 +255,7 @@ NAVREE_ORIGIN="http://127.0.0.1:8095" run_with_timeout 180 "$charkha_bar" \
     -NavreePictures "$build/mac-evidence/menubar" \
     -NavreeSteps "wait:4;presence;status:bar-icon;panel:popover;badge:3;dockmenu;openinwindow;wait:2;picture:promoted-window;closewindow;badge:none;quit"
 
-bad_steps='frame: no window|no table with that row|may not be chosen|unknown step|: not found or disabled|: not taken|about: not found|, no panel|no window under the item|no such item|found nothing saying|nothing under|no event'
+bad_steps='frame: no window|no table with that row|no sidebar|may not be chosen|unknown step|: not found or disabled|: not taken|about: not found|, no panel|no window under the item|no such item|found nothing saying|nothing under|no event'
 for sub in store inbox board menubar; do
     echo "--- macOS $sub steps ---"
     cat "$build/mac-evidence/$sub/steps.txt"
