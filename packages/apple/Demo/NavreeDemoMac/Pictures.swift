@@ -39,6 +39,7 @@ struct DemoPictures: ViewModifier {
 @MainActor
 enum WindowPictures {
     private static var started = false
+    private static var enhanced = false
 
     static func run() async {
         let defaults = UserDefaults.standard
@@ -47,10 +48,6 @@ enum WindowPictures {
         let out = URL(fileURLWithPath: (folder as NSString).expandingTildeInPath, isDirectory: true)
         try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         var log: [String] = []
-        // SwiftUI gives its windows' elements only to an assistive app, which
-        // first sets the app's enhanced user interface: the app does so itself.
-        let enhance = NSSelectorFromString("accessibilitySetEnhancedUserInterfaceAttribute:")
-        if NSApp.responds(to: enhance) { _ = NSApp.perform(enhance, with: NSNumber(value: true)) }
         // The menu bar acts on the key window of the active app, as for a person.
         NSApp.activate()
         windows.first?.makeKeyAndOrderFront(nil)
@@ -98,18 +95,22 @@ enum WindowPictures {
             case "composed":
                 log.append(composed(argument, out: out))
             case "tree":
+                await ensureAccessibility()
                 write(tree(), to: out.appendingPathComponent("\(argument).txt"))
                 log.append("tree \(argument).txt")
             case "views":
                 write(views(), to: out.appendingPathComponent("\(argument).txt"))
                 log.append("views \(argument).txt")
             case "toolbar":
+                await ensureAccessibility()
                 write(toolbar(), to: out.appendingPathComponent("\(argument).txt"))
                 log.append("toolbar \(argument).txt")
             case "elements":
+                await ensureAccessibility()
                 write(await fromRunLoop(elements), to: out.appendingPathComponent("\(argument).txt"))
                 log.append("elements \(argument).txt")
             case "click":
+                await ensureAccessibility()
                 let before = windows.first?.title ?? ""
                 let place = await fromRunLoop { click(argument) }
                 try? await Task.sleep(for: .seconds(2))
@@ -145,6 +146,17 @@ enum WindowPictures {
             }
         }
         write(log.joined(separator: "\n") + "\n", to: out.appendingPathComponent("steps.txt"))
+    }
+
+    /// SwiftUI gives its windows' elements only to an assistive app, which
+    /// first sets the app's enhanced user interface: turn it on once the
+    /// window has loaded, before walking its elements.
+    static func ensureAccessibility() async {
+        guard !enhanced else { return }
+        enhanced = true
+        let enhance = NSSelectorFromString("accessibilitySetEnhancedUserInterfaceAttribute:")
+        if NSApp.responds(to: enhance) { _ = NSApp.perform(enhance, with: NSNumber(value: true)) }
+        try? await Task.sleep(for: .milliseconds(200))
     }
 
     /// Runs `work` from the main run loop, as an assistive app's requests

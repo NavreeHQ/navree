@@ -25,18 +25,24 @@ mkdir -p \
     "$build/results"
 
 run_with_timeout() {
-    python3 -I - "$@" <<'PY'
+    BUILD_LOGS="$build/logs" python3 -I - "$@" <<'PY'
+import glob
+import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
+import time
 
 seconds = int(sys.argv[1])
-proc = subprocess.Popen(sys.argv[2:], start_new_session=True)
+cmd = sys.argv[2:]
+started = time.time()
+proc = subprocess.Popen(cmd, start_new_session=True)
 try:
-    sys.exit(proc.wait(timeout=seconds))
+    rc = proc.wait(timeout=seconds)
 except subprocess.TimeoutExpired:
-    sys.stderr.write(f"Command timed out after {seconds}s: {' '.join(sys.argv[2:])}\n")
+    sys.stderr.write(f"Command timed out after {seconds}s: {' '.join(cmd)}\n")
     sys.stderr.flush()
     try:
         os.killpg(proc.pid, signal.SIGTERM)
@@ -47,6 +53,55 @@ except subprocess.TimeoutExpired:
         except Exception:
             pass
     sys.exit(124)
+
+if rc != 0:
+    if rc < 0:
+        sig = -rc
+        try:
+            sig_name = signal.Signals(sig).name
+        except Exception:
+            sig_name = str(sig)
+        sys.stderr.write(f"Command terminated by signal {sig} ({sig_name}): {' '.join(cmd)}\n")
+        time.sleep(2)
+    else:
+        sys.stderr.write(f"Command exited with status {rc}: {' '.join(cmd)}\n")
+    diag_dir = os.path.expanduser("~/Library/Logs/DiagnosticReports")
+    out_dir = os.path.join(os.environ.get("BUILD_LOGS", "."), "diagnostic-reports")
+    if os.path.isdir(diag_dir):
+        recent = [
+            p for p in glob.glob(os.path.join(diag_dir, "*"))
+            if os.path.isfile(p) and os.path.getmtime(p) >= started - 2
+        ]
+        if recent:
+            os.makedirs(out_dir, exist_ok=True)
+            for report in sorted(recent, key=os.path.getmtime):
+                shutil.copy2(report, os.path.join(out_dir, os.path.basename(report)))
+                sys.stderr.write(f"--- Diagnostic report: {os.path.basename(report)} ---\n")
+                try:
+                    with open(report, "r", encoding="utf-8", errors="replace") as fh:
+                        first = fh.readline()
+                        body = fh.read()
+                    if report.endswith(".ips") and body.strip().startswith("{"):
+                        data = json.loads(body)
+                        exc = data.get("exception", {})
+                        sys.stderr.write(f"Exception: {exc}\n")
+                        faulting = data.get("faultingThread", 0)
+                        threads = data.get("threads", [])
+                        images = data.get("usedImages", [])
+                        if 0 <= faulting < len(threads):
+                            sys.stderr.write(f"Faulting thread {faulting}:\n")
+                            for frame in threads[faulting].get("frames", [])[:25]:
+                                idx = frame.get("imageIndex", -1)
+                                img = images[idx].get("name", "?") if 0 <= idx < len(images) else "?"
+                                sym = frame.get("symbol", hex(frame.get("imageOffset", 0)))
+                                sys.stderr.write(f"  {img}: {sym}\n")
+                    else:
+                        sys.stderr.write((first + body)[:4000] + "\n")
+                except Exception as exc:
+                    sys.stderr.write(f"Could not parse report: {exc}\n")
+    sys.stderr.flush()
+    sys.exit(128 + (-rc) if rc < 0 else rc)
+sys.exit(0)
 PY
 }
 
@@ -168,24 +223,39 @@ echo "=== 5. Walking native macOS Charkha.app and CharkhaBar.app against live se
 defaults write com.navree.demo.mac ApplePersistenceIgnoreState -bool YES || true
 defaults write com.navree.demo.menubar ApplePersistenceIgnoreState -bool YES || true
 
+clean_mac_state() {
+    rm -rf \
+        "${TMPDIR:-/tmp}/com.navree.demo.mac.savedState" \
+        "${TMPDIR:-/tmp}/com.navree.demo.menubar.savedState" \
+        "$HOME/Library/Saved Application State/com.navree.demo.mac.savedState" \
+        "$HOME/Library/Saved Application State/com.navree.demo.menubar.savedState"
+}
+
+clean_mac_state
 NAVREE_ORIGIN="http://127.0.0.1:8095" run_with_timeout 180 "$charkha" \
     -NavreeSelect /orders \
     -NavreePictures "$build/mac-evidence/store" \
-    -NavreeSteps "wait:4;size:1440x900;wait:1;frame;menus;toolbar:toolbar-orders;elements:ax-orders;picture:orders-light;composed:orders-composed-light;appearance:dark;wait:1;picture:orders-dark;appearance:light;wait:1;choose:0;wait:2;picture:order-detail;menu:View/Dashboard;wait:2;picture:dashboard;menu:View/Inventory;wait:2;picture:inventory;drag:760x560;wait:1;picture:narrow;about:about;icon:appicon;quit"
+    -NavreeSteps "wait:4;size:1440x900;wait:1;frame;menus;toolbar:toolbar-orders;elements:ax-orders;picture:orders-light;composed:orders-composed-light;appearance:dark;wait:1;picture:orders-dark;appearance:light;wait:1;drag:760x560;wait:1;picture:narrow;size:1440x900;wait:1;click:Dashboard;wait:2;picture:dashboard;click:Inventory;wait:2;picture:inventory;click:Orders;wait:2;choose:0;wait:2;picture:order-detail;about:about;icon:appicon;quit"
 
+sleep 1
+clean_mac_state
 NAVREE_ORIGIN="http://127.0.0.1:8096" run_with_timeout 180 "$charkha" \
     -NavreePictures "$build/mac-evidence/inbox" \
     -NavreeSteps "wait:4;size:1440x900;wait:1;frame;toolbar:toolbar-inbox;elements:ax-inbox;picture:inbox-light;appearance:dark;wait:1;picture:inbox-dark;quit"
 
+sleep 1
+clean_mac_state
 NAVREE_ORIGIN="http://127.0.0.1:8097" run_with_timeout 180 "$charkha" \
     -NavreePictures "$build/mac-evidence/board" \
     -NavreeSteps "wait:4;size:1440x900;wait:1;frame;toolbar:toolbar-board;elements:ax-board;picture:board-light;scroll:240;wait:1;picture:board-scrolled;appearance:dark;wait:1;picture:board-dark;quit"
 
+sleep 1
+clean_mac_state
 NAVREE_ORIGIN="http://127.0.0.1:8095" run_with_timeout 180 "$charkha_bar" \
     -NavreePictures "$build/mac-evidence/menubar" \
     -NavreeSteps "wait:4;presence;status:bar-icon;panel:popover;badge:3;dockmenu;openinwindow;wait:2;picture:promoted-window;closewindow;badge:none;quit"
 
-bad_steps='frame: no window|no table with that row|may not be chosen|unknown step|: not found or disabled|: not taken|about: not found|, no panel|no window under the item|no such item|found nothing saying'
+bad_steps='frame: no window|no table with that row|may not be chosen|unknown step|: not found or disabled|: not taken|about: not found|, no panel|no window under the item|no such item|found nothing saying|nothing under|no event'
 for sub in store inbox board menubar; do
     echo "--- macOS $sub steps ---"
     cat "$build/mac-evidence/$sub/steps.txt"
@@ -201,6 +271,8 @@ for sub in store inbox board menubar; do
     fi
 done
 grep -q "row 0 chosen of" "$build/mac-evidence/store/steps.txt"
+grep -q 'picture dashboard-1.png .* "Today"' "$build/mac-evidence/store/steps.txt"
+grep -q 'picture inventory-1.png .* "Inventory"' "$build/mac-evidence/store/steps.txt"
 echo "macOS walks wrote $(find "$build/mac-evidence" -name '*.png' -size +0c | wc -l | tr -d ' ') PNG files"
 
 echo "=== 6. Running live WalkTests and appearance checks on iPhone and iPad simulators ==="
