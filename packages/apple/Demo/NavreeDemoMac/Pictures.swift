@@ -27,6 +27,8 @@ import SwiftUI
 /// event queue);
 /// `choose:<row>` (a row of the window's table chosen through the table's
 /// own selection, as a click chooses it);
+/// `sidebar:<row>` (an item of the window's sidebar chosen through its
+/// outline's own selection);
 /// `scroll:<points>` (the content under the window's middle scrolled down by
 /// that many points, up when negative);
 /// `appearance:<dark|light|system>`; `quit`.
@@ -120,6 +122,11 @@ enum WindowPictures {
                 let chosen = choose(Int(argument) ?? 0)
                 try? await Task.sleep(for: .seconds(2))
                 log.append("choose \(argument): \(chosen); front window \"\(before)\" became \"\(windows.first?.title ?? "")\", \(windows.count) windows")
+            case "sidebar":
+                let before = windows.first?.title ?? ""
+                let chosen = sidebar(Int(argument) ?? 0)
+                try? await Task.sleep(for: .seconds(2))
+                log.append("sidebar \(argument): \(chosen); front window \"\(before)\" became \"\(windows.first?.title ?? "")\"")
             case "scroll":
                 log.append("scroll \(argument): \(scroll(Double(argument) ?? 0))")
             case "appearance":
@@ -502,6 +509,28 @@ enum WindowPictures {
         guard table.delegate?.tableView?(table, shouldSelectRow: row) ?? true else { return "row \(row) may not be chosen" }
         table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
         return "row \(row) chosen of \(table.numberOfRows), selected \(Array(table.selectedRowIndexes))"
+    }
+
+    /// Chooses an item of the window's sidebar (counted from 0 among its
+    /// selectable rows), through the outline's own selection.
+    static func sidebar(_ row: Int) -> String {
+        guard let window = windows.first, let root = window.contentView else { return "no window" }
+        var found: NSOutlineView?
+        func walk(_ view: NSView) {
+            if found == nil, let outline = view as? NSOutlineView, outline.numberOfColumns == 1 { found = outline; return }
+            view.subviews.forEach(walk)
+        }
+        walk(root)
+        guard let outline = found else { return "no sidebar" }
+        let selectable = (0..<outline.numberOfRows).filter { index in
+            guard let item = outline.item(atRow: index) else { return false }
+            if outline.delegate?.outlineView?(outline, isGroupItem: item) == true { return false }
+            return outline.delegate?.outlineView?(outline, shouldSelectItem: item) ?? true
+        }
+        guard row >= 0, row < selectable.count else { return "no sidebar item \(row)" }
+        let target = selectable[row]
+        outline.selectRowIndexes(IndexSet(integer: target), byExtendingSelection: false)
+        return "item \(row) (row \(target)) chosen of \(selectable.count), selected \(Array(outline.selectedRowIndexes))"
     }
 
     /// The frame of the first element whose words are these, else of the
