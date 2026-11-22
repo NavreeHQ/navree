@@ -6,6 +6,12 @@ It is preview code. What it does not do yet is at the end of this page.
 
 An app makes a `ShellConfiguration` with its origin and shows `AppShell`. How each part of the protocol is drawn is in `skills/navree-native-apple/SKILL.md`; what the runtime core decides, and what it asks of a client, is in `crates/navree-native-core/README.md`.
 
+## The Swift package
+
+An app outside this repository adds the client as the package `https://github.com/NavreeHQ/navree-swift`, at the minor version of Navree its server runs (`.upToNextMinor(from: "1.5.0")`; what a native client is answered may change in a minor release), and uses the product `NavreeNative`. The core comes in it already built, as a binary target the package downloads from the Navree release and checks by its SHA-256, so the app needs no Rust. It is built for Apple silicon only: a Mac app sets `ARCHS = arm64`, and a simulator build leaves out `x86_64`. `navree native:init` writes a new app's project that uses the package.
+
+That repository holds only what a release puts there. `scripts/swift-package.sh <version> <core-url-base> <out-dir>` makes it from the core `scripts/build-core.sh` built: the core's zip and its `.sha256`, the package (this folder's `Sources/`, the licences, a README, and this `Package.swift` with the core as the download and without the test targets), and the package packed as `navree-swift-<version>.tar.gz`. It stops when `Package.swift` is not in the form it changes, checks that the new manifest has the same targets and products, and builds the package against the zip. This folder's own `Package.swift` keeps the core as the local `NavreeCore.xcframework`, for the demo and the tests.
+
 ## What the library does by itself
 
 These hold for every app built on the library, with nothing to configure.
