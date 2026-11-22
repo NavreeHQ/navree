@@ -226,6 +226,14 @@ public enum CommandRules {
         return text + "…"
     }
 
+    /// Whether the screen's menu has anything in it: one of the screen's
+    /// own commands or the chosen row's (`chosen`, their count). A screen
+    /// with none, or whose commands all go to File and Edit, leaves no empty
+    /// menu in the menu bar.
+    public static func screenMenuHolds(_ entries: [MenuEntry], chosen: Int) -> Bool {
+        chosen > 0 || entries.contains { $0.slot == .screen || $0.slot == .destructive }
+    }
+
     /// The name of the menu that holds the window's own commands: the
     /// destination it shows, as Mail names its Mailbox menu. A name the
     /// system's own menus already have is not taken twice.

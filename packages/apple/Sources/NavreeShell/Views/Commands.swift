@@ -166,8 +166,11 @@ public struct NavreeCommands: Commands {
         CommandGroup(before: .sidebar) {
             ViewCommands(target: target)
         }
-        CommandMenu(CommandRules.screenMenu(destinationLabel)) {
-            ScreenCommands(target: target)
+        // No empty menu: a screen with no commands of its own has none.
+        if ScreenCommands.holdsAny(target) {
+            CommandMenu(CommandRules.screenMenu(destinationLabel)) {
+                ScreenCommands(target: target)
+            }
         }
         AboutAndHelpCommands(configuration: configuration)
     }
@@ -295,6 +298,15 @@ struct ViewCommands: View {
 /// have no place of their own, then the chosen row's, then what destroys.
 struct ScreenCommands: View {
     let target: WindowCommands?
+
+    /// Whether the window in front has anything for this menu.
+    @MainActor
+    static func holdsAny(_ target: WindowCommands?) -> Bool {
+        guard let target else { return false }
+        return CommandRules.screenMenuHolds(
+            CommandRules.entries(target.screenActions), chosen: target.chosen?.actions.count ?? 0
+        )
+    }
 
     var body: some View {
         if let target {
