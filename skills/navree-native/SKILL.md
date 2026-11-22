@@ -601,12 +601,15 @@ Say these plainly to the owner; do not build around them.
   through the browser is not available on Windows yet.
 - **The app on the device** (the Rust server running inside the app, offline).
   Not built; it needs a trust design of its own.
-- **Project scaffolding.** There is no `navree native:init`, `native:run` or
-  `native:build`. The Android client is a package in the repository
-  (`packages/android`, with a demo app). The Apple client is in the
-  repository (`packages/apple`), in preview: it runs the example apps on
-  simulators and on a Mac; no package is published and nothing has run on a
-  real device. A store build of your own app is not packaged yet.
+- **Project scaffolding.** `navree native:init` writes the Apple client's
+  project (an iPhone and iPad app and a Mac app, as an XcodeGen `project.yml`)
+  on the Swift package `navree-swift`, which each release makes once its
+  repository is set up; until then `--package-path` takes the client from a
+  checkout's `packages/apple`. There is no `native:run` or `native:build`, and
+  no project command for Android or Windows: the Android client is a package
+  in the repository (`packages/android`, with a demo app) and the Windows
+  client too (`packages/windows`). The Apple client is in preview. A store
+  build of your own app is not packaged yet.
 
 ## 8. Which skill next
 
@@ -621,7 +624,7 @@ Say these plainly to the owner; do not build around them.
 | Sign in from an app: app ids, association files, the sign-in hand-over, confirming an action | `navree-auth` |
 | Sign in with Apple or Google from the system sheet | `navree-social` |
 | Push notifications to the device | `navree-notification-channels` |
-| The commands `native:coverage` and `native:doctor` | `navree-cli-generators` |
+| The commands `native:coverage`, `native:doctor` and `native:init` | `navree-cli-generators` |
 
 ## Common mistakes
 
