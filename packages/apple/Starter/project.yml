@@ -1,0 +1,122 @@
+# Dukaan for iPhone, iPad and Mac, as a text description:
+# `xcodegen generate` in this folder writes Dukaan.xcodeproj (never
+# committed). Written by `navree native:init`.
+name: Dukaan
+options:
+  deploymentTarget:
+    iOS: "26.0"
+    macOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # The runtime core is built for Apple silicon only, so a simulator build
+    # leaves out an Intel Mac's.
+    EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+packages:
+  # The Navree Native client, with its runtime core already built.
+  NavreeNative:
+    path: ..
+targets:
+  # The app for iPhone and iPad.
+  Dukaan:
+    type: application
+    platform: iOS
+    sources:
+      - path: Dukaan
+    dependencies:
+      - package: NavreeNative
+        product: NavreeNative
+    # Who signs the app and with what: Signing/Signing.xcconfig.
+    configFiles:
+      Debug: Signing/Signing.xcconfig
+      Release: Signing/Signing.xcconfig
+    info:
+      path: Generated/Dukaan-Info.plist
+      properties:
+        CFBundleDisplayName: "Dukaan"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # The server the app's screens come from.
+        NavreeOrigin: http://127.0.0.1:8095
+        # What the build is signed with, as the client reads it.
+        NavreeSignedWith: $(NAVREE_SIGNED_WITH)
+        NavreeAssociatedDomain: $(NAVREE_ASSOCIATED_DOMAIN)
+        # The scheme a sign-in in the system's browser comes back on.
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes: [dukaan]
+        # Plain http to this machine only, for development.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NAVREE_BUNDLE_ID)
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+  # The app for the Mac, with the same code and the same bundle id.
+  DukaanMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: Dukaan
+    dependencies:
+      - package: NavreeNative
+        product: NavreeNative
+    configFiles:
+      Debug: Signing/Signing.xcconfig
+      Release: Signing/Signing.xcconfig
+    info:
+      path: Generated/DukaanMac-Info.plist
+      properties:
+        CFBundleDisplayName: "Dukaan"
+        CFBundleName: "Dukaan"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NavreeOrigin: http://127.0.0.1:8095
+        NavreeSignedWith: $(NAVREE_SIGNED_WITH)
+        NavreeAssociatedDomain: $(NAVREE_ASSOCIATED_DOMAIN)
+        LSApplicationCategoryType: public.app-category.business
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes: [dukaan]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(NAVREE_BUNDLE_ID)
+        PRODUCT_NAME: Dukaan
+        # The runtime core is built for Apple silicon only.
+        ARCHS: arm64
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        ENABLE_HARDENED_RUNTIME: YES
+schemes:
+  Dukaan:
+    build:
+      targets:
+        Dukaan: all
+  DukaanMac:
+    build:
+      targets:
+        DukaanMac: all

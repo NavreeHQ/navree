@@ -642,7 +642,9 @@ jobs:
   # protocol's screens drawn with NavreeShots, the live store, inbox and board
   # demos walked on a Mac and on simulators, and the demo app's UI test passes
   # run in light, dark, the largest text size, right to left and an iPad's
-  # regular width, once on the current Xcode and once on the one before.
+  # regular width, once on the current Xcode and once on the one before; and,
+  # on the current Xcode, the Swift package a release makes and the project
+  # `navree native:init` writes (Starter/), built.
   apple:
     name: Apple client (Xcode ${{ matrix.xcode }})
     needs: [changes, core]
@@ -718,6 +720,22 @@ jobs:
       - name: Put XcodeGen on the path
         run: |
           echo "$HOME/xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
+      # The Swift package a release makes (its manifest checked and built
+      # against the core's zip), and Starter/, which is what `navree
+      # native:init` writes (a test of navree-cli keeps the two equal),
+      # built for the simulator and the Mac. Once, on the current Xcode.
+      - name: The Swift package and the Starter
+        if: matrix.xcode == '27.2' && steps.core.outputs.mac == 'true'
+        run: |
+          mkdir -p build/logs
+          bash scripts/swift-package.sh 0.0.0 https://example.invalid/navree "$RUNNER_TEMP/swift-package" \
+            2>&1 | tee build/logs/swift-package.log
+          cd Starter
+          xcodegen generate
+          xcodebuild -project Dukaan.xcodeproj -scheme Dukaan -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/starter" build 2>&1 | tee ../build/logs/starter-ios.log | tail -20
+          xcodebuild -project Dukaan.xcodeproj -scheme DukaanMac -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath "$RUNNER_TEMP/starter" build 2>&1 | tee ../build/logs/starter-mac.log | tail -20
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
