@@ -144,6 +144,9 @@ pub enum Command {
     /// Check what a native build needs, without changing anything: the native preview feature, the settings for links, passkeys, push and sign-in, the Android and Apple toolchains.
     #[command(name = "native:doctor")]
     NativeDoctor(NativeDoctorArgs),
+    /// Write the project of the app's Apple client (iPhone, iPad and Mac) on the Swift package, in apple/: its origin, bundle id and team from the app's settings or the flags.
+    #[command(name = "native:init")]
+    NativeInit(NativeInitArgs),
     /// Install a plugin: add the crate (or turn on a first-party package's feature), wire its module, and write what it suggests where you can read it.
     #[command(name = "plugin:add")]
     PluginAdd(PluginAddArgs),
@@ -629,6 +632,41 @@ pub struct NativeDoctorArgs {
     /// Print the findings as JSON.
     #[arg(long)]
     pub json: bool,
+}
+
+/// `navree native:init [--platform apple] [--name <name>] [--origin <url>] [--bundle-id <id>] [--team <id>] [--dir <path>] [--package <url>] [--package-version <version>] [--package-path <path>] [--dry-run]`.
+#[derive(Debug, Args)]
+pub struct NativeInitArgs {
+    /// The client to write the project of.
+    #[arg(long, value_enum, default_value_t)]
+    pub platform: crate::native_init::InitPlatform,
+    /// The app's name as people see it (default: the app's `app.name`).
+    #[arg(long)]
+    pub name: Option<String>,
+    /// The server the app talks to: https, or http to this machine for development (default: the app's `app.url`).
+    #[arg(long, value_name = "URL")]
+    pub origin: Option<String>,
+    /// The bundle id (default: the app's one `auth.apps.apple` table).
+    #[arg(long, value_name = "ID")]
+    pub bundle_id: Option<String>,
+    /// The ten-character Team ID (default: that table's `team_id`).
+    #[arg(long, value_name = "ID")]
+    pub team: Option<String>,
+    /// The project's folder, from the app's root.
+    #[arg(long, value_name = "PATH")]
+    pub dir: Option<PathBuf>,
+    /// The Swift package's repository.
+    #[arg(long, value_name = "URL")]
+    pub package: Option<String>,
+    /// The Swift package's version (default: the `navree` version in Cargo.lock), up to the next minor.
+    #[arg(long, value_name = "VERSION")]
+    pub package_version: Option<String>,
+    /// A local Swift package instead: packages/apple of a Navree checkout, after scripts/build-core.sh.
+    #[arg(long, value_name = "PATH", conflicts_with_all = ["package", "package_version"])]
+    pub package_path: Option<PathBuf>,
+    /// Print the files instead of writing them.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 /// `navree browser:install [--version <version>] [--force]`.
@@ -1223,6 +1261,75 @@ mod tests {
             .to_string();
         assert!(help.contains("native:coverage"), "{help}");
         assert!(help.contains("native:doctor"), "{help}");
+        assert!(help.contains("native:init"), "{help}");
+    }
+
+    #[test]
+    fn native_init_flags() {
+        use crate::native_init::InitPlatform;
+
+        let Command::NativeInit(args) = parse(&["native:init"]) else {
+            panic!("expected native:init");
+        };
+        assert_eq!(args.platform, InitPlatform::Apple);
+        assert!(args.name.is_none() && args.package_path.is_none() && !args.dry_run);
+        let Command::NativeInit(args) = parse(&[
+            "native:init",
+            "--platform",
+            "apple",
+            "--name",
+            "Dukaan",
+            "--origin",
+            "https://dukaan.example",
+            "--bundle-id",
+            "in.example.dukaan",
+            "--team",
+            "ABCDE12345",
+            "--dir",
+            "clients/apple",
+            "--package",
+            "https://github.com/NavreeHQ/navree-swift",
+            "--package-version",
+            "1.4.0",
+            "--dry-run",
+        ]) else {
+            panic!("expected native:init");
+        };
+        assert_eq!(args.name.as_deref(), Some("Dukaan"));
+        assert_eq!(args.origin.as_deref(), Some("https://dukaan.example"));
+        assert_eq!(args.bundle_id.as_deref(), Some("in.example.dukaan"));
+        assert_eq!(args.team.as_deref(), Some("ABCDE12345"));
+        assert_eq!(
+            args.dir.as_deref(),
+            Some(std::path::Path::new("clients/apple"))
+        );
+        assert_eq!(args.package_version.as_deref(), Some("1.4.0"));
+        assert!(args.dry_run);
+        let Command::NativeInit(args) =
+            parse(&["native:init", "--package-path", "../navree/packages/apple"])
+        else {
+            panic!("expected native:init");
+        };
+        assert_eq!(
+            args.package_path.as_deref(),
+            Some(std::path::Path::new("../navree/packages/apple"))
+        );
+        for refused in [
+            &["native:init", "--platform", "android"][..],
+            &[
+                "native:init",
+                "--package-path",
+                "x",
+                "--package-version",
+                "1.4.0",
+            ],
+        ] {
+            assert!(
+                Cli::try_parse_from(std::iter::once("navree").chain(refused.iter().copied()))
+                    .is_err(),
+                "{refused:?}"
+            );
+        }
     }
 
     #[test]

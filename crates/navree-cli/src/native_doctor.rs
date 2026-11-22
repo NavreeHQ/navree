@@ -284,7 +284,7 @@ pub struct Facts<'a> {
 
 // --- Reading the settings -------------------------------------------------
 
-fn text(value: &Value, key: &str) -> String {
+pub(crate) fn text(value: &Value, key: &str) -> String {
     match value.get(key) {
         Some(Value::String(text)) => text.trim().to_owned(),
         Some(Value::Number(number)) => number.to_string(),
@@ -334,14 +334,14 @@ fn present(value: &Value, key: &str) -> bool {
 
 // The rules `auth.apps` is checked against when the app starts.
 
-fn is_team_id(id: &str) -> bool {
+pub(crate) fn is_team_id(id: &str) -> bool {
     id.len() == 10
         && id
             .chars()
             .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
 }
 
-fn is_bundle_id(id: &str) -> bool {
+pub(crate) fn is_bundle_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 155
         && !id.starts_with('.')
@@ -1554,7 +1554,7 @@ pub struct DoctorOptions {
 
 /// The app's settings by dotted key, as the app reads them, or why they do not
 /// load.
-fn load_settings(root: &Path) -> Result<Box<Lookup>, String> {
+pub(crate) fn load_settings(root: &Path) -> Result<Box<Lookup>, String> {
     let project = navree_navigator::Project::find(root).map_err(|error| error.to_string())?;
     let config = project
         .config()

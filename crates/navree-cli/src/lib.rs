@@ -71,6 +71,7 @@ pub mod names;
 pub mod native;
 pub mod native_coverage;
 pub mod native_doctor;
+pub mod native_init;
 pub mod new_app;
 pub mod openapi_client;
 pub mod plugin;

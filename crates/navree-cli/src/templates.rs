@@ -101,6 +101,17 @@ const TEMPLATES: &[(&str, &str)] = templates![
     "component/browser_test.rs",
     "component/script.js",
     "component/sheet.css",
+    "native/apple/project.yml",
+    "native/apple/App.swift",
+    "native/apple/Contents.json",
+    "native/apple/AppIcon.json",
+    "native/apple/AccentColor.json",
+    "native/apple/Signing.xcconfig",
+    "native/apple/Signing.local.xcconfig.example",
+    "native/apple/iOS.entitlements",
+    "native/apple/Mac.entitlements",
+    "native/apple/gitignore",
+    "native/apple/README.md",
 ];
 
 /// A template failed to render (a bug in the template or its context).
