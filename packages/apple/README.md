@@ -12,6 +12,8 @@ An app outside this repository adds the client as the package `https://github.co
 
 That repository holds only what a release puts there. `scripts/swift-package.sh <version> <core-url-base> <out-dir>` makes it from the core `scripts/build-core.sh` built: the core's zip and its `.sha256`, the package (this folder's `Sources/`, the licences, a README, and this `Package.swift` with the core as the download and without the test targets), and the package packed as `navree-swift-<version>.tar.gz`. It stops when `Package.swift` is not in the form it changes, checks that the new manifest has the same targets and products, and builds the package against the zip. This folder's own `Package.swift` keeps the core as the local `NavreeCore.xcframework`, for the demo and the tests.
 
+Each release does it in three steps. `release.yml`'s `apple-package` job builds the core on a Mac, runs the script with the release's download address, and attaches the zip and the packed package to the draft release. When the release is published, `publish-release` sends `navree-release` with the version to the repository named by the variable `SWIFT_PACKAGE_REPO`. There `update.yml` (kept here as `release/update.yml`) downloads the packed package, checks its SHA-256, commits it to `main` and tags it with the version, without a `v` (`1.5.0`). The repository, the variable and the token's access to it are set up once, as `release/update.yml` says; until then the release says in a notice that the package was not updated.
+
 ## What the library does by itself
 
 These hold for every app built on the library, with nothing to configure.

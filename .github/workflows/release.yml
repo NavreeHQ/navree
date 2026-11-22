@@ -8,7 +8,12 @@
 #    section.
 # 3. binaries: the `navree` CLI for Linux, macOS and Windows, attached to the
 #    draft with a SHA-256 file each.
-# 4. crates (environment `crates-io`, which asks for an approval): `cargo
+# 4. apple-package: the Apple client's runtime core, built on a Mac for an
+#    iPhone, the iOS simulator and a Mac, attached to the draft as
+#    NavreeCore.xcframework.zip, with the Swift package that downloads it
+#    (navree-swift-<version>.tar.gz), each with a SHA-256 file
+#    (packages/apple/scripts/swift-package.sh).
+# 5. crates (environment `crates-io`, which asks for an approval): `cargo
 #    xtask release publish`, in dependency order. It resumes: run the job
 #    again after a stop, and the crates the registry has are skipped.
 #    Crates that exist on crates.io publish with trusted publishing, a fresh
@@ -19,13 +24,16 @@
 #    no version of and trusted publishing for all the others, and stops at a
 #    new crate when the secret is not set. Afterwards delete the secret,
 #    revoke the token and add the new crate's trusted publisher.
-# 5. npm (environment `npm`, which asks for an approval): the five
+# 6. npm (environment `npm`, which asks for an approval): the five
 #    `@navree/*` packages with provenance (`pnpm -r publish`, which skips a
 #    version npm has already). The secret NPM_TOKEN is used when set (a
 #    package's first publish); otherwise npm's trusted publishing.
-# 6. publish-release: the draft becomes the release; the branch docs/<major>.x
+# 7. publish-release: the draft becomes the release; the branch docs/<major>.x
 #    moves to the tag, and the website and the skeleton repository are told
-#    (with the secret RELEASE_DISPATCH_TOKEN, when set).
+#    (with the secret RELEASE_DISPATCH_TOKEN, when set), and so is the Swift
+#    package's repository, named by the variable SWIFT_PACKAGE_REPO, which
+#    then commits and tags the package of this version
+#    (packages/apple/release/update.yml).
 #
 # sbom.yml also runs on the tag.
 name: Release
@@ -201,6 +209,42 @@ jobs:
           fi
           gh release upload "$TAG" "$archive" "$archive.sha256" --clobber
 
+  apple-package:
+    needs: [verify, github-release]
+    runs-on: macos-26
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,aarch64-apple-darwin
+
+      - name: Build the core
+        run: bash packages/apple/scripts/build-core.sh
+
+      - name: Make the Swift package and attach it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          packages/apple/scripts/swift-package.sh "$VERSION" \
+            "https://github.com/NavreeHQ/navree/releases/download/$TAG" dist
+          gh release upload "$TAG" \
+            dist/NavreeCore.xcframework.zip dist/NavreeCore.xcframework.zip.sha256 \
+            "dist/navree-swift-$VERSION.tar.gz" "dist/navree-swift-$VERSION.tar.gz.sha256" \
+            --clobber
+
   crates:
     needs: verify
     runs-on: ubuntu-latest
@@ -307,7 +351,7 @@ jobs:
           [ "${#missing[@]}" -eq 0 ]
 
   publish-release:
-    needs: [verify, binaries, crates, npm]
+    needs: [verify, binaries, apple-package, crates, npm]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -345,3 +389,20 @@ jobs:
               --field event_type=navree-release \
               --field "client_payload[version]=$VERSION"
           done
+
+      - name: Tell the Swift package's repository
+        # The repository named by the variable SWIFT_PACKAGE_REPO (for
+        # example NavreeHQ/navree-swift) runs packages/apple/release/update.yml,
+        # which commits and tags this version's package from the release.
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_DISPATCH_TOKEN }}
+          REPO: ${{ vars.SWIFT_PACKAGE_REPO }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          if [ -z "$REPO" ] || [ -z "$GH_TOKEN" ]; then
+            echo "::notice::the Swift package was not updated: set the variable SWIFT_PACKAGE_REPO and give RELEASE_DISPATCH_TOKEN access to that repository (packages/apple/release/update.yml says how)"
+            exit 0
+          fi
+          gh api "repos/$REPO/dispatches" \
+            --field event_type=navree-release \
+            --field "client_payload[version]=$VERSION"
