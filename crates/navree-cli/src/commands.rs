@@ -268,6 +268,22 @@ pub fn execute(cli: Cli, cwd: &Path) -> anyhow::Result<ExitCode> {
             let ready = run_doctor(&root, &options, &SystemMachine, &mut std::io::stdout())?;
             Ok(exit_code(ready))
         }
+        Command::NativeInit(args) => {
+            let options = crate::native_init::InitOptions {
+                platform: args.platform,
+                name: args.name.clone(),
+                origin: args.origin.clone(),
+                bundle_id: args.bundle_id.clone(),
+                team: args.team.clone(),
+                dir: args.dir.clone(),
+                package: args.package.clone(),
+                package_version: args.package_version.clone(),
+                package_path: args.package_path.clone(),
+                dry_run: args.dry_run,
+            };
+            crate::native_init::run_init(cwd, &options, &mut std::io::stdout())?;
+            Ok(ExitCode::SUCCESS)
+        }
         Command::PluginAdd(args) => {
             let app_env = match find_app(cwd) {
                 Ok(roots) => dock::app_env(&roots.config)?,

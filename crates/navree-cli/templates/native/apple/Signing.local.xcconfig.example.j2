@@ -1,0 +1,26 @@
+// A team's signing of {{ display_name }}. Copy to Signing.local.xcconfig, put
+// in the team's own values, then `xcodegen generate`.
+//
+// On Apple's side first (developer.apple.com, Certificates, Identifiers &
+// Profiles): an App ID for NAVREE_BUNDLE_ID with Sign in with Apple,
+// Associated Domains and Push Notifications; the iPhone and iPad app and the
+// Mac app share it. On the server, the app under `auth.apps.apple`
+// (config/app.toml), so it serves apple-app-site-association over https at
+// NAVREE_ASSOCIATED_DOMAIN:
+//
+//   [auth.apps.apple.{{ scheme }}]
+//   team_id = "{{ team if team else "ABCDE12345" }}"
+//   bundle_id = "{{ bundle_id }}"
+//
+// `navree native:doctor --platform ios` checks the server's side.
+
+// The ten-character Team ID.
+DEVELOPMENT_TEAM = {{ team if team else "ABCDE12345" }}
+CODE_SIGN_IDENTITY[sdk=macosx*] = Apple Development
+// The origin's host: the app talks to https://{{ domain if domain else "shop.example" }}.
+NAVREE_ASSOCIATED_DOMAIN = {{ domain if domain else "shop.example" }}
+CODE_SIGN_ENTITLEMENTS[sdk=iphone*] = Signing/iOS.entitlements
+CODE_SIGN_ENTITLEMENTS[sdk=macosx*] = Signing/Mac.entitlements
+// The Mac client does not take push.
+NAVREE_SIGNED_WITH[sdk=iphone*] = associated-domains sign-in-with-apple push
+NAVREE_SIGNED_WITH[sdk=macosx*] = associated-domains sign-in-with-apple
