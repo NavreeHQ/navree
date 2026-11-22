@@ -89,6 +89,17 @@ public enum StatusRules {
         if case .app? = item?.content { true } else { false }
     }
 
+    /// Whether a press that sent the app to the background was on its own
+    /// item: on macOS 26 and later the system takes a press on an item in
+    /// the menu bar, so the app goes to the background before the item's
+    /// click comes. The window then stays for that click to close it, as it
+    /// does while the app is in front; any other press, or none at all
+    /// (another app came forward by itself), is a click elsewhere.
+    public static func pressOnItem(mouse: CGPoint, buttons: Int, item: CGRect?) -> Bool {
+        guard buttons != 0, let item else { return false }
+        return item.contains(mouse)
+    }
+
     /// Where the item's window stands: under the item, centred on it, kept on
     /// the item's screen, its top a few points under the menu bar.
     public static func windowFrame(item: CGRect, size: CGSize, screen: CGRect) -> CGRect {
