@@ -1279,10 +1279,24 @@ impl Core {
                 let stamp = (!shell.stamp.is_empty())
                     .then(|| shell.stamp.clone())
                     .or(header);
+                let answered_for = self.inner.naming.clone();
                 self.install(shell, false);
                 // The person is the server's word now: what is kept is read
-                // only when it is theirs, and emptied when it is not.
-                let person = self.inner.user.clone();
+                // only when it is theirs, and emptied when it is not. A shell
+                // that names nobody while its answer names a person by id
+                // (a server that signs people in and gives its shell nobody
+                // to name) is held to that id, as every answer is compared
+                // with it: else each page answered for the person would read
+                // as made for another than the nobody named, and the shell
+                // would be asked again at every page, for ever. The client is
+                // still given nobody, as the shell says.
+                let person = self.inner.user.clone().or_else(|| {
+                    answered_for.map(|id| Who {
+                        id: Some(id),
+                        name: String::new(),
+                        email: None,
+                    })
+                });
                 self.shell_named(person);
                 self.remember_shell(response.body);
                 self.inner.shell_stamp = stamp;
@@ -6672,6 +6686,61 @@ mod tests {
     /// The key a client is given for the person signed in.
     fn key_of(core: &Core) -> Option<String> {
         Some(core.view.app.as_ref()?.user.as_ref()?.key.clone())
+    }
+
+    /// A server may sign people in and still give its native shell nobody to
+    /// name (no shell of its own): its answers name the person by id, the
+    /// shell's answer too. The core holds the session to that id. A page
+    /// answered for the same person is shown and the shell is not asked
+    /// again, which it would be at every page, for ever, were the page taken
+    /// for another person than the nobody the shell named. A page answered
+    /// for nobody is still the news that the session ended.
+    #[test]
+    fn a_shell_that_names_nobody_but_answers_for_a_person_is_held_to_that_person() {
+        const OPERATOR: &str = "01a20318-d68a-70bb-997a-f63a7f215f24";
+        let nobody = include_str!("../transcripts/fixtures/made/shell-nobody.json");
+        // Of the shell's build: a page of another build is a new deploy, which asks for the shell.
+        let page = r#"{"navree":1,"build":"152bd84abf4d","vocab":0,"screen":{"title":"Overview","body":{"t":"form","id":"note","method":"post","action":"/orders/1/note","children":[{"t":"field","id":"text","name":"text","input":{"t":"text"}},{"t":"button","label":"Save","action":{"t":"submit"}}]}}}"#;
+        let pages = |core: &Core| -> Vec<u64> {
+            core.inner
+                .pending
+                .iter()
+                .filter(|(_, asked)| matches!(asked.purpose, Pending::Page { .. }))
+                .map(|(request, _)| *request)
+                .collect()
+        };
+        let mut core = signed_in_as(Some(OPERATOR), nobody);
+        assert!(
+            key_of(&core).is_none(),
+            "the shell names nobody to the client"
+        );
+        let first = *pages(&core).first().expect("the home page is asked for");
+        let shown = core.send(native(first, page, Some(OPERATOR), false));
+        assert!(
+            !shown
+                .effects
+                .iter()
+                .any(|effect| asks_for_the_shell(effect).is_some()),
+            "a page for the person the shell's answer named asks for no shell: {shown:?}"
+        );
+        let home = core.view.destinations[core.view.selected].stack[0];
+        assert!(
+            core.view.screens[&home].title.as_deref() == Some("Overview")
+                && !core.view.screens[&home].loading,
+            "the page is shown: {:?}",
+            core.view.screens[&home]
+        );
+        // The session ends: an answer for nobody sends the core to the shell.
+        core.send(Event::Refresh { screen: home });
+        let again = *pages(&core).last().expect("the page is asked for again");
+        let ended = core.send(native(again, page, None, false));
+        assert!(
+            ended
+                .effects
+                .iter()
+                .any(|effect| asks_for_the_shell(effect).is_some()),
+            "an answer for nobody after the person's asks for the shell: {ended:?}"
+        );
     }
 
     /// The person a client is given carries the core's key for them. When
