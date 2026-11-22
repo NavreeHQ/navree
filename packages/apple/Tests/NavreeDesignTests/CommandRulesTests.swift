@@ -113,6 +113,20 @@ private func button(
     #expect(CommandRules.screenMenu(nil) == "Actions")
 }
 
+@Test func theScreensMenuIsInTheMenuBarOnlyWhenItHoldsACommand() {
+    // A screen with no actions, or whose actions all go to File and Edit,
+    // leaves no empty menu in the menu bar.
+    #expect(!CommandRules.screenMenuHolds(CommandRules.entries([]), chosen: 0))
+    #expect(!CommandRules.screenMenuHolds(
+        CommandRules.entries([button("New order", role: .create), button("Share", standard: .share), button("Search", standard: .search)]),
+        chosen: 0
+    ))
+    #expect(CommandRules.screenMenuHolds(CommandRules.entries([button("Restock")]), chosen: 0))
+    #expect(CommandRules.screenMenuHolds(CommandRules.entries([button("Cancel order", role: .destructive)]), chosen: 0))
+    // The chosen row's commands are the menu's too.
+    #expect(CommandRules.screenMenuHolds(CommandRules.entries([]), chosen: 2))
+}
+
 @Test func theUserMenusSettingsEntryIsFoundByItsGearOrItsAddress() {
     let profile = Navree.Node.link(Navree.Link(action: .navigate(Navree.Action.Navigate(href: "/profile")), label: "Profile"))
     let settings = Navree.Node.link(Navree.Link(action: .navigate(Navree.Action.Navigate(href: "/account/settings")), label: "Settings"))
