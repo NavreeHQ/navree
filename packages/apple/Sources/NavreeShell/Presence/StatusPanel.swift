@@ -30,6 +30,17 @@ final class StatusPanel: NSPanel {
     /// What Escape does when nothing in the window took it.
     var escape: (@MainActor () -> Void)?
 
+    /// The window's style: titled for its bar and toolbar, and taking the
+    /// keyboard without bringing the app forward. On macOS 26 and later the
+    /// system takes the click on the item, and the app asking to come forward
+    /// is then refused while another app is in front: an ordinary window
+    /// would open with the keyboard still in that app.
+    static func style(resizable: Bool) -> NSWindow.StyleMask {
+        var style: NSWindow.StyleMask = [.titled, .fullSizeContentView, .nonactivatingPanel]
+        if resizable { style.insert(.resizable) }
+        return style
+    }
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
@@ -167,7 +178,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         // A panel the person may resize opens at the size they left it.
         let size = options.resizable && panel.frame.width > 1 ? panel.frame.size : options.size
         panel.setFrame(StatusRules.windowFrame(item: place.frame, size: size, screen: screen), display: true)
-        NSApp.activate()
+        // The panel takes the keyboard itself; the app in front stays in front.
         panel.makeKeyAndOrderFront(nil)
         shown = true
         pressed(true)
@@ -204,9 +215,15 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     /// Closes the panel for what happened outside it (a click elsewhere, the
     /// app going to the background), unless one of the system's own sheets
     /// stands over it (signing in): that sheet answers to the panel, and
-    /// closing the panel under it would leave it nowhere.
+    /// closing the panel under it would leave it nowhere. A press on the
+    /// item itself is not outside: its click closes the panel, which would
+    /// otherwise close here first and open again on that click.
     private func hideForOutside() {
         guard PresenceModel.shared.systemSheets == 0 else { return }
+        let press = StatusRules.pressOnItem(
+            mouse: NSEvent.mouseLocation, buttons: NSEvent.pressedMouseButtons, item: item?.button?.window?.frame
+        )
+        guard !press else { return }
         hide()
     }
 
@@ -233,8 +250,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
 
     private func makePanel() -> StatusPanel {
         let options = self.options
-        var style: NSWindow.StyleMask = [.titled, .fullSizeContentView]
-        if options.resizable { style.insert(.resizable) }
+        let style = StatusPanel.style(resizable: options.resizable)
         let panel = StatusPanel(contentRect: CGRect(origin: .zero, size: options.size), styleMask: style, backing: .buffered, defer: true)
         // No window buttons, as the system's own items' windows; the bar holds
         // the screen's title and the shell's toolbar, since the window holds a

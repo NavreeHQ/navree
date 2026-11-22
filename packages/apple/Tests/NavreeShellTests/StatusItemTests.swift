@@ -110,6 +110,20 @@ private let held = StatusItem(image: .symbol("shippingbox"), content: .app())
     #expect(short.minY == 8)
 }
 
+@Test func aPressOnTheItemItselfIsNotAClickElsewhere() {
+    // On macOS 26 and later the system takes a press on an item in the menu
+    // bar, so the app goes to the background before the item's click comes:
+    // that press is the item's own, and its click closes the window.
+    let item = CGRect(x: 978, y: 870, width: 32, height: 30)
+    #expect(StatusRules.pressOnItem(mouse: CGPoint(x: 994, y: 885), buttons: 1, item: item))
+    #expect(StatusRules.pressOnItem(mouse: CGPoint(x: 994, y: 885), buttons: 2, item: item))
+    // A press elsewhere is a click elsewhere, and so is no press at all
+    // (another app came forward by itself).
+    #expect(!StatusRules.pressOnItem(mouse: CGPoint(x: 700, y: 885), buttons: 1, item: item))
+    #expect(!StatusRules.pressOnItem(mouse: CGPoint(x: 994, y: 885), buttons: 0, item: item))
+    #expect(!StatusRules.pressOnItem(mouse: CGPoint(x: 994, y: 885), buttons: 1, item: nil))
+}
+
 @Test func theWindowOpensOnTheScreenThatHoldsTheItem() {
     // A second screen to the right of the first, its menu bar with the item.
     let second = CGRect(x: 1440, y: 0, width: 1920, height: 1050)
@@ -176,3 +190,19 @@ private let held = StatusItem(image: .symbol("shippingbox"), content: .app())
     #expect(parts.name == "Charkha Bar")
     #expect(StatusRules.label(item: item, count: nil, place: .menuBar, appName: "Charkha Bar").accessibilityLabel == "Charkha Bar")
 }
+
+#if os(macOS)
+import AppKit
+
+@Test func theWindowUnderTheItemTakesTheKeyboardWithoutBringingTheAppForward() {
+    // On macOS 26 and later the system takes the click on the item, so the
+    // app may not come forward when the window opens: the window takes the
+    // keyboard itself, as the system's own items' windows do, so Escape and
+    // typing reach it at once.
+    let fixed = StatusPanel.style(resizable: false)
+    #expect(fixed.contains(.nonactivatingPanel))
+    #expect(fixed.contains(.titled))
+    #expect(!fixed.contains(.resizable))
+    #expect(StatusPanel.style(resizable: true).contains([.nonactivatingPanel, .resizable]))
+}
+#endif
