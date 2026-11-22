@@ -1,6 +1,6 @@
 ---
 name: navree-cli-generators
-description: "Uses the `navree` CLI: `navree new` (Navree UI by default, `--ui`, `--kit`), every `make:*` generator with the files it writes and what it registers (including `make:page`, `make:form`, `make:table`, `make:plugin` and `make:component`), `plugin:add`, `plugin:list` and `plugin:remove`, the marker comments, `navree dev`, `navree native:coverage` and `navree native:doctor` for apps that answer native clients, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, model, factory, seeder, migration, job, event, listener, mail, notification, policy, command, test, MCP server, Helm resource, Navree UI page, form, data table, plugin crate or UI component), installing, listing or removing a plugin, running an app command such as migrate or queue:work, or adding a custom command."
+description: "Uses the `navree` CLI: `navree new` (Navree UI by default, `--ui`, `--kit`), every `make:*` generator with the files it writes and what it registers (including `make:page`, `make:form`, `make:table`, `make:plugin` and `make:component`), `plugin:add`, `plugin:list` and `plugin:remove`, the marker comments, `navree dev`, `navree native:coverage`, `navree native:doctor` and `navree native:init` for apps that answer native clients, forwarding to the app's own commands, and console commands with `CommandSpec`. Use when generating any code in a Navree app (module, controller, service, model, factory, seeder, migration, job, event, listener, mail, notification, policy, command, test, MCP server, Helm resource, Navree UI page, form, data table, plugin crate or UI component), installing, listing or removing a plugin, running an app command such as migrate or queue:work, or adding a custom command."
 ---
 
 # The navree CLI and generators
@@ -14,7 +14,8 @@ Two command lines:
   `queue:work`, ...). `navree <command>` forwards anything the CLI doesn't
   own (`new`, `make:*`, `plugin:add`, `plugin:remove`, `plugin:list`, `dev`,
   `check`, `gate`, `dock*`, the Harbor commands, `mcp`, `skills:install`,
-  `browser:install`, `openapi:client`, `native:coverage`, `native:doctor`) as
+  `browser:install`, `openapi:client`, `native:coverage`, `native:doctor`,
+  `native:init`) as
   `cargo run --quiet -- <command>`. In
   production, run the binary itself: `./my-app migrate`. When the app has
   a `dock.toml`, `navree dev` and forwarded commands get its services'
@@ -185,6 +186,8 @@ navree native:coverage --json               # for tools
 navree native:coverage --fail-on web        # a gate: exit 1 when a page is shown in the web view (layout: layout or web)
 navree native:doctor                        # what a native build needs: ready, missing or not applicable, and the next step
 navree native:doctor --platform android --url https://orders.example.com --json
+navree native:init                          # the Apple client's project in apple/: iPhone, iPad and Mac on the Swift package
+navree native:init --name Dukaan --origin http://127.0.0.1:8080 --dry-run
 ```
 
 - Grades: `idiom` (the page belongs to the system), `layout` (native parts in a
@@ -221,6 +224,15 @@ navree native:doctor --platform android --url https://orders.example.com --json
   origins, `notify.push` keys (presence only), social providers, the JDK, the
   Android SDK and platform, and Xcode (on a Mac; elsewhere it says Apple builds
   need a Mac or a cloud build). It exits 1 when anything is missing.
+- `native:init` writes an XcodeGen `project.yml` (an iPhone and iPad app and a
+  Mac app sharing one bundle id), `<Name>/App.swift`, an asset catalog,
+  `Signing/` (no team: runs in the simulator and on the Mac; a team and each
+  system's entitlements in the ignored `Signing.local.xcconfig`), `.gitignore`
+  and `README.md`, in `apple/`. Name, origin, bundle id and team come from the
+  flags or `app.name`, `app.url` and the one `auth.apps.apple` table; the Swift
+  package `navree-swift` is pinned up to the next minor of the `navree` in
+  `Cargo.lock`. An origin is https, or http to a loopback host. It never
+  overwrites a file; `--package-path` takes the client from a checkout.
 
 ## Common mistakes
 

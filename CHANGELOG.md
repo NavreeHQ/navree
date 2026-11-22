@@ -7,6 +7,11 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+### Added
+
+- `navree native:init` writes the project of the app's Apple client in `apple/`: an iPhone and iPad app and a Mac app sharing one bundle id, on the Swift package `navree-swift`, as an XcodeGen `project.yml` with the app's code, an asset catalog, signing that runs with no team and a team's signing with each system's entitlements. The name, origin, bundle id and team come from the flags or the app's settings (`app.name`, `app.url`, `auth.apps.apple`), and the package is pinned up to the next minor version of the `navree` in `Cargo.lock`.
+- Each release makes the Apple client as a Swift package of its own: the runtime core built for iPhone, the iOS simulator and the Mac, attached to the release as `NavreeCore.xcframework.zip` with the package that downloads it (`packages/apple/scripts/swift-package.sh`), and committed and tagged in the package's repository (`packages/apple/release/update.yml`, once its repository and the variable `SWIFT_PACKAGE_REPO` are set up).
+
 ## [1.4.0] - 2026-11-19
 
 ### Upgrading
