@@ -1,0 +1,24 @@
+# Dukaan for iPhone, iPad and Mac
+
+The Apple client of Dukaan: its screens come from http://127.0.0.1:8095 and are drawn natively, by the Navree Native client in `..`. Written by `navree native:init`.
+
+## Run it
+
+1. XcodeGen, once: `brew install xcodegen`.
+2. In this folder: `xcodegen generate`, then `open Dukaan.xcodeproj`.
+3. Run the scheme `Dukaan` in an iPhone or iPad simulator, or `DukaanMac` on this Mac.
+
+The app talks to http://127.0.0.1:8095: plain http to this machine, for development, so start the server there first (`navree dev`). A build for a device talks to the site over https: change `NavreeOrigin` in `project.yml`, for both apps.
+
+The server draws its pages for the app when its `navree` dependency has the native preview on: `navree native:doctor --platform ios` says what the server is missing, and `navree native:coverage --platform ios` how each page is drawn.
+
+## Signing
+
+`Signing/Signing.xcconfig` signs both apps with the bundle id `com.navree.dukaan`, and no entitlements. Sign in with Apple, passkeys, push and a sign-in that comes back on a link of the site need a team: copy `Signing/Signing.local.xcconfig.example` to `Signing/Signing.local.xcconfig`, fill it in (it says what to register with Apple and on the server), and run `xcodegen generate` again. The iPhone and iPad app and the Mac app share the bundle id, so one App ID and one `auth.apps.apple` entry on the server cover both.
+
+## The client
+
+`project.yml` takes the client from `..`: a Navree checkout's `packages/apple`, with its core built by `scripts/build-core.sh`. An app for people takes it from the package instead: `url: https://github.com/NavreeHQ/navree-swift` and `minorVersion:` the version of Navree the server runs.
+Its runtime core is built for Apple silicon only: the Mac app is built for `arm64`, and a simulator build leaves out `x86_64`.
+
+`Dukaan/App.swift` is the whole app: a `ShellConfiguration` with the origin, and `NavreeScenes`. What else it can set (other hosts a web page loads from, covering the app in the app switcher, opening at login on a Mac) is in the client's documentation.

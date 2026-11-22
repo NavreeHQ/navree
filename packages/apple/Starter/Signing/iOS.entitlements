@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Sign in with Apple, from the system's own sheet. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<!-- The site's passkeys and a confirmation signed with one, a sign-in
+	     session that comes back on a link of the site (webcredentials), and
+	     the site's links opened in the app (applinks). -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>webcredentials:$(NAVREE_ASSOCIATED_DOMAIN)</string>
+		<string>applinks:$(NAVREE_ASSOCIATED_DOMAIN)</string>
+	</array>
+	<!-- Push through Apple's service; a build for the App Store is given
+	     production by its profile. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>
