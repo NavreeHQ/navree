@@ -54,6 +54,8 @@ pub fn platform(builder: AppBuilder, sources: ConfigSources) -> AppBuilder {
         .module(SessionModule::from_config())
         // The sign-in page that Helm, Fleet and Lighthouse send guests to.
         .module(navree::auth::AuthPages::new())
+        // The person signed in, named to a native app.
+        .module(NativeShellModule)
         .module(AuditModule::from_config())
         // Packages.
         .module(NotifyModule::from_config())
@@ -87,6 +89,46 @@ pub fn platform(builder: AppBuilder, sources: ConfigSources) -> AppBuilder {
         .module(LogbookModule::from_config())
         .module(FleetModule::from_config())
         .module(TenancyModule)
+}
+
+/// The shell a native app draws its navigation from names the person signed
+/// in, with their menu, so the app shows who is signed in, holds what it
+/// keeps to them, and asks for its push token once somebody is. Only the
+/// native shell's own address is answered: the web's error pages are as the
+/// tools draw them.
+#[module(register = Self::wire)]
+struct NativeShellModule;
+
+impl NativeShellModule {
+    fn wire(&self, m: &mut ModuleBuilder) {
+        m.contribute(navree::ui::ErrorShell::new(native_shell));
+    }
+}
+
+/// The native shell for the request's person: the app's name, and theirs and
+/// their email at the foot, with signing out. Nobody signed in, it names
+/// nobody.
+async fn native_shell(request: navree::http::ErrorContext) -> Option<navree::ui::Shell> {
+    if request.uri.path() != "/_navree/native/shell" {
+        return None;
+    }
+    let name = request
+        .ctx
+        .try_get::<navree::config::Config>()
+        .await
+        .and_then(|config| config.app_name())
+        .unwrap_or_else(|| "Navree System".to_owned());
+    let shell = navree::ui::Shell::new(name);
+    let Some(id) = request.user else {
+        return Some(shell);
+    };
+    let auth = request.ctx.get::<navree::auth::AuthService>().await.ok()?;
+    let person = auth.find_user(id).await.ok().flatten()?;
+    Some(
+        shell.user(
+            navree::ui::UserMenu::new(person.name, person.email).action("Sign out", "/sign-out"),
+        ),
+    )
 }
 
 /// What the app adds to tenancy: workspaces are the billable (plans,
