@@ -560,10 +560,10 @@ pub fn run_init(
             project.bundle_id
         )?;
     }
-    if let PackageSource::Remote { version, .. } = &project.package {
+    if let PackageSource::Remote { url, version } = &project.package {
         writeln!(
             out,
-            "  note     the client is the Swift package {SWIFT_PACKAGE_URL} {version}, up to the next minor version"
+            "  note     the client is the Swift package {url} {version}, up to the next minor version"
         )?;
     }
     Ok(())
@@ -1007,6 +1007,25 @@ mod tests {
         )
         .unwrap();
         assert!(dir.path().join("apple").join("project.yml").exists());
+    }
+
+    #[test]
+    fn run_init_names_the_package_it_wrote() {
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
+        let mut options = flags("Dukaan", "https://dukaan.example");
+        options.package = Some("https://git.example/dukaan/navree-swift".to_owned());
+        options.package_version = Some("1.4.0".to_owned());
+        let mut out = Vec::new();
+        run_init(dir.path(), &options, &mut out).unwrap();
+        let printed = String::from_utf8(out).unwrap();
+        assert!(
+            printed.contains("https://git.example/dukaan/navree-swift 1.4.0"),
+            "{printed}"
+        );
+        assert!(!printed.contains(SWIFT_PACKAGE_URL), "{printed}");
     }
 
     #[test]
