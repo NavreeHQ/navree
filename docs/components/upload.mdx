@@ -17,6 +17,8 @@ Upload::new("photo", "Profile photo")
 
 `Upload::new(name, label)` posts its files as `name`. `.action(url)` makes it a form of its own. Without an action it is a field for a form of yours, and that form must have `enctype="multipart/form-data"`.
 
+The previews on this page have no server. A file you choose in one is listed, its progress is played and it is marked as sent, and it goes nowhere: it never leaves your browser.
+
 ## When to use it
 
 Use an upload for files a person has on their device: a photo, an Aadhaar card scan, a price list, a video of the shop. For a file the server already has, list it with `UploadedFile`. For text, use an [Input](/docs/components/input/) or a [Textarea](/docs/components/textarea/).
