@@ -55,6 +55,10 @@ body[data-preview-open] [data-preview-open] > dialog:not([open]){display:flex;fl
 [data-preview-cell]{margin:0;display:flex;flex-direction:column;gap:12px;min-width:0;padding:16px;border:1px solid var(--line);border-radius:var(--radius-lg)}
 [data-preview-cell-body]{flex:1;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;min-width:0;min-height:40px}
 [data-preview-gallery=wide] [data-preview-cell-body]{display:block}
+/* A cell with a box to type in is laid out from its top. A line that comes under the box as
+   it is left (what was typed can't be taken) then grows the cell downward, and the button
+   beside the box is still under the pointer that is pressing it. */
+[data-preview-cell-body]:has(input:not([type=hidden],[type=checkbox],[type=radio],[type=range],[type=file],[type=color]),textarea){align-items:flex-start}
 [data-preview-cell] figcaption{color:var(--fg-3);font:12px/1.4 var(--font-mono);text-align:center;overflow-wrap:anywhere}
 [data-preview-gallery=wide] figcaption{text-align:start}
 [data-preview-gallery=icon] [data-preview-cell]{gap:8px;padding:16px 8px 10px}
