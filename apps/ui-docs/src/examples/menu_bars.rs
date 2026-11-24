@@ -27,7 +27,11 @@ pub fn all() -> Vec<Example> {
         )
         .show()
         .height(430),
-        single!("context-menu", "submenu", "A submenu", context_submenu).height(200),
+        // From the top, with room under the card for the menu and the submenu beside it,
+        // wherever the card is pressed: a frame that had to grow would close the menu.
+        single!("context-menu", "submenu", "A submenu", context_submenu)
+            .start()
+            .height(310),
         single!(
             "context-menu",
             "destructive",
