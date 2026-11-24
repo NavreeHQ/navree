@@ -339,7 +339,7 @@ The tools of the ecosystem add their own commands to the CLI. They run in the CL
 
 ## Native apps
 
-A Navree UI page can also answer a native client (on an iPhone, an iPad, a Mac, an Android phone or tablet, or a Windows PC) with the parts of the page, which the system draws with its own toolkit. This is a preview: it is behind the facade feature `ui-native-preview`, and what it answers may change in a minor release. Add it to the `navree` dependency, or to a feature of your own app:
+A Navree UI page can also answer a native client (on an iPhone, an iPad, a Mac, an Android phone or tablet, or a Windows PC) with the parts of the page, which the system draws with its own toolkit. It is behind the facade feature `ui-native-preview`, and what it answers may change in a minor release. Add it to the `navree` dependency, or to a feature of your own app:
 
 ```toml title="Cargo.toml"
 [features]
@@ -387,7 +387,7 @@ Skipped (4):
 Not pages, so not asked: the toolkit's and the framework's own files (4); not a GET (7); answers that are not pages (1).
 ```
 
-It builds the app with the cargo feature that turns the preview on (the entry of your `[features]` that lists `navree/ui-native-preview`; `--features` names another), runs the app's own `native:coverage` command, which `UiModule` registers, and prints what the app answered. The app is booted, as for any command of its own, so it needs its settings and its database.
+It builds the app with the cargo feature that turns native answers on (the entry of your `[features]` that lists `navree/ui-native-preview`; `--features` names another), runs the app's own `native:coverage` command, which `UiModule` registers, and prints what the app answered. The app is booted, as for any command of its own, so it needs its settings and its database.
 
 | Option | What it does |
 |---|---|

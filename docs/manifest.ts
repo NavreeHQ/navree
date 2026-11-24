@@ -325,8 +325,6 @@ export const sections: DocsSection[] = [
       "page-policy",
       // Native apps
       "native",
-      // What is next
-      "coming-next",
     ],
     groups: [
       { title: "Foundations", from: "foundations" },
@@ -334,7 +332,6 @@ export const sections: DocsSection[] = [
       { title: "Forms and data", from: "forms" },
       { title: "Interaction", from: "commands-and-ops" },
       { title: "Native apps", from: "native" },
-      { title: "What is next", from: "coming-next" },
     ],
   },
   {
