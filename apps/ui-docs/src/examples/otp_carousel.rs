@@ -25,7 +25,10 @@ pub fn all() -> Vec<Example> {
         single!("input-otp", "error", "With an error", otp_error)
             .start()
             .height(150),
-        gallery!("input-otp", "states", "States", otp_states).medium(),
+        // Six boxes don't shrink: a cell narrower than them would draw them over the next.
+        gallery!("input-otp", "states", "States", otp_states)
+            .broad()
+            .height(316),
         single!("input-otp", "send", "Sent when whole", otp_send)
             .start()
             .height(110),

@@ -17,8 +17,9 @@ pub fn all() -> Vec<Example> {
         single!("phone-input", "saved", "A saved number", phone_saved)
             .start()
             .height(470),
+        // Room for the number beside the country: a narrower cell cuts it.
         gallery!("phone-input", "states", "States", phone_states)
-            .medium()
+            .broad()
             .start()
             .height(480),
         single!(

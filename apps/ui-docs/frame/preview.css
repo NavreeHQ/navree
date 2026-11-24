@@ -46,6 +46,9 @@ body[data-preview-open] [data-preview-open] > dialog:not([open]){display:flex;fl
 /* Galleries: one captioned cell per variant or state. */
 [data-preview-gallery]{--cell:220px;display:grid;gap:12px;width:100%;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--cell)),1fr))}
 [data-preview-gallery=narrow]{--cell:140px}
+/* What does not shrink (a month's grid, the boxes of a code, a phone number): its cells are
+   never told how many go to a row, so each is at least this wide, down to one to a row. */
+[data-preview-gallery=broad]{--cell:330px}
 [data-preview-gallery=wide]{--cell:100%}
 [data-preview-gallery=icon]{--cell:112px;gap:8px}
 @media (min-width:481px){[data-preview-cols="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}[data-preview-cols="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}[data-preview-cols="4"]{grid-template-columns:repeat(4,minmax(0,1fr))}[data-preview-cols="5"]{grid-template-columns:repeat(5,minmax(0,1fr))}}
@@ -57,6 +60,9 @@ body[data-preview-open] [data-preview-open] > dialog:not([open]){display:flex;fl
 [data-preview-gallery=icon] [data-preview-cell]{gap:8px;padding:16px 8px 10px}
 [data-preview-gallery=icon] [data-preview-cell-body] [data-slot=icon]{width:20px;height:20px;color:var(--fg-1)}
 @media (max-width:480px){[data-preview-gallery=medium]{--cell:140px}[data-preview-cell]{padding:12px}}
+/* On a phone a broad cell has the row to itself, and what it shows nearly all of the row: a
+   month with its week numbers is 295px wide. */
+@media (max-width:480px){body[data-preview]:has([data-preview-gallery=broad]){padding-inline:12px}[data-preview-gallery=broad] [data-preview-cell]{padding-inline:4px}}
 
 /* A searchable gallery: the search box stays at the top, the cells below it
    are laid out and painted only when they scroll near. */
