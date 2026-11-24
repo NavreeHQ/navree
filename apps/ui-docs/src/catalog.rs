@@ -1221,6 +1221,9 @@ pub enum Cells {
     Narrow,
     /// About 220px.
     Medium,
+    /// At least 330px, as many to a row as fit: a calendar, a one-time code, a phone
+    /// number, which are drawn over the next cell when theirs is narrower than they are.
+    Broad,
     /// The whole width, one per line: alerts, items.
     Wide,
     /// About 96px: icons.
@@ -1234,6 +1237,7 @@ impl Cells {
         match self {
             Self::Narrow => "narrow",
             Self::Medium => "medium",
+            Self::Broad => "broad",
             Self::Wide => "wide",
             Self::Icon => "icon",
             Self::Flag => "flag",
@@ -1349,6 +1353,12 @@ impl Example {
 
     pub fn medium(mut self) -> Self {
         self.cells = Cells::Medium;
+        self
+    }
+
+    /// Cells for what does not shrink: as many to a row as fit, down to one on a phone.
+    pub fn broad(mut self) -> Self {
+        self.cells = Cells::Broad;
         self
     }
 

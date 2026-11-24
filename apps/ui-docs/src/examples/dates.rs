@@ -35,8 +35,13 @@ pub fn all() -> Vec<Example> {
             calendar_dropdowns
         )
         .height(340),
-        gallery!("calendar", "locales", "Languages", calendar_locales).height(340),
-        gallery!("calendar", "states", "States", calendar_states).height(340),
+        // A month's grid doesn't shrink: a cell narrower than it would draw it over the next.
+        gallery!("calendar", "locales", "Languages", calendar_locales)
+            .broad()
+            .height(752),
+        gallery!("calendar", "states", "States", calendar_states)
+            .broad()
+            .height(340),
         single!("date-picker", "thumb", "A date picker", date_picker_thumb).height(120),
         single!(
             "date-picker",
