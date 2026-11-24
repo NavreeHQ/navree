@@ -8,9 +8,18 @@
 // (config/app.toml), so it serves apple-app-site-association over https at
 // NAVREE_ASSOCIATED_DOMAIN:
 //
-//   [auth.apps.apple.{{ scheme }}]
+//   [auth.apps]
+//   # The site answers the callback link with an empty page in a browser.
+//   callback_page = true
+//
+//   [auth.apps.apple.{{ server_table }}]
 //   team_id = "{{ team if team else "ABCDE12345" }}"
 //   bundle_id = "{{ bundle_id }}"
+//   # A sign-in in the system's browser comes back on a link of the site.
+//   callback = "https://{{ domain if domain else "shop.example" }}/app/signed-in"
+//
+// Unsigned, it comes back on the app's scheme instead:
+// callback = "{{ scheme }}:/signed-in" with custom_scheme = true.
 //
 // `navree native:doctor --platform ios` checks the server's side.
 

@@ -1,7 +1,7 @@
 # {{ display_name }} for iPhone, iPad and Mac, as a text description:
 # `xcodegen generate` in this folder writes {{ type_name }}.xcodeproj (never
 # committed). Written by `navree native:init`.
-name: {{ type_name }}
+name: "{{ type_name }}"
 options:
   deploymentTarget:
     iOS: "26.0"
@@ -20,20 +20,20 @@ packages:
   # The Navree Native client, with its runtime core already built.
   NavreeNative:
 {% if package_path %}
-    path: {{ package_path }}
+    path: {{ package_path_yaml }}
 {% else %}
-    url: {{ package_url }}
+    url: {{ package_url_yaml }}
     # Up to the next minor version: keep it at the minor version of Navree
     # the server runs.
-    minorVersion: {{ package_version }}
+    minorVersion: {{ package_version_yaml }}
 {% endif %}
 targets:
   # The app for iPhone and iPad.
-  {{ type_name }}:
+  "{{ type_name }}":
     type: application
     platform: iOS
     sources:
-      - path: {{ type_name }}
+      - path: "{{ type_name }}"
     dependencies:
       - package: NavreeNative
         product: NavreeNative
@@ -55,7 +55,7 @@ targets:
         # The scheme a sign-in in the system's browser comes back on.
         CFBundleURLTypes:
           - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
-            CFBundleURLSchemes: [{{ scheme }}]
+            CFBundleURLSchemes: ["{{ scheme }}"]
 {% if loopback %}
         # Plain http to this machine only, for development.
         NSAppTransportSecurity:
@@ -82,11 +82,11 @@ targets:
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES
   # The app for the Mac, with the same code and the same bundle id.
-  {{ type_name }}Mac:
+  "{{ type_name }}Mac":
     type: application
     platform: macOS
     sources:
-      - path: {{ type_name }}
+      - path: "{{ type_name }}"
     dependencies:
       - package: NavreeNative
         product: NavreeNative
@@ -106,7 +106,7 @@ targets:
         LSApplicationCategoryType: public.app-category.business
         CFBundleURLTypes:
           - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
-            CFBundleURLSchemes: [{{ scheme }}]
+            CFBundleURLSchemes: ["{{ scheme }}"]
 {% if loopback %}
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
@@ -114,7 +114,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(NAVREE_BUNDLE_ID)
-        PRODUCT_NAME: {{ type_name }}
+        PRODUCT_NAME: "{{ type_name }}"
         # The runtime core is built for Apple silicon only.
         ARCHS: arm64
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -123,11 +123,11 @@ targets:
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         ENABLE_HARDENED_RUNTIME: YES
 schemes:
-  {{ type_name }}:
+  "{{ type_name }}":
     build:
       targets:
-        {{ type_name }}: all
-  {{ type_name }}Mac:
+        "{{ type_name }}": all
+  "{{ type_name }}Mac":
     build:
       targets:
-        {{ type_name }}Mac: all
+        "{{ type_name }}Mac": all

@@ -1554,7 +1554,7 @@ pub struct DoctorOptions {
 
 /// The app's settings by dotted key, as the app reads them, or why they do not
 /// load.
-pub(crate) fn load_settings(root: &Path) -> Result<Box<Lookup>, String> {
+fn load_settings(root: &Path) -> Result<Box<Lookup>, String> {
     let project = navree_navigator::Project::find(root).map_err(|error| error.to_string())?;
     let config = project
         .config()

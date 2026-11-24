@@ -12,6 +12,23 @@ The app talks to http://127.0.0.1:8095: plain http to this machine, for developm
 
 The server draws its pages for the app when its `navree` dependency has the native preview on: `navree native:doctor --platform ios` says what the server is missing, and `navree native:coverage --platform ios` how each page is drawn.
 
+## Signing in
+
+The app hands a sign-in to the system's browser, and the server hands it back to the app. The server names the app in `config/app.toml`:
+
+```toml
+[auth.apps.apple.dukaan]
+team_id = "ABCDE12345"
+bundle_id = "com.navree.dukaan"
+# Back on the app's own scheme, which works unsigned, in the simulator.
+callback = "dukaan:/signed-in"
+custom_scheme = true
+```
+
+Signed by a team with Associated Domains (below), the sign-in comes back on a link of the site instead, which no other app can claim: `callback = "https://shop.example/app/signed-in"` without `custom_scheme`, and `callback_page = true` under `[auth.apps]`, so the site answers that link in a browser.
+
+The app opens the system's browser for the pages in `ShellConfiguration.signInPaths`, by default a social sign-in's only (`/auth/*/redirect`). For the site's own sign-in page as well, add `signInPaths: ["/sign-in", "/auth/*/redirect"]` to the `ShellConfiguration` in `Dukaan/App.swift`.
+
 ## Signing
 
 `Signing/Signing.xcconfig` signs both apps with the bundle id `com.navree.dukaan`, and no entitlements. Sign in with Apple, passkeys, push and a sign-in that comes back on a link of the site need a team: copy `Signing/Signing.local.xcconfig.example` to `Signing/Signing.local.xcconfig`, fill it in (it says what to register with Apple and on the server), and run `xcodegen generate` again. The iPhone and iPad app and the Mac app share the bundle id, so one App ID and one `auth.apps.apple` entry on the server cover both.

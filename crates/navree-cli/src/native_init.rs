@@ -114,6 +114,9 @@ pub struct AppleProject {
     pub bundle_id_assumed: bool,
     /// The Team ID, or empty.
     pub team: String,
+    /// The app's table on the server (`auth.apps.apple.<table>`): the one
+    /// the settings have for the bundle id, else the scheme.
+    pub server_table: String,
     /// The Swift package.
     pub package: PackageSource,
 }
@@ -156,13 +159,24 @@ fn navree_in_lock(lock: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// [`facts_from`] for the app in `root`: what loads, the rest empty.
+/// [`facts_from`] for the app in `root`: what loads, the rest empty. `root`
+/// is the app's package, or a workspace whose default member is the app (the
+/// `micro` starter kit), which keeps `config/` at its root: the settings are
+/// read there, as the app reads them when it runs from `root`.
 pub fn app_facts(root: &Path) -> AppFacts {
     let lock = root
         .ancestors()
         .find_map(|dir| std::fs::read_to_string(dir.join("Cargo.lock")).ok());
-    match crate::native_doctor::load_settings(root) {
-        Ok(settings) => facts_from(settings.as_ref(), lock.as_deref()),
+    let app = navree_navigator::Project {
+        root: root.to_path_buf(),
+        package: String::new(),
+        lockfile: None,
+    };
+    match app.config() {
+        Ok(config) => facts_from(
+            &move |key: &str| config.section::<Value>(key).ok(),
+            lock.as_deref(),
+        ),
         Err(_) => facts_from(&|_| None, lock.as_deref()),
     }
 }
@@ -199,19 +213,14 @@ pub fn resolve(
         )?;
     let origin = Origin::parse(origin)?;
 
-    let (bundle_id, app_team, bundle_id_assumed) = match (
-        &options.bundle_id,
-        facts.apple.as_slice(),
-    ) {
-        (Some(id), apps) => {
-            let team = apps
-                .iter()
-                .find(|app| &app.bundle_id == id)
-                .map(|app| app.team_id.clone());
-            (id.clone(), team.unwrap_or_default(), false)
-        }
-        (None, [app]) => (app.bundle_id.clone(), app.team_id.clone(), false),
-        (None, []) => (format!("com.example.{scheme}"), String::new(), true),
+    let (bundle_id, known, bundle_id_assumed) = match (&options.bundle_id, facts.apple.as_slice()) {
+        (Some(id), apps) => (
+            id.clone(),
+            apps.iter().find(|app| &app.bundle_id == id),
+            false,
+        ),
+        (None, [app]) => (app.bundle_id.clone(), Some(app), false),
+        (None, []) => (format!("com.example.{scheme}"), None, true),
         (None, apps) => anyhow::bail!(
             "the app's settings have {} Apple apps ({}): pass --bundle-id with the one this project is for",
             apps.len(),
@@ -225,7 +234,11 @@ pub fn resolve(
         crate::native_doctor::is_bundle_id(&bundle_id),
         "`{bundle_id}` is not a bundle id: A-Z, a-z, 0-9, `-` and `.`, such as in.example.dukaan"
     );
-    let team = options.team.clone().unwrap_or(app_team);
+    let team = options
+        .team
+        .clone()
+        .unwrap_or_else(|| known.map(|app| app.team_id.clone()).unwrap_or_default());
+    let server_table = known.map_or_else(|| scheme.clone(), |app| app.table.clone());
     anyhow::ensure!(
         team.is_empty() || crate::native_doctor::is_team_id(&team),
         "`{team}` is not a Team ID: ten characters, A-Z and 0-9"
@@ -265,6 +278,7 @@ pub fn resolve(
         bundle_id,
         bundle_id_assumed,
         team,
+        server_table,
         package,
     })
 }
@@ -482,9 +496,20 @@ struct Context<'a> {
     domain: &'a str,
     bundle_id: &'a str,
     team: &'a str,
+    server_table: &'a str,
     package_url: Option<&'a str>,
     package_version: Option<&'a str>,
     package_path: Option<&'a str>,
+    /// The package's url, version and path as quoted YAML strings.
+    package_url_yaml: Option<String>,
+    package_version_yaml: Option<String>,
+    package_path_yaml: Option<String>,
+}
+
+/// `text` as a double-quoted YAML string (a JSON string is one), so a name
+/// such as `Yes` stays a string and `: ` or ` #` do not end the value.
+fn yaml(text: &str) -> String {
+    serde_json::to_string(text).unwrap_or_else(|_| "\"\"".to_owned())
 }
 
 /// The project's files.
@@ -497,8 +522,7 @@ pub fn plan(project: &AppleProject) -> Result<FileSet, TemplateError> {
     };
     let context = Context {
         display_name: &project.display_name,
-        display_name_yaml: serde_json::to_string(&project.display_name)
-            .unwrap_or_else(|_| "\"\"".to_owned()),
+        display_name_yaml: yaml(&project.display_name),
         type_name: &project.type_name,
         scheme: &project.scheme,
         origin: &project.origin,
@@ -506,9 +530,13 @@ pub fn plan(project: &AppleProject) -> Result<FileSet, TemplateError> {
         domain: &project.domain,
         bundle_id: &project.bundle_id,
         team: &project.team,
+        server_table: &project.server_table,
         package_url,
         package_version,
         package_path,
+        package_url_yaml: package_url.map(yaml),
+        package_version_yaml: package_version.map(yaml),
+        package_path_yaml: package_path.map(yaml),
     };
     let mut files = FileSet::new();
     for (template, path) in FILES {
@@ -521,13 +549,14 @@ pub fn plan(project: &AppleProject) -> Result<FileSet, TemplateError> {
 }
 
 /// Runs `navree native:init` in `cwd`: the project goes in `--dir` (default
-/// `apple`) beside the app's `Cargo.toml`, or in `cwd` outside an app.
+/// `apple`) beside the app's `Cargo.toml` (a `micro` app's workspace
+/// `Cargo.toml`, as for `navree dev`), or in `cwd` outside an app.
 pub fn run_init(
     cwd: &Path,
     options: &InitOptions,
     out: &mut dyn std::io::Write,
 ) -> anyhow::Result<()> {
-    let (root, facts) = match crate::project::project_root(cwd) {
+    let (root, facts) = match crate::project::run_root(cwd) {
         Some(root) => {
             let facts = app_facts(&root);
             (root, facts)
@@ -892,11 +921,11 @@ mod tests {
         );
         let project_yml = set.get("project.yml").unwrap();
         assert!(
-            project_yml.contains(&format!("url: {SWIFT_PACKAGE_URL}\n")),
+            project_yml.contains(&format!("url: \"{SWIFT_PACKAGE_URL}\"\n")),
             "{project_yml}"
         );
         assert!(
-            project_yml.contains("minorVersion: 1.4.0\n"),
+            project_yml.contains("minorVersion: \"1.4.0\"\n"),
             "{project_yml}"
         );
         assert!(
@@ -925,7 +954,7 @@ mod tests {
             project_yml.contains("NSAllowsLocalNetworking: true"),
             "{project_yml}"
         );
-        assert!(project_yml.contains("path: ..\n"), "{project_yml}");
+        assert!(project_yml.contains("path: \"..\"\n"), "{project_yml}");
         assert!(!project_yml.contains("minorVersion"), "{project_yml}");
         let signing = set.get("Signing/Signing.xcconfig").unwrap();
         assert!(
@@ -1041,5 +1070,141 @@ mod tests {
         assert!(!dir.path().join("apple").exists());
         let printed = String::from_utf8(out).unwrap();
         assert!(printed.contains("==> project.yml <=="), "{printed}");
+    }
+
+    #[test]
+    fn run_init_in_a_workspace_app_reads_it_from_the_workspace() {
+        // The micro starter kit: a workspace whose default member is the
+        // app, with the settings and the lock at the workspace's root.
+        let dir = tempfile::Builder::new()
+            .prefix("navree-test-")
+            .tempdir()
+            .unwrap();
+        let root = dir.path();
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nresolver = \"3\"\nmembers = [\"crates/*\"]\ndefault-members = [\"crates/dukaan\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("Cargo.lock"),
+            "version = 4\n\n[[package]]\nname = \"navree\"\nversion = \"1.4.0\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("crates").join("dukaan")).unwrap();
+        std::fs::write(
+            root.join("crates").join("dukaan").join("Cargo.toml"),
+            "[package]\nname = \"dukaan\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("config")).unwrap();
+        std::fs::write(
+            root.join("config").join("app.toml"),
+            "[app]\nname = \"Dukaan\"\nurl = \"https://dukaan.example\"\n\n[auth.apps.apple.main]\nteam_id = \"ABCDE12345\"\nbundle_id = \"in.example.dukaan\"\n",
+        )
+        .unwrap();
+        let mut out = Vec::new();
+        run_init(root, &InitOptions::default(), &mut out).unwrap();
+        let apple = root.join("apple");
+        let signing =
+            std::fs::read_to_string(apple.join("Signing").join("Signing.xcconfig")).unwrap();
+        assert!(
+            signing.contains("NAVREE_BUNDLE_ID = in.example.dukaan\n"),
+            "{signing}"
+        );
+        assert!(
+            signing.contains("DEVELOPMENT_TEAM = ABCDE12345\n"),
+            "{signing}"
+        );
+        let project_yml = std::fs::read_to_string(apple.join("project.yml")).unwrap();
+        assert!(project_yml.contains("1.4.0"), "{project_yml}");
+        assert!(apple.join("Dukaan").join("App.swift").exists());
+    }
+
+    #[test]
+    fn the_readme_and_the_example_say_what_the_server_needs() {
+        // The settings name the app's table `main`: the files name it too,
+        // so no second table is made for the same app.
+        let mut facts = dukaan();
+        facts.apple[0].table = "main".to_owned();
+        let set = files(&project(&InitOptions::default(), &facts).unwrap());
+        for name in ["README.md", "Signing/Signing.local.xcconfig.example"] {
+            let text = set.get(name).unwrap();
+            for wanted in [
+                "[auth.apps.apple.main]",
+                "team_id = \"ABCDE12345\"",
+                "bundle_id = \"in.example.dukaan\"",
+                "callback = \"dukaan:/signed-in\"",
+                "custom_scheme = true",
+                "callback = \"https://dukaan.example/app/signed-in\"",
+                "callback_page = true",
+            ] {
+                assert!(text.contains(wanted), "{name} lacks {wanted}:\n{text}");
+            }
+            assert!(
+                !text.contains("[auth.apps.apple.dukaan]"),
+                "{name}:\n{text}"
+            );
+        }
+        let readme = set.get("README.md").unwrap();
+        assert!(
+            readme.contains("signInPaths: [\"/sign-in\", \"/auth/*/redirect\"]"),
+            "{readme}"
+        );
+
+        // With no table in the settings, the scheme names it.
+        let set = files(
+            &project(
+                &flags("Dukaan", "http://127.0.0.1:8095"),
+                &AppFacts::default(),
+            )
+            .unwrap(),
+        );
+        for name in ["README.md", "Signing/Signing.local.xcconfig.example"] {
+            let text = set.get(name).unwrap();
+            assert!(text.contains("[auth.apps.apple.dukaan]"), "{name}:\n{text}");
+            assert!(
+                text.contains("callback = \"https://shop.example/app/signed-in\""),
+                "{name}:\n{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn names_and_paths_are_quoted_in_the_project() {
+        // `Yes` is a boolean to YAML 1.1 (XcodeGen refuses `name: Yes`), and
+        // `: ` and ` #` end a plain YAML value.
+        let mut made = project(&flags("Yes", "https://yes.example"), &AppFacts::default()).unwrap();
+        made.package = PackageSource::Local {
+            path: "/w/a: b #c/packages/apple".to_owned(),
+        };
+        let set = files(&made);
+        let project_yml = set.get("project.yml").unwrap();
+        for line in [
+            "name: \"Yes\"\n",
+            "\n  \"Yes\":\n    type: application\n",
+            "\n  \"YesMac\":\n    type: application\n",
+            "      - path: \"Yes\"\n",
+            "CFBundleURLSchemes: [\"yes\"]\n",
+            "PRODUCT_NAME: \"Yes\"\n",
+            "\n  \"Yes\":\n    build:\n",
+            "\n        \"Yes\": all\n",
+            "\n        \"YesMac\": all\n",
+            "    path: \"/w/a: b #c/packages/apple\"\n",
+        ] {
+            assert!(project_yml.contains(line), "{line:?} in:\n{project_yml}");
+        }
+
+        let mut options = flags("Yes", "https://yes.example");
+        options.package = Some("https://git.example/a: b #c/navree-swift".to_owned());
+        options.package_version = Some("1.4.0".to_owned());
+        let set = files(&project(&options, &AppFacts::default()).unwrap());
+        let project_yml = set.get("project.yml").unwrap();
+        for line in [
+            "    url: \"https://git.example/a: b #c/navree-swift\"\n",
+            "    minorVersion: \"1.4.0\"\n",
+        ] {
+            assert!(project_yml.contains(line), "{line:?} in:\n{project_yml}");
+        }
     }
 }
