@@ -58,7 +58,7 @@ pub fn all() -> Vec<Example> {
             .height(270),
         single!("carousel", "vertical", "Vertical", carousel_vertical)
             .start()
-            .height(340),
+            .height(408),
         single!("carousel", "rtl", "Right to left", carousel_rtl)
             .start()
             .height(270),
