@@ -37,6 +37,8 @@ The `carousel` module adds the rest: the previous and next buttons, the keys of 
 
 The buttons come before the track in the page, so a keyboard user meets them first. At the first slide, previous is disabled; at the last, next is. A disabled button keeps focus, so a keyboard user is not thrown out of the carousel when they press it for the last time.
 
+They stand beside the track, previous at its start and next at its end, in room the carousel keeps for them, so a button never covers a slide. The room is kept from the first paint, so the slides don't move when the module shows the buttons; with JavaScript off there are no buttons and the track takes the whole width.
+
 <UiPreview example="carousel/default" />
 
 ## Pickers
@@ -74,7 +76,7 @@ While it rotates, the track is not announced to a screen reader (`aria-live="off
 
 ## Vertical
 
-`.vertical()` runs the slides from top to bottom. `.height(CarouselHeight::Tall)` sets how tall it is: short is 12rem, medium 18rem, tall 26rem.
+`.vertical()` runs the slides from top to bottom, with previous above the track and next below it. `.height(CarouselHeight::Tall)` sets how tall the track is: short is 12rem, medium 18rem, tall 26rem.
 
 <UiPreview example="carousel/vertical" />
 

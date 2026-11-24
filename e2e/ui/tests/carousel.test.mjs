@@ -48,6 +48,40 @@ async function until(read, want, what, ms = 4000) {
   assert.deepEqual(got, want, what);
 }
 
+/**
+ * What is wrong with where the previous and next buttons of the page's carousels are: one that lies
+ * over its track (so over a slide), one that leaves its carousel's viewport, one that isn't shown.
+ */
+const misplaced = (page) =>
+  page.locator("[data-slot=carousel]").evaluateAll((roots) =>
+    roots.flatMap((root) => {
+      const track = root.querySelector("[data-slot=carousel-track]").getBoundingClientRect();
+      const port = root.querySelector("[data-slot=carousel-viewport]").getBoundingClientRect();
+      return [...root.querySelectorAll("[data-carousel=prev],[data-carousel=next]")].flatMap((button) => {
+        const b = button.getBoundingClientRect();
+        const which = `${root.id} ${button.getAttribute("data-carousel")}`;
+        if (!b.width) return [`${which} is not shown`];
+        const over = Math.min(b.right, track.right) - Math.max(b.left, track.left) > 0.5 && Math.min(b.bottom, track.bottom) - Math.max(b.top, track.top) > 0.5;
+        const out = b.left < port.left - 0.5 || b.right > port.right + 0.5 || b.top < port.top - 0.5 || b.bottom > port.bottom + 0.5;
+        return [...(over ? [`${which} is over the track`] : []), ...(out ? [`${which} is outside the viewport`] : [])];
+      });
+    }),
+  );
+
+/**
+ * Where each carousel's track is in its viewport, and how wide: what must not change when the buttons
+ * show. Its height is left out: a track that waits for the module shows a scrollbar, which some
+ * browsers give room to.
+ */
+const tracks = (page) =>
+  page.locator("[data-slot=carousel]").evaluateAll((roots) =>
+    roots.map((root) => {
+      const port = root.querySelector("[data-slot=carousel-viewport]").getBoundingClientRect();
+      const t = root.querySelector("[data-slot=carousel-track]").getBoundingClientRect();
+      return [root.id, Math.round(t.left - port.left), Math.round(t.top - port.top), Math.round(t.width)];
+    }),
+  );
+
 const state = (page, id) =>
   page.locator(`#${id}`).evaluate((root) => ({
     prev: root.querySelector("[data-carousel=prev]")?.getAttribute("aria-disabled"),
@@ -220,16 +254,16 @@ inBrowsers(({ open, browserName }) => {
     await phone.close();
   });
 
-  test("a vertical carousel scrolls from top to bottom, with its buttons at the top and bottom", async () => {
+  test("a vertical carousel scrolls from top to bottom, with its buttons above and below the track", async () => {
     const { page, close } = await open("/carousel");
     await page.waitForSelector("#c-vertical[data-ready]");
     const where = await page.locator("#c-vertical").evaluate((root) => {
       const track = root.querySelector("[data-slot=carousel-track]").getBoundingClientRect();
       const prev = root.querySelector("[data-carousel=prev]").getBoundingClientRect();
       const next = root.querySelector("[data-carousel=next]").getBoundingClientRect();
-      return { prevTop: prev.top - track.top < 20, nextBottom: track.bottom - next.bottom < 20, height: Math.round(track.height) };
+      return { prevAbove: prev.bottom <= track.top && track.top - prev.bottom < 20, nextBelow: next.top >= track.bottom && next.top - track.bottom < 20, height: Math.round(track.height) };
     });
-    assert.deepEqual([where.prevTop, where.nextBottom], [true, true]);
+    assert.deepEqual([where.prevAbove, where.nextBelow], [true, true]);
     assert.ok(where.height >= 280 && where.height <= 300, `18rem tall: ${where.height}`);
     await page.locator("#c-vertical [data-carousel=next]").click();
     await until(() => index(page, "c-vertical"), 1, "next goes down one");
@@ -258,6 +292,53 @@ inBrowsers(({ open, browserName }) => {
     await until(() => index(page, "c-rtl"), 1, "ArrowRight goes back");
     const flipped = await page.locator("#c-rtl [data-carousel=prev] svg").evaluate((e) => getComputedStyle(e).scale);
     assert.match(flipped, /^-1/, "the chevron is mirrored");
+    await close();
+  });
+
+  for (const [label, options] of [
+    ["at 1440", {}],
+    ["on a phone", { viewport: PHONE }],
+  ]) {
+    test(`the previous and next buttons stand beside the track and cover no part of a slide, whichever way it reads or runs (${label})`, async () => {
+      const { page, close } = await open("/carousel", options);
+      await page.waitForSelector("#c-hostile[data-ready]");
+      assert.deepEqual(await misplaced(page), [], "as the page loads");
+      // On again, so a slide's start is where the previous button stands.
+      for (const id of ["c-basic", "c-two", "c-vertical", "c-rtl"]) {
+        await page.locator(`#${id} [data-carousel=next]`).click();
+        await until(() => index(page, id), 1, `${id} moved on`);
+      }
+      assert.deepEqual(await misplaced(page), [], "after next");
+      // Previous is at the track's start and next at its end: left and right, the other way round where the
+      // page reads right to left, and above and below where the slides run down.
+      const sides = await page.evaluate(() =>
+        Object.fromEntries(
+          ["c-basic", "c-rtl", "c-vertical"].map((id) => {
+            const root = document.getElementById(id);
+            const t = root.querySelector("[data-slot=carousel-track]").getBoundingClientRect();
+            const side = (b) => (b.right <= t.left ? "left" : b.left >= t.right ? "right" : b.bottom <= t.top ? "above" : b.top >= t.bottom ? "below" : "over");
+            return [id, ["prev", "next"].map((which) => side(root.querySelector(`[data-carousel=${which}]`).getBoundingClientRect()))];
+          }),
+        ),
+      );
+      assert.deepEqual(sides, { "c-basic": ["left", "right"], "c-rtl": ["right", "left"], "c-vertical": ["above", "below"] });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll");
+      await close();
+    });
+  }
+
+  test("the room for the buttons is kept before the module arrives, so the slides don't move when it shows them", async () => {
+    // A page whose carousel module never comes: scripting is on, the carousels are not ready, no button shows.
+    const late = await open("/carousel", { before: (page) => page.route(/\/carousel-[0-9a-f]+\.js$/, (route) => route.abort()) });
+    await late.page.waitForLoadState("load");
+    assert.equal(await late.page.locator("[data-slot=carousel][data-ready]").count(), 0, "the module never came");
+    assert.equal(await late.page.locator("#c-basic [data-carousel=next]").isVisible(), false);
+    const before = await tracks(late.page);
+    // Its console says the script failed to load, which is what this page was asked to do.
+    await late.context.close();
+    const { page, close } = await open("/carousel");
+    await page.waitForSelector("#c-hostile[data-ready]");
+    assert.deepEqual(await tracks(page), before, "each track is where it was with no buttons showing");
     await close();
   });
 
@@ -334,6 +415,15 @@ inBrowsers(({ open, browserName }) => {
     assert.equal(await page.locator("#c-pickers [data-carousel=next]").isVisible(), false);
     assert.equal(await page.locator("#c-auto [data-carousel=rotation]").isVisible(), false);
     assert.equal(await page.locator("#c-pickers[data-ready]").count(), 0);
+    // No button will ever show, so no room is kept for one: each track is as wide, or as tall, as its carousel.
+    const room = await page.locator("[data-slot=carousel-viewport]").evaluateAll((ports) =>
+      ports.map((port) => {
+        const p = port.getBoundingClientRect();
+        const t = port.querySelector("[data-slot=carousel-track]").getBoundingClientRect();
+        return Math.round(p.width - t.width + (p.height - t.height));
+      }),
+    );
+    assert.deepEqual(room, room.map(() => 0), "no room kept beside any track");
     assert.equal(await page.locator("#c-pickers [role=tab]").first().evaluate((e) => e.tagName), "A");
     const stops = await page.locator("#c-pickers [role=tab]").evaluateAll((els) => els.every((e) => e.tabIndex === 0));
     assert.equal(stops, true, "every link can be reached by keyboard");

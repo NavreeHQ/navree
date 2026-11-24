@@ -12,6 +12,10 @@ every `@navree/*` package carries the same version.
 - `navree native:init` writes the project of the app's Apple client in `apple/`: an iPhone and iPad app and a Mac app sharing one bundle id, on the Swift package `navree-swift`, as an XcodeGen `project.yml` with the app's code, an asset catalog, signing that runs with no team and a team's signing with each system's entitlements. The name, origin, bundle id and team come from the flags or the app's settings (`app.name`, `app.url`, `auth.apps.apple`), and the package is pinned up to the next minor version of the `navree` in `Cargo.lock`.
 - Each release makes the Apple client as a Swift package of its own: the runtime core built for iPhone, the iOS simulator and the Mac, attached to the release as `NavreeCore.xcframework.zip` with the package that downloads it (`packages/apple/scripts/swift-package.sh`), and committed and tagged in the package's repository (`packages/apple/release/update.yml`, once its repository and the variable `SWIFT_PACKAGE_REPO` are set up).
 
+### Fixed
+
+- In `navree-ui`, a `Carousel`'s previous and next buttons stand beside the track, in room the carousel keeps for them (`--carousel-room`, 2.25rem at each end), and no longer cover the start of a slide: left and right of the track, the other way round in a right-to-left page, and above and below it in a vertical carousel. The room is there from the first paint, so the slides don't move when the buttons show, and is not kept where no script runs.
+
 ### Security
 
 - Navree needs url 2.5.9, which fixes RUSTSEC-2026-0592 in 2.5.8: the origin of a `blob:` URL nested in another no longer recurses until the stack overflows. `cargo update -p url` brings it to an app.
