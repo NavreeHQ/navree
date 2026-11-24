@@ -7,6 +7,8 @@ every `@navree/*` package carries the same version.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-24
+
 ### Added
 
 - `navree native:init` writes the project of the app's Apple client in `apple/`: an iPhone and iPad app and a Mac app sharing one bundle id, on the Swift package `navree-swift`, as an XcodeGen `project.yml` with the app's code, an asset catalog, signing that runs with no team and a team's signing with each system's entitlements. The name, origin, bundle id and team come from the flags or the app's settings (`app.name`, `app.url`, `auth.apps.apple`), and the package is pinned up to the next minor version of the `navree` in `Cargo.lock`.
@@ -17,6 +19,9 @@ every `@navree/*` package carries the same version.
 - In `navree-ui`, a `Carousel`'s previous and next buttons stand beside the track, in room the carousel keeps for them (`--carousel-room`, 2.25rem at each end), and no longer cover the start of a slide: left and right of the track, the other way round in a right-to-left page, and above and below it in a vertical carousel. The room is there from the first paint, so the slides don't move when the buttons show, and is not kept where no script runs.
 - In `navree-ui`, a `DataTable`'s column menus, its Columns picker and its view menu open at their buttons the first time they are opened. A popup as wide as its content was placed from the widest it may be (22rem) and then drew narrower, so one that only says "Hide column" landed 11rem short of its button, at the table's edge in a narrow one; the second opening was right. A popup is now measured as it lies once placed.
 - In `navree-ui`, the theme menu is never wider than what holds it. Its width comes from the window (22rem, or the window less a margin), which is right where it opens over the page; drawn in the page, in a box narrower than that, it ran past the box's edge.
+- In Navree Native's runtime core, a server whose native shell names nobody, while its answers name the person signed in by id, no longer makes the app reload for ever and show nothing. The shell is held to the person its answer names, so that person's pages are shown, and a page for nobody still ends the session.
+- The system app's native shell names the app and, at its foot, the person signed in, with their name, their email and signing out, so an app signed in to it keeps what it holds for them and asks for its push token.
+- In Navree Native for Apple (`packages/apple`), on a Mac: the window under an item in the menu bar closes on a second click on the item and takes the keyboard while the app in front stays in front; a screen with no commands of its own leaves no empty menu named for it in the menu bar; and a window with a sidebar waits for its first screen before it chooses two columns or three, instead of drawing two and replacing them.
 
 ### Security
 
@@ -1291,7 +1296,8 @@ Most apps upgrade with no change. These are the changes that can ask something o
 
 First release. Read what it includes in the [release notes](https://navree.com/docs/prologue/release-notes/).
 
-[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/NavreeHQ/navree/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.5.0
 [1.4.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.4.0
 [1.3.0]: https://github.com/NavreeHQ/navree/releases/tag/v1.3.0
 [1.2.4]: https://github.com/NavreeHQ/navree/releases/tag/v1.2.4
