@@ -440,6 +440,41 @@ for (const name of NAMES) {
       await page.done();
     });
 
+    for (const width of [390, 360, 320]) {
+      test(`the theme menu stays within a ${width} px window when open, and within what holds it when it is drawn in the page`, async () => {
+        const page = await open("/themes", { viewport: { width, height: 800 } });
+        await page.click("[popovertarget=ui-theme-menu]");
+        // The browser's toggle event places it, a task after it shows.
+        await page.waitFor(() => document.getElementById("ui-theme-menu")?.matches(":popover-open") && document.getElementById("ui-theme-menu").style.top !== "");
+        await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+        // In layout sizes: the menu is a little scaled while it fades in.
+        const opened = await page.evaluate(() => {
+          const pop = document.getElementById("ui-theme-menu");
+          const left = parseFloat(pop.style.left);
+          const root = document.documentElement;
+          return { left, right: left + pop.offsetWidth, window: window.innerWidth, sideways: root.scrollWidth > root.clientWidth };
+        });
+        assert.ok(opened.left >= 8 && opened.right <= opened.window - 8 + 0.5, `a margin on each side of it: ${JSON.stringify(opened)}`);
+        assert.equal(opened.sideways, false, "the page does not scroll sideways");
+        await shot(page, `menu-open-${width}`);
+        await page.keyboard.press("Escape");
+        await page.waitFor(() => !document.getElementById("ui-theme-menu").matches(":popover-open"));
+        // Drawn in the page as a picture of itself, in a box narrower than the window would let the menu
+        // be: its width comes from the window, and it still holds to the box.
+        const held = await page.evaluate(() => {
+          const pop = document.getElementById("ui-theme-menu");
+          const box = document.createElement("div");
+          box.style.setProperty("width", "280px");
+          document.body.append(box);
+          box.append(pop);
+          for (const [name, value] of [["display", "block"], ["position", "relative"], ["inset", "auto"], ["margin", "0"]]) pop.style.setProperty(name, value);
+          return { menu: pop.getBoundingClientRect().width, box: box.getBoundingClientRect().width };
+        });
+        assert.ok(held.menu <= held.box + 0.5, `no wider than the box that holds it: ${JSON.stringify(held)}`);
+        await page.done();
+      });
+    }
+
     test("with JavaScript off, the menu posts with Apply and the next page is in the new theme", async () => {
       const page = await open("/themes", { javaScriptEnabled: false });
       await page.click("[popovertarget=ui-theme-menu]");

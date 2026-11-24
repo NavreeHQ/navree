@@ -14,8 +14,8 @@ html[data-ui-js] [data-theme-apply]{display:none}
 [data-slot=theme-swatch]{display:block;width:.75rem;height:.75rem;border-radius:2px;background:var(--token-bg)}
 [data-slot=theme-swatches] [data-token=ink-1]{box-shadow:inset 0 0 0 1px var(--line-2)}
 
-/* The theme menu */
-[data-slot=popover-content][data-variant=theme-menu]{width:min(22rem,calc(100vw - 1rem));max-width:none;padding:.75rem}
+/* The theme menu: 22rem, or the window less a margin where that is less, and never wider than what holds it. */
+[data-slot=popover-content][data-variant=theme-menu]{width:min(22rem,calc(100vw - 1rem));max-width:100%;padding:.75rem}
 [data-slot=theme-menu-form]{display:flex;flex-direction:column;gap:.75rem}
 [data-slot=theme-cards],[data-slot=theme-modes]{display:flex;flex-direction:column;gap:.125rem}
 [data-slot=theme-menu-legend]{margin-bottom:.25rem;color:var(--fg-3);font-size:12px;font-weight:500}
