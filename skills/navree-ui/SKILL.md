@@ -1126,6 +1126,5 @@ marketing blocks draw a public site from the same app with no script, and
 - https://navree.com/docs/ui/page-policy/
 - https://navree.com/docs/ui/marketing-sites/
 - https://navree.com/docs/ui/seo/
-- https://navree.com/docs/ui/coming-next/
 - https://navree.com/docs/components/overview/
 - https://navree.com/docs/basics/errors/
