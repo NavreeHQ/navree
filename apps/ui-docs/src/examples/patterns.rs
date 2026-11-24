@@ -7,7 +7,7 @@ use navree::ui::form::{FormView, Money};
 use navree::ui::*;
 use serde::Deserialize;
 
-use crate::catalog::{Example, gallery, single};
+use crate::catalog::{Example, Fragment, gallery, single};
 
 const SOURCE: &str = include_str!("patterns.rs");
 
@@ -49,13 +49,13 @@ pub fn all() -> Vec<Example> {
         single!("commands", "fill", "A row's details", commands_fill)
             .live()
             .height(360),
-        single!(
-            "regions",
-            "lazy",
-            "Before a lazy region loads",
-            regions_lazy
-        )
-        .start(),
+        // The core runtime fetches the region once the page has painted, and the preview
+        // answers from `fragments`: it has no server to ask.
+        single!("regions", "lazy", "A lazy region", regions_lazy)
+            .start()
+            .live()
+            .fragments(regions_lazy_answer)
+            .height(300),
         single!("regions", "poll", "A region that polls", regions_poll).start(),
     ]
 }
@@ -226,6 +226,24 @@ fn commands_fill() -> (Table, Dialog) {
 
 fn regions_lazy() -> Card {
     Card::titled("Revenue by month").body(Region::new("revenue").src("/fragments/revenue").lazy())
+}
+
+/// What `/fragments/revenue` answers: the part that goes in the region.
+fn regions_lazy_answer() -> Vec<Fragment> {
+    let months = [
+        ("September", "₹14,20,000"),
+        ("October", "₹16,45,500"),
+        ("November", "₹18,40,000"),
+    ];
+    vec![Fragment {
+        src: "/fragments/revenue",
+        node: Table::new()
+            .head((TableHead::new("Month"), TableHead::new("Revenue")))
+            .rows(months.map(|(month, revenue)| {
+                TableRowEl::new((TableCell::new(month), TableCell::new(revenue)))
+            }))
+            .into(),
+    }]
 }
 
 fn regions_poll() -> Card {
