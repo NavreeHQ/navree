@@ -31,6 +31,11 @@ body[data-preview-open] [data-preview-open] > dialog:not([open]){display:flex;fl
 [data-preview-show] [data-slot=command-dialog]:not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:36rem;height:auto;max-height:none}
 [data-preview-show] :is([data-slot=popover-content],[data-slot=hover-card-content],[data-slot=info-tip-content],[data-slot=tooltip-content],[data-slot=navigation-menu-content]):not(:popover-open){display:block;position:relative;inset:auto;margin:0;height:auto}
 [data-preview-show] [data-slot=dropdown-menu]:not([data-sub]):not(:popover-open){display:block;position:relative;inset:auto;margin:.25rem 0 0;height:auto}
+/* An info tip drawn in place stands beside what it explains: in a frame too narrow for
+   both it goes under it, no wider than the frame less its padding. Its row wraps while the
+   tip is open too, for the stand-in that keeps its room. */
+[data-preview-show] :has(> [data-slot=info-tip-content]){flex-wrap:wrap}
+[data-preview-show] [data-slot=info-tip-content]:not(:popover-open){max-width:min(20rem,calc(100vw - 48px))}
 /* The room of a picture drawn in place while the real one is open: nothing under the pointer moves. */
 [data-preview-kept]{flex:none;max-width:100%;visibility:hidden}
 /* What a link or form would do in an app, said in place of doing it: over anything open. */
