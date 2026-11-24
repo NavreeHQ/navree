@@ -18,8 +18,10 @@
 //   # A sign-in in the system's browser comes back on a link of the site.
 //   callback = "https://shop.example/app/signed-in"
 //
-// Unsigned, it comes back on the app's scheme instead:
-// callback = "dukaan:/signed-in" with custom_scheme = true.
+// A build with no team can come back only on the app's scheme:
+//   callback = "dukaan:/signed-in" with custom_scheme = true
+// and only when the site's sign-in form reaches /auth/app/finish by the
+// browser's own navigation, which Navree's page script does not do yet.
 //
 // `navree native:doctor --platform ios` checks the server's side.
 

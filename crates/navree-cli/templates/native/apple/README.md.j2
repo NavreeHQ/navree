@@ -19,15 +19,18 @@ The server draws its pages for the app when its `navree` dependency has the nati
 The app hands a sign-in to the system's browser, and the server hands it back to the app. The server names the app in `config/app.toml`:
 
 ```toml
+[auth.apps]
+# The site answers the callback link with an empty page in a browser.
+callback_page = true
+
 [auth.apps.apple.{{ server_table }}]
 team_id = "{{ team if team else "ABCDE12345" }}"
 bundle_id = "{{ bundle_id }}"
-# Back on the app's own scheme, which works unsigned, in the simulator.
-callback = "{{ scheme }}:/signed-in"
-custom_scheme = true
+# Back on a link of the site, which no other app can claim.
+callback = "https://{{ domain if domain else "shop.example" }}/app/signed-in"
 ```
 
-Signed by a team with Associated Domains (below), the sign-in comes back on a link of the site instead, which no other app can claim: `callback = "https://{{ domain if domain else "shop.example" }}/app/signed-in"` without `custom_scheme`, and `callback_page = true` under `[auth.apps]`, so the site answers that link in a browser.
+That link needs both apps signed by a team with Associated Domains (below). A build with no team can come back only on the app's own scheme, `callback = "{{ scheme }}:/signed-in"` with `custom_scheme = true`, and only when the site's sign-in form reaches `/auth/app/finish` by the browser's own navigation: Navree's page script fetches that address today, which spends the hand-over, so sign in with a build signed by a team.
 
 The app opens the system's browser for the pages in `ShellConfiguration.signInPaths`, by default a social sign-in's only (`/auth/*/redirect`). For the site's own sign-in page as well, add `signInPaths: ["/sign-in", "/auth/*/redirect"]` to the `ShellConfiguration` in `{{ type_name }}/App.swift`.
 
