@@ -27,16 +27,18 @@ let hide = 0;
 
 /**
  * Says, for a few seconds, what an app would have done here: `before`, the address
- * as code, then `after`. A status, so assistive technology reads it too.
+ * as code, then `after`. A status, so assistive technology reads it too. It stands at
+ * the foot of the frame, or at its head (`place` is `"top"`) when what it speaks of is
+ * drawn at the foot: a file's row, added under the ones before it.
  */
-function tell(before, url, after) {
+function tell(before, url, after, place = "") {
   if (!note) {
     note = document.createElement("div");
-    note.setAttribute("data-preview-note", "");
     note.setAttribute("role", "status");
     note.setAttribute("popover", "manual");
     document.body.append(note);
   }
+  note.setAttribute("data-preview-note", place);
   const code = document.createElement("code");
   code.textContent = written(url);
   try {
@@ -69,6 +71,9 @@ addEventListener(
       // A list's "Load more" and a toast's close are the toolkit's to handle in place.
       const inPlace = href.startsWith("#") || is(link, "[data-slot=lazy-more], [data-slot=toast-close]");
       if (!inPlace) tell(`${NO_SERVER}this link opens `, new URL(href, location.href), ".");
+      // A toast drawn in place is not in the toolkit's standing toaster, whose toasts the
+      // toolkit takes away: its close takes it away here, as the page does with no script.
+      if (is(link, "[data-slot=toast-close]")) link.closest("[data-preview-stage] [data-slot=toast]")?.remove();
       return;
     }
     // A submit button: the browser would post the form, which a preview can't. Its
@@ -198,6 +203,18 @@ const answers = [...document.querySelectorAll("template[data-preview-answer]")];
 const fetched = window.fetch;
 const page = (html, more) =>
   new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "x-ui-more": more ? "1" : "0" } });
+// A fragment of a page drawn ahead of time the same way: a lazy region's content, the children
+// of a tree's branch. It answers its own address, query and all, each time it is asked, after
+// the moment a quick server takes, so what the page shows while it waits is seen. It carries
+// the headers of a page of the app that answers a part alone, without which a region draws nothing.
+const FRAGMENT_MS = 600;
+const fragment = (html) =>
+  new Promise((done) =>
+    setTimeout(
+      () => done(new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "x-navree-page": "1", "x-navree-fragment": "1" } })),
+      FRAGMENT_MS,
+    ),
+  );
 window.fetch = function (input, init) {
   let url;
   try {
@@ -216,8 +233,139 @@ window.fetch = function (input, init) {
     }
     return Promise.resolve(page("", false));
   }
+  if (method === "GET") {
+    const asked = url.pathname + url.search;
+    const drawn = answers.find((answer) => answer.dataset.dir === undefined && answer.dataset.src === asked);
+    if (drawn) return fragment(drawn.innerHTML);
+  }
   if (method !== "GET" && theirs()) tell(`${NO_SERVER}this sends ${method} `, url, ".");
   return Promise.resolve(new Response(null, { status: 204 }));
+};
+
+// An upload sends its files with XMLHttpRequest, which says how much of a file has gone. It
+// gets the same stand-in: a request to this site that is no file of the previews is never
+// sent. The time it would take is played, and it is answered as a server that kept the file
+// answers, in the words of the toolkit's own `Uploads`.
+const Sent = window.XMLHttpRequest;
+/** How long a file takes to go, whatever its size and however many parts: long enough to see its bar fill. */
+const TAKES_MS = 1200;
+/** The large files being sent in parts, by the id each was given when it started. */
+const large = new Map();
+/** The large file a request to `url` is a part of, or the last request of: its id comes before the last segment. */
+const largeOf = (url) => large.get(url.pathname.split("/").at(-2) || "");
+/** How many bytes of files `body` carries. A request with none is answered at once. */
+const weight = (body) => {
+  if (body instanceof Blob) return body.size;
+  if (!(body instanceof FormData)) return 0;
+  let bytes = 0;
+  for (const value of body.values()) if (value instanceof Blob) bytes += value.size;
+  return bytes;
+};
+/** A file as the server lists one it kept. The key is the one a form posts in the file's place. */
+const stored = (name, size, mime) => ({ name, size, mime, key: "preview" });
+/** What the server would answer to `method` at `url` with `body`: its status and its JSON. */
+function reply(method, url, body) {
+  const taken = { status: 204, json: null };
+  // A large file starts with its name and size, and is told how to cut itself.
+  if (method === "POST" && typeof body === "string" && body) {
+    try {
+      const { name, size } = JSON.parse(body);
+      if (typeof size === "number") {
+        const id = String(large.size + 1).padStart(32, "0");
+        const chunk_bytes = 4 * 1024 * 1024;
+        large.set(id, { name: String(name), size });
+        return { status: 200, json: { id, chunk_bytes, chunks: Math.ceil(size / chunk_bytes) } };
+      }
+    } catch {}
+    return taken;
+  }
+  // A file posted whole is kept, and so is a large one at the last request of its parts.
+  const whole = method === "POST" && !body ? largeOf(url) : null;
+  const files = body instanceof FormData ? [...body.values()].filter((value) => value instanceof File) : [];
+  const list = whole ? [stored(whole.name, whole.size, "")] : files.map((file) => stored(file.name, file.size, file.type));
+  // Anything else (a part of a large file, a file given up on) is taken, with nothing to say.
+  return list.length ? { status: 200, json: { stored: list, refused: [] } } : taken;
+}
+window.XMLHttpRequest = class extends Sent {
+  /** The request this one stands in for, or null for one that is sent: a file of the previews. */
+  #call = null;
+  /** The answer, once the played request is over. */
+  #answer = null;
+  #timer = 0;
+
+  open(method, url, ...rest) {
+    clearTimeout(this.#timer);
+    this.#answer = null;
+    this.#call = null;
+    try {
+      const to = new URL(String(url), location.href);
+      if (to.origin === location.origin && !to.pathname.startsWith(ROOT)) this.#call = { method: String(method).toUpperCase(), url: to };
+    } catch {}
+    // Opened either way, so its headers can be set; one that is stood in for is never sent.
+    super.open(method, url, ...rest);
+  }
+
+  send(body = null) {
+    const call = this.#call;
+    if (!call) return super.send(body);
+    const total = weight(body);
+    // A part of a large file takes its share of the file's time.
+    const whole = largeOf(call.url);
+    // Said once for a file, at its first request, and not only just after a press: a file
+    // goes because someone chose it, and the dialog it was chosen in has used the press up.
+    if (call.method !== "GET" && !whole) tell(`${NO_SERVER}this sends ${call.method} `, call.url, ".", "top");
+    const takes = total ? TAKES_MS * (whole?.size ? Math.min(1, total / whole.size) : 1) : 0;
+    const started = performance.now();
+    const step = () => {
+      const gone = performance.now() - started;
+      const share = gone < takes ? gone / takes : 1;
+      if (total) this.upload.dispatchEvent(new ProgressEvent("progress", { lengthComputable: true, loaded: Math.round(total * share), total }));
+      if (share < 1) {
+        this.#timer = setTimeout(step, Math.min(120, takes - gone));
+        return;
+      }
+      this.#timer = 0;
+      this.#answer = reply(call.method, call.url, body);
+      for (const type of ["readystatechange", "load", "loadend"]) this.dispatchEvent(new ProgressEvent(type));
+    };
+    this.#timer = setTimeout(step, Math.min(120, takes));
+  }
+
+  abort() {
+    if (!this.#call) return super.abort();
+    if (!this.#timer) return;
+    clearTimeout(this.#timer);
+    this.#timer = 0;
+    for (const type of ["abort", "loadend"]) this.dispatchEvent(new ProgressEvent(type));
+  }
+
+  get readyState() {
+    return this.#answer ? 4 : super.readyState;
+  }
+  get status() {
+    return this.#call ? (this.#answer?.status ?? 0) : super.status;
+  }
+  get statusText() {
+    return this.#call ? "" : super.statusText;
+  }
+  get responseURL() {
+    return this.#call ? (this.#answer ? this.#call.url.href : "") : super.responseURL;
+  }
+  get responseText() {
+    return this.#call ? (this.#answer?.json ? JSON.stringify(this.#answer.json) : "") : super.responseText;
+  }
+  get response() {
+    if (!this.#call) return super.response;
+    return this.responseType === "json" ? (this.#answer?.json ?? null) : this.responseText;
+  }
+  getResponseHeader(name) {
+    if (!this.#call) return super.getResponseHeader(name);
+    return this.#answer?.json && String(name).toLowerCase() === "content-type" ? "application/json" : null;
+  }
+  getAllResponseHeaders() {
+    if (!this.#call) return super.getAllResponseHeaders();
+    return this.#answer?.json ? "content-type: application/json\r\n" : "";
+  }
 };
 
 // Nothing loads another page into the frame: a script that would (a part of the page
@@ -268,15 +416,34 @@ if (document.body.hasAttribute("data-preview-show")) {
     kept.get(el)?.remove();
     kept.delete(el);
   };
+  // Where the toolkit puts an open popup, and a list's least width and most height, it
+  // writes on the popup itself. They are the open popup's: left on a picture drawn in place
+  // they would move it, so they go as it closes.
+  const PLACED = ["left", "top", "min-width", "max-height"];
+  // A popup that takes the focus as it opens says so with `autofocus`. Its picture is in the
+  // page from the start, where the browser reads the same word as "take the focus as the page
+  // loads": nobody asked for that, and a framed page may not take the focus by itself. So a
+  // picture is written with `data-preview-autofocus` in its place (a script is too late to
+  // take the word off). The popup has the word back as it is about to open, when the browser
+  // looks for it, and gives it up as it closes.
+  /** What takes the focus when `el` opens: the popup itself, or something it holds. */
+  const focusing = (el) => [el, ...el.querySelectorAll("[data-preview-autofocus]")].filter((node) => has(node, "data-preview-autofocus"));
   // A popover is measured as it is about to open, while it is still in place, and
   // gives its room back as it is about to close, so the page never moves between.
   addEventListener(
     "beforetoggle",
     (event) => {
       const el = event.target;
-      if (!(el instanceof Element) || !el.matches(PICTURES)) return;
-      if (event.newState === "open") keep(el, roomOf(el));
-      else free(el);
+      if (!(el instanceof HTMLElement) || !el.matches(PICTURES)) return;
+      if (event.newState === "open") {
+        keep(el, roomOf(el));
+        for (const node of focusing(el)) node.setAttribute("autofocus", "");
+        return;
+      }
+      free(el);
+      for (const node of focusing(el)) node.removeAttribute("autofocus");
+      for (const name of PLACED) el.style.removeProperty(name);
+      if (!attr(el, "style")) el.removeAttribute("style");
     },
     true,
   );
@@ -345,6 +512,9 @@ for (const form of document.querySelectorAll("form[data-preview-search]")) {
   input.addEventListener("input", () => {
     if (!pending) pending = requestAnimationFrame(filter);
   });
+  // What the box already holds is filtered for at once: words typed while a long page was
+  // still coming, or kept by the browser when the page is loaded again.
+  if (input.value) filter();
   form.addEventListener("submit", (event) => event.preventDefault());
 }
 
