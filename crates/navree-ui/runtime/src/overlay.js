@@ -19,6 +19,10 @@ function place(pop, anchor, again) {
   if (pop.hasAttribute("data-ui-match-width")) pop.style.minWidth = a.width + "px";
   const fit = pop.hasAttribute("data-ui-fit");
   if (fit) pop.style.maxHeight = "";
+  // A popup with no place yet is laid out as the stylesheet lays out an unplaced one: centred, and one as
+  // wide as its content stretched to its widest. It is given a place before it is measured, so the size
+  // read here is the size it keeps.
+  if (!pop.style.left) pop.style.left = pop.style.top = "0px";
   // Layout sizes, not the box as drawn: a popup that is fading in is a little scaled.
   const p = { width: pop.offsetWidth, height: pop.offsetHeight };
   // `start` and `end` follow the text's direction (a submenu opens toward the end); the rest are screen sides.
