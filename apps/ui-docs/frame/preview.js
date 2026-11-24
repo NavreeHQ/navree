@@ -416,15 +416,24 @@ if (document.body.hasAttribute("data-preview-show")) {
     kept.get(el)?.remove();
     kept.delete(el);
   };
+  // Where the toolkit puts an open popup, and a list's least width and most height, it
+  // writes on the popup itself. They are the open popup's: left on a picture drawn in place
+  // they would move it, so they go as it closes.
+  const PLACED = ["left", "top", "min-width", "max-height"];
   // A popover is measured as it is about to open, while it is still in place, and
   // gives its room back as it is about to close, so the page never moves between.
   addEventListener(
     "beforetoggle",
     (event) => {
       const el = event.target;
-      if (!(el instanceof Element) || !el.matches(PICTURES)) return;
-      if (event.newState === "open") keep(el, roomOf(el));
-      else free(el);
+      if (!(el instanceof HTMLElement) || !el.matches(PICTURES)) return;
+      if (event.newState === "open") {
+        keep(el, roomOf(el));
+        return;
+      }
+      free(el);
+      for (const name of PLACED) el.style.removeProperty(name);
+      if (!attr(el, "style")) el.removeAttribute("style");
     },
     true,
   );
