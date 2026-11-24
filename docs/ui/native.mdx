@@ -1,13 +1,13 @@
 ---
-title: "Native apps (preview)"
+title: "Native apps"
 description: "The same Navree UI pages answer an iPhone, an iPad, a Mac, an Android phone or tablet and a Windows PC with native parts that each system draws its own way: turning it on, saying what a page's parts are, and reading the coverage report."
 ---
 
 A native client asks for the same URL a browser does and gets the page as a tree of parts: a screen, a list, a form, a button with a role. The client for each system draws that tree with the system's own components (SwiftUI on Apple systems, Jetpack Compose with Material 3 on Android, WinUI 3 on Windows) and puts each part where that system's design guidelines put it. The server says what a thing is. The client decides where it goes and how it looks.
 
-<Callout type="warning" title="A preview">
+<Callout type="note" title="One feature turns it on">
 
-Native clients sit behind a feature whose name says it may change, and what they answer may change in a minor release. A browser's pages are the same bytes with it on and off. No client is released yet: the Android client is in the repository and runs on emulators, the Apple client is in the repository and runs on simulators and on a Mac, the Windows client (Windows 11, WinUI 3) is in the repository and has no sign-in through the browser yet, no package of any of them is published, and nothing has run on a real device. A watch or TV client, widgets, a Linux client, starting device features from a page, and a scaffold for the app project do not exist yet.
+Native answers come with the `ui-native-preview` feature of `navree`, and what they answer may change in a minor release. A browser's pages are the same bytes with it on and off. The clients that draw them are in the repository: Android (Kotlin and Jetpack Compose) for phones and tablets, Apple (Swift and SwiftUI) for iPhone, iPad and Mac, and Windows (C# and WinUI 3), all on one shared runtime core.
 
 </Callout>
 
