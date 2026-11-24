@@ -24,7 +24,7 @@ env = []
 navree = { path = "../../crates/navree", default-features = false, features = ["http-client", "mail"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-url = "2.5.8"
+url = "2.5.9"
 
 [dev-dependencies]
 http = "1.5.0"

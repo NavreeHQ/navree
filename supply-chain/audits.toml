@@ -13,6 +13,12 @@ criteria = "safe-to-deploy"
 delta = "0.3.1 -> 0.6.1"
 notes = "Diff reviewed. The new build.rs only prints cfg flags chosen from the rustc version, the target arch and the COUNT_INSTRUCTIONS_TEST variable (rustversion is its only build dependency). New SSE2, NEON and word-at-a-time comparisons; the inline asm only hides values from the optimizer or sets the aarch64 DIT bit, which a guard restores. Unsafe blocks are commented and bounded by length asserts. No I/O. Same publisher as 0.3.1; the repository moved to Codeberg, as CHANGES for 0.6.0 says."
 
+[[audits.cookie]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.18.2 -> 0.18.3"
+notes = "Diff reviewed. The nonce of a private cookie is filled from the operating system's generator (OsRng) instead of the thread-local one, so two processes forked from one never reuse a nonce. One line of source, a changelog entry and the version; no new dependencies, no unsafe, no build script, no I/O beyond the OS random source. Published from github:rwf2/cookie-rs."
+
 [[audits.email-encoding]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
