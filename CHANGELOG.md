@@ -15,6 +15,7 @@ every `@navree/*` package carries the same version.
 ### Security
 
 - Navree needs url 2.5.9, which fixes RUSTSEC-2026-0592 in 2.5.8: the origin of a `blob:` URL nested in another no longer recurses until the stack overflows. `cargo update -p url` brings it to an app.
+- Navree needs cookie 0.18.3, which fixes RUSTSEC-2026-0594 in 0.18.2: the nonce of a private cookie comes from the operating system, so two processes forked from one never encrypt with the same nonce. `cargo update -p cookie` brings it to an app.
 
 ## [1.4.0] - 2026-11-19
 

@@ -116,7 +116,7 @@ hyper = "1.12.0"
 # header parser.
 httparse = "1.10.1"
 tower = { version = "0.5.3", features = ["limit", "timeout", "util"] }
-cookie = { version = "0.18.2", features = ["percent-encode"] }
+cookie = { version = "0.18.3", features = ["percent-encode"] }
 percent-encoding = "2.3.2"
 url = "2.5.9"
 mime = "0.3.17"

@@ -1,8 +1,4 @@
 # Findings in this app's pnpm-lock.yaml that have no release its tools can
 # use. OSV-Scanner reads this file for the lockfile in the same folder only.
 # Reviewed 2026-11-01; each entry expires so it gets looked at again.
-
-[[IgnoredVulns]]
-id = "GHSA-fc5q-39xc-vjpf"
-ignoreUntil = 2026-12-18
-reason = "picomatch 4.0.7 and earlier can take a very long time on a glob of a single-branch repeated extglob, and no fixed version is published. Here it is only part of the build and test tools (Vite, Vitest, Rollup and their file finders, and Nuxt's own kit for @navree/nuxt), which match the project's own glob patterns, never a pattern from outside. Move to the fixed picomatch the day it is published, and drop this entry."
+# There are none at present.
