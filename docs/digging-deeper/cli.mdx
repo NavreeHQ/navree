@@ -478,7 +478,7 @@ packages = ["in.example.orders"]
 
 ### navree native:init
 
-`navree native:init` writes the project of the app's Apple client in `apple/` beside `Cargo.toml`: an app for iPhone and iPad and an app for the Mac, with the same code and the same bundle id, on the Swift package [`navree-swift`](https://github.com/NavreeHQ/navree-swift), which each release of Navree makes with the client's runtime core already built. The project is an [XcodeGen](https://github.com/yonaskolb/XcodeGen) `project.yml`, so it reads as text and is written again with one command:
+`navree native:init` writes the project of the app's Apple client in `apple/` beside `Cargo.toml` (a `micro` app's workspace `Cargo.toml`, where its `config/` is): an app for iPhone and iPad and an app for the Mac, with the same code and the same bundle id, on the Swift package [`navree-swift`](https://github.com/NavreeHQ/navree-swift), which each release of Navree makes with the client's runtime core already built. The project is an [XcodeGen](https://github.com/yonaskolb/XcodeGen) `project.yml`, so it reads as text and is written again with one command:
 
 ```sh
 navree native:init
@@ -495,7 +495,7 @@ The values come from the flags, else from the app's settings: the name from `app
 | `<Name>/Assets.xcassets` | An empty app icon and accent colour. |
 | `Signing/Signing.xcconfig` | The bundle id and the team; with no team, both apps run in the simulator and on this Mac. |
 | `Signing/Signing.local.xcconfig.example` | A team's signing, kept out of git: the entitlements of each system (Sign in with Apple, associated domains, push on iPhone and iPad, the App Sandbox on the Mac) and what to register with Apple and on the server. |
-| `.gitignore`, `README.md` | What `xcodegen generate` and builds write; the next steps. |
+| `.gitignore`, `README.md` | What `xcodegen generate` and builds write; the next steps, and the app's `auth.apps.apple` table with the sign-in's `callback`. |
 
 | Option | What it does |
 |---|---|

@@ -22,6 +22,7 @@ fn starter() -> AppleProject {
         bundle_id: "com.navree.dukaan".to_owned(),
         bundle_id_assumed: false,
         team: String::new(),
+        server_table: "dukaan".to_owned(),
         package: PackageSource::Local {
             path: "..".to_owned(),
         },

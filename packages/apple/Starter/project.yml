@@ -1,7 +1,7 @@
 # Dukaan for iPhone, iPad and Mac, as a text description:
 # `xcodegen generate` in this folder writes Dukaan.xcodeproj (never
 # committed). Written by `navree native:init`.
-name: Dukaan
+name: "Dukaan"
 options:
   deploymentTarget:
     iOS: "26.0"
@@ -19,14 +19,14 @@ settings:
 packages:
   # The Navree Native client, with its runtime core already built.
   NavreeNative:
-    path: ..
+    path: ".."
 targets:
   # The app for iPhone and iPad.
-  Dukaan:
+  "Dukaan":
     type: application
     platform: iOS
     sources:
-      - path: Dukaan
+      - path: "Dukaan"
     dependencies:
       - package: NavreeNative
         product: NavreeNative
@@ -48,7 +48,7 @@ targets:
         # The scheme a sign-in in the system's browser comes back on.
         CFBundleURLTypes:
           - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
-            CFBundleURLSchemes: [dukaan]
+            CFBundleURLSchemes: ["dukaan"]
         # Plain http to this machine only, for development.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
@@ -73,11 +73,11 @@ targets:
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES
   # The app for the Mac, with the same code and the same bundle id.
-  DukaanMac:
+  "DukaanMac":
     type: application
     platform: macOS
     sources:
-      - path: Dukaan
+      - path: "Dukaan"
     dependencies:
       - package: NavreeNative
         product: NavreeNative
@@ -97,13 +97,13 @@ targets:
         LSApplicationCategoryType: public.app-category.business
         CFBundleURLTypes:
           - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
-            CFBundleURLSchemes: [dukaan]
+            CFBundleURLSchemes: ["dukaan"]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(NAVREE_BUNDLE_ID)
-        PRODUCT_NAME: Dukaan
+        PRODUCT_NAME: "Dukaan"
         # The runtime core is built for Apple silicon only.
         ARCHS: arm64
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -112,11 +112,11 @@ targets:
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         ENABLE_HARDENED_RUNTIME: YES
 schemes:
-  Dukaan:
+  "Dukaan":
     build:
       targets:
-        Dukaan: all
-  DukaanMac:
+        "Dukaan": all
+  "DukaanMac":
     build:
       targets:
-        DukaanMac: all
+        "DukaanMac": all
