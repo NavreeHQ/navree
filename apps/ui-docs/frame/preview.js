@@ -502,6 +502,9 @@ for (const form of document.querySelectorAll("form[data-preview-search]")) {
   input.addEventListener("input", () => {
     if (!pending) pending = requestAnimationFrame(filter);
   });
+  // What the box already holds is filtered for at once: words typed while a long page was
+  // still coming, or kept by the browser when the page is loaded again.
+  if (input.value) filter();
   form.addEventListener("submit", (event) => event.preventDefault());
 }
 
