@@ -14,7 +14,7 @@ Card::titled("Revenue by month")
     .body(Region::new("revenue").src("/fragments/revenue").lazy())
 ```
 
-The preview above is the region before it loads: two skeleton lines, and `aria-busy` on the region. In an app, the runtime fetches the source as soon as the page has painted.
+The preview above loads the way an app's region does. It is drawn as two skeleton lines, with `aria-busy` on the region; the runtime fetches the source as soon as the page has painted, and draws the answer in place. A preview has no server, so its answer was drawn ahead of time.
 
 ## When to use it
 

@@ -108,6 +108,7 @@ pub fn all() -> Vec<Example> {
             .start()
             .width(360)
             .height(120),
+        // The button copies with a command, which the core runtime runs.
         single!(
             "copy-field",
             "default",
@@ -116,7 +117,8 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .width(520)
-        .height(160),
+        .height(160)
+        .live(),
         // Auth layout
         single!("auth-layout", "thumb", "A sign-in page", auth_layout_thumb)
             .fill()

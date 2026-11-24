@@ -72,10 +72,12 @@ pub fn all() -> Vec<Example> {
         .start()
         .width(620)
         .height(210),
+        // The button copies with a command, which the core runtime runs.
         single!("code-block", "copy", "A copy button", code_block_copy)
             .start()
             .width(620)
-            .height(150),
+            .height(150)
+            .live(),
         gallery!("code-block", "languages", "Languages", code_block_languages).medium(),
     ]
 }

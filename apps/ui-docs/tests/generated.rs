@@ -211,6 +211,28 @@ fn a_previews_fragments_are_answered_from_the_preview() {
         );
     }
 }
+
+/// The lazy region's preview fills in: it loads the core runtime, which fetches the region
+/// once the page has painted, and holds what the region's source answers.
+#[test]
+fn the_lazy_regions_preview_loads_the_runtime_and_holds_its_answer() {
+    let files = ui_docs::generate();
+    let core = navree::ui::assets::CORE_URL
+        .rsplit('/')
+        .next()
+        .expect("the core runtime has a file name");
+    let region = &files["previews/regions/lazy.html"];
+    assert!(region.contains(core), "the lazy region loads no runtime");
+    assert!(
+        region.contains("<template data-preview-answer data-src=\"/fragments/revenue\">"),
+        "the lazy region has no answer"
+    );
+    assert!(
+        region.contains("data-ui-src=\"/fragments/revenue\""),
+        "the lazy region asks another address"
+    );
+}
+
 /// A preview draws a drawer open with CSS, so its scrim stands in for the
 /// dialog's `::backdrop`: a sheet asked for a light backdrop gets the toolkit's
 /// own light value, and the default one the toolkit's default.

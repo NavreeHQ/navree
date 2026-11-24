@@ -71,6 +71,9 @@ addEventListener(
       // A list's "Load more" and a toast's close are the toolkit's to handle in place.
       const inPlace = href.startsWith("#") || is(link, "[data-slot=lazy-more], [data-slot=toast-close]");
       if (!inPlace) tell(`${NO_SERVER}this link opens `, new URL(href, location.href), ".");
+      // A toast drawn in place is not in the toolkit's standing toaster, whose toasts the
+      // toolkit takes away: its close takes it away here, as the page does with no script.
+      if (is(link, "[data-slot=toast-close]")) link.closest("[data-preview-stage] [data-slot=toast]")?.remove();
       return;
     }
     // A submit button: the browser would post the form, which a preview can't. Its
