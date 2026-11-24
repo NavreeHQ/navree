@@ -1151,6 +1151,14 @@ mod tests {
             readme.contains("signInPaths: [\"/sign-in\", \"/auth/*/redirect\"]"),
             "{readme}"
         );
+        // The scheme comes back only when the sign-in form reaches the
+        // hand-over's finish by the browser's own navigation, which Navree's
+        // page script does not do yet: the files say so, and promise nothing.
+        for name in ["README.md", "Signing/Signing.local.xcconfig.example"] {
+            let text = set.get(name).unwrap();
+            assert!(text.contains("/auth/app/finish"), "{name}:\n{text}");
+            assert!(!text.contains("works unsigned"), "{name}:\n{text}");
+        }
 
         // With no table in the settings, the scheme names it.
         let set = files(
