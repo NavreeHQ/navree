@@ -19,6 +19,12 @@ criteria = "safe-to-deploy"
 delta = "0.4.2 -> 0.4.3"
 notes = "Diff reviewed. Body encoding no longer picks 7bit or 8bit for input with a NUL, or a CR or LF outside a CRLF (a bare LF in a str is still taken as a line ending), so such bytes go out as quoted-printable or base64. RFC 2231 parameter encoding writes at least one character per line, so a 62-character key can no longer stall it or underflow. Header folding never leaves a line of white space only. Tests added. No new dependencies, no build script, no unsafe (forbid(unsafe_code)), no I/O. Published from github:lettre/email-encoding."
 
+[[audits.form_urlencoded]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.2.2 -> 1.2.3"
+notes = "Diff reviewed. A start position past the end of the target is clamped to the target's length instead of panicking; the dependency floor moves to percent-encoding 2.3.2. No unsafe, no build script, no I/O. Published from github:servo/rust-url."
+
 [[audits.harfrust]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
@@ -138,6 +144,12 @@ who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-run"
 delta = "1.0.122 -> 1.0.125"
 notes = 'Diff reviewed. Forwards workspace profile and cargo-features tables into generated test manifests, probes -Zthreads=1 support on nightly rustc, streams cargo build stderr through std::io::pipe while building dependencies, and passes --config=term.color="always" when stderr is a terminal without NO_COLOR or TERM=dumb. Dev-only UI test harness; no unsafe. Same publisher as 1.0.122.'
+
+[[audits.url]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.5.8 -> 2.5.9"
+notes = "Diff reviewed. A blob: URL takes the origin of its inner URL only when that URL is http, https or file, so a nested blob: URL no longer recurses; the percent-encode sets and file-host handling follow the URL Standard; removing a path segment searches the path only, so a long run of double-dot segments is no longer quadratic. Tests and test data added. No new dependencies, no unsafe, no build script, no I/O. Published from github:servo/rust-url."
 
 [[audits.usvg]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
