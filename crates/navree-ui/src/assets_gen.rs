@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "4aea3e473663";
+pub const BUILD: &str = "77fda192a930";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-8984b59d1fec.js";
@@ -12,7 +12,7 @@ pub const CORE_URL: &str = "/_navree/ui/core-8984b59d1fec.js";
 pub const SIDEBAR_URL: &str = "/_navree/ui/sidebar-366c16d19fc8.js";
 
 /// The URL of `overlay.js`.
-pub const OVERLAY_URL: &str = "/_navree/ui/overlay-704dbc8826bf.js";
+pub const OVERLAY_URL: &str = "/_navree/ui/overlay-d30ab67a4ddf.js";
 
 /// The URL of `table.js`.
 pub const TABLE_URL: &str = "/_navree/ui/table-4818c62c0060.js";
@@ -98,7 +98,7 @@ pub const PHONE_URL: &str = "/_navree/ui/phone-e7a815361487.js";
 pub const PHONE_DATA_URL: &str = "/_navree/ui/phone-data-648e01c2d20f.json";
 
 /// The URL of `navree-ui.css`.
-pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-c6ff0cb3f28d.css";
+pub const NAVREE_UI_URL: &str = "/_navree/ui/navree-ui-957b1e028c79.css";
 
 /// The URL of `speculation.json`.
 pub const SPECULATION_URL: &str = "/_navree/ui/speculation-8769afc1b5fc.json";
@@ -116,7 +116,7 @@ pub const UPLOAD_STYLES_URL: &str = "/_navree/ui/upload-styles-7f4953470d44.css"
 pub const OTP_STYLES_URL: &str = "/_navree/ui/otp-styles-bb2761698471.css";
 
 /// The URL of `carousel-styles.css`.
-pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-b75b29f68c27.css";
+pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-46da85c6d8a4.css";
 
 /// The URL of `menubar-styles.css`.
 pub const MENUBAR_STYLES_URL: &str = "/_navree/ui/menubar-styles-52a4f5f79413.css";
@@ -214,7 +214,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "overlay",
         ext: "js",
-        hash: "704dbc8826bf",
+        hash: "d30ab67a4ddf",
         content_type: "text/javascript; charset=utf-8",
         bytes: include_bytes!("../dist/overlay.js"),
         gzip: Some(include_bytes!("../dist/overlay.js.gz")),
@@ -468,7 +468,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "navree-ui",
         ext: "css",
-        hash: "c6ff0cb3f28d",
+        hash: "957b1e028c79",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/navree-ui.css"),
         gzip: Some(include_bytes!("../dist/navree-ui.css.gz")),
@@ -522,7 +522,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "carousel-styles",
         ext: "css",
-        hash: "b75b29f68c27",
+        hash: "46da85c6d8a4",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/carousel-styles.css"),
         gzip: Some(include_bytes!("../dist/carousel-styles.css.gz")),
