@@ -31,11 +31,19 @@ body[data-preview-open] [data-preview-open] > dialog:not([open]){display:flex;fl
 [data-preview-show] [data-slot=command-dialog]:not([open]){display:flex;flex-direction:column;position:relative;inset:auto;margin:0;width:100%;max-width:36rem;height:auto;max-height:none}
 [data-preview-show] :is([data-slot=popover-content],[data-slot=hover-card-content],[data-slot=info-tip-content],[data-slot=tooltip-content],[data-slot=navigation-menu-content]):not(:popover-open){display:block;position:relative;inset:auto;margin:0;height:auto}
 [data-preview-show] [data-slot=dropdown-menu]:not([data-sub]):not(:popover-open){display:block;position:relative;inset:auto;margin:.25rem 0 0;height:auto}
+/* An info tip drawn in place stands beside what it explains: in a frame too narrow for
+   both it goes under it, no wider than the frame less its padding. Its row wraps while the
+   tip is open too, for the stand-in that keeps its room. */
+[data-preview-show] :has(> [data-slot=info-tip-content]){flex-wrap:wrap}
+[data-preview-show] [data-slot=info-tip-content]:not(:popover-open){max-width:min(20rem,calc(100vw - 48px))}
 /* The room of a picture drawn in place while the real one is open: nothing under the pointer moves. */
 [data-preview-kept]{flex:none;max-width:100%;visibility:hidden}
 /* What a link or form would do in an app, said in place of doing it: over anything open. */
 [data-preview-note]{position:fixed;inset:auto 8px 8px;width:fit-content;max-width:min(32rem,calc(100% - 16px));height:auto;margin:0 auto;padding:.5rem .75rem;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--ink-3);color:var(--fg);font:12px/1.5 var(--font-sans);text-align:start;overflow-wrap:anywhere;box-shadow:0 8px 24px rgb(0 0 0/.35)}
 [data-preview-note] code{color:var(--fg-1);font:11.5px/1.5 var(--font-mono)}
+/* At the head of the frame, for what is drawn at its foot (a file's row), and taking no press
+   itself: the place to choose the next file is under it. */
+[data-preview-note=top]{inset:8px 8px auto;pointer-events:none}
 /* A toaster drawn in place, with its toasts staying: a preview is a picture, not a page that fades them. */
 [data-preview] [data-slot=toaster]{position:static;translate:none;width:100%;max-width:24rem}
 [data-preview] [data-slot=toast]{animation:none}
@@ -43,17 +51,27 @@ body[data-preview-open] [data-preview-open] > dialog:not([open]){display:flex;fl
 /* Galleries: one captioned cell per variant or state. */
 [data-preview-gallery]{--cell:220px;display:grid;gap:12px;width:100%;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--cell)),1fr))}
 [data-preview-gallery=narrow]{--cell:140px}
+/* What does not shrink (a month's grid, the boxes of a code, a phone number): its cells are
+   never told how many go to a row, so each is at least this wide, down to one to a row. */
+[data-preview-gallery=broad]{--cell:330px}
 [data-preview-gallery=wide]{--cell:100%}
 [data-preview-gallery=icon]{--cell:112px;gap:8px}
 @media (min-width:481px){[data-preview-cols="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}[data-preview-cols="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}[data-preview-cols="4"]{grid-template-columns:repeat(4,minmax(0,1fr))}[data-preview-cols="5"]{grid-template-columns:repeat(5,minmax(0,1fr))}}
 [data-preview-cell]{margin:0;display:flex;flex-direction:column;gap:12px;min-width:0;padding:16px;border:1px solid var(--line);border-radius:var(--radius-lg)}
 [data-preview-cell-body]{flex:1;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;min-width:0;min-height:40px}
 [data-preview-gallery=wide] [data-preview-cell-body]{display:block}
+/* A cell with a box to type in is laid out from its top. A line that comes under the box as
+   it is left (what was typed can't be taken) then grows the cell downward, and the button
+   beside the box is still under the pointer that is pressing it. */
+[data-preview-cell-body]:has(input:not([type=hidden],[type=checkbox],[type=radio],[type=range],[type=file],[type=color]),textarea){align-items:flex-start}
 [data-preview-cell] figcaption{color:var(--fg-3);font:12px/1.4 var(--font-mono);text-align:center;overflow-wrap:anywhere}
 [data-preview-gallery=wide] figcaption{text-align:start}
 [data-preview-gallery=icon] [data-preview-cell]{gap:8px;padding:16px 8px 10px}
 [data-preview-gallery=icon] [data-preview-cell-body] [data-slot=icon]{width:20px;height:20px;color:var(--fg-1)}
 @media (max-width:480px){[data-preview-gallery=medium]{--cell:140px}[data-preview-cell]{padding:12px}}
+/* On a phone a broad cell has the row to itself, and what it shows nearly all of the row: a
+   month with its week numbers is 295px wide. */
+@media (max-width:480px){body[data-preview]:has([data-preview-gallery=broad]){padding-inline:12px}[data-preview-gallery=broad] [data-preview-cell]{padding-inline:4px}}
 
 /* A searchable gallery: the search box stays at the top, the cells below it
    are laid out and painted only when they scroll near. */

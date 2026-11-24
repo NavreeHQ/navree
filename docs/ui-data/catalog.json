@@ -4,6 +4,7 @@
     {
       "id": "actions",
       "title": "Actions",
+      "about": "What a click does: buttons, toggles and the menus that hold actions, from a dropdown to a menu bar.",
       "components": [
         "button",
         "button-group",
@@ -17,6 +18,7 @@
     {
       "id": "inputs",
       "title": "Inputs",
+      "about": "Every field a form needs, from text to searchable choices, a phone number, a one-time code and an upload, and the form drawn from a struct.",
       "components": [
         "field",
         "input",
@@ -40,6 +42,7 @@
     {
       "id": "dates",
       "title": "Date and time",
+      "about": "A calendar and pickers for a day, a range of days and a time, whose values the server checks.",
       "components": [
         "calendar",
         "date-picker",
@@ -51,6 +54,7 @@
     {
       "id": "display",
       "title": "Display",
+      "about": "Cards, badges, avatars, text, Markdown and code, timelines and feeds, and the parts of a conversation.",
       "components": [
         "card",
         "badge",
@@ -73,6 +77,7 @@
     {
       "id": "feedback",
       "title": "Feedback",
+      "about": "Alerts, toasts, empty states, the pages of an error, progress, skeletons and spinners.",
       "components": [
         "alert",
         "toast",
@@ -90,6 +95,7 @@
     {
       "id": "overlays",
       "title": "Overlays",
+      "about": "Dialogs, sheets, drawers, popovers, tooltips and hover cards, on the browser's own elements.",
       "components": [
         "dialog",
         "alert-dialog",
@@ -103,6 +109,7 @@
     {
       "id": "layout",
       "title": "Layout",
+      "about": "Stacks, rows and grids on the 4 px grid, and the parts that fold, scroll, split and divide a page.",
       "components": [
         "layout",
         "split-pane",
@@ -118,6 +125,7 @@
     {
       "id": "navigation",
       "title": "Navigation",
+      "about": "The app shell, tabs, navigation menus, breadcrumbs, pagination and the command palette.",
       "components": [
         "app-shell",
         "tabs",
@@ -130,6 +138,7 @@
     {
       "id": "flow",
       "title": "Steps, ranges and trees",
+      "about": "Steps and wizards that keep a form's progress, sliders, trees and toolbars.",
       "components": [
         "stepper",
         "wizard",
@@ -141,6 +150,7 @@
     {
       "id": "data",
       "title": "Data",
+      "about": "Tables, the server-side DataTable, lazy lists, sortable lists and grids, stats and bars. Charts have a group of their own.",
       "components": [
         "table",
         "data-table",
@@ -153,6 +163,7 @@
     {
       "id": "charts",
       "title": "Charts",
+      "about": "Line, area, bar, donut, scatter, sparkline and funnel charts, rings, gauges, heat maps and a clock of the day, all drawn on the server.",
       "components": [
         "line-chart",
         "area-chart",
@@ -179,6 +190,7 @@
     {
       "id": "app-blocks",
       "title": "App blocks",
+      "about": "Blocks an app's screens are made of: a dock of its main places, a pager for days, a field to copy from, a note beside a figure and the page of a sign-in form.",
       "components": [
         "info-tip",
         "chart-skeleton",
@@ -192,6 +204,7 @@
     {
       "id": "marketing",
       "title": "Marketing",
+      "about": "A public website's parts: the page with its header and footer, a hero, sections, feature grids, pricing, testimonials and questions.",
       "components": [
         "site-page",
         "site-header",
@@ -214,6 +227,7 @@
     {
       "id": "assistant",
       "title": "Assistant",
+      "about": "A conversation with an assistant: its messages, the box to write in, tool calls, approvals, suggestions, sources and the list of threads.",
       "components": [
         "conversation",
         "chat-message",
@@ -6259,9 +6273,9 @@
       "kind": "gallery",
       "code": "vec![\n    (\n        \"Filled\",\n        Field::new(\"otp-filled\", \"Code\").control(InputOtp::new(\"a\", 6).value(\"482915\")),\n    ),\n    (\n        \"Disabled\",\n        Field::new(\"otp-disabled\", \"Code\")\n            .control(InputOtp::new(\"b\", 6).value(\"482915\").disabled(true)),\n    ),\n    (\n        \"Read only\",\n        Field::new(\"otp-readonly\", \"Code\")\n            .control(InputOtp::new(\"c\", 6).value(\"482915\").readonly()),\n    ),\n    (\n        \"Invalid\",\n        Field::new(\"otp-invalid\", \"Code\").control(InputOtp::new(\"d\", 6).invalid(true)),\n    ),\n]",
       "src": "/ui-preview/input-otp/states.html",
-      "height": 120,
+      "height": 316,
       "layout": "center",
-      "cells": "medium",
+      "cells": "broad",
       "show": false,
       "open": false,
       "live": false,
@@ -10833,9 +10847,9 @@
       "kind": "gallery",
       "code": "let today = NaiveDate::from_ymd_opt(2026, 11, 3).unwrap_or_default();\n[\n    (\n        \"de\",\n        Calendar::new(\"de\")\n            .today(today)\n            .locale(DateLocale::of(\"de\"))\n            .week_numbers(),\n    ),\n    (\n        \"ja\",\n        Calendar::new(\"ja\")\n            .today(today)\n            .locale(DateLocale::of(\"ja\")),\n    ),\n    (\n        \"ar\",\n        Calendar::new(\"ar\")\n            .today(today)\n            .locale(DateLocale::of(\"ar\")),\n    ),\n]",
       "src": "/ui-preview/calendar/locales.html",
-      "height": 340,
+      "height": 752,
       "layout": "center",
-      "cells": "medium",
+      "cells": "broad",
       "show": false,
       "open": false,
       "live": false,
@@ -10861,7 +10875,7 @@
       "src": "/ui-preview/calendar/states.html",
       "height": 340,
       "layout": "center",
-      "cells": "medium",
+      "cells": "broad",
       "show": false,
       "open": false,
       "live": false,
@@ -14228,7 +14242,7 @@
       "src": "/ui-preview/phone-input/states.html",
       "height": 480,
       "layout": "start",
-      "cells": "medium",
+      "cells": "broad",
       "show": false,
       "open": false,
       "live": false,
@@ -15974,10 +15988,12 @@
       "cells": "narrow",
       "show": false,
       "open": false,
-      "live": false,
+      "live": true,
       "width": 620,
       "fit": true,
-      "scripts": [],
+      "scripts": [
+        "core-8984b59d1fec.js"
+      ],
       "captions": [],
       "slots": [
         {
@@ -28691,8 +28707,8 @@
       "kind": "single",
       "code": "ContextMenu::new(\"move-menu\", \"Move the contact\")\n    .content(\n        Card::titled(\"Harleen Kaur\").body(Text::muted(\"Right click to move her to a list.\")),\n    )\n    .item(MenuItem::link(\"Open the profile\", \"/contacts/12\"))\n    .submenu(\n        MenuSub::new(\"Move to\")\n            .item(MenuItem::action(\"Hot leads\"))\n            .item(MenuItem::action(\"Follow up in Jalandhar\"))\n            .item(MenuItem::action(\"Customers\")),\n    )",
       "src": "/ui-preview/context-menu/submenu.html",
-      "height": 200,
-      "layout": "center",
+      "height": 310,
+      "layout": "start",
       "cells": "narrow",
       "show": false,
       "open": false,
@@ -58499,19 +58515,21 @@
       "id": "regions/lazy",
       "component": "regions",
       "slug": "lazy",
-      "title": "Before a lazy region loads",
+      "title": "A lazy region",
       "kind": "single",
       "code": "Card::titled(\"Revenue by month\").body(Region::new(\"revenue\").src(\"/fragments/revenue\").lazy())",
       "src": "/ui-preview/regions/lazy.html",
-      "height": 120,
+      "height": 300,
       "layout": "start",
       "cells": "narrow",
       "show": false,
       "open": false,
-      "live": false,
+      "live": true,
       "width": null,
       "fit": true,
-      "scripts": [],
+      "scripts": [
+        "core-8984b59d1fec.js"
+      ],
       "captions": [],
       "slots": [
         {
@@ -67950,10 +67968,12 @@
       "cells": "narrow",
       "show": false,
       "open": false,
-      "live": false,
+      "live": true,
       "width": 520,
       "fit": true,
-      "scripts": [],
+      "scripts": [
+        "core-8984b59d1fec.js"
+      ],
       "captions": [],
       "slots": [
         {
@@ -80944,9 +80964,790 @@
       "live": false,
       "width": 1440,
       "fit": false,
-      "scripts": [],
+      "scripts": [
+        "sidebar-366c16d19fc8.js",
+        "overlay-704dbc8826bf.js",
+        "select-9799dd37022f.js",
+        "menus-a3553608f59a.js",
+        "sortable-e3871427c647.js"
+      ],
       "captions": [],
-      "slots": []
+      "slots": [
+        {
+          "slot": "sidebar-wrapper",
+          "tag": "div",
+          "count": 1,
+          "children": [
+            {
+              "slot": "sidebar",
+              "tag": "aside",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "sidebar-header",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-brand",
+                      "tag": "a",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-logo",
+                          "tag": "span",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-brand-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-brand-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-brand-context",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-content",
+                  "tag": "nav",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-group",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "sidebar-group-label",
+                          "tag": "p",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "sidebar-menu",
+                          "tag": "ul",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-item",
+                              "tag": "a",
+                              "count": 3,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "sidebar-label",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "slot": "sidebar-footer",
+                  "tag": "div",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "sidebar-user",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "avatar",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "sidebar-user-text",
+                          "tag": "span",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "sidebar-user-name",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            },
+                            {
+                              "slot": "sidebar-user-email",
+                              "tag": "span",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "popover-content",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "menu-link",
+                          "tag": "button",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "slot": "sidebar-overlay",
+              "tag": "div",
+              "count": 1,
+              "children": []
+            },
+            {
+              "slot": "sidebar-inset",
+              "tag": "div",
+              "count": 1,
+              "children": [
+                {
+                  "slot": "topbar",
+                  "tag": "header",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "button",
+                      "tag": "button",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "icon",
+                          "tag": "svg",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "separator",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "breadcrumb",
+                      "tag": "nav",
+                      "count": 1,
+                      "children": []
+                    },
+                    {
+                      "slot": "topbar-spacer",
+                      "tag": "div",
+                      "count": 1,
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "slot": "page",
+                  "tag": "main",
+                  "count": 1,
+                  "children": [
+                    {
+                      "slot": "page-header",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "page-title",
+                          "tag": "h1",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "page-actions",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "button",
+                              "tag": "button",
+                              "count": 2,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "kbd",
+                                  "tag": "kbd",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "dropdown-menu",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "menu-header",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "menu-item",
+                                  "tag": "button",
+                                  "count": 8,
+                                  "children": [
+                                    {
+                                      "slot": "icon",
+                                      "tag": "svg",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "menu-text",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "stack",
+                      "tag": "div",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "grid",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "combobox",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "combobox-control",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "combobox-input",
+                                      "tag": "input",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "combobox-clear",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "slot": "combobox-toggle",
+                                      "tag": "button",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "icon",
+                                          "tag": "svg",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "select-native",
+                                  "tag": "select",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "select-popup",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "select-list",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "select-footer",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "select-note",
+                                          "tag": "p",
+                                          "count": 1,
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "select-status",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "native-select",
+                              "tag": "select",
+                              "count": 2,
+                              "children": []
+                            },
+                            {
+                              "slot": "row",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "button",
+                                  "tag": "button",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "region",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "stack",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "live-state",
+                                  "tag": "span",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "live-dot",
+                                      "tag": "span",
+                                      "count": 1,
+                                      "children": []
+                                    }
+                                  ]
+                                },
+                                {
+                                  "slot": "sortable",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": [
+                                    {
+                                      "slot": "sortable-help",
+                                      "tag": "p",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "sortable-status",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": []
+                                    },
+                                    {
+                                      "slot": "sortable-lists",
+                                      "tag": "div",
+                                      "count": 1,
+                                      "children": [
+                                        {
+                                          "slot": "sortable-list",
+                                          "tag": "section",
+                                          "count": 5,
+                                          "children": [
+                                            {
+                                              "slot": "sortable-list-header",
+                                              "tag": "div",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "sortable-list-title",
+                                                  "tag": "h2",
+                                                  "count": 1,
+                                                  "children": []
+                                                },
+                                                {
+                                                  "slot": "sortable-count",
+                                                  "tag": "span",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "slot": "sortable-items",
+                                              "tag": "ol",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "sortable-item",
+                                                  "tag": "li",
+                                                  "count": 20,
+                                                  "children": [
+                                                    {
+                                                      "slot": "sortable-handle",
+                                                      "tag": "button",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "icon",
+                                                          "tag": "svg",
+                                                          "count": 1,
+                                                          "children": []
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "slot": "sortable-body",
+                                                      "tag": "div",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "stack",
+                                                          "tag": "div",
+                                                          "count": 1,
+                                                          "children": [
+                                                            {
+                                                              "slot": "row",
+                                                              "tag": "div",
+                                                              "count": 1,
+                                                              "children": [
+                                                                {
+                                                                  "slot": "badge",
+                                                                  "tag": "span",
+                                                                  "count": 1,
+                                                                  "children": [
+                                                                    {
+                                                                      "slot": "badge-dot",
+                                                                      "tag": "span",
+                                                                      "count": 1,
+                                                                      "children": []
+                                                                    }
+                                                                  ]
+                                                                }
+                                                              ]
+                                                            },
+                                                            {
+                                                              "slot": "button",
+                                                              "tag": "button",
+                                                              "count": 1,
+                                                              "children": []
+                                                            },
+                                                            {
+                                                              "slot": "meta",
+                                                              "tag": "ul",
+                                                              "count": 1,
+                                                              "children": [
+                                                                {
+                                                                  "slot": "meta-item",
+                                                                  "tag": "li",
+                                                                  "count": 2,
+                                                                  "children": [
+                                                                    {
+                                                                      "slot": "meta-start",
+                                                                      "tag": "span",
+                                                                      "count": 1,
+                                                                      "children": [
+                                                                        {
+                                                                          "slot": "avatar",
+                                                                          "tag": "span",
+                                                                          "count": 1,
+                                                                          "children": [
+                                                                            {
+                                                                              "slot": "icon",
+                                                                              "tag": "svg",
+                                                                              "count": 1,
+                                                                              "children": []
+                                                                            }
+                                                                          ]
+                                                                        }
+                                                                      ]
+                                                                    },
+                                                                    {
+                                                                      "slot": "meta-text",
+                                                                      "tag": "span",
+                                                                      "count": 1,
+                                                                      "children": []
+                                                                    }
+                                                                  ]
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    },
+                                                    {
+                                                      "slot": "sortable-move",
+                                                      "tag": "details",
+                                                      "count": 1,
+                                                      "children": [
+                                                        {
+                                                          "slot": "sortable-move-summary",
+                                                          "tag": "summary",
+                                                          "count": 1,
+                                                          "children": []
+                                                        },
+                                                        {
+                                                          "slot": "sortable-form",
+                                                          "tag": "form",
+                                                          "count": 1,
+                                                          "children": [
+                                                            {
+                                                              "slot": "sortable-move-field",
+                                                              "tag": "label",
+                                                              "count": 1,
+                                                              "children": []
+                                                            },
+                                                            {
+                                                              "slot": "native-select",
+                                                              "tag": "select",
+                                                              "count": 1,
+                                                              "children": []
+                                                            },
+                                                            {
+                                                              "slot": "sortable-move-field",
+                                                              "tag": "label",
+                                                              "count": 1,
+                                                              "children": []
+                                                            },
+                                                            {
+                                                              "slot": "input",
+                                                              "tag": "input",
+                                                              "count": 1,
+                                                              "children": []
+                                                            },
+                                                            {
+                                                              "slot": "button",
+                                                              "tag": "button",
+                                                              "count": 1,
+                                                              "children": []
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "slot": "sortable-empty",
+                                              "tag": "p",
+                                              "count": 1,
+                                              "children": []
+                                            },
+                                            {
+                                              "slot": "sortable-more",
+                                              "tag": "form",
+                                              "count": 1,
+                                              "children": [
+                                                {
+                                                  "slot": "button",
+                                                  "tag": "button",
+                                                  "count": 1,
+                                                  "children": []
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "sheet",
+                      "tag": "dialog",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "dialog-header",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "dialog-title",
+                              "tag": "h2",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "dialog-body",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        },
+                        {
+                          "slot": "dialog-close",
+                          "tag": "button",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "icon",
+                              "tag": "svg",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "slot": "command-dialog",
+                      "tag": "dialog",
+                      "count": 1,
+                      "children": [
+                        {
+                          "slot": "command",
+                          "tag": "div",
+                          "count": 1,
+                          "children": [
+                            {
+                              "slot": "command-input-wrap",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "icon",
+                                  "tag": "svg",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "command-input",
+                                  "tag": "input",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "command-list",
+                              "tag": "div",
+                              "count": 1,
+                              "children": [
+                                {
+                                  "slot": "command-recent",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": []
+                                },
+                                {
+                                  "slot": "command-remote",
+                                  "tag": "div",
+                                  "count": 1,
+                                  "children": []
+                                }
+                              ]
+                            },
+                            {
+                              "slot": "select-note",
+                              "tag": "p",
+                              "count": 1,
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "slot": "select-status",
+                          "tag": "div",
+                          "count": 1,
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "slot": "toaster",
+          "tag": "section",
+          "count": 1,
+          "children": []
+        }
+      ]
     },
     {
       "id": "build-anything/board-sync",
