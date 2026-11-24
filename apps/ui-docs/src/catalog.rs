@@ -1183,6 +1183,16 @@ pub struct Answer {
     pub more: bool,
 }
 
+/// A part of a page its source would answer with, drawn ahead of time: what a lazy
+/// region holds once it has loaded, the children of a tree's branch. A preview has no
+/// server, so the preview script answers each request for `src` from it.
+pub struct Fragment {
+    /// The source's address as the page names it, with its query: `/tree/children?parent=docs`.
+    pub src: &'static str,
+    /// What the source answers.
+    pub node: Node,
+}
+
 /// How the preview frame places what it shows.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Layout {
@@ -1266,6 +1276,8 @@ pub struct Example {
     pub fit: bool,
     /// What the sources of the lists in it would answer.
     pub answers: fn() -> Vec<Answer>,
+    /// What the sources of its other parts would answer: a lazy region, a tree's branch.
+    pub fragments: fn() -> Vec<Fragment>,
 }
 
 impl Example {
@@ -1293,6 +1305,7 @@ impl Example {
             width: None,
             fit: true,
             answers: Vec::new,
+            fragments: Vec::new,
         }
     }
 
@@ -1377,6 +1390,12 @@ impl Example {
     /// Answers the requests of the lists in it from `answers`.
     pub fn answers(mut self, answers: fn() -> Vec<Answer>) -> Self {
         self.answers = answers;
+        self
+    }
+
+    /// Answers the requests of its other parts from `fragments`.
+    pub fn fragments(mut self, fragments: fn() -> Vec<Fragment>) -> Self {
+        self.fragments = fragments;
         self
     }
 }

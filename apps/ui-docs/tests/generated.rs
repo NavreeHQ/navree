@@ -133,7 +133,16 @@ fn a_previews_lists_are_answered_from_the_preview() {
         .iter()
         .filter(|(name, _)| name.starts_with("previews/") && name.ends_with(".html"))
     {
-        for template in html.split("<template data-preview-answer").skip(1) {
+        // A list's page says which end it is for; an answer that doesn't is a fragment, below.
+        for template in html
+            .split("<template data-preview-answer")
+            .skip(1)
+            .filter(|template| {
+                template
+                    .split_once('>')
+                    .is_some_and(|(tag, _)| tag.contains(" data-dir=\""))
+            })
+        {
             answered += 1;
             let src = template
                 .split("data-src=\"")
@@ -157,6 +166,51 @@ fn a_previews_lists_are_answered_from_the_preview() {
     assert!(answered >= 2, "{answered} answers");
 }
 
+/// A part of a page that is fetched by its address (a tree's lazy branch, a lazy region)
+/// has no server to ask either: what the address would answer is drawn into the preview,
+/// for an address a part of the preview names.
+#[test]
+fn a_previews_fragments_are_answered_from_the_preview() {
+    let files = ui_docs::generate();
+    for (name, html) in files
+        .iter()
+        .filter(|(name, _)| name.starts_with("previews/") && name.ends_with(".html"))
+    {
+        for template in html.split("<template data-preview-answer").skip(1) {
+            let (tag, rest) = template
+                .split_once('>')
+                .expect("an answer's opening tag ends");
+            if tag.contains(" data-dir=\"") {
+                continue;
+            }
+            let src = tag
+                .split("data-src=\"")
+                .nth(1)
+                .and_then(|rest| rest.split('"').next())
+                .expect("an answer names its source");
+            // A region names its source in `data-ui-src`; a branch in `data-src`, as the
+            // answer's own tag does, so the branch is the second place the address is in.
+            assert!(
+                html.contains(&format!("data-ui-src=\"{src}\""))
+                    || html.matches(&format!(" data-src=\"{src}\"")).count() > 1,
+                "{name} answers {src}, which nothing in it asks"
+            );
+            assert!(
+                !rest.starts_with("</template>"),
+                "{name}: the answer for {src} is empty"
+            );
+        }
+    }
+    let tree = &files["previews/tree-view/lazy.html"];
+    for branch in ["docs", "music"] {
+        assert!(
+            tree.contains(&format!(
+                "<template data-preview-answer data-src=\"/tree/children?parent={branch}\">"
+            )),
+            "the {branch} branch has no answer"
+        );
+    }
+}
 /// A preview draws a drawer open with CSS, so its scrim stands in for the
 /// dialog's `::backdrop`: a sheet asked for a light backdrop gets the toolkit's
 /// own light value, and the default one the toolkit's default.

@@ -4,7 +4,7 @@ use navree::ui::flow::{SliderLabels, SliderSpec, TreeState};
 use navree::ui::*;
 use serde::Deserialize;
 
-use crate::catalog::{Example, gallery, single};
+use crate::catalog::{Example, Fragment, gallery, single};
 
 const SOURCE: &str = include_str!("flow.rs");
 
@@ -89,8 +89,10 @@ pub fn all() -> Vec<Example> {
         single!("tree-view", "single", "Choosing one", tree_single)
             .start()
             .height(200),
+        // The branches' children come from `fragments`: a preview has no server to ask.
         single!("tree-view", "lazy", "Children from the server", tree_lazy)
             .start()
+            .fragments(tree_lazy_children)
             .height(150),
         single!("tree-view", "paged", "A long list in pages", tree_paged)
             .start()
@@ -450,6 +452,28 @@ fn tree_lazy() -> Tree {
     Tree::new("lazy", "Folders")
         .node(TreeNode::lazy("docs", "Documents", "/tree/children?parent=docs").icon(icons::FOLDER))
         .node(TreeNode::lazy("music", "Music", "/tree/children?parent=music").icon(icons::FOLDER))
+}
+
+/// What each branch's address answers: its children, drawn by the same tree, as the
+/// handler of `/tree/children` draws them.
+fn tree_lazy_children() -> Vec<Fragment> {
+    let children = |nodes: [TreeNode; 2]| Node::from(tree_lazy().children(2, 0, None, nodes, None));
+    vec![
+        Fragment {
+            src: "/tree/children?parent=docs",
+            node: children([
+                TreeNode::leaf("docs/gst", "GST returns 2026").icon(icons::FILE),
+                TreeNode::leaf("docs/rent", "Rent agreement, Sector 17").icon(icons::FILE),
+            ]),
+        },
+        Fragment {
+            src: "/tree/children?parent=music",
+            node: children([
+                TreeNode::leaf("music/folk", "Punjabi folk").icon(icons::FILE),
+                TreeNode::leaf("music/films", "Hindi film songs").icon(icons::FILE),
+            ]),
+        },
+    ]
 }
 
 fn tree_paged() -> Tree {

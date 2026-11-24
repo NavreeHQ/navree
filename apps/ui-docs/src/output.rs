@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use crate::api::TypeDoc;
 use crate::catalog::{
-    COMPONENTS, Cells, Component, Entry, Example, GROUPS, GUIDE_TYPES, Kind, Layout,
+    COMPONENTS, Cells, Component, Entry, Example, Fragment, GROUPS, GUIDE_TYPES, Kind, Layout,
 };
 
 /// Where the preview documents are served from, under the site's root.
@@ -285,9 +285,10 @@ fn app_sheet_path(sheet: &AppSheet) -> String {
     format!("_app/{}", file_of(&sheet.url()))
 }
 
-/// The pages a preview's lists are answered from, as templates the preview
-/// script reads. Inert markup: nothing in a template runs or loads.
-fn answers(example: &Example) -> String {
+/// The pages a preview's lists are answered from, and what its other sources answer
+/// (`fragments`), as templates the preview script reads. Inert markup: nothing in a
+/// template runs or loads.
+fn answers(example: &Example, fragments: &[Fragment]) -> String {
     let mut out = String::new();
     for answer in (example.answers)() {
         let html = LazyPage::new(answer.items, answer.more).to_html();
@@ -296,6 +297,14 @@ fn answers(example: &Example) -> String {
             escape(answer.src),
             escape(answer.dir),
             if answer.more { "1" } else { "0" },
+        ));
+    }
+    // A fragment has no direction: it is the whole answer of its address.
+    for fragment in fragments {
+        out.push_str(&format!(
+            "<template data-preview-answer data-src=\"{}\">{}</template>",
+            escape(fragment.src),
+            without_streams(&render(&fragment.node)),
         ));
     }
     out
@@ -307,6 +316,8 @@ struct Parts<'a> {
     page: Option<&'a View>,
     scripts: &'a [String],
     sheets: &'a [String],
+    /// What the sources of its regions and branches answer.
+    fragments: &'a [Fragment],
 }
 
 /// The preview document of one example.
@@ -383,7 +394,7 @@ fn document(example: &Example, stage: &Node, parts: &Parts<'_>, component: &Comp
     } else {
         body
     };
-    let answers = answers(example);
+    let answers = answers(example, parts.fragments);
     format!(
         "{head}<body data-preview=\"{}\"{show}>{body}{answers}</body>\n</html>\n",
         example.layout.as_str(),
@@ -587,7 +598,14 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
             Kind::Single(_) | Kind::Gallery(_) | Kind::Search { .. } => None,
         };
         let (node, captions) = stage(example, page.as_ref());
-        let uses = measure(&node).uses;
+        // What a source answers may hold parts the page has none of yet: an app's answer
+        // brings their styles and scripts with it, a preview's are linked from the start.
+        let fragments = (example.fragments)();
+        let uses = fragments
+            .iter()
+            .fold(measure(&node).uses, |uses, fragment| {
+                uses.with(measure(&fragment.node).uses)
+            });
         let scripts = scripts(example, uses);
         let sheets = sheets(uses);
         // A page in a theme of your own links its sheet, which an app serves from
@@ -607,6 +625,7 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
             page: page.as_ref(),
             scripts: &scripts,
             sheets: &sheets,
+            fragments: &fragments,
         };
         files.insert(
             format!("previews/{}/{}.html", example.component, example.slug),
