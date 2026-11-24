@@ -47,7 +47,8 @@ pub fn all() -> Vec<Example> {
         )
         .fill()
         .width(1440)
-        .height(900),
+        .height(900)
+        .edited(lifted),
         Example::new(
             "build-anything",
             "board-sync",
@@ -238,8 +239,8 @@ fn card() -> Node {
         .into()
 }
 
-/// The board with In progress's second card lifted by the keys and carried into
-/// Review, the board saying where it is: what a move looks like part way through.
+/// The board with In progress's second card carried into the next column: the page a
+/// move is part way through, as the app draws it. [`lifted`] marks the card as held.
 fn drag() -> Node {
     let data = seeded(&[(11, Column::Review)]);
     let viewer = data.people[0].clone();
@@ -252,18 +253,24 @@ fn drag() -> Node {
         &Filters::default(),
         today(),
     );
-    let html = render(page.to_view().body_node())
-        .replacen(
-            "<li data-slot=\"sortable-item\" id=\"columns-item-11\"",
-            "<li data-slot=\"sortable-item\" id=\"columns-item-11\" data-lifted",
-            1,
-        )
-        .replacen(
-            "aria-atomic=\"true\" data-ui-sr></div>",
-            "aria-atomic=\"true\" data-ui-sr>Position 2 of 2 in Review.</div>",
-            1,
-        );
-    Node::from(SafeHtml::trusted(html))
+    page.to_view().body_node().clone()
+}
+
+/// The markup of that board with the card lifted by the keys and the board saying where
+/// it is: what a move looks like part way through. The sortable module puts the page in
+/// this state, so it is written into the markup the page was rendered to, and the page
+/// itself stays the app's own tree, with the styles and scripts its parts name.
+fn lifted(html: &str) -> String {
+    html.replacen(
+        "<li data-slot=\"sortable-item\" id=\"columns-item-11\"",
+        "<li data-slot=\"sortable-item\" id=\"columns-item-11\" data-lifted",
+        1,
+    )
+    .replacen(
+        "aria-atomic=\"true\" data-ui-sr></div>",
+        "aria-atomic=\"true\" data-ui-sr>Position 2 of 2 in Review.</div>",
+        1,
+    )
 }
 
 /// Two screens of one board, In progress and Review: Gurpreet has just moved a
