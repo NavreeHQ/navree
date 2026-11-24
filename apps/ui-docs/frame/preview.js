@@ -200,6 +200,18 @@ const answers = [...document.querySelectorAll("template[data-preview-answer]")];
 const fetched = window.fetch;
 const page = (html, more) =>
   new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "x-ui-more": more ? "1" : "0" } });
+// A fragment of a page drawn ahead of time the same way: a lazy region's content, the children
+// of a tree's branch. It answers its own address, query and all, each time it is asked, after
+// the moment a quick server takes, so what the page shows while it waits is seen. It carries
+// the headers of a page of the app that answers a part alone, without which a region draws nothing.
+const FRAGMENT_MS = 600;
+const fragment = (html) =>
+  new Promise((done) =>
+    setTimeout(
+      () => done(new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "x-navree-page": "1", "x-navree-fragment": "1" } })),
+      FRAGMENT_MS,
+    ),
+  );
 window.fetch = function (input, init) {
   let url;
   try {
@@ -217,6 +229,11 @@ window.fetch = function (input, init) {
       return Promise.resolve(page(answer.innerHTML, answer.dataset.more === "1"));
     }
     return Promise.resolve(page("", false));
+  }
+  if (method === "GET") {
+    const asked = url.pathname + url.search;
+    const drawn = answers.find((answer) => answer.dataset.dir === undefined && answer.dataset.src === asked);
+    if (drawn) return fragment(drawn.innerHTML);
   }
   if (method !== "GET" && theirs()) tell(`${NO_SERVER}this sends ${method} `, url, ".");
   return Promise.resolve(new Response(null, { status: 204 }));
