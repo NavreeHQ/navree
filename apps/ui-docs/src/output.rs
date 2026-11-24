@@ -482,6 +482,8 @@ struct ComponentJson {
 struct GroupJson {
     id: &'static str,
     title: &'static str,
+    /// The line under the title.
+    about: &'static str,
     components: &'static [&'static str],
 }
 
@@ -708,6 +710,7 @@ pub fn files(examples: &[Example], api: &BTreeMap<String, TypeDoc>) -> BTreeMap<
                 .map(|group| GroupJson {
                     id: group.id,
                     title: group.title,
+                    about: group.about,
                     components: group.components,
                 })
                 .collect(),
@@ -802,6 +805,11 @@ fn check(examples: &[Example], api: &BTreeMap<String, TypeDoc>) {
         }
     }
     for group in GROUPS {
+        assert!(
+            !group.about.trim().is_empty(),
+            "group {} has no line under its title",
+            group.id
+        );
         for id in group.components {
             assert!(
                 COMPONENTS.iter().any(|component| component.id == *id),
