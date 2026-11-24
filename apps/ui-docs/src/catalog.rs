@@ -7,6 +7,8 @@ use navree::ui::{LazyItem, Node, View};
 pub struct Group {
     pub id: &'static str,
     pub title: &'static str,
+    /// The line under the group's title: what is in it, in a sentence.
+    pub about: &'static str,
     pub components: &'static [&'static str],
 }
 
@@ -15,6 +17,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "actions",
         title: "Actions",
+        about: "What a click does: buttons, toggles and the menus that hold actions, from a dropdown to a menu bar.",
         components: &[
             "button",
             "button-group",
@@ -28,6 +31,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "inputs",
         title: "Inputs",
+        about: "Every field a form needs, from text to searchable choices, a phone number, a one-time code and an upload, and the form drawn from a struct.",
         components: &[
             "field",
             "input",
@@ -51,6 +55,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "dates",
         title: "Date and time",
+        about: "A calendar and pickers for a day, a range of days and a time, whose values the server checks.",
         components: &[
             "calendar",
             "date-picker",
@@ -62,6 +67,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "display",
         title: "Display",
+        about: "Cards, badges, avatars, text, Markdown and code, timelines and feeds, and the parts of a conversation.",
         components: &[
             "card",
             "badge",
@@ -84,6 +90,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "feedback",
         title: "Feedback",
+        about: "Alerts, toasts, empty states, the pages of an error, progress, skeletons and spinners.",
         components: &[
             "alert",
             "toast",
@@ -101,6 +108,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "overlays",
         title: "Overlays",
+        about: "Dialogs, sheets, drawers, popovers, tooltips and hover cards, on the browser's own elements.",
         components: &[
             "dialog",
             "alert-dialog",
@@ -114,6 +122,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "layout",
         title: "Layout",
+        about: "Stacks, rows and grids on the 4 px grid, and the parts that fold, scroll, split and divide a page.",
         components: &[
             "layout",
             "split-pane",
@@ -129,6 +138,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "navigation",
         title: "Navigation",
+        about: "The app shell, tabs, navigation menus, breadcrumbs, pagination and the command palette.",
         components: &[
             "app-shell",
             "tabs",
@@ -141,11 +151,13 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "flow",
         title: "Steps, ranges and trees",
+        about: "Steps and wizards that keep a form's progress, sliders, trees and toolbars.",
         components: &["stepper", "wizard", "slider", "tree-view", "toolbar"],
     },
     Group {
         id: "data",
         title: "Data",
+        about: "Tables, the server-side DataTable, lazy lists, sortable lists and grids, stats and bars. Charts have a group of their own.",
         components: &[
             "table",
             "data-table",
@@ -158,6 +170,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "charts",
         title: "Charts",
+        about: "Line, area, bar, donut, scatter, sparkline and funnel charts, rings, gauges, heat maps and a clock of the day, all drawn on the server.",
         components: &[
             "line-chart",
             "area-chart",
@@ -184,6 +197,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "app-blocks",
         title: "App blocks",
+        about: "Blocks an app's screens are made of: a dock of its main places, a pager for days, a field to copy from, a note beside a figure and the page of a sign-in form.",
         components: &[
             "info-tip",
             "chart-skeleton",
@@ -197,6 +211,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "marketing",
         title: "Marketing",
+        about: "A public website's parts: the page with its header and footer, a hero, sections, feature grids, pricing, testimonials and questions.",
         components: &[
             "site-page",
             "site-header",
@@ -219,6 +234,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         id: "assistant",
         title: "Assistant",
+        about: "A conversation with an assistant: its messages, the box to write in, tool calls, approvals, suggestions, sources and the list of threads.",
         components: &[
             "conversation",
             "chat-message",
