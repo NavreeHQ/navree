@@ -313,7 +313,7 @@ lettre = { version = "0.11.24", default-features = false, features = [
 # Mail rendering (navree-mail): CSS inlined into `style` attributes and a
 # plain-text body from the HTML, on the html5ever already in the tree (no
 # remote stylesheets, no CLI).
-css-inline = { version = "0.23.0", default-features = false }
+css-inline = { version = "0.25.0", default-features = false }
 html2text = { version = "0.17.4", default-features = false }
 # extension_sheet! parses a plugin's stylesheet as browsers do (navree-ui-ext-macros only).
 cssparser = "0.38.0"
