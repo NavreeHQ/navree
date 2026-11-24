@@ -15,6 +15,7 @@ every `@navree/*` package carries the same version.
 ### Fixed
 
 - In `navree-ui`, a `Carousel`'s previous and next buttons stand beside the track, in room the carousel keeps for them (`--carousel-room`, 2.25rem at each end), and no longer cover the start of a slide: left and right of the track, the other way round in a right-to-left page, and above and below it in a vertical carousel. The room is there from the first paint, so the slides don't move when the buttons show, and is not kept where no script runs.
+- In `navree-ui`, a `DataTable`'s column menus, its Columns picker and its view menu open at their buttons the first time they are opened. A popup as wide as its content was placed from the widest it may be (22rem) and then drew narrower, so one that only says "Hide column" landed 11rem short of its button, at the table's edge in a narrow one; the second opening was right. A popup is now measured as it lies once placed.
 
 ### Security
 

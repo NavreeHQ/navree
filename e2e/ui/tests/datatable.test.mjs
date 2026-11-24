@@ -703,6 +703,41 @@ for (const browserName of browsers) {
       await close();
     });
 
+    test("every popup of a table's head and toolbar opens at its button the first time, left to right and right to left", async () => {
+      await reset();
+      for (const [path, table] of [["/deals", "deals"], ["/rtl", "rtl"]]) {
+        const { page, problems, close } = await open(path);
+        await page.waitForSelector(`#${table}[data-ui-ready]`);
+        // The column menus, the saved views, the Columns picker and the view menu: each as wide as what it holds.
+        const ids = await page
+          .locator(`#${table} thead [popovertarget], #${table} [data-slot=table-toolbar] [popovertarget]`)
+          .evaluateAll((buttons) => buttons.filter((button) => button.getClientRects().length).map((button) => button.getAttribute("popovertarget")));
+        assert.ok(ids.length >= 6, `${path} has popups to open: ${ids}`);
+        for (const id of ids) {
+          const button = page.locator(`[popovertarget="${id}"]`);
+          await button.hover();
+          await button.click();
+          // The browser's toggle event places it, a task after it shows: by the frame after next it has.
+          await page.waitForFunction((menu) => document.getElementById(menu).matches(":popover-open") && document.getElementById(menu).style.top !== "", id);
+          await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+          // Its end on its button's end (its left edge on the button's, read right to left), held a margin
+          // inside the window. In layout sizes: the popup is a little scaled while it fades in.
+          const off = await page.evaluate((menu) => {
+            const pop = document.getElementById(menu);
+            const at = document.querySelector(`[popovertarget="${menu}"]`).getBoundingClientRect();
+            const width = pop.offsetWidth;
+            const end = getComputedStyle(pop).direction === "rtl" ? at.left : at.right - width;
+            return parseFloat(pop.style.left) - Math.max(8, Math.min(end, window.innerWidth - width - 8));
+          }, id);
+          assert.ok(Math.abs(off) < 1, `${path}, ${id}: ${off}px from where its button puts it`);
+          await page.keyboard.press("Escape");
+          await page.waitForFunction((menu) => !document.getElementById(menu).matches(":popover-open"), id);
+        }
+        assert.deepEqual(problems, []);
+        await close();
+      }
+    });
+
     test("slow network: pending within a frame, typing stays live", async () => {
       await reset();
       const { page, close } = await open("/deals");

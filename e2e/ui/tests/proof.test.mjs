@@ -315,6 +315,38 @@ test("a popover sits by its button and dismisses on a click outside", async () =
   await close();
 });
 
+test("a data table's column menu opens at its button, end on end, the first time and the second", async () => {
+  const { page, problems, close } = await open("/deals?per_page=10");
+  await page.locator("#deals[data-ui-ready]").waitFor();
+  // Where the menu was put against its button, in layout sizes: the menu is a little scaled while it fades in.
+  const placed = (id) =>
+    page.locator(`#${id}`).evaluate((pop) => {
+      const b = document.querySelector(`[popovertarget="${pop.id}"]`).getBoundingClientRect();
+      return { end: parseFloat(pop.style.left) + pop.offsetWidth - b.right, below: parseFloat(pop.style.top) - b.bottom, width: pop.offsetWidth };
+    });
+  // "Hide column" alone, the two sorts with it, and the last column's: each narrower than the widest a table's menu may be.
+  for (const column of ["stage", "amount", "updated_at"]) {
+    const id = `deals-m-${column}`;
+    const button = page.locator(`[popovertarget=${id}]`);
+    for (const time of ["first", "second"]) {
+      await button.hover();
+      await button.click();
+      await page.locator(`#${id}`).waitFor();
+      // The browser's toggle event places it, a task after it shows: by the frame after next it has.
+      await page.waitForFunction((menu) => document.getElementById(menu).style.top !== "", id);
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      const at = await placed(id);
+      assert.ok(at.width < 352, `${column}: a menu narrower than 22rem, ${at.width}`);
+      assert.ok(Math.abs(at.end) < 1, `${column}, the ${time} time: the menu's end is ${at.end}px from its button's`);
+      assert.ok(Math.abs(at.below - 4) < 1, `${column}, the ${time} time: the menu is ${at.below}px under its button`);
+      await page.keyboard.press("Escape");
+      await page.locator(`#${id}`).waitFor({ state: "hidden" });
+    }
+  }
+  assert.deepEqual(problems, []);
+  await close();
+});
+
 test("a tooltip shows on focus and hover, with its role, and Esc hides it", async () => {
   const { page, close } = await open("/gallery");
   const button = page.getByRole("button", { name: "Tooltip" });
