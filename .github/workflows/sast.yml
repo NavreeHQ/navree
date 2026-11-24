@@ -59,7 +59,7 @@ jobs:
       - name: List the findings the pull request suppresses
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         run: scripts/sast.sh suppressed-warnings
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: ${{ !cancelled() && github.event.repository.private == false && hashFiles('sast-reports/semgrep.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         with:
           sarif_file: sast-reports/semgrep.sarif
@@ -90,12 +90,12 @@ jobs:
         env:
           GITLEAKS_LOG_OPTS: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || '--all' }}
         run: scripts/sast.sh secrets
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: ${{ !cancelled() && github.event.repository.private == false && hashFiles('sast-reports/gitleaks-history.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         with:
           sarif_file: sast-reports/gitleaks-history.sarif
           category: gitleaks-history
-      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
         if: ${{ !cancelled() && github.event.repository.private == false && hashFiles('sast-reports/gitleaks-tree.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         with:
           sarif_file: sast-reports/gitleaks-tree.sarif
