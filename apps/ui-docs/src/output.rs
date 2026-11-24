@@ -399,6 +399,12 @@ fn document(example: &Example, stage: &Node, parts: &Parts<'_>, component: &Comp
         Some(edit) => edit(&body),
         None => body,
     };
+    // A popup drawn in place is in the page from the start, and takes no focus as it loads.
+    let body = if example.show {
+        without_autofocus(&body)
+    } else {
+        body
+    };
     let answers = answers(example, parts.fragments);
     format!(
         "{head}<body data-preview=\"{}\"{show}>{body}{answers}</body>\n</html>\n",
@@ -432,6 +438,49 @@ fn without_streams(html: &str) -> String {
         rest = &value[end..];
     }
     out.push_str(rest);
+    out
+}
+
+/// `html` with every `autofocus` attribute written as `data-preview-autofocus`: nothing in
+/// it takes the focus as the page loads. A popup that takes the focus as it opens says so
+/// with `autofocus`; drawn in place as a picture it is in the page from the start, where the
+/// browser reads the same word as "focus this when the page loads", which nobody asked for
+/// and a framed page may not do by itself. The browser notes the element as it reads the
+/// markup, so a script that takes the word off is too late: the picture is written without
+/// it, and the preview script gives it back to a popup as it is about to open.
+fn without_autofocus(html: &str) -> String {
+    const WORD: &str = "autofocus";
+    let bytes = html.as_bytes();
+    let mut out = String::with_capacity(html.len() + 64);
+    // Where the part not yet copied starts, and whether `at` is in an opening tag, in a
+    // quoted value of it.
+    let (mut copied, mut at) = (0, 0);
+    let mut in_tag = false;
+    let mut quote = None;
+    while let Some(&byte) = bytes.get(at) {
+        at += 1;
+        if !in_tag {
+            // Text and closing tags are passed over: only an opening tag has attributes.
+            in_tag = byte == b'<' && bytes.get(at).is_some_and(u8::is_ascii_alphabetic);
+        } else if let Some(open) = quote {
+            if byte == open {
+                quote = None;
+            }
+        } else if byte == b'"' || byte == b'\'' {
+            quote = Some(byte);
+        } else if byte == b'>' {
+            in_tag = false;
+        } else if byte == b' '
+            && html[at..].starts_with(WORD)
+            && matches!(bytes.get(at + WORD.len()), Some(b' ' | b'>' | b'/' | b'='))
+        {
+            out.push_str(&html[copied..at]);
+            out.push_str("data-preview-");
+            copied = at;
+            at += WORD.len();
+        }
+    }
+    out.push_str(&html[copied..]);
     out
 }
 
@@ -845,6 +894,20 @@ mod stream_tests {
             r#"<div id="r" data-ui-src="/f"><table></table></div>"#
         );
         assert_eq!(super::without_streams("<p>plain</p>"), "<p>plain</p>");
+    }
+}
+
+#[cfg(test)]
+mod focus_tests {
+    #[test]
+    fn a_picture_is_written_with_no_autofocus() {
+        // On the popup and on a field in it; not in a value, nor in the words of the page.
+        let html = r#"<div popover="auto" tabindex="-1" autofocus data-ui-place><input autofocus><p title="a > b autofocus ">An autofocus is a word here.</p></div>"#;
+        assert_eq!(
+            super::without_autofocus(html),
+            r#"<div popover="auto" tabindex="-1" data-preview-autofocus data-ui-place><input data-preview-autofocus><p title="a > b autofocus ">An autofocus is a word here.</p></div>"#
+        );
+        assert_eq!(super::without_autofocus("<p>plain</p>"), "<p>plain</p>");
     }
 }
 
