@@ -420,6 +420,14 @@ if (document.body.hasAttribute("data-preview-show")) {
   // writes on the popup itself. They are the open popup's: left on a picture drawn in place
   // they would move it, so they go as it closes.
   const PLACED = ["left", "top", "min-width", "max-height"];
+  // A popup that takes the focus as it opens says so with `autofocus`. Its picture is in the
+  // page from the start, where the browser reads the same word as "take the focus as the page
+  // loads": nobody asked for that, and a framed page may not take the focus by itself. So a
+  // picture is written with `data-preview-autofocus` in its place (a script is too late to
+  // take the word off). The popup has the word back as it is about to open, when the browser
+  // looks for it, and gives it up as it closes.
+  /** What takes the focus when `el` opens: the popup itself, or something it holds. */
+  const focusing = (el) => [el, ...el.querySelectorAll("[data-preview-autofocus]")].filter((node) => has(node, "data-preview-autofocus"));
   // A popover is measured as it is about to open, while it is still in place, and
   // gives its room back as it is about to close, so the page never moves between.
   addEventListener(
@@ -429,9 +437,11 @@ if (document.body.hasAttribute("data-preview-show")) {
       if (!(el instanceof HTMLElement) || !el.matches(PICTURES)) return;
       if (event.newState === "open") {
         keep(el, roomOf(el));
+        for (const node of focusing(el)) node.setAttribute("autofocus", "");
         return;
       }
       free(el);
+      for (const node of focusing(el)) node.removeAttribute("autofocus");
       for (const name of PLACED) el.style.removeProperty(name);
       if (!attr(el, "style")) el.removeAttribute("style");
     },

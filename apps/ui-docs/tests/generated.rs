@@ -233,6 +233,39 @@ fn the_lazy_regions_preview_loads_the_runtime_and_holds_its_answer() {
     );
 }
 
+/// A popup drawn in place is in the page from the start: with `autofocus` on it the browser
+/// would give it the focus as its frame loads. A preview that draws its popups in place
+/// writes none (the preview script gives the word back to a popup that opens), and one
+/// whose popups are closed keeps it as the toolkit wrote it.
+#[test]
+fn a_popup_drawn_in_place_takes_no_focus_as_its_frame_loads() {
+    let files = ui_docs::generate();
+    let mut pictures = 0;
+    for (name, html) in files
+        .iter()
+        .filter(|(name, _)| name.starts_with("previews/") && name.ends_with(".html"))
+    {
+        let body = html.split("<body ").nth(1).expect("a preview has a body");
+        let (tag, body) = body.split_once('>').expect("the body's tag ends");
+        if !tag.contains(" data-preview-show") {
+            continue;
+        }
+        for word in [" autofocus ", " autofocus>", " autofocus="] {
+            assert!(!body.contains(word), "{name} holds an autofocus");
+        }
+        if body.contains(" data-preview-autofocus") {
+            pictures += 1;
+        }
+    }
+    for id in ["popover/default", "info-tip/default"] {
+        let html = &files[&format!("previews/{id}.html")];
+        assert!(html.contains(" data-preview-autofocus "), "{id}");
+    }
+    assert!(pictures >= 2, "{pictures} pictures of a popup that focuses");
+    // Closed, a popup is not drawn and takes no focus: its word stays.
+    assert!(files["previews/popover/sides.html"].contains(" autofocus "));
+}
+
 /// A preview draws a drawer open with CSS, so its scrim stands in for the
 /// dialog's `::backdrop`: a sheet asked for a light backdrop gets the toolkit's
 /// own light value, and the default one the toolkit's default.
