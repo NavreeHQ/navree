@@ -1278,6 +1278,10 @@ pub struct Example {
     pub answers: fn() -> Vec<Answer>,
     /// What the sources of its other parts would answer: a lazy region, a tree's branch.
     pub fragments: fn() -> Vec<Fragment>,
+    /// Changes the markup once it is rendered, for a state only a script puts a page in:
+    /// a card lifted part way through a move. What the page loads is still read from
+    /// what the example drew.
+    pub edited: Option<fn(&str) -> String>,
 }
 
 impl Example {
@@ -1306,6 +1310,7 @@ impl Example {
             fit: true,
             answers: Vec::new,
             fragments: Vec::new,
+            edited: None,
         }
     }
 
@@ -1396,6 +1401,12 @@ impl Example {
     /// Answers the requests of its other parts from `fragments`.
     pub fn fragments(mut self, fragments: fn() -> Vec<Fragment>) -> Self {
         self.fragments = fragments;
+        self
+    }
+
+    /// Changes the rendered markup with `edit`.
+    pub fn edited(mut self, edit: fn(&str) -> String) -> Self {
+        self.edited = Some(edit);
         self
     }
 }

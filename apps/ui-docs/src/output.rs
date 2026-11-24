@@ -394,6 +394,10 @@ fn document(example: &Example, stage: &Node, parts: &Parts<'_>, component: &Comp
     } else {
         body
     };
+    let body = match example.edited {
+        Some(edit) => edit(&body),
+        None => body,
+    };
     let answers = answers(example, parts.fragments);
     format!(
         "{head}<body data-preview=\"{}\"{show}>{body}{answers}</body>\n</html>\n",
