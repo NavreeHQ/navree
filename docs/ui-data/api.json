@@ -1893,6 +1893,12 @@
         "generics": "",
         "args": "reason: impl Into<String>",
         "doc": "Says why a disabled button is disabled, in the page's words: a native client puts it where its system explains a control that does not respond (a hint, a tip on a long press, the description read aloud). A browser's page does not change; say it there too, in a `title` or beside the button, if it should be seen."
+      },
+      {
+        "name": "native_call",
+        "generics": "",
+        "args": "call: crate::NativeCall",
+        "doc": "Says what a tap on the button starts on the device of a native app, in place of what it does in a browser: see `Element::native_call`. The call is written only for a native client whose app says it has the call's feature. A browser's page does not change."
       }
     ],
     "variants": [],
