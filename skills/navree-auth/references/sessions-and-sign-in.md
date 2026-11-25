@@ -105,7 +105,9 @@
     (`com.example.orders:/signed-in`: lower-case scheme of 2 to 39
     characters, no user, query or fragment; never `https`, `http`, loopback
     or a scheme a browser or Windows opens itself). `platform=windows`, `app`
-    = the build's id; a code works for the id that started it. Always treated
+    = the build's id (a package family name in any case of its letters, an
+    `app_id` to the letter); a code works for the id that started it, and
+    policies and the audit trail get the id as the settings write it. Always treated
     as a custom-scheme app: the browser's own sign-in is never handed over.
     No association file, no passkey origin.
   - Only the browser's own navigation finishes a hand-over: `GET
