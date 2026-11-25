@@ -591,8 +591,9 @@ Say these plainly to the owner; do not build around them.
 - **Starting most device features from a page.** A page starts two: a sign-in
   with a passkey, and Sign in with Apple or with Google, each in the system's
   own sheet (`Button::native_call` or `el(..).native_call` with a
-  `NativeCall`, written only for a client whose app lists `passkey` or
-  `platform_sign_in`; the sign-in page of `AuthPages` does both itself, and
+  `NativeCall`, written only for a client whose app lists `passkey` with
+  `passkey_options`, or `platform_sign_in`; the sign-in page of `AuthPages`
+  does both itself, and
   `native_client_with(feature)` tells a page whether to draw a control only an
   app can use). There is no page-side way to ask for the camera, location, a
   scanner or a share sheet, to make a passkey, or to confirm an action. A
