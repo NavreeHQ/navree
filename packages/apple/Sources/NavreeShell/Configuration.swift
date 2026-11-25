@@ -214,12 +214,14 @@ public enum CoreConfiguration {
     /// making one, a confirmation signed with one), Sign in with Apple and
     /// push only when the build is signed for them. The core asks the server
     /// for a passkey's options and hands them over with the call, as it does
-    /// a confirmation's challenge.
+    /// a confirmation's challenge; `passkey_options`, listed with `passkey`,
+    /// says this build shows the sheet with them. A server offers a passkey
+    /// call only to a build that lists both.
     public static func caps(signedWith: Set<Entitlement>, signInScheme: String?) -> [String] {
         var caps = ["clipboard", "local_notification", "open_settings", "open_url", "request_review"]
         if DeviceCalls.shares { caps.append("share") }
         if signInScheme != nil || signedWith.contains(.associatedDomains) { caps.append("auth_session") }
-        if signedWith.contains(.associatedDomains) { caps += ["confirm", "passkey"] }
+        if signedWith.contains(.associatedDomains) { caps += ["confirm", "passkey", "passkey_options"] }
         if signedWith.contains(.signInWithApple) { caps.append("platform_sign_in") }
         if signedWith.contains(.pushNotifications) { caps.append("push") }
         return caps.sorted()

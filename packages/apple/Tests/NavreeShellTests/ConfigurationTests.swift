@@ -25,7 +25,7 @@ import Testing
 
 @Test func whatNeedsATeamIsListedOnlyWhenTheBuildIsSignedForIt() {
     let none = CoreConfiguration.caps(signedWith: [], signInScheme: "charkha")
-    for cap in ["confirm", "platform_sign_in", "push", "passkey"] {
+    for cap in ["confirm", "platform_sign_in", "push", "passkey", "passkey_options"] {
         #expect(!none.contains(cap), "\(cap)")
     }
     #expect(CoreConfiguration.caps(signedWith: [.associatedDomains], signInScheme: nil).contains("confirm"))
@@ -34,10 +34,19 @@ import Testing
     // A passkey needs the origin as an associated domain, as a confirmation signed with one does.
     #expect(CoreConfiguration.caps(signedWith: [.associatedDomains], signInScheme: nil).contains("passkey"))
     #expect(!CoreConfiguration.caps(signedWith: [.signInWithApple, .pushNotifications], signInScheme: "x").contains("passkey"))
-    // Listing nothing the protocol does not name.
+    // A build that lists `passkey` says with it that it shows the sheet with the options
+    // the core hands over: a server offers a passkey call only to a build that lists both.
+    let builds: [Set<Entitlement>] = [
+        [], [.associatedDomains], [.signInWithApple, .pushNotifications], Set(Entitlement.allCases),
+    ]
+    for signedWith in builds {
+        let caps = CoreConfiguration.caps(signedWith: signedWith, signInScheme: "x")
+        #expect(caps.contains("passkey") == caps.contains("passkey_options"), "\(signedWith)")
+    }
+    // Listing nothing the protocol does not name: its features, and the name that says how a passkey is carried out.
     let known: Set<String> = [
         "clipboard", "share", "capture", "auth_session", "open_url", "push", "local_notification", "passkey", "confirm",
-        "location_once", "scan_code", "app_lock", "platform_sign_in", "request_review", "open_settings",
+        "location_once", "scan_code", "app_lock", "platform_sign_in", "request_review", "open_settings", "passkey_options",
     ]
     #expect(Set(CoreConfiguration.caps(signedWith: Set(Entitlement.allCases), signInScheme: "x")).isSubset(of: known))
 }
