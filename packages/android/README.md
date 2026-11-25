@@ -4,6 +4,36 @@ The Android client of Navree Native: `navree-native` (the library: the runtime c
 
 An app declares `com.navree.client.NavreeActivity` in its manifest and sets its origin, name and colour in its resources (`demo/src/main/res/values/navree.xml`). An app that needs more subclasses the activity and overrides `config()`.
 
+## The Maven packages
+
+An app outside this repository takes the client as two Maven packages, at the minor version of Navree its server runs (what a native client is answered may change in a minor release): `com.navree:navree-native`, and `com.navree:navree-push-fcm` for an app that sends notifications. The library carries the runtime core already built, for `arm64-v8a` and `x86_64`, so the app needs no Rust.
+
+```kotlin
+dependencies {
+    implementation("com.navree:navree-native:<version>")
+    implementation("com.navree:navree-push-fcm:<version>") // only for an app that sends notifications
+}
+```
+
+Each release builds the two and attaches them to the release as `navree-android-<version>.tar.gz`: a Maven repository in a folder, with `com/navree/<module>/<version>/` holding the library (`.aar`), its POM and Gradle metadata, its sources jar and its javadoc jar. The documentation is the KDoc in the sources jar, which Android Studio shows; the javadoc jar holds a page that says so. An app can use the folder as it is: unpack the archive and name the folder in `settings.gradle.kts`, beside `google()` and `mavenCentral()`:
+
+```kotlin
+maven { url = uri("/path/to/navree-android") }
+```
+
+The release publishes the same packages to Maven Central once the namespace, the key and the secrets under "Set up once" are there. Until then its `maven-central` job publishes nothing, says so in a notice, and passes.
+
+A release does it in two jobs of `release.yml`. `android-package` builds the core for the two ABIs (`scripts/build-core.sh`), then `scripts/maven-package.sh <version> <out-dir>` publishes the two modules to a folder (`gradle -PnavreeVersion=<version> publishAllPublicationsToFolderRepository`), stops when a module lacks one of its files, when a POM lacks what Maven Central asks of it, or when the library does not hold the core for both ABIs, and packs the folder; the job attaches the archive to the draft release. After the crates are published, `maven-central` (the environment `maven-central`) runs `scripts/maven-central.sh <folder> <version>`: it signs every file with the project's key, packs the folder as the Central Portal takes it (each file with its signature and its sums), uploads it through the Portal's publishing API to be published as soon as the Portal has checked it, and waits until the Portal says it is published. A version Maven Central has already is left as it is, so the job can be run again after a stop. **What is on Maven Central stays there for good**: a version can be neither replaced nor taken back.
+
+The "Native clients" workflow does all of it but the upload each time the client changes, at the version `0.0.0` and with a key it makes for the run, and keeps the folder and the signed bundle (`android-packages`).
+
+### Set up once
+
+1. **The namespace.** An account at [central.sonatype.com](https://central.sonatype.com) and, in it, the namespace `com.navree` (View Namespaces, Add Namespace, then Verify Namespace). The Portal shows a verification key: it goes into a TXT record on `navree.com` itself, since the namespace is that domain reversed. Confirm in the Portal only once the record answers (`dig TXT navree.com`): a lookup that finds nothing is remembered for hours. The Portal says Verified within minutes of a record it can read.
+2. **A user token.** At [central.sonatype.com/usertoken](https://central.sonatype.com/usertoken), Generate User Token, with a name and an expiry. It shows a username and a password, once: they are the secrets `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD`. When the token runs out, a new one replaces the two.
+3. **A signing key.** A GPG key with a passphrase (`gpg --full-generate-key`) whose primary key can sign, which is the key Maven Central checks a signature against and the one the script signs with. Its public half goes to a key server Maven Central reads: `gpg --keyserver keyserver.ubuntu.com --send-keys <fingerprint>` (it also reads `keys.openpgp.org` and `pgp.mit.edu`). The private half, as `gpg --armor --export-secret-keys <fingerprint>` prints it, is the secret `MAVEN_GPG_PRIVATE_KEY`, and its passphrase the secret `MAVEN_GPG_PASSPHRASE`. A key has an end date: before it comes, extend the key and send its public half again.
+4. **The environment.** In the repository's settings, the environment `maven-central`, holding the four secrets as its own (not the repository's), set to ask for a maintainer's approval and to deploy from the tags `v*` only. A release then waits for that approval before it publishes, as it does for crates.io and npm. A release that ran before this was done has made the environment already, with nothing in it: the approval, the limit and the secrets are added to that one.
+
 ## What the library does by itself
 
 These hold for every app built on the library, with nothing to configure.
