@@ -210,13 +210,16 @@ public enum CoreConfiguration {
     /// icon. The share sheet where the build shows one: on iPhone and iPad,
     /// not on a Mac. A sign-in session only when it
     /// can come back: on the app's own scheme, or on a link of the origin the
-    /// build has the associated domain for. A confirmation with a passkey, Sign
-    /// in with Apple and push only when the build is signed for them.
+    /// build has the associated domain for. A passkey (signing in with one,
+    /// making one, a confirmation signed with one), Sign in with Apple and
+    /// push only when the build is signed for them. The core asks the server
+    /// for a passkey's options and hands them over with the call, as it does
+    /// a confirmation's challenge.
     public static func caps(signedWith: Set<Entitlement>, signInScheme: String?) -> [String] {
         var caps = ["clipboard", "local_notification", "open_settings", "open_url", "request_review"]
         if DeviceCalls.shares { caps.append("share") }
         if signInScheme != nil || signedWith.contains(.associatedDomains) { caps.append("auth_session") }
-        if signedWith.contains(.associatedDomains) { caps.append("confirm") }
+        if signedWith.contains(.associatedDomains) { caps += ["confirm", "passkey"] }
         if signedWith.contains(.signInWithApple) { caps.append("platform_sign_in") }
         if signedWith.contains(.pushNotifications) { caps.append("push") }
         return caps.sorted()

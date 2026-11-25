@@ -188,7 +188,7 @@ host over https.
 | The sign-in handed over on the app's own scheme | works | the scheme in `CFBundleURLTypes`; on the server `callback = "<scheme>:/signed-in"` with `custom_scheme = true` |
 | The sign-in handed over on an https link | not offered: the session is never opened | a team; Associated Domains on the App ID; `webcredentials:<host>`; the association file on a real https host |
 | Sign in with Apple | not offered | a team; Sign in with Apple on the App ID; the entitlement; a person signed in to an Apple Account on the device; `social.providers.apple` and `auth.apps.apple` on the server |
-| Passkeys, made or used | not offered | as the https sign-in, with `webcredentials:<rp_id>`; and, for now, a core that fetches the passkey's options (it does not yet) |
+| Passkeys, made or used | not offered | as the https sign-in, with `webcredentials:<rp_id>`; on the server `auth.passkeys` with `https://<rp_id>` among its origins, and `credentials` on the app in `auth.apps.apple`. The core asks the server for the passkey's options and hands them over with the call |
 | Confirming an action with a passkey | not offered | as passkeys, and a passkey made for the site |
 | Push | not offered | a team; Push Notifications on the App ID; `aps-environment`; `notify.push.apns` with a `.p8` key on the server; delivery is proven only on a device |
 
