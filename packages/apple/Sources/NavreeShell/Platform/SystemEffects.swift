@@ -184,15 +184,17 @@ public final class SystemEffects: EffectRunner {
     }
 
     /// Hears who the window's core says is signed in, and tells the session
-    /// (``SessionKeeper/hears(_:from:)``): somebody else than before, with
+    /// (``SessionKeeper/hears(_:was:from:)``): somebody else than before, with
     /// no sign-out between, is a change of person the client is told of by
     /// nothing else. A core that names nobody says nothing of who was here
-    /// or who comes next, and neither does one that is signing out.
+    /// or who comes next, and neither does one that is signing out. What the
+    /// core says the person's plain key was is told with them, so the
+    /// person written down by that key is not taken for another.
     private func hear(_ client: NativeClient) {
         guard tail == .none, let user = client.app?.user else { return }
         heard = true
         askForPush()
-        keeper.hears(Self.person(user), from: self)
+        keeper.hears(Self.person(user), was: client.app?.userWas, from: self)
     }
 
     /// Who a core's user is to the session: the key the core gives for them

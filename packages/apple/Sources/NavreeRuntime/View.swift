@@ -57,6 +57,11 @@ public struct AppPart: Sendable {
     public var home: String
     public var theme: Navree.Theme?
     public var user: Navree.User?
+    /// What the key of the person signed in was before the client gave the
+    /// core a secret: their plain key. The core says it only beside `user`,
+    /// and only to a client that said it still keeps a key of that kind. It
+    /// is compared and never kept.
+    public var userWas: String?
     /// The shell's routes, when the core says them.
     public var routes: [Navree.Route] = []
 }
@@ -323,6 +328,7 @@ extension AppPart: Decodable {
         home = c.lenient("home", "/")
         theme = c.optional("theme")
         user = try c.decodeIfPresent(Navree.User.self, forKey: JSONKey("user"))
+        userWas = c.optional("user_was")
         routes = c.lenient("routes", [])
     }
 }
