@@ -984,13 +984,27 @@ pub enum PasskeyMode {
     SignIn,
 }
 
-/// Signs in with a passkey, or registers one, in the system's own sheet. The
-/// client fetches the request's options from `options` when the person taps.
+/// Signs in with a passkey, or registers one, in the system's own sheet.
+///
+/// It takes two requests, both with the session's cookies and its token in
+/// `x-xsrf-token`, with the system's sheet between them:
+///
+/// 1. On a tap, the client posts `{}` as JSON to `options`, which answers the
+///    request's options as WebAuthn writes them: `{"publicKey": {...}}`. A
+///    route that refuses starts nothing.
+/// 2. The client prompts with the system's sheet, then posts
+///    [`PasskeyCredential`] to `then.href` as a form, with the call's ticket
+///    and `outcome` as every call's result is. The route spends the ticket and
+///    checks the credential against the challenge its options held.
+///
+/// A person who closes the sheet is a refusal ([`Refusal::Cancelled`]): the
+/// client posts the ticket and `outcome` alone.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Passkey {
     /// Sign in or register.
     pub mode: PasskeyMode,
-    /// The route that answers the request's options (WebAuthn's own JSON).
+    /// The route that answers the request's options (WebAuthn's own JSON, as
+    /// `{"publicKey": {...}}`) to a post of `{}`.
     pub options: OriginPath,
     /// Whether the system offers the passkey from the keyboard's suggestions
     /// instead of a sheet.
