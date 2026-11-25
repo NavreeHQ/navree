@@ -35,7 +35,8 @@
 //!   checks above, are what "read-only" rests on.
 //! - Unless `--allow-remote-database` is given, only SQLite files and
 //!   servers on this machine (`localhost`, a loopback address or a Unix
-//!   socket) are allowed ([`check_local`]).
+//!   socket) are allowed, whether the URL names the server or the
+//!   environment SQLx reads does (`PGHOSTADDR`, `PGHOST`) ([`check_local`]).
 
 mod guard;
 mod query;
@@ -136,7 +137,8 @@ pub enum DatabaseError {
          really mean to read that database."
     )]
     Remote {
-        /// The host named in the URL.
+        /// The host named in the URL, or in the environment (then with the
+        /// variable that names it).
         host: String,
     },
     /// The SQLite file does not exist (Navigator never creates one).
@@ -451,13 +453,23 @@ impl Target {
     /// Checks `url` (the driver, and that it is local unless `allow_remote`)
     /// for the app at `root`.
     pub fn new(url: &str, root: &Path, allow_remote: bool) -> Result<Target, DatabaseError> {
+        Self::new_in(url, root, allow_remote, |name| std::env::var(name).ok())
+    }
+
+    /// [`Target::new`], with the environment read through `var`.
+    fn new_in(
+        url: &str,
+        root: &Path,
+        allow_remote: bool,
+        var: impl Fn(&str) -> Option<String>,
+    ) -> Result<Target, DatabaseError> {
         let url = url.trim();
         if url.is_empty() {
             return Err(DatabaseError::NotConfigured);
         }
         let driver = Driver::of(url)?;
         if !allow_remote {
-            check_local(url)?;
+            check_local_in(url, var)?;
         }
         Ok(Target {
             driver,
@@ -633,26 +645,72 @@ impl Target {
 /// Fails with [`DatabaseError::Remote`] unless `url` is a SQLite URL or
 /// names only local hosts: `localhost`, a loopback address (`127.0.0.1`,
 /// `::1`), a Unix socket directory, or no host at all (the default socket).
+///
+/// SQLx takes what a PostgreSQL URL leaves out from the environment, so the
+/// environment is held to the same rule: `PGHOSTADDR` is the address SQLx
+/// connects to unless the URL has a `hostaddr` parameter (a host in the URL
+/// does not replace it), and `PGHOST` is the host of a URL that names none.
 pub fn check_local(url: &str) -> Result<(), DatabaseError> {
+    check_local_in(url, |name| std::env::var(name).ok())
+}
+
+/// [`check_local`], with the environment read through `var`.
+fn check_local_in(
+    url: &str,
+    var: impl Fn(&str) -> Option<String>,
+) -> Result<(), DatabaseError> {
     if Driver::of(url)? == Driver::Sqlite {
         return Ok(());
     }
-    for host in hosts(url) {
-        if !is_local_host(&host) {
-            return Err(DatabaseError::Remote { host });
+    let named = named_hosts(url);
+    for host in named.hosts.iter().chain(&named.addrs) {
+        if !is_local_host(host) {
+            return Err(DatabaseError::Remote { host: host.clone() });
         }
+    }
+    // SQLx reads `PGHOSTADDR` as an IP address and passes over anything
+    // else. It is refused even where SQLx would not use it (a URL that names
+    // a Unix socket): the message names the variable to unset.
+    if named.addrs.is_empty()
+        && let Some(addr) = var("PGHOSTADDR")
+        && addr
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| !ip.is_loopback())
+    {
+        return Err(DatabaseError::Remote {
+            host: format!("{addr} (PGHOSTADDR in the environment)"),
+        });
+    }
+    if named.hosts.is_empty()
+        && let Some(host) = var("PGHOST")
+        && !host.is_empty()
+        && !is_local_host(&host)
+    {
+        return Err(DatabaseError::Remote {
+            host: format!("{host} (PGHOST in the environment)"),
+        });
     }
     Ok(())
 }
 
+/// The hosts a PostgreSQL URL names.
+struct NamedHosts {
+    /// The authority's hosts (comma separated) and the `host` query
+    /// parameters.
+    hosts: Vec<String>,
+    /// The `hostaddr` query parameters.
+    addrs: Vec<String>,
+}
+
 /// Every host a PostgreSQL URL names: the authority's hosts (comma
 /// separated) and the `host` / `hostaddr` query parameters.
-fn hosts(url: &str) -> Vec<String> {
+fn named_hosts(url: &str) -> NamedHosts {
     let rest = url.split_once("://").map_or("", |(_, rest)| rest);
     let (before_query, query) = rest.split_once('?').unwrap_or((rest, ""));
     let authority = before_query.split('/').next().unwrap_or("");
     let authority = authority.rsplit_once('@').map_or(authority, |(_, a)| a);
     let mut hosts: Vec<String> = Vec::new();
+    let mut addrs: Vec<String> = Vec::new();
     for part in authority.split(',') {
         let host = if let Some(stripped) = part.strip_prefix('[') {
             stripped.split(']').next().unwrap_or("").to_owned()
@@ -665,18 +723,22 @@ fn hosts(url: &str) -> Vec<String> {
         }
     }
     for pair in query.split('&') {
-        if let Some((key, value)) = pair.split_once('=')
-            && (key == "host" || key == "hostaddr")
-        {
-            hosts.extend(
-                percent_decode(value)
-                    .split(',')
-                    .filter(|h| !h.is_empty())
-                    .map(str::to_owned),
-            );
-        }
+        let Some((key, value)) = pair.split_once('=') else {
+            continue;
+        };
+        let into = match key {
+            "host" => &mut hosts,
+            "hostaddr" => &mut addrs,
+            _ => continue,
+        };
+        into.extend(
+            percent_decode(value)
+                .split(',')
+                .filter(|h| !h.is_empty())
+                .map(str::to_owned),
+        );
     }
-    hosts
+    NamedHosts { hosts, addrs }
 }
 
 fn is_local_host(host: &str) -> bool {
@@ -880,8 +942,114 @@ mod tests {
             "postgres://navree@%2Fvar%2Frun%2Fpostgresql/crm",
             "postgres://u@127.0.0.2/crm",
         ] {
-            assert!(check_local(url).is_ok(), "{url}");
+            assert!(check_local_in(url, env(&[])).is_ok(), "{url}");
         }
+    }
+
+    /// An environment that holds `pairs` and nothing else.
+    fn env(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
+        move |name| {
+            pairs
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| (*value).to_owned())
+        }
+    }
+
+    /// The host that the refusal of `url` names, in an environment of `pairs`.
+    fn refused(url: &str, pairs: &'static [(&'static str, &'static str)]) -> String {
+        match check_local_in(url, env(pairs)) {
+            Err(DatabaseError::Remote { host }) => host,
+            other => panic!("{url} with {pairs:?}: {other:?}"),
+        }
+    }
+
+    fn allowed(url: &str, pairs: &'static [(&'static str, &'static str)]) {
+        let checked = check_local_in(url, env(pairs));
+        assert!(checked.is_ok(), "{url} with {pairs:?}: {checked:?}");
+    }
+
+    /// SQLx connects to `PGHOSTADDR` whatever host the URL names, and to
+    /// `PGHOST` when the URL names none, so both are held to the rule.
+    #[test]
+    fn a_remote_server_named_by_the_environment_is_refused() {
+        assert_eq!(
+            refused(
+                "postgres://app@localhost/crm",
+                &[("PGHOSTADDR", "10.0.0.5")]
+            ),
+            "10.0.0.5 (PGHOSTADDR in the environment)"
+        );
+        assert_eq!(
+            refused("postgres:///crm", &[("PGHOSTADDR", "2001:db8::1")]),
+            "2001:db8::1 (PGHOSTADDR in the environment)"
+        );
+        assert_eq!(
+            refused("postgres:///crm", &[("PGHOST", "db.example.com")]),
+            "db.example.com (PGHOST in the environment)"
+        );
+        // A local `hostaddr` in the URL still leaves the host to `PGHOST`.
+        assert_eq!(
+            refused(
+                "postgres://app@/crm?hostaddr=127.0.0.1",
+                &[("PGHOST", "db.example.com")]
+            ),
+            "db.example.com (PGHOST in the environment)"
+        );
+        // SQLx would not use the address on a socket; it is refused all the
+        // same, and the message names the variable.
+        assert_eq!(
+            refused(
+                "postgres://navree@/crm?host=/var/run/postgresql",
+                &[("PGHOSTADDR", "10.0.0.5")]
+            ),
+            "10.0.0.5 (PGHOSTADDR in the environment)"
+        );
+        let message = check_local_in(
+            "postgres://app@localhost/crm",
+            env(&[("PGHOSTADDR", "10.0.0.5")]),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(message.contains("PGHOSTADDR"), "{message}");
+        assert!(message.contains("--allow-remote-database"), "{message}");
+    }
+
+    #[test]
+    fn a_local_server_named_by_the_environment_is_allowed() {
+        allowed(
+            "postgres://app@localhost/crm",
+            &[("PGHOSTADDR", "127.0.0.1")],
+        );
+        allowed("postgres://app@localhost/crm", &[("PGHOSTADDR", "::1")]);
+        allowed("postgres:///crm", &[("PGHOST", "localhost")]);
+        allowed("postgres:///crm", &[("PGHOST", "/var/run/postgresql")]);
+        allowed(
+            "postgres:///crm",
+            &[("PGHOST", "127.0.0.1"), ("PGHOSTADDR", "127.0.0.1")],
+        );
+        // The URL's own `hostaddr` is the one SQLx uses.
+        allowed(
+            "postgres://app@localhost/crm?hostaddr=127.0.0.1",
+            &[("PGHOSTADDR", "10.0.0.5")],
+        );
+        // A host in the URL takes the place of `PGHOST`.
+        allowed(
+            "postgres://app@localhost/crm",
+            &[("PGHOST", "db.example.com")],
+        );
+        // SQLx passes over a `PGHOSTADDR` that is not an IP address, and an
+        // empty `PGHOST` names no server.
+        allowed(
+            "postgres://app@localhost/crm",
+            &[("PGHOSTADDR", "db.example.com")],
+        );
+        allowed("postgres:///crm", &[("PGHOST", "")]);
+        // SQLite reads neither variable.
+        allowed(
+            "sqlite://storage/app.db",
+            &[("PGHOSTADDR", "10.0.0.5"), ("PGHOST", "db.example.com")],
+        );
     }
 
     #[test]
@@ -905,7 +1073,7 @@ mod tests {
                 "192.168.1.4",
             ),
         ] {
-            match check_local(url) {
+            match check_local_in(url, env(&[])) {
                 Err(DatabaseError::Remote { host: found }) => assert_eq!(found, host, "{url}"),
                 other => panic!("{url}: {other:?}"),
             }
@@ -925,6 +1093,19 @@ mod tests {
             Target::new("  ", root, true),
             Err(DatabaseError::NotConfigured)
         ));
+    }
+
+    #[test]
+    fn the_flag_allows_what_the_environment_names() {
+        let root = Path::new(".");
+        let url = "postgres://app@localhost/crm";
+        let remote: &'static [(&str, &str)] = &[("PGHOSTADDR", "10.0.0.5")];
+        assert!(matches!(
+            Target::new_in(url, root, false, env(remote)),
+            Err(DatabaseError::Remote { .. })
+        ));
+        assert!(Target::new_in(url, root, true, env(remote)).is_ok());
+        assert!(Target::new_in(url, root, false, env(&[])).is_ok());
     }
 
     #[test]
