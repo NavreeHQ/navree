@@ -84,6 +84,14 @@
     one-time value); Cancel sends the callback `error=access_denied&state=..`.
     For a custom-scheme app the page says "sign in again": Continue signs the
     browser out first.
+  - An app whose callback is not `https` (`custom_scheme`, every Windows
+    app) gets no code without the person's word: whoever holds the scheme
+    can start a hand-over itself, with a challenge of its own. After the
+    sign-in, `/auth/app/finish` answers 200 with the page ("The Windows app
+    <id> wants to sign in as <person> ... Continue only if you opened <id>
+    yourself"); the code leaves on Continue (`POST /auth/app/confirm`), for
+    the sign-in the page was shown for and no other. A test that drives
+    such a hand-over posts that form before it expects the callback.
   - The app's session keeps the sign-in time of the browser session the code
     came from (`#[recent_auth]` sees it). After a sign-in made for the
     hand-over it ends as a "remember me" sign-in made then would; after a

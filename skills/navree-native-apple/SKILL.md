@@ -185,7 +185,7 @@ host over https.
 
 | Feature | Unsigned, in the simulator | What it needs |
 |---|---|---|
-| The sign-in handed over on the app's own scheme | works | the scheme in `CFBundleURLTypes`; on the server `callback = "<scheme>:/signed-in"` with `custom_scheme = true` |
+| The sign-in handed over on the app's own scheme | works; after the sign-in the site asks on a page that names the app, and the code leaves on Continue | the scheme in `CFBundleURLTypes`; on the server `callback = "<scheme>:/signed-in"` with `custom_scheme = true` |
 | The sign-in handed over on an https link | not offered: the session is never opened | a team; Associated Domains on the App ID; `webcredentials:<host>`; the association file on a real https host |
 | Sign in with Apple | not offered | a team; Sign in with Apple on the App ID; the entitlement; a person signed in to an Apple Account on the device; `social.providers.apple` and `auth.apps.apple` on the server |
 | Passkeys, made or used | not offered | as the https sign-in, with `webcredentials:<rp_id>`; on the server `auth.passkeys` with `https://<rp_id>` among its origins, and `credentials` on the app in `auth.apps.apple`. The core asks the server for the passkey's options and hands them over with the call; a signed build lists `passkey` and `passkey_options`, and a server offers a passkey call only to a client that lists both |
