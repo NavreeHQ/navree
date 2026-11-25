@@ -112,31 +112,61 @@ where
     F: FnMut() -> Fut,
     Fut: Future<Output = Result<T>>,
 {
-    let started = Instant::now();
-    let mut delays = Delays::new(policy, rand::random::<f64>);
-    let mut retries = 0u32;
+    let mut budget = Budget::new(policy);
     loop {
         let error = match attempt().await {
             Ok(value) => return Ok(value),
             Err(error) => error,
         };
-        if !error.retryable(replay)
-            || retries >= policy.max_retries
-            || started.elapsed() > policy.retry_timeout
-        {
+        if !error.retryable(replay) {
             return Err(error);
         }
-        retries += 1;
-        let delay = delays.next();
+        let Some(delay) = budget.next_delay(policy) else {
+            return Err(error);
+        };
         tracing::info!(
             kind = ?error.kind(),
             status = error.status().map(|status| status.as_u16()),
-            retry = retries,
+            retry = budget.retries(),
             max_retries = policy.max_retries,
             delay_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
             "a request to a cloud store failed and is sent again"
         );
         tokio::time::sleep(delay).await;
+    }
+}
+
+/// What is left of a [`RetryPolicy`] for one thing that is tried again: a
+/// request, or the rest of a body that stopped.
+pub(super) struct Budget {
+    started: Instant,
+    retries: u32,
+    delays: Delays,
+}
+
+impl Budget {
+    /// The whole of `policy`, counted from now.
+    pub(super) fn new(policy: &RetryPolicy) -> Self {
+        Self {
+            started: Instant::now(),
+            retries: 0,
+            delays: Delays::new(policy, rand::random::<f64>),
+        }
+    }
+
+    /// How long to wait before the next try, or `None` when `policy`
+    /// allows no other: its retries are used up, or its time has passed.
+    pub(super) fn next_delay(&mut self, policy: &RetryPolicy) -> Option<Duration> {
+        if self.retries >= policy.max_retries || self.started.elapsed() > policy.retry_timeout {
+            return None;
+        }
+        self.retries += 1;
+        Some(self.delays.next())
+    }
+
+    /// How many times it was tried again.
+    pub(super) fn retries(&self) -> u32 {
+        self.retries
     }
 }
 

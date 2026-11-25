@@ -14,7 +14,8 @@
 //!    [`credentials::Provider::credential`], then the request is built and
 //!    signed, then [`http::Client::send`] and [`http::Response::success`].
 //! 3. [`http::Response::bytes_up_to`] and [`xml::parse`] for an answer, or
-//!    [`http::Response::stream`] for a file.
+//!    [`http::Response::resuming_stream`] for a file that is opened: it
+//!    asks for the rest when the body stops before the file does.
 //!
 //! Every part fails with [`Error`], which becomes a [`StoreError`] at the
 //! store's edge (a 404 is "not found"). Neither its text nor its `Debug`

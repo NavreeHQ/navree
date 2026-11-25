@@ -12,23 +12,29 @@
 //!   address.
 //! - **The times a request may take** are the ones the cloud disks have
 //!   always had: [`REQUEST_TIMEOUT`] for the whole request, body included,
-//!   and [`CONNECT_TIMEOUT`] to connect.
+//!   and [`CONNECT_TIMEOUT`] to connect. A file that takes longer to arrive
+//!   is read in more than one request
+//!   ([`Response::resuming_stream`]).
 //! - **HTTP/1.1, and no compression**, so `Content-Length` is the size of
 //!   the object.
 //! - **Nothing secret is shown.** The `Debug` form of a [`Request`] has no
 //!   query and no header value, and a failure has no URL.
 
 use std::fmt;
+use std::future::Future;
 use std::ops::Range;
 use std::time::Duration;
 
-use ::http::header::{CONTENT_LENGTH, HeaderMap, HeaderName, HeaderValue};
+use ::http::header::{
+    CONTENT_LENGTH, CONTENT_RANGE, ETAG, HeaderMap, HeaderName, HeaderValue, IF_MATCH, RANGE,
+};
 use ::http::{Method, StatusCode};
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt;
-use futures_util::stream::BoxStream;
+use futures_util::stream::{self, BoxStream};
 use url::Url;
 
+use super::retry::{Budget, Replay, RetryPolicy};
 use super::{Error, ErrorKind, Result};
 
 /// The longest one request may take, from connecting to the last byte of
@@ -448,11 +454,12 @@ impl Response {
         }
     }
 
-    /// The body in chunks, as they arrive: the contents of a file that is
-    /// streamed. [`REQUEST_TIMEOUT`] counts from the start of the request,
-    /// so a body still arriving when it runs out ends with a failure of
-    /// [`ErrorKind::Timeout`]; a driver then asks for the rest with a
-    /// `Range` (and `If-Match`, so it is the rest of the same file).
+    /// The body in chunks, as they arrive. [`REQUEST_TIMEOUT`] counts from
+    /// the start of the request, so a body still arriving when it runs out
+    /// ends with a failure of [`ErrorKind::Timeout`], and so does one whose
+    /// connection drops ([`ErrorKind::Interrupted`]): a file is streamed
+    /// with [`resuming_stream`](Self::resuming_stream), which goes on from
+    /// there.
     pub fn stream(self) -> BoxStream<'static, Result<Bytes>> {
         self.inner
             .bytes_stream()
@@ -462,6 +469,294 @@ impl Response {
                 })
             })
             .boxed()
+    }
+
+    /// The body of a file in chunks, read to its end even when it takes
+    /// longer than one request may or its connection drops: when the body
+    /// stops before the file does, the rest is asked for and the stream
+    /// goes on with the byte after the last it gave. It is what a driver's
+    /// `open` gives, from the answer to its `GET` (a `200`, or a `206` when
+    /// it asked for a range).
+    ///
+    /// `again` asks for the rest: it sends one more `GET` of the same file
+    /// with the headers it is handed added to the request, and gives the
+    /// answer as it comes. The headers are `Range` (`bytes=<next>-`, up to
+    /// the last byte of the range when this answer is one) and `If-Match`
+    /// with this answer's entity tag, so a store that has another file
+    /// there by now refuses (`412`). `again` is one try, signed with a
+    /// credential asked for at that moment: the stream does the waiting
+    /// and the trying again.
+    ///
+    /// The rest is taken only when it is the rest of this file: a `206`
+    /// whose `Content-Range` starts at the byte asked for and ends where
+    /// this answer does, with this answer's entity tag. Any other answer
+    /// ends the stream with a failure, and nothing of two files is ever
+    /// mixed: a status that is not a success as [`ErrorKind::Status`]
+    /// (asked again first if it says so: `408`, `429`, `5xx`), anything
+    /// else as [`ErrorKind::Answer`].
+    ///
+    /// The tries after the body stops, until a byte arrives, are held to
+    /// `policy`: at most its retries, within its time from the first of
+    /// them, its delays between them. Once a byte arrives the count starts
+    /// afresh, so a file of any size is read while it keeps coming, and a
+    /// store that stops answering ends the stream with the last failure.
+    ///
+    /// An answer without a strong entity tag (none, or a weak one,
+    /// `W/"..."`) is streamed as [`stream`](Self::stream) gives it, and a
+    /// failure of its body is the stream's: nothing would say that the rest
+    /// belongs to the same file.
+    ///
+    /// ```no_run
+    /// use futures_util::TryStreamExt;
+    /// use navree_storage::cloud::http::{Client, Request};
+    /// use navree_storage::cloud::retry::{Replay, RetryPolicy, with_backoff};
+    /// use navree_storage::store::{Method, Object, StoreError, StoreResult, Url};
+    ///
+    /// /// What a driver's `open` does with the address of an object.
+    /// async fn open(client: Client, url: Url, policy: RetryPolicy) -> StoreResult<Object> {
+    ///     let first = with_backoff(&policy, Replay::Safe, || async {
+    ///         // Signed, as every request is.
+    ///         let request = Request::new(Method::GET, url.clone());
+    ///         client.send(request).await?.success().await
+    ///     })
+    ///     .await?;
+    ///     let size = first.declared_length().unwrap_or(0);
+    ///     let (client, url) = (client.clone(), url.clone());
+    ///     let body = first.resuming_stream(&policy, move |rest| {
+    ///         let (client, url) = (client.clone(), url.clone());
+    ///         async move {
+    ///             let mut request = Request::new(Method::GET, url);
+    ///             request.headers.extend(rest);
+    ///             // Signed again, with a credential asked for now.
+    ///             client.send(request).await
+    ///         }
+    ///     });
+    ///     Ok(Object::new(size, Box::pin(body.map_err(StoreError::from))))
+    /// }
+    /// ```
+    pub fn resuming_stream<F, Fut>(
+        self,
+        policy: &RetryPolicy,
+        again: F,
+    ) -> BoxStream<'static, Result<Bytes>>
+    where
+        F: FnMut(HeaderMap) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<Response>> + Send + 'static,
+    {
+        let Some(position) = Position::of(self.status(), self.headers()) else {
+            return self.stream();
+        };
+        let resuming = Resuming {
+            body: self.stream(),
+            position,
+            policy: policy.clone(),
+            stall: None,
+            again,
+        };
+        stream::try_unfold(resuming, |mut resuming| async move {
+            let chunk = resuming.next().await?;
+            Ok(chunk.map(|chunk| (chunk, resuming)))
+        })
+        .boxed()
+    }
+}
+
+/// Where the body of a file stands, and what its rest must be.
+#[derive(Debug, PartialEq, Eq)]
+struct Position {
+    /// The entity tag of the first answer, which the rest must have too.
+    etag: HeaderValue,
+    /// The next byte of the file to arrive.
+    next: u64,
+    /// The byte after the last one the body holds, when the answer says.
+    end: Option<u64>,
+    /// The last byte to ask for, when the first answer is a range itself;
+    /// the rest of a whole file is asked for without one.
+    last: Option<u64>,
+}
+
+impl Position {
+    /// Where the body of an answer with `status` and `headers` starts and
+    /// ends; `None` when nothing says the rest would be of the same file:
+    /// no entity tag, a weak one (two bodies with one weak tag mean the
+    /// same and need not be the same bytes), or a range that does not say
+    /// which bytes it is.
+    fn of(status: StatusCode, headers: &HeaderMap) -> Option<Position> {
+        let etag = headers.get(ETAG)?;
+        if !etag.as_bytes().starts_with(b"\"") {
+            return None;
+        }
+        let text = |name: HeaderName| headers.get(name).and_then(|value| value.to_str().ok());
+        let (next, end, last) = if status == StatusCode::PARTIAL_CONTENT {
+            let (range, _) = content_range(text(CONTENT_RANGE)?)?;
+            (range.start, Some(range.end), Some(range.end - 1))
+        } else {
+            (0, text(CONTENT_LENGTH).and_then(number), None)
+        };
+        Some(Position {
+            etag: etag.clone(),
+            next,
+            end,
+            last,
+        })
+    }
+
+    /// Whether every byte of the body has arrived, as far as the answer
+    /// said how many there are.
+    fn reached_end(&self) -> bool {
+        self.end.is_some_and(|end| self.next >= end)
+    }
+
+    /// The headers that ask for the rest of the file, and only of this one.
+    fn rest(&self) -> HeaderMap {
+        let range = match self.last {
+            Some(last) => format!("bytes={}-{last}", self.next),
+            None => format!("bytes={}-", self.next),
+        };
+        let mut headers = HeaderMap::new();
+        // Digits, `=` and `-` always make a header value.
+        if let Ok(range) = HeaderValue::from_str(&range) {
+            headers.insert(RANGE, range);
+        }
+        headers.insert(IF_MATCH, self.etag.clone());
+        headers
+    }
+
+    /// Checks that a `206` with `headers` is the rest that was asked for,
+    /// and takes from it where the body ends.
+    fn take(&mut self, headers: &HeaderMap) -> Result<()> {
+        // The tag first: a store that takes no notice of `If-Match` sends
+        // the rest of whatever file is there now.
+        match headers.get(ETAG) {
+            Some(etag) if *etag == self.etag => {}
+            Some(_) => {
+                return Err(Error::new(
+                    ErrorKind::Answer,
+                    "the file changed while it was read",
+                ));
+            }
+            None => {
+                return Err(Error::new(
+                    ErrorKind::Answer,
+                    "the rest of a file was answered without its entity tag",
+                ));
+            }
+        }
+        let range = headers
+            .get(CONTENT_RANGE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(content_range);
+        let Some((range, _)) = range else {
+            return Err(Error::new(
+                ErrorKind::Answer,
+                "the rest of a file was answered without saying which bytes it is",
+            ));
+        };
+        if range.start != self.next || self.end.is_some_and(|end| range.end != end) {
+            return Err(Error::new(
+                ErrorKind::Answer,
+                "the rest of a file was answered with other bytes than were asked for",
+            ));
+        }
+        self.end = Some(range.end);
+        Ok(())
+    }
+}
+
+/// A body that asks for its rest when it stops: see
+/// [`Response::resuming_stream`].
+struct Resuming<F> {
+    body: BoxStream<'static, Result<Bytes>>,
+    position: Position,
+    policy: RetryPolicy,
+    /// The tries since the body stopped; `None` while it arrives.
+    stall: Option<Budget>,
+    again: F,
+}
+
+impl<F, Fut> Resuming<F>
+where
+    F: FnMut(HeaderMap) -> Fut,
+    Fut: Future<Output = Result<Response>>,
+{
+    /// The next chunk of the file, or `None` at its end.
+    async fn next(&mut self) -> Result<Option<Bytes>> {
+        loop {
+            let failure = match self.body.next().await {
+                Some(Ok(chunk)) if chunk.is_empty() => continue,
+                Some(Ok(chunk)) => {
+                    self.position.next += chunk.len() as u64;
+                    self.stall = None;
+                    return Ok(Some(chunk));
+                }
+                // The end, where the answer said it would be or where it
+                // said nothing.
+                None if self.position.end.is_none() || self.position.reached_end() => {
+                    return Ok(None);
+                }
+                None => Error::new(
+                    ErrorKind::Interrupted,
+                    "the answer ended before the file did",
+                ),
+                // A failure after the last byte takes nothing from the file.
+                Some(Err(_)) if self.position.reached_end() => return Ok(None),
+                Some(Err(error)) => error,
+            };
+            self.resume(failure).await?;
+        }
+    }
+
+    /// Asks for the rest after the body stopped with `failure`, until an
+    /// answer is the rest or the policy allows no other try. However the
+    /// body stopped, it is worth asking: reading does no harm twice.
+    async fn resume(&mut self, mut failure: Error) -> Result<()> {
+        loop {
+            let policy = &self.policy;
+            let stall = self.stall.get_or_insert_with(|| Budget::new(policy));
+            let Some(delay) = stall.next_delay(policy) else {
+                return Err(failure);
+            };
+            tracing::info!(
+                kind = ?failure.kind(),
+                status = failure.status().map(|status| status.as_u16()),
+                retry = stall.retries(),
+                max_retries = policy.max_retries,
+                delay_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
+                from = self.position.next,
+                "the body of a file stopped and its rest is asked for"
+            );
+            tokio::time::sleep(delay).await;
+            let rest = match (self.again)(self.position.rest()).await {
+                Ok(answer) => self.take(answer).await,
+                Err(error) => Err(error),
+            };
+            match rest {
+                Ok(body) => {
+                    self.body = body;
+                    return Ok(());
+                }
+                Err(error) if error.retryable(Replay::Safe) => failure = error,
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    /// The body of `answer` when it is the rest that was asked for.
+    async fn take(&mut self, answer: Response) -> Result<BoxStream<'static, Result<Bytes>>> {
+        if answer.status() != StatusCode::PARTIAL_CONTENT {
+            // A status that is not a success is its own failure: a 412 for
+            // a file that was replaced, a 503 to ask again.
+            let answer = answer.success().await?;
+            return Err(Error::new(
+                ErrorKind::Answer,
+                format!(
+                    "the store answered {} when asked for the rest of a file",
+                    answer.status()
+                ),
+            ));
+        }
+        self.position.take(answer.headers())?;
+        Ok(answer.stream())
     }
 }
 
@@ -733,5 +1028,131 @@ mod tests {
             )),
             "https://storage.googleapis.com/agra-media/a.png"
         );
+    }
+
+    fn headers(pairs: &[(&'static str, &'static str)]) -> HeaderMap {
+        pairs
+            .iter()
+            .map(|(name, value)| {
+                (
+                    HeaderName::from_static(name),
+                    HeaderValue::from_static(value),
+                )
+            })
+            .collect()
+    }
+
+    /// The answer to a `GET` of a whole file of 1000 bytes, 400 of which
+    /// have arrived.
+    fn at_400() -> Position {
+        let whole = headers(&[("etag", "\"v1\""), ("content-length", "1000")]);
+        let mut position = Position::of(StatusCode::OK, &whole).unwrap();
+        position.next = 400;
+        position
+    }
+
+    #[test]
+    fn the_rest_of_a_file_is_asked_from_the_next_byte_of_the_same_file() {
+        // A whole file: from the next byte on.
+        let whole = headers(&[("etag", "\"v1\""), ("content-length", "1000")]);
+        let position = Position::of(StatusCode::OK, &whole).unwrap();
+        assert_eq!(
+            (position.next, position.end, position.last),
+            (0, Some(1000), None)
+        );
+        assert_eq!(
+            at_400().rest(),
+            headers(&[("range", "bytes=400-"), ("if-match", "\"v1\"")])
+        );
+        assert!(!at_400().reached_end());
+
+        // A range of a file: from the next byte to the last of the range.
+        let range = headers(&[
+            ("etag", "\"v1\""),
+            ("content-range", "bytes 100-899/1000"),
+            ("content-length", "800"),
+        ]);
+        let mut position = Position::of(StatusCode::PARTIAL_CONTENT, &range).unwrap();
+        assert_eq!(
+            (position.next, position.end, position.last),
+            (100, Some(900), Some(899))
+        );
+        position.next = 400;
+        assert_eq!(
+            position.rest(),
+            headers(&[("range", "bytes=400-899"), ("if-match", "\"v1\"")])
+        );
+        position.next = 900;
+        assert!(position.reached_end());
+
+        // A file whose length the answer does not say.
+        let unsized_file = headers(&[("etag", "\"v1\"")]);
+        let position = Position::of(StatusCode::OK, &unsized_file).unwrap();
+        assert_eq!((position.next, position.end), (0, None));
+        assert!(!position.reached_end());
+    }
+
+    #[test]
+    fn nothing_is_asked_again_without_a_strong_entity_tag() {
+        for no_tag in [
+            headers(&[("content-length", "1000")]),
+            headers(&[("etag", "W/\"v1\""), ("content-length", "1000")]),
+            headers(&[("etag", "v1"), ("content-length", "1000")]),
+        ] {
+            assert_eq!(Position::of(StatusCode::OK, &no_tag), None, "{no_tag:?}");
+        }
+        // A range that does not say which bytes it is.
+        let range = headers(&[("etag", "\"v1\""), ("content-length", "800")]);
+        assert_eq!(Position::of(StatusCode::PARTIAL_CONTENT, &range), None);
+    }
+
+    #[test]
+    fn only_the_rest_that_was_asked_for_is_taken() {
+        let mut position = at_400();
+        let rest = headers(&[("etag", "\"v1\""), ("content-range", "bytes 400-999/1000")]);
+        position.take(&rest).unwrap();
+        assert_eq!((position.next, position.end), (400, Some(1000)));
+
+        for (answer, says) in [
+            (headers(&[("etag", "\"v1\"")]), "without saying which bytes"),
+            (
+                headers(&[("etag", "\"v1\""), ("content-range", "bytes 0-999/1000")]),
+                "other bytes",
+            ),
+            (
+                headers(&[("etag", "\"v1\""), ("content-range", "bytes 401-999/1000")]),
+                "other bytes",
+            ),
+            (
+                headers(&[("etag", "\"v1\""), ("content-range", "bytes 400-1099/1100")]),
+                "other bytes",
+            ),
+            (
+                headers(&[("etag", "\"v2\""), ("content-range", "bytes 400-999/1000")]),
+                "the file changed",
+            ),
+            // Another file of another size: what it is comes first.
+            (
+                headers(&[("etag", "\"v2\""), ("content-range", "bytes 400-1099/1100")]),
+                "the file changed",
+            ),
+            (
+                headers(&[("content-range", "bytes 400-999/1000")]),
+                "without its entity tag",
+            ),
+        ] {
+            let error = at_400().take(&answer).unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::Answer, "{answer:?}");
+            assert!(error.to_string().contains(says), "{error}");
+            assert!(!error.retryable(Replay::Safe));
+        }
+
+        // Where the first answer gave no length, the rest says where the
+        // file ends.
+        let unsized_file = headers(&[("etag", "\"v1\"")]);
+        let mut position = Position::of(StatusCode::OK, &unsized_file).unwrap();
+        position.next = 400;
+        position.take(&rest).unwrap();
+        assert_eq!(position.end, Some(1000));
     }
 }
