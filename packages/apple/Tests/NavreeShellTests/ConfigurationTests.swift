@@ -31,8 +31,9 @@ import Testing
     #expect(CoreConfiguration.caps(signedWith: [.associatedDomains], signInScheme: nil).contains("confirm"))
     #expect(CoreConfiguration.caps(signedWith: [.signInWithApple], signInScheme: nil).contains("platform_sign_in"))
     #expect(CoreConfiguration.caps(signedWith: [.pushNotifications], signInScheme: nil).contains("push"))
-    // A passkey's own request is never fetched by the core: no build lists it.
-    #expect(!CoreConfiguration.caps(signedWith: Set(Entitlement.allCases), signInScheme: "x").contains("passkey"))
+    // A passkey needs the origin as an associated domain, as a confirmation signed with one does.
+    #expect(CoreConfiguration.caps(signedWith: [.associatedDomains], signInScheme: nil).contains("passkey"))
+    #expect(!CoreConfiguration.caps(signedWith: [.signInWithApple, .pushNotifications], signInScheme: "x").contains("passkey"))
     // Listing nothing the protocol does not name.
     let known: Set<String> = [
         "clipboard", "share", "capture", "auth_session", "open_url", "push", "local_notification", "passkey", "confirm",

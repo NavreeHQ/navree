@@ -291,15 +291,17 @@ struct SheetTests {
         #expect(run(signIn, options: bare, signedWith: [.associatedDomains], []).asked.count == 1)
     }
 
-    /// The core never fetches a passkey's options: the call arrives with
-    /// none, and no request is made here to get them.
+    /// The core asks the server for a passkey's options and hands them over
+    /// with the call. A call that arrives with none shows no sheet, and no
+    /// request is made here to get them.
     @Test func aPasskeyCallWithoutItsOptionsIsRefusedWithoutASheet() {
         let register = DeviceRequest.call(.passkey(.init(mode: .register, options: "/api/auth/passkeys/register/options")))
         let (asked, answers) = run(register, options: nil, signedWith: [.associatedDomains], [])
         #expect(asked.isEmpty && answers == [.refused(.failed)])
         #expect(run(register, options: Self.registrationOptions, signedWith: [], []).answers == [.refused(.notBuilt)])
-        // And no build offers it while that is so.
-        #expect(!CoreConfiguration.caps(signedWith: Set(Entitlement.allCases), signInScheme: "charkha").contains("passkey"))
+        // A build offers it only when it is signed with the site's domain.
+        #expect(CoreConfiguration.caps(signedWith: [.associatedDomains], signInScheme: "charkha").contains("passkey"))
+        #expect(!CoreConfiguration.caps(signedWith: [], signInScheme: "charkha").contains("passkey"))
     }
 
     // MARK: - Notifications
