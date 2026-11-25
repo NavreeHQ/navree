@@ -77,6 +77,10 @@ public sealed class PersonChange
     private bool saidNoKey;
     private bool wasCovered;
 
+    // The two marks of the person named, while what waits under the first is still to be kept under the second: the mark they had
+    // before the core made their key with the install's secret, and the mark they have now.
+    private (string Before, string After)? owedMove;
+
     /// <summary>Makes it for one host.</summary>
     /// <param name="watch">Who was named last.</param>
     /// <param name="gate">The gate the host marks what the core says with.</param>
@@ -102,6 +106,12 @@ public sealed class PersonChange
 
     /// <summary>The change of person that began last, with what came of each part when it is over; null when none has begun.</summary>
     public Task<WipeReport>? Last { get; private set; }
+
+    /// <summary>
+    /// The keeping of what waits for the person under the mark they have now, as it was tried last; null when none was tried. It is over
+    /// when the mark has had its turn to be written and, when it was written, what waits has been kept under it.
+    /// </summary>
+    public Task? Moved { get; private set; }
 
     /// <summary>
     /// The mark of the person what is kept is kept for: the one named last, and still that one while a later state names nobody, since
@@ -185,6 +195,9 @@ public sealed class PersonChange
 
         if (heard == PersonHeard.Another)
         {
+            // What waited under a mark the person before had is theirs, and goes with the rest of what was kept for them.
+            owedMove = null;
+
             // Nothing stands between the watch taking the person who is here now and the change being owed: the first thing a change
             // does is to say so to the keeper.
             Last = ChangeAsync(mark);
@@ -194,9 +207,8 @@ public sealed class PersonChange
             if (heard == PersonHeard.Same && markBefore is not null && !string.Equals(markBefore, mark, StringComparison.Ordinal))
             {
                 // The same person, named by the key the core makes with the install's secret where the mark kept was of their plain
-                // key: what waits for them under the mark before is theirs still, and waits under the mark they have now. The keeper
-                // writes that mark below, in place of the one before.
-                MoveWaiting(markBefore, mark);
+                // key: what waits for them under the mark before is theirs still, and is to wait under the mark they have now.
+                owedMove = (markBefore, mark);
             }
 
             if (heard == PersonHeard.First)
@@ -219,7 +231,21 @@ public sealed class PersonChange
                 DropWaitingForNobody();
             }
 
-            keeper.KeepPerson(mark);
+            if (owedMove is (string before, string after) && string.Equals(after, mark, StringComparison.Ordinal))
+            {
+                // The mark is written first, and what waits is kept under it only once that mark is the one kept. Were what waits
+                // written under a mark that then could not be, the next start would read the mark before, find what waits to be
+                // somebody else's, and let go of it. Until then it waits under the mark before, and is tried again with each state
+                // that names the person.
+                if (Moved is null || Moved.IsCompleted)
+                {
+                    Moved = MoveWhenKeptAsync(before, after);
+                }
+            }
+            else
+            {
+                keeper.KeepPerson(mark);
+            }
         }
 
         return heard;
@@ -231,6 +257,40 @@ public sealed class PersonChange
         watch.SignedOut();
         Here = null;
         wasCovered = false;
+        owedMove = null;
+    }
+
+    // Writes the mark the person has now and, when it is the mark kept, keeps what waited under the mark before under it, on the
+    // window's thread. A mark that could not be written leaves what waits where it is: nothing of it is lost, and the next state that
+    // names the person tries again.
+    private async Task MoveWhenKeptAsync(string before, string after)
+    {
+        try
+        {
+            if (!await keeper.KeepPersonAsync(after).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            await parts.OnWindow(() =>
+            {
+                // A sign-out, or another person, since the mark was asked to be written took what waited away with the rest.
+                if (owedMove is (string had, string has)
+                    && string.Equals(had, before, StringComparison.Ordinal)
+                    && string.Equals(has, after, StringComparison.Ordinal)
+                    && string.Equals(watch.Named, after, StringComparison.Ordinal))
+                {
+                    owedMove = null;
+                    MoveWaiting(before, after);
+                }
+
+                return Task.CompletedTask;
+            }).ConfigureAwait(false);
+        }
+        catch (Exception failure)
+        {
+            Say("what waited for the person under the mark they had before could not be kept under the mark they have now: " + failure.GetType().Name);
+        }
     }
 
     private void DropWaitingForNobody()
