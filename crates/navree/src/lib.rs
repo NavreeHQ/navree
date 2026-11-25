@@ -13,6 +13,7 @@
 //! | [`kernel`] | navree-kernel | always | module graph, DI container, lifecycle, commands |
 //! | [`bounded`] | navree-bounded | always | the bounded in-process `Cache`: strict capacity, SIEVE eviction, TTL and TTI, single-flight loading |
 //! | [`glob`] | navree-glob | always | the glob matcher for configured patterns: `*` any run of characters, `?` one, everything else literal |
+//! | [`datetime`] | navree-datetime | always | dates and times of Navree's own: `Timestamp` (an instant), `Date`, `Time`, `DateTime`, `Offset`, and `Span` (an exact length of time) |
 //! | [`contracts`] | navree-contracts | always | cross-module traits: `Principal`, `Job`, `Clock`, `AuditSink`, ... |
 //! | [`config`] | navree-config | always | `ConfigModule`, `.env`, TOML, JSON and `APP_*` sources |
 //! | [`embed_locales!`] | navree-i18n-macros | always | Fluent files embedded in a binary, for any crate's translations (also `navree::i18n::embed_locales`) |
@@ -176,6 +177,8 @@ pub mod prelude;
 pub use navree_bounded as bounded;
 pub use navree_config as config;
 pub use navree_contracts as contracts;
+/// Dates and times: instants, days, times of day, offsets and spans.
+pub use navree_datetime as datetime;
 pub use navree_glob as glob;
 pub use navree_kernel as kernel;
 /// OpenAPI: the document model, and `ToSchema` (trait and derive).

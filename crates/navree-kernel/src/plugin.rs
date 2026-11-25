@@ -447,6 +447,7 @@ pub const FRAMEWORK_CRATES: &[&str] = &[
     "navree_config",
     "navree_contracts",
     "navree_crypto",
+    "navree_datetime",
     "navree_db",
     "navree_directory",
     "navree_dock",
@@ -1152,7 +1153,7 @@ mod tests {
                 "{package}: `{ns}`"
             );
         }
-        assert_eq!(FRAMEWORK_CRATES.len(), 74);
+        assert_eq!(FRAMEWORK_CRATES.len(), 75);
         assert!(FRAMEWORK_CRATES.windows(2).all(|w| w[0] < w[1]));
         assert!(is_framework_crate("navree_kernel::__private::PlainModule"));
         assert!(is_framework_crate("&navree_ui::module::UiModule"));

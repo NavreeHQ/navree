@@ -1,0 +1,23 @@
+[package]
+name = "navree-datetime"
+description = "Navree's dates and times: instants, calendar days, times of day, offsets and exact spans, with no third-party time crate under them."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["navree", "date", "time", "datetime", "calendar"]
+categories = ["date-and-time"]
+readme = "README.md"
+include = ["src/**", "README.md", "LICENSE-*"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+# The tests read the recorded values in `tests/golden/`, one JSON object a line.
+serde_json = { workspace = true }

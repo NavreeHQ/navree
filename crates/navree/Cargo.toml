@@ -737,6 +737,7 @@ harbor = ["dep:navree-harbor", "template"]
 
 [dependencies]
 navree-bounded = { workspace = true }
+navree-datetime = { workspace = true }
 navree-glob = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }

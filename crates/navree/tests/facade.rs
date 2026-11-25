@@ -27,6 +27,10 @@ fn every_module_crate_is_reexported_whole() {
     >());
     assert!(same::<navree::glob::Glob, navree_glob::Glob>());
     assert!(same::<
+        navree::datetime::Timestamp,
+        navree_datetime::Timestamp,
+    >());
+    assert!(same::<
         navree::contracts::RequestId,
         navree::contracts::RequestId,
     >());
@@ -603,10 +607,11 @@ const OPT_IN: &[&str] = &[
 ];
 
 /// Always compiled into the facade (not behind a feature).
-const ALWAYS: [&str; 8] = [
+const ALWAYS: [&str; 9] = [
     "navree-kernel",
     "navree-bounded",
     "navree-glob",
+    "navree-datetime",
     "navree-contracts",
     "navree-config",
     "navree-macros",

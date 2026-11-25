@@ -92,6 +92,10 @@ const HIERARCHY: &[Rule] = &[
     // and fake stubs, the Logbook's ignored routes and the session layer's
     // CSRF exceptions. It depends on no navree crate.
     rule("navree-glob", 0, &[]),
+    // Dates and times of Navree's own: instants, days, times of day, offsets
+    // and spans, and the one arithmetic of the calendar under them. It depends
+    // on no navree crate, and the facade re-exports it.
+    rule("navree-datetime", 0, &[]),
     // Markdown read once and read safely: CommonMark into events that hold no raw
     // HTML, no script link and no unbounded document. navree-ui draws them as
     // elements and navree-api as HTML for the descriptions of its reference. It
@@ -627,6 +631,7 @@ const RUNTIME_CRATES: &[&str] = &[
     "navree-markdown",
     "navree-native",
     "navree-glob",
+    "navree-datetime",
     "navree-phone",
     "navree-template",
     "navree-macros",
