@@ -11,7 +11,7 @@ public enum ReturnKind
     /// <summary>On a link of the site: only an installed package that the site names can catch it, which no build here is.</summary>
     Https,
 
-    /// <summary>On a port of the machine itself, which the app listens on while the sign-in is open.</summary>
+    /// <summary>On a port of the machine itself. It is read so that it can be refused by name: the app listens on no port, which every account on the machine could reach.</summary>
     Loopback,
 }
 

@@ -266,21 +266,24 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// An address came to the app on its own scheme. It goes to the core as it came: as the return of the sign-in that is open, or as a link
-    /// from outside when none is, and the core takes it only with that sign-in's <c>state</c>, on the way back that sign-in named. With signing
-    /// in through the browser turned off (<see cref="BrowserSignIn"/>) it is dropped: never opened as a page, never taken as a sign-in's
-    /// return, and the core is not told of it.
+    /// An address came to the app on its own scheme. It goes to the core as it came: the open sign-in's own return (on the way back that
+    /// sign-in named, with its <c>state</c>) as that sign-in's end, and anything else as a link from outside, with or without a sign-in
+    /// open. So a link to a page of the app that arrives while a sign-in is open is opened, and the sign-in stays open; the core holds every
+    /// return to the way back and the <c>state</c> of the sign-in it opened, however it is handed on. With signing in through the browser
+    /// turned off (<see cref="BrowserSignIn"/>) the address is dropped: never opened as a page, never taken as a sign-in's return, and the
+    /// core is not told of it.
     /// </summary>
     /// <param name="address">The whole address.</param>
     public void HandleReturn(string address)
     {
         ArgumentNullException.ThrowIfNull(address);
-        switch (BrowserSignIn.Route(BrowserSignIn.Offered, signIn.IsOpen, address))
+
+        // The sign-in's own return ends the sign-in here too: it is no longer open, so what arrives after it is a link from outside, and its
+        // time running out tells the core nothing more. Any other address leaves it open. Turned off, the sign-in is not asked.
+        SignInOffer offer = BrowserSignIn.Offered ? signIn.Offer(address, out _) : SignInOffer.NoneOpen;
+        switch (BrowserSignIn.Route(BrowserSignIn.Offered, offer, address))
         {
             case Arrival.SignInDone:
-                // The sign-in's own return ends the sign-in here too: it is no longer open, so what arrives after it is a link from outside,
-                // and its time running out tells the core nothing more. Any other address leaves it open; the core is told either way.
-                _ = signIn.Offer(address, out _);
                 client.Send(Events.SignInDone(address));
                 break;
             case Arrival.OpenLink:

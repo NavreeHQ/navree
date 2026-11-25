@@ -6,10 +6,16 @@ public enum Arrival
     /// <summary>Nothing: it is not used, not opened as a page, and the core is not told of it.</summary>
     Dropped,
 
-    /// <summary>The core is told the sign-in it opened came back with it; the core takes it only with that sign-in's state.</summary>
+    /// <summary>
+    /// The core is told the sign-in it opened came back with it: the address is on the way back that sign-in named and carries its state. The
+    /// core checks both again before it takes it.
+    /// </summary>
     SignInDone,
 
-    /// <summary>The core is given it as a link from outside; the core never opens a sign-in's return as a page.</summary>
+    /// <summary>
+    /// The core is given it as a link from outside, with or without a sign-in open: a link to a page of the app opens that page, and the core
+    /// never opens a sign-in's return as a page.
+    /// </summary>
     OpenLink,
 }
 
@@ -21,16 +27,18 @@ public enum Arrival
 /// takes a scheme of the app's own (<see cref="ComesBack"/>): only then is the core told the build has a sign-in session, is the scheme
 /// registered, and does a link to a sign-in address open the browser. Every address that arrives on the scheme is handed to the core as it came,
 /// and the core decides: it takes a return only while the sign-in it opened is open, on the way back that sign-in named, with its
-/// <c>state</c>. Turned off (<see cref="Offered"/> false), no sign-in in the browser is started, the scheme is neither registered nor offered,
-/// and an address that arrives on it is dropped, with or without a sign-in open.
+/// <c>state</c>. The open sign-in's own return is handed to it as that sign-in's end; any other address, while a sign-in is open too, as a
+/// link from outside, so a link to a page of the app still opens that page (<see cref="Route"/>). Turned off (<see cref="Offered"/> false),
+/// no sign-in in the browser is started, the scheme is neither registered nor offered, and an address that arrives on it is dropped, with or
+/// without a sign-in open.
 /// </summary>
 /// <remarks>
 /// What it stands on, each of which has to stay true while it is on: the server lists Windows apps for the hand-over (the app's id is its package
 /// family name when packaged, its configured id when not) with their callback on the app's scheme, and names that callback to a Windows client
 /// in the shell; and a transcript made by the core (<c>hand-over-windows.json</c>) shows a Windows sign-in starting with its <c>state</c> and
 /// challenge and refusing a return with another <c>state</c>, with none, or with no sign-in open. The server gives a Windows app's sign-in to a
-/// link of its own scheme and to nothing else, so a return on a port of this machine (<see cref="LoopbackReturn"/>) or on a link of the site
-/// is not taken, and no port is listened on (<see cref="WhyNotReturn"/>).
+/// link of its own scheme and to nothing else, so a return on a port of this machine or on a link of the site is not taken, and the client has
+/// nothing that listens on a port (<see cref="WhyNotReturn"/>): a port of the machine can be reached by every account on it.
 /// </remarks>
 public static class BrowserSignIn
 {
@@ -74,19 +82,23 @@ public static class BrowserSignIn
         };
     }
 
-    /// <summary>What is done with an address that arrived on the app's scheme.</summary>
+    /// <summary>
+    /// What is done with an address that arrived on the app's scheme. Only the open sign-in's own return is told to the core as that sign-in's
+    /// end. Anything else is a link from outside, also while a sign-in is open: a link to a page of the app is then opened and not lost, and an
+    /// address that only looks like a return is refused by the core, which holds one to the way back and the <c>state</c> of the sign-in.
+    /// </summary>
     /// <param name="offered">Whether signing in through the browser is offered (<see cref="Offered"/>).</param>
-    /// <param name="signInOpen">Whether a sign-in in the browser that this app started is open.</param>
+    /// <param name="offer">What the sign-in that is open made of the address (<see cref="SignInTracker.Offer"/>).</param>
     /// <param name="address">The whole address, as it came.</param>
     /// <returns>What is done.</returns>
-    public static Arrival Route(bool offered, bool signInOpen, string address)
+    public static Arrival Route(bool offered, SignInOffer offer, string address)
     {
         if (!offered || string.IsNullOrWhiteSpace(address))
         {
             return Arrival.Dropped;
         }
 
-        return signInOpen ? Arrival.SignInDone : Arrival.OpenLink;
+        return offer == SignInOffer.Taken ? Arrival.SignInDone : Arrival.OpenLink;
     }
 
     /// <summary>The app's id the hand-over names it by: the package family name when the app runs from a package, the configured id when not.</summary>

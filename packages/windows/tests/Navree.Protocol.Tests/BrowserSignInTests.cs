@@ -134,6 +134,40 @@ public sealed class BrowserSignInTests
     }
 
     [TestMethod]
+    public async Task While_a_sign_in_is_open_the_core_tells_a_link_to_a_page_from_an_address_on_the_callback()
+    {
+        using CoreClient client = new(Config(WithSession, "charkha", Paths), _ => { });
+        await client.SendAsync(Events.Start);
+        await client.SendAsync(Events.Response(1, 200, Native, null, [], Shell(Callback)));
+        Update shown = await client.SendAsync(Events.Response(2, 200, Native, null, [], Welcome()));
+        long screen = shown.State.Nav.Front ?? throw new AssertFailedException("no screen is in front");
+        Update tapped = await client.SendAsync(Events.Act(screen, new Models.ActionNavigate { Href = "/auth/google/redirect" }));
+        RandomEffect random = tapped.Effects.OfType<RandomEffect>().Single();
+        Update opened = await client.SendAsync(Events.Random(random.Request, Bytes));
+        Expect.That(opened.Effects.OfType<SignInEffect>().Any(), "no sign-in was started");
+
+        // What the client hands on as a link from outside while its sign-in is open. An address on the callback that is not the sign-in's
+        // return is held to the sign-in's state by the core all the same: it is refused, and nothing is exchanged or opened.
+        foreach (string planted in new[] { Callback + "?code=OTHER00000&state=not-the-state", Callback + "?code=OTHER00000" })
+        {
+            Update refused = await client.SendAsync(Events.OpenLink(planted));
+            Expect.That(!refused.Effects.OfType<FetchEffect>().Any(), "an address on the callback that is not the sign-in's return was exchanged or opened");
+            Expect.That(refused.Effects.OfType<ReportEffect>().Any(report => report.What == "sign_in"), "an address on the callback was not said to be refused");
+        }
+
+        // A link to a page of the app is no return: the core says nothing of a sign-in for it, and exchanges nothing.
+        Update link = await client.SendAsync(Events.OpenLink("charkha://orders/7"));
+        Expect.That(!link.Effects.OfType<ReportEffect>().Any(report => report.What == "sign_in"), "a link to a page of the app was taken for a sign-in's return");
+        Expect.That(!link.Effects.OfType<FetchEffect>().Any(IsExchange), "a link to a page of the app was exchanged");
+
+        // The sign-in is still open: its own return is exchanged.
+        Update back = await client.SendAsync(Events.SignInDone(Callback + "?code=Tq7uX0b2c9&state=" + State));
+        Expect.That(back.Effects.OfType<FetchEffect>().Any(IsExchange), "the sign-in's own return was not exchanged after a link to a page arrived");
+    }
+
+    private static bool IsExchange(FetchEffect fetch) => fetch.Url.EndsWith("/api/auth/app/exchange", StringComparison.Ordinal);
+
+    [TestMethod]
     public async Task A_callback_that_is_not_on_the_apps_own_scheme_starts_no_sign_in()
     {
         // A shell that names a way back the app cannot be sure is its own: another scheme, a port of this machine, a link of another site.

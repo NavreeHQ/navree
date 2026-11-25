@@ -114,16 +114,38 @@ public sealed class BrowserSignInTests
     }
 
     [TestMethod]
-    public void Every_arrival_goes_to_the_core_as_it_came_which_decides()
+    public void While_a_sign_in_is_open_only_its_own_return_ends_it_and_any_other_address_is_a_link_from_outside()
     {
-        // The core takes a return only while the sign-in it opened is open, on the way back it named and with its state; anything else it refuses.
-        const string other = "charkha:/signed-in?code=OTHER00000&state=not-the-state";
-        Assert.AreEqual(Arrival.SignInDone, BrowserSignIn.Route(BrowserSignIn.Offered, signInOpen: true, other));
-        Assert.AreEqual(Arrival.OpenLink, BrowserSignIn.Route(BrowserSignIn.Offered, signInOpen: false, other));
-        Assert.AreEqual(Arrival.SignInDone, BrowserSignIn.Route(offered: true, signInOpen: true, other));
-        Assert.AreEqual(Arrival.OpenLink, BrowserSignIn.Route(offered: true, signInOpen: false, other));
-        Assert.AreEqual(Arrival.Dropped, BrowserSignIn.Route(offered: true, signInOpen: true, string.Empty));
-        Assert.AreEqual(Arrival.Dropped, BrowserSignIn.Route(offered: true, signInOpen: false, " "));
+        SignInTracker tracker = new();
+        DateTimeOffset now = new(2026, 11, 25, 10, 0, 0, TimeSpan.FromMinutes(330));
+        _ = tracker.Begin(SignInReturn.Parse("charkha:/signed-in")!, now, TimeSpan.FromMinutes(10), State);
+
+        // A link to a page of the app, and addresses that only look like the return: each goes to the core as a link from outside, which
+        // opens the page and refuses the rest, and the sign-in stays open.
+        string[] notTheReturn =
+        [
+            "charkha://orders/7",
+            "charkha:/signed-in?code=OTHER00000&state=not-the-state",
+            "charkha:/signed-in?code=OTHER00000",
+            "charkha:/signed-in",
+        ];
+        foreach (string address in notTheReturn)
+        {
+            Assert.AreEqual(Arrival.OpenLink, BrowserSignIn.Route(BrowserSignIn.Offered, tracker.Offer(address, out _), address), address);
+            Expect.That(tracker.IsOpen, address + " ended the sign-in");
+        }
+
+        // Its own return is told to the core as the sign-in's end, once. The same address again is a link from outside, which the core never
+        // opens as a page.
+        string own = "charkha:/signed-in?code=Tq7uX0b2c9&state=" + State;
+        Assert.AreEqual(Arrival.SignInDone, BrowserSignIn.Route(offered: true, tracker.Offer(own, out _), own));
+        Expect.That(!tracker.IsOpen, "the sign-in is still open after its return");
+        Assert.AreEqual(Arrival.OpenLink, BrowserSignIn.Route(offered: true, tracker.Offer(own, out _), own));
+
+        // With no sign-in open every address is a link from outside, and an address that says nothing is not told to the core at all.
+        Assert.AreEqual(Arrival.OpenLink, BrowserSignIn.Route(offered: true, SignInOffer.NoneOpen, "charkha://orders/7"));
+        Assert.AreEqual(Arrival.Dropped, BrowserSignIn.Route(offered: true, SignInOffer.NoneOpen, string.Empty));
+        Assert.AreEqual(Arrival.Dropped, BrowserSignIn.Route(offered: true, SignInOffer.Taken, " "));
     }
 
     [TestMethod]
@@ -139,8 +161,10 @@ public sealed class BrowserSignInTests
         ];
         foreach (string address in arriving)
         {
-            Assert.AreEqual(Arrival.Dropped, BrowserSignIn.Route(offered: false, signInOpen: true, address), address + " with a sign-in open");
-            Assert.AreEqual(Arrival.Dropped, BrowserSignIn.Route(offered: false, signInOpen: false, address), address + " with none open");
+            foreach (SignInOffer offer in Enum.GetValues<SignInOffer>())
+            {
+                Assert.AreEqual(Arrival.Dropped, BrowserSignIn.Route(offered: false, offer, address), address + " offered as " + offer);
+            }
         }
     }
 
