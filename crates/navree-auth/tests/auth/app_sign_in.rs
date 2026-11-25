@@ -1026,6 +1026,105 @@ async fn an_attempt_or_a_confirmation_used_twice_at_once_issues_one_code() {
     assert_eq!(codes_among(&[one, two]), 1);
 }
 
+/// `GET path` with `headers` on the request, as the browser or a script
+/// says how it asks.
+async fn asked_with(client: &TestClient, path: &str, headers: &[(&str, &str)]) -> TestResponse {
+    let mut request = client.get(path).header("accept", "text/html");
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    request.send().await
+}
+
+// Only the browser itself opens the finish address. Fetched by the sign-in
+// page's script or any other, loaded ahead of a click or in a frame, it
+// changes nothing, so the hand-over is still there for the browser; the
+// answer is a page no runtime shows, so navree-ui's goes there for real.
+#[tokio::test]
+async fn only_the_browsers_own_navigation_finishes_a_hand_over() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    create_user(&app, "simran@example.com").await;
+    let (verifier, challenge) = pkce("fetched");
+    let sheet = app.client();
+    start(&sheet, &challenge, "s-30").await.assert_status(303);
+    let to_sign_in = get(&sheet, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    sign_in_form(&sheet, "simran@example.com", &back)
+        .await
+        .assert_status(303);
+
+    for headers in [
+        // navree-ui's runtime, going there or fetching ahead of a click.
+        &[("x-navree-ui", "1")][..],
+        &[("x-navree-ui", "1"), ("x-navree-prefetch", "1")],
+        // Any other script's fetch.
+        &[
+            ("sec-fetch-mode", "cors"),
+            ("sec-fetch-dest", "empty"),
+            ("sec-fetch-site", "same-origin"),
+        ],
+        // The browser loading the page ahead of a click, and a frame.
+        &[
+            ("sec-fetch-mode", "navigate"),
+            ("sec-fetch-dest", "document"),
+            ("sec-purpose", "prefetch"),
+        ],
+        &[("sec-fetch-mode", "navigate"), ("sec-fetch-dest", "iframe")],
+    ] {
+        let refused = asked_with(&sheet, &back, headers).await;
+        assert_eq!(
+            refused.status().as_u16(),
+            403,
+            "{headers:?}: {}",
+            refused.text()
+        );
+        assert_eq!(refused.header("location"), None, "{headers:?}");
+        // HTML that does not say it is a page of the app: what navree-ui's
+        // runtime loads for real, at the address the answer came from.
+        assert!(
+            refused
+                .header("content-type")
+                .is_some_and(|kind| kind.starts_with("text/html")),
+            "{headers:?}"
+        );
+        assert_eq!(refused.header("x-navree-page"), None, "{headers:?}");
+        assert_eq!(refused.header("cache-control"), Some("no-store"));
+        assert_eq!(refused.header("referrer-policy"), Some("no-referrer"));
+        assert_eq!(refused.header("x-frame-options"), Some("DENY"));
+        let page = refused.text();
+        assert!(
+            !page.contains("code=") && !page.contains("<script"),
+            "{page}"
+        );
+    }
+    // Nothing changed: the browser is still signed in for the hand-over, and
+    // no hand-over was refused.
+    whoami(&sheet).await.assert_status(200);
+    assert!(sink.with_action("auth.app_sign_in_refused").is_empty());
+
+    // The browser itself goes there, and the code leaves for the app.
+    let handed = asked_with(
+        &sheet,
+        &back,
+        &[
+            ("sec-fetch-mode", "navigate"),
+            ("sec-fetch-dest", "document"),
+            ("sec-fetch-site", "same-origin"),
+        ],
+    )
+    .await;
+    let code = callback_code(&handed, "s-30");
+    exchange(&phone(&app).await, "apple", &code, &verifier)
+        .await
+        .assert_status(200);
+    // A fetch afterwards is told the same, whatever became of the hand-over.
+    asked_with(&sheet, &back, &[("x-navree-ui", "1")])
+        .await
+        .assert_status(403);
+    assert!(sink.with_action("auth.app_sign_in_refused").is_empty());
+}
+
 /// The `next` of the sign-in page a hand-over sends the browser to: the
 /// finish address with the hand-over's `attempt`.
 fn finish_with_attempt(sign_in: &str) -> String {

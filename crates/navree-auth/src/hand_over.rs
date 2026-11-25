@@ -72,13 +72,27 @@
 //! gets a sign-in the browser already had: the person signs in again. The
 //! answers of the finish and the confirmation are `no-store` and
 //! `no-referrer`.
+//!
+//! Only the browser's own navigation finishes a hand-over. The finish
+//! answers with a redirect to the app's callback, which reaches the app only
+//! when the browser itself follows it; a script's `fetch` would take the
+//! one-time `attempt` and the code with it, and the app would never hear of
+//! either. So a request for the finish address that says it is anything else
+//! (navree-ui's runtime or a native client asking, a fetch by a script, a
+//! page loaded ahead of a click, a frame) changes nothing and is answered
+//! `403` with a small page that is none of navree-ui's. The runtime shows
+//! only a page that says it is the app's and loads any other for real, at
+//! the address the answer came from: a fetch of its own that reaches the
+//! finish address ends as the browser's own navigation to it. The sign-in
+//! pages (`AuthPages`) do not let it come to that: they tell the runtime to
+//! leave for the finish address, which it does without a fetch.
 
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
 use http::header::{CACHE_CONTROL, REFERRER_POLICY, X_FRAME_OPTIONS};
-use http::{HeaderValue, Method};
+use http::{HeaderMap, HeaderValue, Method, StatusCode};
 use navree_contracts::AuditKind;
 use navree_crypto::{constant_time_eq, random_token, sha256_hex};
 use navree_http::response::{Html, Redirect};
@@ -126,6 +140,59 @@ const PENDING_KEY: &str = "_auth_app";
 
 /// The longest `state` an app may pass, in bytes.
 const MAX_STATE_LEN: usize = 512;
+
+/// The request headers of navree-ui's browser runtime and of a native
+/// client: each asks with its own HTTP stack, never as the browser's
+/// navigation.
+const ASKED_BY_CODE: [&str; 2] = ["x-navree-ui", "x-navree-native"];
+
+/// The request headers of a page loaded ahead of a click, which the person
+/// may never open: `Sec-Purpose` of today's browsers, and the two older
+/// ones.
+const AHEAD_OF_A_CLICK: [&str; 3] = ["sec-purpose", "purpose", "x-moz"];
+
+/// Whether a request with these `headers` is the browser's own navigation to
+/// a page of its own: not navree-ui's runtime or a native client asking, not
+/// a page loaded ahead of a click, and, where the browser says how it asks
+/// (`Sec-Fetch-Mode`, `Sec-Fetch-Dest`), a navigation to a document, so not a
+/// script's fetch and not a frame. A browser that says nothing of it is
+/// taken at its word.
+fn opened_by_the_browser(headers: &HeaderMap) -> bool {
+    let says = |name: &str, wanted: &str| {
+        headers
+            .get(name)
+            .is_none_or(|value| value.as_bytes().eq_ignore_ascii_case(wanted.as_bytes()))
+    };
+    !ASKED_BY_CODE
+        .iter()
+        .chain(&AHEAD_OF_A_CLICK)
+        .any(|name| headers.contains_key(*name))
+        && says("sec-fetch-mode", "navigate")
+        && says("sec-fetch-dest", "document")
+}
+
+/// The answer to a request for the finish address that was not the browser's
+/// own navigation: nothing of the hand-over is read or changed. It is `403`
+/// with a page of the framework's own, not one of navree-ui's: the runtime
+/// of navree-ui shows no such page, and sends the browser to the address the
+/// answer came from instead, whether it asked for that address itself or a
+/// post or a link of its own was sent on there. Never cached, never sent on
+/// as a referrer, never framed.
+fn not_a_navigation() -> Response {
+    let mut response = Html(
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
+         <meta name=\"referrer\" content=\"no-referrer\">\n\
+         <title>Opened by the browser only</title>\n</head>\n\
+         <body>\n<p>This address is only opened by the browser itself.</p>\n</body>\n</html>\n",
+    )
+    .into_response();
+    *response.status_mut() = StatusCode::FORBIDDEN;
+    let headers = response.headers_mut();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    headers.insert(X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    response
+}
 
 /// What an app asks for at [`APP_SIGN_IN_PATH`].
 #[derive(Clone, Default, Deserialize)]
@@ -1012,18 +1079,26 @@ impl Controller for AppSignInController {
         let service = self.service.clone();
         let keep = self.apps.keep_browser_signed_in;
         let sign_in = self.sign_in.clone();
-        let finish =
-            move |session: Session, meta: ClientMeta, Query(request): Query<FinishRequest>| {
-                let service = service.clone();
-                let sign_in = sign_in.clone();
-                async move {
-                    let finish = service
-                        .finish_app_sign_in(&session, request.attempt.as_deref(), keep, &meta)
-                        .await
-                        .map_err(AuthError::into_app_error)?;
-                    Ok::<_, AppError>(finish_response(finish, &sign_in, &session))
+        let finish = move |session: Session,
+                           meta: ClientMeta,
+                           headers: HeaderMap,
+                           Query(request): Query<FinishRequest>| {
+            let service = service.clone();
+            let sign_in = sign_in.clone();
+            async move {
+                // Only the browser's own navigation finishes a hand-over: the
+                // redirect to the app reaches the app only when the browser
+                // follows it. Anything else changes nothing.
+                if !opened_by_the_browser(&headers) {
+                    return Ok::<_, AppError>(not_a_navigation());
                 }
-            };
+                let finish = service
+                    .finish_app_sign_in(&session, request.attempt.as_deref(), keep, &meta)
+                    .await
+                    .map_err(AuthError::into_app_error)?;
+                Ok::<_, AppError>(finish_response(finish, &sign_in, &session))
+            }
+        };
         routes.push(
             RouteDef::on(Method::GET, format!("!{APP_SIGN_IN_FINISH_PATH}"), finish)
                 .public()
@@ -1033,12 +1108,14 @@ impl Controller for AppSignInController {
                         "Sends a browser that is not signed in to the sign-in page, and a \
                          sign-in made for this hand-over on to the app's callback with a \
                          one-time code. A browser that was signed in when the hand-over began \
-                         gets a page that asks the person first (200, HTML)."
+                         gets a page that asks the person first (200, HTML). Only the browser's \
+                         own navigation is answered so: a fetch by a script, a page loaded \
+                         ahead of a click or a frame changes nothing and gets 403."
                             .to_owned(),
                     ),
                     ..api(
                         "Send a signed-in browser on to the app with a one-time code",
-                        &[200, 303, 400],
+                        &[200, 303, 400, 403],
                     )
                 }),
         );
@@ -1267,6 +1344,8 @@ fn sign_in_href(sign_in: &str, attempt: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use http::header::CONTENT_TYPE;
+
     use super::*;
 
     #[test]
@@ -1279,6 +1358,76 @@ mod tests {
             sign_in_href("/login", Some("a-b_c")),
             "/login?next=%2Fauth%2Fapp%2Ffinish%3Fattempt%3Da-b_c"
         );
+    }
+
+    #[test]
+    fn only_the_browsers_own_navigation_opens_the_finish_address() {
+        let asked = |pairs: &[(&'static str, &'static str)]| {
+            let mut headers = HeaderMap::new();
+            for (name, value) in pairs {
+                headers.insert(*name, HeaderValue::from_static(value));
+            }
+            opened_by_the_browser(&headers)
+        };
+        // A browser that says how it asks, in any case, and one that says nothing.
+        assert!(asked(&[]));
+        assert!(asked(&[
+            ("sec-fetch-mode", "navigate"),
+            ("sec-fetch-dest", "document"),
+            ("sec-fetch-site", "cross-site"),
+        ]));
+        assert!(asked(&[
+            ("sec-fetch-mode", "Navigate"),
+            ("sec-fetch-dest", "DOCUMENT")
+        ]));
+        for not_the_browser in [
+            // navree-ui's runtime and a native client, whatever else they say.
+            &[("x-navree-ui", "1")][..],
+            &[
+                ("x-navree-ui", "1"),
+                ("sec-fetch-mode", "navigate"),
+                ("sec-fetch-dest", "document"),
+            ],
+            &[("x-navree-native", "1")],
+            // A script's fetch, with or without the runtime's header.
+            &[("sec-fetch-mode", "cors"), ("sec-fetch-dest", "empty")],
+            &[("sec-fetch-mode", "same-origin")],
+            &[("sec-fetch-mode", "no-cors"), ("sec-fetch-dest", "image")],
+            // A frame, which navigates but is no page of the browser's own.
+            &[("sec-fetch-mode", "navigate"), ("sec-fetch-dest", "iframe")],
+            // A page loaded ahead of a click.
+            &[
+                ("sec-purpose", "prefetch"),
+                ("sec-fetch-mode", "navigate"),
+                ("sec-fetch-dest", "document"),
+            ],
+            &[("sec-purpose", "prefetch;prerender")],
+            &[("purpose", "prefetch")],
+            &[("x-moz", "prefetch")],
+        ] {
+            assert!(!asked(not_the_browser), "{not_the_browser:?}");
+        }
+    }
+
+    // What navree-ui's runtime needs of it to go to the address for real: HTML
+    // that does not say it is a page of the app. Nothing sends the browser on
+    // from it, and nothing keeps it.
+    #[test]
+    fn the_answer_to_anything_else_is_a_page_no_runtime_shows_and_nothing_keeps() {
+        let response = not_a_navigation();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let headers = response.headers();
+        assert!(
+            headers[CONTENT_TYPE]
+                .to_str()
+                .unwrap()
+                .starts_with("text/html")
+        );
+        assert!(headers.get("x-navree-page").is_none());
+        assert!(headers.get(http::header::LOCATION).is_none());
+        assert_eq!(headers[CACHE_CONTROL], "no-store");
+        assert_eq!(headers[REFERRER_POLICY], "no-referrer");
+        assert_eq!(headers[X_FRAME_OPTIONS], "DENY");
     }
 
     #[test]
