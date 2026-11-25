@@ -701,7 +701,11 @@ async fn an_assertion_over_a_native_challenge_is_refused_on_the_routes_that_name
         "{}",
         refused.text()
     );
-    assert_eq!(refusals(&sink), ["challenge of another session"; 3]);
+    // Each refusal says what happened, also for the session that asked.
+    assert_eq!(
+        refusals(&sink),
+        ["challenge of a session answered on a route that names no session"; 3]
+    );
     // Nobody was signed in with the passkey.
     assert!(
         sink.with_action("auth.login")

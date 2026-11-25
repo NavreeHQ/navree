@@ -135,15 +135,20 @@ pub(crate) fn session_mark(session_id: &str) -> String {
 }
 
 /// Whether a ceremony `kept` with a session's mark (or none) may be answered
-/// by a caller that names the session `asked` (or none); else why not. A
-/// challenge asked for in a session is answered in that session only, and a
-/// caller that names a session takes no challenge of another, or of none.
+/// by a caller that names the session `asked` (or none); else why not, in the
+/// words the refusal is logged and audited with. A challenge asked for in a
+/// session is answered in that session only, and a caller that names a
+/// session takes no challenge of another, or of none.
 fn same_session(kept: Option<&str>, asked: Option<&str>) -> Result<(), &'static str> {
     match (kept, asked) {
         (None, None) => Ok(()),
         (Some(kept), Some(asked)) if constant_time_eq(kept.as_bytes(), asked.as_bytes()) => Ok(()),
+        // A challenge of the passkey page or of the token API, on a session's route.
         (None, Some(_)) => Err("challenge not asked for in this session"),
-        _ => Err("challenge of another session"),
+        // A session's challenge on a route that names none. The session that
+        // asked is refused there like every other, so the words name the route.
+        (Some(_), None) => Err("challenge of a session answered on a route that names no session"),
+        (Some(_), Some(_)) => Err("challenge of another session"),
     }
 }
 
@@ -771,14 +776,16 @@ mod tests {
         assert_eq!(same_session(None, None), Ok(()));
         // A challenge of a session, answered in it.
         assert_eq!(same_session(Some(&phone), Some(&phone)), Ok(()));
-        // In another session, and by a caller that names none.
+        // In another session.
         assert_eq!(
             same_session(Some(&phone), Some(&other)),
             Err("challenge of another session")
         );
+        // By a caller that names none: the words say so, whoever posts there,
+        // the session that asked included.
         assert_eq!(
             same_session(Some(&phone), None),
-            Err("challenge of another session")
+            Err("challenge of a session answered on a route that names no session")
         );
         // A caller that names a session takes no challenge of none.
         assert_eq!(
