@@ -21,6 +21,14 @@
 //!   usual challenge. The [`SignInPolicy`](crate::SignInPolicy)s are
 //!   asked first ([`SignInMethod::Passkey`]): an account whose domain
 //!   enforces single sign-on gets 403 `sso_required`.
+//! - **A challenge of a session.** The challenges of the routes above
+//!   belong to no session: the first valid answer uses one up, wherever it
+//!   is posted. The challenge a native app asks for from a page
+//!   (`AuthService::passkey_call_options`, feature `session`) is kept
+//!   with a mark of the session that asked, and is answered only through
+//!   that session's own route: `POST /auth/passkeys/login` and the passkey
+//!   page's route name no session, so they refuse an assertion over it and
+//!   leave it unused.
 //! - `GET /auth/passkeys` lists the user's passkeys and `DELETE
 //!   /auth/passkeys/{id}` removes one.
 //! - [`VirtualAuthenticator`](crate::testing::VirtualAuthenticator) plays
@@ -35,7 +43,7 @@ use std::fmt;
 
 use chrono::{DateTime, Utc};
 use navree_contracts::AuditKind;
-use navree_crypto::{random_token, sha256_hex};
+use navree_crypto::{constant_time_eq, random_token, sha256_hex};
 use navree_openapi::ToSchema;
 use navree_orm::{Model as _, Record};
 use serde::{Deserialize, Serialize};
@@ -106,6 +114,37 @@ struct Ceremony {
     kind: String,
     /// For a registration: the user.
     user_id: Option<Uuid>,
+    /// For a sign-in a native app started from a page of a session: that
+    /// session, as [`session_mark`] names it. Such a challenge is answered
+    /// only by a caller that names the same session; the routes that name
+    /// none (the passkey page's and the token API's) never take it. A
+    /// ceremony kept before challenges were marked reads as one of no
+    /// session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    session: Option<String>,
+}
+
+/// What a ceremony keeps of the session that asked for its challenge: a
+/// SHA-256 over the session's id, made for this one purpose (the words before
+/// the id keep it apart from every other hash of one), so the cache never
+/// holds the id, which is a credential, or a value another store could match.
+/// It changes when the session's id does, as at every sign-in.
+#[cfg_attr(not(feature = "session"), allow(dead_code))]
+pub(crate) fn session_mark(session_id: &str) -> String {
+    sha256_hex(format!("navree-auth:passkey-session:{session_id}").as_bytes())
+}
+
+/// Whether a ceremony `kept` with a session's mark (or none) may be answered
+/// by a caller that names the session `asked` (or none); else why not. A
+/// challenge asked for in a session is answered in that session only, and a
+/// caller that names a session takes no challenge of another, or of none.
+fn same_session(kept: Option<&str>, asked: Option<&str>) -> Result<(), &'static str> {
+    match (kept, asked) {
+        (None, None) => Ok(()),
+        (Some(kept), Some(asked)) if constant_time_eq(kept.as_bytes(), asked.as_bytes()) => Ok(()),
+        (None, Some(_)) => Err("challenge not asked for in this session"),
+        _ => Err("challenge of another session"),
+    }
 }
 
 /// The `PublicKeyCredential` JSON a browser returns
@@ -153,7 +192,7 @@ impl AuthService {
     /// `excludeCredentials`.
     pub async fn passkey_registration_options(&self, user: &User) -> Result<Value, AuthError> {
         let options = self.passkey_options()?;
-        let challenge = self.start_ceremony("register", Some(user.id)).await?;
+        let challenge = self.start_ceremony("register", Some(user.id), None).await?;
         let exclude: Vec<Value> = self
             .passkeys(user.id)
             .await?
@@ -247,7 +286,7 @@ impl AuthService {
         }
         let client_json = b64url(&credential.response.client_data_json)
             .ok_or_else(|| refused("malformed client data"))?;
-        self.check_client_data(&client_json, "webauthn.create", Some(user.id))
+        self.check_client_data(&client_json, "webauthn.create", Some(user.id), None)
             .await?;
         let attestation = credential
             .response
@@ -345,9 +384,23 @@ impl AuthService {
     /// /auth/passkeys/login/options`): a single-use challenge, the RP id,
     /// and, for a registered `email`, its passkeys as `allowCredentials`
     /// (otherwise an empty list: the browser offers discoverable passkeys).
+    /// The challenge belongs to no session: whoever answers it first, at the
+    /// passkey page's route or the token API's, uses it up.
     pub async fn passkey_login_options(&self, email: Option<&str>) -> Result<Value, AuthError> {
+        self.login_options(email, None).await
+    }
+
+    /// [`passkey_login_options`](AuthService::passkey_login_options) whose
+    /// challenge is kept with `session` (a [`session_mark`]) when there is
+    /// one: it is then answered only through
+    /// [`passkey_step`](AuthService::passkey_step) with the same mark.
+    pub(crate) async fn login_options(
+        &self,
+        email: Option<&str>,
+        session: Option<String>,
+    ) -> Result<Value, AuthError> {
         let options = self.passkey_options()?;
-        let challenge = self.start_ceremony("login", None).await?;
+        let challenge = self.start_ceremony("login", None, session).await?;
         let allow: Vec<Value> = match email {
             Some(email) => match self.find_by_email(email).await? {
                 Some(user) => self
@@ -391,7 +444,8 @@ impl AuthService {
         credential: &Value,
         meta: &ClientMeta,
     ) -> Result<LoginOutcome, AuthError> {
-        match self.passkey_step(credential, meta).await? {
+        // A token client has no session: a challenge kept with one is not its to answer.
+        match self.passkey_step(credential, None, meta).await? {
             (
                 PasswordStep::TwoFactor {
                     user,
@@ -422,12 +476,19 @@ impl AuthService {
     /// authentication whose passkey did not verify the user, a challenge
     /// (audited as `auth.two_factor_challenge`). Whether the passkey
     /// verified the user comes with it. Nothing is issued yet.
+    ///
+    /// `session` is the [`session_mark`] of the session the caller answers
+    /// for, when the challenge was asked for in one (a native app's call), and
+    /// `None` for the routes whose challenges belong to no session. The
+    /// challenge the assertion answers must have been kept the same way: with
+    /// that mark, or with none.
     pub(crate) async fn passkey_step(
         &self,
         credential: &Value,
+        session: Option<&str>,
         meta: &ClientMeta,
     ) -> Result<(PasswordStep, bool), AuthError> {
-        match self.check_assertion(credential).await {
+        match self.check_assertion(credential, session).await {
             Ok((user, verified)) => {
                 self.check_sign_in(&SignInAttempt::of(&user, SignInMethod::Passkey), meta)
                     .await?;
@@ -479,8 +540,14 @@ impl AuthService {
         }
     }
 
-    /// A new challenge for a `kind` ceremony, kept until the timeout.
-    async fn start_ceremony(&self, kind: &str, user_id: Option<Uuid>) -> Result<String, AuthError> {
+    /// A new challenge for a `kind` ceremony, kept until the timeout, with
+    /// the mark of the session that asked for it when it is one's own.
+    async fn start_ceremony(
+        &self,
+        kind: &str,
+        user_id: Option<Uuid>,
+        session: Option<String>,
+    ) -> Result<String, AuthError> {
         let challenge = random_token(CHALLENGE_LEN);
         let ttl = std::time::Duration::from_secs(self.options.passkeys.timeout_secs);
         self.cache
@@ -489,6 +556,7 @@ impl AuthService {
                 &Ceremony {
                     kind: kind.to_owned(),
                     user_id,
+                    session,
                 },
                 ttl,
             )
@@ -496,13 +564,19 @@ impl AuthService {
         Ok(base64_url(challenge.as_bytes()))
     }
 
-    /// Checks `client_json`: its type, its challenge (a pending ceremony of
-    /// the matching kind and user, used up now) and its origin.
+    /// Checks `client_json`: its type, its origin and its challenge (a
+    /// pending ceremony of the matching kind, user and session, used up now).
+    /// `session` is the mark of the session the caller answers for, or `None`
+    /// for a caller that names none: a ceremony kept with a session's mark is
+    /// taken only with the same mark, and one kept with none only without. A
+    /// challenge refused for its session is not used up: it is still good
+    /// where it was asked for.
     async fn check_client_data(
         &self,
         client_json: &[u8],
         kind: &str,
         user_id: Option<Uuid>,
+        session: Option<&str>,
     ) -> Result<(), AuthError> {
         let client =
             ClientData::parse(client_json).ok_or_else(|| refused("malformed client data"))?;
@@ -527,6 +601,7 @@ impl AuthService {
         };
         match ceremony {
             Some(ceremony) if ceremony.kind == wanted && ceremony.user_id == user_id => {
+                same_session(ceremony.session.as_deref(), session).map_err(refused)?;
                 if self.cache.forget(&key).await? {
                     Ok(())
                 } else {
@@ -557,11 +632,17 @@ impl AuthService {
     }
 
     /// The user of a valid assertion and whether the authenticator verified
-    /// them; records the new signature counter.
-    async fn check_assertion(&self, credential: &Value) -> Result<(User, bool), AuthError> {
+    /// them; records the new signature counter. `session` is the mark of the
+    /// session the caller answers for, if any (see
+    /// [`passkey_step`](AuthService::passkey_step)).
+    async fn check_assertion(
+        &self,
+        credential: &Value,
+        session: Option<&str>,
+    ) -> Result<(User, bool), AuthError> {
         let options = self.passkey_options()?;
         let (credential, stored, client_json) = self.assertion_parts(credential).await?;
-        self.check_client_data(&client_json, "webauthn.get", None)
+        self.check_client_data(&client_json, "webauthn.get", None, session)
             .await?;
         self.finish_assertion(&credential, stored, &client_json, options, false)
             .await
@@ -677,4 +758,61 @@ fn ceremony_key(challenge: &str) -> String {
 pub(crate) fn base64_url(bytes: &[u8]) -> String {
     use base64::Engine as _;
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_challenge_of_a_session_is_answered_in_that_session_only() {
+        let (phone, other) = (session_mark("session-a"), session_mark("session-b"));
+        // A challenge of no session, answered by a caller that names none: the web's way.
+        assert_eq!(same_session(None, None), Ok(()));
+        // A challenge of a session, answered in it.
+        assert_eq!(same_session(Some(&phone), Some(&phone)), Ok(()));
+        // In another session, and by a caller that names none.
+        assert_eq!(
+            same_session(Some(&phone), Some(&other)),
+            Err("challenge of another session")
+        );
+        assert_eq!(
+            same_session(Some(&phone), None),
+            Err("challenge of another session")
+        );
+        // A caller that names a session takes no challenge of none.
+        assert_eq!(
+            same_session(None, Some(&phone)),
+            Err("challenge not asked for in this session")
+        );
+    }
+
+    #[test]
+    fn a_sessions_mark_is_a_hash_of_its_own_and_never_the_id() {
+        let mark = session_mark("session-a");
+        assert_eq!(mark, session_mark("session-a"));
+        assert_ne!(mark, session_mark("session-b"));
+        assert_eq!(mark.len(), 64);
+        assert!(!mark.contains("session-a"));
+        // Not the plain hash of the id, which another store may hold.
+        assert_ne!(mark, sha256_hex(b"session-a"));
+    }
+
+    #[test]
+    fn a_ceremony_kept_before_sessions_were_marked_is_one_of_no_session() {
+        let kept: Ceremony = serde_json::from_str(r#"{"kind":"login","user_id":null}"#).unwrap();
+        assert_eq!(kept.session, None);
+        // One of no session is written as it always was.
+        assert_eq!(
+            serde_json::to_string(&kept).unwrap(),
+            r#"{"kind":"login","user_id":null}"#
+        );
+        let marked = Ceremony {
+            session: Some(session_mark("session-a")),
+            ..kept
+        };
+        let read: Ceremony =
+            serde_json::from_str(&serde_json::to_string(&marked).unwrap()).unwrap();
+        assert_eq!(read.session, marked.session);
+    }
 }

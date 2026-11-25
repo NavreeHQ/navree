@@ -33,6 +33,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::passkeys::session_mark;
 use crate::passkeys::webauthn::{ClientData, b64url};
 use crate::refresh_token::Model as RefreshToken;
 use crate::service::{PasswordStep, SessionKind, entry};
@@ -239,6 +240,13 @@ impl AuthService {
     /// [`login_with_passkey`](AuthService::login_with_passkey), then a
     /// session, or the waiting second factor for an account whose passkey
     /// did not verify the user.
+    ///
+    /// The challenge must be one of no session
+    /// ([`passkey_login_options`](AuthService::passkey_login_options)). One a
+    /// native app asked for with
+    /// [`passkey_call_options`](AuthService::passkey_call_options) is refused
+    /// here, from any session, and stays unused: it is answered only through
+    /// [`login_with_passkey_call_session`](AuthService::login_with_passkey_call_session).
     pub async fn login_with_passkey_session(
         &self,
         session: &Session,
@@ -246,7 +254,24 @@ impl AuthService {
         remember: bool,
         meta: &ClientMeta,
     ) -> Result<SessionSignIn, AuthError> {
-        let (step, _verified) = self.passkey_step(credential, meta).await?;
+        self.passkey_session_step(session, credential, None, remember, meta)
+            .await
+    }
+
+    /// The steps of every passkey sign-in on a session: the first step of
+    /// [`login_with_passkey`](AuthService::login_with_passkey)
+    /// ([`passkey_step`](AuthService::passkey_step)), for a challenge kept
+    /// with the mark `asked_in` or with none, then the session or the waiting
+    /// second factor.
+    async fn passkey_session_step(
+        &self,
+        session: &Session,
+        credential: &serde_json::Value,
+        asked_in: Option<&str>,
+        remember: bool,
+        meta: &ClientMeta,
+    ) -> Result<SessionSignIn, AuthError> {
+        let (step, _verified) = self.passkey_step(credential, asked_in, meta).await?;
         self.session_step(
             session,
             step,
@@ -258,19 +283,25 @@ impl AuthService {
     }
 
     /// The `publicKey` options of a passkey sign-in that a native app starts
-    /// from a page of `session` (the `passkey` device call): the single-use
-    /// challenge of
-    /// [`passkey_login_options`](AuthService::passkey_login_options), which
-    /// the session remembers as the one it asked for (its SHA-256, until
-    /// `auth.passkeys.timeout_secs`).
+    /// from a page of `session` (the `passkey` device call): a single-use
+    /// challenge as
+    /// [`passkey_login_options`](AuthService::passkey_login_options) makes
+    /// one, bound to this session in two places. The store of pending
+    /// challenges keeps it with a mark of the session's id, so no caller that
+    /// names another session, or none (the passkey page's route, `POST
+    /// /auth/passkeys/login`), can answer it; and the session remembers it
+    /// (its SHA-256, until `auth.passkeys.timeout_secs`) as the one it asked
+    /// for. Only
     /// [`login_with_passkey_call_session`](AuthService::login_with_passkey_call_session)
-    /// takes only an assertion over it. One challenge waits at a time: asking
-    /// again replaces it.
+    /// with this session takes an assertion over it. One challenge waits at a
+    /// time: asking again replaces it.
     pub async fn passkey_call_options(
         &self,
         session: &Session,
     ) -> Result<serde_json::Value, AuthError> {
-        let options = self.passkey_login_options(None).await?;
+        let options = self
+            .login_options(None, Some(session_mark(&session.id())))
+            .await?;
         let challenge = options["challenge"].as_str().unwrap_or_default();
         let ttl = i64::try_from(self.options.passkeys.timeout_secs).unwrap_or(i64::MAX);
         session
@@ -291,10 +322,12 @@ impl AuthService {
     /// [`passkey_call_options`](AuthService::passkey_call_options); the
     /// session forgets it now, whatever follows. Then come the steps of
     /// [`login_with_passkey_session`](AuthService::login_with_passkey_session),
-    /// which this calls: the assertion checked as the passkey page checks it
-    /// (the challenge used up, the origin, the relying party, the signature,
-    /// the counter), the sign-in policies, the session or the waiting second
-    /// factor. An assertion over a challenge another session asked for is
+    /// through the same code: the assertion checked as the passkey page checks
+    /// it (the origin, the relying party, the signature, the counter), with
+    /// one thing more, that the pending challenge is the one kept with this
+    /// session's mark, which is used up; then the sign-in policies, and the
+    /// session or the waiting second factor. An assertion over a challenge
+    /// another session asked for, or one that belongs to no session, is
     /// [`AuthError::PasskeyRefused`], logged and audited as
     /// `auth.login_failed` like every other refusal.
     pub async fn login_with_passkey_call_session(
@@ -321,7 +354,10 @@ impl AuthService {
             .await;
             return Err(AuthError::PasskeyRefused(reason.to_owned()));
         }
-        self.login_with_passkey_session(session, credential, remember, meta)
+        // The store of pending challenges is asked the same: it kept this one
+        // with the mark of the session that asked.
+        let asked_in = session_mark(&session.id());
+        self.passkey_session_step(session, credential, Some(&asked_in), remember, meta)
             .await
     }
 
