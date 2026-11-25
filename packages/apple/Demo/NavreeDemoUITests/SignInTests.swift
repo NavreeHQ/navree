@@ -19,8 +19,8 @@ import XCTest
 /// from a build signed to run locally (`CODE_SIGN_IDENTITY=-`): a build with
 /// no signature at all has no Keychain, so nothing outlives a launch. The
 /// site's sign-in form must lead to the hand-over's finish address by the
-/// browser's own navigation: a page script that fetches that address spends
-/// the hand-over before the session sees where it returns.
+/// browser's own navigation, as the framework's own sign-in pages do: the
+/// server finishes nothing for a page script that fetches that address.
 final class SignInTests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false

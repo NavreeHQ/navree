@@ -30,7 +30,7 @@ bundle_id = "{{ bundle_id }}"
 callback = "https://{{ domain if domain else "shop.example" }}/app/signed-in"
 ```
 
-That link needs both apps signed by a team with Associated Domains (below). A build with no team can come back only on the app's own scheme, `callback = "{{ scheme }}:/signed-in"` with `custom_scheme = true`, and only when the site's sign-in form reaches `/auth/app/finish` by the browser's own navigation: Navree's page script fetches that address today, which spends the hand-over, so sign in with a build signed by a team.
+That link needs both apps signed by a team with Associated Domains (below). A build with no team can come back only on the app's own scheme, `callback = "{{ scheme }}:/signed-in"` with `custom_scheme = true`. Either way the sign-in ends at `/auth/app/finish`, which only the browser's own navigation finishes: Navree's sign-in pages send the browser there themselves, and a sign-in page of your own that signs a person in by script does the same (`location.assign(next)`).
 
 The app opens the system's browser for the pages in `ShellConfiguration.signInPaths`, by default a social sign-in's only (`/auth/*/redirect`). For the site's own sign-in page as well, add `signInPaths: ["/sign-in", "/auth/*/redirect"]` to the `ShellConfiguration` in `{{ type_name }}/App.swift`.
 
