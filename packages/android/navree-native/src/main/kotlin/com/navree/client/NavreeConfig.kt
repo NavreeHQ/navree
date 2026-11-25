@@ -210,8 +210,22 @@ const val LIBRARY_VERSION = "0.1.0"
  */
 val UNDRAWABLE: List<String> = listOf("web")
 
-/** The core's configuration for this app on this device. */
-fun coreConfig(config: NavreeConfig, device: Device, caps: List<String>, appId: String? = null): JsonObject = buildJsonObject {
+/**
+ * The core's configuration for this app on this device. [secret] is the
+ * secret of this install, as hex, which the core makes its key for a person
+ * with; a caller that gives none is given plain keys. [oldKey] says that the
+ * mark the client still keeps is of a plain key, made before the install had
+ * a secret: the core then says what the plain key of the person it names
+ * was. It is said only with a secret.
+ */
+fun coreConfig(
+    config: NavreeConfig,
+    device: Device,
+    caps: List<String>,
+    appId: String? = null,
+    secret: String? = null,
+    oldKey: Boolean = false,
+): JsonObject = buildJsonObject {
     put("origin", config.origin.trimEnd('/'))
     // The package name: without it no sign-in is handed over and no push token registered.
     appId?.let { put("app_id", it) }
@@ -255,6 +269,10 @@ fun coreConfig(config: NavreeConfig, device: Device, caps: List<String>, appId: 
             if ("platform_sign_in" in caps) put("native", buildJsonArray { add(JsonPrimitive("google")) })
         },
     )
+    if (secret != null) {
+        put("secret", secret)
+        if (oldKey) put("old_key", true)
+    }
 }
 
 /** The token a web view adds to its user agent, after a space: who is asking, and with which library. */

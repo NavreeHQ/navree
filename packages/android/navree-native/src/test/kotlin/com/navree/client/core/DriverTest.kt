@@ -493,6 +493,22 @@ class ConfigTest {
     }
 
     @Test
+    fun the_installs_secret_goes_to_the_core_and_a_plain_key_is_asked_for_only_while_one_is_kept() {
+        val store = NavreeConfig(origin = "https://store.example.in", name = "Store", seed = null)
+        val secret = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+        val given = coreConfig(store, device, emptyList(), "in.example.store", secret)
+        assertEquals(secret, given["secret"]!!.jsonPrimitive.content)
+        assertNull("a client that keeps no plain key asks the core for none", given["old_key"])
+        val kept = coreConfig(store, device, emptyList(), "in.example.store", secret, oldKey = true)
+        assertEquals(secret, kept["secret"]!!.jsonPrimitive.content)
+        assertEquals("true", kept["old_key"]!!.jsonPrimitive.content)
+        // A caller that gives no secret is given plain keys, and there is no key from before to ask for.
+        val none = coreConfig(store, device, emptyList(), "in.example.store", oldKey = true)
+        assertNull(none["secret"])
+        assertNull(none["old_key"])
+    }
+
+    @Test
     fun the_web_views_token_names_the_protocol_the_platform_and_the_library() {
         assertEquals("NavreeNative/1 (platform=android; lib=0.1.0)", webViewToken())
     }

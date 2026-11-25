@@ -299,6 +299,122 @@ class PersonWatchTest {
         assertEquals("she is remembered by name and email", mark(anjali), word.mark)
     }
 
+    private val ravneet = "Ravneet Kaur" to "ravneet.kaur@example.com"
+
+    /**
+     * Her key as a run before the install had a secret was given it, and as
+     * the core makes it with the secret; and those of another account of her
+     * name and email. They are the keys the core's conversations
+     * `person-key-steady.json` and `person-key-was.json` record.
+     */
+    private val ravneetPlain = "1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e"
+    private val ravneetKeyed = "k2:17d27bf8db683479c652471e31c96ac7d03e690c41c4f94f56ca99de886e389e"
+    private val otherPlain = "1bc3dcdc8ebf5d231237007ccc4903b602f64185813b65bc5b6d1f5f798fcab7"
+    private val otherKeyed = "k2:6bd1a2cdf43aaf682ec4d5da88fc8ca12d82976ffebb660e10e75f894e0c82d7"
+
+    /** Hears a person as a core that has the install's secret names them, with what it says their plain key was. */
+    private fun PersonWatch.hear(key: String, who: Pair<String, String?>, was: String?) = hear(key, who.first, who.second, was)
+
+    @Test
+    fun the_mark_of_a_key_made_with_the_installs_secret_is_told_from_the_mark_of_a_plain_key() {
+        val plain = PersonWatch.markOfKey(ravneetPlain)
+        val keyed = PersonWatch.markOfKey(ravneetKeyed)
+        assertTrue(plain.startsWith("key:"))
+        assertTrue("the mark of a key made with the secret begins as the mark of a plain one", keyed.startsWith("k2:"))
+        assertEquals("one key has two marks", keyed, PersonWatch.markOfKey(ravneetKeyed))
+        assertNotEquals(keyed, PersonWatch.markOfKey(otherKeyed))
+        assertFalse("the key is read from its mark", keyed.contains(ravneetKeyed.removePrefix("k2:"), ignoreCase = true))
+        assertFalse("a mark made of a name and email begins as a key's", mark(ravneet).startsWith("k2:"))
+
+        // Whether a start asks the core what a person's plain key was: only where the mark it reads is of a plain key.
+        assertFalse("nothing is kept at a first start", watch().keepsPlainKey)
+        watch().hearAndKeep(ravneetPlain, ravneet)
+        assertTrue("a start that reads the mark of a plain key does not say so", watch().keepsPlainKey)
+        assertFalse("a mark kept at another origin is asked about", watch("https://other.example:443").keepsPlainKey)
+        file.delete()
+        watch().hearAndKeep(ravneetKeyed, ravneet)
+        assertFalse("a start that reads the mark of a key made with the secret asks for a plain one", watch().keepsPlainKey)
+        file.delete()
+        watch().hearAndKeep(ravneet)
+        assertFalse("a mark made of a name and email is taken for the mark of a plain key", watch().keepsPlainKey)
+    }
+
+    @Test
+    fun a_mark_kept_of_a_plain_key_is_the_person_whose_plain_key_the_core_says_it_was_and_the_mark_of_the_key_they_have_now_takes_its_place() {
+        // A run before the install had a secret remembered her by her plain key.
+        watch().hearAndKeep(ravneetPlain, ravneet)
+        assertEquals(PersonWatch.markOfKey(ravneetPlain), kept())
+        // The first start after the update: the core names her by the key it makes with the secret, and says what her key was.
+        val watch = watch()
+        val word = watch.hear(ravneetKeyed, ravneet, ravneetPlain)
+        assertEquals("the person the mark was kept for is taken for another when her key is first made with the secret", Heard.Same, word.heard)
+        assertEquals(PersonWatch.markOfKey(ravneetKeyed), word.mark)
+        assertTrue("the mark of the key she has now is not written down", word.write)
+        assertEquals("nothing is written before the store's turn", PersonWatch.markOfKey(ravneetPlain), kept())
+        watch.keep(word)
+        assertEquals(PersonWatch.markOfKey(ravneetKeyed), kept())
+        assertFalse("the mark is written twice", watch.hear(ravneetKeyed, ravneet, ravneetPlain).write)
+        // The starts after read the mark of her new key, ask for no plain one, and hear her as the same with or without it.
+        assertFalse(watch().keepsPlainKey)
+        assertEquals(Heard.Same, watch().hear(ravneetKeyed, ravneet).heard)
+        assertEquals(Heard.Same, watch().hear(ravneetKeyed, ravneet, ravneetPlain).heard)
+        // And under the key she has now a new name is still her, and another account is not.
+        assertEquals(Heard.Same, watch().hear(ravneetKeyed, "Ravneet K. Sandhu" to null).heard)
+        assertEquals(Heard.Another, watch().hear(otherKeyed, ravneet, otherPlain).heard)
+    }
+
+    @Test
+    fun a_mark_kept_of_a_plain_key_is_another_persons_when_the_core_says_another_plain_key_or_none() {
+        watch().hearAndKeep(ravneetPlain, ravneet)
+        // Her session ran out, and another account of her name and email signs in at the first start after the update.
+        val other = watch().hear(otherKeyed, ravneet, otherPlain)
+        assertEquals("another account is left what was kept for her", Heard.Another, other.heard)
+        assertFalse(other.write)
+        assertEquals("her mark stays until what was kept for her is gone", PersonWatch.markOfKey(ravneetPlain), kept())
+        // A core that does not say what her key was leaves the two marks two people's.
+        assertEquals(Heard.Another, watch().hear(ravneetKeyed, ravneet).heard)
+        assertEquals(Heard.Another, watch().hear(ravneetKeyed, ravneet, "").heard)
+        // What the core says a key was holds only the mark of a plain key to a key made with the secret: not one plain key to another,
+        assertEquals(Heard.Another, watch().hear(otherPlain, ravneet, ravneetPlain).heard)
+        // not a mark made of a name and email,
+        file.delete()
+        watch().hearAndKeep(ravneet)
+        assertEquals(Heard.Another, watch().hear(ravneetKeyed, ravneet, ravneetPlain).heard)
+        // and not one key made with the secret to another.
+        file.delete()
+        watch().hearAndKeep(otherKeyed, ravneet)
+        assertEquals(Heard.Another, watch().hear(ravneetKeyed, ravneet, otherKeyed).heard)
+        // After a sign-out nobody is remembered, and whoever is named is the first.
+        val out = watch()
+        out.signedOut()
+        assertFalse(out.keepsPlainKey)
+        assertEquals(Heard.First, out.hear(ravneetKeyed, ravneet, ravneetPlain).heard)
+    }
+
+    @Test
+    fun the_keys_the_cores_transcript_records_for_a_client_that_kept_a_plain_key_are_one_person_to_the_client() {
+        val folder = File("../../../crates/navree-native-core/transcripts")
+        org.junit.Assume.assumeTrue("the core's transcripts are beside the client", folder.isDirectory)
+        val root = kotlinx.serialization.json.Json.parseToJsonElement(File(folder, "person-key-was.json").readText()) as kotlinx.serialization.json.JsonObject
+        // Each step that names a person: their key, and what the core says their plain key was.
+        val named = (root["steps"] as kotlinx.serialization.json.JsonArray).mapNotNull { step ->
+            val checks = (step as kotlinx.serialization.json.JsonObject)["check"] as? kotlinx.serialization.json.JsonArray ?: return@mapNotNull null
+            fun at(pointer: String) = checks.firstNotNullOfOrNull { item ->
+                val check = item as kotlinx.serialization.json.JsonObject
+                if ((check["at"] as? kotlinx.serialization.json.JsonPrimitive)?.content == pointer) (check["is"] as? kotlinx.serialization.json.JsonPrimitive)?.content else null
+            }
+            at("/app/user/key")?.let { key -> key to at("/app/user_was") }
+        }
+        assertEquals("two people are named in person-key-was.json", 2, named.size)
+        val (hers, another) = named
+        assertEquals(ravneetKeyed to ravneetPlain, hers)
+        assertEquals(otherKeyed to otherPlain, another)
+        // The release before kept her plain key, as person-key-steady.json records it: she is the same person, and the other account is not.
+        watch().hearAndKeep(ravneetPlain, ravneet)
+        assertEquals(Heard.Same, watch().hear(hers.first, ravneet, hers.second).heard)
+        assertEquals(Heard.Another, watch().hear(another.first, ravneet, another.second).heard)
+    }
+
     @Test
     fun the_person_keys_recorded_in_the_cores_transcripts_give_the_marks_the_client_keeps() {
         val folder = File("../../../crates/navree-native-core/transcripts")
