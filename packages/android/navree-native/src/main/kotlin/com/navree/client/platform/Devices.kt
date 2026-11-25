@@ -53,8 +53,13 @@ class DeviceCalls(
     private val tokenGranted: () -> Unit = {},
     private val answer: (JsonObject) -> Unit,
 ) {
-    /** The features this build carries out, by the protocol's names. */
-    val features: List<String> = listOf("share", "platform_sign_in", "passkey", "confirm") + if (pushes) listOf("push") else emptyList()
+    /**
+     * The features this build carries out, by the protocol's names. `passkey_options`
+     * says how `passkey` is carried out here: from the request the core asked the
+     * server for. A server offers a passkey call only to a build that lists both.
+     */
+    val features: List<String> =
+        listOf("share", "platform_sign_in", "passkey", "passkey_options", "confirm") + if (pushes) listOf("push") else emptyList()
 
     private var sharing: Pair<Long, BroadcastReceiver>? = null
     private var chosen = false
