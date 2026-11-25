@@ -125,7 +125,8 @@ public sealed class SystemPlace : IDisposable
             WindowFrame.SetIcon(mainHandle, appIcon);
         }
 
-        if (host.Options.Place.Scheme is string scheme && Capabilities.Has(Offers, SystemFeature.ProtocolReturn))
+        // The scheme is the app's only for a run that can catch a sign-in's return on it: such a run told the core it has a sign-in session.
+        if (host.Options.Place.Scheme is string scheme && BrowserSignIn.ComesBack(Capabilities.Has(Offers, SystemFeature.ProtocolReturn), scheme))
         {
             bool registered = Activation.RegisterScheme(scheme, host.Options.AppName);
             Say("the app's scheme " + scheme + (registered ? " is registered" : " could not be registered"));

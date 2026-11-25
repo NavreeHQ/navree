@@ -12,8 +12,6 @@ public sealed partial class ShellHost
 {
     private const string SnapshotKey = StartRules.SnapshotKey;
     private readonly SignInTracker signIn = new();
-    private LoopbackReturn? loopback;
-    private CancellationTokenSource? loopbackWait;
     private bool coreStopped;
 
     /// <summary>The app's place in Windows: set by the app once its main window exists; the device calls that need a window are answered through it.</summary>
@@ -191,8 +189,9 @@ public sealed partial class ShellHost
     }
 
     // The core asks for a sign-in in the system's browser: the one the person is signed in to Windows with, which shares what it keeps with the
-    // person's other sites. A session that must share nothing cannot be had in it, so it is not started. While signing in through the browser is
-    // not offered (BrowserSignIn), none is started at all: no browser is opened and no port is listened on.
+    // person's other sites. A session that must share nothing cannot be had in it, so it is not started. It comes back on the app's own scheme and
+    // no other way (BrowserSignIn): a return on a link of the site or on a port of this machine is not started, and no port is listened on. With
+    // signing in through the browser turned off, none is started at all.
     private void BeginSignIn(SignInEffect effect)
     {
         SignInReturn? comesBack = SignInReturn.Parse(effect.Callback);
@@ -204,30 +203,12 @@ public sealed partial class ShellHost
                 ? "a session that shares nothing with the browser cannot be had in the system's browser"
                 : !SignInRules.MayStart(effect.Url)
                     ? "the address is not one a browser may be sent to"
-                    : comesBack.WhyNot();
+                    : BrowserSignIn.WhyNotReturn(comesBack);
         if (why is not null || comesBack is null)
         {
             Problem?.Invoke("a sign-in was not started: " + why);
             client.Send(Events.SignInDone(null));
             return;
-        }
-
-        StopLoopback();
-        if (comesBack.Kind == ReturnKind.Loopback)
-        {
-            try
-            {
-                loopback = LoopbackReturn.Start(comesBack.Port);
-                loopbackWait = new CancellationTokenSource();
-                comesBack = comesBack with { Port = loopback.Port };
-                _ = WaitForLoopbackAsync(loopback, loopbackWait.Token);
-            }
-            catch (Exception problem) when (problem is System.Net.Sockets.SocketException or InvalidOperationException)
-            {
-                Problem?.Invoke("a sign-in was not started: the machine would not listen for its return");
-                client.Send(Events.SignInDone(null));
-                return;
-            }
         }
 
         TimeSpan limit = TimeSpan.FromMinutes(10);
@@ -264,27 +245,8 @@ public sealed partial class ShellHost
 
         if (signIn.End(DateTimeOffset.UtcNow) is int ended && ended == ticket)
         {
-            StopLoopback();
             client.Send(Events.SignInDone(null));
         }
-    }
-
-    private async Task WaitForLoopbackAsync(LoopbackReturn listening, CancellationToken cancel)
-    {
-        string? address = await listening.WaitAsync(cancel).ConfigureAwait(true);
-        if (address is not null && ReferenceEquals(loopback, listening))
-        {
-            HandleReturn(address);
-        }
-    }
-
-    private void StopLoopback()
-    {
-        loopbackWait?.Cancel();
-        loopbackWait?.Dispose();
-        loopbackWait = null;
-        loopback?.Dispose();
-        loopback = null;
     }
 
     // The sign-in ended: with an address it came back on, or with none when it could not be opened or the time was up.
@@ -300,15 +262,14 @@ public sealed partial class ShellHost
             return;
         }
 
-        StopLoopback();
         client.Send(Events.SignInDone(address));
     }
 
     /// <summary>
-    /// An address came to the app on its own scheme (or on a loopback port). While signing in through the browser is not offered
-    /// (<see cref="BrowserSignIn"/>) it is dropped: never opened as a page, never taken as a sign-in's return, and the core is not told of it.
-    /// Once it is offered, it goes to the core as it came: as the return of the sign-in that is open, or as a link from outside when none is,
-    /// and the core takes it only with that sign-in's <c>state</c>, on the way back that sign-in named.
+    /// An address came to the app on its own scheme. It goes to the core as it came: as the return of the sign-in that is open, or as a link
+    /// from outside when none is, and the core takes it only with that sign-in's <c>state</c>, on the way back that sign-in named. With signing
+    /// in through the browser turned off (<see cref="BrowserSignIn"/>) it is dropped: never opened as a page, never taken as a sign-in's
+    /// return, and the core is not told of it.
     /// </summary>
     /// <param name="address">The whole address.</param>
     public void HandleReturn(string address)
@@ -319,11 +280,7 @@ public sealed partial class ShellHost
             case Arrival.SignInDone:
                 // The sign-in's own return ends the sign-in here too: it is no longer open, so what arrives after it is a link from outside,
                 // and its time running out tells the core nothing more. Any other address leaves it open; the core is told either way.
-                if (signIn.Offer(address, out _) == SignInOffer.Taken)
-                {
-                    StopLoopback();
-                }
-
+                _ = signIn.Offer(address, out _);
                 client.Send(Events.SignInDone(address));
                 break;
             case Arrival.OpenLink:
@@ -331,7 +288,7 @@ public sealed partial class ShellHost
                 break;
             default:
                 // Never the address itself in what is said: a return can carry a code.
-                Problem?.Invoke("an address that arrived on the app's scheme was not used: signing in through the browser is not offered");
+                Problem?.Invoke("an address that arrived on the app's scheme was not used: signing in through the browser is turned off");
                 break;
         }
     }

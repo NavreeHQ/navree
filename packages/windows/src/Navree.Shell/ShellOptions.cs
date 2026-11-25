@@ -12,8 +12,19 @@ public sealed record ShellOptions
     /// <summary>The app's name, which is also what its data folder is called.</summary>
     public required string AppName { get; init; }
 
-    /// <summary>The app's own id, such as <c>com.charkha.supply</c>, by which a sign-in is handed over and a push token registered.</summary>
+    /// <summary>
+    /// The app's own id, such as <c>com.charkha.supply</c>, by which a sign-in is handed over and a push token registered. An app that runs from a
+    /// package is named by its package family name instead. The server lists the one a build names itself by (<c>auth.apps.windows</c>:
+    /// <c>app_id</c>, <c>package_family_name</c>); without an id no sign-in in the browser is handed over.
+    /// </summary>
     public string? AppId { get; init; }
+
+    /// <summary>
+    /// The addresses that start a sign-in with another site, where a star stands for one segment: a link to one opens the sign-in in the system's
+    /// browser and is never fetched. They are told to the core only by a run that can catch the sign-in's return, which takes the app's own
+    /// scheme (<see cref="PlaceOptions.Scheme"/>).
+    /// </summary>
+    public IReadOnlyList<string> SignInPaths { get; init; } = ["/auth/*/redirect", "/api/auth/social/*/redirect"];
 
     /// <summary>The other origins the app treats as its own; a host may start with <c>*.</c>.</summary>
     public IReadOnlyList<string> Also { get; init; } = [];

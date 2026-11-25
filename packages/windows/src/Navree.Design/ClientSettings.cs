@@ -51,6 +51,10 @@ public static class ClientConfig
     /// <param name="signInCallback">The scheme a sign-in in the browser comes back on, when the app has one.</param>
     /// <param name="loopbackHttp">Whether plain http to the machine itself is allowed.</param>
     /// <param name="undrawable">The kinds this build does not draw.</param>
+    /// <param name="signInPaths">
+    /// The addresses that start a sign-in with another site, where a star stands for one segment (<c>/auth/*/redirect</c>): a link to one opens
+    /// the sign-in in the browser and is never fetched. None for a run that cannot catch a sign-in's return.
+    /// </param>
     /// <returns>The configuration as UTF-8 JSON.</returns>
     public static byte[] Json(
         string origin,
@@ -62,7 +66,8 @@ public static class ClientConfig
         IReadOnlyList<string> caps,
         string? signInCallback,
         bool loopbackHttp,
-        IReadOnlyList<string> undrawable)
+        IReadOnlyList<string> undrawable,
+        IReadOnlyList<string>? signInPaths = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         using MemoryStream stream = new();
@@ -110,10 +115,26 @@ public static class ClientConfig
 
             w.WriteEndArray();
             w.WriteEndObject();
-            if (signInCallback is not null)
+            IReadOnlyList<string> starts = signInPaths ?? Array.Empty<string>();
+            if (signInCallback is not null || starts.Count > 0)
             {
                 w.WriteStartObject("sign_in");
-                w.WriteString("callback", signInCallback);
+                if (starts.Count > 0)
+                {
+                    w.WriteStartArray("paths");
+                    foreach (string path in starts)
+                    {
+                        w.WriteStringValue(path);
+                    }
+
+                    w.WriteEndArray();
+                }
+
+                if (signInCallback is not null)
+                {
+                    w.WriteString("callback", signInCallback);
+                }
+
                 w.WriteEndObject();
             }
 

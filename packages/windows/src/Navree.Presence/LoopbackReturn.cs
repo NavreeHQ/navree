@@ -9,6 +9,10 @@ namespace Navree.Presence;
 /// listening for that one request. It listens on the loopback address only (so nothing off the machine can reach it), takes
 /// one request, answers it with a short page that says the person may go back to the app, and stops.
 /// </summary>
+/// <remarks>
+/// The app starts none: the server gives a Windows app's sign-in to a link of the app's own scheme alone, so a sign-in that would come back
+/// on a port is not started (<see cref="BrowserSignIn.WhyNotReturn"/>) and the app listens on no port.
+/// </remarks>
 public sealed class LoopbackReturn : IDisposable
 {
     private const int LargestRequest = 8192;

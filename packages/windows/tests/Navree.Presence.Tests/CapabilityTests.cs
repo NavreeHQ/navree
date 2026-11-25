@@ -67,6 +67,10 @@ public sealed class CapabilityTests
         IReadOnlyList<string> elevated = Capabilities.ProtocolCaps(Capabilities.For(false, true));
         Expect.That(!elevated.Contains("local_notification"), "an elevated run lists no local notification");
         Expect.That(elevated.Contains("share"), "it still lists the share sheet");
+
+        // A sign-in session is listed last, and only for an app with a scheme of its own, on which the sign-in comes back.
+        IReadOnlyList<string> withScheme = Capabilities.ProtocolCaps(Capabilities.For(false, false), "charkha");
+        CollectionAssert.AreEqual(new[] { "clipboard", "open_url", "open_settings", "share", "local_notification", "auth_session" }, withScheme.ToArray());
     }
 
     [TestMethod]
