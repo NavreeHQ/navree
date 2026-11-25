@@ -161,14 +161,14 @@ class AndroidEffects(
      * with: read now, and made and written down when there is none
      * ([InstallSecret]). It goes to the core and nowhere else.
      */
-    val installSecret: String = InstallSecret.of(File(app.noBackupFilesDir, InstallSecret.FILE))
+    internal val installSecret: String = InstallSecret.of(File(app.noBackupFilesDir, InstallSecret.FILE))
 
     /**
      * Whether the mark this start read is of a plain key, made before the
      * install had a secret: the core is then asked to say what the plain key
      * of the person it names was, so that person is not taken for another.
      */
-    val keepsPlainKey: Boolean = person.keepsPlainKey
+    internal val keepsPlainKey: Boolean = person.keepsPlainKey
 
     /**
      * The core's two words for the end of a session. `session_ending` comes
