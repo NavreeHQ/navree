@@ -2149,6 +2149,209 @@ fn what_an_author_says_of_a_control_is_said_to_a_native_client_and_never_written
     assert_eq!(build().to_html(), browser.to_html());
 }
 
+/// A client of `platform` whose app says it has the device features `caps`.
+fn with_caps(platform: Platform, caps: &[&str]) -> Client {
+    let mut client = Client::new(platform, FormFactor::Phone);
+    client.caps = caps.iter().map(|cap| (*cap).to_owned()).collect();
+    client
+}
+
+/// The ways in of a sign-in page: a link to the passkey page that starts a passkey on the
+/// device, and a button that only an app with the provider's sheet is given.
+fn ways_in() -> View {
+    use navree_ui::{NativeCall, NativeProvider, NativeThen};
+    let passkey = NativeCall::passkey_sign_in(
+        "/sign-in/passkey/native/options",
+        NativeThen::new(
+            "/sign-in/passkey/native?next=%2Fdeals",
+            "tk-1",
+            1_794_000_000,
+        ),
+    );
+    let apple = NativeCall::provider_sign_in(
+        NativeProvider::Apple,
+        "/api/auth/social/apple/native/nonce",
+        "/api/auth/social/apple/native/session",
+    )
+    .second_step("/sign-in/two-factor");
+    View::new("Sign in").body((
+        el("a")
+            .href("/sign-in/passkey?next=%2Fdeals")
+            .child("Sign in with a passkey")
+            .native_call(passkey),
+        Button::outline("Sign in with Apple").native_call(apple),
+    ))
+}
+
+#[test]
+fn a_control_starts_its_device_call_for_a_client_whose_app_has_the_feature() {
+    use navree_native::device::{
+        Alt, Call, DeviceCall, OriginPath, Passkey, PasskeyMode, PlatformSignIn, SignInProvider,
+    };
+    let path = |text: &str| OriginPath::parse(text).unwrap();
+    let page = TestNative::build(
+        with_caps(Platform::Ios, &["passkey", "platform_sign_in"]),
+        ways_in,
+    );
+    assert!(page.is_native(), "{:?}", page.why());
+    let Some(Action::Device(DeviceCall { call, then, alt })) = page.tap("Sign in with a passkey")
+    else {
+        panic!(
+            "not a device call: {:?}",
+            page.tap("Sign in with a passkey")
+        );
+    };
+    assert_eq!(
+        call,
+        Call::Passkey(Passkey {
+            mode: PasskeyMode::SignIn,
+            options: path("/sign-in/passkey/native/options"),
+            conditional: false,
+        })
+    );
+    // The result goes where the page said, with the ticket it was given.
+    let then = then.expect("where the assertion is posted");
+    assert_eq!(then.href.as_str(), "/sign-in/passkey/native?next=%2Fdeals");
+    assert_eq!(then.ticket.as_str(), "tk-1");
+    assert_eq!(then.exp, 1_794_000_000);
+    // A build that can't start the call after all goes where the link leads.
+    assert_eq!(
+        alt,
+        Some(Alt::Navigate {
+            href: path("/sign-in/passkey?next=%2Fdeals")
+        })
+    );
+    // A sign-in with a provider posts to its own route: no ticket, no stand-in.
+    assert_eq!(
+        page.tap("Sign in with Apple"),
+        Some(Action::Device(DeviceCall::new(PlatformSignIn {
+            provider: SignInProvider::Apple,
+            nonce: path("/api/auth/social/apple/native/nonce"),
+            sign_in: path("/api/auth/social/apple/native/session"),
+            web: None,
+            client_id: None,
+            second_step: Some(path("/sign-in/two-factor")),
+        })))
+    );
+}
+
+#[test]
+fn a_client_whose_app_lacks_the_feature_gets_the_control_as_it_was() {
+    // An app with neither feature: the link leads to the passkey page, the button does nothing.
+    let page = TestNative::build(with_caps(Platform::Android, &["share"]), ways_in);
+    assert!(page.is_native(), "{:?}", page.why());
+    assert_eq!(
+        page.tap("Sign in with a passkey"),
+        Some(Action::navigate("/sign-in/passkey?next=%2Fdeals"))
+    );
+    assert_eq!(page.tap("Sign in with Apple"), None);
+    // Each call goes by its own feature.
+    let page = TestNative::build(with_caps(Platform::Android, &["passkey"]), ways_in);
+    assert!(matches!(
+        page.tap("Sign in with a passkey"),
+        Some(Action::Device(_))
+    ));
+    assert_eq!(page.tap("Sign in with Apple"), None);
+    // Built for a browser, the page carries no word of either call.
+    let plain = View::new("Sign in").body((
+        el("a")
+            .href("/sign-in/passkey?next=%2Fdeals")
+            .child("Sign in with a passkey"),
+        Button::outline("Sign in with Apple"),
+    ));
+    assert_eq!(ways_in().to_html(), plain.to_html());
+    assert!(!ways_in().to_html().contains("tk-1"));
+}
+
+#[test]
+fn a_device_call_that_names_another_site_is_never_sent() {
+    use navree_ui::{NativeCall, NativeProvider, NativeThen};
+    let client = || with_caps(Platform::Android, &["passkey", "platform_sign_in"]);
+    for (options, then) in [
+        ("https://evil.example/options", "/sign-in/passkey/native"),
+        ("//evil.example/options", "/sign-in/passkey/native"),
+        (
+            "/sign-in/passkey/native/options",
+            "https://evil.example/take",
+        ),
+        ("/sign-in/passkey/native/options", "/\\evil.example"),
+    ] {
+        let page = TestNative::build(client(), || {
+            View::new("Sign in").body(
+                el("a")
+                    .href("/sign-in/passkey")
+                    .child("Sign in with a passkey")
+                    .native_call(NativeCall::passkey_sign_in(
+                        options,
+                        NativeThen::new(then, "tk-1", 1_794_000_000),
+                    )),
+            )
+        });
+        assert_eq!(
+            page.tap("Sign in with a passkey"),
+            Some(Action::navigate("/sign-in/passkey")),
+            "{options} {then}"
+        );
+    }
+    // A call with no ticket has nothing to post its result with.
+    let page = TestNative::build(client(), || {
+        View::new("Sign in").body(
+            el("a")
+                .href("/sign-in/passkey")
+                .child("Sign in with a passkey")
+                .native_call(NativeCall::passkey_sign_in(
+                    "/sign-in/passkey/native/options",
+                    NativeThen::new("/sign-in/passkey/native", "", 1_794_000_000),
+                )),
+        )
+    });
+    assert_eq!(
+        page.tap("Sign in with a passkey"),
+        Some(Action::navigate("/sign-in/passkey"))
+    );
+    let page = TestNative::build(client(), || {
+        View::new("Sign in").body(Button::outline("Sign in with Google").native_call(
+            NativeCall::provider_sign_in(
+                NativeProvider::Google,
+                "/api/auth/social/google/native/nonce",
+                "https://evil.example/session",
+            ),
+        ))
+    });
+    assert_eq!(page.tap("Sign in with Google"), None);
+}
+
+#[test]
+fn a_page_asks_which_native_client_has_a_feature() {
+    use navree_ui::{NativeFamily, native_client_with};
+    // Outside a native client's request nobody has anything.
+    assert_eq!(native_client_with("passkey"), None);
+    let asked = |client: Client| {
+        let mut said = None;
+        TestNative::build(client, || {
+            said = Some((
+                native_client_with("passkey").map(|client| client.family),
+                native_client_with("platform_sign_in").map(|client| client.family),
+            ));
+            View::new("x")
+        });
+        said.unwrap()
+    };
+    assert_eq!(
+        asked(with_caps(Platform::Ipados, &["passkey"])),
+        (Some(NativeFamily::Apple), None)
+    );
+    assert_eq!(
+        asked(with_caps(Platform::Android, &["platform_sign_in"])),
+        (None, Some(NativeFamily::Android))
+    );
+    assert_eq!(
+        asked(with_caps(Platform::Windows, &["passkey"])),
+        (Some(NativeFamily::Other), None)
+    );
+    assert_eq!(asked(with_caps(Platform::Ios, &[])), (None, None));
+}
+
 #[test]
 fn a_link_a_browser_reloads_the_page_for_is_a_plain_link_to_a_native_client() {
     let page = TestNative::of(

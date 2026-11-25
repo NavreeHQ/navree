@@ -1343,6 +1343,19 @@ impl Cx {
     /// What a link or a button does, from its attributes.
     #[inline(never)]
     pub(crate) fn action_of(&mut self, element: &Element) -> Read<Option<Action>> {
+        // What the page said a tap starts on the device comes before what the markup does:
+        // it was written only for a client whose app says it has the feature.
+        if let Some(mut device) = element.said().and_then(|hints| hints.device) {
+            // A link keeps its address, for a build that can't start the call after all.
+            if device.alt.is_none()
+                && element.tag() == "a"
+                && let Some(href) = attr(element, "href")
+                && let Ok(href) = navree_native::device::OriginPath::parse(&href)
+            {
+                device.alt = Some(navree_native::device::Alt::Navigate { href });
+            }
+            return Ok(Some(Action::Device(device)));
+        }
         let commands = match attr(element, "data-ui-click") {
             Some(json) => Some(commands(&json)?),
             None => None,

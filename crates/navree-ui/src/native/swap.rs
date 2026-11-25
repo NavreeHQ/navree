@@ -1118,14 +1118,9 @@ pub(crate) async fn shell_parts(
     ctx: &navree_kernel::AppContext,
     client: Option<&navree_native::Client>,
 ) -> crate::NativeShellParts {
-    use navree_native::Platform as P;
-    let who = crate::NativeClient::new(match client.map(|client| client.platform) {
-        Some(P::Ios | P::Ipados | P::Macos | P::Watchos | P::Tvos | P::Visionos) => {
-            crate::NativeFamily::Apple
-        }
-        Some(P::Android | P::Wearos) => crate::NativeFamily::Android,
-        _ => crate::NativeFamily::Other,
-    });
+    let who = crate::NativeClient::new(client.map_or(crate::NativeFamily::Other, |client| {
+        crate::device::family_of(client.platform)
+    }));
     let mut parts = crate::NativeShellParts::default();
     for part in ctx
         .get_all::<dyn crate::NativeShellPart>()

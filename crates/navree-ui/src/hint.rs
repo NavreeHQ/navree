@@ -110,6 +110,9 @@ pub(crate) struct Hints {
     pub(crate) standard: Option<Standard>,
     /// Why it can't be used now.
     pub(crate) reason: Option<String>,
+    /// The device call a tap starts in the client's app, in place of what the control
+    /// does in a browser: written only for a client whose app says it has the feature.
+    pub(crate) device: Option<navree_native::DeviceCall>,
 }
 
 /// What a table's column is to a record, for a screen too narrow for a table,
