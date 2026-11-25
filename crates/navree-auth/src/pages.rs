@@ -1026,7 +1026,29 @@ fn signed_in_redirect(
     paths: &Paths,
     next: Option<&str>,
 ) -> Response {
-    Reply::redirect(signed_in_target(service, session, paths, next)).into_response()
+    onward(signed_in_target(service, session, paths, next)).into_response()
+}
+
+/// Whether `target` is the address that finishes handing a sign-in over to an
+/// app ([`APP_SIGN_IN_FINISH_PATH`](crate::APP_SIGN_IN_FINISH_PATH)), with
+/// whatever query it carries. Only the browser itself opens it: it answers
+/// with a redirect to the app, once, which no fetch can follow.
+fn finishes_hand_over(target: &str) -> bool {
+    target.split(['?', '#']).next() == Some(crate::hand_over::APP_SIGN_IN_FINISH_PATH)
+}
+
+/// The reply that sends a browser on to `target`, a page of this site, once
+/// it is signed in. navree-ui's runtime fetches the page a reply goes to and
+/// shows it in place; the finish of a hand-over is no page to fetch, so the
+/// runtime is told to leave for it, as it leaves for another site: the
+/// browser goes there itself, and nothing of the runtime's asks for it first.
+/// A browser without the runtime gets the same redirect either way.
+fn onward(target: LocalHref) -> Reply {
+    if finishes_hand_over(target.as_str()) {
+        Reply::redirect_external(target.as_str())
+    } else {
+        Reply::redirect(target)
+    }
 }
 
 /// The sign-up page around `form`.
@@ -1347,8 +1369,7 @@ impl Controller for PagesController {
                     let (paths, this) = (at.clone(), this.clone());
                     async move {
                         if signed_in(&parts) {
-                            return Reply::redirect(paths.after(query.next.as_deref()))
-                                .into_response();
+                            return onward(paths.after(query.next.as_deref())).into_response();
                         }
                         let next = query
                             .next
@@ -1895,7 +1916,7 @@ impl PagesController {
                     let paths = at.clone();
                     async move {
                         if signed_in(&parts) {
-                            return Reply::redirect(paths.after_sign_up(query.next.as_deref()))
+                            return onward(paths.after_sign_up(query.next.as_deref()))
                                 .into_response();
                         }
                         let next = query
@@ -2019,7 +2040,7 @@ impl PagesController {
                                 } else {
                                     paths.after_sign_up(input.next.as_deref())
                                 };
-                                Ok(Reply::redirect(target).into_response())
+                                Ok(onward(target).into_response())
                             }
                             Ok(SessionSignIn::TwoFactorRequired) => Ok(Reply::redirect(
                                 paths.with_next(&paths.two_factor, input.next.as_deref()),
@@ -2097,6 +2118,27 @@ mod tests {
         let mut none = NativeShellParts::default();
         part(false).contribute(&mut none, &NativeClient::new(NativeFamily::Apple));
         assert_eq!(none, NativeShellParts::default());
+    }
+
+    #[test]
+    fn the_finish_of_a_hand_over_is_known_with_its_query_and_nothing_near_it_is() {
+        for finish in [
+            "/auth/app/finish",
+            "/auth/app/finish?attempt=k3xq7aB2",
+            "/auth/app/finish#top",
+        ] {
+            assert!(finishes_hand_over(finish), "{finish}");
+        }
+        for page in [
+            "/",
+            "/orders?next=/auth/app/finish",
+            "/auth/app/finished",
+            "/auth/app/finish/",
+            "/auth/app/sign-in",
+            "/shop/auth/app/finish",
+        ] {
+            assert!(!finishes_hand_over(page), "{page}");
+        }
     }
 
     #[test]
