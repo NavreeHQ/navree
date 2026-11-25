@@ -76,6 +76,32 @@ pub(crate) fn mask_urls(s: &str, mut found: Option<&mut Vec<String>>) -> String 
         let (url, after) = tail.split_at(url_end);
         let authority_end = url.find(['/', '?', '#']).unwrap_or(url.len());
         let (authority, path_and_query) = url.split_at(authority_end);
+        // A `#`, `?` or `/` written as it is in a password ends the
+        // authority early: the rest of the password, and the `@` that ends
+        // it, come after. So with a `:` after the host and an `@` later in
+        // the URL, everything from that `:` to the last `@` is taken for a
+        // password. A URL with a port and an `@` in its path or query is
+        // masked the same way: the two cannot be told apart.
+        let host_start = authority.rfind('@').map_or(0, |at| at + 1);
+        let after_brackets = authority[host_start..]
+            .rfind(']')
+            .map_or(host_start, |end| host_start + end + 1);
+        let late = authority[after_brackets..]
+            .find(':')
+            .map(|colon| after_brackets + colon)
+            .zip(path_and_query.rfind('@'));
+        let (authority, late_password, path_and_query) = match late {
+            Some((colon, at)) => (
+                &authority[..colon],
+                Some(format!(
+                    "{}{}",
+                    &authority[colon + 1..],
+                    &path_and_query[..at]
+                )),
+                &path_and_query[at..],
+            ),
+            None => (authority, None, path_and_query),
+        };
         let userinfo = authority
             .rfind('@')
             .map(|end| (end, &authority[..end]))
@@ -92,6 +118,13 @@ pub(crate) fn mask_urls(s: &str, mut found: Option<&mut Vec<String>>) -> String 
             }
             None => out.push_str(authority),
         }
+        if let Some(password) = late_password {
+            out.push(':');
+            out.push_str(REDACTED);
+            if let Some(found) = found.as_deref_mut() {
+                found.push(password);
+            }
+        }
         out.push_str(&mask_parameters(path_and_query, found.as_deref_mut()));
         rest = after;
     }
@@ -100,26 +133,44 @@ pub(crate) fn mask_urls(s: &str, mut found: Option<&mut Vec<String>>) -> String 
 }
 
 /// Masks the values of secret-looking parameters after the first `?` or `#`,
-/// keeping every separator as it was.
+/// keeping every separator as it was. A secret with a `#`, `&` or `;`
+/// written as it is in it is cut short there, and what follows reads as a
+/// parameter with no value: such a word, straight after a secret-looking
+/// parameter, is masked too.
 fn mask_parameters(path_and_query: &str, mut found: Option<&mut Vec<String>>) -> String {
     let Some(start) = path_and_query.find(['?', '#']) else {
         return path_and_query.to_owned();
     };
     let (head, mut rest) = path_and_query.split_at(start + 1);
     let mut out = String::from(head);
+    let mut after_secret = false;
     loop {
         let end = rest.find(['&', ';', '#']).unwrap_or(rest.len());
         let (parameter, tail) = rest.split_at(end);
         match parameter.split_once('=') {
-            Some((name, value)) if is_secret_key(name) && !value.is_empty() => {
-                out.push_str(name);
-                out.push('=');
-                out.push_str(REDACTED);
-                if let Some(found) = found.as_deref_mut() {
-                    found.push(value.to_owned());
+            Some((name, value)) if is_secret_key(name) => {
+                after_secret = true;
+                if value.is_empty() {
+                    out.push_str(parameter);
+                } else {
+                    out.push_str(name);
+                    out.push('=');
+                    out.push_str(REDACTED);
+                    if let Some(found) = found.as_deref_mut() {
+                        found.push(value.to_owned());
+                    }
                 }
             }
-            _ => out.push_str(parameter),
+            None if after_secret && !parameter.is_empty() => {
+                out.push_str(REDACTED);
+                if let Some(found) = found.as_deref_mut() {
+                    found.push(parameter.to_owned());
+                }
+            }
+            _ => {
+                after_secret = false;
+                out.push_str(parameter);
+            }
         }
         let Some(separator) = tail.chars().next() else {
             break;
@@ -256,6 +307,49 @@ mod tests {
         ] {
             assert_eq!(mask_urls(input, None), expected, "{input}");
         }
+    }
+
+    /// A `#`, `?` or `/` written as it is in a password ends the authority
+    /// early, and a `#` or `&` in a secret parameter cuts it short: no part
+    /// of either is shown.
+    #[test]
+    fn a_secret_with_a_mark_written_as_it_is_is_masked() {
+        for (input, expected) in [
+            (
+                "postgres://navree:#Abc1@localhost/crm",
+                "postgres://navree:[redacted]@localhost/crm",
+            ),
+            (
+                "postgres://navree:?Abc1@localhost/crm",
+                "postgres://navree:[redacted]@localhost/crm",
+            ),
+            (
+                "postgres://navree:2024#Spring@db/crm",
+                "postgres://navree:[redacted]@db/crm",
+            ),
+            (
+                "postgres://navree:pa/ss@localhost:5432/crm",
+                "postgres://navree:[redacted]@localhost:5432/crm",
+            ),
+            (
+                "postgres://us@er:12#hunter2@host/db",
+                "postgres://us@er:[redacted]@host/db",
+            ),
+            ("postgres://[::1]:5432/crm", "postgres://[::1]:5432/crm"),
+            (
+                "postgres://h/d?password=hun#ter2",
+                "postgres://h/d?password=[redacted]#[redacted]",
+            ),
+            (
+                "postgres://h/d?password=hun&ter2&sslmode=require",
+                "postgres://h/d?password=[redacted]&[redacted]&sslmode=require",
+            ),
+        ] {
+            assert_eq!(mask_urls(input, None), expected, "{input}");
+        }
+        let mut found = Vec::new();
+        mask_urls("postgres://u:12#hunter2@h/d", Some(&mut found));
+        assert_eq!(found, ["12#hunter2"]);
     }
 
     #[test]
