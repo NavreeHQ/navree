@@ -1,8 +1,9 @@
 //! The core the cloud stores share (`navree_storage::cloud`): object keys
 //! that keep their bytes and stay under their bucket, a credential that is
 //! fetched again before it expires and once for many callers, requests
-//! that are sent again when the store says so, and a client that sends
-//! plain HTTP only where an endpoint asks for it.
+//! that are sent again when the store says so, a client that sends plain
+//! HTTP only where an endpoint asks for it, and a file whose body stops
+//! part-way and is read on from there.
 
 #![cfg(feature = "__cloud")]
 
@@ -11,14 +12,18 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
-use futures_util::TryStreamExt;
+use futures_util::stream::BoxStream;
+use futures_util::{StreamExt, TryStreamExt};
+use http::HeaderMap;
+use navree_kernel::BoxFuture;
 use navree_storage::cloud::credentials::{Credential, Provider};
-use navree_storage::cloud::http::{Client, ERROR_BODY_LIMIT, Request};
+use navree_storage::cloud::http::{Client, ERROR_BODY_LIMIT, Request, Response};
 use navree_storage::cloud::keys::{check_key, encode_component, encode_key, object_url};
 use navree_storage::cloud::retry::{Replay, RetryPolicy, with_backoff};
-use navree_storage::cloud::{ErrorKind, xml};
+use navree_storage::cloud::{Error, ErrorKind, xml};
 use navree_storage::store::{Method, StoreError, Url};
 use percent_encoding::percent_decode_str;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use wiremock::matchers::any;
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -544,4 +549,340 @@ async fn a_request_that_writes_says_its_length_and_one_that_asks_says_none() {
         })
         .collect();
     assert_eq!(lengths, [Some("0"), Some("6"), Some("0"), None, None, None]);
+}
+
+/// A file of 1000 bytes whose every byte tells where it is, so that bytes
+/// from another place show.
+fn ledger() -> Vec<u8> {
+    (0..1000u32).map(|at| (at % 251) as u8).collect()
+}
+
+/// The head of the answer to a `GET` of the whole ledger.
+const WHOLE: &str = "HTTP/1.1 200 OK\r\ncontent-length: 1000\r\netag: \"v1\"\r\n\r\n";
+
+/// The address of a store that answers its one request with `head` and
+/// `body` and then hangs up, whatever length the head declares: a body
+/// that stops part-way.
+async fn hangs_up_after(head: &str, body: &[u8]) -> Url {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let (head, body) = (head.to_owned(), body.to_vec());
+    tokio::spawn(async move {
+        let Ok((mut socket, _)) = listener.accept().await else {
+            return;
+        };
+        // The whole request first: hanging up with something unread would
+        // reset the connection, and a reset can take sent bytes with it.
+        let mut request = Vec::new();
+        let mut buffer = [0u8; 2048];
+        while !request.windows(4).any(|end| end == b"\r\n\r\n") {
+            match socket.read(&mut buffer).await {
+                Ok(0) | Err(_) => return,
+                Ok(read) => request.extend_from_slice(&buffer[..read]),
+            }
+        }
+        let _ = socket.write_all(head.as_bytes()).await;
+        let _ = socket.write_all(&body).await;
+        let _ = socket.shutdown().await;
+    });
+    Url::parse(&format!("http://{address}/ludhiana-invoices/ledger.csv")).unwrap()
+}
+
+/// How a store answers a request for the rest of `file`: the bytes its
+/// `Range` names, as a `206` that says which they are, with the entity tag
+/// `etag`.
+fn the_rest_of(
+    file: Vec<u8>,
+    etag: &'static str,
+) -> impl Fn(&wiremock::Request) -> ResponseTemplate + Send + Sync + 'static {
+    move |request: &wiremock::Request| {
+        let range = request
+            .headers
+            .get("range")
+            .and_then(|range| range.to_str().ok())
+            .and_then(|range| range.strip_prefix("bytes="))
+            .and_then(|range| range.split_once('-'));
+        let Some((first, last)) = range else {
+            return ResponseTemplate::new(400);
+        };
+        let first = first.parse::<usize>().ok();
+        let last = match last {
+            "" => Some(file.len() - 1),
+            last => last.parse::<usize>().ok(),
+        };
+        match (first, last) {
+            (Some(first), Some(last)) if first <= last && last < file.len() => {
+                ResponseTemplate::new(206)
+                    .insert_header(
+                        "content-range",
+                        format!("bytes {first}-{last}/{}", file.len()),
+                    )
+                    .insert_header("etag", etag)
+                    .set_body_bytes(file[first..=last].to_vec())
+            }
+            _ => ResponseTemplate::new(416),
+        }
+    }
+}
+
+/// A store at which `answer` answers every request, and the address of the
+/// ledger on it.
+async fn store_with(answer: impl wiremock::Respond + 'static) -> (MockServer, Url) {
+    let server = MockServer::start().await;
+    Mock::given(any()).respond_with(answer).mount(&server).await;
+    let url = Url::parse(&format!("{}/ludhiana-invoices/ledger.csv", server.uri())).unwrap();
+    (server, url)
+}
+
+/// The answer to a request, once it comes.
+type Answer = BoxFuture<'static, navree_storage::cloud::Result<Response>>;
+
+/// How a driver asks for the rest of a file: one `GET` of `url` with the
+/// headers it is handed, the answer given as it comes.
+fn asking(client: &Client, url: &Url) -> impl FnMut(HeaderMap) -> Answer + Send + 'static {
+    let (client, url) = (client.clone(), url.clone());
+    move |rest: HeaderMap| {
+        let (client, url) = (client.clone(), url.clone());
+        Box::pin(async move {
+            let mut request = Request::new(Method::GET, url);
+            request.headers.extend(rest);
+            client.send(request).await
+        })
+    }
+}
+
+/// The answer to a `GET` of `url`: a success whose body is not read yet.
+async fn first_answer(client: &Client, url: Url) -> Response {
+    let answer = client.send(Request::new(Method::GET, url)).await.unwrap();
+    answer.success().await.unwrap()
+}
+
+/// What a stream gave before it ended, and the failure it ended with if it
+/// did.
+async fn drain(
+    mut body: BoxStream<'static, navree_storage::cloud::Result<Bytes>>,
+) -> (Vec<u8>, Option<Error>) {
+    let mut read = Vec::new();
+    loop {
+        match body.next().await {
+            Some(Ok(chunk)) => read.extend_from_slice(&chunk),
+            Some(Err(failure)) => return (read, Some(failure)),
+            None => return (read, None),
+        }
+    }
+}
+
+/// The `Range` of each request `server` got, in order.
+async fn ranges_asked(server: &MockServer) -> Vec<String> {
+    let requests = server.received_requests().await.unwrap();
+    requests
+        .iter()
+        .map(|request| request.headers["range"].to_str().unwrap().to_owned())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_file_whose_body_stops_is_read_on_from_where_it_stopped() {
+    let file = ledger();
+    // Plain HTTP to more than one address: the two halves of a store.
+    let client = Client::for_metadata().unwrap();
+    let (rest, rest_url) = store_with(the_rest_of(file.clone(), "\"v1\"")).await;
+
+    // The whole file, on a connection that drops after 400 of 1000 bytes.
+    let first = first_answer(&client, hangs_up_after(WHOLE, &file[..400]).await).await;
+    assert_eq!(first.declared_length(), Some(1000));
+    let body = first.resuming_stream(&quick(3), asking(&client, &rest_url));
+    let (read, failure) = drain(body).await;
+    assert!(failure.is_none(), "{failure:?}");
+    assert_eq!(read, file);
+
+    // A range of it, bytes 100 to 899, that drops after 300 bytes.
+    let head = "HTTP/1.1 206 Partial Content\r\ncontent-length: 800\r\n\
+                content-range: bytes 100-899/1000\r\netag: \"v1\"\r\n\r\n";
+    let first = first_answer(&client, hangs_up_after(head, &file[100..400]).await).await;
+    let body = first.resuming_stream(&quick(3), asking(&client, &rest_url));
+    let (read, failure) = drain(body).await;
+    assert!(failure.is_none(), "{failure:?}");
+    assert_eq!(read, &file[100..900]);
+
+    // The rest was asked for once each time: from the byte after the last
+    // that arrived, to the end of what was first asked, of the same file.
+    assert_eq!(ranges_asked(&rest).await, ["bytes=400-", "bytes=400-899"]);
+    let requests = rest.received_requests().await.unwrap();
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.headers["if-match"] == "\"v1\"")
+    );
+}
+
+#[tokio::test]
+async fn a_file_replaced_while_it_is_read_ends_in_a_failure_and_is_never_mixed() {
+    let file = ledger();
+    let client = Client::for_metadata().unwrap();
+
+    // The store says the file there is another one now.
+    let (rest, rest_url) = store_with(ResponseTemplate::new(412)).await;
+    let first = first_answer(&client, hangs_up_after(WHOLE, &file[..400]).await).await;
+    let body = first.resuming_stream(&quick(3), asking(&client, &rest_url));
+    let (read, failure) = drain(body).await;
+    assert_eq!(read, &file[..400]);
+    let failure = failure.unwrap();
+    assert_eq!(failure.kind(), ErrorKind::Status);
+    assert_eq!(failure.status().map(|status| status.as_u16()), Some(412));
+    assert_eq!(ranges_asked(&rest).await, ["bytes=400-"], "asked once");
+
+    // A store that takes no notice of `If-Match` and sends the rest of the
+    // other file: its entity tag tells.
+    let other: Vec<u8> = file.iter().rev().copied().collect();
+    let (rest, rest_url) = store_with(the_rest_of(other, "\"v2\"")).await;
+    let first = first_answer(&client, hangs_up_after(WHOLE, &file[..400]).await).await;
+    let body = first.resuming_stream(&quick(3), asking(&client, &rest_url));
+    let (read, failure) = drain(body).await;
+    assert_eq!(read, &file[..400]);
+    let failure = failure.unwrap();
+    assert_eq!(failure.kind(), ErrorKind::Answer);
+    assert_eq!(failure.to_string(), "the file changed while it was read");
+    assert_eq!(ranges_asked(&rest).await, ["bytes=400-"], "asked once");
+}
+
+#[tokio::test]
+async fn an_answer_that_is_not_the_rest_asked_for_ends_the_stream() {
+    let file = ledger();
+    let client = Client::for_metadata().unwrap();
+    let whole_again = ResponseTemplate::new(200)
+        .insert_header("etag", "\"v1\"")
+        .set_body_bytes(file.clone());
+    let from_the_start = ResponseTemplate::new(206)
+        .insert_header("etag", "\"v1\"")
+        .insert_header("content-range", "bytes 0-999/1000")
+        .set_body_bytes(file.clone());
+    let which_bytes_unsaid = ResponseTemplate::new(206)
+        .insert_header("etag", "\"v1\"")
+        .set_body_bytes(file[400..].to_vec());
+    for (answer, says) in [
+        (
+            whole_again,
+            "the store answered 200 OK when asked for the rest of a file",
+        ),
+        (
+            from_the_start,
+            "the rest of a file was answered with other bytes than were asked for",
+        ),
+        (
+            which_bytes_unsaid,
+            "the rest of a file was answered without saying which bytes it is",
+        ),
+    ] {
+        let (rest, rest_url) = store_with(answer).await;
+        let first = first_answer(&client, hangs_up_after(WHOLE, &file[..400]).await).await;
+        let body = first.resuming_stream(&quick(3), asking(&client, &rest_url));
+        let (read, failure) = drain(body).await;
+        assert_eq!(read, &file[..400], "{says}");
+        let failure = failure.unwrap();
+        assert_eq!(failure.kind(), ErrorKind::Answer, "{says}");
+        assert_eq!(failure.to_string(), says);
+        assert_eq!(ranges_asked(&rest).await, ["bytes=400-"], "asked once");
+    }
+}
+
+#[tokio::test]
+async fn the_rest_is_asked_for_as_often_as_the_policy_allows_and_no_more() {
+    let file = ledger();
+    let client = Client::for_metadata().unwrap();
+
+    // Busy twice, then the rest.
+    let calls = Arc::new(AtomicUsize::new(0));
+    let (counted, rest_of) = (calls.clone(), the_rest_of(file.clone(), "\"v1\""));
+    let busy_twice = move |request: &wiremock::Request| {
+        if counted.fetch_add(1, Ordering::SeqCst) < 2 {
+            ResponseTemplate::new(503)
+        } else {
+            rest_of(request)
+        }
+    };
+    let (rest, rest_url) = store_with(busy_twice).await;
+    let first = first_answer(&client, hangs_up_after(WHOLE, &file[..400]).await).await;
+    let body = first.resuming_stream(&quick(3), asking(&client, &rest_url));
+    let (read, failure) = drain(body).await;
+    assert!(failure.is_none(), "{failure:?}");
+    assert_eq!(read, file);
+    assert_eq!(ranges_asked(&rest).await, ["bytes=400-"; 3]);
+
+    // Busy for good: asked as often as the policy allows, and the failure
+    // is the store's last answer.
+    let (rest, rest_url) = store_with(ResponseTemplate::new(503)).await;
+    let first = first_answer(&client, hangs_up_after(WHOLE, &file[..400]).await).await;
+    let body = first.resuming_stream(&quick(3), asking(&client, &rest_url));
+    let (read, failure) = drain(body).await;
+    assert_eq!(read, &file[..400]);
+    let failure = failure.unwrap();
+    assert_eq!(failure.status().map(|status| status.as_u16()), Some(503));
+    assert_eq!(ranges_asked(&rest).await, ["bytes=400-"; 3]);
+
+    // A policy with no retries asks for nothing: the failure is the body's.
+    let (rest, rest_url) = store_with(the_rest_of(file.clone(), "\"v1\"")).await;
+    let first = first_answer(&client, hangs_up_after(WHOLE, &file[..400]).await).await;
+    let body = first.resuming_stream(&quick(0), asking(&client, &rest_url));
+    let (read, failure) = drain(body).await;
+    assert_eq!(read, &file[..400]);
+    assert_eq!(failure.unwrap().status(), None);
+    assert!(ranges_asked(&rest).await.is_empty());
+}
+
+#[tokio::test]
+async fn a_file_without_a_strong_entity_tag_is_not_asked_for_again() {
+    let file = ledger();
+    let client = Client::for_metadata().unwrap();
+    for head in [
+        "HTTP/1.1 200 OK\r\ncontent-length: 1000\r\n\r\n",
+        "HTTP/1.1 200 OK\r\ncontent-length: 1000\r\netag: W/\"v1\"\r\n\r\n",
+    ] {
+        let (rest, rest_url) = store_with(the_rest_of(file.clone(), "\"v1\"")).await;
+        let first = first_answer(&client, hangs_up_after(head, &file[..400]).await).await;
+        let body = first.resuming_stream(&quick(3), asking(&client, &rest_url));
+        let (read, failure) = drain(body).await;
+        // Nothing would say the rest is of the same file: the body's own
+        // failure ends the stream.
+        assert_eq!(read, &file[..400]);
+        let failure = failure.unwrap();
+        assert_ne!(failure.kind(), ErrorKind::Status, "{failure:?}");
+        assert!(ranges_asked(&rest).await.is_empty(), "{head}");
+    }
+}
+
+#[tokio::test]
+async fn a_file_that_keeps_arriving_is_read_however_often_its_body_stops() {
+    let file = ledger();
+    let client = Client::for_metadata().unwrap();
+    let first_url = hangs_up_after(WHOLE, &file[..400]).await;
+    // The rest stops too, after 300 more bytes.
+    let head = "HTTP/1.1 206 Partial Content\r\ncontent-length: 600\r\n\
+                content-range: bytes 400-999/1000\r\netag: \"v1\"\r\n\r\n";
+    let second_url = hangs_up_after(head, &file[400..700]).await;
+    let (rest, rest_url) = store_with(the_rest_of(file.clone(), "\"v1\"")).await;
+
+    let asked = Arc::new(AtomicUsize::new(0));
+    let again = {
+        let (client, asked) = (client.clone(), asked.clone());
+        move |headers: HeaderMap| {
+            let first_time = asked.fetch_add(1, Ordering::SeqCst) == 0;
+            let url = if first_time { &second_url } else { &rest_url };
+            let (client, url) = (client.clone(), url.clone());
+            async move {
+                let mut request = Request::new(Method::GET, url);
+                request.headers.extend(headers);
+                client.send(request).await
+            }
+        }
+    };
+
+    // One retry is all the policy allows, and each stop gets it afresh once
+    // bytes have arrived in between.
+    let first = first_answer(&client, first_url).await;
+    let (read, failure) = drain(first.resuming_stream(&quick(1), again)).await;
+    assert!(failure.is_none(), "{failure:?}");
+    assert_eq!(read, file);
+    assert_eq!(asked.load(Ordering::SeqCst), 2);
+    assert_eq!(ranges_asked(&rest).await, ["bytes=700-"]);
 }
