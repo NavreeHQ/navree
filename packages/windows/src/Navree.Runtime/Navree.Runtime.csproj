@@ -5,6 +5,7 @@
     <RootNamespace>Navree.Runtime</RootNamespace>
     <AssemblyName>Navree.Runtime</AssemblyName>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Navree Native for Windows: the view state, the events and effects, and the client that drives the runtime core.</Description>
   </PropertyGroup>
 
   <ItemGroup>

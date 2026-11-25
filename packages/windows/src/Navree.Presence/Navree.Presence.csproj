@@ -9,6 +9,7 @@
     <RootNamespace>Navree.Presence</RootNamespace>
     <AssemblyName>Navree.Presence</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Navree Native for Windows: the app's place in Windows (the taskbar, notifications, the jump list, the notification area), as plain rules and the calls of the system that need no window.</Description>
   </PropertyGroup>
 
   <ItemGroup>

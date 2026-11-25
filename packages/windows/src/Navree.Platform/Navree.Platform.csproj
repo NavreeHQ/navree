@@ -8,6 +8,7 @@
     <AssemblyName>Navree.Platform</AssemblyName>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Navree Native for Windows: the connections, the cookies, what is kept on the device and the wipe, as plain .NET.</Description>
   </PropertyGroup>
 
   <ItemGroup>

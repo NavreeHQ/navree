@@ -5,6 +5,7 @@
     <RootNamespace>Navree.Protocol</RootNamespace>
     <AssemblyName>Navree.Protocol</AssemblyName>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Navree Native for Windows: the models of the protocol a Navree server and its native clients speak.</Description>
   </PropertyGroup>
 
 </Project>

@@ -5,6 +5,7 @@
     <RootNamespace>Navree.Design</RootNamespace>
     <AssemblyName>Navree.Design</AssemblyName>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Navree Native for Windows: the design rules as plain functions, with no UI types.</Description>
   </PropertyGroup>
 
   <ItemGroup>
