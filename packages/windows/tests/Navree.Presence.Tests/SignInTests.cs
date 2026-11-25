@@ -1,6 +1,3 @@
-using System.Net.Sockets;
-using System.Text;
-
 namespace Navree.Presence.Tests;
 
 [TestClass]
@@ -181,48 +178,14 @@ public sealed class SignInTests
         Assert.IsFalse(SignInRules.Same("k3xq-7a", null));
     }
 
+    // The client has nothing that listens for a sign-in on a port of this machine, which every account on it can reach: a return there is
+    // read only to be refused, and the type that listened is gone.
     [TestMethod]
-    public void TheRequestLineOfALoopbackReturnMustBeAPlainGetOfAPath()
+    public void NothingInTheClientListensOnAPortForASignInsReturn()
     {
-        Assert.AreEqual("/cb?code=1&state=2", LoopbackReturn.Target("GET /cb?code=1&state=2 HTTP/1.1"));
-        Assert.IsNull(LoopbackReturn.Target("POST /cb HTTP/1.1"));
-        Assert.IsNull(LoopbackReturn.Target("GET http://evil.example/cb HTTP/1.1"));
-        Assert.IsNull(LoopbackReturn.Target("GET //evil.example HTTP/1.1"));
-        Assert.IsNull(LoopbackReturn.Target("GET /cb HTTP/2"));
-        Assert.IsNull(LoopbackReturn.Target("GET /cb"));
-        Assert.IsNull(LoopbackReturn.Target(string.Empty));
-    }
-
-    [TestMethod]
-    public async Task ALoopbackReturnTakesOneRequestOnTheMachineItselfAndAnswersIt()
-    {
-        using LoopbackReturn listening = LoopbackReturn.Start();
-        Assert.AreNotEqual(0, listening.Port);
-        using CancellationTokenSource limit = new(TimeSpan.FromSeconds(20));
-        Task<string?> waiting = listening.WaitAsync(limit.Token);
-
-        using TcpClient browser = new();
-        await browser.ConnectAsync(System.Net.IPAddress.Loopback, listening.Port, limit.Token);
-        NetworkStream stream = browser.GetStream();
-        await stream.WriteAsync(Encoding.ASCII.GetBytes("GET /cb?code=abc&state=xyz HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"), limit.Token);
-        byte[] buffer = new byte[2048];
-        int read = await stream.ReadAsync(buffer, limit.Token);
-        string answer = Encoding.UTF8.GetString(buffer, 0, read);
-
-        string? address = await waiting;
-        Assert.AreEqual("http://127.0.0.1:" + listening.Port + "/cb?code=abc&state=xyz", address);
-        Expect.That(answer.StartsWith("HTTP/1.1 200", StringComparison.Ordinal), "the browser is answered");
-        Expect.That(answer.Contains("no-store", StringComparison.Ordinal), "the answer is not kept");
-        Assert.IsTrue(SignInReturn.Parse("http://127.0.0.1:" + listening.Port + "/cb")!.Matches(address));
-    }
-
-    [TestMethod]
-    public async Task ALoopbackReturnThatIsNotAskedForARequestEndsWhenTheWaitIsCancelled()
-    {
-        using LoopbackReturn listening = LoopbackReturn.Start();
-        using CancellationTokenSource limit = new();
-        Task<string?> waiting = listening.WaitAsync(limit.Token);
-        await limit.CancelAsync();
-        Assert.IsNull(await waiting);
+        SignInReturn onAPort = SignInReturn.Parse("http://127.0.0.1:5123/cb") ?? throw new AssertFailedException("the address was not read");
+        Assert.AreEqual(ReturnKind.Loopback, onAPort.Kind);
+        Assert.IsNotNull(BrowserSignIn.WhyNotReturn(onAPort));
+        Assert.IsNull(typeof(SignInReturn).Assembly.GetType("Navree.Presence.LoopbackReturn"), "a listener for a sign-in's return on a port is in the client again");
     }
 }
