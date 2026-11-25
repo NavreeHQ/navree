@@ -13,7 +13,20 @@
 #    NavreeCore.xcframework.zip, with the Swift package that downloads it
 #    (navree-swift-<version>.tar.gz), each with a SHA-256 file
 #    (packages/apple/scripts/swift-package.sh).
-# 5. crates (environment `crates-io`, which asks for an approval): `cargo
+# 5. android-package: the Android client as Maven packages. The runtime core
+#    is built for arm64-v8a and x86_64 (packages/android/scripts/build-core.sh),
+#    and com.navree:navree-native and com.navree:navree-push-fcm are published
+#    to a folder at the release's version, each with its POM, its sources jar
+#    and its javadoc jar (packages/android/scripts/maven-package.sh). The
+#    folder is attached to the draft as navree-android-<version>.tar.gz, with
+#    a SHA-256 file. Nothing here needs Maven Central.
+# 6. windows-package: the Windows client as NuGet packages. The runtime core
+#    is built as a DLL for win-x64, the eight libraries under
+#    packages/windows/src are built at the release's version and packed
+#    (packages/windows/scripts/pack.ps1), and the eight packages are attached
+#    to the draft in one file, navree-windows-<version>.zip, with a SHA-256
+#    file. Nothing here needs nuget.org.
+# 7. crates (environment `crates-io`, which asks for an approval): `cargo
 #    xtask release publish`, in dependency order. It resumes: run the job
 #    again after a stop, and the crates the registry has are skipped.
 #    Crates that exist on crates.io publish with trusted publishing, a fresh
@@ -24,11 +37,25 @@
 #    no version of and trusted publishing for all the others, and stops at a
 #    new crate when the secret is not set. Afterwards delete the secret,
 #    revoke the token and add the new crate's trusted publisher.
-# 6. npm (environment `npm`, which asks for an approval): the five
+# 8. npm (environment `npm`, which asks for an approval): the five
 #    `@navree/*` packages with provenance (`pnpm -r publish`, which skips a
 #    version npm has already). The secret NPM_TOKEN is used when set (a
 #    package's first publish); otherwise npm's trusted publishing.
-# 7. publish-release: the draft becomes the release; the branch docs/<major>.x
+# 9. maven-central (environment `maven-central`), after the crates: the
+#    Android packages of step 5 are signed, uploaded through the Central
+#    Portal's publishing API and waited for until the Portal says they are
+#    published (packages/android/scripts/maven-central.sh). It resumes: a
+#    version Maven Central has already is left as it is. The environment's
+#    secrets are MAVEN_CENTRAL_USERNAME and MAVEN_CENTRAL_PASSWORD (a Portal
+#    user token), MAVEN_GPG_PRIVATE_KEY and MAVEN_GPG_PASSPHRASE (the signing
+#    key). Until they are set the job publishes nothing, says so in a notice
+#    and passes. packages/android/README.md says what is set up once.
+# 10. nuget (environment `nuget`), after the crates: the Windows packages of
+#    step 6 are pushed to nuget.org (`dotnet nuget push`, which leaves a
+#    version nuget.org has already as it is). The environment's secret is
+#    NUGET_API_KEY. Until it is set the job publishes nothing, says so in a
+#    notice and passes. packages/windows/README.md says what is set up once.
+# 11. publish-release: the draft becomes the release; the branch docs/<major>.x
 #    moves to the tag, and the website and the skeleton repository are told
 #    (with the secret RELEASE_DISPATCH_TOKEN, when set), and so is the Swift
 #    package's repository, named by the variable SWIFT_PACKAGE_REPO, which
@@ -245,6 +272,138 @@ jobs:
             "dist/navree-swift-$VERSION.tar.gz" "dist/navree-swift-$VERSION.tar.gz.sha256" \
             --clobber
 
+  android-package:
+    needs: [verify, github-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      # The Gradle the Android client job of native.yml builds and tests the
+      # client with: the two are changed together.
+      GRADLE_VERSION: "9.6.0"
+      GRADLE_SHA256: bbaeb2fef8710818cf0e261201dab964c572f92b942812df0c3620d62a529a01
+      GRADLE_OPTS: -Dorg.gradle.daemon=false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Build the core
+        run: bash packages/android/scripts/build-core.sh
+
+      # JDK 17 and Gradle, which comes from its own site and is checked
+      # against a fixed sum, and platform 36: as in native.yml.
+      - name: JDK and Gradle
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          curl -fsSL -o "$RUNNER_TEMP/gradle.zip" "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip"
+          echo "$GRADLE_SHA256  $RUNNER_TEMP/gradle.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-$GRADLE_VERSION/bin" >> "$GITHUB_PATH"
+
+      - name: Platform 36
+        run: |
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdk" --licenses > /dev/null
+          "$sdk" --install "platforms;android-36" "build-tools;36.0.0" > /dev/null
+          ls "$ANDROID_HOME/platforms"
+
+      - name: Make the Maven packages and attach them
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          bash packages/android/scripts/maven-package.sh "$VERSION" dist
+          gh release upload "$TAG" \
+            "dist/navree-android-$VERSION.tar.gz" "dist/navree-android-$VERSION.tar.gz.sha256" \
+            --clobber
+
+      # The maven-central job takes them from here: it reads nothing from the
+      # draft release, which only a token that may write can see.
+      - name: Keep the packages for the maven-central job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-package
+          path: |
+            dist/navree-android-${{ needs.verify.outputs.version }}.tar.gz
+            dist/navree-android-${{ needs.verify.outputs.version }}.tar.gz.sha256
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  windows-package:
+    needs: [verify, github-release]
+    runs-on: windows-2025
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      # The core as a DLL for 64-bit Windows, which Navree.Core's package carries.
+      - name: Build the core
+        shell: bash
+        run: |
+          cargo rustc -p navree-native-core --locked --release --target x86_64-pc-windows-msvc --crate-type cdylib
+          mkdir -p packages/windows/native/win-x64
+          cp target/x86_64-pc-windows-msvc/release/navree_native_core.dll packages/windows/native/win-x64/
+          ls -l packages/windows/native/win-x64
+
+      # Navree.Shell and the seven libraries it stands on: restored from the
+      # lock files kept beside each project (CI is true, so a restore that
+      # would change a package fails), then built at the release's version.
+      - name: Build the libraries
+        shell: pwsh
+        working-directory: packages/windows
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          dotnet restore src/Navree.Shell/Navree.Shell.csproj
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build src/Navree.Shell/Navree.Shell.csproj -c Release --no-restore "-p:Version=${env:VERSION}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Make the NuGet packages and attach them
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File packages/windows/scripts/pack.ps1 -Version $env:VERSION -Out dist
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release upload $env:TAG "dist/navree-windows-${env:VERSION}.zip" "dist/navree-windows-${env:VERSION}.zip.sha256" --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # The nuget job takes them from here: it reads nothing from the draft
+      # release, which only a token that may write can see.
+      - name: Keep the packages for the nuget job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-package
+          path: |
+            dist/navree-windows-${{ needs.verify.outputs.version }}.zip
+            dist/navree-windows-${{ needs.verify.outputs.version }}.zip.sha256
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
   crates:
     needs: verify
     runs-on: ubuntu-latest
@@ -350,8 +509,107 @@ jobs:
           done
           [ "${#missing[@]}" -eq 0 ]
 
+  maven-central:
+    needs: [verify, android-package, crates]
+    runs-on: ubuntu-latest
+    # The Central Portal checks an upload and then publishes it; the job waits
+    # for both. Run it again after a stop: what Maven Central has is left.
+    timeout-minutes: 90
+    environment: maven-central
+    permissions:
+      contents: read
+    steps:
+      - name: Is Maven Central set up
+        id: setup
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          if [ -z "$MAVEN_CENTRAL_USERNAME" ] || [ -z "$MAVEN_CENTRAL_PASSWORD" ] || [ -z "$MAVEN_GPG_PRIVATE_KEY" ]; then
+            echo "::notice::the Android client was not published to Maven Central: the environment maven-central does not have the secrets MAVEN_CENTRAL_USERNAME, MAVEN_CENTRAL_PASSWORD and MAVEN_GPG_PRIVATE_KEY (packages/android/README.md says what to set up). The release has the packages as navree-android-$VERSION.tar.gz"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.setup.outputs.ready == 'true'
+        with:
+          persist-credentials: false
+          sparse-checkout: packages/android/scripts
+
+      - name: The packages
+        if: steps.setup.outputs.ready == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: android-package
+          path: ${{ runner.temp }}/android
+
+      - name: Publish to Maven Central
+        if: steps.setup.outputs.ready == 'true'
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          cd "$RUNNER_TEMP/android"
+          sha256sum -c "navree-android-$VERSION.tar.gz.sha256"
+          tar -xzf "navree-android-$VERSION.tar.gz"
+          bash "$GITHUB_WORKSPACE/packages/android/scripts/maven-central.sh" "$RUNNER_TEMP/android/navree-android" "$VERSION"
+
+  nuget:
+    needs: [verify, windows-package, crates]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: nuget
+    permissions:
+      contents: read
+    steps:
+      - name: Is nuget.org set up
+        id: setup
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::notice::the Windows client was not published to nuget.org: the environment nuget does not have the secret NUGET_API_KEY (packages/windows/README.md says what to set up). The release has the packages as navree-windows-$VERSION.zip"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: The packages
+        if: steps.setup.outputs.ready == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-package
+          path: ${{ runner.temp }}/windows
+
+      - name: Publish to nuget.org
+        if: steps.setup.outputs.ready == 'true'
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          DOTNET_NOLOGO: "true"
+          DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+        run: |
+          cd "$RUNNER_TEMP/windows"
+          sha256sum -c "navree-windows-$VERSION.zip.sha256"
+          unzip -q "navree-windows-$VERSION.zip" -d packages
+          ls -l packages
+          # A version nuget.org has already is left as it is (--skip-duplicate),
+          # so the job can be run again after a stop.
+          for package in packages/*.nupkg; do
+            dotnet nuget push "$package" --source https://api.nuget.org/v3/index.json \
+              --api-key "$NUGET_API_KEY" --skip-duplicate
+          done
+
   publish-release:
-    needs: [verify, binaries, apple-package, crates, npm]
+    # maven-central and nuget pass when their registry is not set up yet (they
+    # publish nothing and say so), so neither can hold a release back for that.
+    needs: [verify, binaries, apple-package, android-package, windows-package, crates, npm, maven-central, nuget]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
