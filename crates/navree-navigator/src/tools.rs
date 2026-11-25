@@ -853,6 +853,28 @@ impl Navigator {
         Ok(ToolOutput::Json(graph["commands"].clone()))
     }
 
+    /// Why the app must not be asked for the state of its migrations, when
+    /// it must not. `migrate:status` connects with the app's own
+    /// `database.url`, which is not the URL read here when
+    /// [`DatabaseOptions::url`] is set, so it is held to the same rule
+    /// ([`database::check_local`]) unless `--allow-remote-database` is given.
+    fn app_database_refused(&self) -> Option<String> {
+        if self.options.allow_remote_database {
+            return None;
+        }
+        let url = match self.config() {
+            Ok(config) => config.get_string("database.url").unwrap_or_default(),
+            Err(error) => return Some(error.0),
+        };
+        let url = url.trim();
+        if url.is_empty() {
+            return None;
+        }
+        database::check_local(url).err().map(|error| {
+            format!("the app was not asked, since it would connect with its own database: {error}")
+        })
+    }
+
     async fn describe_schema(&self, args: TableArgs) -> Result<ToolOutput, ToolError> {
         let target = self.database()?;
         let schema = database::describe_schema(&target, args.table.as_deref()).await?;
@@ -869,7 +891,13 @@ impl Navigator {
             .iter()
             .map(|m| m.label())
             .collect();
-        let pending = match self.probe(|probe| probe.migration_status()).await {
+        // The app answers from its own database, which is asked only when it
+        // passes the rule the database read here passed.
+        let status = match self.app_database_refused() {
+            Some(reason) => Err(ToolError::new(reason)),
+            None => self.probe(|probe| probe.migration_status()).await,
+        };
+        let pending = match status {
             Ok(status) => json!(
                 status
                     .as_array()
