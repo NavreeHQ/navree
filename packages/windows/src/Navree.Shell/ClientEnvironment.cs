@@ -82,6 +82,6 @@ internal static class ClientEnvironment
             options.Place.Scheme,
             options.LoopbackHttp,
             options.Undrawable,
-            comesBack ? options.SignInPaths : null);
+            signInPaths: comesBack ? options.SignInPaths : null);
     }
 }
