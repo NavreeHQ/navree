@@ -59,7 +59,9 @@ import kotlin.concurrent.thread
  * Unless the field keeps it, the place a picture was taken is taken out of the
  * copy, or the picture is refused, by what the copy's own bytes say it is
  * ([FileRules.place], [PictureData]): never by the type the provider gave or
- * the file's name.
+ * the file's name. So is the place a video was made ([FileRules.videoPlace],
+ * [VideoData]); a Matroska or WebM file that holds sound alone is no video,
+ * and is taken without what names a place in it ([MatroskaData]).
  */
 class PickedFiles internal constructor(private val folder: File) {
     /** The most bytes one file may have, and all the files of one field together: `NavreeConfig.mostFileBytes`. */
@@ -211,9 +213,14 @@ class PickedFiles internal constructor(private val folder: File) {
                         FileRules.Place.Refuse -> FileRules.Refusal.PlaceUnchecked(name)
                     }
                 } else {
-                    when (FileRules.videoPlace(VideoData.kindOf(copy, mime))) {
+                    // A Matroska or WebM file that holds sound alone is no video, whatever type or name it came under: it is taken, without what names a place in it.
+                    val video = VideoData.kindOf(copy, mime)
+                    when (FileRules.videoPlace(video)) {
                         FileRules.Place.None -> null
-                        FileRules.Place.TakeOut -> if (takeOutVideoPlace(copy)) null else FileRules.Refusal.WithLocation(name)
+                        FileRules.Place.TakeOut -> {
+                            val taken = if (video == FileRules.Video.Sound) takeOutSoundPlace(copy) else takeOutVideoPlace(copy)
+                            if (taken) null else FileRules.Refusal.WithLocation(name)
+                        }
                         FileRules.Place.Check, FileRules.Place.Refuse -> FileRules.Refusal.VideoUnchecked(name)
                     }
                 }
@@ -427,6 +434,54 @@ class PickedFiles internal constructor(private val folder: File) {
         } finally {
             remuxed.delete()
             cleaned.delete()
+        }
+    }
+
+    /**
+     * Takes what can say where it was made out of a Matroska or WebM file
+     * that holds sound alone ([MatroskaData]): every tag that names a place,
+     * every attached file and what a blanked part still held are overwritten
+     * in place, so the sound does not move. A file that holds none of them is
+     * left as it is. Then the copy is read again: it must still read cleanly
+     * as sound alone, with nothing of that left in it, no XMP packet in its
+     * bytes that names a place, and no place the platform itself finds.
+     * False when a step fails or a place is still found.
+     */
+    private fun takeOutSoundPlace(copy: File): Boolean {
+        val cleaned = File(copy.path + ".clean")
+        return try {
+            val initial = MatroskaData.inspect(copy)
+            if (!initial.soundOnly) return false
+            if (!initial.clean) {
+                if (MatroskaData.clean(copy, cleaned).broken) return false
+                Files.move(cleaned.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+            val after = MatroskaData.inspect(copy)
+            after.soundOnly &&
+                after.clean &&
+                copy.inputStream().buffered().use { !PictureData.packetNamesPlace(it) } &&
+                !retrieverNamesLocation(copy)
+        } catch (_: Throwable) {
+            false
+        } finally {
+            cleaned.delete()
+        }
+    }
+
+    /**
+     * Whether the platform itself names a place in a file of sound. One
+     * it cannot open names none: the device may have no decoder for the
+     * sound, and the file's own bytes have been read for a place already.
+     */
+    private fun retrieverNamesLocation(file: File): Boolean {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.path)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION) != null
+        } catch (_: Throwable) {
+            false
+        } finally {
+            runCatching { retriever.release() }
         }
     }
 

@@ -25,6 +25,9 @@ import java.io.RandomAccessFile
  * Tracks that are neither video nor audio (`mdia` -> `hdlr` other than `vide`
  * or `soun`) are counted in [Found.nonMediaTracks] so [PickedFiles] remuxes
  * video and audio tracks alone before cleaning.
+ *
+ * A Matroska or WebM file is not rewritten as a video. One that holds sound
+ * alone is told from one with video by reading it whole ([MatroskaData]).
  */
 internal object VideoData {
     const val HEAD = 512
@@ -55,7 +58,9 @@ internal object VideoData {
      * The kind of video these first bytes (from a file of [fileLength] bytes)
      * and [mime] name, or null when they name no video. Call only after
      * [PictureData.kindOf] answered null so HEIC, AVIF and CR3 pictures stay
-     * pictures.
+     * pictures. First bytes cannot say that a Matroska or WebM file holds
+     * sound alone: here every one is [Video.Other], and only the whole file
+     * ([kindOf] of a file) says otherwise.
      */
     fun kindOf(head: ByteArray, fileLength: Long = head.size.toLong(), mime: String? = null): Video? {
         fun at(offset: Int, vararg bytes: Int) = head.size >= offset + bytes.size && bytes.indices.all { head[offset + it].toInt() and 0xFF == bytes[it] }
@@ -89,6 +94,12 @@ internal object VideoData {
      * `free`, `skip`, `wide`) longer than [HEAD], walks top-level box headers
      * across the file so a headerless `.mov` or padded `.mp4` is still seen as
      * [Video.Iso] even under a generic media type.
+     *
+     * A Matroska or WebM file is read whole ([MatroskaData]), since its tracks
+     * say what it holds and its first bytes do not: one that reads cleanly and
+     * holds sound alone is [Video.Sound], whatever type or name it came under.
+     * One with a track that is not audio, or that does not read cleanly, is
+     * [Video.Other] as before.
      */
     fun kindOf(file: File, mime: String? = null): Video? {
         if (PictureData.kindOf(file) != null) return null
@@ -105,6 +116,7 @@ internal object VideoData {
         val slice = head.copyOf(read)
         val total = file.length()
         if (isIsoVideoFile(file, slice, total)) return Video.Iso
+        if (MatroskaData.isEbml(slice) && MatroskaData.inspect(file).soundOnly) return Video.Sound
         return kindOf(slice, total, mime)
     }
 

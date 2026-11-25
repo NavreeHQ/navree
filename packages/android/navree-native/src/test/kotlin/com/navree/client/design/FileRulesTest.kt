@@ -134,6 +134,11 @@ class FileRulesTest {
     }
 
     @Test
+    fun a_matroska_or_webm_file_that_holds_sound_alone_is_taken_with_what_names_a_place_taken_out() {
+        assertEquals(FileRules.Place.TakeOut, FileRules.videoPlace(FileRules.Video.Sound))
+    }
+
+    @Test
     fun the_web_views_accept_array_is_read_as_a_fields_accept_list() {
         assertNull(FileRules.chooserAccept(null))
         assertNull(FileRules.chooserAccept(emptyArray()))

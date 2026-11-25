@@ -315,8 +315,19 @@ With nothing opened, the list has the window.
   what follows the end of the picture; the copy is read again and refused when
   a place is still in it. A HEIC, AVIF or GIF that holds one is refused; a HEIC
   below API 28, an AVIF below API 31, a TIFF and a raw picture are refused
-  outright, as the system cannot read them for it. The place in a video is not
-  taken out.
+  outright, as the system cannot read them for it. The place an MP4, MOV, M4V
+  or 3GP video was made is taken out of the copy the same way, and the copy is
+  refused when a place is still in it; a video in any other container (WebM,
+  Matroska, AVI, Ogg, a transport stream) is refused, as the client does not
+  rewrite it.
+- A Matroska or WebM file that holds sound alone (`.mka`, a `.webm` with no
+  video track) is no video, whatever type or name it came under: it is read
+  whole, and when it reads cleanly and every track in it is audio it is taken.
+  A tag in it that names a place, every file attached to it (a cover picture
+  can hold the place it was taken) and what a blanked part still held are
+  overwritten in place first, so the sound does not move; the copy is read
+  again and refused when a place is still in it. One with a track that is not
+  audio, or that does not read cleanly, is refused as a video is.
 - While the form is on its way the field cannot be changed. A field that takes
   one file replaces it (a second choice replaces the first); one that takes
   several adds, with no limit on the count.
