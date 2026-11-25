@@ -503,42 +503,84 @@ fn is_own_scheme_link(callback: &str) -> bool {
     })
 }
 
+/// A value of a Windows app as the settings write it. The app, as it starts,
+/// takes a value that is not there for none, holds a text to the letter (an
+/// empty one is a text, and is refused), and does not start on a value that
+/// is no text: the three are kept apart here, so each is said as it is there.
+#[derive(Debug, PartialEq, Eq)]
+enum Written {
+    /// Not in the settings.
+    Absent,
+    /// A text, as it is written: nothing is trimmed off it.
+    Text(String),
+    /// A number, a switch, a list or a table.
+    NotText,
+}
+
+impl Written {
+    fn at(value: &Value, key: &str) -> Self {
+        match value.get(key) {
+            None | Some(Value::Null) => Written::Absent,
+            Some(Value::String(text)) => Written::Text(text.clone()),
+            Some(_) => Written::NotText,
+        }
+    }
+
+    /// Whether it is a text that `holds` to its rule.
+    fn is(&self, holds: fn(&str) -> bool) -> bool {
+        matches!(self, Written::Text(text) if holds(text))
+    }
+
+    /// The text, when it is one that says something.
+    fn text(&self) -> Option<&str> {
+        match self {
+            Written::Text(text) if !text.is_empty() => Some(text),
+            _ => None,
+        }
+    }
+}
+
 struct WindowsApp {
     name: String,
-    package_family_name: String,
-    app_id: String,
-    callback: String,
+    package_family_name: Written,
+    app_id: Written,
+    callback: Written,
 }
 
 impl WindowsApp {
-    /// The ids a build of the app names itself by.
-    fn ids(&self) -> impl Iterator<Item = &str> {
-        [self.package_family_name.as_str(), self.app_id.as_str()]
+    /// The ids a build of the app names itself by, each with what tells it
+    /// apart from another app's: a package family name in lower case (a build
+    /// is known by it whatever the case of its letters), the id the app was
+    /// built with as it is.
+    fn ids(&self) -> impl Iterator<Item = (&str, String)> {
+        self.package_family_name
+            .text()
+            .map(|family| (family, family.to_ascii_lowercase()))
             .into_iter()
-            .filter(|id| !id.is_empty())
+            .chain(self.app_id.text().map(|id| (id, id.to_owned())))
     }
 
     fn problems(&self) -> Vec<String> {
         let key = format!("auth.apps.windows.{}", self.name);
         let mut problems = Vec::new();
-        if self.package_family_name.is_empty() && self.app_id.is_empty() {
+        if self.package_family_name == Written::Absent && self.app_id == Written::Absent {
             problems.push(format!(
                 "{key} must name the app: package_family_name (a build installed from a package), app_id (a build with no package), or both"
             ));
         }
-        if !self.package_family_name.is_empty()
-            && !is_package_family_name(&self.package_family_name)
+        if self.package_family_name != Written::Absent
+            && !self.package_family_name.is(is_package_family_name)
         {
             problems.push(format!(
                 "{key}.package_family_name must be a package family name, as `Get-AppxPackage` prints it (ExampleOrders_8wekyb3d8bbwe)"
             ));
         }
-        if !self.app_id.is_empty() && !is_bundle_id(&self.app_id) {
+        if self.app_id != Written::Absent && !self.app_id.is(is_bundle_id) {
             problems.push(format!(
                 "{key}.app_id must be the id the app was built with (A-Z, a-z, 0-9, `-` and `.`)"
             ));
         }
-        if !is_own_scheme_link(&self.callback) {
+        if !self.callback.is(is_own_scheme_link) {
             problems.push(format!(
                 "{key}.callback must be a link on the app's own scheme, written as it is sent (`com.example.orders:/signed-in`: the scheme in lower case, not https and not one a browser or Windows opens itself; no user, password, query or fragment)"
             ));
@@ -547,23 +589,14 @@ impl WindowsApp {
     }
 }
 
-/// The text at `key` as it is written: a Windows app's values are held to
-/// the letter when the app starts, so nothing is trimmed off them here.
-fn exact(value: &Value, key: &str) -> String {
-    match value.get(key) {
-        Some(Value::String(text)) => text.clone(),
-        _ => String::new(),
-    }
-}
-
 fn windows_apps(settings: &Lookup) -> Vec<WindowsApp> {
     tables(settings, "auth.apps.windows")
         .into_iter()
         .map(|(name, app)| WindowsApp {
             name,
-            package_family_name: exact(&app, "package_family_name"),
-            app_id: exact(&app, "app_id"),
-            callback: exact(&app, "callback"),
+            package_family_name: Written::at(&app, "package_family_name"),
+            app_id: Written::at(&app, "app_id"),
+            callback: Written::at(&app, "callback"),
         })
         .collect()
 }
@@ -839,10 +872,12 @@ fn windows_app_item(scope: Scope, apps: &[WindowsApp]) -> Item {
     }
     let mut problems: Vec<String> = apps.iter().flat_map(WindowsApp::problems).collect();
     // An id names one app: a hand-over that names it must find one callback.
+    // Two package family names that differ only in the case of their letters
+    // are one.
     let mut named = std::collections::BTreeMap::new();
     for app in apps {
-        for id in app.ids() {
-            if let Some(other) = named.insert(id, app.name.as_str())
+        for (id, told_apart_by) in app.ids() {
+            if let Some(other) = named.insert(told_apart_by, app.name.as_str())
                 && other != app.name
             {
                 problems.push(format!(
@@ -857,8 +892,11 @@ fn windows_app_item(scope: Scope, apps: &[WindowsApp]) -> Item {
             format!(
                 "{} ({}, comes back on {})",
                 app.name,
-                app.ids().collect::<Vec<_>>().join(" and "),
-                app.callback
+                app.ids()
+                    .map(|(id, _)| id)
+                    .collect::<Vec<_>>()
+                    .join(" and "),
+                app.callback.text().unwrap_or_default()
             )
         }));
         return Item::ready("auth.windows", Group::Settings, TITLE, shown);
@@ -2687,6 +2725,96 @@ mod tests {
             "{}",
             windows.detail
         );
+        // A package family name in another case is the same app's: a build is
+        // known by it whatever the case of its letters.
+        let mut settings = with_windows_app();
+        settings["auth"]["apps"]["windows"]["kiosk"] = json!({
+            "package_family_name": "charkhasupply_8wekyb3d8bbwe",
+            "callback": "charkha-kiosk:/signed-in"
+        });
+        let items = run(&ready_machine(), Preview::On, settings, Scope::All);
+        let windows = item(&items, "auth.windows");
+        assert_eq!(windows.status, Status::Missing);
+        assert!(
+            windows.detail.contains("names the app `")
+                && windows.detail.contains("names too: an app is listed once"),
+            "{}",
+            windows.detail
+        );
+        // The id an app was built with is held to the letter: in another case
+        // it is another app's.
+        let mut settings = with_windows_app();
+        settings["auth"]["apps"]["windows"]["kiosk"] =
+            json!({"app_id": "Com.Charkha.Supply", "callback": "charkha-kiosk:/signed-in"});
+        let items = run(&ready_machine(), Preview::On, settings, Scope::All);
+        assert_eq!(status_of(&items, "auth.windows"), Status::Ready);
+    }
+
+    // The app, as it starts, refuses an id that is written and empty, and does
+    // not start on one that is no text. The doctor says so of each, and takes
+    // neither for an id that is not there: one id is enough only when the
+    // other is not written at all.
+    #[test]
+    fn a_windows_apps_id_that_is_empty_or_no_text_is_not_one_that_is_not_there() {
+        for (field, said) in [
+            (
+                "package_family_name",
+                "package_family_name must be a package family name",
+            ),
+            ("app_id", "app_id must be the id the app was built with"),
+        ] {
+            for value in [
+                json!(""),
+                json!(5),
+                json!(true),
+                json!(["com.charkha.supply"]),
+                json!({"id": "com.charkha.supply"}),
+            ] {
+                let mut settings = with_windows_app();
+                settings["auth"]["apps"]["windows"]["main"][field] = value.clone();
+                let items = run(&ready_machine(), Preview::On, settings, Scope::Windows);
+                let windows = item(&items, "auth.windows");
+                assert_eq!(windows.status, Status::Missing, "{field} = {value}");
+                assert!(
+                    windows
+                        .detail
+                        .contains(&format!("auth.apps.windows.main.{said}")),
+                    "{field} = {value}: {}",
+                    windows.detail
+                );
+                assert!(!Report::of(items).ready, "{field} = {value}");
+            }
+        }
+        // A callback that is no text is no link.
+        let mut settings = with_windows_app();
+        settings["auth"]["apps"]["windows"]["main"]["callback"] = json!(5);
+        let items = run(&ready_machine(), Preview::On, settings, Scope::Windows);
+        let windows = item(&items, "auth.windows");
+        assert_eq!(windows.status, Status::Missing);
+        assert!(
+            windows
+                .detail
+                .contains("auth.apps.windows.main.callback must be a link"),
+            "{}",
+            windows.detail
+        );
+        // An id written as nothing is one that is not there.
+        let mut settings = with_windows_app();
+        settings["auth"]["apps"]["windows"]["main"]["app_id"] = Value::Null;
+        let items = run(&ready_machine(), Preview::On, settings, Scope::Windows);
+        let windows = item(&items, "auth.windows");
+        assert_eq!(windows.status, Status::Ready, "{windows:?}");
+        assert_eq!(
+            windows.detail,
+            "main (CharkhaSupply_8wekyb3d8bbwe, comes back on charkha:/signed-in)"
+        );
+        // The three are kept apart as they are read.
+        let app = json!({"a": "", "b": 5, "c": null, "d": " x "});
+        assert_eq!(Written::at(&app, "a"), Written::Text(String::new()));
+        assert_eq!(Written::at(&app, "b"), Written::NotText);
+        assert_eq!(Written::at(&app, "c"), Written::Absent);
+        assert_eq!(Written::at(&app, "d"), Written::Text(" x ".to_owned()));
+        assert_eq!(Written::at(&app, "e"), Written::Absent);
     }
 
     #[test]
