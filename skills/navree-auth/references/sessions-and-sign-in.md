@@ -190,7 +190,10 @@ hold for both).
   the session (422 `invalid_ticket` otherwise, and once), the assertion must
   answer the challenge that session asked for, and it is then checked by
   `login_with_passkey_session`. A module of your own adds a provider's sheet
-  with `ProviderSheets`. Every other client gets the page as it was.
+  with `ProviderSheets`. The sign-in page is a screen of the app only where it
+  gives it a call; every other native client gets it in its web view, as
+  before, and so are the other pages. An app whose build opens `/sign-in` in
+  the system's sign-in session never asks for the page and is offered no call.
 - `POST /api/auth/session/login`, `/session/2fa/verify`,
   `/session/magic-link/verify` and `/session/otp/verify` are the JSON routes of
   a single-page app on the cookie (no token; the `X-XSRF-TOKEN` header).
