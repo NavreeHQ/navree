@@ -42,6 +42,7 @@ mod guard;
 mod query;
 mod schema;
 
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -49,6 +50,7 @@ use std::time::Duration;
 use sqlx::postgres::{PgConnectOptions, PgConnection};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::{ConnectOptions, Executor, Row};
+use url::Url;
 
 pub use guard::{
     CheckedStatement, Dialect, MAX_EXPRESSION_DEPTH, MAX_SQL_BYTES, Refusal, StatementKind, check,
@@ -646,7 +648,12 @@ impl Target {
 /// names only local hosts: `localhost`, a loopback address (`127.0.0.1`,
 /// `::1`), a Unix socket directory, or no host at all (the default socket).
 ///
-/// SQLx takes what a PostgreSQL URL leaves out from the environment, so the
+/// A PostgreSQL URL is read as SQLx reads it, by the `url` crate and then
+/// by its host and its `host` and `hostaddr` query parameters, so the server
+/// judged is the one SQLx connects to. A URL that parser refuses is an error
+/// here as it is there.
+///
+/// SQLx takes what the URL leaves out from the environment, so the
 /// environment is held to the same rule: `PGHOSTADDR` is the address SQLx
 /// connects to unless the URL has a `hostaddr` parameter (a host in the URL
 /// does not replace it), and `PGHOST` is the host of a URL that names none.
@@ -655,33 +662,75 @@ pub fn check_local(url: &str) -> Result<(), DatabaseError> {
 }
 
 /// [`check_local`], with the environment read through `var`.
-fn check_local_in(
-    url: &str,
-    var: impl Fn(&str) -> Option<String>,
-) -> Result<(), DatabaseError> {
+fn check_local_in(url: &str, var: impl Fn(&str) -> Option<String>) -> Result<(), DatabaseError> {
     if Driver::of(url)? == Driver::Sqlite {
         return Ok(());
     }
-    let named = named_hosts(url);
-    for host in named.hosts.iter().chain(&named.addrs) {
-        if !is_local_host(host) {
-            return Err(DatabaseError::Remote { host: host.clone() });
+    check_endpoint(&parse_url(url)?, var)
+}
+
+/// `url` as SQLx parses it.
+fn parse_url(url: &str) -> Result<Url, DatabaseError> {
+    Url::parse(url).map_err(|error| DatabaseError::Connect {
+        url: redact_url(url),
+        message: short_message(&error.to_string()),
+    })
+}
+
+/// Fails with [`DatabaseError::Remote`] unless SQLx connects on this machine
+/// for the PostgreSQL URL `url`, in the environment that `var` reads. It
+/// follows sqlx-postgres 0.9 (`PgConnectOptions::parse_from_url`): the URL's
+/// host, then each `host` and `hostaddr` query parameter, over `PGHOST` and
+/// `PGHOSTADDR`. Every host and address named is judged, the ones a later
+/// parameter replaces too.
+fn check_endpoint(url: &Url, var: impl Fn(&str) -> Option<String>) -> Result<(), DatabaseError> {
+    let remote = |host: &str| DatabaseError::Remote {
+        host: host.to_owned(),
+    };
+    // Whether the URL names a host (a socket directory is one) and an
+    // address.
+    let mut names_host = false;
+    let mut names_addr = false;
+    if let Some(host) = url.host_str() {
+        names_host = true;
+        // SQLx takes a host whose first byte is `/` once percent-decoded for
+        // a socket directory, and any other host as it is written.
+        let socket = host
+            .get(..3)
+            .is_some_and(|start| start.eq_ignore_ascii_case("%2f"));
+        if !socket && !is_local_host(host) {
+            return Err(remote(host));
+        }
+    }
+    for (key, value) in url.query_pairs() {
+        match &*key {
+            "host" => {
+                names_host = true;
+                if !is_local_host(&value) {
+                    return Err(remote(&value));
+                }
+            }
+            "hostaddr" => {
+                names_addr = true;
+                if !value.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback()) {
+                    return Err(remote(&value));
+                }
+            }
+            _ => {}
         }
     }
     // SQLx reads `PGHOSTADDR` as an IP address and passes over anything
     // else. It is refused even where SQLx would not use it (a URL that names
     // a Unix socket): the message names the variable to unset.
-    if named.addrs.is_empty()
+    if !names_addr
         && let Some(addr) = var("PGHOSTADDR")
-        && addr
-            .parse::<std::net::IpAddr>()
-            .is_ok_and(|ip| !ip.is_loopback())
+        && addr.parse::<IpAddr>().is_ok_and(|ip| !ip.is_loopback())
     {
         return Err(DatabaseError::Remote {
             host: format!("{addr} (PGHOSTADDR in the environment)"),
         });
     }
-    if named.hosts.is_empty()
+    if !names_host
         && let Some(host) = var("PGHOST")
         && !host.is_empty()
         && !is_local_host(&host)
@@ -693,81 +742,17 @@ fn check_local_in(
     Ok(())
 }
 
-/// The hosts a PostgreSQL URL names.
-struct NamedHosts {
-    /// The authority's hosts (comma separated) and the `host` query
-    /// parameters.
-    hosts: Vec<String>,
-    /// The `hostaddr` query parameters.
-    addrs: Vec<String>,
-}
-
-/// Every host a PostgreSQL URL names: the authority's hosts (comma
-/// separated) and the `host` / `hostaddr` query parameters.
-fn named_hosts(url: &str) -> NamedHosts {
-    let rest = url.split_once("://").map_or("", |(_, rest)| rest);
-    let (before_query, query) = rest.split_once('?').unwrap_or((rest, ""));
-    let authority = before_query.split('/').next().unwrap_or("");
-    let authority = authority.rsplit_once('@').map_or(authority, |(_, a)| a);
-    let mut hosts: Vec<String> = Vec::new();
-    let mut addrs: Vec<String> = Vec::new();
-    for part in authority.split(',') {
-        let host = if let Some(stripped) = part.strip_prefix('[') {
-            stripped.split(']').next().unwrap_or("").to_owned()
-        } else {
-            part.split(':').next().unwrap_or("").to_owned()
-        };
-        let host = percent_decode(&host);
-        if !host.is_empty() {
-            hosts.push(host);
-        }
-    }
-    for pair in query.split('&') {
-        let Some((key, value)) = pair.split_once('=') else {
-            continue;
-        };
-        let into = match key {
-            "host" => &mut hosts,
-            "hostaddr" => &mut addrs,
-            _ => continue,
-        };
-        into.extend(
-            percent_decode(value)
-                .split(',')
-                .filter(|h| !h.is_empty())
-                .map(str::to_owned),
-        );
-    }
-    NamedHosts { hosts, addrs }
-}
-
+/// Whether SQLx connects on this machine for `host`: `localhost`, a
+/// loopback IP address (SQLx drops the brackets round one), or a path (a
+/// Unix socket directory).
 fn is_local_host(host: &str) -> bool {
-    let host = host.trim().to_ascii_lowercase();
-    if host == "localhost" || host.ends_with(".localhost") || host.starts_with('/') {
+    let lower = host.to_ascii_lowercase();
+    if lower == "localhost" || lower.ends_with(".localhost") || host.starts_with('/') {
         return true;
     }
-    host.parse::<std::net::IpAddr>()
+    host.trim_matches(&['[', ']'][..])
+        .parse::<IpAddr>()
         .is_ok_and(|ip| ip.is_loopback())
-}
-
-fn percent_decode(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%'
-            && i + 2 < bytes.len()
-            && let Some(hex) = s.get(i + 1..i + 3)
-            && let Ok(byte) = u8::from_str_radix(hex, 16)
-        {
-            out.push(byte);
-            i += 3;
-            continue;
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// `scheme://user:password@host/...` with the password replaced by `***`.
@@ -938,7 +923,8 @@ mod tests {
             "postgres://navree:navree@localhost/crm",
             "postgresql://navree@[::1]:5432/crm",
             "postgres:///crm",
-            "postgres://navree@/crm?host=/var/run/postgresql",
+            "postgres:///crm?host=/var/run/postgresql",
+            "postgres://navree@localhost/crm?host=/var/run/postgresql",
             "postgres://navree@%2Fvar%2Frun%2Fpostgresql/crm",
             "postgres://u@127.0.0.2/crm",
         ] {
@@ -991,7 +977,7 @@ mod tests {
         // A local `hostaddr` in the URL still leaves the host to `PGHOST`.
         assert_eq!(
             refused(
-                "postgres://app@/crm?hostaddr=127.0.0.1",
+                "postgres:///crm?hostaddr=127.0.0.1",
                 &[("PGHOST", "db.example.com")]
             ),
             "db.example.com (PGHOST in the environment)"
@@ -1000,7 +986,7 @@ mod tests {
         // same, and the message names the variable.
         assert_eq!(
             refused(
-                "postgres://navree@/crm?host=/var/run/postgresql",
+                "postgres:///crm?host=/var/run/postgresql",
                 &[("PGHOSTADDR", "10.0.0.5")]
             ),
             "10.0.0.5 (PGHOSTADDR in the environment)"
@@ -1051,6 +1037,72 @@ mod tests {
             &[("PGHOSTADDR", "10.0.0.5"), ("PGHOST", "db.example.com")],
         );
     }
+    /// A URL is read as SQLx reads it: with the key of a parameter decoded,
+    /// with nothing after a `#`, and without the tabs and line ends that the
+    /// `url` crate drops.
+    #[test]
+    fn a_url_is_judged_as_sqlx_parses_it() {
+        assert_eq!(
+            refused("postgres://app@localhost/crm?h%6Fst=db.example.com", &[]),
+            "db.example.com"
+        );
+        assert_eq!(
+            refused("postgres://app@localhost/crm?host%61ddr=10.0.0.5", &[]),
+            "10.0.0.5"
+        );
+        assert_eq!(
+            refused("postgres://db.example.com#@localhost/crm", &[]),
+            "db.example.com"
+        );
+        assert_eq!(
+            refused(
+                "postgres:///crm#?host=localhost",
+                &[("PGHOST", "db.example.com")]
+            ),
+            "db.example.com (PGHOST in the environment)"
+        );
+        assert_eq!(
+            refused(
+                "postgres:///crm#?hostaddr=127.0.0.1",
+                &[("PGHOSTADDR", "10.0.0.5")]
+            ),
+            "10.0.0.5 (PGHOSTADDR in the environment)"
+        );
+        assert_eq!(
+            refused("postgres:/\t/db.example.com/crm", &[]),
+            "db.example.com"
+        );
+        assert_eq!(
+            refused("postgres://db.exa\nmple.com/crm", &[]),
+            "db.example.com"
+        );
+        assert_eq!(
+            refused("postgres://app@local\rhost/crm?ho\tst=db.example.com", &[]),
+            "db.example.com"
+        );
+        // The same forms, naming this machine, are still let through.
+        allowed("postgres://app@localhost/crm?h%6Fst=127.0.0.1", &[]);
+        allowed("postgres://localhost#@db.example.com/crm", &[]);
+        allowed("postgres:/\t/local\nhost/crm", &[]);
+    }
+
+    /// SQLx cannot connect with a URL that its parser refuses, and the check
+    /// does not let one through as local.
+    #[test]
+    fn a_url_that_sqlx_cannot_parse_is_an_error() {
+        for url in [
+            "postgres://navree@/crm?host=/var/run/postgresql",
+            "postgres://localhost:port/crm",
+        ] {
+            assert!(
+                matches!(
+                    check_local_in(url, env(&[])),
+                    Err(DatabaseError::Connect { .. })
+                ),
+                "{url}"
+            );
+        }
+    }
 
     #[test]
     fn remote_databases_are_refused() {
@@ -1062,7 +1114,7 @@ mod tests {
             ("postgres://app@10.0.0.5/crm", "10.0.0.5"),
             (
                 "postgres://app@localhost,db.example.com/crm",
-                "db.example.com",
+                "localhost,db.example.com",
             ),
             (
                 "postgres://app@localhost/crm?host=db.example.com",
