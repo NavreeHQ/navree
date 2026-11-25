@@ -230,7 +230,7 @@ pub(super) fn run_sqlite(
     use rusqlite::{Connection, OpenFlags};
 
     let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-    let conn = match file {
+    let mut conn = match file {
         SqliteFile::Memory => Connection::open_in_memory_with_flags(flags),
         SqliteFile::Path(path) => Connection::open_with_flags(path, flags),
     }

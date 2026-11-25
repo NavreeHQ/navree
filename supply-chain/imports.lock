@@ -44,8 +44,8 @@ user-login = "hsivonen"
 user-name = "Henri Sivonen"
 
 [[publisher.rusqlite]]
-version = "0.39.0"
-when = "2026-03-15"
+version = "0.43.0"
+when = "2026-11-15"
 user-id = 5062
 user-login = "gwenn"
 user-name = "gwenn"
