@@ -14,6 +14,15 @@
 //!
 //! Both are `application/json`, answered at their exact path with no
 //! redirect, and not mounted at all when nothing is configured for them.
+//!
+//! Windows has no such file. A Windows app is listed (`auth.apps.windows`)
+//! for the sign-in hand-over alone: by the id it names itself with (its
+//! package family name when it is installed from a package, the id it was
+//! built with when it is not) and the link on its own scheme the hand-over
+//! ends on. Windows opens such a link in whichever program registered the
+//! scheme, and nothing proves to the site which program asks, so a Windows
+//! app is held to what an Apple or Android app with a custom scheme is held
+//! to: it never gets a sign-in the browser already had.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -60,6 +69,11 @@ const MAX_PATH_LEN: usize = 1024;
 /// # links = true                       # handle_all_urls
 /// # credentials = true                 # get_login_creds, and the passkey origin
 /// # callback = "https://example.com/app/signed-in"  # the sign-in hand-over
+///
+/// [auth.apps.windows.main]
+/// package_family_name = "ExampleOrders_8wekyb3d8bbwe"  # a build installed from a package
+/// app_id = "com.example.orders"                        # a build with no package
+/// callback = "com.example.orders:/signed-in"           # the sign-in hand-over
 /// ```
 ///
 /// An Android app with `credentials` adds its signatures to the passkey
@@ -67,6 +81,8 @@ const MAX_PATH_LEN: usize = 1024;
 /// assertions are accepted beside `auth.passkeys.origins`. In production
 /// list the Play App Signing certificate; a debug certificate only for
 /// development builds.
+///
+/// A Windows app is listed for the sign-in hand-over: see [`WindowsApp`].
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, ConfigSection)]
 #[config(key = "auth.apps", docs = "/docs/security/passwordless/", validate = Self::check_values)]
 #[serde(default)]
@@ -82,6 +98,8 @@ pub struct AppsOptions {
     pub apple: BTreeMap<String, AppleApp>,
     /// The Android apps, by name.
     pub android: BTreeMap<String, AndroidApp>,
+    /// The Windows apps, by name.
+    pub windows: BTreeMap<String, WindowsApp>,
     /// Whether a browser that signed in only to hand its sign-in over to an
     /// app stays signed in afterwards (default `false`: it is signed out,
     /// and only the app holds a session). A browser that was signed in
@@ -105,6 +123,7 @@ impl Default for AppsOptions {
             exclude: Vec::new(),
             apple: BTreeMap::new(),
             android: BTreeMap::new(),
+            windows: BTreeMap::new(),
             keep_browser_signed_in: false,
             callback_page: false,
         }
@@ -212,6 +231,51 @@ impl AndroidApp {
     }
 }
 
+/// A Windows app (`auth.apps.windows.<name>`), listed for the sign-in
+/// hand-over.
+///
+/// A build names itself by one id: its package family name when it runs
+/// from an installed package, the id it was built with when it does not.
+/// An app that ships both ways gives both; one of the two is required.
+///
+/// The hand-over ends on a link of the app's own scheme, which the app
+/// registers with Windows. Any program can register a scheme, and nothing
+/// proves to the site which program asked, so a Windows app is held to what
+/// an Apple or Android app with `custom_scheme` is held to: the code works
+/// only with the verifier of the app that started the hand-over (PKCE,
+/// S256), and the app never gets a sign-in the browser already had (the
+/// person is asked first, is signed out there and signs in again). A link
+/// of the site (`https`) and a port of the machine (`http://127.0.0.1`) are
+/// not taken as a Windows app's callback.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+#[non_exhaustive]
+pub struct WindowsApp {
+    /// The package family name (`ExampleOrders_8wekyb3d8bbwe`), by which a
+    /// build installed from a package names itself: the package's name, `_`
+    /// and the thirteen characters of its publisher id, exactly as
+    /// `Get-AppxPackage` prints `PackageFamilyName`.
+    pub package_family_name: Option<String>,
+    /// The id a build with no package was built with (`com.example.orders`),
+    /// by which such a build names itself.
+    pub app_id: Option<String>,
+    /// Where the sign-in hand-over sends the app its one-time code: a link
+    /// on the app's own scheme (`com.example.orders:/signed-in`), written as
+    /// it is sent (the scheme in lower case, 2 to 39 characters), with no
+    /// user, password, query or fragment. Required.
+    pub callback: Option<String>,
+}
+
+impl WindowsApp {
+    /// The ids a build of the app may name itself by.
+    fn ids(&self) -> impl Iterator<Item = &str> {
+        self.package_family_name
+            .as_deref()
+            .into_iter()
+            .chain(self.app_id.as_deref())
+    }
+}
+
 impl AppsOptions {
     /// Checks the values and joins the problems (the boot calls this).
     fn check_values(&self) -> Result<(), String> {
@@ -272,6 +336,52 @@ impl AppsOptions {
                 app.custom_scheme,
                 &mut errors,
             );
+        }
+        // An id names one app: a hand-over that names it must find one callback.
+        let mut named: BTreeMap<&str, &str> = BTreeMap::new();
+        for (name, app) in &self.windows {
+            let key = format!("auth.apps.windows.{name}");
+            if app.package_family_name.is_none() && app.app_id.is_none() {
+                errors.push(format!(
+                    "{key} must name the app: package_family_name (a build installed from a \
+                     package), app_id (a build with no package), or both"
+                ));
+            }
+            if app
+                .package_family_name
+                .as_deref()
+                .is_some_and(|family| !is_package_family_name(family))
+            {
+                errors.push(format!(
+                    "{key}.package_family_name must be a package family name: the package's \
+                     name (3 to 50 of A-Z, a-z, 0-9, `.` and `-`), `_` and the 13 characters \
+                     of its publisher id (ExampleOrders_8wekyb3d8bbwe)"
+                ));
+            }
+            if app.app_id.as_deref().is_some_and(|id| !is_bundle_id(id)) {
+                errors.push(format!(
+                    "{key}.app_id must be the id the app was built with (A-Z, a-z, 0-9, `-` \
+                     and `.`)"
+                ));
+            }
+            if !app.callback.as_deref().is_some_and(is_own_scheme_link) {
+                errors.push(format!(
+                    "{key}.callback must be a link on the app's own scheme, written as it is \
+                     sent (`com.example.orders:/signed-in`: the scheme in lower case, 2 to 39 \
+                     characters, not https and not one a browser or Windows opens itself; no \
+                     user, password, query or fragment)"
+                ));
+            }
+            for id in app.ids() {
+                if let Some(other) = named.insert(id, name.as_str())
+                    && other != name.as_str()
+                {
+                    errors.push(format!(
+                        "{key} names the app `{id}`, which auth.apps.windows.{other} names \
+                         too: an app is listed once"
+                    ));
+                }
+            }
         }
         if errors.is_empty() {
             Ok(())
@@ -378,9 +488,10 @@ impl AppsOptions {
 #[cfg_attr(not(feature = "session"), allow(dead_code))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct HandOverApp {
-    /// `apple` or `android`.
+    /// `apple`, `android` or `windows`.
     pub(crate) platform: &'static str,
-    /// The bundle id or package name.
+    /// The bundle id, the package name, or the id a Windows build names
+    /// itself by.
     pub(crate) id: String,
     /// Where its code goes.
     pub(crate) callback: String,
@@ -388,8 +499,10 @@ pub(crate) struct HandOverApp {
 
 #[cfg_attr(not(feature = "session"), allow(dead_code))]
 impl AppsOptions {
-    /// The app `id` (bundle id or package name) of `platform` (`apple` or
-    /// `android`), when it has a hand-over callback.
+    /// The app `id` of `platform`, when it has a hand-over callback: the
+    /// bundle id of an `apple` app, the package name of an `android` one,
+    /// and for `windows` either id of an app (its package family name or
+    /// the id it was built with).
     pub(crate) fn hand_over_app(&self, platform: &str, id: &str) -> Option<HandOverApp> {
         let found = |callback: &Option<String>, app_id: &str, platform: &'static str| {
             let callback = callback.clone()?;
@@ -408,16 +521,38 @@ impl AppsOptions {
                 .android
                 .values()
                 .find_map(|app| found(&app.callback, &app.package, "android")),
+            "windows" => self.windows.values().find_map(|app| {
+                let callback = app.callback.clone()?;
+                app.ids().any(|own| own == id).then(|| HandOverApp {
+                    platform: "windows",
+                    id: id.to_owned(),
+                    callback,
+                })
+            }),
             _ => None,
         }
     }
 
-    /// The callback of the first app of `platform` (`apple` or `android`) that has one: what
-    /// a native client of that family is told to come back on.
-    pub(crate) fn first_callback(&self, platform: &str) -> Option<String> {
+    /// The callback a native client of `platform` is told to come back on, in
+    /// the shell document. `apple`, `android`: that of the first app that has
+    /// one. `windows`: the one callback its apps have between them; when they
+    /// have several, none is named, and each client comes back on the scheme
+    /// it was built with (a client refuses a callback that is not on its own
+    /// scheme, so naming one app's to another would keep it from signing in).
+    pub(crate) fn shell_callback(&self, platform: &str) -> Option<String> {
         match platform {
             "apple" => self.apple.values().find_map(|app| app.callback.clone()),
             "android" => self.android.values().find_map(|app| app.callback.clone()),
+            "windows" => {
+                let mut callbacks = self
+                    .windows
+                    .values()
+                    .filter_map(|app| app.callback.as_deref());
+                let first = callbacks.next()?;
+                callbacks
+                    .all(|other| other == first)
+                    .then(|| first.to_owned())
+            }
             _ => None,
         }
     }
@@ -426,6 +561,7 @@ impl AppsOptions {
     pub(crate) fn has_hand_over(&self) -> bool {
         self.apple.values().any(|app| app.callback.is_some())
             || self.android.values().any(|app| app.callback.is_some())
+            || self.windows.values().any(|app| app.callback.is_some())
     }
 
     /// Every app's callback, by its configuration key
@@ -440,7 +576,13 @@ impl AppsOptions {
                 app.callback.as_deref()?,
             ))
         });
-        apple.chain(android)
+        let windows = self.windows.iter().filter_map(|(name, app)| {
+            Some((
+                format!("auth.apps.windows.{name}"),
+                app.callback.as_deref()?,
+            ))
+        });
+        apple.chain(android).chain(windows)
     }
 
     /// Checks that every `https` callback is on the host of `site` (the
@@ -536,11 +678,7 @@ fn check_callback(
         if is_https_scheme(&url) {
             return plain && url.host_str().is_some_and(|host| !host.is_empty());
         }
-        match url.scheme().to_ascii_lowercase().as_str() {
-            "http" | "javascript" | "data" | "file" | "blob" | "about" | "ftp" | "ws" | "wss"
-            | "intent" | "content" | "mailto" | "tel" | "sms" => false,
-            _ => custom_scheme && plain,
-        }
+        !is_browsers_scheme(&url.scheme().to_ascii_lowercase()) && custom_scheme && plain
     });
     if !fine {
         errors.push(format!(
@@ -548,6 +686,91 @@ fn check_callback(
              Link), or a custom scheme with {key}.custom_scheme = true"
         ));
     }
+}
+
+/// Whether a browser loads, runs or hands on a link of `scheme` (in lower
+/// case) itself: never a scheme of an app's own.
+fn is_browsers_scheme(scheme: &str) -> bool {
+    matches!(
+        scheme,
+        "http"
+            | "javascript"
+            | "data"
+            | "file"
+            | "blob"
+            | "about"
+            | "ftp"
+            | "ws"
+            | "wss"
+            | "intent"
+            | "content"
+            | "mailto"
+            | "tel"
+            | "sms"
+    )
+}
+
+/// Whether Windows or a program that comes with it opens a link of `scheme`
+/// (in lower case) itself: its settings, its store and its installer
+/// (`ms-...`), its browser, its search, its shell.
+fn is_windows_scheme(scheme: &str) -> bool {
+    scheme.starts_with("ms-")
+        || matches!(
+            scheme,
+            "microsoft-edge"
+                | "search"
+                | "search-ms"
+                | "shell"
+                | "vbscript"
+                | "res"
+                | "view-source"
+        )
+}
+
+/// Whether `callback` is a link on a scheme of an app's own, as the callback
+/// of a Windows app must be:
+///
+/// - written as it is sent (what the URL standard makes of it is the same
+///   text, so the scheme is in lower case and nothing needs encoding): the
+///   address the hand-over redirects to, the callback the shell names to the
+///   app and the `redirect_uri` the app sends are then one string;
+/// - a scheme of 2 to 39 characters, as Windows registers one, that is not
+///   `https` and not one a browser or Windows opens itself;
+/// - a path or a host after the scheme, and no user, password, query or
+///   fragment (the code and the state are the whole query), at most 2048
+///   bytes.
+fn is_own_scheme_link(callback: &str) -> bool {
+    url::Url::parse(callback).ok().is_some_and(|url| {
+        let scheme = url.scheme();
+        callback.len() <= 2048
+            && url.as_str() == callback
+            && (2..=39).contains(&scheme.len())
+            && !is_https_scheme(&url)
+            && !is_browsers_scheme(scheme)
+            && !is_windows_scheme(scheme)
+            && !url.cannot_be_a_base()
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none()
+    })
+}
+
+/// Whether `name` is a package family name, as Windows writes one: the
+/// package's name (3 to 50 letters, digits, `.` and `-`), `_`, and the
+/// publisher id, 13 characters of the 32 it is written in (digits and lower
+/// case letters without `i`, `l`, `o` and `u`).
+fn is_package_family_name(name: &str) -> bool {
+    name.rsplit_once('_').is_some_and(|(package, publisher)| {
+        (3..=50).contains(&package.len())
+            && package
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-'))
+            && publisher.len() == 13
+            && publisher.bytes().all(|b| {
+                matches!(b, b'0'..=b'9' | b'a'..=b'h' | b'j' | b'k' | b'm' | b'n' | b'p'..=b't' | b'v'..=b'z')
+            })
+    })
 }
 
 /// Whether `url`'s scheme is `https`, in any case: the one reading of a
@@ -1038,6 +1261,287 @@ mod tests {
         ] {
             assert_eq!(is_plain_path(path), plain, "{path}");
         }
+    }
+
+    const FAMILY: &str = "CharkhaSupply_8wekyb3d8bbwe";
+
+    /// The settings with one Windows app, and `more` over them.
+    fn windows(more: &[(&str, Value)]) -> Result<AppsOptions, navree_config::ConfigError> {
+        let mut sources = ConfigSources::new()
+            .set("auth.apps.windows.main.package_family_name", FAMILY)
+            .set("auth.apps.windows.main.app_id", "com.charkha.supply")
+            .set("auth.apps.windows.main.callback", "charkha:/signed-in");
+        for (key, value) in more {
+            sources = sources.set(*key, value.clone());
+        }
+        load(sources)
+    }
+
+    #[test]
+    fn a_windows_app_is_listed_by_either_id_with_a_callback_on_its_own_scheme() {
+        let apps = windows(&[]).unwrap();
+        assert!(apps.has_hand_over());
+        for id in [FAMILY, "com.charkha.supply"] {
+            assert_eq!(
+                apps.hand_over_app("windows", id),
+                Some(HandOverApp {
+                    platform: "windows",
+                    id: id.to_owned(),
+                    callback: "charkha:/signed-in".to_owned(),
+                }),
+                "{id}"
+            );
+            // The id of a Windows app names no app of another system.
+            assert_eq!(apps.hand_over_app("apple", id), None);
+            assert_eq!(apps.hand_over_app("android", id), None);
+        }
+        for other in [
+            "",
+            "main",
+            "CharkhaSupply",
+            "charkhasupply_8wekyb3d8bbwe",
+            "CharkhaSupply_8wekyb3d8bbwe ",
+            "com.charkha",
+            "com.charkha.supply.kiosk",
+        ] {
+            assert_eq!(apps.hand_over_app("windows", other), None, "{other:?}");
+        }
+        assert_eq!(apps.hand_over_app("Windows", FAMILY), None);
+        assert_eq!(
+            apps.shell_callback("windows").as_deref(),
+            Some("charkha:/signed-in")
+        );
+        assert_eq!(apps.shell_callback("apple"), None);
+        // Windows has no file by which a site names its apps, and no passkey origin.
+        assert_eq!(apps.apple_association(), None);
+        assert_eq!(apps.android_association(), None);
+        assert!(apps.passkey_origins().is_empty());
+        // A scheme is no link of the site: no host to check, no page to answer.
+        assert_eq!(
+            apps.check_callback_hosts("https://shop.example.com"),
+            Ok(())
+        );
+        let mut apps = apps;
+        apps.callback_page = true;
+        assert!(apps.callback_page_paths().is_empty());
+        // One id is enough.
+        for (kept, id) in [
+            ("package_family_name", FAMILY),
+            ("app_id", "com.charkha.supply"),
+        ] {
+            let one = load(
+                ConfigSources::new()
+                    .set(&format!("auth.apps.windows.main.{kept}"), id)
+                    .set("auth.apps.windows.main.callback", "charkha://signed-in"),
+            )
+            .unwrap_or_else(|error| panic!("{kept} alone: {error}"));
+            assert_eq!(
+                one.hand_over_app("windows", id).map(|app| app.callback),
+                Some("charkha://signed-in".to_owned()),
+                "{kept} alone"
+            );
+        }
+    }
+
+    #[test]
+    fn a_windows_app_needs_an_id_of_the_right_shape() {
+        let none =
+            load(ConfigSources::new().set("auth.apps.windows.main.callback", "charkha:/signed-in"))
+                .expect_err("no id")
+                .to_string();
+        assert!(
+            none.contains("auth.apps.windows.main must name the app"),
+            "{none}"
+        );
+        for (field, value) in [
+            // No publisher id, one of another length, one in capitals, one with a
+            // letter the 32 do not have (`i`, `l`, `o`, `u`).
+            ("package_family_name", "CharkhaSupply"),
+            ("package_family_name", "CharkhaSupply_8wekyb3d8bbw"),
+            ("package_family_name", "CharkhaSupply_8wekyb3d8bbwe1"),
+            ("package_family_name", "CharkhaSupply_8WEKYB3D8BBWE"),
+            ("package_family_name", "CharkhaSupply_8wekyb3d8bbwi"),
+            // A package's name of 3 to 50 letters, digits, `.` and `-`.
+            ("package_family_name", "Ch_8wekyb3d8bbwe"),
+            ("package_family_name", "Charkha Supply_8wekyb3d8bbwe"),
+            ("package_family_name", "Charkha_Supply_8wekyb3d8bbwe"),
+            ("app_id", "com..charkha"),
+            ("app_id", ".charkha"),
+            ("app_id", "com.charkha.supply/x"),
+            ("app_id", "com.charkha supply"),
+            ("app_id", "Charkha_Supply"),
+        ] {
+            let key = format!("auth.apps.windows.main.{field}");
+            let error = windows(&[(key.as_str(), json!(value))])
+                .expect_err(value)
+                .to_string();
+            assert!(error.contains(&key), "{field} = {value:?}: {error}");
+        }
+        assert!(!is_package_family_name("") && !is_package_family_name("_"));
+        assert!(is_package_family_name(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe"
+        ));
+        assert!(is_package_family_name(&format!(
+            "{}_0123456789abc",
+            "a".repeat(50)
+        )));
+        assert!(!is_package_family_name(&format!(
+            "{}_0123456789abc",
+            "a".repeat(51)
+        )));
+    }
+
+    #[test]
+    fn a_windows_callback_is_a_link_on_the_apps_own_scheme_and_nothing_else() {
+        for callback in [
+            "charkha:/signed-in",
+            "charkha://signed-in",
+            "charkha:/",
+            "com.charkha.supply:/signed-in",
+            "charkha-supply+in:/auth/signed-in",
+        ] {
+            let apps = windows(&[("auth.apps.windows.main.callback", json!(callback))])
+                .unwrap_or_else(|error| panic!("{callback}: {error}"));
+            assert_eq!(
+                apps.hand_over_app("windows", FAMILY)
+                    .map(|app| app.callback)
+                    .as_deref(),
+                Some(callback)
+            );
+        }
+        for refused in [
+            // A link of the site, a port of the machine, and what a browser opens itself.
+            "https://charkha.example/app/signed-in",
+            "HTTPS://charkha.example/app/signed-in",
+            "http://127.0.0.1:5123/signed-in",
+            "http://localhost/signed-in",
+            "javascript:alert(1)",
+            "data:text/html,x",
+            "file:///C:/signed-in",
+            "mailto:simran@charkha.example",
+            // What Windows opens itself.
+            "ms-settings:/signed-in",
+            "ms-appinstaller:/signed-in",
+            "microsoft-edge:/signed-in",
+            "search-ms:/signed-in",
+            "shell:/signed-in",
+            // Not written as it is sent: a capital in the scheme, a space.
+            "Charkha:/signed-in",
+            "CHARKHA://signed-in",
+            "charkha:/signed in",
+            // A scheme of one character (a drive's letter) or of more than 39.
+            "c:/signed-in",
+            "abcdefghijklmnopqrstuvwxyzabcdefghijklmn:/signed-in",
+            // A user, a password, a query, a fragment; no path or host; no scheme.
+            "charkha://user@signed-in",
+            "charkha://user:pass@signed-in",
+            "charkha:/signed-in?from=windows",
+            "charkha:/signed-in?state=planted",
+            "charkha:/signed-in#code",
+            "charkha:signed-in",
+            "charkha",
+            "/signed-in",
+            "",
+        ] {
+            let error = windows(&[("auth.apps.windows.main.callback", json!(refused))])
+                .expect_err(refused)
+                .to_string();
+            assert!(
+                error.contains("auth.apps.windows.main.callback"),
+                "{refused}: {error}"
+            );
+        }
+        // A callback is required: a Windows app is listed for the hand-over alone.
+        let error =
+            load(ConfigSources::new().set("auth.apps.windows.main.package_family_name", FAMILY))
+                .expect_err("no callback")
+                .to_string();
+        assert!(error.contains("auth.apps.windows.main.callback"), "{error}");
+        // The limits: a scheme of 39 characters, a callback of 2048 bytes.
+        assert!(is_own_scheme_link(&format!("{}:/x", "a".repeat(39))));
+        assert!(!is_own_scheme_link(&format!("{}:/x", "a".repeat(40))));
+        assert!(!is_own_scheme_link(&format!(
+            "charkha:/{}",
+            "x".repeat(2048)
+        )));
+    }
+
+    #[test]
+    fn an_id_names_one_windows_app_and_the_shell_names_a_callback_they_share() {
+        let second = |id: &str, callback: &str| {
+            windows(&[
+                ("auth.apps.windows.kiosk.app_id", json!(id)),
+                ("auth.apps.windows.kiosk.callback", json!(callback)),
+            ])
+        };
+        // The same id under two names: a hand-over that names it could go either way.
+        let error = second("com.charkha.supply", "charkha-kiosk:/signed-in")
+            .expect_err("one id twice")
+            .to_string();
+        assert!(
+            error.contains("names the app `com.charkha.supply`")
+                && error.contains("auth.apps.windows.kiosk")
+                && error.contains("auth.apps.windows.main"),
+            "{error}"
+        );
+        // Two apps, one way back: the shell names it. Two ways back: it names none.
+        let same = second("com.charkha.kiosk", "charkha:/signed-in").unwrap();
+        assert_eq!(
+            same.shell_callback("windows").as_deref(),
+            Some("charkha:/signed-in")
+        );
+        let two = second("com.charkha.kiosk", "charkha-kiosk:/signed-in").unwrap();
+        assert_eq!(two.shell_callback("windows"), None);
+        assert_eq!(
+            two.hand_over_app("windows", "com.charkha.kiosk")
+                .map(|app| app.callback)
+                .as_deref(),
+            Some("charkha-kiosk:/signed-in")
+        );
+        assert_eq!(
+            two.hand_over_app("windows", FAMILY)
+                .map(|app| app.callback)
+                .as_deref(),
+            Some("charkha:/signed-in")
+        );
+        assert_eq!(windows(&[]).unwrap().windows.len(), 1);
+        assert_eq!(configured().shell_callback("windows"), None);
+    }
+
+    // The rules of Apple and Android callbacks are what they were: the list of
+    // schemes a browser opens itself is one list, read by both checks.
+    #[test]
+    fn the_schemes_a_browser_opens_itself_are_refused_for_every_system() {
+        for scheme in [
+            "http",
+            "javascript",
+            "data",
+            "file",
+            "blob",
+            "about",
+            "ftp",
+            "ws",
+            "wss",
+            "intent",
+            "content",
+            "mailto",
+            "tel",
+            "sms",
+        ] {
+            assert!(is_browsers_scheme(scheme), "{scheme}");
+            let callback = format!("{scheme}:/signed-in");
+            assert!(!is_own_scheme_link(&callback), "{callback}");
+            let apple = load(
+                ConfigSources::new()
+                    .set("auth.apps.apple.main.team_id", "ABCDE12345")
+                    .set("auth.apps.apple.main.bundle_id", "com.example.orders")
+                    .set("auth.apps.apple.main.callback", callback.as_str())
+                    .set("auth.apps.apple.main.custom_scheme", true),
+            );
+            assert!(apple.is_err(), "{callback}");
+        }
+        assert!(!is_browsers_scheme("com.example.orders"));
+        assert!(!is_browsers_scheme("https"));
     }
 
     #[test]

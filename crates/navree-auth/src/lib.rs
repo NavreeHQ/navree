@@ -256,7 +256,7 @@ pub use account_controller::{
 };
 pub use apps::{
     ANDROID_ASSOCIATION_PATH, ANDROID_ORIGIN_PREFIX, APPLE_ASSOCIATION_PATH, AndroidApp, AppleApp,
-    AppsOptions,
+    AppsOptions, WindowsApp,
 };
 pub use controller::{
     LoginInput, LoginResponse, LogoutInput, RefreshInput, RegisterInput, TwoFactorChallenge,
