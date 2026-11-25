@@ -43,6 +43,12 @@ criteria = "safe-to-deploy"
 delta = "0.11.23 -> 0.11.24"
 notes = "Diff reviewed. SMTP client: the connection is closed if bytes are already buffered after the STARTTLS reply; dot-stuffing also applies after a bare CR or LF; replies are read under a 100,000-byte cap and parsed once per line, only CRLF ending a line; a white-space EHLO line no longer panics; DATA and message replies must have the expected class. A quoted local part is kept as written and addresses reject non-ASCII white space. Debug hides DKIM keys and AUTH credentials. No new dependencies or build script, forbid(unsafe_code), I/O only on the SMTP socket. Published from github:lettre/lettre."
 
+[[audits.libsqlite3-sys]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.37.0 -> 0.40.0"
+notes = "Diff read. The bundled SQLite goes from 3.51.3 to 3.54.1: sqlite3.c, sqlite3.h and sqlite3ext.h are byte for byte the 3.54.1 amalgamation published by sqlite.org (SHA-256 compared), taken as SQLite's own release and not read line by line. The pregenerated bindings are bindgen 0.73 output for it and for SQLite 3.45.3, the oldest system SQLite now accepted: extern declarations, constants, and the call-through wrappers of the loadable_extension feature. build.rs takes the SQLCipher source from the optional sqlcipher-src crate (feature bundled-sqlcipher only, not in this tree) in place of a copy in the crate, no longer sets SQLITE_ENABLE_MEMORY_MANAGEMENT, prints rerun-if-env-changed for the variables it reads, and marks env::set_var of PKG_CONFIG_PATH unsafe for edition 2024; what it runs is unchanged (the C compiler through cc, pkg-config or vcpkg for a system SQLite) and it fetches nothing. src changes one import order. Published by gwenn, as 0.37.0 was."
+
 [[audits.mongodb]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
