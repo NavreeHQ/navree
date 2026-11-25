@@ -43,19 +43,24 @@ internal object InstallSecret {
      * the session is made.
      */
     fun of(file: File, random: SecureRandom = SecureRandom()): String = synchronized(lock) {
-        runCatching { file.readText().trim() }.getOrNull()?.takeIf(::reads)?.let { return it }
-        unwritten[file.path]?.let { return it }
+        val held = runCatching { file.readText().trim() }.getOrNull()?.takeIf { reads(it) } ?: unwritten[file.path]
+        held ?: make(random).also { made ->
+            try {
+                WipeRules.put(file, made + "\n")
+            } catch (_: Exception) {
+                // The secret of this process alone: the next start makes another, and takes the person it then hears for another.
+                unwritten[file.path] = made
+            }
+        }
+    }
+
+    /** A new secret, as hex. */
+    private fun make(random: SecureRandom): String {
         val bytes = ByteArray(BYTES)
         random.nextBytes(bytes)
         val made = bytes.joinToString("") { "%02x".format(it) }
         bytes.fill(0)
-        try {
-            WipeRules.put(file, made + "\n")
-        } catch (_: Exception) {
-            // The secret of this process alone: the next start makes another, and takes the person it then hears for another.
-            unwritten[file.path] = made
-        }
-        made
+        return made
     }
 
     /** Whether [text] is a secret the core takes: hex, two characters a byte, of at least [BYTES] bytes. */
