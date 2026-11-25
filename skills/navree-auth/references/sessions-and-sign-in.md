@@ -177,6 +177,20 @@ hold for both).
   `TwoFactorPolicy` requires to set two-factor up reaches the setup routes and
   signing out only (403 `two_factor_required` elsewhere); the pages send them
   to the setup page after signing in.
+- In a Navree Native app the sign-in page starts the system's own sheet where
+  the client says it can and the site is set up for it: the passkey link
+  carries the `passkey` device call (the client lists `passkey`;
+  `auth.passkeys` is on; an app of its family under `auth.apps` has
+  `credentials`; for an Apple app `https://<rp_id>` is among
+  `auth.passkeys.origins`), and a button stands for Sign in with Apple or with
+  Google (the client lists `platform_sign_in`; navree-social with its
+  `session` feature takes that provider from an app). The passkey call's routes
+  are `POST /sign-in/passkey/native/options` and `POST
+  /sign-in/passkey/native`: the result needs the ticket the page sealed for
+  the session (422 `invalid_ticket` otherwise, and once), the assertion must
+  answer the challenge that session asked for, and it is then checked by
+  `login_with_passkey_session`. A module of your own adds a provider's sheet
+  with `ProviderSheets`. Every other client gets the page as it was.
 - `POST /api/auth/session/login`, `/session/2fa/verify`,
   `/session/magic-link/verify` and `/session/otp/verify` are the JSON routes of
   a single-page app on the cookie (no token; the `X-XSRF-TOKEN` header).
