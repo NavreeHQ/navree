@@ -59,14 +59,17 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .height(420),
-        // Tall enough for the calendar to open under each field, whole.
+        // Tall enough for the calendar to open under each field, whole. A date is shown beside
+        // its button: half a phone's row is at some widths less than the two take, and cuts it.
         gallery!("date-picker", "states", "States", date_picker_states)
+            .roomy()
             .start()
             .height(440),
         single!("date-picker", "button", "One button", date_picker_button)
             .start()
             .height(420),
         gallery!("date-picker", "locales", "Languages", date_picker_locales)
+            .roomy()
             .start()
             .height(440),
         single!("date-picker", "birth", "A date of birth", date_picker_birth)
@@ -140,7 +143,9 @@ pub fn all() -> Vec<Example> {
         single!("time-picker", "rules", "Office hours", time_picker_rules)
             .start()
             .height(380),
+        // A time that can be cleared has two buttons beside it: half a phone's row cuts it.
         gallery!("time-picker", "states", "States", time_picker_states)
+            .roomy()
             .start()
             .height(380),
         single!(
@@ -175,12 +180,15 @@ pub fn all() -> Vec<Example> {
         )
         .start()
         .height(460),
+        // Each box shows what it holds beside its buttons, two when it can be cleared: half a
+        // phone's row cuts it.
         gallery!(
             "date-time-picker",
             "states",
             "States",
             date_time_picker_states
         )
+        .roomy()
         .start()
         .height(460),
         single!(

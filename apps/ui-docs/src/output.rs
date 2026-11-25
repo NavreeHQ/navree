@@ -243,7 +243,7 @@ fn columns(cells: Cells, n: usize) -> i64 {
     match cells {
         Cells::Wide => 1,
         // As many as fit: the cells say how wide they are, not how many go to a row.
-        Cells::Icon | Cells::Flag | Cells::Broad => 0,
+        Cells::Icon | Cells::Flag | Cells::Roomy | Cells::Broad => 0,
         Cells::Narrow if n <= 5 => n,
         Cells::Medium if n <= 4 => n,
         Cells::Narrow | Cells::Medium if n <= 6 => 3,
