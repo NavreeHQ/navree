@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    `maven-publish`
 }
 
 abstract class CopyTranscriptsTask : DefaultTask() {
@@ -75,6 +76,30 @@ android {
         // and the store demo's recorded answers.
         assets.directories.add("../../../crates/navree-native/corpus")
         assets.directories.add("../fixtures")
+    }
+
+    // What is published: the release build, with its sources.
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+}
+
+// com.navree:navree-native. The version, the folder it is published to, the
+// javadoc jar and the rest of the POM are in ../build.gradle.kts.
+publishing {
+    publications {
+        register<MavenPublication>("release") {
+            afterEvaluate { from(components["release"]) }
+            pom {
+                name.set("Navree Native for Android")
+                description.set(
+                    "The Android client of Navree Native: an app whose screens a Navree server draws, " +
+                        "natively, with Jetpack Compose and Material 3.",
+                )
+            }
+        }
     }
 }
 
