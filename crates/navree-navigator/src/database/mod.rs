@@ -443,6 +443,9 @@ pub struct Target {
     url: String,
     /// The app's directory (relative SQLite paths start there).
     root: PathBuf,
+    /// Whether only a server on this machine may be connected to (no
+    /// `--allow-remote-database`).
+    local_only: bool,
     /// Whether `query_database` may run as a privileged PostgreSQL role
     /// (`NAVREE_MCP_ALLOW_PRIVILEGED_DATABASE_ROLE=1`).
     allow_privileged: bool,
@@ -477,6 +480,7 @@ impl Target {
             driver,
             url: url.to_owned(),
             root: root.to_path_buf(),
+            local_only: !allow_remote,
             allow_privileged: false,
             hint: None,
         })
@@ -549,9 +553,18 @@ impl Target {
     /// the one checked. Options in the startup message win over those
     /// settings, so the connection pins the standard reading, then checks it
     /// held: a connection pooler can drop startup options.
+    ///
+    /// The URL is parsed once. SQLx builds its options from the very URL the
+    /// local-only check judges, in the environment as it is now, and the
+    /// options are made to hold the host and the address the check found,
+    /// so what is connected to is what was judged.
     async fn postgres(&self) -> Result<PgConnection, DatabaseError> {
-        let options = PgConnectOptions::from_str(&self.url)
-            .map_err(|e| self.connect_error(e))?
+        let url = Url::parse(&self.url).map_err(|e| self.connect_error(e))?;
+        let mut options = PgConnectOptions::from_url(&url).map_err(|e| self.connect_error(e))?;
+        if self.local_only {
+            options = local_endpoint(&url, |name| std::env::var(name).ok())?.pin(options);
+        }
+        let options = options
             .application_name("navree-navigator")
             .options(POSTGRES_SESSION)
             .disable_statement_logging();
@@ -666,7 +679,7 @@ fn check_local_in(url: &str, var: impl Fn(&str) -> Option<String>) -> Result<(),
     if Driver::of(url)? == Driver::Sqlite {
         return Ok(());
     }
-    check_endpoint(&parse_url(url)?, var)
+    local_endpoint(&parse_url(url)?, var).map(|_| ())
 }
 
 /// `url` as SQLx parses it.
@@ -677,15 +690,50 @@ fn parse_url(url: &str) -> Result<Url, DatabaseError> {
     })
 }
 
-/// Fails with [`DatabaseError::Remote`] unless SQLx connects on this machine
-/// for the PostgreSQL URL `url`, in the environment that `var` reads. It
-/// follows sqlx-postgres 0.9 (`PgConnectOptions::parse_from_url`): the URL's
-/// host, then each `host` and `hostaddr` query parameter, over `PGHOST` and
-/// `PGHOSTADDR`. Every host and address named is judged, the ones a later
-/// parameter replaces too.
-fn check_endpoint(url: &Url, var: impl Fn(&str) -> Option<String>) -> Result<(), DatabaseError> {
+/// The host and the address SQLx connects to for a PostgreSQL URL, once
+/// both are judged to be on this machine.
+#[derive(Debug, PartialEq)]
+struct PgEndpoint {
+    /// The host: the URL's (the last one it names), else `PGHOST`. `None`
+    /// leaves SQLx its own: a socket directory, or its default (a socket
+    /// directory that exists, else `localhost`).
+    host: Option<String>,
+    /// The address connected to in place of the host: the URL's `hostaddr`,
+    /// else `PGHOSTADDR`.
+    addr: Option<IpAddr>,
+}
+
+impl PgEndpoint {
+    /// `options` holding the host and the address that were judged,
+    /// whatever SQLx read for itself.
+    fn pin(self, mut options: PgConnectOptions) -> PgConnectOptions {
+        if let Some(host) = &self.host {
+            options = options.host(host);
+        }
+        if let Some(addr) = self.addr {
+            options = options.hostaddr(addr);
+        }
+        options
+    }
+}
+
+/// The endpoint SQLx connects to for the PostgreSQL URL `url`, in the
+/// environment that `var` reads; fails with [`DatabaseError::Remote`] unless
+/// it is on this machine. It follows sqlx-postgres 0.9
+/// (`PgConnectOptions::parse_from_url`): the URL's host, then each `host`
+/// and `hostaddr` query parameter, over `PGHOST` and `PGHOSTADDR`. Every
+/// host and address named is judged, the ones a later parameter replaces
+/// too.
+fn local_endpoint(
+    url: &Url,
+    var: impl Fn(&str) -> Option<String>,
+) -> Result<PgEndpoint, DatabaseError> {
     let remote = |host: &str| DatabaseError::Remote {
         host: host.to_owned(),
+    };
+    let mut endpoint = PgEndpoint {
+        host: None,
+        addr: None,
     };
     // Whether the URL names a host (a socket directory is one) and an
     // address.
@@ -698,8 +746,11 @@ fn check_endpoint(url: &Url, var: impl Fn(&str) -> Option<String>) -> Result<(),
         let socket = host
             .get(..3)
             .is_some_and(|start| start.eq_ignore_ascii_case("%2f"));
-        if !socket && !is_local_host(host) {
-            return Err(remote(host));
+        if !socket {
+            if !is_local_host(host) {
+                return Err(remote(host));
+            }
+            endpoint.host = Some(host.to_owned());
         }
     }
     for (key, value) in url.query_pairs() {
@@ -709,11 +760,17 @@ fn check_endpoint(url: &Url, var: impl Fn(&str) -> Option<String>) -> Result<(),
                 if !is_local_host(&value) {
                     return Err(remote(&value));
                 }
+                // A path is a socket directory, which SQLx keeps beside the
+                // host.
+                if !value.starts_with('/') {
+                    endpoint.host = Some(value.into_owned());
+                }
             }
             "hostaddr" => {
                 names_addr = true;
-                if !value.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback()) {
-                    return Err(remote(&value));
+                match value.parse::<IpAddr>() {
+                    Ok(addr) if addr.is_loopback() => endpoint.addr = Some(addr),
+                    _ => return Err(remote(&value)),
                 }
             }
             _ => {}
@@ -723,23 +780,28 @@ fn check_endpoint(url: &Url, var: impl Fn(&str) -> Option<String>) -> Result<(),
     // else. It is refused even where SQLx would not use it (a URL that names
     // a Unix socket): the message names the variable to unset.
     if !names_addr
-        && let Some(addr) = var("PGHOSTADDR")
-        && addr.parse::<IpAddr>().is_ok_and(|ip| !ip.is_loopback())
+        && let Some(named) = var("PGHOSTADDR")
+        && let Ok(addr) = named.parse::<IpAddr>()
     {
-        return Err(DatabaseError::Remote {
-            host: format!("{addr} (PGHOSTADDR in the environment)"),
-        });
+        if !addr.is_loopback() {
+            return Err(DatabaseError::Remote {
+                host: format!("{named} (PGHOSTADDR in the environment)"),
+            });
+        }
+        endpoint.addr = Some(addr);
     }
     if !names_host
-        && let Some(host) = var("PGHOST")
-        && !host.is_empty()
-        && !is_local_host(&host)
+        && let Some(named) = var("PGHOST")
+        && !named.is_empty()
     {
-        return Err(DatabaseError::Remote {
-            host: format!("{host} (PGHOST in the environment)"),
-        });
+        if !is_local_host(&named) {
+            return Err(DatabaseError::Remote {
+                host: format!("{named} (PGHOST in the environment)"),
+            });
+        }
+        endpoint.host = Some(named);
     }
-    Ok(())
+    Ok(endpoint)
 }
 
 /// Whether SQLx connects on this machine for `host`: `localhost` itself, a
@@ -1108,6 +1170,69 @@ mod tests {
         allowed("postgres://app@LOCALHOST/crm", &[]);
     }
 
+    /// The endpoint judged for `url`, in an environment of `pairs`.
+    fn endpoint(url: &str, pairs: &'static [(&'static str, &'static str)]) -> PgEndpoint {
+        local_endpoint(&Url::parse(url).unwrap(), env(pairs)).unwrap()
+    }
+
+    /// The host and the address that were judged are the ones the
+    /// connection is given.
+    #[test]
+    fn the_connection_is_given_the_endpoint_that_was_judged() {
+        let loopback = IpAddr::from([127, 0, 0, 1]);
+        assert_eq!(
+            endpoint("postgres://app@localhost/crm?hostaddr=127.0.0.1", &[]),
+            PgEndpoint {
+                host: Some("localhost".to_owned()),
+                addr: Some(loopback),
+            }
+        );
+        // The last host the URL names is the one SQLx keeps.
+        assert_eq!(
+            endpoint("postgres://app@localhost/crm?host=127.0.0.1", &[]).host,
+            Some("127.0.0.1".to_owned())
+        );
+        // What the URL leaves out comes from the environment.
+        assert_eq!(
+            endpoint(
+                "postgres:///crm",
+                &[("PGHOST", "localhost"), ("PGHOSTADDR", "127.0.0.1")]
+            ),
+            PgEndpoint {
+                host: Some("localhost".to_owned()),
+                addr: Some(loopback),
+            }
+        );
+        // A socket directory is SQLx's to keep, and so is its default.
+        let none = PgEndpoint {
+            host: None,
+            addr: None,
+        };
+        assert_eq!(
+            endpoint("postgres://%2Fvar%2Frun%2Fpostgresql/crm", &[]),
+            none
+        );
+        assert_eq!(endpoint("postgres:///crm", &[]), none);
+
+        // Options that read something else are made to hold the endpoint.
+        let options = PgConnectOptions::new_without_pgpass()
+            .username("app")
+            .host("db.example.com")
+            .hostaddr(IpAddr::from([10, 0, 0, 5]));
+        let pinned = PgEndpoint {
+            host: Some("localhost".to_owned()),
+            addr: Some(loopback),
+        }
+        .pin(options);
+        assert_eq!(pinned.get_host(), "localhost");
+        let rebuilt = pinned.to_url_lossy();
+        let addrs: Vec<String> = rebuilt
+            .query_pairs()
+            .filter(|(key, _)| key == "hostaddr")
+            .map(|(_, value)| value.into_owned())
+            .collect();
+        assert_eq!(addrs, ["127.0.0.1"]);
+    }
     /// SQLx cannot connect with a URL that its parser refuses, and the check
     /// does not let one through as local.
     #[test]
