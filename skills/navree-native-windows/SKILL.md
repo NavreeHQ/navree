@@ -122,8 +122,9 @@ Do not:
 `Navree.Presence` (`Capabilities.For`) decides at startup what the current run
 offers from two runtime facts — `PackageIdentity.Has()` and
 `PackageIdentity.Elevated()` — and reports both in Settings > About and in the
-protocol's `caps` list (`clipboard`, `open_url`, `open_settings`, `share`, and
-`local_notification` when not elevated):
+protocol's `caps` list (`clipboard`, `open_url`, `open_settings`, `share`,
+`local_notification` when not elevated, and `auth_session` when the app has a
+scheme of its own for a browser sign-in to come back on):
 
 | Capability | Unpackaged (`Navree.Demo`) | Packaged MSIX (`Navree.Demo.Packaged`) |
 |---|---|---|
@@ -132,6 +133,7 @@ protocol's `caps` list (`clipboard`, `open_url`, `open_settings`, `share`, and
 | Count on the taskbar button | Drawn overlay icon (`ITaskbarList3`) | Numeric `BadgeNotification` |
 | App notifications & scheduled reminders | Offered unless running elevated as Administrator | Offered unless running elevated |
 | Taskbar jump list | Not offered (Settings states it needs package identity) | Offered (`Windows.UI.StartScreen.JumpList`) |
+| The app's own scheme, for a browser sign-in's return (`PlaceOptions.Scheme`) | Registered for the current user as the app starts (`ActivationRegistrationManager`) | Declared in the manifest (`windows.protocol`) |
 | Kept session & reminder store | Protected with `CryptProtectData` (`DataProtectionScope.CurrentUser`) | Same (`CryptProtectData`) |
 
 Reminders (`Notifications.cs` and `SystemPlace.cs`) obey two extra guards on
@@ -150,7 +152,7 @@ Windows:
 | Need | State on Windows | Server skill |
 |---|---|---|
 | In-app sign-in forms, locked sign-in covers, session cookies, CSRF and sign-out wipe | Built and active | `navree-auth` |
-| Browser sign-in hand-over (`BrowserSignIn.Offered`) and custom URI scheme return (`ProtocolReturn`) | Gated off (`BrowserSignIn.Offered == false`): browser cookies are separate from the app's, and the server does not yet configure a Windows app entry (`auth.apps.windows`) for one-time code + PKCE hand-over. Incoming scheme activations are dropped while off. | `navree-auth` |
+| Browser sign-in hand-over (`BrowserSignIn.Offered`) and custom URI scheme return (`ProtocolReturn`) | Built and on. The browser's cookies are separate from the app's, so a sign-in there reaches the app by the server's hand-over: one-time code + PKCE (S256) + `state`, returned on a link of the app's own scheme. The server lists the app under `auth.apps.windows` (`package_family_name` for a packaged build, `app_id` for an unpackaged one, `callback = "charkha:/signed-in"`). The app sets `PlaceOptions.Scheme` (and `ShellOptions.AppId` when unpackaged); without a scheme the run takes no part (`BrowserSignIn.ComesBack`). Starts from a link matching `ShellOptions.SignInPaths` or an `auth_session` call. Only the scheme return is taken: no loopback port is listened on, no `https` return, and an `ephemeral` session is refused. The server never hands over a sign-in the browser already had. | `navree-auth` |
 | Windows Hello and passkeys (`WindowsHelloAuthenticator`) | Interface stubbed (`KeyCredentialManager.IsSupportedAsync` checked, `ConfirmAsync` returns `Unsupported`); `Passkeys` is not advertised in `caps` yet. | `navree-auth` |
 | Push notifications (WNS) | Not built; scheduled local notifications (`local_notification`) work while the app or tray icon runs. | `navree-notification-channels` |
 
