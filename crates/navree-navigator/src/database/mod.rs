@@ -37,6 +37,11 @@
 //!   servers on this machine (`localhost`, a loopback address or a Unix
 //!   socket) are allowed, whether the URL names the server or the
 //!   environment SQLx reads does (`PGHOSTADDR`, `PGHOST`) ([`check_local`]).
+//!   A SQLite file named as a network path (`\\server\share\...`) is on
+//!   another machine too. A mounted network drive, or an NFS or SMB mount,
+//!   cannot be told from a local folder, and a local port or socket may be
+//!   forwarded elsewhere: the check judges the address, not where the data
+//!   lives.
 
 mod guard;
 mod query;
@@ -522,6 +527,9 @@ impl Target {
         if file.as_os_str() == ":memory:" || self.url.contains(":memory:") {
             return Ok(query::SqliteFile::Memory);
         }
+        if self.local_only {
+            check_sqlite_file(&file)?;
+        }
         let path = if file.is_absolute() {
             file
         } else {
@@ -670,8 +678,9 @@ impl Target {
     }
 }
 
-/// Fails with [`DatabaseError::Remote`] unless `url` is a SQLite URL or
-/// names only local hosts: `localhost`, a loopback address (`127.0.0.1`,
+/// Fails with [`DatabaseError::Remote`] unless `url` is a SQLite URL whose
+/// file is not named as a network path (`\\server\share\...`), or names
+/// only local hosts: `localhost`, a loopback address (`127.0.0.1`,
 /// `::1`), a Unix socket directory, or no host at all (the default socket).
 ///
 /// A PostgreSQL URL is read as SQLx reads it, by the `url` crate and then
@@ -690,9 +699,45 @@ pub fn check_local(url: &str) -> Result<(), DatabaseError> {
 /// [`check_local`], with the environment read through `var`.
 fn check_local_in(url: &str, var: impl Fn(&str) -> Option<String>) -> Result<(), DatabaseError> {
     if Driver::of(url)? == Driver::Sqlite {
-        return Ok(());
+        // A URL SQLx cannot read opens no file.
+        return match SqliteConnectOptions::from_str(url) {
+            Ok(options) => check_sqlite_file(options.get_filename()),
+            Err(_) => Ok(()),
+        };
     }
     local_endpoint(&parse_url(url)?, var).map(|_| ())
+}
+
+/// Fails with [`DatabaseError::Remote`] when the SQLite file `file` is on
+/// another machine by its very name: a UNC path (`\\server\share\...`, or
+/// `//server/share/...`, which Windows reads the same way), its long form
+/// (`\\?\UNC\...`) or a device path (`\\.\...`). Opening one, or only asking
+/// whether it exists, signs in to that server as the user. The rule is the
+/// same on every system, so a URL is judged alike wherever it is read. The
+/// long form of a path on a drive (`\\?\C:\...`) is local.
+fn check_sqlite_file(file: &Path) -> Result<(), DatabaseError> {
+    let name = file.to_string_lossy();
+    let mut leading = name.chars();
+    let two_separators = matches!(
+        (leading.next(), leading.next()),
+        (Some('\\' | '/'), Some('\\' | '/'))
+    );
+    if two_separators && !is_verbatim_disk(&name) {
+        return Err(DatabaseError::Remote {
+            host: format!("{name} (a network path)"),
+        });
+    }
+    Ok(())
+}
+
+/// Whether `name` is the long form of a path on a drive: `\\?\C:\...`.
+fn is_verbatim_disk(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    name.starts_with(r"\\?\")
+        && bytes.len() >= 7
+        && bytes[4].is_ascii_alphabetic()
+        && bytes[5] == b':'
+        && bytes[6] == b'\\'
 }
 
 /// `url` as SQLx parses it.
@@ -1089,6 +1134,39 @@ mod tests {
             Driver::of("mysql://localhost/crm"),
             Err(DatabaseError::Unsupported { scheme }) if scheme == "mysql"
         ));
+    }
+
+    /// A SQLite file on a share is on another machine, and only asking
+    /// whether it exists signs in to that machine.
+    #[test]
+    fn a_sqlite_file_on_a_share_is_refused() {
+        for url in [
+            "sqlite:////dbserver/share/app.db",
+            "sqlite://%5C%5Cdbserver%5Cshare%5Capp.db",
+            r"sqlite://\\dbserver\share\app.db",
+            "sqlite://%5C%5C%3F%5CUNC%5Cdbserver%5Cshare%5Capp.db",
+            r"sqlite://\\.\pipe\app",
+            r"sqlite:\/dbserver/share/app.db",
+        ] {
+            let host = refused(url, &[]);
+            assert!(host.ends_with("(a network path)"), "{url}: {host}");
+        }
+        for url in [
+            "sqlite://storage/app.db?mode=rwc",
+            "sqlite:///var/lib/crm/app.db",
+            r"sqlite://C:\data\app.db",
+            "sqlite://%5C%5C%3F%5CC:%5Cdata%5Capp.db",
+            "sqlite::memory:",
+        ] {
+            allowed(url, &[]);
+        }
+        let root = Path::new(".");
+        let share = "sqlite:////dbserver/share/app.db";
+        assert!(matches!(
+            Target::new_in(share, root, false, env(&[])),
+            Err(DatabaseError::Remote { .. })
+        ));
+        assert!(Target::new_in(share, root, true, env(&[])).is_ok());
     }
 
     /// A value that is no URL may hold a password, and none of it is
