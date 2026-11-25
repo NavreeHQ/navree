@@ -50,6 +50,19 @@ fn iphone() -> String {
     client_of("ios", "passkey+platform_sign_in")
 }
 
+/// A browser with a session of its own and the token its posts carry.
+async fn browser(app: &TestApp) -> TestClient {
+    let client = app.client();
+    client
+        .get("/sign-in")
+        .header("accept", "text/html")
+        .send()
+        .await
+        .assert_status(200);
+    assert!(client.cookie(XSRF).is_some());
+    client
+}
+
 /// `builder` with passkeys on and the session layer, navree-ui and the pages.
 fn with_passkey_pages(builder: TestAppBuilder, sink: &Arc<RecordingSink>) -> TestAppBuilder {
     builder
@@ -619,6 +632,121 @@ async fn an_assertion_that_signed_in_once_is_refused_the_second_time() {
         .assert_status(303);
     whoami(&other).await.assert_status(401);
     assert_eq!(refusals(&sink), ["challenge of another session"]);
+}
+
+// The challenge a native app asks for is its session's where pending
+// challenges are kept, not only in the session. The passkey page's route and
+// the token API's name no session, so neither takes an assertion over it,
+// from another session or from the one that asked; and neither uses it up.
+#[tokio::test]
+async fn an_assertion_over_a_native_challenge_is_refused_on_the_routes_that_name_no_session() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = apple_app(&clock, &sink).await;
+    let (user, authenticator) = with_passkey(&app, "simran@example.com").await;
+    let phone = app.client();
+    let (_, result_at, ticket) = call_of(&phone).await;
+    let assertion = authenticator.get(&options(&phone).await).unwrap();
+
+    // Another session posts it to the passkey page's route, as that page's script would.
+    let other = browser(&app).await;
+    other
+        .post("/sign-in/passkey/verify")
+        .xsrf()
+        .json(&json!({ "credential": assertion, "next": "/deals" }))
+        .send()
+        .await
+        .assert_error_code(401, "invalid_passkey");
+    whoami(&other).await.assert_status(401);
+    // The session that asked fares no better there.
+    phone
+        .post("/sign-in/passkey/verify")
+        .xsrf()
+        .json(&json!({ "credential": assertion, "next": "/deals" }))
+        .send()
+        .await
+        .assert_error_code(401, "invalid_passkey");
+    whoami(&phone).await.assert_status(401);
+    // The token API gives no tokens for it.
+    let api = browser(&app).await;
+    let refused = api
+        .post("/api/auth/passkeys/login")
+        .xsrf()
+        .json(&json!({ "credential": assertion }))
+        .send()
+        .await
+        .assert_error_code(401, "invalid_passkey");
+    assert!(
+        !refused.text().contains("access_token"),
+        "{}",
+        refused.text()
+    );
+    assert_eq!(refusals(&sink), ["challenge of another session"; 3]);
+    // Nobody was signed in with the passkey.
+    assert!(
+        sink.with_action("auth.login")
+            .iter()
+            .all(|entry| entry.metadata["method"] != "passkey")
+    );
+
+    // None of it used the challenge up: through its own route, in its own
+    // session, the answer still signs the person in.
+    let done = post_assertion(&phone, &result_at, &ticket, &assertion)
+        .await
+        .assert_status(303);
+    assert_eq!(went_to(&done), "/deals");
+    whoami(&phone)
+        .await
+        .assert_status(200)
+        .assert_json_path("user_id", json!(user.id));
+}
+
+// The other way round: the challenges of the passkey page and of the token
+// API belong to no session, as they always did, and still sign in there. The
+// native route takes none of them.
+#[tokio::test]
+async fn a_challenge_of_no_session_is_answered_where_it_always_was_and_not_by_the_call() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = apple_app(&clock, &sink).await;
+    let (user, authenticator) = with_passkey(&app, "simran@example.com").await;
+
+    // A challenge of the passkey page, answered and posted with a call's ticket.
+    let phone = app.client();
+    let (_, result_at, ticket) = call_of(&phone).await;
+    let page_options = phone
+        .post("/sign-in/passkey/options")
+        .xsrf()
+        .json(&json!({}))
+        .send()
+        .await
+        .assert_status(200)
+        .json_value()["publicKey"]
+        .clone();
+    let assertion = authenticator.get(&page_options).unwrap();
+    let refused = post_assertion(&phone, &result_at, &ticket, &assertion)
+        .await
+        .assert_status(303);
+    assert_eq!(
+        went_to(&refused),
+        "/sign-in?next=%2Fdeals&status=passkey-failed"
+    );
+    whoami(&phone).await.assert_status(401);
+    assert_eq!(refusals(&sink), ["no challenge asked for in this session"]);
+
+    // On the page's own route the same answer signs the browser in, from any session.
+    let other = browser(&app).await;
+    let done = other
+        .post("/sign-in/passkey/verify")
+        .xsrf()
+        .json(&json!({ "credential": assertion, "next": "/deals" }))
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(done, json!({ "status": "signed_in", "next": "/deals" }));
+    whoami(&other)
+        .await
+        .assert_status(200)
+        .assert_json_path("user_id", json!(user.id));
 }
 
 // A call that brings no assertion goes back to the sign-in page: with no
