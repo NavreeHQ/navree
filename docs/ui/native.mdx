@@ -151,6 +151,8 @@ pub fn apple_button() -> Option<Node> {
 
 A passkey call posts its result with a ticket: seal one for the session, the call (`passkey`) and the route with the app's `CallTickets`, and redeem it in the route before anything else. The route then checks the assertion as it would a browser's.
 
+A call reaches the app only on a screen. A page drawn in `AuthLayout`, as the pages of `AuthPages` are, is shown in the client's web view, because the protocol has no kind for that layout; it is read as a screen (the form's column, without the panel beside it and the theme menu) only when a control on it carries a call for the client that asks.
+
 ## What the device keeps between launches
 
 A native app keeps the shell between launches, so it opens with its bars drawn. It keeps a page only when the page lets a private cache keep it, the same rule a browser follows: a page is `Cache-Control: no-store` unless its author says otherwise, because pages show private data, and such a page is never written to the device. To let a page be kept, say so on the page:
