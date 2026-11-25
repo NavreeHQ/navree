@@ -16,6 +16,7 @@ mod jwt;
 mod login;
 mod logout;
 mod module;
+mod native_calls;
 mod offboarding;
 mod orm;
 mod passkeys;

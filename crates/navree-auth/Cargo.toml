@@ -99,6 +99,10 @@ futures = { workspace = true }
 navree-api = { workspace = true }
 # The PostgreSQL test checks the impersonator column of the audit log.
 navree-audit = { workspace = true }
+# The tests ask for the sign-in page as a native client does, and read the
+# envelope it is answered with.
+navree-native = { workspace = true }
+navree-ui = { workspace = true, features = ["native-preview"] }
 navree-observe = { workspace = true }
 navree-testing = { workspace = true }
 # Tests boot MailModule, which needs ViewModule.

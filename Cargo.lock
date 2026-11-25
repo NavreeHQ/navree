@@ -4336,6 +4336,7 @@ dependencies = [
  "navree-http-client",
  "navree-kernel",
  "navree-mail",
+ "navree-native",
  "navree-notify",
  "navree-observe",
  "navree-openapi",
