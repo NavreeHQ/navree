@@ -680,7 +680,7 @@ pub(crate) enum Pending {
         more: bool,
     },
     /// What a device call needs from the server before the client can run
-    /// it: a confirmation's challenge, a sign-in's nonce.
+    /// it: a confirmation's challenge, a passkey's options, a sign-in's nonce.
     BeforeCall { call: u64 },
     /// A sign-in session's code, exchanged for a session of the app's own.
     Exchange,

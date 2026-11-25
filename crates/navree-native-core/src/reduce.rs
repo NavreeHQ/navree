@@ -1841,11 +1841,10 @@ impl Core {
 
     /// Writes the paths `keys` of a device call as whole addresses on the
     /// app's origin, as a picture's source is written: what the system is
-    /// handed (a page shared) or the client fetches (a file shared, the
-    /// options of a passkey) is never a path for it to read against
-    /// something. One that does not read as one of the app's addresses is
-    /// taken out, and that is said: the name of what was taken out, never the
-    /// address.
+    /// handed (a page shared) or the client fetches (a file shared) is never
+    /// a path for it to read against something. One that does not read as
+    /// one of the app's addresses is taken out, and that is said: the name of
+    /// what was taken out, never the address.
     fn whole_in(&mut self, call: &mut Value, keys: &[&str]) {
         let Some(call) = call.as_object_mut() else {
             return;
@@ -1955,6 +1954,44 @@ impl Core {
                     self.inner.calls.remove(&number);
                 }
             }
+            Call::Passkey(passkey) => {
+                // The options of the ceremony are the server's to give: the
+                // core asks for them, the client only shows the system's sheet.
+                // The ticket is not spent here: it goes back with the result.
+                let Some(then) = device.then else {
+                    return self.report(
+                        "device",
+                        "a passkey with nowhere to post its result".to_owned(),
+                    );
+                };
+                if !self.may_send(id) {
+                    return;
+                }
+                self.inner.next.call += 1;
+                let number = self.inner.next.call;
+                let options = passkey.options.as_str().to_owned();
+                self.inner.calls.insert(
+                    number,
+                    crate::state::DeviceCall {
+                        screen: id,
+                        call: Call::Passkey(passkey),
+                        goes: Goes::Then { then, spent: false },
+                    },
+                );
+                if !self.post_json(
+                    Pending::BeforeCall { call: number },
+                    &options,
+                    "{}".to_owned(),
+                ) {
+                    self.inner.calls.remove(&number);
+                    // Never the address: only that it is not one of the app's.
+                    self.report(
+                        "device",
+                        "the `options` of a passkey is not an address of the app, and it was not started"
+                            .to_owned(),
+                    );
+                }
+            }
             Call::PlatformSignIn(sign_in) => {
                 let provider = serde_json::to_value(sign_in.provider)
                     .ok()
@@ -2013,7 +2050,6 @@ impl Core {
                 // What the system is handed or the client fetches is written whole.
                 let addresses: &[&str] = match &call {
                     Call::Share(_) => &["href", "file"],
-                    Call::Passkey(_) => &["options"],
                     _ => &[],
                 };
                 if !addresses.is_empty()
@@ -3679,10 +3715,176 @@ mod tests {
         assert_eq!(device["title"], "Order");
     }
 
-    /// The address a passkey call has the client fetch is written whole too,
-    /// and an address that is taken out of a device call is said.
+    /// A passkey's options are the server's to give: the core asks their route
+    /// before the client is told anything, hands the client what came back,
+    /// and posts the assertion where the call said, with the call's ticket.
     #[test]
-    fn what_a_passkey_fetches_is_a_whole_address_or_nothing_and_a_dropped_one_is_said() {
+    fn a_passkey_asks_the_server_for_its_options_and_posts_the_assertion_with_its_ticket() {
+        // An app that can do passkeys, started against a server with no shell.
+        let started = || {
+            let mut client = Client::new(Platform::Android, FormFactor::Phone);
+            client.caps = vec!["passkey".to_owned()];
+            let mut core = Core::new(Config::new("https://shop.example", client));
+            core.send(Event::Start);
+            core.send(Event::Response(Response {
+                request: 1,
+                status: 404,
+                ..Response::default()
+            }));
+            core
+        };
+        let mut core = started();
+        let tap = |core: &mut Core, options: &str| {
+            let action = serde_json::from_value(serde_json::json!({
+                "t": "device",
+                "call": {"f": "passkey", "mode": "sign_in", "options": options},
+                "then": {
+                    "href": "/sign-in/passkey/native?next=%2Forders",
+                    "ticket": "tk_41",
+                    "exp": 1_794_000_000_i64,
+                },
+            }))
+            .expect("a device action");
+            core.send(Event::Act {
+                screen: Some(1),
+                action,
+                form: None,
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            })
+            .effects
+        };
+        let effects = tap(&mut core, "/sign-in/passkey/native/options");
+        // Nothing is asked of the client yet.
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Device { .. })),
+            "{effects:?}"
+        );
+        let asked = effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(request) => Some(request),
+                _ => None,
+            })
+            .expect("the options are asked for");
+        assert!(matches!(asked.method, Verb::Post), "{asked:?}");
+        assert_eq!(
+            asked.url,
+            "https://shop.example/sign-in/passkey/native/options"
+        );
+        assert!(asked.xsrf);
+        assert!(
+            matches!(&asked.body, Some(Body::Json { text }) if text == "{}"),
+            "{asked:?}"
+        );
+        // The route answers the request's options: now the client shows the sheet with them.
+        let effects = core
+            .send(Event::Response(Response {
+                request: asked.request,
+                status: 200,
+                content_type: Some("application/json".to_owned()),
+                body: r#"{"publicKey":{"challenge":"Y2hhbGxlbmdl","rpId":"shop.example","userVerification":"preferred","allowCredentials":[]}}"#.to_owned(),
+                ..Response::default()
+            }))
+            .effects;
+        let (number, options) = effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Device {
+                    call,
+                    posts: true,
+                    options: Some(options),
+                    ..
+                } => Some((*call, options.clone())),
+                _ => None,
+            })
+            .expect("the call is started with the options");
+        assert_eq!(options["publicKey"]["rpId"], "shop.example");
+        assert_eq!(options["publicKey"]["challenge"], "Y2hhbGxlbmdl");
+        // The assertion goes where the call said, as a form, with the ticket and the outcome.
+        let done: Event = serde_json::from_value(serde_json::json!({
+            "t": "device_result",
+            "call": number,
+            "ok": true,
+            "fields": [{"name": "credential", "value": "{\"id\":\"pk_1\"}"}],
+        }))
+        .expect("a result");
+        let effects = core.send(done).effects;
+        let (url, body) = effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(request) if matches!(request.method, Verb::Post) => {
+                    Some((request.url.clone(), request.body.clone()))
+                }
+                _ => None,
+            })
+            .expect("the assertion is posted");
+        assert_eq!(
+            url,
+            "https://shop.example/sign-in/passkey/native?next=%2Forders"
+        );
+        let Some(Body::Form { text }) = body else {
+            panic!("not a form: {body:?}");
+        };
+        assert!(
+            text.starts_with("credential=") && text.ends_with("&_call=tk_41&outcome=ok"),
+            "{text}"
+        );
+        // A route that refuses gives the client nothing to show.
+        let mut core = started();
+        let effects = tap(&mut core, "/sign-in/passkey/native/options");
+        let again = effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(request) => Some(request.request),
+                _ => None,
+            })
+            .expect("the options are asked for again");
+        let effects = core
+            .send(Event::Response(Response {
+                request: again,
+                status: 429,
+                ..Response::default()
+            }))
+            .effects;
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Device { .. })),
+            "{effects:?}"
+        );
+        // Options that are not an address of the app are never asked for, and that is
+        // said without the address.
+        let mut core = started();
+        let effects = tap(&mut core, "/sign-in/\u{3000}options");
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Fetch(_) | Effect::Device { .. })),
+            "{effects:?}"
+        );
+        let said: Vec<&String> = effects
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::Report { what, detail } if what == "device" => Some(detail),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(said.len(), 1, "{effects:?}");
+        assert!(
+            said[0].contains("options") && !said[0].contains("sign-in"),
+            "{said:?}"
+        );
+    }
+
+    /// An address that is taken out of a device call is said.
+    #[test]
+    fn an_address_taken_out_of_a_device_call_is_said_by_its_name() {
         let mut client = Client::new(Platform::Android, FormFactor::Phone);
         client.caps = vec!["passkey".to_owned(), "share".to_owned()];
         let mut core = Core::new(Config::new("https://shop.example", client));
@@ -3725,36 +3927,36 @@ mod tests {
                 })
                 .collect()
         };
-        let effects = call(
-            serde_json::json!({"f": "passkey", "mode": "sign_in", "options": "/auth/passkeys/options"}),
-        );
-        assert_eq!(
-            device_of(&effects)["options"],
-            "https://shop.example/auth/passkeys/options"
-        );
+        let effects =
+            call(serde_json::json!({"f": "share", "title": "Order", "href": "/orders/1"}));
+        assert_eq!(device_of(&effects)["href"], "https://shop.example/orders/1");
         assert!(said(&effects).is_empty(), "{effects:?}");
         // A path the core does not read as one of the app's addresses is not
         // handed over, and that is said, with the name of what was dropped
         // and never the address.
         let effects = call(
-            serde_json::json!({"f": "passkey", "mode": "sign_in", "options": "/auth/\u{3000}options"}),
-        );
-        assert!(device_of(&effects).get("options").is_none());
-        let reports = said(&effects);
-        assert_eq!(reports.len(), 1, "{effects:?}");
-        assert!(
-            reports[0].contains("options") && !reports[0].contains("auth"),
-            "{reports:?}"
-        );
-        let effects = call(
             serde_json::json!({"f": "share", "title": "Order", "href": "/orders/\u{3000}1", "file": "/orders/\u{3000}2"}),
         );
+        let device = device_of(&effects);
+        assert!(device.get("href").is_none() && device.get("file").is_none());
         let reports = said(&effects);
         assert_eq!(reports.len(), 2, "{reports:?}");
         assert!(
             reports[0].contains("href") && reports[1].contains("file"),
             "{reports:?}"
         );
+        assert!(reports.iter().all(|report| !report.contains("orders")));
+        // A passkey with nowhere to post its result is not started, and that is said.
+        let effects = call(
+            serde_json::json!({"f": "passkey", "mode": "sign_in", "options": "/auth/passkeys/options"}),
+        );
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Fetch(_) | Effect::Device { .. })),
+            "{effects:?}"
+        );
+        assert_eq!(said(&effects).len(), 1, "{effects:?}");
     }
 
     /// A core that started against a server with no shell: one destination,

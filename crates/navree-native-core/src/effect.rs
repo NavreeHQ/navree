@@ -149,9 +149,9 @@ pub enum Effect {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         posts: bool,
         /// What the server gave for this call to start with, which the core
-        /// asked for: for `confirm` the passkey request (`{"publicKey": …}`),
-        /// for `platform_sign_in` `{"nonce": "…"}`. The client asks the server
-        /// for nothing itself.
+        /// asked for: for `confirm` and for `passkey` the passkey request
+        /// (`{"publicKey": …}`), for `platform_sign_in` `{"nonce": "…"}`. The
+        /// client asks the server for nothing itself.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         options: Option<serde_json::Value>,
     },
