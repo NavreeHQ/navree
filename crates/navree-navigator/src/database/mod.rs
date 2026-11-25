@@ -89,13 +89,20 @@ pub enum Driver {
 }
 
 impl Driver {
-    /// The driver of `url`, by its scheme.
+    /// The driver of `url`, by its scheme. What stands before the first `:`
+    /// is named in the error only when it is written like a scheme: any
+    /// other value (a libpq `key=value` string, say) may hold a password,
+    /// and none of it is repeated.
     pub fn of(url: &str) -> Result<Driver, DatabaseError> {
-        let scheme = url.split(':').next().unwrap_or("").to_ascii_lowercase();
+        let Some((scheme, _)) = url.split_once(':') else {
+            return Err(DatabaseError::NotAUrl);
+        };
+        let scheme = scheme.to_ascii_lowercase();
         match scheme.as_str() {
             "sqlite" => Ok(Driver::Sqlite),
             "postgres" | "postgresql" => Ok(Driver::Postgres),
-            _ => Err(DatabaseError::Unsupported { scheme }),
+            _ if is_scheme(&scheme) => Err(DatabaseError::Unsupported { scheme }),
+            _ => Err(DatabaseError::NotAUrl),
         }
     }
 
@@ -131,6 +138,12 @@ pub enum DatabaseError {
         /// The URL scheme.
         scheme: String,
     },
+    /// A value that is not written as a URL (a libpq `key=value` string, a
+    /// bare name). None of it is shown: it may hold a password.
+    #[error(
+        "the database is not given as a URL: Navigator reads `sqlite:`, `postgres:` and `postgresql:` URLs"
+    )]
+    NotAUrl,
     /// A server that isn't on this machine, without `--allow-remote-database`.
     #[error(
         "database.url points at {host}, which isn't on this machine. Navigator only connects to local databases \
@@ -1072,6 +1085,29 @@ mod tests {
             Driver::of("postgresql://localhost/crm").unwrap(),
             Driver::Postgres
         );
+        assert!(matches!(
+            Driver::of("mysql://localhost/crm"),
+            Err(DatabaseError::Unsupported { scheme }) if scheme == "mysql"
+        ));
+    }
+
+    /// A value that is no URL may hold a password, and none of it is
+    /// repeated in the error.
+    #[test]
+    fn a_value_that_is_no_url_is_not_repeated() {
+        for value in [
+            "host=localhost user=app password=s3cret dbname=crm",
+            "host=localhost user=app password=s3:cret dbname=crm",
+            "s3cret",
+            "an-uncommonly-long-scheme-s3cret://localhost/crm",
+        ] {
+            let error = Driver::of(value).unwrap_err();
+            assert!(
+                matches!(error, DatabaseError::NotAUrl),
+                "{value}: {error:?}"
+            );
+            assert!(!error.to_string().contains("s3"), "{error}");
+        }
         assert!(matches!(
             Driver::of("mysql://localhost/crm"),
             Err(DatabaseError::Unsupported { scheme }) if scheme == "mysql"
