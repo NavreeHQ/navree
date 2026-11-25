@@ -179,7 +179,8 @@ hold for both).
   to the setup page after signing in.
 - In a Navree Native app the sign-in page starts the system's own sheet where
   the client says it can and the site is set up for it: the passkey link
-  carries the `passkey` device call (the client lists `passkey`;
+  carries the `passkey` device call (the client lists `passkey` and
+  `passkey_options`, which an Android build of 1.5.0 or earlier does not;
   `auth.passkeys` is on; an app of its family under `auth.apps` has
   `credentials`; for an Apple app `https://<rp_id>` is among
   `auth.passkeys.origins`), and a button stands for Sign in with Apple or with
@@ -188,8 +189,12 @@ hold for both).
   are `POST /sign-in/passkey/native/options` and `POST
   /sign-in/passkey/native`: the result needs the ticket the page sealed for
   the session (422 `invalid_ticket` otherwise, and once), the assertion must
-  answer the challenge that session asked for, and it is then checked by
-  `login_with_passkey_session`. A module of your own adds a provider's sheet
+  answer the challenge that session asked for, and it is then checked by the
+  code `login_with_passkey_session` runs. That challenge is kept with a mark
+  of its session: `POST /sign-in/passkey/verify` and `POST
+  /api/auth/passkeys/login` name no session and refuse an assertion over it
+  (their own challenges belong to no session, as before), and a sign-in by
+  another way forgets one left waiting. A module of your own adds a provider's sheet
   with `ProviderSheets`. The sign-in page is a screen of the app only where it
   gives it a call; every other native client gets it in its web view, as
   before, and so are the other pages. An app whose build opens `/sign-in` in

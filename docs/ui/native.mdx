@@ -123,11 +123,11 @@ The theme on the wire is its name and its accent for a light and a dark ground. 
 
 ## What a page starts on the device
 
-Two things a browser does on a page, a native app does in the system's own sheet: signing in with a passkey, and signing in with Apple or with Google. A control says so with `native_call`, on a `Button` or on an element. The call is written only for a native client whose app lists the call's feature among its capabilities (`passkey`, `platform_sign_in`); every other client gets the control as it is, and a browser's page does not change by a byte.
+Two things a browser does on a page, a native app does in the system's own sheet: signing in with a passkey, and signing in with Apple or with Google. A control says so with `native_call`, on a `Button` or on an element. The call is written only for a native client whose app lists what the call needs among its capabilities; every other client gets the control as it is, and a browser's page does not change by a byte.
 
-| Call | The app's capability | What the app does on a tap |
+| Call | The app's capabilities | What the app does on a tap |
 |---|---|---|
-| `NativeCall::passkey_sign_in(options, then)` | `passkey` | Posts `{}` to `options` for the request's options (`{"publicKey": {...}}`), shows the system's passkey sheet, and posts the assertion to `then` as a form: `credential`, the call's ticket as `_call`, and `outcome` |
+| `NativeCall::passkey_sign_in(options, then)` | `passkey` and `passkey_options` | Posts `{}` to `options` for the request's options (`{"publicKey": {...}}`), shows the system's passkey sheet, and posts the assertion to `then` as a form: `credential`, the call's ticket as `_call`, and `outcome` |
 | `NativeCall::provider_sign_in(provider, nonce, sign_in)` | `platform_sign_in` | Posts to `nonce` for a one-time nonce and a sealed state, shows the provider's sheet, and posts the identity token with the state to `sign_in` as JSON |
 
 The sign-in page of [`AuthPages`](/docs/security/passwordless/#a-passkey-in-a-navree-native-app) writes both calls itself, where the client says it can and the site is set up for it. A page of your own does the same. A capability is the client's own word: it decides what a page offers, never what a route accepts, so the routes a call names check everything it brings back.
@@ -147,9 +147,9 @@ pub fn apple_button() -> Option<Node> {
 }
 ```
 
-`native_client_with(feature)` answers the client of the request, with the family of systems it is on, when it is a native client whose app has the feature; a page draws a control only an app can use, or makes what a call needs, only then. A link keeps its address: a build that turns out not to have the feature goes where the link leads. Every path of a call is a path on your own site; a call that names another site is never sent.
+`native_client_with(feature)` answers the client of the request, with the family of systems it is on, when it is a native client whose app has the feature; a page draws a control only an app can use, or makes what a call needs, only then. For `passkey` it answers only when the app lists `passkey_options` too. That name says the build shows the passkey sheet with the options the server gives; an Android build of 1.5.0 or earlier lists `passkey` alone, could only fail the call, and so is answered as a client without passkeys. A link keeps its address: a build that turns out not to have the feature goes where the link leads. Every path of a call is a path on your own site; a call that names another site is never sent.
 
-A passkey call posts its result with a ticket: seal one for the session, the call (`passkey`) and the route with the app's `CallTickets`, and redeem it in the route before anything else. The route then checks the assertion as it would a browser's.
+A passkey call posts its result with a ticket: seal one for the session, the call (`passkey`) and the route with the app's `CallTickets`, and redeem it in the route before anything else. The route then checks the assertion as it would a browser's. With navree-auth, make the options with `AuthService::passkey_call_options` and check the result with `AuthService::login_with_passkey_call_session`: the challenge is then bound to the session that asked, and no other route or session takes an assertion over it.
 
 A call reaches the app only on a screen. A page drawn in `AuthLayout`, as the pages of `AuthPages` are, is shown in the client's web view, because the protocol has no kind for that layout; it is read as a screen (the form's column, without the panel beside it and the theme menu) only when a control on it carries a call for the client that asks.
 
