@@ -30,7 +30,7 @@ public sealed class BrowserSignInTests
 
     // The configuration of a packaged app whose scheme is `scheme`, told the device features `caps` and the sign-in addresses `paths`.
     private static byte[] Config(IReadOnlyList<string> caps, string? scheme, IReadOnlyList<string>? paths) =>
-        ClientConfig.Json("https://shop.example", [], Family, new ClientSettings(false, false, 100, "en-IN", "Asia/Kolkata"), "10.0.26100.0", "1.0.0", caps, scheme, false, Undrawable.Kinds, paths);
+        ClientConfig.Json("https://shop.example", [], Family, new ClientSettings(false, false, 100, "en-IN", "Asia/Kolkata"), "10.0.26100.0", "1.0.0", caps, scheme, false, Undrawable.Kinds, signInPaths: paths);
 
     // The shell as the framework's server writes it for a Windows client: the hand-over's routes, with the callback of the app it lists.
     private static string Shell(string? callback)
