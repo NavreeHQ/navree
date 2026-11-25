@@ -294,7 +294,7 @@ impl AuthService {
     /// for. Only
     /// [`login_with_passkey_call_session`](AuthService::login_with_passkey_call_session)
     /// with this session takes an assertion over it. One challenge waits at a
-    /// time: asking again replaces it.
+    /// time: asking again replaces it, and signing in another way forgets it.
     pub async fn passkey_call_options(
         &self,
         session: &Session,
@@ -419,6 +419,8 @@ impl AuthService {
                 challenge_token, ..
             } => {
                 session.regenerate();
+                // The first step of another way in ends a passkey challenge left waiting.
+                session.remove(SESSION_PASSKEY_CALL_KEY);
                 session
                     .insert(
                         SESSION_CHALLENGE_KEY,
@@ -535,6 +537,7 @@ impl AuthService {
             .await?;
         let token = self.two_factor_challenge(user, &method)?;
         session.regenerate();
+        session.remove(SESSION_PASSKEY_CALL_KEY);
         session
             .insert(SESSION_CHALLENGE_KEY, &Pending { token, remember })
             .map_err(session_error)?;
@@ -885,6 +888,9 @@ impl AuthService {
         session.regenerate();
         session.remove(SESSION_CHALLENGE_KEY);
         session.remove(SESSION_STASH_KEY);
+        // A passkey challenge a native app asked for and never answered ends with
+        // the sign-in that came instead.
+        session.remove(SESSION_PASSKEY_CALL_KEY);
         if signed_in.remember {
             session.set_lifetime(Duration::from_secs(self.options.session.max_age_secs(true)));
         } else {
