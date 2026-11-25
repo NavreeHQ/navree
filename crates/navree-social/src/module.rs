@@ -34,6 +34,10 @@ use crate::{Social, SocialError, SocialOptions, SocialProvider};
 ///   `social_account_clients`, after `auth`);
 /// - a credential revoker (`social`): navree-auth's offboarding revokes the
 ///   users' stored Apple and Google tokens at the provider;
+/// - with the feature `session`, the sign-ins the system's own sheet does in a
+///   native app (navree-auth's `ProviderSheets`): Sign in with Apple and Sign
+///   in with Google, each where its nonce route answers, so the sign-in page
+///   of `AuthPages` offers them to an app that can open the sheet;
 /// - the mapping of [`SocialError`]s returned from handlers to error
 ///   responses.
 ///
@@ -143,6 +147,31 @@ fn register(m: &mut ModuleBuilder, options: Option<SocialOptions>) {
         .credential_revoker::<SocialRevoker>()
         .migrations(migrations())
         .map_error::<SocialError>(map_social_error);
+    // The sign-in page of a native app offers the system's own sheet for Apple and
+    // for Google, where an app can sign in on its session.
+    #[cfg(feature = "session")]
+    m.multi(
+        Factory::<dyn navree_auth::ProviderSheets>::new(|r: Resolver| async move {
+            let social = r.get::<Social>().await?;
+            let auth = r.get::<AuthOptions>().await?;
+            let api_prefix = match r.app().try_get::<navree_http::HttpOptions>().await {
+                Some(http) => http.api_prefix.clone(),
+                None => String::new(),
+            };
+            let base = format!(
+                "/{}/{}/social",
+                api_prefix.trim_matches('/'),
+                auth.routes_prefix.trim_matches('/')
+            )
+            .replace("//", "/");
+            Ok(Arc::new(crate::native::SocialSheets { social, base })
+                as Arc<dyn navree_auth::ProviderSheets>)
+        })
+        .deps(vec![
+            ProviderKey::of::<Social>(),
+            ProviderKey::of::<AuthOptions>(),
+        ]),
+    );
 }
 
 /// `SocialModule::for_feature::<P>()`.

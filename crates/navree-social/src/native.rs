@@ -540,6 +540,50 @@ impl Social {
     }
 }
 
+/// What navree-auth's sign-in page offers a native app with the system's own
+/// sheet: Sign in with Apple and Sign in with Google, each exactly where its
+/// nonce route answers ([`native_audiences`]). The routes are the two this
+/// module mounts for an app on its session, `{provider}/native/nonce` and
+/// `{provider}/native/session`, which check everything the sheet brings back;
+/// saying them here checks nothing and grants nothing. Feature `session`.
+#[cfg(feature = "session")]
+pub(crate) struct SocialSheets {
+    pub(crate) social: Arc<Social>,
+    /// The routes' base on this site: `/api/auth/social`.
+    pub(crate) base: String,
+}
+
+#[cfg(feature = "session")]
+impl navree_auth::ProviderSheets for SocialSheets {
+    fn sheets(&self) -> Vec<navree_auth::ProviderSheet> {
+        use navree_auth::{ProviderSheet, SheetProvider};
+
+        let Ok(rt) = self.social.rt() else {
+            return Vec::new();
+        };
+        // Without the routes there is nowhere for a sheet's token to go.
+        if !rt.options.routes {
+            return Vec::new();
+        }
+        rt.providers
+            .values()
+            .filter_map(|entry| {
+                native_audiences(rt, entry).ok()?;
+                let routes = format!("{}/{}/native", self.base, entry.key);
+                let nonce = format!("{routes}/nonce");
+                let sign_in = format!("{routes}/session");
+                Some(match entry.kind {
+                    Kind::Apple => ProviderSheet::new(SheetProvider::Apple, nonce, sign_in),
+                    // Android's sheet is asked for a token made for the site's own
+                    // client id, which is the audience the session route takes.
+                    _ => ProviderSheet::new(SheetProvider::Google, nonce, sign_in)
+                        .client_id(entry.config.client_id.clone()),
+                })
+            })
+            .collect()
+    }
+}
+
 /// What revoking an account's stored token at its provider came to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Revocation {
