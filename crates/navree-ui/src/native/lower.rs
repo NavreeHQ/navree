@@ -1491,6 +1491,8 @@ const QUIET_HOOKS: &[&str] = &[
     "data-ui-hotkey",
     "data-ui-hotkey-scope",
     "data-ui-boost",
+    // A link a browser follows by loading the whole page: a client's own way already.
+    "data-ui-noboost",
     "data-ui-keep-attrs",
     "data-ui-in-region",
     "data-ui-cell",
