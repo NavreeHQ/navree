@@ -9,17 +9,24 @@
 //! the `passkey` device call the sign-in page gives a client that can. Its two
 //! routes stand beside the page's:
 //!
-//! - `POST {sign-in}/passkey/native/options` answers the same options
-//!   (`{"publicKey": {...}}`) and has the session remember the challenge as
-//!   the one it asked for;
+//! - `POST {sign-in}/passkey/native/options` answers options of the same
+//!   shape (`{"publicKey": {...}}`) with a challenge of this session
+//!   ([`AuthService::passkey_call_options`](crate::AuthService::passkey_call_options)):
+//!   the challenge is kept with a mark of the session, and the session
+//!   remembers it as the one it asked for;
 //! - `POST {sign-in}/passkey/native` takes the call's result as a form
 //!   (`credential`, the call's ticket as `_call`, and `outcome`). The ticket
 //!   must be the one sealed for this session, this call and this route, and
-//!   it is good once; the assertion must answer the challenge this session
-//!   asked for; and then it is checked by
-//!   [`AuthService::login_with_passkey_session`](crate::AuthService::login_with_passkey_session),
-//!   as the page's own `verify` route checks a browser's. The answer is where
-//!   the app goes next, as after the sign-in form.
+//!   it is good once. The assertion is then checked by
+//!   [`AuthService::login_with_passkey_call_session`](crate::AuthService::login_with_passkey_call_session):
+//!   it must answer the challenge this session asked for, the pending
+//!   challenge it uses up must be the one kept with this session's mark, and
+//!   the rest is the code the page's own `verify` route checks a browser's
+//!   with. The answer is where the app goes next, as after the sign-in form.
+//!
+//! A challenge of the native routes is its session's: the page's own `verify`
+//! route names no session and refuses an assertion over one, from any session,
+//! and the native route takes no assertion over a challenge of the page's.
 
 use std::time::Duration;
 
