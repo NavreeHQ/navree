@@ -245,11 +245,11 @@ public sealed class PersonChange
         }
     }
 
-    private void MoveWaiting(string from, string to)
+    private void MoveWaiting(string before, string after)
     {
         try
         {
-            parts.MoveWaiting?.Invoke(from, to);
+            parts.MoveWaiting?.Invoke(before, after);
         }
         catch (Exception failure)
         {

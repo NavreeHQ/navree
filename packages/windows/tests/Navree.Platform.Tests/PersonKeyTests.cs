@@ -118,13 +118,13 @@ public sealed class PersonKeyTests
             Assert.IsTrue(PersonWatch.IsPlainKeyMark(keptFor!), "the start does not ask the core what a person's key was");
             SessionGate gate = new();
             RecordedShell shell = new();
-            List<(string From, string To)> moved = [];
+            List<(string Before, string After)> moved = [];
             ConcurrentQueue<string> problems = new();
             PersonChange people = new(
                 new PersonWatch(keptFor, keeper.KeepsOfAPerson()),
                 gate,
                 keeper,
-                shell.Parts with { MoveWaiting = (from, to) => moved.Add((from, to)) },
+                shell.Parts with { MoveWaiting = (had, has) => moved.Add((had, has)) },
                 problems.Enqueue);
 
             // The core names her by the key it makes with the install's secret, and says what her key was.
@@ -175,12 +175,12 @@ public sealed class PersonKeyTests
             _ = keeper.Open();
             SessionGate gate = new();
             RecordedShell shell = new();
-            List<(string From, string To)> moved = [];
+            List<(string Before, string After)> moved = [];
             PersonChange people = new(
                 new PersonWatch(keeper.KeptPerson(), keeper.KeepsOfAPerson()),
                 gate,
                 keeper,
-                shell.Parts with { MoveWaiting = (from, to) => moved.Add((from, to)) },
+                shell.Parts with { MoveWaiting = (had, has) => moved.Add((had, has)) },
                 _ => { });
 
             // Her session ran out, and another account of the same name signs in: the core says that account's own plain key.
