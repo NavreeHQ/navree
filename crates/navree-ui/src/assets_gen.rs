@@ -3,7 +3,7 @@
 use crate::assets::Asset;
 
 /// The hash of all the assets: the build a page and an ops response belong to.
-pub const BUILD: &str = "77fda192a930";
+pub const BUILD: &str = "d7b3d75d699b";
 
 /// The URL of `core.js`.
 pub const CORE_URL: &str = "/_navree/ui/core-8984b59d1fec.js";
@@ -119,7 +119,7 @@ pub const OTP_STYLES_URL: &str = "/_navree/ui/otp-styles-bb2761698471.css";
 pub const CAROUSEL_STYLES_URL: &str = "/_navree/ui/carousel-styles-46da85c6d8a4.css";
 
 /// The URL of `menubar-styles.css`.
-pub const MENUBAR_STYLES_URL: &str = "/_navree/ui/menubar-styles-52a4f5f79413.css";
+pub const MENUBAR_STYLES_URL: &str = "/_navree/ui/menubar-styles-7b8f9c0c97ba.css";
 
 /// The URL of `charts-styles.css`.
 pub const CHARTS_STYLES_URL: &str = "/_navree/ui/charts-styles-731c25be066b.css";
@@ -180,7 +180,7 @@ pub const TOOLBAR_STYLES_URL: &str = "/_navree/ui/toolbar-styles-c7d3d0ed61e9.cs
 pub const DATES_STYLES_URL: &str = "/_navree/ui/dates-styles-bf5355979336.css";
 
 /// The URL of `time-styles.css`.
-pub const TIME_STYLES_URL: &str = "/_navree/ui/time-styles-6f981a6f0f57.css";
+pub const TIME_STYLES_URL: &str = "/_navree/ui/time-styles-b370f469d323.css";
 
 /// The URL of `geist.woff2`.
 pub const GEIST_URL: &str = "/_navree/ui/geist-685b571ab077.woff2";
@@ -531,7 +531,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "menubar-styles",
         ext: "css",
-        hash: "52a4f5f79413",
+        hash: "7b8f9c0c97ba",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/menubar-styles.css"),
         gzip: Some(include_bytes!("../dist/menubar-styles.css.gz")),
@@ -712,7 +712,7 @@ pub static FILES: &[Asset] = &[
     Asset {
         name: "time-styles",
         ext: "css",
-        hash: "6f981a6f0f57",
+        hash: "b370f469d323",
         content_type: "text/css; charset=utf-8",
         bytes: include_bytes!("../dist/time-styles.css"),
         gzip: Some(include_bytes!("../dist/time-styles.css.gz")),
