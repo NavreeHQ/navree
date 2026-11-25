@@ -663,7 +663,11 @@ async fn a_custom_scheme_app_never_gets_the_browsers_sign_in() {
     // person signs in again for the app.
     let (page, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
     assert!(
-        page.contains("Sign in again to continue to com.example.legacy"),
+        page.contains("Sign in again to continue to the Android app com.example.legacy"),
+        "{page}"
+    );
+    assert!(
+        page.contains("Continue only if you opened com.example.legacy yourself."),
         "{page}"
     );
     whoami(&browser).await.assert_status(200);
@@ -676,10 +680,194 @@ async fn a_custom_scheme_app_never_gets_the_browsers_sign_in() {
         .await
         .assert_status(303);
     assert_eq!(location(&signed_in), back);
-    let handed = get(&browser, &back).await.assert_status(303);
+    // The sign-in made for the app does not leave by itself either: the
+    // person is told which app asks, and the code leaves when they continue.
+    let (page, token, csrf_token) = confirmation(&get(&browser, &back).await);
+    assert!(
+        page.contains("The Android app com.example.legacy wants to sign in as"),
+        "{page}"
+    );
+    let handed = answer(&browser, &token, &csrf_token, "continue")
+        .await
+        .assert_status(303);
     assert!(location(&handed).starts_with("com.example.legacy:/signed-in?code="));
     assert_eq!(handed.header("cache-control"), Some("no-store"));
     assert_eq!(handed.header("referrer-policy"), Some("no-referrer"));
+}
+
+// Whoever holds a scheme can open the start address itself, with a challenge
+// of its own, so the proof of possession says nothing about who asks. A
+// sign-in made for an app whose callback is not https is therefore not sent
+// on by itself: the page names the app and the system the settings list it
+// under, and the code leaves only on Continue. The page is that sign-in's:
+// opened again it is the same page, another sign-in gets none, and Continue
+// hands over the sign-in the page was shown for and no other.
+#[tokio::test]
+async fn a_sign_in_for_an_app_on_a_scheme_leaves_only_when_the_person_continues() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    let user = create_user(&app, "simran@example.com").await;
+    let other = create_user(&app, "harpreet@example.com").await;
+
+    // The browser is signed out, as when another program opens the start.
+    let browser = app.client();
+    start_legacy(&browser, "s-40").await.assert_status(303);
+    let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    sign_in_form(&browser, "simran@example.com", &back)
+        .await
+        .assert_status(303);
+    let asked = get(&browser, &back).await;
+    let (page, token, csrf_token) = confirmation(&asked);
+    assert!(
+        page.contains(
+            "The Android app com.example.legacy wants to sign in as Anu Lakhotia (simran@example.com)"
+        ),
+        "{page}"
+    );
+    assert!(
+        page.contains(
+            "You are signed out here. Continue only if you opened com.example.legacy yourself."
+        ),
+        "{page}"
+    );
+    // Nothing left for the scheme, and the browser is still signed in.
+    whoami(&browser)
+        .await
+        .assert_status(200)
+        .assert_json_path("id", json!(user.id));
+    // Opened again, with the attempt or without it: the same question.
+    for again in [back.as_str(), "/auth/app/finish"] {
+        let (_, same, _) = confirmation(&get(&browser, again).await);
+        assert_eq!(same, token, "{again}");
+    }
+    // Continue: the code leaves, once, and the browser is signed out.
+    let handed = answer(&browser, &token, &csrf_token, "continue").await;
+    let (code, error) = scheme_callback(&handed, LEGACY_CALLBACK, "s-40");
+    assert_eq!(error, None);
+    whoami(&browser).await.assert_status(401);
+    let fresh = csrf(&browser).await;
+    refused_page(answer(&browser, &token, &fresh, "continue").await);
+    let (verifier, _) = pkce("legacy");
+    let phone = phone(&app).await;
+    phone
+        .post("/api/auth/app/exchange")
+        .xsrf()
+        .json(&json!({
+            "platform": "android",
+            "app": "com.example.legacy",
+            "code": code.expect("a code"),
+            "code_verifier": verifier,
+        }))
+        .send()
+        .await
+        .assert_status(200);
+    whoami(&phone)
+        .await
+        .assert_status(200)
+        .assert_json_path("id", json!(user.id));
+
+    // Cancel: the app hears no, no code leaves, and the browser stays as it is.
+    let browser = app.client();
+    start_legacy(&browser, "s-41").await.assert_status(303);
+    let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    sign_in_form(&browser, "simran@example.com", &back)
+        .await
+        .assert_status(303);
+    let (_, token, csrf_token) = confirmation(&get(&browser, &back).await);
+    let cancelled = answer(&browser, &token, &csrf_token, "cancel").await;
+    assert_eq!(
+        scheme_callback(&cancelled, LEGACY_CALLBACK, "s-41"),
+        (None, Some("access_denied".to_owned()))
+    );
+    whoami(&browser).await.assert_status(200);
+    refused_page(get(&browser, &back).await);
+    let fresh = csrf(&browser).await;
+    refused_page(answer(&browser, &token, &fresh, "continue").await);
+
+    // The page is the sign-in's it was shown for. Somebody else signs in in
+    // that browser before it is answered: the page is not shown to them, and
+    // the hand-over is over.
+    let browser = app.client();
+    start_legacy(&browser, "s-42").await.assert_status(303);
+    let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    sign_in_form(&browser, "simran@example.com", &back)
+        .await
+        .assert_status(303);
+    let (_, token, _) = confirmation(&get(&browser, &back).await);
+    sign_in_form(&browser, "harpreet@example.com", "/orders")
+        .await
+        .assert_status(303);
+    refused_page(get(&browser, "/auth/app/finish").await);
+    let fresh = csrf(&browser).await;
+    refused_page(answer(&browser, &token, &fresh, "continue").await);
+
+    // Continue pressed once another sign-in has taken that one's place hands
+    // nothing over: not the sign-in the page was shown for, which has ended,
+    // and not the one the browser has now.
+    let browser = app.client();
+    start_legacy(&browser, "s-43").await.assert_status(303);
+    let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    sign_in_form(&browser, "simran@example.com", &back)
+        .await
+        .assert_status(303);
+    let (_, token, _) = confirmation(&get(&browser, &back).await);
+    sign_in_form(&browser, "harpreet@example.com", "/orders")
+        .await
+        .assert_status(303);
+    let fresh = csrf(&browser).await;
+    refused_page(answer(&browser, &token, &fresh, "continue").await);
+    whoami(&browser)
+        .await
+        .assert_status(200)
+        .assert_json_path("id", json!(other.id));
+
+    let reasons = refusal_reasons(&sink);
+    assert_eq!(
+        reasons,
+        [
+            "no app sign-in was started in this browser",
+            "no app sign-in was started in this browser",
+            "no app sign-in was started in this browser",
+            "the sign-in was not made for this app sign-in",
+            "no app sign-in was started in this browser",
+            "the sign-in made for this app sign-in has ended",
+        ]
+    );
+}
+
+// Where the browser is kept signed in after a hand-over
+// (`auth.apps.keep_browser_signed_in`), the page says so, and it is.
+#[tokio::test]
+async fn a_browser_kept_signed_in_is_told_so_before_its_sign_in_leaves_for_a_scheme() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = builder(&clock, &sink)
+        .config("auth.apps.keep_browser_signed_in", true)
+        .build()
+        .await;
+    create_user(&app, "simran@example.com").await;
+    let browser = app.client();
+    start_legacy(&browser, "s-44").await.assert_status(303);
+    let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    sign_in_form(&browser, "simran@example.com", &back)
+        .await
+        .assert_status(303);
+    let (page, token, csrf_token) = confirmation(&get(&browser, &back).await);
+    assert!(
+        page.contains(
+            "You stay signed in here. Continue only if you opened com.example.legacy yourself."
+        ),
+        "{page}"
+    );
+    let handed = answer(&browser, &token, &csrf_token, "continue").await;
+    let (code, error) = scheme_callback(&handed, LEGACY_CALLBACK, "s-44");
+    assert_eq!(error, None);
+    assert!(code.is_some());
+    whoami(&browser).await.assert_status(200);
 }
 
 // Any site can send a browser to the start address. For a signed-in
@@ -1234,6 +1422,9 @@ fn finish_with_attempt(sign_in: &str) -> String {
     next
 }
 
+/// The callback of the custom-scheme Android app.
+const LEGACY_CALLBACK: &str = "com.example.legacy:/signed-in";
+
 /// `GET /auth/app/sign-in` for the custom-scheme Android app.
 async fn start_legacy(client: &TestClient, state: &str) -> TestResponse {
     let (_, challenge) = pkce("legacy");
@@ -1304,7 +1495,8 @@ async fn a_sign_in_made_for_something_else_is_never_handed_to_a_custom_scheme_ap
         ]
     );
 
-    // The hand-over's own sign-in still finishes.
+    // The hand-over's own sign-in still finishes, once the person says they
+    // opened the app.
     let browser = app.client();
     start_legacy(&browser, "s-8").await.assert_status(303);
     let to_sign_in = get(&browser, "/auth/app/finish").await.assert_status(303);
@@ -1312,7 +1504,10 @@ async fn a_sign_in_made_for_something_else_is_never_handed_to_a_custom_scheme_ap
     sign_in_form(&browser, "simran@example.com", &back)
         .await
         .assert_status(303);
-    let handed = get(&browser, &back).await.assert_status(303);
+    let (_, token, csrf_token) = confirmation(&get(&browser, &back).await);
+    let handed = answer(&browser, &token, &csrf_token, "continue")
+        .await
+        .assert_status(303);
     assert!(location(&handed).starts_with("com.example.legacy:/signed-in?code="));
 }
 
@@ -1490,15 +1685,25 @@ async fn start_windows(
 }
 
 /// The Windows callback the hand-over sent the browser to: its `code`, or
-/// its `error`, with the state checked. The address before the query is the
-/// configured callback, to the letter.
+/// its `error`, with the state checked.
 fn windows_callback(response: &TestResponse, state: &str) -> (Option<String>, Option<String>) {
+    scheme_callback(response, WINDOWS_CALLBACK, state)
+}
+
+/// The callback on a scheme of an app's own that the hand-over sent the
+/// browser to: its `code`, or its `error`, with the state checked. The
+/// address before the query is the configured `callback`, to the letter.
+fn scheme_callback(
+    response: &TestResponse,
+    callback: &str,
+    state: &str,
+) -> (Option<String>, Option<String>) {
     assert_eq!(response.status().as_u16(), 303, "{}", response.text());
     assert_eq!(response.header("cache-control"), Some("no-store"));
     assert_eq!(response.header("referrer-policy"), Some("no-referrer"));
     let to = location(response);
     let (address, query) = to.split_once('?').expect("a query");
-    assert_eq!(address, WINDOWS_CALLBACK);
+    assert_eq!(address, callback);
     let pairs: Vec<(String, String)> = url::form_urlencoded::parse(query.as_bytes())
         .into_owned()
         .collect();
@@ -1515,8 +1720,9 @@ fn windows_callback(response: &TestResponse, state: &str) -> (Option<String>, Op
     (named("code"), named("error"))
 }
 
-/// The person signs in in the browser for the Windows app named `id`: the
-/// browser and the code its callback carried.
+/// The person signs in in the browser for the Windows app named `id`, and
+/// says on the page that follows that they opened it: the browser and the
+/// code its callback carried.
 async fn browser_sign_in_for_windows(
     app: &TestApp,
     id: &str,
@@ -1533,7 +1739,9 @@ async fn browser_sign_in_for_windows(
     sign_in_form(&browser, "simran@example.com", &back)
         .await
         .assert_status(303);
-    let (code, error) = windows_callback(&get(&browser, &back).await, state);
+    let (_, token, csrf_token) = confirmation(&get(&browser, &back).await);
+    let handed = answer(&browser, &token, &csrf_token, "continue").await;
+    let (code, error) = windows_callback(&handed, state);
     assert_eq!(error, None);
     (browser, code.expect("a code"))
 }
@@ -1560,10 +1768,11 @@ async fn exchange_as(
 }
 
 // A Windows app signs a person in through their own browser: the start with
-// its id, an S256 challenge and a state, the sign-in pages, a one-time code
-// on the link of its own scheme, and the exchange from its own HTTP stack.
-// A build installed from a package names itself by its package family name,
-// a build with no package by the id it was built with.
+// its id, an S256 challenge and a state, the sign-in pages, the page that
+// names the app and asks, a one-time code on the link of its own scheme, and
+// the exchange from its own HTTP stack. A build installed from a package
+// names itself by its package family name, a build with no package by the id
+// it was built with.
 #[tokio::test]
 async fn a_sign_in_in_the_browser_is_handed_to_a_windows_app() {
     let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
@@ -1587,7 +1796,23 @@ async fn a_sign_in_in_the_browser_is_handed_to_a_windows_app() {
         sign_in_form(&browser, "simran@example.com", &back)
             .await
             .assert_status(303);
-        let (code, error) = windows_callback(&get(&browser, &back).await, state);
+        // Any program can hold the scheme: the person is told which app
+        // asks, as the settings name it, and nothing leaves before they
+        // continue.
+        let (page, token, csrf_token) = confirmation(&get(&browser, &back).await);
+        assert!(
+            page.contains(&format!(
+                "The Windows app {id} wants to sign in as Anu Lakhotia (simran@example.com)"
+            )),
+            "{page}"
+        );
+        assert!(
+            page.contains(&format!("Continue only if you opened {id} yourself.")),
+            "{page}"
+        );
+        whoami(&browser).await.assert_status(200);
+        let handed = answer(&browser, &token, &csrf_token, "continue").await;
+        let (code, error) = windows_callback(&handed, state);
         assert_eq!(error, None);
         let code = code.expect("a code");
         // The browser signed in only for the hand-over: it is signed out again.
@@ -1861,7 +2086,8 @@ async fn a_windows_build_that_writes_its_package_family_name_in_another_case_is_
 
 // Any program on the machine can register a scheme and start the hand-over
 // itself, so a Windows app never rides on a sign-in the browser already
-// had: the person is asked, is signed out there, and signs in again.
+// had: the person is asked, is signed out there, signs in again, and says
+// once more that they opened the app before the code leaves.
 #[tokio::test]
 async fn a_windows_app_never_gets_the_browsers_sign_in() {
     let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
@@ -1895,7 +2121,13 @@ async fn a_windows_app_never_gets_the_browsers_sign_in() {
         .assert_status(303);
     let (page, token, csrf_token) = confirmation(&get(&browser, "/auth/app/finish").await);
     assert!(
-        page.contains(&format!("Sign in again to continue to {FAMILY}")),
+        page.contains(&format!(
+            "Sign in again to continue to the Windows app {FAMILY}"
+        )),
+        "{page}"
+    );
+    assert!(
+        page.contains(&format!("Continue only if you opened {FAMILY} yourself.")),
         "{page}"
     );
     let to_sign_in = answer(&browser, &token, &csrf_token, "continue")
@@ -1907,7 +2139,14 @@ async fn a_windows_app_never_gets_the_browsers_sign_in() {
     sign_in_form(&browser, "simran@example.com", &back)
         .await
         .assert_status(303);
-    let (code, error) = windows_callback(&get(&browser, &back).await, "w-8");
+    // The new sign-in does not leave by itself either.
+    let (page, token, csrf_token) = confirmation(&get(&browser, &back).await);
+    assert!(
+        page.contains(&format!("The Windows app {FAMILY} wants to sign in as")),
+        "{page}"
+    );
+    let handed = answer(&browser, &token, &csrf_token, "continue").await;
+    let (code, error) = windows_callback(&handed, "w-8");
     assert_eq!(error, None);
     exchange_as(
         &phone(&app).await,

@@ -32,12 +32,17 @@
 //!    /auth/app/confirm` with the session's CSRF token (masked anew on every
 //!    page) and a one-time value of this hand-over. Continue hands that
 //!    sign-in over and keeps the browser signed in (an `https` callback), or
-//!    signs the browser out and asks the person to sign in again (a custom
-//!    scheme). Cancel ends the hand-over and sends the browser to the
-//!    callback with `error=access_denied` and the `state`. The `attempt` and
-//!    the confirmation's value each work once, also for requests sent at the
-//!    same time: each is held in the cache the codes are kept in, and the
-//!    first request that takes it from there uses it up.
+//!    signs the browser out and asks the person to sign in again (a callback
+//!    that is not `https`). Cancel ends the hand-over and sends the browser
+//!    to the callback with `error=access_denied` and the `state`. For an app
+//!    whose callback is not `https`, a sign-in that comes back with the
+//!    `attempt` gets that page too, in place of the code ("The Windows app
+//!    ExampleOrders_8wekyb3d8bbwe wants to sign in as Simran Kaur"): the
+//!    code leaves only when the person continues, and it is that sign-in
+//!    which is handed over, no other the browser has by then. The `attempt`
+//!    and the confirmation's value each work once, also for requests sent at
+//!    the same time: each is held in the cache the codes are kept in, and
+//!    the first request that takes it from there uses it up.
 //! 3. The app posts `{platform, app, code, code_verifier}` to `POST
 //!    {api}/auth/app/exchange` from its own HTTP stack. The code works once,
 //!    for that app, with the verifier whose SHA-256 the session was started
@@ -74,11 +79,17 @@
 //! and the hand-over ends. Opening the start address, which any site can
 //! do, signs nobody out and hands nothing over. An app whose callback is a
 //! custom scheme (`custom_scheme`, which another app could claim) never
-//! gets a sign-in the browser already had: the person signs in again. A
-//! Windows app is always such an app: its callback is a link on its own
-//! scheme, which any program on the machine can register, and nothing
-//! proves to the site which program asked. The answers of the finish and
-//! the confirmation are `no-store` and `no-referrer`.
+//! gets a sign-in the browser already had: the person signs in again. Nor
+//! does it get a sign-in without the person's word. Whoever holds the
+//! scheme can open the start address itself, with a challenge of its own,
+//! and the proof of possession then proves nothing: the code would go to it
+//! with the verifier it made. So the page names the app and the system the
+//! settings list it under, says "Continue only if you opened it yourself",
+//! and the code is issued on Continue alone. A Windows app is always such
+//! an app: its callback is a link on its own scheme, which any program on
+//! the machine can register, and nothing proves to the site which program
+//! asked. The answers of the finish and the confirmation are `no-store` and
+//! `no-referrer`.
 //!
 //! Only the browser's own navigation finishes a hand-over. The finish
 //! answers with a redirect to the app's callback, which reaches the app only
@@ -235,10 +246,15 @@ struct Pending {
     /// over without asking.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     attempt: Option<String>,
-    /// While a browser that was signed in at the start has not answered the
-    /// confirmation page: the one-time value its form posts back.
+    /// While the person has not answered the confirmation page: the
+    /// one-time value its form posts back.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     confirm: Option<String>,
+    /// While the page asks after a sign-in made for this hand-over (an app
+    /// whose callback is not `https`): the browser's server-side session of
+    /// that sign-in. Continue hands that sign-in over, and no other.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    asked_after: Option<Uuid>,
 }
 
 /// The query of [`APP_SIGN_IN_FINISH_PATH`]: the hand-over's `attempt`, when
@@ -321,26 +337,59 @@ pub(crate) enum Finish {
     SignIn(Option<String>),
     /// To the app's callback, with the code (or `error`) and the state.
     App(String),
-    /// The browser was signed in when the hand-over began: the page that
-    /// asks the person first.
+    /// The page that asks the person first: a browser that was signed in
+    /// when the hand-over began, and any sign-in that is about to leave for
+    /// an app whose callback is not `https`.
     Confirm(ConfirmPage),
 }
 
 /// What the confirmation page says and posts back.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct ConfirmPage {
-    /// The app's id, as it named itself: its bundle id, its package name, or
-    /// the id of a Windows build.
+    /// The app's id, as the settings write it: its bundle id, its package
+    /// name, or the id of a Windows build.
     app: String,
+    /// The system the settings list the app under (`Apple`, `Android`,
+    /// `Windows`). The page names it with an app whose callback is not
+    /// `https`: nothing proves which program asked, so the person is told
+    /// what the settings say the id is.
+    system: &'static str,
     /// The signed-in person's name.
     name: String,
     /// The signed-in person's email.
     email: String,
-    /// An app with a custom-scheme callback: continuing signs the browser
-    /// out, and the person signs in again.
-    sign_in_again: bool,
+    /// What continuing does.
+    asks: Asks,
     /// The hand-over's one-time value.
     token: String,
+}
+
+/// What the confirmation page asks the person to continue with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Asks {
+    /// The browser was signed in before the hand-over began, and the app's
+    /// callback is `https`: that sign-in is handed over, and the browser
+    /// stays signed in.
+    HandOver,
+    /// The browser was signed in before the hand-over began, and the app's
+    /// callback is not `https`: the browser is signed out, and the person
+    /// signs in again for the app.
+    SignInAgain,
+    /// The person signed in for this hand-over, and the app's callback is
+    /// not `https`: that sign-in is handed over, and the browser stays
+    /// signed in afterwards or not.
+    AfterSignIn { stays_signed_in: bool },
+}
+
+/// The system an app of `platform` is for, as the confirmation page names
+/// it.
+fn system_of(platform: &str) -> &'static str {
+    match platform {
+        "apple" => "Apple",
+        "android" => "Android",
+        "windows" => "Windows",
+        _ => "",
+    }
 }
 
 fn refused(reason: impl Into<String>) -> AuthError {
@@ -450,6 +499,7 @@ impl AuthService {
                 started_at: self.clock.now().timestamp(),
                 attempt: Some(attempt),
                 confirm,
+                asked_after: None,
             },
         )
     }
@@ -565,14 +615,17 @@ impl AuthService {
     /// Finishes a started hand-over (`GET /auth/app/finish`): a browser not
     /// signed in yet goes to the sign-in page ([`Finish::SignIn`]); a sign-in
     /// that came back with the hand-over's `attempt` gets a one-time code
-    /// for the app and goes to its callback ([`Finish::App`]), once (the
-    /// attempt is used up, also by two requests sent at the same time); a
-    /// browser
-    /// that was signed in when the hand-over began is asked first
-    /// ([`Finish::Confirm`], answered by
-    /// [`confirm_app_sign_in`](AuthService::confirm_app_sign_in)). Any
-    /// other sign-in (made for something else while the hand-over waited)
-    /// ends the hand-over, refused. An impersonation is never handed over.
+    /// for an app with an `https` callback and goes there ([`Finish::App`]),
+    /// once (the attempt is used up, also by two requests sent at the same
+    /// time). For an app whose callback is not `https` the person is asked
+    /// first, on the page that names the app ([`Finish::Confirm`]): any
+    /// program can claim a scheme and start a hand-over itself, with a
+    /// challenge of its own, so the code leaves only when the person says
+    /// they opened the app. A browser that was signed in when the hand-over
+    /// began is asked first too. Each page is answered by
+    /// [`confirm_app_sign_in`](AuthService::confirm_app_sign_in). Any other
+    /// sign-in (made for something else while the hand-over waited) ends
+    /// the hand-over, refused. An impersonation is never handed over.
     pub(crate) async fn finish_app_sign_in(
         &self,
         session: &Session,
@@ -617,6 +670,22 @@ impl AuthService {
                     )
                     .await);
             }
+            if !is_https(&pending.callback) {
+                // Any program can claim a scheme, open the start address
+                // itself and hold the verifier: the code would go to it. The
+                // person is told which app asks, and the code leaves only
+                // when they continue.
+                let mut pending = pending;
+                let token = random_token(32);
+                self.hold_once(&token).await?;
+                pending.attempt = None;
+                pending.confirm = Some(token);
+                pending.asked_after = Some(signed_in.session_id);
+                self.keep_pending(session, &pending)?;
+                return self
+                    .ask(session, &pending, &signed_in, keep_browser_signed_in, meta)
+                    .await;
+            }
             let source = Source {
                 user: signed_in,
                 ends_at,
@@ -626,20 +695,13 @@ impl AuthService {
                 .issue_code(session, pending, source, keep_browser_signed_in, meta)
                 .await;
         }
-        // Signed in before the hand-over began: the person says first.
-        if let Some(token) = pending.confirm.clone() {
-            let Some(user) = self.find_user(signed_in.user_id).await? else {
-                return Err(self
-                    .end_hand_over(session, &pending.app, "the user no longer exists", meta)
-                    .await);
-            };
-            return Ok(Finish::Confirm(ConfirmPage {
-                app: pending.app.clone(),
-                name: user.name,
-                email: user.email,
-                sign_in_again: !is_https(&pending.callback),
-                token,
-            }));
+        // The person says first: the browser was signed in before the
+        // hand-over began, or the page of a sign-in made for it is opened
+        // again before it is answered.
+        if pending.confirm.is_some() {
+            return self
+                .ask(session, &pending, &signed_in, keep_browser_signed_in, meta)
+                .await;
         }
         // A sign-in that did not come back from the hand-over's own sign-in
         // page, nor was confirmed, is never handed over.
@@ -653,17 +715,69 @@ impl AuthService {
             .await)
     }
 
+    /// The page that asks the person before `pending` goes on, for the
+    /// browser sign-in `signed_in`. What continuing does follows from the
+    /// app's callback and from whether the page comes after a sign-in made
+    /// for the hand-over. A page that came after such a sign-in is shown to
+    /// that sign-in alone: for any other the hand-over ends, refused.
+    async fn ask(
+        &self,
+        session: &Session,
+        pending: &Pending,
+        signed_in: &SessionUser,
+        keep_browser_signed_in: bool,
+        meta: &ClientMeta,
+    ) -> Result<Finish, AuthError> {
+        let not_for_this = "the sign-in was not made for this app sign-in";
+        let Some(token) = pending.confirm.clone() else {
+            return Err(self
+                .end_hand_over(session, &pending.app, not_for_this, meta)
+                .await);
+        };
+        if pending
+            .asked_after
+            .is_some_and(|sign_in| sign_in != signed_in.session_id)
+        {
+            return Err(self
+                .end_hand_over(session, &pending.app, not_for_this, meta)
+                .await);
+        }
+        let Some(user) = self.find_user(signed_in.user_id).await? else {
+            return Err(self
+                .end_hand_over(session, &pending.app, "the user no longer exists", meta)
+                .await);
+        };
+        let asks = match pending.asked_after {
+            Some(_) => Asks::AfterSignIn {
+                stays_signed_in: pending.was_signed_in || keep_browser_signed_in,
+            },
+            None if is_https(&pending.callback) => Asks::HandOver,
+            None => Asks::SignInAgain,
+        };
+        Ok(Finish::Confirm(ConfirmPage {
+            app: pending.app.clone(),
+            system: system_of(&pending.platform),
+            name: user.name,
+            email: user.email,
+            asks,
+            token,
+        }))
+    }
+
     /// Answers the confirmation page (`POST /auth/app/confirm`) with the
-    /// hand-over's one-time value `token`: Continue (`proceed`) hands the
-    /// browser's sign-in over to an app with an `https` callback (the
-    /// browser stays signed in), or signs the browser out and sends it to
-    /// the sign-in page with the hand-over's `attempt` for an app with a
-    /// custom scheme (and for a browser no longer signed in). Cancel ends
-    /// the hand-over and sends the browser to the callback with
-    /// `error=access_denied` and the `state`. A value that is not the
-    /// waiting hand-over's, or one another request used already (two
-    /// answers sent at the same time get one code between them), ends it,
-    /// refused.
+    /// hand-over's one-time value `token`. Continue (`proceed`) on the page
+    /// of a browser that was signed in before hands that sign-in over to an
+    /// app with an `https` callback (the browser stays signed in), or signs
+    /// the browser out and sends it to the sign-in page with the hand-over's
+    /// `attempt` for an app whose callback is not `https` (and for a browser
+    /// no longer signed in). Continue on the page that came after a sign-in
+    /// made for the hand-over hands that sign-in over, and no other: when
+    /// the browser is no longer signed in with it, the hand-over ends,
+    /// refused. Cancel ends the hand-over and sends the browser to the
+    /// callback with `error=access_denied` and the `state`; the browser
+    /// stays as it is. A value that is not the waiting hand-over's, or one
+    /// another request used already (two answers sent at the same time get
+    /// one code between them), ends it, refused.
     pub(crate) async fn confirm_app_sign_in(
         &self,
         session: &Session,
@@ -706,6 +820,7 @@ impl AuthService {
                 .await);
         }
         pending.confirm = None;
+        let asked_after = pending.asked_after.take();
         if !proceed {
             session.remove(PENDING_KEY);
             tracing::info!(target: "navree::auth", app = %pending.app, "an app sign-in was cancelled");
@@ -717,6 +832,29 @@ impl AuthService {
             return Ok(Finish::App(callback));
         }
         let signed_in = self.live_user(session).await?;
+        if let Some(asked_after) = asked_after {
+            // The page came after a sign-in made for this hand-over: that
+            // sign-in is handed over, and no other the browser has by now.
+            return match signed_in {
+                Some((user, ends_at)) if user.session_id == asked_after => {
+                    let source = Source {
+                        user,
+                        ends_at,
+                        finished: Finished::SignedIn,
+                    };
+                    self.issue_code(session, pending, source, keep_browser_signed_in, meta)
+                        .await
+                }
+                _ => Err(self
+                    .end_hand_over(
+                        session,
+                        &pending.app,
+                        "the sign-in made for this app sign-in has ended",
+                        meta,
+                    )
+                    .await),
+            };
+        }
         if let Some((user, ends_at)) = signed_in
             && is_https(&pending.callback)
         {
@@ -1117,7 +1255,8 @@ impl Controller for AppSignInController {
                         "Sends a browser that is not signed in to the sign-in page, and a \
                          sign-in made for this hand-over on to the app's callback with a \
                          one-time code. A browser that was signed in when the hand-over began \
-                         gets a page that asks the person first (200, HTML). Only the browser's \
+                         gets a page that asks the person first (200, HTML), and so does a \
+                         sign-in made for an app whose callback is not https. Only the browser's \
                          own navigation is answered so: a fetch by a script, a page loaded \
                          ahead of a click or a frame changes nothing and gets 403."
                             .to_owned(),
@@ -1311,22 +1450,42 @@ fn confirm_page(page: &ConfirmPage, csrf: &str) -> String {
     } else {
         format!("{} ({})", escape_html(&page.name), escape_html(&page.email))
     };
-    let (title, text) = if page.sign_in_again {
-        (
-            format!("Sign in again to continue to {app}"),
-            format!(
-                "You are signed in here as {person}. To continue to {app}, you are signed out \
-                 here and sign in again."
-            ),
-        )
-    } else {
-        (
+    // An app whose callback is not `https` is named with its system, as the
+    // settings list it: "the Windows app ExampleOrders_8wekyb3d8bbwe".
+    let named = |the: &str| match page.system {
+        "" => app.clone(),
+        system => format!("{the} {system} app {app}"),
+    };
+    let only_if = format!("Continue only if you opened {app} yourself.");
+    let (title, text) = match page.asks {
+        Asks::HandOver => (
             format!("{app} wants to sign in as {person}"),
             format!(
-                "{app} gets a sign-in of its own as {person}. You stay signed in here. Continue \
-                 only if you opened {app} yourself."
+                "{app} gets a sign-in of its own as {person}. You stay signed in here. {only_if}"
             ),
-        )
+        ),
+        Asks::SignInAgain => {
+            let the_app = named("the");
+            (
+                format!("Sign in again to continue to {the_app}"),
+                format!(
+                    "You are signed in here as {person}. To continue to {the_app}, you are \
+                     signed out here and sign in again. {only_if}"
+                ),
+            )
+        }
+        Asks::AfterSignIn { stays_signed_in } => {
+            let the_app = named("The");
+            let here = if stays_signed_in {
+                "You stay signed in here."
+            } else {
+                "You are signed out here."
+            };
+            (
+                format!("{the_app} wants to sign in as {person}"),
+                format!("{the_app} gets a sign-in of its own as {person}. {here} {only_if}"),
+            )
+        }
     };
     let csrf = escape_html(csrf);
     let token = escape_html(&page.token);
@@ -1375,6 +1534,135 @@ mod tests {
         assert_eq!(
             sign_in_href("/login", Some("a-b_c")),
             "/login?next=%2Fauth%2Fapp%2Ffinish%3Fattempt%3Da-b_c"
+        );
+    }
+
+    fn page(asks: Asks, system: &'static str, app: &str) -> String {
+        confirm_page(
+            &ConfirmPage {
+                app: app.to_owned(),
+                system,
+                name: "Simran Kaur".to_owned(),
+                email: "simran@example.in".to_owned(),
+                asks,
+                token: "one-time".to_owned(),
+            },
+            "masked",
+        )
+    }
+
+    // What each page says: the app, the person, what continuing does with the
+    // browser, and that only whoever opened the app should continue. An app
+    // whose callback is not https is named with the system the settings list
+    // it under, since its id alone need not say what asks.
+    #[test]
+    fn the_confirmation_page_names_the_app_and_says_who_should_continue() {
+        const FAMILY: &str = "CharkhaSupply_8wekyb3d8bbwe";
+        const PERSON: &str = "Simran Kaur (simran@example.in)";
+
+        let https = page(Asks::HandOver, "Apple", "com.example.orders");
+        assert!(
+            https.contains(&format!(
+                "<h1>com.example.orders wants to sign in as {PERSON}</h1>"
+            )),
+            "{https}"
+        );
+        assert!(
+            https.contains(
+                "You stay signed in here. Continue only if you opened com.example.orders yourself."
+            ),
+            "{https}"
+        );
+        assert!(!https.contains("Apple app"), "{https}");
+
+        let again = page(Asks::SignInAgain, "Windows", FAMILY);
+        assert!(
+            again.contains(&format!(
+                "<h1>Sign in again to continue to the Windows app {FAMILY}</h1>"
+            )),
+            "{again}"
+        );
+        assert!(
+            again.contains(&format!(
+                "To continue to the Windows app {FAMILY}, you are signed out here and sign in \
+                 again. Continue only if you opened {FAMILY} yourself."
+            )),
+            "{again}"
+        );
+
+        let after = page(
+            Asks::AfterSignIn {
+                stays_signed_in: false,
+            },
+            "Windows",
+            FAMILY,
+        );
+        assert!(
+            after.contains(&format!(
+                "<h1>The Windows app {FAMILY} wants to sign in as {PERSON}</h1>"
+            )),
+            "{after}"
+        );
+        assert!(
+            after.contains(&format!(
+                "The Windows app {FAMILY} gets a sign-in of its own as {PERSON}. You are signed \
+                 out here. Continue only if you opened {FAMILY} yourself."
+            )),
+            "{after}"
+        );
+        let kept = page(
+            Asks::AfterSignIn {
+                stays_signed_in: true,
+            },
+            "Android",
+            "com.example.legacy",
+        );
+        assert!(
+            kept.contains(&format!(
+                "The Android app com.example.legacy gets a sign-in of its own as {PERSON}. You \
+                 stay signed in here. Continue only if you opened com.example.legacy yourself."
+            )),
+            "{kept}"
+        );
+
+        // Every page posts the same form, and runs no script.
+        for html in [&https, &again, &after, &kept] {
+            assert!(html.contains("action=\"/auth/app/confirm\""), "{html}");
+            assert!(
+                html.contains("name=\"confirm\" value=\"one-time\""),
+                "{html}"
+            );
+            assert!(html.contains("name=\"_csrf\" value=\"masked\""), "{html}");
+            assert!(
+                html.contains("value=\"continue\"") && html.contains("value=\"cancel\""),
+                "{html}"
+            );
+            assert!(!html.contains("<script"), "{html}");
+        }
+
+        // What a page writes of the app and of the person is text.
+        let odd = confirm_page(
+            &ConfirmPage {
+                app: "<b>orders</b>".to_owned(),
+                system: "Windows",
+                name: "<i>Simran</i>".to_owned(),
+                email: "simran@example.in".to_owned(),
+                asks: Asks::SignInAgain,
+                token: "\"><i>".to_owned(),
+            },
+            "masked",
+        );
+        assert!(!odd.contains("<b>") && !odd.contains("<i>"), "{odd}");
+
+        // The systems the settings list apps under; an app of any other is
+        // named by its id alone.
+        assert_eq!(system_of("apple"), "Apple");
+        assert_eq!(system_of("android"), "Android");
+        assert_eq!(system_of("windows"), "Windows");
+        assert_eq!(system_of("linux"), "");
+        assert!(
+            page(Asks::SignInAgain, "", "x.y")
+                .contains("<h1>Sign in again to continue to x.y</h1>")
         );
     }
 

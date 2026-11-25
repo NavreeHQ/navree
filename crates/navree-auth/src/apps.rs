@@ -150,7 +150,9 @@ pub struct AppleApp {
     pub callback: Option<String>,
     /// Whether [`callback`](Self::callback) may be a custom scheme
     /// (`com.example.orders:/signed-in`). Any app on the device can claim a
-    /// scheme; leave it off unless the app cannot use a universal link.
+    /// scheme; leave it off unless the app cannot use a universal link. With
+    /// it, the person is asked on a page that names the app before a sign-in
+    /// leaves for the scheme.
     pub custom_scheme: bool,
 }
 
@@ -196,7 +198,8 @@ pub struct AndroidApp {
     pub callback: Option<String>,
     /// Whether [`callback`](Self::callback) may be a custom scheme. Any app
     /// on the device can claim a scheme; leave it off unless the app cannot
-    /// use an App Link.
+    /// use an App Link. With it, the person is asked on a page that names
+    /// the app before a sign-in leaves for the scheme.
     pub custom_scheme: bool,
 }
 
@@ -243,10 +246,12 @@ impl AndroidApp {
 /// proves to the site which program asked, so a Windows app is held to what
 /// an Apple or Android app with `custom_scheme` is held to: the code works
 /// only with the verifier of the app that started the hand-over (PKCE,
-/// S256), and the app never gets a sign-in the browser already had (the
-/// person is asked first, is signed out there and signs in again). A link
-/// of the site (`https`) and a port of the machine (`http://127.0.0.1`) are
-/// not taken as a Windows app's callback.
+/// S256), the app never gets a sign-in the browser already had (the person
+/// is asked first, is signed out there and signs in again), and a sign-in
+/// made for it leaves only once the person has said, on a page that names
+/// the app, that they opened it. A link of the site (`https`) and a port of
+/// the machine (`http://127.0.0.1`) are not taken as a Windows app's
+/// callback.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 #[non_exhaustive]
