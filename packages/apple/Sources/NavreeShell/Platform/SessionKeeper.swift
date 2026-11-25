@@ -2,6 +2,7 @@ import CryptoKit
 import Foundation
 import NavreeProtocol
 import NavreeRuntime
+import Security
 import WebKit
 import os
 
@@ -526,6 +527,31 @@ final class SessionKeeper {
             default: false
             }
         }
+
+        /// What a key the core made with the install's secret begins with.
+        /// Any other key is a plain one: a hash anybody can make again,
+        /// which the core made before the install had a secret.
+        static let keyed = "k2:"
+
+        /// Whether the key written down is a plain one. While one is, the
+        /// core is asked to say what the plain key of the person it names
+        /// was (`old_key` in its configuration).
+        var keepsPlainKey: Bool {
+            key.map { !$0.hasPrefix(Person.keyed) } ?? false
+        }
+
+        /// Whether this person, written down by their plain key, is the
+        /// person `now`, whom the core names by a key made with the
+        /// install's secret: the core says what the plain key of `now` was
+        /// (`app.user_was`), and it is the key written down. The one rule by
+        /// which two keys are one person's, and it holds once: `now` is
+        /// written down in this one's place. A core that says no plain key,
+        /// or another, leaves them two people.
+        func isPlain(of now: Person, was: String?) -> Bool {
+            guard let mine = key, keepsPlainKey, let theirs = now.key, theirs.hasPrefix(Person.keyed) else { return false }
+            guard let was, !was.isEmpty else { return false }
+            return mine == was
+        }
     }
 
     /// The mark of a person, made from the name and the address a core
@@ -551,7 +577,13 @@ final class SessionKeeper {
     /// when all of it went: an app ended in the middle, or a part that
     /// failed, leaves the person before written down, and the next start
     /// does the change over.
-    func hears(_ now: Person, from window: SystemEffects) {
+    ///
+    /// `was` is what the core says the plain key of the person it names was
+    /// (`app.user_was`), where it says. The person written down by that
+    /// plain key is the same person under the key the core makes now
+    /// (``Person/isPlain(of:was:)``): nothing of theirs goes, and they are
+    /// written down by the key they have now. It is compared and never kept.
+    func hears(_ now: Person, was: String? = nil, from window: SystemEffects) {
         guard let before = person else {
             person = now
             if keeps() { _ = record?.keep(person: now) }
@@ -559,12 +591,26 @@ final class SessionKeeper {
         }
         guard before != now else { return }
         person = now
-        // The same person under another name (the same key) is only written
-        // down as they are named now.
-        if before.isSame(as: now) || personChanged(by: window) {
+        // The same person under another name (the same key), or under the
+        // key the core makes with the install's secret where their plain
+        // key was written down, is only written down as they are named now.
+        if before.isSame(as: now) || before.isPlain(of: now, was: was) || personChanged(by: window) {
             if keeps() { _ = record?.keep(person: now) }
         }
     }
+
+    // MARK: - The install's secret
+
+    /// The secret of this install, which every window's core makes its key
+    /// for a person with (`secret` in the core's configuration): the one
+    /// the record keeps, made the first time it is asked for. A session
+    /// with no record has one for as long as it lives.
+    private(set) lazy var installSecret: String = record?.secret() ?? SessionRecord.newSecret()
+
+    /// Whether the person written down is written down by a plain key, made
+    /// before the install had a secret: a core made now is then asked to
+    /// say what the plain key of the person it names was.
+    var keepsPlainKey: Bool { person?.keepsPlainKey ?? false }
 
     /// The core of `window` names another person than the session's, and
     /// nobody signed out between. The cookies are the new person's already,
@@ -847,6 +893,54 @@ struct SessionRecord: Sendable {
         list.current = nil
         list.retired.append(current)
         return write(list)
+    }
+
+    private var install: URL { folder.appendingPathComponent("install") }
+
+    /// The secret of this install of the app, as hex: 32 bytes from the
+    /// system's secure random generator, made the first time it is asked
+    /// for and kept in the session's folder, which no backup takes. A
+    /// sign-out leaves it, so one person has one key at every start. A file
+    /// that is gone, or holds no secret, is replaced by a new secret: the
+    /// keys made with it are other keys, and the person named next is then
+    /// another person than the one written down, as anybody else is. One
+    /// that cannot be written down is this run's alone. It is a secret: it
+    /// goes to the core and nowhere else, and is never written to a log.
+    func secret() -> String {
+        if let data = try? Data(contentsOf: install) {
+            let held = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            if SessionRecord.reads(secret: held) { return held }
+        }
+        let made = SessionRecord.newSecret()
+        do {
+            try prepare()
+            try Data(made.utf8).write(
+                to: install, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+            )
+        } catch {
+            // This run's alone: the next start makes another.
+        }
+        return made
+    }
+
+    /// How many bytes the install's secret has.
+    static let secretBytes = 32
+
+    /// A new secret, as hex.
+    static func newSecret() -> String {
+        var bytes = [UInt8](repeating: 0, count: secretBytes)
+        if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) != errSecSuccess {
+            // The system's own generator for Swift, which is a secure one on Apple's systems.
+            var generator = SystemRandomNumberGenerator()
+            bytes = (0..<secretBytes).map { _ in UInt8.random(in: UInt8.min...UInt8.max, using: &generator) }
+        }
+        return bytes.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Whether a text is a secret the core takes: hex, two characters a
+    /// byte, of at least ``secretBytes`` bytes.
+    static func reads(secret text: String) -> Bool {
+        text.count >= 2 * secretBytes && text.count % 2 == 0 && text.allSatisfy { $0.isASCII && $0.isHexDigit }
     }
 
     private func prepare() throws {

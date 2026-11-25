@@ -231,7 +231,17 @@ public enum CoreConfiguration {
     /// false the core keeps nothing between launches: for a window beside
     /// the app's main ones, whose core would otherwise write its own list of
     /// pages over theirs in the one store they share.
-    public static func json(_ configuration: ShellConfiguration, device: DeviceTraits, keeps: Bool = true) -> Data {
+    ///
+    /// `secret` is the secret of this install, as hex, which the core makes
+    /// its key for a person with; a caller that gives none is given plain
+    /// keys. `oldKey` says that the person the session wrote down is written
+    /// down by a plain key, made before the install had a secret: the core
+    /// then says what the plain key of the person it names was. It is said
+    /// only with a secret.
+    public static func json(
+        _ configuration: ShellConfiguration, device: DeviceTraits, keeps: Bool = true, secret: String? = nil,
+        oldKey: Bool = false
+    ) -> Data {
         var signIn: [String: Any] = [
             "paths": configuration.signInPaths,
             // Apple's own sheet signs in with Apple; any other provider goes the web's way.
@@ -257,6 +267,10 @@ public enum CoreConfiguration {
             "sign_in": signIn,
         ]
         if configuration.loopbackHTTP { config["loopback_http"] = true }
+        if let secret {
+            config["secret"] = secret
+            if oldKey { config["old_key"] = true }
+        }
         return (try? JSONSerialization.data(withJSONObject: config, options: [.sortedKeys])) ?? Data()
     }
 }

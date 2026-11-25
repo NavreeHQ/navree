@@ -84,6 +84,30 @@ import Testing
     #expect(client["caps"] as? [String] == CoreConfiguration.caps(signedWith: [], signInScheme: "charkha"))
     // The core reads it.
     #expect(Core(config: data) != nil)
+    // A caller that gives no secret says none, and asks for no key from before.
+    #expect(config["secret"] == nil)
+    #expect(config["old_key"] == nil)
+}
+
+@Test func theCoresConfigurationCarriesTheInstallsSecretAndAsksForAPlainKeyOnlyWhileOneIsKept() throws {
+    let configuration = ShellConfiguration(origin: "https://charkha.example", appID: "com.navree.demo", appVersion: "1.4.0")
+    let secret = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+    func config(secret: String?, oldKey: Bool) throws -> [String: Any] {
+        let data = CoreConfiguration.json(configuration, device: DeviceTraits(), secret: secret, oldKey: oldKey)
+        return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+    let given = try config(secret: secret, oldKey: false)
+    #expect(given["secret"] as? String == secret)
+    #expect(given["old_key"] == nil)
+    let kept = try config(secret: secret, oldKey: true)
+    #expect(kept["secret"] as? String == secret)
+    #expect(kept["old_key"] as? Bool == true)
+    // With no secret the core gives plain keys, and there is no key from before to ask for.
+    let none = try config(secret: nil, oldKey: true)
+    #expect(none["secret"] == nil)
+    #expect(none["old_key"] == nil)
+    // The core reads a configuration with a secret, and makes the person's key with it.
+    #expect(Core(config: CoreConfiguration.json(configuration, device: DeviceTraits(), secret: secret)) != nil)
 }
 
 @MainActor

@@ -724,6 +724,154 @@ struct SessionEndTests {
         #expect(places.snapshots.read("snapshot-first") == nil)
         #expect(places.record.person() == byName)
     }
+
+    @Test func aPersonWrittenDownByAPlainKeyIsTheSameUnderTheKeyMadeWithTheInstallsSecretAndNobodyElseIs() throws {
+        // Her key as the release before gave it, and as the core makes it
+        // with the secret of an install; and those of another account of
+        // her name and address. They are the keys the core's conversations
+        // person-key-steady.json and person-key-was.json record.
+        let ravneetPlain = "1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e"
+        let ravneetKeyed = "k2:17d27bf8db683479c652471e31c96ac7d03e690c41c4f94f56ca99de886e389e"
+        let otherPlain = "1bc3dcdc8ebf5d231237007ccc4903b602f64185813b65bc5b6d1f5f798fcab7"
+        let otherKeyed = "k2:6bd1a2cdf43aaf682ec4d5da88fc8ca12d82976ffebb660e10e75f894e0c82d7"
+        let mark = SessionKeeper.mark(name: "Ravneet Kaur", email: "ravneet.kaur@example.com")
+        let plain = SessionKeeper.Person(key: ravneetPlain, mark: mark)
+        let keyed = SessionKeeper.Person(key: ravneetKeyed, mark: mark)
+        let other = SessionKeeper.Person(key: otherKeyed, mark: mark)
+        let byName = SessionKeeper.Person(key: nil, mark: mark)
+
+        // Which key is a plain one, and when two keys are one person's.
+        #expect(plain.keepsPlainKey)
+        #expect(!keyed.keepsPlainKey)
+        #expect(!byName.keepsPlainKey)
+        #expect(plain.isPlain(of: keyed, was: ravneetPlain))
+        #expect(!plain.isSame(as: keyed))
+        // A core that says no plain key, or another account's, leaves them two people.
+        #expect(!plain.isPlain(of: keyed, was: nil))
+        #expect(!plain.isPlain(of: keyed, was: ""))
+        #expect(!plain.isPlain(of: other, was: otherPlain))
+        // Only a plain key written down is held to a key made with the
+        // secret: not one plain key to another, not one key made with the
+        // secret to another, and not a person written down by name.
+        #expect(!plain.isPlain(of: SessionKeeper.Person(key: otherPlain, mark: mark), was: ravneetPlain))
+        #expect(!keyed.isPlain(of: other, was: ravneetKeyed))
+        #expect(!byName.isPlain(of: keyed, was: ravneetPlain))
+
+        /// The release before: she is written down by her plain key, and her place is kept.
+        func written() -> (places: Places, slot: MemorySlot) {
+            let places = Places()
+            let slot = MemorySlot()
+            let before = SessionKeeper.open(
+                origin: "https://shop.example", slot: slot, cache: places.cache, snapshots: places.snapshots,
+                files: places.files, record: places.record, removes: { _ in true }
+            )
+            before.hears(plain, from: SystemEffects(transport: FakeTransport(), keeper: before))
+            places.snapshots.write("snapshot-first", "what Ravneet typed")
+            return (places, slot)
+        }
+        /// The first start after the update: the session opened from what the device holds, and one window in it.
+        func start(_ kept: (places: Places, slot: MemorySlot)) -> (keeper: SessionKeeper, window: SystemEffects, played: PlayedNotifications) {
+            let keeper = SessionKeeper.open(
+                origin: "https://shop.example", slot: kept.slot, cache: kept.places.cache, snapshots: kept.places.snapshots,
+                files: kept.places.files, record: kept.places.record, removes: { _ in true }
+            )
+            let window = SystemEffects(transport: FakeTransport(), keeper: keeper)
+            let played = PlayedNotifications()
+            window.devices.notifications = played
+            return (keeper, window, played)
+        }
+
+        // The core names her by the key it makes now, and says what her key
+        // was: she is the person written down. Nothing goes, and she is
+        // written down by the key she has now.
+        let hers = written()
+        defer { hers.places.remove() }
+        #expect(hers.places.record.person() == plain)
+        var run = start(hers)
+        #expect(run.keeper.keepsPlainKey)
+        run.keeper.hears(keyed, was: ravneetPlain, from: run.window)
+        #expect(run.played.signOuts == 0)
+        #expect(run.keeper.number == 0)
+        #expect(hers.places.snapshots.read("snapshot-first") == "what Ravneet typed")
+        #expect(hers.places.record.person() == keyed)
+        #expect(!run.keeper.keepsPlainKey)
+        // The start after reads her new key and asks the core for no plain
+        // one; named again, with or without what her key was, nothing goes.
+        run = start(hers)
+        #expect(!run.keeper.keepsPlainKey)
+        run.keeper.hears(keyed, from: run.window)
+        run.keeper.hears(keyed, was: ravneetPlain, from: run.window)
+        #expect(run.played.signOuts == 0)
+        #expect(hers.places.snapshots.read("snapshot-first") == "what Ravneet typed")
+
+        // Her session ran out, and another account of her name signs in at
+        // the first start after the update: the core says that account's
+        // own plain key, which is not the one written down. Everything goes.
+        let left = written()
+        defer { left.places.remove() }
+        run = start(left)
+        run.keeper.hears(other, was: otherPlain, from: run.window)
+        #expect(run.played.signOuts == 1)
+        #expect(run.keeper.number == 1)
+        #expect(left.places.snapshots.read("snapshot-first") == nil)
+        #expect(left.places.record.person() == other)
+
+        // A core that does not say what her key was: the two keys are two people's.
+        let unsaid = written()
+        defer { unsaid.places.remove() }
+        run = start(unsaid)
+        run.keeper.hears(keyed, from: run.window)
+        #expect(run.played.signOuts == 1)
+        #expect(unsaid.places.snapshots.read("snapshot-first") == nil)
+        #expect(unsaid.places.record.person() == keyed)
+    }
+
+    @Test func theInstallsSecretIsMadeOnceIsTheSameForEveryWindowAndStaysThroughASignOut() throws {
+        let places = Places()
+        defer { places.remove() }
+        let made = places.record.secret()
+        #expect(made.count == 2 * SessionRecord.secretBytes)
+        #expect(SessionRecord.reads(secret: made))
+        #expect(places.record.secret() == made)
+
+        // The session gives every window's core the one the record keeps.
+        let keeper = SessionKeeper.open(
+            origin: "https://shop.example", slot: MemorySlot(), cache: places.cache, snapshots: places.snapshots,
+            files: places.files, record: places.record, removes: { _ in true }
+        )
+        #expect(keeper.installSecret == made)
+
+        // A sign-out takes who was written down, and leaves the secret.
+        let window = SystemEffects(transport: FakeTransport(), keeper: keeper)
+        window.devices.notifications = PlayedNotifications()
+        let ravneet = SessionKeeper.Person(
+            key: "k2:17d27bf8db683479c652471e31c96ac7d03e690c41c4f94f56ca99de886e389e",
+            mark: SessionKeeper.mark(name: "Ravneet Kaur", email: nil)
+        )
+        keeper.hears(ravneet, from: window)
+        #expect(places.record.person() == ravneet)
+        keeper.end(by: window)
+        #expect(places.record.person() == nil)
+        #expect(places.record.secret() == made)
+        #expect(keeper.installSecret == made)
+
+        // Another install has another; and a session with no record has one of its own for as long as it lives.
+        let elsewhere = Places()
+        defer { elsewhere.remove() }
+        #expect(elsewhere.record.secret() != made)
+        let loose = SessionKeeper(cache: places.cache, snapshots: places.snapshots)
+        let its = loose.installSecret
+        #expect(SessionRecord.reads(secret: its))
+        #expect(its != made)
+        #expect(loose.installSecret == its)
+
+        // What the core takes for a secret: hex, two characters a byte, of 32 bytes or more.
+        #expect(!SessionRecord.reads(secret: String(made.dropLast(2))))
+        #expect(!SessionRecord.reads(secret: made + "0"))
+        #expect(!SessionRecord.reads(secret: "zz" + made.dropFirst(2)))
+        #expect(SessionRecord.reads(secret: made + "0a"))
+    }
+
     @Test func withoutAKeyTwoPeopleOfOneNameAndNoAddressAreOneAndARenamedPersonIsAnother() throws {
         let places = Places()
         defer { places.remove() }

@@ -22,6 +22,24 @@ import Testing
     // With nobody signed in there is no person, and no key.
     let nobody = try JSONDecoder().decode(AppPart.self, from: Data(#"{"name":"Charkha","home":"/"}"#.utf8))
     #expect(nobody.user == nil)
+    #expect(keyed.userWas == nil)
+}
+
+/// To a client that says it still keeps a plain key, the core says beside
+/// the person what their plain key was; to any other it says none.
+@Test func theAppPartReadsWhatThePersonsKeyWasWhenTheCoreSaysIt() throws {
+    let said = try JSONDecoder().decode(
+        AppPart.self,
+        from: Data(
+            #"{"name":"Charkha","home":"/","user":{"name":"Ravneet Kaur","key":"k2:17d27bf8"},"user_was":"1c54d473"}"#.utf8
+        )
+    )
+    #expect(said.user?.key == "k2:17d27bf8")
+    #expect(said.userWas == "1c54d473")
+    let unsaid = try JSONDecoder().decode(
+        AppPart.self, from: Data(#"{"name":"Charkha","home":"/","user":{"name":"Ravneet Kaur","key":"k2:17d27bf8"}}"#.utf8)
+    )
+    #expect(unsaid.userWas == nil)
 }
 
 /// Events are written as the core's own conversations write them.

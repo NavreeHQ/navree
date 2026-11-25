@@ -228,11 +228,17 @@ final class Session {
     /// Makes the window's core, its client and what carries out its effects.
     /// A configuration the core does not read makes none.
     private func make(_ device: DeviceTraits) {
-        let config = CoreConfiguration.json(configuration, device: device, keeps: keeps)
-        guard let core = Core(config: config) else { return }
-        // The session is opened before a transport is made over it: a
-        // sign-out that was cut short is finished before anything is read.
+        // The session is opened before the core is made and before a
+        // transport is made over it: a sign-out that was cut short is
+        // finished before anything is read, and the core makes its key for a
+        // person with the secret of this install, which the session keeps.
+        // While the person written down is written down by a plain key, the
+        // core is asked to say what the plain key of the person it names was.
         let keeper = given ?? SessionKeeper.shared(for: configuration)
+        let config = CoreConfiguration.json(
+            configuration, device: device, keeps: keeps, secret: keeper.installSecret, oldKey: keeper.keepsPlainKey
+        )
+        guard let core = Core(config: config) else { return }
         let effects = SystemEffects(
             transport: configuration.transport(), keeper: keeper,
             signedWith: configuration.signedWith, origin: configuration.base, site: configuration.site,
