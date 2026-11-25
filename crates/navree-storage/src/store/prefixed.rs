@@ -9,11 +9,11 @@ use std::time::Duration;
 use bytes::Bytes;
 use navree_kernel::BoxFuture;
 
-use super::{Meta, Method, Object, Store, StoreResult, Upload, Url};
+use super::{HeaderName, HeaderValue, Meta, Method, Object, Store, StoreResult, Upload, Url};
 
 /// `inner`, seen from the directory `prefix`: path `a.txt` is `prefix/a.txt`
 /// in `inner`, listings leave the prefix out again, and a link is signed
-/// for the path under the prefix.
+/// by `inner` for the path under the prefix, bound to the headers given.
 ///
 /// ```
 /// use std::sync::Arc;
@@ -143,6 +143,20 @@ impl Store for PrefixedStore {
                 .await
         })
     }
+
+    fn signed_url_with<'a>(
+        &'a self,
+        path: &'a str,
+        method: Method,
+        expires_in: Duration,
+        headers: &'a [(HeaderName, HeaderValue)],
+    ) -> BoxFuture<'a, StoreResult<Url>> {
+        Box::pin(async move {
+            self.inner
+                .signed_url_with(&self.full(path), method, expires_in, headers)
+                .await
+        })
+    }
 }
 
 #[cfg(test)]
@@ -258,11 +272,43 @@ mod tests {
         }
     }
 
-    /// A store that signs: it records the path it is asked to sign and
-    /// answers with a link to it.
+    /// What a store was asked to sign: by which method of the trait, the
+    /// path, the method, the lifetime and the headers.
+    type Asked = (
+        &'static str,
+        String,
+        Method,
+        Duration,
+        Vec<(String, String)>,
+    );
+
+    /// A store that signs: it records what it is asked to sign and answers
+    /// with a link to the path.
     #[derive(Default)]
     struct Signing {
-        asked: Mutex<Vec<(String, Method, Duration)>>,
+        asked: Mutex<Vec<Asked>>,
+    }
+
+    impl Signing {
+        fn sign(
+            &self,
+            by: &'static str,
+            path: &str,
+            method: Method,
+            expires_in: Duration,
+            headers: &[(HeaderName, HeaderValue)],
+        ) -> StoreResult<Url> {
+            let headers = headers
+                .iter()
+                .map(|(name, value)| (name.to_string(), value.to_str().unwrap().to_owned()))
+                .collect();
+            self.asked
+                .lock()
+                .unwrap()
+                .push((by, path.to_owned(), method, expires_in, headers));
+            Url::parse(&format!("https://files.amritsar.example/{path}?sig=abc"))
+                .map_err(StoreError::failed)
+        }
     }
 
     impl fmt::Display for Signing {
@@ -304,20 +350,24 @@ mod tests {
             unimplemented!()
         }
 
+        // A store may sign a link without headers in a way of its own.
         fn signed_url<'a>(
             &'a self,
             path: &'a str,
             method: Method,
             expires_in: Duration,
         ) -> BoxFuture<'a, StoreResult<Url>> {
-            Box::pin(async move {
-                self.asked
-                    .lock()
-                    .unwrap()
-                    .push((path.to_owned(), method, expires_in));
-                Url::parse(&format!("https://files.amritsar.example/{path}?sig=abc"))
-                    .map_err(StoreError::failed)
-            })
+            Box::pin(async move { self.sign("signed_url", path, method, expires_in, &[]) })
+        }
+
+        fn signed_url_with<'a>(
+            &'a self,
+            path: &'a str,
+            method: Method,
+            expires_in: Duration,
+            headers: &'a [(HeaderName, HeaderValue)],
+        ) -> BoxFuture<'a, StoreResult<Url>> {
+            Box::pin(async move { self.sign("signed_url_with", path, method, expires_in, headers) })
         }
     }
 
@@ -326,20 +376,58 @@ mod tests {
         let signing = Arc::new(Signing::default());
         let prefixed = PrefixedStore::new(signing.clone(), "tenants/agra");
         let link = prefixed
-            .signed_url("docs/a.txt", Method::PUT, Duration::from_secs(300))
+            .signed_url("docs/a.txt", Method::GET, Duration::from_secs(300))
             .await
             .unwrap();
         assert_eq!(
             link.as_str(),
             "https://files.amritsar.example/tenants/agra/docs/a.txt?sig=abc"
         );
+
+        // Bound to headers, they reach the store under the prefix as given.
+        let headers = [
+            (
+                HeaderName::from_static("content-type"),
+                HeaderValue::from_static("image/png"),
+            ),
+            (
+                HeaderName::from_static("x-goog-content-length-range"),
+                HeaderValue::from_static("0,5000000"),
+            ),
+        ];
+        let link = prefixed
+            .signed_url_with(
+                "avatars/a.png",
+                Method::PUT,
+                Duration::from_secs(600),
+                &headers,
+            )
+            .await
+            .unwrap();
+        assert_eq!(link.path(), "/tenants/agra/avatars/a.png");
+
+        let bound = |name: &str, value: &str| (name.to_owned(), value.to_owned());
         assert_eq!(
             *signing.asked.lock().unwrap(),
-            [(
-                "tenants/agra/docs/a.txt".to_owned(),
-                Method::PUT,
-                Duration::from_secs(300)
-            )]
+            [
+                (
+                    "signed_url",
+                    "tenants/agra/docs/a.txt".to_owned(),
+                    Method::GET,
+                    Duration::from_secs(300),
+                    Vec::new(),
+                ),
+                (
+                    "signed_url_with",
+                    "tenants/agra/avatars/a.png".to_owned(),
+                    Method::PUT,
+                    Duration::from_secs(600),
+                    vec![
+                        bound("content-type", "image/png"),
+                        bound("x-goog-content-length-range", "0,5000000"),
+                    ],
+                ),
+            ]
         );
 
         // Under a store that signs none, there is none either.
@@ -347,6 +435,17 @@ mod tests {
         assert!(matches!(
             prefixed
                 .signed_url("docs/a.txt", Method::GET, Duration::from_secs(300))
+                .await,
+            Err(StoreError::Unsupported(_))
+        ));
+        assert!(matches!(
+            prefixed
+                .signed_url_with(
+                    "docs/a.txt",
+                    Method::PUT,
+                    Duration::from_secs(300),
+                    &headers
+                )
                 .await,
             Err(StoreError::Unsupported(_))
         ));

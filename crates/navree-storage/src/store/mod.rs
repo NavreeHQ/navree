@@ -48,6 +48,9 @@ mod prefixed;
 
 /// The method of a [signed link](Store::signed_url): `GET` or `PUT`.
 pub use http::Method;
+/// The name and the value of a header a
+/// [signed link](Store::signed_url_with) is bound to.
+pub use http::header::{HeaderName, HeaderValue};
 /// A [signed link](Store::signed_url).
 pub use url::Url;
 
@@ -176,20 +179,54 @@ pub trait Store: fmt::Display + Send + Sync {
     /// app. The link carries its own expiry; nothing is kept to take it
     /// back.
     ///
-    /// Only a store that can sign gives one: a cloud provider's. Every
-    /// other store keeps this default, which fails with
-    /// [`StoreError::Unsupported`]. A store refuses a method it does not
-    /// sign and a lifetime longer than its provider allows with
-    /// [`StoreError::Failed`]. Headers a link is bound to (a content type,
-    /// a size range) are a method of the store that can bind them, not of
-    /// this trait.
+    /// It is [`signed_url_with`](Store::signed_url_with) and no headers,
+    /// which is the method a store that signs implements.
     fn signed_url<'a>(
         &'a self,
         path: &'a str,
         method: Method,
         expires_in: Duration,
     ) -> BoxFuture<'a, StoreResult<Url>> {
-        let _ = (path, method, expires_in);
+        self.signed_url_with(path, method, expires_in, &[])
+    }
+
+    /// A [signed link](Store::signed_url) bound to `headers`: a request
+    /// made with it must carry each of them with exactly that value, or the
+    /// provider refuses the request. It is how an upload link is held to a
+    /// content type and to a size before a byte is sent.
+    ///
+    /// Only a store that can sign gives a link: a cloud provider's. Every
+    /// other store keeps this default, which fails with
+    /// [`StoreError::Unsupported`]. A store that signs fails with
+    /// [`StoreError::Failed`] for a method it does not sign, for a lifetime
+    /// longer than its provider allows (seven days on S3 and Google Cloud
+    /// Storage) and for a header it cannot bind: it never gives a link that
+    /// holds a request to less than was asked.
+    ///
+    /// What the links of each provider bind:
+    ///
+    /// - **S3** (a Signature Version 4 query): the headers given. An
+    ///   upload link is given `content-type`. No header holds an upload to
+    ///   a size there, so the size is checked once the file has arrived
+    ///   ([`Disk::accept_upload`](crate::Disk::accept_upload)).
+    /// - **Google Cloud Storage** (a V4 signature): the headers given. An
+    ///   upload link is given `content-type` and
+    ///   `x-goog-content-length-range`, the least and the most bytes the
+    ///   body may have (`0,<limit>`, or the declared size twice).
+    /// - **Azure Blob Storage** (a service SAS): none, since a SAS signs no
+    ///   header. Its store is asked with no headers. The request made with
+    ///   an upload link still has to carry `x-ms-blob-type: BlockBlob`,
+    ///   which Azure asks of every blob that is put, and carries its
+    ///   content type unbound: whoever hands out the link says so beside
+    ///   it, and checks the file once it has arrived.
+    fn signed_url_with<'a>(
+        &'a self,
+        path: &'a str,
+        method: Method,
+        expires_in: Duration,
+        headers: &'a [(HeaderName, HeaderValue)],
+    ) -> BoxFuture<'a, StoreResult<Url>> {
+        let _ = (path, method, expires_in, headers);
         Box::pin(async { Err(StoreError::Unsupported("signed links")) })
     }
 }
