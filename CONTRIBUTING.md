@@ -99,7 +99,7 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (dev tool)
 L1  navree-contracts  navree-config  navree-telemetry
-L0  navree-kernel  navree-bounded  navree-pdf  navree-glob  navree-markdown  navree-openapi    navree-macros  navree-orm-macros  navree-i18n-macros  navree-ui-ext-macros  navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
+L0  navree-kernel  navree-bounded  navree-pdf  navree-glob  navree-datetime  navree-markdown  navree-openapi    navree-macros  navree-orm-macros  navree-i18n-macros  navree-ui-ext-macros  navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (tools; no navree deps)
 ```
 
 | Layer | Crate | What it provides |
@@ -108,6 +108,7 @@ L0  navree-kernel  navree-bounded  navree-pdf  navree-glob  navree-markdown  nav
 | L0 | `navree-bounded` | The bounded in-process cache: sharded locks, a strict capacity, SIEVE eviction, TTL and TTI, single-flight loading (re-exported as `navree::bounded`) |
 | L0 | `navree-pdf` | PDF object layer under navree-documents and navree-media: a lazy reader held to a memory and work budget (cross-reference tables and streams, object streams, incremental updates, repair of a broken cross-reference, the standard filters, files encrypted without a password to open them), a writer, and text in reading order |
 | L0 | `navree-glob` | The glob matcher for patterns configured as strings (`*` any run of characters, `?` one character, everything else literal, case-sensitive), matched in time bounded by the pattern times the input: the browser's URL waits, the HTTP client's host allow-list and fake stubs, the Logbook's ignored routes and the CSRF exceptions |
+| L0 | `navree-datetime` | Dates and times of Navree's own, with no third-party time crate under them: `Timestamp` (an exact instant), `Date`, `Time`, `DateTime` (a day and a time with no zone), `Offset` and `Span` (an exact length of time), on one arithmetic of the calendar (re-exported as `navree::datetime`) |
 | L0 | `navree-markdown` | CommonMark read once and read safely: events with no raw HTML (it comes out as text), links held to `http`, `https`, `mailto`, `tel` and addresses on this site, pictures only from this site and only in text you trust, and a cap on the length and the nesting of the text. navree-ui draws them as elements and navree-api as HTML for the descriptions of its reference |
 | L0 | `navree-template` | The template engine under navree-view, navree-cli and navree-harbor: the Jinja syntax, HTML autoescaping, a sandboxed value model, caps on depth, loops, work and output |
 | L0 | `navree-openapi` | The OpenAPI 3.1 document model, and `ToSchema` (trait; its derive is in `navree-macros`) |

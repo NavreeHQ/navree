@@ -21,7 +21,7 @@ L4  navree-session  navree-validation  navree-queue  navree-audit  navree-access
 L3  navree-db  navree-testing  navree-observe  navree-api  navree-mail  navree-realtime  navree-storage  navree-time
 L2  navree-http  navree-log  navree-crypto  navree-events  navree-view  navree-cache  navree-http-client  navree-schema  navree-navigator (tool)
 L1  navree-contracts  navree-config  navree-telemetry  navree-native-core (the native clients' runtime core)
-L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PDF reading, writing and text)  navree-glob (the glob matcher)  navree-markdown (Markdown reading)  navree-native (Navree Native's protocol)  navree-phone (phone numbers)  navree-template (the template engine)  navree-openapi (the OpenAPI document model and `ToSchema`)   navree-macros, navree-i18n-macros, navree-orm-macros, navree-ui-macros, navree-ui-ext-macros, navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (dev and deploy tools)   navree-template-peak (memory tests of the template engine)
+L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PDF reading, writing and text)  navree-glob (the glob matcher)  navree-datetime (dates and times)  navree-markdown (Markdown reading)  navree-native (Navree Native's protocol)  navree-phone (phone numbers)  navree-template (the template engine)  navree-openapi (the OpenAPI document model and `ToSchema`)   navree-macros, navree-i18n-macros, navree-orm-macros, navree-ui-macros, navree-ui-ext-macros, navree-validation-macros (proc-macros; no runtime navree deps)   navree-dock, navree-harbor (dev and deploy tools)   navree-template-peak (memory tests of the template engine)
 ```
 
 | Layer | Crate | What it provides |
@@ -30,6 +30,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 | L0 | `navree-bounded` | The bounded in-process cache: sharded locks, a strict capacity, SIEVE eviction, TTL and TTI, single-flight loading. It holds the memory cache store, abilities, token lookups and verified domains, and is re-exported as `navree::bounded` |
 | L0 | `navree-pdf` | The PDF object layer under navree-documents and navree-media: a lazy reader held to a memory and work budget (cross-reference tables and streams, object streams, incremental updates, repair of a broken cross-reference, the standard filters, files encrypted without a password to open them), a writer, and text in reading order |
 | L0 | `navree-glob` | The glob matcher for patterns configured as strings (`*` any run of characters, `?` one character, everything else literal, case-sensitive), matched in time bounded by the pattern times the input: the browser's URL waits, the HTTP client's host allow-list and fake stubs, the Logbook's ignored routes and the CSRF exceptions |
+| L0 | `navree-datetime` | Dates and times of Navree's own, with no third-party time crate under them: `Timestamp` (an exact instant), `Date`, `Time`, `DateTime` (a day and a time with no zone), `Offset` and `Span` (an exact length of time), on one arithmetic of the calendar. It is re-exported as `navree::datetime` |
 | L0 | `navree-markdown` | CommonMark read once and read safely: events with no raw HTML (it comes out as text), links held to `http`, `https`, `mailto`, `tel` and addresses on this site, pictures only from this site and only in text you trust, and a cap on the length and the nesting of the text. navree-ui draws them as elements and navree-api as HTML for the descriptions of its reference |
 | L0 | `navree-native` | Navree Native's protocol: the closed vocabulary of parts, actions and ops a native client is answered in, the client's descriptor, the example answers every client decodes, and Navree Native UI, the builders a screen for native clients is written with. navree-ui reads pages into it behind its `native-preview` feature, and the facade names it `navree::native` |
 | L0 | `navree-phone` | Phone numbers: parsing what people type, checking it against each country's numbering plan (libphonenumber's, compiled into tables) and writing E.164, international, national and `tel:` forms. navree-validation's `Phone` rule, navree-orm's phone fields and navree-ui's phone input are built on it |
@@ -113,7 +114,7 @@ L0  navree-kernel  navree-bounded (the bounded in-process cache)  navree-pdf (PD
 
 | Crate | May depend on |
 |---|---|
-| `navree-kernel`, `navree-bounded`, `navree-pdf`, `navree-glob`, `navree-markdown`, `navree-native`, `navree-phone`, `navree-template`, `navree-macros`, `navree-orm-macros`, `navree-i18n-macros`, `navree-ui-macros`, `navree-ui-ext-macros`, `navree-validation-macros`, `navree-dock` | No Navree crate |
+| `navree-kernel`, `navree-bounded`, `navree-pdf`, `navree-glob`, `navree-datetime`, `navree-markdown`, `navree-native`, `navree-phone`, `navree-template`, `navree-macros`, `navree-orm-macros`, `navree-i18n-macros`, `navree-ui-macros`, `navree-ui-ext-macros`, `navree-validation-macros`, `navree-dock` | No Navree crate |
 | `navree-openapi` | macros |
 | `navree-harbor`, `navree-template-peak` | template |
 | `navree-native-core` | native |
