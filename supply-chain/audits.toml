@@ -1,11 +1,35 @@
 
 # cargo-vet audits file
 
+[[audits.async-nats]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.51.0 -> 0.53.0"
+notes = "Diff read. Connecting: TLS is asked of every server once any TLS setting or a tls:// URL asks for it (tls_optional opts out); servers a server advertises are taken as host:port only, never from an INFO read before the TLS handshake, keep the transport and TLS they were learned on, and an IP among them is checked against the name its reporting server was checked under (verify_discovered_servers_by_ip brings back checking the IP itself); a server that offers no TLS when TLS is asked fails early; the lists in later INFO messages now replace the discovered servers (ignore_discovered_servers turns discovery off). WebSocket connections run on the client's own TCP stream and TLS handshake. Reading: a bare -ERR line, a payload length that overflows and a header value with a lone CR or LF no longer panic the connection (HeaderValue converts with TryFrom or from_lossy). Authentication code is unchanged. tokio-rustls 0.26.3. No unsafe, no build script, no new process, file or variable use. Published by Jarema, as 0.51.0 was."
+
 [[audits.brotli]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "9.1.1 -> 9.1.3"
 notes = "Diff reviewed. The encoder checks minimum copy length after fix_unbroken_len truncates a match at a custom dictionary boundary; BrotliEncoderVersion is checked at compile time against CARGO_PKG_VERSION; BrotliEncoderMallocUsize uses checked_mul before calling a custom allocator; boundary test added. No build script, no new dependencies, no I/O in changed code. Same publisher as 9.1.1."
+
+[[audits.bytes]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.12.1 -> 1.12.2"
+notes = "Diff read. try_get_int and try_get_int_le sign-extend as get_int does; Chain::chunks_vectored adds the second buffer's chunks only once the first's are all listed, so vectored writes keep their order; Bytes::truncate(0) puts an empty static Bytes in place and drops the old handle, which releases the shared buffer; Writer::write_all writes what fits and then fails with WriteZero. BytesMut: put_u8 and put_bytes fast paths; extend_from_slice and put_bytes set the length after reserve, whose postcondition bounds it; Extend<u8> fills a Vec-backed buffer through a ManuallyDrop Vec over the same allocation, taking no more items than the spare capacity, so the Vec does not reallocate (std's Vec::extend does not grow within capacity, and a debug assertion checks it). The serde floor is 1.0.70. No new dependencies, no build script, no I/O. Published by Darksonn, as 1.12.1 was."
+
+[[audits.clap]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "4.6.7 -> 4.6.9"
+notes = "Diff read. Documentation links and URLs only in src; clap_derive is pinned to 4.6.9 and clap_builder stays at 4.6.7. forbid(unsafe_code), no build script, no I/O. Published by epage, as 4.6.7 was."
+
+[[audits.clap_derive]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "4.6.7 -> 4.6.9"
+notes = "Diff read. The derives emit a mut binding that is reassigned where they shadowed a let (augment_args, augment_subcommands, their update forms and the deferred subcommand closure), and the flatten check on Option<Args> is an expect with the same condition; the builder calls and their order are the same. Its compile-time dependencies move to proc-macro2 1.0.107, quote 1.0.47 and syn 3.0.10. The macro reads no file, variable or network. forbid(unsafe_code), no build script. Published by epage, as 4.6.7 was."
 
 [[audits.constant_time_eq]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
@@ -19,11 +43,23 @@ criteria = "safe-to-deploy"
 delta = "0.18.2 -> 0.18.3"
 notes = "Diff reviewed. The nonce of a private cookie is filled from the operating system's generator (OsRng) instead of the thread-local one, so two processes forked from one never reuse a nonce. One line of source, a changelog entry and the version; no new dependencies, no unsafe, no build script, no I/O beyond the OS random source. Published from github:rwf2/cookie-rs."
 
+[[audits.css-inline]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.23.1 -> 0.25.0"
+notes = "Diff read. Three new options that change nothing by default: remove_unused_at_rules, media_type (a matching top-level @media is inlined) and keep_classes; fragment inlining refuses keep_at_rules; :has() selectors are parsed and matched; with keep_at_rules and no style-tag inlining, rules from extra CSS and linked sheets are inlined. Element is Copy for selectors 0.43. The new code works on strings and the parsed document only: nothing new fetches a URL or reads a file, and the one fetch path stays behind load_remote_stylesheets. The new command-line flags are in the binary, behind the cli feature. No unsafe, no build script. Published by Stranger6667, as 0.23.1 was."
+
 [[audits.email-encoding]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.4.2 -> 0.4.3"
 notes = "Diff reviewed. Body encoding no longer picks 7bit or 8bit for input with a NUL, or a CR or LF outside a CRLF (a bare LF in a str is still taken as a line ending), so such bytes go out as quoted-printable or base64. RFC 2231 parameter encoding writes at least one character per line, so a 62-character key can no longer stall it or underflow. Header folding never leaves a line of white space only. Tests added. No new dependencies, no build script, no unsafe (forbid(unsafe_code)), no I/O. Published from github:lettre/email-encoding."
+
+[[audits.fast_image_resize]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "6.1.0 -> 6.2.0"
+notes = "Diff read. check_crop_box adds left to width and top to height with checked_add, so a crop box that wrapped in a release build is refused before the unchecked row slicing it guards; Coefficients keeps the lowest bound start and the highest bound end, and Resizer sizes and offsets its temporary image from them, not from the first and last bound; u8x2 divide_alpha_inplace no longer makes a shared slice over the row it writes to. The new SIMD128 convolution and alpha code is compiled for wasm32 only and keeps the bounds of the SSE4.1 code beside it. The rayon feature no longer turns on image; cpufeatures 0.3.1. No build script, no I/O. Published by Cykooz, as 6.1.0 was."
 
 [[audits.form_urlencoded]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
@@ -37,11 +73,23 @@ criteria = "safe-to-deploy"
 delta = "0.15.0 -> 0.16.0"
 notes = "Diff reviewed. Bounds operation budgets across Buffer cluster merges, masks, lookup passes, WouldApplyContext, variation deltas and contextual or ligature rule construction; adds SyllableLookaheadMemo so Indic, Khmer and USE syllable scanners stay linear on long joiner or segment-begin runs; records syllable cuts across substitutions; caches glyph names in ShaperFont; precomputes running advance sums for mark attachment propagation; updates kern/kerx state handling and lookup deduplication in OtMapBuilder. No new dependencies, no build script, no unsafe, no I/O. Same publisher as 0.15.0."
 
+[[audits.harfrust]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.16.0 -> 0.16.1"
+notes = "Diff read. Follows HarfBuzz 15.2.0. AAT state machines record which glyphs can trigger an action (a walk over the reachable states, each visited once) and skip a subtable when the buffer holds none of them; kern format 0 gets a pair filter; kerx and GPOS may run together; skipped glyphs are charged one unit per 32, and the work and length budgets are raised (up to 65536 operations per glyph, a buffer up to 512 times its input); the Arabic stretch pass counts copies in i64 and caps a run at 256 glyphs; vowel constraints look across default ignorables; the USE and Arabic PUA tables are regenerated; Buffer gains push_latin1, push_utf16 and a not-found glyph. Indexes and counts taken from font data stay checked. forbid(unsafe_code), no dependency change, no build script, no I/O (font files are included by tests only). Published by dfrg, as 0.16.0 was."
+
 [[audits.lettre]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.11.23 -> 0.11.24"
 notes = "Diff reviewed. SMTP client: the connection is closed if bytes are already buffered after the STARTTLS reply; dot-stuffing also applies after a bare CR or LF; replies are read under a 100,000-byte cap and parsed once per line, only CRLF ending a line; a white-space EHLO line no longer panics; DATA and message replies must have the expected class. A quoted local part is kept as written and addresses reject non-ASCII white space. Debug hides DKIM keys and AUTH credentials. No new dependencies or build script, forbid(unsafe_code), I/O only on the SMTP socket. Published from github:lettre/lettre."
+
+[[audits.libredox]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.25"
+notes = "Read in full (one source file). System-call wrappers for Redox OS over relibc's redox_* symbols: extern declarations, an owning file-descriptor type, one wrapper per call, three repr(C) structs of integers and flag constants. No build script, no statics, nothing run at load time, no I/O beyond the calls it wraps; the unsafe is FFI calls and MaybeUninit values the kernel fills. sigaction and Fd::new are safe functions that code on Redox could misuse. whoami (from sqlx-postgres) depends on it for target_os = redox only. Published by 4lDO2."
 
 [[audits.libsqlite3-sys]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
@@ -55,17 +103,53 @@ criteria = "safe-to-deploy"
 delta = "3.10.0 -> 3.10.1"
 notes = "Diff reviewed. Bumps mongodb-internal-macros to 3.10.1, replaces derive_where(Debug) with manual Debug impls on Client, cursors and change streams, drops Debug on internal CSFLE and OIDC state types, and redacts DataKeyOptions::key_material, OIDC CallbackContext::refresh_token and IdpServerResponse tokens, Socks5Proxy::authentication and TlsOptions::tls_certificate_key_file_password in Debug output. No build script, no unsafe, no new I/O. Same publisher as 3.10.0."
 
+[[audits.mongodb]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "3.10.1 -> 3.10.2"
+notes = "Diff read. Display of ConnectionString writes <redacted> for the user name and password, the TLS key file password, authMechanismProperties and the proxy credentials (to_unredacted_string gives the full form); parse errors of connection strings and options no longer repeat the input; PLAIN authentication refuses a NUL in the user name or password. No TLS or authentication check is loosened. mongodb-internal-macros 3.10.2. No build script, no unsafe, no new I/O. Published by mongo-rust-driver, as 3.10.1 was."
+
 [[audits.mongodb-internal-macros]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "3.10.0 -> 3.10.1"
 notes = "Diff reviewed. Version bump in Cargo.toml only; no source changes, no build script, no unsafe, no I/O. Same publisher as 3.10.0."
 
+[[audits.mongodb-internal-macros]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "3.10.1 -> 3.10.2"
+notes = "Diff read. The version in Cargo.toml only; no source change. Published by mongo-rust-driver, as 3.10.1 was."
+
 [[audits.notify]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "8.2.1 -> 8.2.2"
 notes = "Diff reviewed. Bumps MSRV to 1.88 and inlines format arguments. On Windows, adds an AtomicBool stopping flag on WatchState and ReadData so queued ReadDirectoryChangesW completions do not rearm a stopped watch, closes directory and semaphore handles only after waiting for completion when CancelIo succeeds (leaking the handle if CancelIo fails rather than closing under an in-flight APC), and signals the completion semaphore before sending Action::Stop on Drop. Unsafe Win32 calls are bounded to watch teardown and tests. Same publisher as 8.2.1."
+
+[[audits.notify]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "8.2.2 -> 9.0.0"
+notes = "Diff read. A new build.rs prints a cfg for FreeBSD's inotify: on a native FreeBSD build only, it runs /bin/freebsd-version -u (fixed path and argument, no shell) to learn the release; for every other target it prints three cargo lines and returns. inotify walks directories itself (symlink loops are found by device and inode), keeps several paths per watch descriptor and filters by Config::event_kinds; kqueue refuses FIFOs, sockets and devices and reports descriptor limits as MaxFilesWatch; FSEvents rebuilds its stream only when the watched roots change, resumes from the last event id, catches panics in its callback, no longer purges the volume's event history and holds roots to a twelfth of RLIMIT_NOFILE; Windows keeps the request and a 64 KiB buffer in one allocation handed to the kernel and taken back once, decodes change records with bounds checks where it trusted the kernel's offsets, waits for an unwatch to finish, and looks up ReadDirectoryChangesExW in the loaded kernel32 by fixed names when extended information is asked for. PollWatcher hashes file contents with xxh3 (new dependency xxhash-rust) in 8 KiB reads. update_paths replaces paths_mut, Config is no longer Copy, ErrorKind is non_exhaustive. No network use; about two thirds of the added lines are tests. Published by JohnTitor, as 8.2.2 was."
+
+[[audits.notify-types]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.1.0 -> 2.3.1"
+notes = "Diff read. An event carries an optional user_data (u64) that takes part in equality and hashing and is left out of the serialized form when unset; debouncer_mini gains DebouncedEventBatch; getters and builders are must_use; edition 2024. Plain data types: no unsafe, no build script, no I/O. Published by JohnTitor, as 2.1.0 was."
+
+[[audits.objc2-system-configuration]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.3.2"
+notes = "Read in full. Bindings to Apple's SystemConfiguration framework written by objc2's header translator: extern statics and functions, constants, opaque CoreFoundation types and one-call wrappers that take or retain the result by the Copy/Create and Get naming rule. One link directive (the framework), no build script, no initializers, no file, network or process access of its own. Three functions that take an untyped CFArray are safe though upstream means to mark them unsafe. whoami (from sqlx-postgres) depends on it for Apple targets only. Published by madsmtm."
+
+[[audits.pin-project-lite]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.17 -> 0.2.18"
+notes = "Diff read. The blanket impl that turns a hand-written Drop on a projected type into a compile error now covers unsized types (T: ?Sized + Drop), so a type that is always unsized can no longer implement Drop and move a pinned field; __private re-exports Sized for it. Compile errors only: no runtime code, no dependencies, no build script. Published from github:taiki-e/pin-project-lite."
 
 [[audits.prost]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
@@ -109,6 +193,24 @@ criteria = "safe-to-deploy"
 delta = "1.8.1 -> 1.8.2"
 notes = "Diff reviewed. Closes synchronous Connection and resets its parser on unrecoverable reply parse errors; ignores unsolicited RESP3 SUnsubscribe pushes while awaiting non-subscription replies; tracks per-shard invalidation counts in ShardedLRU so replies invalidated in flight are not cached; wakes async cluster pending queues via poll_recv, follows hostless MOVED and ASK redirects, routes MSETEX by first key and refreshes cluster routing; rejects out-of-range integer and double conversions in FromRedisValue, converts RESP3 doubles for big-number types, accepts -1 data_received on Role::Replica and adjusts TLS feature gates. No new dependencies, no build script, no unsafe. Same publisher as 1.8.1."
 
+[[audits.regex]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.13.1 -> 1.13.2"
+notes = "Diff read. Needs regex-automata 0.4.19 and regex-syntax 0.8.12; the builders drop a clone of a Copy value, and the nightly-only Pattern impl is written unsafe impl as the trait now asks, its body unchanged. Test data added. No build script, no I/O. Published by BurntSushi, as 1.13.1 was."
+
+[[audits.regex-automata]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.4.18 -> 0.4.19"
+notes = "Diff read. ByteSet::from_bytes reads its second half from the right offset and checks the length of both halves, which corrects the quit set of a DFA read from bytes; the meta engine's forward DFA search starts acceleration after the byte already consumed; the bounded backtracker is passed over at its haystack limit, where it panicked; the PikeVM ignores slots past the pattern's own; the one-pass DFA takes its scratch path for a single pattern. meta::Regex::is_match_with is new, the default pool capacity is the constant 8 again, and Span::offset panics on overflow. No limit on size, nesting or states changes and no unsafe line changes. No build script, no I/O. Published by BurntSushi, as 0.4.18 was."
+
+[[audits.regex-syntax]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.8.11 -> 0.8.12"
+notes = "Diff read. A Parser can be used again: reset clears the capture index, the capture names and the scratch buffer, and the parse-once assertion is gone; IntervalSet::canonicalize merges in place; common-prefix lifting takes literals, classes and look-arounds only, which corrects leftmost-first matches of alternations such as ab*b|ab*c; Position orders by offset, line and column. The nest limit is untouched. forbid(unsafe_code), no dependencies, no build script, no I/O. Published by BurntSushi, as 0.8.11 was."
+
 [[audits.resvg]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
@@ -120,6 +222,18 @@ who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "7.5.4 -> 7.5.5"
 notes = "Diff reviewed. Extracts restore_terminal_configuration on Unix (tcsetattr) and Windows (SetConsoleMode) and calls it before raise(SIGINT) or GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0) in send_signal_sigint so terminal echo and mode flags are restored when the default signal action exits before Drop. No new dependencies, no build script. Same publisher as 7.5.4."
+
+[[audits.selectors]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.41.0 -> 0.43.0"
+notes = "Diff read. Element must be Copy and is passed by value through matching, with the clones removed; the Parser methods take &str names; the unsafe OpaqueElement::as_const_ptr gives way to a safe to_ptr; a subtree filter hashes into a 64-bit mask with shifts below the word size; FxHashMap is hashbrown's map with the same Fx hasher (new dependency hashbrown 0.17); servo_arc 0.6. No unsafe added, no build script, no I/O. Published by Loirooriol, as 0.41.0 was."
+
+[[audits.servo_arc]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.5.0 -> 0.6.0"
+notes = "Diff read. Safety sections on five existing unsafe functions whose bodies are unchanged, deref and borrow written through coercion, the hand-written ne removed, HeaderSlice::is_empty added, ArcBorrow::ptr_eq through ptr::eq. No unsafe body changes, no dependencies, no build script. Published by Loirooriol, as 0.5.0 was."
 
 [[audits.skrifa]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
@@ -138,6 +252,48 @@ who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.6.0 -> 0.7.0"
 notes = "Diff reviewed. Extends the optional internal derive_dialect! proc macro to accept syn::Expr method overrides checked against Dialect trait items, and sorts sibling sqlparser-* paths deterministically during workspace expansion. No build script, no unsafe. Same publisher as 0.6.0."
+
+[[audits.sqlx]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.9.0 -> 0.9.1"
+notes = "Diff read. Pins the sqlx crates at 0.9.1, adds the opt-in feature tls-rustls-aws-lc-rs-native-roots and changes documentation; no Rust code of its own changes. Published by abonander, as 0.9.0 was."
+
+[[audits.sqlx-core]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.9.0 -> 0.9.1"
+notes = "Diff read. TLS is split into a connector built once per connect options and a handshake that takes the host name each time; the choice of verifier (WebPKI with the roots, or the ones that pass over certificate or name checks when the options ask) is the same code as before, and the name is still checked on every handshake. connect_tcp takes IP literals without brackets and sets TCP_NODELAY; RustlsSocket::poll_flush only writes pending records; the pool's idle counter can no longer wrap; a .sql file in a migrations folder whose name is not <version>_<description>.sql is an error unless sqlx.toml says warn or ignore; AnyConnection::close_hard closes hard; [u8; N] works in Any. sha2 0.11, time 0.3.48, an opt-in aws-lc-rs feature. No unsafe, no build script; the files read are the certificate files and the migrations folder, as before. Published by abonander, as 0.9.0 was."
+
+[[audits.sqlx-macros]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.9.0 -> 0.9.1"
+notes = "Diff read. The version, the pins on sqlx-core and sqlx-macros-core and one forwarding feature; no source change. Published by abonander, as 0.9.0 was."
+
+[[audits.sqlx-macros-core]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.9.0 -> 0.9.1"
+notes = "Diff read. The query macros look for .env files only from the manifest folder up to the workspace root, which they learn by running cargo metadata --no-deps (the cargo of the build; an existing call, now made on the first expansion in every crate); an unreadable .env is passed over when a database URL or SQLX_OFFLINE is already set. The environment variables read are the same, nothing is written, and the describe connection sets plan_cache_mode through sqlx-postgres. The type derives keep integer reprs only and refuse repr(C) alone on an enum. sha2 0.11 without default features. No unsafe, no build script. Published by abonander, as 0.9.0 was."
+
+[[audits.sqlx-mysql]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.9.0 -> 0.9.1"
+notes = "Diff read. The connect-time SET quotes and escapes charset, collation and time zone, which closes an SQL injection through those URL parameters; packet decoding checks lengths before every read (handshake, length-encoded strings, EOF and ERR packets, binary and text rows), refuses more than 4096 columns and packets over 1 GiB, and returns errors where it panicked; authentication uses the nonce of an AuthSwitchRequest and sends an empty response for an empty password. TLS: the options move into SslOptions with a cached connector that every setter clears, tls-sni-servername is opt-in, and each ssl-mode checks what it checked before. No unsafe, no build script, no new I/O. Published by abonander, as 0.9.0 was."
+
+[[audits.sqlx-postgres]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.9.0 -> 0.9.1"
+notes = "Diff read. hostaddr (the URL parameter and PGHOSTADDR) is the address connected to while host stays the name for TLS and pgpass, where it used to stand in for the host; whoami is used with its std feature, so the default user is the operating system's login name again; the TLS options move into SslOptions with a cached connector that every setter clears, and each sslmode checks what it checked before. A stale cached plan is closed and the statement sent once more outside a transaction; a cancelled BEGIN leaves a rollback queued; statements go unnamed when the cache is off; PgListener reconnects on any I/O error; date, time and array decoding return errors where they panicked or wrapped. No unsafe, no build script; the pgpass and SASL code is unchanged. Published by abonander, as 0.9.0 was."
+
+[[audits.sqlx-sqlite]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.9.0 -> 0.9.1"
+notes = "Diff read. Allows libsqlite3-sys below 0.41. The worker keeps its transaction depth in step with SQLite after SQLite rolls back by itself, and takes an opt-in thread stack size; column_nullable no longer builds a CStr from a null declared type (the one change inside unsafe); rows_affected is 0 for read-only statements; [u8; N] can be bound and read; time and chrono decoding return errors where they panicked. No build script, no new I/O. Published by abonander, as 0.9.0 was."
 
 [[audits.svgtypes]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
@@ -169,11 +325,23 @@ criteria = "safe-to-deploy"
 delta = "0.49.0 -> 0.50.0"
 notes = "Diff reviewed. Bumps svgtypes to 0.16.2, skrifa to 0.49.0 and harfrust to 0.15.0; adds Options::max_depth (1024 by default) and general cycle detection for SVG resource references; computes Group and Path bounding boxes lazily through OnceLock; drops the parsed roxmltree::Document before tree conversion; adds FontCache reusing loaded skrifa fonts and harfrust shape plans; supports the inline path attribute on textPath. No build script, no unsafe, no new I/O. Same publisher as 0.49.0."
 
+[[audits.uuid]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.29.2 -> 1.29.3"
+notes = "Diff read. Deserializing: a sequence must hold exactly 16 bytes (extra elements were left unread before), the Braced, Hyphenated, Simple and Urn forms take strings only, and the bytes form also takes a 16-element sequence; strings parse as before. ContextV1 counts with core's AtomicU16 (a Cell where the target has none), so the optional atomic dependency and feature are gone. Parse errors carry a static message. No unsafe change, no build script, no I/O. Published by KodrAus, as 1.29.2 was."
+
 [[audits.webpki-roots]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.0.11 -> 1.0.12"
 notes = "Diff reviewed. Removes six retired or distrusted root certificates from TLS_SERVER_ROOTS (DigiCert Trusted Root G4, QuoVadis Root CA 3 G3, QuoVadis Root CA 1 G3, Buypass Class 2 Root CA, Certigna Root CA and Buypass Class 3 Root CA); no other source changes, no build script, no unsafe, no I/O. Same publisher as 1.0.11."
+
+[[audits.zeroize]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.9.1 -> 1.9.2"
+notes = "Diff read. Slices of DefaultIsZeroes types, MaybeUninit slices, the spare bytes of an Option and zeroize_flat_type go through a new bulk module: on targets with inline assembly (x86, x86_64, arm, aarch64, riscv, loongarch64, s390x) a plain fill or write_bytes followed by the existing assembly barrier, which the compiler must take to read the memory; on every other target volatile writes, in chunks. Scalars, arrays and the element-wise paths still use write_volatile. On targets without inline assembly optimization_barrier is black_box alone. zeroize_bytes is new. The unsafe blocks state their conditions and meet them (a pointer from a live &mut, lengths in bytes, chunk casts inside the slice). No new dependencies but a dev-only bench, no build script, no I/O. Published from github:RustCrypto/utils."
 
 [[audits.zeroize_derive]]
 who = "Amritpal Singh <boparaiamrit@gmail.com>"
@@ -186,6 +354,12 @@ who = "Amritpal Singh <boparaiamrit@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "9.5.0 -> 9.7.0"
 notes = "Diff reviewed. Widens the BSD and macOS nix dependency range to >=0.30.0, <0.33.0; hardens archive extraction to reject symlinked destination or ancestor directories inside the target root and opens non-symlink paths with O_NOFOLLOW (and O_DIRECTORY on directories) before setting permissions on Unix; seeks to the central directory start in ZipWriter::new_append_with_config; preserves encryption and data-descriptor flags, raw comments and ExtendedTimestamp or Ntfs extra fields across raw copies; exposes safe fixed-header parse helpers. Published from github:zip-rs/zip2."
+
+[[audits.zip]]
+who = "Amritpal Singh <boparaiamrit@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "9.7.0 -> 9.8.2"
+notes = "Diff read. Extraction is rewritten to stay under the destination: on Unix every directory on the way is opened from its parent with openat and O_NOFOLLOW, files are created with openat, O_NOFOLLOW and mode 0600 and must be regular files with one link, symlinks are made with symlinkat, modes are set through the open descriptor (the path-based chmod fallback is gone), and a partial file is removed only when its device and inode match; on Windows the directories are held open, reparse points other than a list of cloud and deduplication tags are refused, and leaves are deleted by handle. The checks 9.7.0 made on .., absolute targets and symlink hops all remain. Directories already on the way are made owner-writable. Reading refuses a multi-disk end record and bounds the entry count by the directory size; writing sums extra-field lengths with checked arithmetic. The unsafe is libc and Win32 calls with checked results. The windows-sys range now starts at 0.60 and zstd-rs is an opt-in feature; no new crates, no build script; only test code starts a process. Published from github:zip-rs/zip2."
 
 [[trusted.rusqlite]]
 criteria = "safe-to-deploy"
