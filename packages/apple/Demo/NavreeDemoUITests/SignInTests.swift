@@ -132,20 +132,32 @@ final class SignInTests: XCTestCase {
         Shots.save("04-signing-in-in-the-session", in: self)
         typing.typeText("\n")
 
+        // The app comes back on a scheme of its own, which any app could
+        // claim: the site names the app and asks before the sign-in leaves.
+        let askQueries = [
+            (browser, browser.webViews.buttons["Continue"]), (browser, browser.buttons["Continue"]),
+            (app, app.webViews.buttons["Continue"]), (app, app.buttons["Continue"]),
+        ]
+        let handOver = try XCTUnwrap(
+            first(askQueries, timeout: 90), "The site's question before the sign-in is handed to the app")
+        settle()
+        Shots.save("05-the-site-asks-before-handing-over", in: self)
+        handOver.tap()
+
         // Back in the app: the session has gone, the code was exchanged.
         let end = Date().addingTimeInterval(90)
-        while Date() < end, first(emailQueries, timeout: 0) != nil {
+        while Date() < end, first(emailQueries + askQueries, timeout: 0) != nil {
             settle(1)
         }
         settle(5)
-        Shots.save("05-back-in-the-app", in: self)
+        Shots.save("06-back-in-the-app", in: self)
         app.terminate()
 
         // Quit and opened again: still signed in, the page drawn natively.
         app = launch(["-NavreeStack", "/=\(page)"])
         XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 90), "The signed-in page")
         settle(5)
-        Shots.save("06-signed-in-after-a-relaunch", in: self)
-        Shots.note("06-signed-in-after-a-relaunch", app.debugDescription)
+        Shots.save("07-signed-in-after-a-relaunch", in: self)
+        Shots.note("07-signed-in-after-a-relaunch", app.debugDescription)
     }
 }
