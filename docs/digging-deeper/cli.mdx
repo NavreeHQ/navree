@@ -313,7 +313,7 @@ The tools of the ecosystem add their own commands to the CLI. They run in the CL
 | `navree make:resource` | `<module> <Model>`, `--path` | Generates a [Helm](/docs/tools/helm/) admin resource for a model of the module (`models/<model>.rs`), with a field per column a user may see (none for a column the model hides or one named like a secret), and registers it in the module's `wire`. |
 | `navree native:coverage` | `--platform <system>`, `--form <device>`, `--json`, `--fail-on <web\|layout>`, `--features <list>`, `--file <path>` | Asks every page route of the app as a native client and prints its grade (`idiom`, `layout` or `web`) and what is missing, with totals; a gate for a store build or CI. Needs the [native preview](#native-apps) and `native.toml` for route parameters. |
 | `navree native:init` | `--name`, `--origin`, `--bundle-id`, `--team`, `--dir`, `--package`, `--package-version`, `--package-path`, `--dry-run` | Writes the project of the app's [Apple client](#native-apps) in `apple/`: an iPhone and iPad app and a Mac app on the Swift package, as an XcodeGen `project.yml`. Never overwrites a file. |
-| `navree native:doctor` | `--platform <ios\|android\|all>`, `--url <site>`, `--json` | Checks what a [native build](#native-apps) needs, without changing anything: the preview feature, `auth.apps`, passkey origins, push keys, sign-in providers, the Android and Apple toolchains. Each item is ready, missing or not applicable, with the next step for what is missing. |
+| `navree native:doctor` | `--platform <ios\|android\|windows\|all>`, `--url <site>`, `--json` | Checks what a [native build](#native-apps) needs, without changing anything: the preview feature, `auth.apps`, passkey origins, push keys, sign-in providers, the Android and Apple toolchains. Each item is ready, missing or not applicable, with the next step for what is missing. |
 
 [Harbor](/docs/tools/harbor/) adds the commands that prepare servers, keep their secrets and ship releases. Every one takes `--env <name>`, which uses `harbor.<name>.toml` instead of `harbor.toml` (the default comes from `NAVREE_HARBOR_ENV`):
 
@@ -434,7 +434,7 @@ A value cannot leave its segment (no `/`, `?`, `#` or spaces; a `{*rest}` parame
 |---|---|
 | Native preview | `Cargo.toml` turns `ui-native-preview` on. |
 | Settings | The app's settings load, as the app reads them: `config/`, `.env` and `APP_*` variables. |
-| `auth.apps` | An Apple app has its Team ID and bundle id, an Android app its package and the SHA-256 fingerprints of its signing certificates; the link paths are paths. |
+| `auth.apps` | An Apple app has its Team ID and bundle id, an Android app its package and the SHA-256 fingerprints of its signing certificates; the link paths are paths. A Windows app has the id a build names itself by (its package family name, the id it was built with, or both) and a `callback` on its own scheme, and no two name the same id. An app with no Windows app is *not applicable*, unless `--platform windows` asks for one. |
 | Association files | The settings make the app serve `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json`. With `--url <site>` the running site is asked, with no redirect followed, and the files must name the apps. |
 | Passkey origins | With `auth.passkeys.enabled`: the relying party, the origins, and `https://<rp_id>` for an Apple app. An Android app's origin comes from its fingerprints. |
 | Push | `notify.push.apns` has a team id, a key and its id, and names the bundle ids of `auth.apps.apple`; `notify.push.fcm` has a service account and names the packages of `auth.apps.android`. Not set up is *not applicable*: push is optional. |
@@ -456,6 +456,11 @@ bundle_id = "in.example.orders"
 package = "in.example.orders"
 fingerprints = ["14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5"]
 
+[auth.apps.windows.main]
+package_family_name = "ExampleOrders_8wekyb3d8bbwe"
+app_id = "in.example.orders"
+callback = "in.example.orders:/signed-in"
+
 [auth.passkeys]
 enabled = true
 rp_id = "orders.example.in"
@@ -472,7 +477,7 @@ packages = ["in.example.orders"]
 
 | Option | What it does |
 |---|---|
-| `--platform <system>` | `ios` (the Apple systems), `android` or `all` (the default). What the other system needs is *not applicable*. |
+| `--platform <system>` | `ios` (the Apple systems), `android`, `windows` or `all` (the default). What the other systems need is *not applicable*. |
 | `--url <site>` | Also asks the running site (`https://orders.example.com`) for the two association files. |
 | `--json` | Prints the findings as JSON: each item has an `id`, a `group`, a `status` (`ready`, `missing` or `not-applicable`), a `detail` and, for what is missing, a `next`. |
 

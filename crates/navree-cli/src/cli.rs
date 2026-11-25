@@ -623,7 +623,7 @@ pub struct NativeCoverageArgs {
 /// `navree native:doctor [--platform <system>] [--url <site>] [--json]`.
 #[derive(Debug, Args)]
 pub struct NativeDoctorArgs {
-    /// Check for these systems: `ios` (the Apple systems), `android` or `all`.
+    /// Check for these systems: `ios` (the Apple systems), `android`, `windows` or `all`.
     #[arg(long, value_enum, default_value_t)]
     pub platform: crate::native_doctor::Scope,
     /// Also ask this running site (`https://orders.example.com`) for the association files Apple and Android read.
@@ -1251,6 +1251,10 @@ mod tests {
             panic!("expected native:doctor");
         };
         assert_eq!(args.platform, Scope::Android);
+        let Command::NativeDoctor(args) = parse(&["native:doctor", "--platform", "windows"]) else {
+            panic!("expected native:doctor");
+        };
+        assert_eq!(args.platform, Scope::Windows);
         assert!(Cli::try_parse_from(["navree", "native:doctor", "--platform", "tvos"]).is_err());
     }
 

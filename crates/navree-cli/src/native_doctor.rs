@@ -127,13 +127,15 @@ impl Item {
 /// Which systems to check for.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Scope {
-    /// Both.
+    /// Every system.
     #[default]
     All,
     /// The Apple systems (iOS, iPadOS, macOS, ...).
     Ios,
     /// Android.
     Android,
+    /// Windows.
+    Windows,
 }
 
 impl Scope {
@@ -145,11 +147,16 @@ impl Scope {
         matches!(self, Self::All | Self::Android)
     }
 
+    fn windows(self) -> bool {
+        matches!(self, Self::All | Self::Windows)
+    }
+
     fn flag(self) -> &'static str {
         match self {
             Self::All => "all",
             Self::Ios => "ios",
             Self::Android => "android",
+            Self::Windows => "windows",
         }
     }
 }
@@ -436,6 +443,131 @@ impl AndroidApp {
     }
 }
 
+/// Whether `name` is a package family name: the package's name (3 to 50
+/// letters, digits, `.` and `-`), `_`, and the 13 characters of its publisher
+/// id (digits and lower case letters without `i`, `l`, `o` and `u`).
+fn is_package_family_name(name: &str) -> bool {
+    name.rsplit_once('_').is_some_and(|(package, publisher)| {
+        (3..=50).contains(&package.len())
+            && package
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-'))
+            && publisher.len() == 13
+            && publisher.bytes().all(|b| {
+                matches!(b, b'0'..=b'9' | b'a'..=b'h' | b'j' | b'k' | b'm' | b'n' | b'p'..=b't' | b'v'..=b'z')
+            })
+    })
+}
+
+/// Whether `callback` is a link on a scheme of an app's own, written as it
+/// is sent: the scheme in lower case, 2 to 39 characters, not `https` and not
+/// one a browser or Windows opens itself; a path or a host after it; no
+/// user, password, query or fragment; at most 2048 bytes.
+fn is_own_scheme_link(callback: &str) -> bool {
+    reqwest::Url::parse(callback).ok().is_some_and(|url| {
+        let scheme = url.scheme();
+        let opened_elsewhere = matches!(
+            scheme,
+            "https"
+                | "http"
+                | "javascript"
+                | "data"
+                | "file"
+                | "blob"
+                | "about"
+                | "ftp"
+                | "ws"
+                | "wss"
+                | "intent"
+                | "content"
+                | "mailto"
+                | "tel"
+                | "sms"
+                | "microsoft-edge"
+                | "search"
+                | "search-ms"
+                | "shell"
+                | "vbscript"
+                | "res"
+                | "view-source"
+        ) || scheme.starts_with("ms-");
+        callback.len() <= 2048
+            && url.as_str() == callback
+            && (2..=39).contains(&scheme.len())
+            && !opened_elsewhere
+            && !url.cannot_be_a_base()
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none()
+    })
+}
+
+struct WindowsApp {
+    name: String,
+    package_family_name: String,
+    app_id: String,
+    callback: String,
+}
+
+impl WindowsApp {
+    /// The ids a build of the app names itself by.
+    fn ids(&self) -> impl Iterator<Item = &str> {
+        [self.package_family_name.as_str(), self.app_id.as_str()]
+            .into_iter()
+            .filter(|id| !id.is_empty())
+    }
+
+    fn problems(&self) -> Vec<String> {
+        let key = format!("auth.apps.windows.{}", self.name);
+        let mut problems = Vec::new();
+        if self.package_family_name.is_empty() && self.app_id.is_empty() {
+            problems.push(format!(
+                "{key} must name the app: package_family_name (a build installed from a package), app_id (a build with no package), or both"
+            ));
+        }
+        if !self.package_family_name.is_empty()
+            && !is_package_family_name(&self.package_family_name)
+        {
+            problems.push(format!(
+                "{key}.package_family_name must be a package family name, as `Get-AppxPackage` prints it (ExampleOrders_8wekyb3d8bbwe)"
+            ));
+        }
+        if !self.app_id.is_empty() && !is_bundle_id(&self.app_id) {
+            problems.push(format!(
+                "{key}.app_id must be the id the app was built with (A-Z, a-z, 0-9, `-` and `.`)"
+            ));
+        }
+        if !is_own_scheme_link(&self.callback) {
+            problems.push(format!(
+                "{key}.callback must be a link on the app's own scheme, written as it is sent (`com.example.orders:/signed-in`: the scheme in lower case, not https and not one a browser or Windows opens itself; no user, password, query or fragment)"
+            ));
+        }
+        problems
+    }
+}
+
+/// The text at `key` as it is written: a Windows app's values are held to
+/// the letter when the app starts, so nothing is trimmed off them here.
+fn exact(value: &Value, key: &str) -> String {
+    match value.get(key) {
+        Some(Value::String(text)) => text.clone(),
+        _ => String::new(),
+    }
+}
+
+fn windows_apps(settings: &Lookup) -> Vec<WindowsApp> {
+    tables(settings, "auth.apps.windows")
+        .into_iter()
+        .map(|(name, app)| WindowsApp {
+            name,
+            package_family_name: exact(&app, "package_family_name"),
+            app_id: exact(&app, "app_id"),
+            callback: exact(&app, "callback"),
+        })
+        .collect()
+}
+
 /// The names and tables under `key`.
 fn tables(settings: &Lookup, key: &str) -> Vec<(String, Value)> {
     match settings(key) {
@@ -549,6 +681,7 @@ fn config_items(facts: &Facts<'_>, settings: &Lookup, items: &mut Vec<Item>) {
     let android = android_apps(settings);
     items.push(apple_app_item(scope, &apple));
     items.push(android_app_item(scope, &android));
+    items.push(windows_app_item(scope, &windows_apps(settings)));
     items.push(paths_item(settings));
     items.push(
         Links {
@@ -590,7 +723,7 @@ fn config_items(facts: &Facts<'_>, settings: &Lookup, items: &mut Vec<Item>) {
         "social.apple",
         "Sign in with Apple",
         "apple",
-        scope.apple(),
+        scope.apple().then_some(()).ok_or(scope),
         settings,
         &apple,
     ));
@@ -598,7 +731,7 @@ fn config_items(facts: &Facts<'_>, settings: &Lookup, items: &mut Vec<Item>) {
         "social.google",
         "Sign in with Google",
         "google",
-        true,
+        Ok(()),
         settings,
         &apple,
     ));
@@ -672,6 +805,66 @@ fn android_app_item(scope: Scope, apps: &[AndroidApp]) -> Item {
     }
     Item::missing(
         "auth.android",
+        Group::Settings,
+        TITLE,
+        problems.join("; "),
+        "Correct the value named in config/app.toml",
+    )
+}
+
+/// A Windows app is listed for sign-in through the browser alone, so an app
+/// with none is missing nothing unless Windows is what was asked for.
+fn windows_app_item(scope: Scope, apps: &[WindowsApp]) -> Item {
+    const TITLE: &str = "Windows app in auth.apps.windows";
+    if !scope.windows() {
+        return Item::not_applicable("auth.windows", Group::Settings, TITLE, not_asked(scope));
+    }
+    if apps.is_empty() {
+        const NONE: &str = "no Windows app is named; sign-in through the browser needs the id a build names itself by and the link on its own scheme it comes back on";
+        if scope != Scope::Windows {
+            return Item::not_applicable(
+                "auth.windows",
+                Group::Settings,
+                TITLE,
+                format!("{NONE} (only an app with a Windows client lists one)"),
+            );
+        }
+        return Item::missing(
+            "auth.windows",
+            Group::Settings,
+            TITLE,
+            NONE,
+            "Add `[auth.apps.windows.main]` with `package_family_name = \"ExampleOrders_8wekyb3d8bbwe\"` (a build installed from a package), `app_id = \"com.example.orders\"` (a build with no package), or both, and `callback = \"com.example.orders:/signed-in\"` to config/app.toml",
+        );
+    }
+    let mut problems: Vec<String> = apps.iter().flat_map(WindowsApp::problems).collect();
+    // An id names one app: a hand-over that names it must find one callback.
+    let mut named = std::collections::BTreeMap::new();
+    for app in apps {
+        for id in app.ids() {
+            if let Some(other) = named.insert(id, app.name.as_str())
+                && other != app.name
+            {
+                problems.push(format!(
+                    "auth.apps.windows.{} names the app `{id}`, which auth.apps.windows.{other} names too: an app is listed once",
+                    app.name
+                ));
+            }
+        }
+    }
+    if problems.is_empty() {
+        let shown = names(apps.iter().map(|app| {
+            format!(
+                "{} ({}, comes back on {})",
+                app.name,
+                app.ids().collect::<Vec<_>>().join(" and "),
+                app.callback
+            )
+        }));
+        return Item::ready("auth.windows", Group::Settings, TITLE, shown);
+    }
+    Item::missing(
+        "auth.windows",
         Group::Settings,
         TITLE,
         problems.join("; "),
@@ -1046,21 +1239,18 @@ fn push_android_item(scope: Scope, settings: &Lookup, android: &[AndroidApp]) ->
     )
 }
 
+/// `asked`: whether the systems asked for have this way in, or the systems
+/// that were asked for when they have not.
 fn social_item(
     id: &'static str,
     title: &str,
     kind: &str,
-    in_scope: bool,
+    asked: Result<(), Scope>,
     settings: &Lookup,
     apple: &[AppleApp],
 ) -> Item {
-    if !in_scope {
-        return Item::not_applicable(
-            id,
-            Group::Settings,
-            title,
-            "not asked for (--platform android)",
-        );
+    if let Err(scope) = asked {
+        return Item::not_applicable(id, Group::Settings, title, not_asked(scope));
     }
     let social = settings("social").unwrap_or(Value::Null);
     let provider = tables(settings, "social.providers")
@@ -2329,6 +2519,252 @@ mod tests {
         assert_eq!(status_of(&items, "android.sdk"), Status::NotApplicable);
         assert_eq!(status_of(&items, "auth.android"), Status::NotApplicable);
         assert_eq!(status_of(&items, "push.android"), Status::NotApplicable);
+        // Neither asks about a Windows app.
+        let windows = item(&items, "auth.windows");
+        assert_eq!(windows.status, Status::NotApplicable);
+        assert!(
+            windows.detail.contains("--platform ios"),
+            "{}",
+            windows.detail
+        );
+        // Asked for Windows alone, nothing of the other systems is checked.
+        let items = run(
+            &Fake::linux(),
+            Preview::On,
+            with_windows_app(),
+            Scope::Windows,
+        );
+        for id in [
+            "auth.apple",
+            "auth.android",
+            "links.apple",
+            "links.android",
+            "push.apple",
+            "push.android",
+            "social.apple",
+            "android.jdk",
+            "android.sdk",
+            "apple.xcode",
+        ] {
+            let other = item(&items, id);
+            assert_eq!(other.status, Status::NotApplicable, "{id}");
+            assert!(
+                other.detail.contains("--platform windows"),
+                "{id}: {}",
+                other.detail
+            );
+        }
+        assert_eq!(status_of(&items, "auth.windows"), Status::Ready);
+        assert!(Report::of(items).ready);
+    }
+
+    /// The settings of an app with a Windows client beside the others.
+    fn with_windows_app() -> Value {
+        let mut settings = full_settings();
+        settings["auth"]["apps"]["windows"] = json!({"main": {
+            "package_family_name": "CharkhaSupply_8wekyb3d8bbwe",
+            "app_id": "com.charkha.supply",
+            "callback": "charkha:/signed-in"
+        }});
+        settings
+    }
+
+    #[test]
+    fn a_windows_app_is_ready_with_an_id_and_a_callback_on_its_own_scheme() {
+        let items = run(
+            &ready_machine(),
+            Preview::On,
+            with_windows_app(),
+            Scope::All,
+        );
+        let windows = item(&items, "auth.windows");
+        assert_eq!(windows.status, Status::Ready, "{windows:?}");
+        assert_eq!(
+            windows.detail,
+            "main (CharkhaSupply_8wekyb3d8bbwe and com.charkha.supply, comes back on charkha:/signed-in)"
+        );
+        assert!(Report::of(items).ready);
+        // One id is enough.
+        for dropped in ["package_family_name", "app_id"] {
+            let mut settings = with_windows_app();
+            settings["auth"]["apps"]["windows"]["main"]
+                .as_object_mut()
+                .unwrap()
+                .remove(dropped);
+            let items = run(&ready_machine(), Preview::On, settings, Scope::Windows);
+            assert_eq!(
+                status_of(&items, "auth.windows"),
+                Status::Ready,
+                "without {dropped}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_windows_app_needs_an_id_and_a_callback_of_the_right_shape() {
+        for (field, value, said) in [
+            (
+                "package_family_name",
+                "CharkhaSupply",
+                "package_family_name must be a package family name",
+            ),
+            (
+                "package_family_name",
+                "CharkhaSupply_8WEKYB3D8BBWE",
+                "package_family_name must be a package family name",
+            ),
+            (
+                "app_id",
+                "com..charkha",
+                "app_id must be the id the app was built with",
+            ),
+            (
+                "callback",
+                "https://charkha.example/app/signed-in",
+                "callback must be a link on the app's own scheme",
+            ),
+            (
+                "callback",
+                "http://127.0.0.1:5123/signed-in",
+                "callback must be a link on the app's own scheme",
+            ),
+            (
+                "callback",
+                "Charkha:/signed-in",
+                "callback must be a link on the app's own scheme",
+            ),
+            (
+                "callback",
+                "charkha:/signed-in?from=windows",
+                "callback must be a link on the app's own scheme",
+            ),
+            (
+                "callback",
+                "ms-settings:/signed-in",
+                "callback must be a link on the app's own scheme",
+            ),
+            (
+                "callback",
+                "",
+                "callback must be a link on the app's own scheme",
+            ),
+        ] {
+            let mut settings = with_windows_app();
+            settings["auth"]["apps"]["windows"]["main"][field] = json!(value);
+            let items = run(&ready_machine(), Preview::On, settings, Scope::All);
+            let windows = item(&items, "auth.windows");
+            assert_eq!(windows.status, Status::Missing, "{field} = {value:?}");
+            assert!(
+                windows
+                    .detail
+                    .contains(&format!("auth.apps.windows.main.{said}")),
+                "{field} = {value:?}: {}",
+                windows.detail
+            );
+            assert!(windows.next.as_deref().unwrap().contains("config/app.toml"));
+        }
+        // No id at all, and one id under two names.
+        let mut settings = with_windows_app();
+        settings["auth"]["apps"]["windows"]["main"] = json!({"callback": "charkha:/signed-in"});
+        let items = run(&ready_machine(), Preview::On, settings, Scope::All);
+        assert!(
+            item(&items, "auth.windows")
+                .detail
+                .contains("auth.apps.windows.main must name the app"),
+            "{:?}",
+            item(&items, "auth.windows")
+        );
+        let mut settings = with_windows_app();
+        settings["auth"]["apps"]["windows"]["kiosk"] =
+            json!({"app_id": "com.charkha.supply", "callback": "charkha-kiosk:/signed-in"});
+        let items = run(&ready_machine(), Preview::On, settings, Scope::All);
+        let windows = item(&items, "auth.windows");
+        assert_eq!(windows.status, Status::Missing);
+        assert!(
+            windows
+                .detail
+                .contains("names the app `com.charkha.supply`"),
+            "{}",
+            windows.detail
+        );
+    }
+
+    #[test]
+    fn no_windows_app_is_missing_only_when_windows_is_what_was_asked_for() {
+        // An app with no Windows client lists none: nothing is missing.
+        let items = run(&ready_machine(), Preview::On, full_settings(), Scope::All);
+        let windows = item(&items, "auth.windows");
+        assert_eq!(windows.status, Status::NotApplicable);
+        assert!(
+            windows.detail.contains("no Windows app is named"),
+            "{}",
+            windows.detail
+        );
+        assert!(windows.next.is_none());
+        assert!(Report::of(items).ready);
+        // Asked about Windows, it is, with the lines to add.
+        let items = run(
+            &ready_machine(),
+            Preview::On,
+            full_settings(),
+            Scope::Windows,
+        );
+        let windows = item(&items, "auth.windows");
+        assert_eq!(windows.status, Status::Missing);
+        let next = windows.next.as_deref().unwrap();
+        assert!(
+            next.contains("[auth.apps.windows.main]") && next.contains("callback ="),
+            "{next}"
+        );
+        assert!(!Report::of(items).ready);
+    }
+
+    // The doctor reads a Windows app's values by the rules the app starts by.
+    #[test]
+    fn a_windows_apps_values_are_read_by_the_rules_the_app_starts_by() {
+        for family in [
+            "CharkhaSupply_8wekyb3d8bbwe",
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+        ] {
+            assert!(is_package_family_name(family), "{family}");
+        }
+        for not_one in [
+            "",
+            "_",
+            "CharkhaSupply",
+            "Ch_8wekyb3d8bbwe",
+            "Charkha Supply_8wekyb3d8bbwe",
+            "Charkha_Supply_8wekyb3d8bbwe",
+            "CharkhaSupply_8wekyb3d8bbw",
+            "CharkhaSupply_8wekyb3d8bbwe1",
+            "CharkhaSupply_8wekyb3d8bbwi",
+        ] {
+            assert!(!is_package_family_name(not_one), "{not_one:?}");
+        }
+        for callback in [
+            "charkha:/signed-in",
+            "charkha://signed-in",
+            "com.charkha.supply:/signed-in",
+        ] {
+            assert!(is_own_scheme_link(callback), "{callback}");
+        }
+        for not_one in [
+            "https://charkha.example/app/signed-in",
+            "http://localhost/signed-in",
+            "javascript:alert(1)",
+            "file:///C:/signed-in",
+            "microsoft-edge:/signed-in",
+            "search-ms:/signed-in",
+            "c:/signed-in",
+            "charkha:/signed in",
+            "charkha://user@signed-in",
+            "charkha:/signed-in#code",
+            "charkha:signed-in",
+            "charkha",
+            "/signed-in",
+        ] {
+            assert!(!is_own_scheme_link(not_one), "{not_one:?}");
+        }
     }
 
     #[test]
