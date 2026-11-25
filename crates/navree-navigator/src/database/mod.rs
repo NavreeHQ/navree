@@ -742,12 +742,13 @@ fn check_endpoint(url: &Url, var: impl Fn(&str) -> Option<String>) -> Result<(),
     Ok(())
 }
 
-/// Whether SQLx connects on this machine for `host`: `localhost`, a
+/// Whether SQLx connects on this machine for `host`: `localhost` itself, a
 /// loopback IP address (SQLx drops the brackets round one), or a path (a
-/// Unix socket directory).
+/// Unix socket directory). No other name is taken for this machine, one
+/// that ends in `.localhost` included: a name resolves wherever its
+/// resolver says.
 fn is_local_host(host: &str) -> bool {
-    let lower = host.to_ascii_lowercase();
-    if lower == "localhost" || lower.ends_with(".localhost") || host.starts_with('/') {
+    if host.eq_ignore_ascii_case("localhost") || host.starts_with('/') {
         return true;
     }
     host.trim_matches(&['[', ']'][..])
@@ -1084,6 +1085,27 @@ mod tests {
         allowed("postgres://app@localhost/crm?h%6Fst=127.0.0.1", &[]);
         allowed("postgres://localhost#@db.example.com/crm", &[]);
         allowed("postgres:/\t/local\nhost/crm", &[]);
+    }
+
+    #[test]
+    fn only_localhost_itself_is_trusted_by_name() {
+        assert_eq!(
+            refused("postgres://app@db.localhost/crm", &[]),
+            "db.localhost"
+        );
+        assert_eq!(
+            refused("postgres://app@localhost.example.com/crm", &[]),
+            "localhost.example.com"
+        );
+        assert_eq!(
+            refused("postgres://app@localhost/crm?host=crm.localhost", &[]),
+            "crm.localhost"
+        );
+        assert_eq!(
+            refused("postgres:///crm", &[("PGHOST", "db.localhost")]),
+            "db.localhost (PGHOST in the environment)"
+        );
+        allowed("postgres://app@LOCALHOST/crm", &[]);
     }
 
     /// SQLx cannot connect with a URL that its parser refuses, and the check
