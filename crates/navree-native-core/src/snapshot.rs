@@ -393,8 +393,10 @@ impl Core {
         };
         let now = person_of(self.inner.user.as_ref(), &self.inner.keying);
         // A snapshot taken before the client gave a secret names its person
-        // by their plain key: it is still theirs, and the next one taken
-        // names them by the key made with the secret.
+        // by their plain key: while the client says it still keeps a key of
+        // that kind, it is still theirs, and the next one taken names them
+        // by the key made with the secret. Once the client says so no more,
+        // a snapshot named by a plain key is nobody's.
         let before = self
             .inner
             .user

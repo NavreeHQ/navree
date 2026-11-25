@@ -185,10 +185,18 @@ impl Keying {
     }
 
     /// The name a snapshot taken before the client gave a secret has for a
-    /// person the server named by id: such a snapshot is still theirs. None
-    /// when keys are plain, or for a person named without an id.
+    /// person the server named by id: such a snapshot is still theirs. Only
+    /// for a client that gives a secret and says it still keeps a key made
+    /// before it gave one, as [`Keying::was`] is: the client that kept a
+    /// plain key is the one whose snapshot can name its person by one, and
+    /// once it says so no more, no snapshot named by a plain key is put back.
+    /// None for every other client, and for a person named without an id.
     pub(crate) fn id_key_before(&self, who: &Who) -> Option<String> {
-        self.secret.as_ref().and_then(|_| who.plain_id_key())
+        if self.old && self.secret.is_some() {
+            who.plain_id_key()
+        } else {
+            None
+        }
     }
 }
 
