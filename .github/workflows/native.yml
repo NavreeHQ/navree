@@ -118,30 +118,13 @@ jobs:
 
       # Android: shared libraries with the glue for com.navree.core.Core, linked
       # with the runner's NDK for API 26, named, and laid out for 16 KB pages.
+      # The script builds the two and checks each of those: the five functions
+      # of the C interface and the four native methods of the Kotlin class,
+      # every loaded part laid out for 16 KB pages, and the library's own name.
+      # A release builds the libraries it publishes with the same script
+      # (release.yml's android-package job).
       - name: Android libraries
-        env:
-          LINK: -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-soname,libnavree_native_core.so
-        run: |
-          ndk="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ndk/aarch64-linux-android26-clang" \
-          CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="$LINK" \
-            cargo rustc -p navree-native-core --locked --release --features jni --target aarch64-linux-android --crate-type cdylib
-          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$ndk/x86_64-linux-android26-clang" \
-          CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS="$LINK" \
-            cargo rustc -p navree-native-core --locked --release --features jni --target x86_64-linux-android --crate-type cdylib
-          for target in aarch64-linux-android x86_64-linux-android; do
-            library="target/$target/release/libnavree_native_core.so"
-            # The five functions of the C interface and the four native methods
-            # of the Kotlin class are in each library.
-            "$ndk/llvm-nm" -D --defined-only "$library" | awk '{print $3}' | grep -E '^(navree_|Java_)' | sort | tee "$target.symbols"
-            test "$(grep -c '^navree_' "$target.symbols")" -eq 5
-            test "$(grep -c '^Java_com_navree_core_Core_native' "$target.symbols")" -eq 4
-            # Every part of the library that is loaded is laid out for 16 KB pages.
-            "$ndk/llvm-readelf" -lW "$library" | awk '$1 == "LOAD" && $NF != "0x4000" { print "a part laid out for " $NF; bad = 1 } END { exit bad }'
-            # It says its own name, and needs nothing but the system's own libraries.
-            "$ndk/llvm-readelf" -dW "$library" | grep -E 'SONAME|NEEDED'
-            "$ndk/llvm-readelf" -dW "$library" | grep -q 'SONAME.*libnavree_native_core.so'
-          done
+        run: bash packages/android/scripts/build-core.sh
 
       # Apple: static libraries for an iPhone, for a simulator on Apple silicon, and for a Mac on Apple silicon.
       - name: Apple libraries
@@ -200,6 +183,7 @@ jobs:
       group: native-android-${{ github.ref }}
       cancel-in-progress: true
     env:
+      # release.yml's android-package job builds what a release publishes with this same Gradle: the two are changed together.
       GRADLE_VERSION: "9.6.0"
       GRADLE_SHA256: bbaeb2fef8710818cf0e261201dab964c572f92b942812df0c3620d62a529a01
       GRADLE_OPTS: -Dorg.gradle.daemon=false
@@ -322,6 +306,33 @@ jobs:
             packages/android/navree-native/build/outputs/apk/androidTest/debug/*.apk
             packages/android/demo/build/outputs/apk/debug/*.apk
             packages/android/demo/build/outputs/apk/release/demo-release-signed.apk
+          retention-days: 14
+
+      # What a release gives Maven Central, without the upload (release.yml's android-package and maven-central jobs do the
+      # same with the release's version and the project's key): com.navree:navree-native and com.navree:navree-push-fcm
+      # published to a folder at a version of the run's own, each checked for its POM, its sources jar and its javadoc jar,
+      # and the library for the runtime core of both ABIs; then every file signed with a key made here, and all of it packed
+      # as the Central Portal takes it.
+      - name: The Maven packages
+        run: |
+          bash scripts/maven-package.sh 0.0.0 "$RUNNER_TEMP/maven"
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -m 700 "$GNUPGHOME"
+          gpg --batch --pinentry-mode loopback --passphrase gate --quick-generate-key "Navree gate <gate@navree.invalid>" ed25519 sign 1d
+          key="$(gpg --batch --pinentry-mode loopback --passphrase gate --armor --export-secret-keys)"
+          gpgconf --kill gpg-agent
+          MAVEN_GPG_PRIVATE_KEY="$key" MAVEN_GPG_PASSPHRASE=gate \
+            bash scripts/maven-central.sh --bundle-only "$RUNNER_TEMP/maven/navree-android" 0.0.0 "$RUNNER_TEMP/maven/navree-android-0.0.0.zip"
+
+      - name: Keep the Maven packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-packages
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/maven/navree-android-0.0.0.tar.gz
+            ${{ runner.temp }}/maven/navree-android-0.0.0.tar.gz.sha256
+            ${{ runner.temp }}/maven/navree-android-0.0.0.zip
           retention-days: 14
 
   # The store, inbox and board demos, answering native clients, for the device
@@ -964,6 +975,28 @@ jobs:
           name: windows-test-reports-${{ matrix.variant }}
           if-no-files-found: ignore
           path: ${{ runner.temp }}/trx
+          retention-days: 14
+
+      # What a release gives nuget.org, without the push (release.yml's windows-package and nuget jobs do the same with the
+      # release's version): each library under src/ packed from what was built above, at a version of the run's own, and
+      # every package read back for what an app needs of it: its id and version, the licence, its library, the other
+      # libraries as dependencies at that same version, a WinUI library's resources, and in Navree.Core the core's DLL.
+      # Once, on the machine that has only the .NET SDK.
+      - name: The NuGet packages
+        if: matrix.variant == 'plain'
+        shell: pwsh
+        working-directory: packages/windows
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/pack.ps1 -Version 0.0.0 -Out "$env:RUNNER_TEMP/nuget"
+
+      - name: Keep the NuGet packages
+        if: matrix.variant == 'plain'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-packages
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/nuget/navree-windows-0.0.0.zip
+            ${{ runner.temp }}/nuget/navree-windows-0.0.0.zip.sha256
           retention-days: 14
 
       # A tool that drives and pictures a running app, at the version written in WINAPP_VERSION: the one release the job's
