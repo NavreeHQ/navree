@@ -266,6 +266,17 @@ The answer is the callback's: the user with an access and a refresh token, or th
 
 An app that keeps navree-session's session cookie instead of tokens (feature `session`) posts the same body to `POST /api/auth/social/{provider}/native/session`, with the session's CSRF token as `X-XSRF-TOKEN` (`"remember": true` keeps it signed in for `auth.session.remember_days`). The session gets a new id and a new CSRF token, and the answer is the user, or `{"two_factor_required": true}`, finished with `POST /api/auth/session/2fa/verify`.
 
+### In a Navree Native app
+
+A [Navree Native](/docs/ui/native/) app does all three steps itself, from a button on the sign-in page. With the feature `session`, this module tells the sign-in page of `AuthPages` which sheets it takes, and the page gives a native client a button for the one its system has:
+
+| The client | The button | When |
+|---|---|---|
+| An app on one of Apple's systems that lists `platform_sign_in` among its capabilities | Sign in with Apple | `social.providers.apple` is set up and `auth.apps.apple` lists an app |
+| An Android app that lists `platform_sign_in` | Sign in with Google | `social.providers.google` is set up and `auth.apps.android` lists an app |
+
+That is exactly where the nonce route answers. The button's call names `POST /api/auth/social/{provider}/native/nonce` and `POST /api/auth/social/{provider}/native/session`, and the page of a second step; Google's also carries the provider's `client_id`, which the Android sheet asks a token for. Nothing else changes: the routes check the attempt and the token as [below](#what-the-server-checks), whoever posts. A browser's sign-in page has no such button, and neither has a native client that can't open the sheet. With `social.routes = false` no button is offered.
+
 ### What the server checks
 
 The attempt is used up first (sealed by this app, for this provider, not expired, not used before), then the token:
