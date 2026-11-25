@@ -157,6 +157,20 @@ class AndroidEffects(
     private val person = PersonWatch(File(app.noBackupFilesDir, PersonWatch.MARK), "${origin.scheme}://${origin.host}:${origin.port}")
 
     /**
+     * The secret of this install, which the core makes its key for a person
+     * with: read now, and made and written down when there is none
+     * ([InstallSecret]). It goes to the core and nowhere else.
+     */
+    val installSecret: String = InstallSecret.of(File(app.noBackupFilesDir, InstallSecret.FILE))
+
+    /**
+     * Whether the mark this start read is of a plain key, made before the
+     * install had a secret: the core is then asked to say what the plain key
+     * of the person it names was, so that person is not taken for another.
+     */
+    val keepsPlainKey: Boolean = person.keepsPlainKey
+
+    /**
      * The core's two words for the end of a session. `session_ending` comes
      * in the update in which the core asks the server to forget this device's
      * push token: the request for the removal stands before it in the same
@@ -226,11 +240,14 @@ class AndroidEffects(
      * mark of the first person named, or of the same one, is written down as
      * whom what is kept here is kept for; another person than the one
      * before, with no sign-out between, is a change of person
-     * ([personChanged]).
+     * ([personChanged]). Where the core says beside the person what their
+     * plain key was (`app.user_was`), that is heard with them: the person a
+     * mark of that key was kept for is the same one under the key they have
+     * now, and only the mark is written anew.
      */
     fun hears(user: Navree.User?) {
         if (user == null || ends.under) return
-        val word = person.hear(user.key, user.name, user.email)
+        val word = person.hear(user.key, user.name, user.email, driver.app?.userWas)
         when {
             word.heard == Heard.Another -> personChanged(word)
             // Dropped when a session ends before its turn: the sign-out takes the mark with everything else.

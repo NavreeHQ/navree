@@ -52,6 +52,17 @@ internal enum class Heard {
  * names somebody with no key. Name and email are compared only where neither
  * side has a key.
  *
+ * One mark is held to another, once. The core makes a person's key with a
+ * secret of this install ([InstallSecret]), and such a key begins `k2:`; its
+ * mark begins so too. A mark kept from before the install had a secret is the
+ * mark of a plain key, which the core makes no more. While such a mark is
+ * kept, the client says so to the core ([keepsPlainKey], `old_key` in the
+ * core's configuration), and the core says beside the person it names what
+ * their plain key was (`app.user_was`). Where the mark kept is the mark of
+ * that key, the person named is the one what is kept is kept for: nothing is
+ * taken away, and the mark of the key they have now is written in its place.
+ * Any other mark of a plain key is another person's, as before.
+ *
  * The mark on the disk is whom what is kept on the device is kept for. When
  * another person is named it stays the mark of the person before until every
  * step that takes their things away has finished ([changed]); an app that
@@ -87,6 +98,14 @@ internal class PersonWatch(private val file: File, private val origin: String) {
     class Word(val heard: Heard, val mark: String, internal val turn: Long, val write: Boolean)
 
     /**
+     * Whether the mark the disk holds is the mark of a plain key: one the
+     * core made before this install had a secret. Asked at the start, before
+     * the core is made, it says whether the core is to say what a person's
+     * plain key was (`old_key`).
+     */
+    val keepsPlainKey: Boolean get() = synchronized(lock) { kept?.startsWith(OF_KEY) == true }
+
+    /**
      * Hears who the core names as signed in: by [key] where the core gives
      * one, by [name] and [email] where it gives none. Another person than the
      * one before, with no sign-out between, is a change of person: from now
@@ -98,15 +117,23 @@ internal class PersonWatch(private val file: File, private val origin: String) {
      * ([markOfKey]): where one kind is remembered and the core names
      * somebody by the other, that is another person, also when the name and
      * email are the same.
+     *
+     * [was] is what the core says the person's plain key was
+     * (`app.user_was`), where it says. Where the mark remembered is the mark
+     * of that key, and the key given now is made with the install's secret,
+     * the person is the same one, and the word says to write the mark of the
+     * key they have now. It is compared and never kept.
      */
-    fun hear(key: String?, name: String, email: String?): Word = synchronized(lock) {
+    fun hear(key: String?, name: String, email: String?, was: String? = null): Word = synchronized(lock) {
         val given = key?.takeIf { it.isNotEmpty() }
         val now = if (given != null) markOfKey(given) else markOf(name, email)
         val before = named
         named = now
-        val heard = when (before) {
-            null -> Heard.First
-            now -> Heard.Same
+        val theirs = before != null && before.startsWith(OF_KEY) && now.startsWith(OF_KEYED) &&
+            was?.takeIf { it.isNotEmpty() }?.let { before == markOfKey(it) } == true
+        val heard = when {
+            before == null -> Heard.First
+            before == now || theirs -> Heard.Same
             else -> Heard.Another
         }
         if (heard == Heard.Another) {
@@ -178,16 +205,25 @@ internal class PersonWatch(private val file: File, private val origin: String) {
          */
         fun markOf(name: String, email: String?): String = sha(name.length.toString() + ":" + name + if (email == null) "-" else "+$email")
 
-        /** What a mark made from a key begins with: no mark made from a name and email does, being hex digits only. */
+        /** What a mark made from a plain key begins with: no mark made from a name and email does, being hex digits only. */
         private const val OF_KEY = "key:"
+
+        /**
+         * What a key the core made with the install's secret begins with, and
+         * what the mark made from such a key begins with: so the mark of a
+         * plain key, which a run before the install had a secret kept, is
+         * told from it by how it begins.
+         */
+        private const val OF_KEYED = "k2:"
 
         /**
          * The mark of the person the core names by [key]: the same for the
          * same key and another for any other, and the key is not read from
          * it. It is told from a mark made of a name and email by how it
-         * begins.
+         * begins, and the mark of a key made with the install's secret from
+         * the mark of a plain one.
          */
-        fun markOfKey(key: String): String = OF_KEY + sha(key)
+        fun markOfKey(key: String): String = (if (key.startsWith(OF_KEYED)) OF_KEYED else OF_KEY) + sha(key)
 
         private fun sha(written: String): String =
             MessageDigest.getInstance("SHA-256").digest(written.encodeToByteArray()).joinToString("") { "%02X".format(it) }

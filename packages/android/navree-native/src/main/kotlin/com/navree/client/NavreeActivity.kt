@@ -83,7 +83,8 @@ class NavreeSession(
         com.navree.client.platform.WorkerGuard.arm(effects.origins)
         val device = Device.of(application)
         environment = Triple(device.dark, device.textPercent, device.locale)
-        engine.core = Core(coreConfig(config, device, effects.caps, application.packageName).toString().encodeToByteArray())
+        // The core makes its key for a person with the install's secret, and says what a person's plain key was while the mark of one is kept.
+        engine.core = Core(coreConfig(config, device, effects.caps, application.packageName, effects.installSecret, effects.keepsPlainKey).toString().encodeToByteArray())
         // The core checks the snapshot itself and starts plainly when it is not for this launch.
         val snapshot = if (restoring) effects.snapshots.read(SNAPSHOT)?.let { runCatching { CoreJson.parseToJsonElement(it) }.getOrNull() } else null
         if (snapshot == null) effects.state.always { effects.snapshots.clear() }
