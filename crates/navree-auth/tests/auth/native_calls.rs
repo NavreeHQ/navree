@@ -1,8 +1,10 @@
 //! Signing in with the system's own sheet in a native app: the sign-in page
 //! gives a client that can the `passkey` device call, and a provider's
 //! sign-in sheet where a module is set up to take it; every other client gets
-//! the page as it was. The passkey call's two routes check its ticket, the
-//! challenge and the assertion.
+//! the page as it was, a build from before a passkey's options were handed to
+//! it among them. The passkey call's two routes check its ticket, the
+//! challenge and the assertion, and the challenge is its session's: the
+//! routes that name no session refuse an assertion over it.
 
 use std::sync::Arc;
 
@@ -48,9 +50,25 @@ fn client_of(platform: &str, caps: &str) -> String {
     )
 }
 
-/// An iPhone app that can show both sheets.
+/// An iPhone app that can show both sheets. A build that shows the passkey
+/// sheet with the options the server gives lists `passkey_options` beside
+/// `passkey`.
 fn iphone() -> String {
-    client_of("ios", "passkey+platform_sign_in")
+    client_of("ios", "passkey+passkey_options+platform_sign_in")
+}
+
+/// An Android app as its build lists what it does now.
+fn android() -> String {
+    client_of(
+        "android",
+        "share+platform_sign_in+passkey+passkey_options+confirm",
+    )
+}
+
+/// An Android app as a build released before the passkey's options were
+/// handed to it lists what it does: `passkey`, which it can only fail.
+fn older_android() -> String {
+    client_of("android", "share+platform_sign_in+passkey+confirm")
 }
 
 /// A browser with a session of its own and the token its posts carry.
@@ -336,9 +354,9 @@ async fn without_the_capability_or_an_app_of_its_family_the_page_is_what_it_was(
         // An app that does not say it can.
         client_of("ios", "share+platform_sign_in"),
         // The site has no Android app.
-        client_of("android", "passkey"),
+        android(),
         // A system no app of the site is on.
-        client_of("windows", "passkey"),
+        client_of("windows", "passkey+passkey_options"),
     ] {
         let envelope = answer(&app.client(), &descriptor, "/sign-in").await;
         assert!(is_the_web_views(&envelope), "{descriptor}: {envelope:?}");
@@ -352,7 +370,7 @@ async fn without_the_capability_or_an_app_of_its_family_the_page_is_what_it_was(
         )
         .build()
         .await;
-    let envelope = screen(&both.client(), &client_of("android", "passkey"), "/sign-in").await;
+    let envelope = screen(&both.client(), &android(), "/sign-in").await;
     assert!(matches!(
         tap(&envelope, "Sign in with a passkey"),
         Some(Action::Device(_))
@@ -816,6 +834,83 @@ async fn a_sign_in_by_another_way_forgets_a_waiting_passkey_challenge() {
         refusals(&sink),
         ["no challenge asked for in this session"; 2]
     );
+}
+
+// An Android build released before a passkey's options were handed to it lists
+// `passkey` and can only fail the call. It is offered none: the sign-in page
+// stays in its web view, where the passkey page works as it did. A build that
+// lists `passkey_options` too gets the call.
+#[tokio::test]
+async fn a_build_from_before_the_options_were_handed_over_keeps_the_page_in_its_web_view() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    // A site whose Android app shares its passkeys.
+    let app = with_passkey_pages(support::clocked(&clock), &sink)
+        .config("auth.apps.android.orders.package", "com.example.orders")
+        .config(
+            "auth.apps.android.orders.fingerprints",
+            json!([FINGERPRINT]),
+        )
+        .build()
+        .await;
+    let older = answer(&app.client(), &older_android(), "/sign-in?next=%2Fdeals").await;
+    assert!(is_the_web_views(&older), "{older:?}");
+    let sent = serde_json::to_string(&older).unwrap();
+    assert!(!sent.contains("/sign-in/passkey/native"), "{sent}");
+
+    let fixed = screen(&app.client(), &android(), "/sign-in?next=%2Fdeals").await;
+    let (options_at, result_at, ticket) = passkey_call(&fixed);
+    assert_eq!(options_at, OPTIONS);
+    assert_eq!(result_at, "/sign-in/passkey/native?next=%2Fdeals");
+    assert!(!ticket.is_empty());
+
+    // An Apple build that lists `passkey` alone is answered the same way.
+    let apple = apple_app(&clock, &sink).await;
+    let older = answer(
+        &apple.client(),
+        &client_of("ios", "confirm+passkey"),
+        "/sign-in",
+    )
+    .await;
+    assert!(is_the_web_views(&older), "{older:?}");
+}
+
+// Where such a build gets the sign-in page as a screen for another call, the
+// link keeps leading to the passkey page, and nothing of the passkey call
+// reaches it: not its routes, not a ticket.
+#[tokio::test]
+async fn an_older_build_on_a_screen_keeps_the_link_to_the_passkey_page() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = with_passkey_pages(support::clocked(&clock), &sink)
+        .config("auth.apps.android.orders.package", "com.example.orders")
+        .config(
+            "auth.apps.android.orders.fingerprints",
+            json!([FINGERPRINT]),
+        )
+        .module(SheetsModule)
+        .build()
+        .await;
+    let older = screen(&app.client(), &older_android(), "/sign-in?next=%2Fdeals").await;
+    // What it could always do, it is still offered.
+    assert!(matches!(
+        tap(&older, "Sign in with Google"),
+        Some(Action::Device(_))
+    ));
+    assert_eq!(
+        tap(&older, "Sign in with a passkey"),
+        Some(Action::navigate("/sign-in/passkey?next=%2Fdeals"))
+    );
+    let sent = serde_json::to_string(&older).unwrap();
+    assert!(!sent.contains("/sign-in/passkey/native"), "{sent}");
+
+    let fixed = screen(&app.client(), &android(), "/sign-in?next=%2Fdeals").await;
+    assert!(matches!(
+        tap(&fixed, "Sign in with Google"),
+        Some(Action::Device(_))
+    ));
+    assert!(matches!(
+        tap(&fixed, "Sign in with a passkey"),
+        Some(Action::Device(_))
+    ));
 }
 
 // A call that brings no assertion goes back to the sign-in page: with no

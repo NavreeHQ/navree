@@ -516,8 +516,10 @@ impl Element {
     /// what the control does in a browser: a passkey in the system's own sheet where a
     /// browser goes to the passkey page. See [`NativeCall`](crate::NativeCall).
     ///
-    /// The call is written only for a native client whose app lists the call's feature
-    /// among its capabilities, and only when every path of the call is one on this site.
+    /// The call is written only for a native client whose app can start it
+    /// ([`native_client_with`](crate::native_client_with) says which: it lists the call's
+    /// feature among its capabilities, and for a passkey `passkey_options` too), and only
+    /// when every path of the call is one on this site.
     /// Every other client gets the control as it is, and so does a browser: it writes no
     /// HTML. A link keeps its address as what the client does where its build can't start
     /// the call after all.
