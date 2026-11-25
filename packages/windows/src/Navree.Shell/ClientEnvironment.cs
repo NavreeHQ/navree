@@ -60,17 +60,28 @@ internal static class ClientEnvironment
         }
     }
 
-    /// <summary>The configuration the core is made from. The app's id is its package family name when packaged, the configured id when not.</summary>
-    internal static byte[] Config(ShellOptions options) =>
-        ClientConfig.Json(
+    /// <summary>
+    /// The configuration the core is made from. The app's id is its package family name when packaged, the configured id when not. A run that
+    /// can catch the return of a sign-in in the browser (it is offered, and the app has a scheme of its own) tells the core it has a sign-in
+    /// session and which addresses start one; any other run tells it neither, so no sign-in in the browser is started.
+    /// </summary>
+    internal static byte[] Config(ShellOptions options)
+    {
+        IReadOnlyList<Navree.Presence.FeatureOffer> offers = PlaceCapabilities.Current();
+        bool comesBack = Navree.Presence.BrowserSignIn.ComesBack(
+            Navree.Presence.Capabilities.Has(offers, Navree.Presence.SystemFeature.ProtocolReturn),
+            options.Place.Scheme);
+        return ClientConfig.Json(
             options.Origin,
             options.Also,
             Navree.Presence.BrowserSignIn.AppId(PackageFamilyName(), options.AppId),
             Settings(),
             Environment.OSVersion.Version.ToString(),
             typeof(ClientEnvironment).Assembly.GetName().Version?.ToString(3) ?? "0.1.0",
-            Navree.Presence.Capabilities.ProtocolCaps(PlaceCapabilities.Current()),
+            Navree.Presence.Capabilities.ProtocolCaps(offers, options.Place.Scheme),
             options.Place.Scheme,
             options.LoopbackHttp,
-            options.Undrawable);
+            options.Undrawable,
+            comesBack ? options.SignInPaths : null);
+    }
 }

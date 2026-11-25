@@ -91,7 +91,7 @@ public static class Capabilities
                 hasIdentity ? "the package's own scheme" : "a scheme registered for this person at run time",
                 null,
                 false)
-            : new(SystemFeature.ProtocolReturn, false, "the app's own scheme", "signing in through the browser is not available on Windows yet, so nothing is taken on the app's scheme", false),
+            : new(SystemFeature.ProtocolReturn, false, "the app's own scheme", "signing in through the browser is turned off in this build, so nothing is taken on the app's scheme", false),
         new(SystemFeature.SingleInstance, true, "the app's own instance key", null, false),
         new(SystemFeature.FullScreen, true, "the full-screen window", null, false),
         new(SystemFeature.Passkeys, false, "Windows Hello and passkeys", "written behind one interface and not proven on a device", false),
@@ -107,11 +107,14 @@ public static class Capabilities
     /// <summary>
     /// The device features this build tells the core it has, by the protocol's names. A control that calls a feature the
     /// build does not list is drawn as the call's stand-in says, so only what is carried out is listed. Listing
-    /// <c>local_notification</c> commits the build to carrying out <c>notify</c>, <c>cancel_notification</c> and <c>set_badge</c>.
+    /// <c>local_notification</c> commits the build to carrying out <c>notify</c>, <c>cancel_notification</c> and <c>set_badge</c>. Listing
+    /// <c>auth_session</c> commits it to carrying out a sign-in in the browser: opening the address the core gives and handing back what
+    /// arrives on the app's scheme. It is listed only for a run that can catch that return (<see cref="BrowserSignIn.ComesBack"/>).
     /// </summary>
     /// <param name="offers">What this run offers.</param>
+    /// <param name="scheme">The app's own scheme, or null when it has none.</param>
     /// <returns>The names.</returns>
-    public static IReadOnlyList<string> ProtocolCaps(IReadOnlyList<FeatureOffer> offers)
+    public static IReadOnlyList<string> ProtocolCaps(IReadOnlyList<FeatureOffer> offers, string? scheme = null)
     {
         List<string> caps = ["clipboard", "open_url", "open_settings"];
         if (Has(offers, SystemFeature.Share))
@@ -122,6 +125,11 @@ public static class Capabilities
         if (Has(offers, SystemFeature.Notifications))
         {
             caps.Add("local_notification");
+        }
+
+        if (BrowserSignIn.ComesBack(Has(offers, SystemFeature.ProtocolReturn), scheme))
+        {
+            caps.Add("auth_session");
         }
 
         return caps;
