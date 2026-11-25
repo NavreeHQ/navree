@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use http::request::Parts;
 use http::{HeaderMap, HeaderValue, Method, StatusCode};
-use navree_contracts::AuthState;
+use navree_contracts::{AuthState, CallTickets, TicketHolder, TicketRequest};
 use navree_db::Uow;
 use navree_http::ModuleBuilderHttpExt;
 use navree_http::extract::{Query, RawQuery};
@@ -26,13 +26,17 @@ use navree_ui::form::{FieldErrors, FormView, Rejected};
 use navree_ui::pages::{PagesOptions, ReturnTo};
 use navree_ui::theme::{Appearance, Theme, ThemeMenu};
 use navree_ui::{
-    Alert, AlertTone, AppFont, AppSheet, AuthLayout, Card, Form, LocalHref, Node, Reply, Shell,
-    Stack, Submit, Text, Validate, View, el,
+    Alert, AlertTone, AppFont, AppSheet, AuthLayout, Button, Card, Element, Form, LocalHref,
+    NativeCall, NativeFamily, NativeThen, Node, Reply, Shell, Stack, Submit, Text, Validate, View,
+    el,
 };
 use serde::Deserialize;
 
 use crate::session_auth::{SIGN_OUT_PATH, TWO_FACTOR_SETUP_PATH};
-use crate::{AuthError, AuthService, ClientMeta, NewUser, SessionSignIn, TwoFactorProof};
+use crate::{
+    AuthError, AuthService, ClientMeta, NewUser, ProviderSheets, SessionSignIn, SheetProvider,
+    TwoFactorProof,
+};
 
 /// How many forgotten-password requests one client may send per minute.
 const FORGOT_PER_MINUTE: u32 = 5;
@@ -59,6 +63,20 @@ const SIGN_UP_PER_MINUTE: u32 = 5;
 /// | `GET`, `POST /sign-in/link`, `GET`, `POST /sign-in/link/verify` | when `auth.magic_link.enabled`: mails a link; the link opens a page with one button that signs in ([`AuthService::login_with_magic_link_session`]); set `auth.magic_link.url` to `https://app.example.com/sign-in/link/verify` |
 /// | `GET`, `POST /sign-in/code`, `POST /sign-in/code/verify` | when `auth.otp.enabled`: mails a code, then asks for it ([`AuthService::login_with_code_session`]) |
 /// | `GET /sign-in/passkey`, `/sign-in/passkey.js`, `POST /sign-in/passkey/options`, `/sign-in/passkey/verify` | when `auth.passkeys.enabled`: the page, its script and the two JSON routes of the ceremony ([`AuthService::login_with_passkey_session`]) |
+/// | `POST /sign-in/passkey/native/options`, `/sign-in/passkey/native` | when `auth.passkeys.enabled`: the two routes of the `passkey` call a native app starts from the sign-in page ([`AuthService::login_with_passkey_call_session`]) |
+///
+/// A native app (navree-ui's `native-preview`) gets the same pages as screens.
+/// Where its client says the app can, and the site is set up for it, the sign-in
+/// page starts the system's own sheet in place of a page: the link to the
+/// passkey page carries the `passkey` device call (the client lists `passkey`;
+/// passkeys are on; an app of the client's family under `auth.apps` has
+/// `credentials`, and an Apple app's origin `https://<rp_id>` is among
+/// `auth.passkeys.origins`), and a button stands for the provider whose sheet
+/// the client's system has (the client lists `platform_sign_in`; a module
+/// registered a [`ProviderSheets`](crate::ProviderSheets) that takes it). What a
+/// client says of itself decides only what is offered: the routes a call names
+/// check everything it brings back. A browser's pages are not changed by any of
+/// it.
 ///
 /// Every post carries the session's CSRF token (the forms hold it as
 /// `_csrf`; navree-session checks it), every page works with JavaScript
@@ -288,7 +306,6 @@ impl navree_ui::NativeShellPart for HandOverShellPart {
         shell: &mut navree_ui::NativeShellParts,
         client: &navree_ui::NativeClient,
     ) {
-        use navree_ui::NativeFamily;
         if !self.handed_over {
             return;
         }
@@ -435,6 +452,18 @@ impl Paths {
             None => LocalHref::from(path),
         }
     }
+
+    /// The sign-in page with the notice `status` (one of those [`notice`] knows),
+    /// `next` carried along when it is safe.
+    fn sign_in_with(&self, next: Option<&str>, status: &str) -> LocalHref {
+        let page = self.with_next(&self.sign_in, next);
+        let joined = if page.as_str().contains('?') {
+            '&'
+        } else {
+            '?'
+        };
+        LocalHref::from(format!("{}{joined}status={status}", page.as_str()))
+    }
 }
 
 /// The sign-in form.
@@ -559,6 +588,14 @@ fn notice(status: Option<&str>) -> Option<Alert> {
         "expired" => (
             AlertTone::Warning,
             "Your sign-in took too long. Sign in again.",
+        ),
+        "passkey-failed" => (
+            AlertTone::Danger,
+            "That passkey didn't work. Try again, or sign in with your password.",
+        ),
+        "passkey-unused" => (
+            AlertTone::Warning,
+            "The passkey was not used. Try again, or sign in with your password.",
         ),
         _ => return None,
     };
@@ -882,12 +919,19 @@ fn link(text: &'static str, href: &str) -> Node {
 
 /// A link to a page that loads a script of its own: the browser reloads the
 /// whole page, so the script runs.
-fn plain_link(text: &'static str, href: &str) -> Node {
-    el("a")
-        .href(href)
-        .flag("data-ui-noboost", true)
-        .child(text)
-        .into()
+fn plain_link(text: &'static str, href: &str) -> Element {
+    el("a").href(href).flag("data-ui-noboost", true).child(text)
+}
+
+/// What the sign-in page offers the native client that asks, where its app can
+/// do it with the system's own sheet and the site is set up for it. Nothing for
+/// a browser, whose page is the page it always was.
+#[derive(Clone, Debug, Default)]
+struct NativeWays {
+    /// What the link to the passkey page starts on the device instead.
+    passkey: Option<NativeCall>,
+    /// A button for each provider whose sheet the client's system has.
+    sheets: Vec<(&'static str, NativeCall)>,
 }
 
 /// The sign-in page around `form`; `next` travels to the other ways in.
@@ -896,6 +940,7 @@ fn sign_in_page(
     form: FormView<SignInForm>,
     notice: Option<Alert>,
     next: Option<&str>,
+    ways: NativeWays,
 ) -> View {
     let mut others = vec![link("Forgot your password?", &paths.forgot)];
     if let Some(sign_up) = &paths.sign_up {
@@ -905,11 +950,22 @@ fn sign_in_page(
         ));
     }
     if paths.has_passkey {
-        others.push(plain_link(
+        let passkey = plain_link(
             "Sign in with a passkey",
             paths.with_next(&paths.passkey, next).as_str(),
-        ));
+        );
+        others.push(match ways.passkey {
+            // In an app that can, the system's own sheet; the page for every other client.
+            Some(call) => passkey.native_call(call).into(),
+            None => passkey.into(),
+        });
     }
+    let sheets: Vec<Node> = ways
+        .sheets
+        .into_iter()
+        .map(|(label, call)| Button::outline(label).block().native_call(call).into())
+        .collect();
+    let sheets = (!sheets.is_empty()).then(|| Node::from(Stack::gap(2).children(sheets)));
     if paths.has_magic_link {
         others.push(link(
             "Email me a sign-in link",
@@ -930,6 +986,7 @@ fn sign_in_page(
             .children((
                 notice,
                 Node::from(form.one_column().submit("Sign in")),
+                sheets,
                 Node::from(Stack::gap(2).children(others)),
             ))
             .into(),
@@ -1079,10 +1136,29 @@ fn signed_in(parts: &Parts) -> bool {
         .is_some_and(|state| state.0.is_some())
 }
 
+/// The device call a passkey sign-in is, as its tickets name it.
+const PASSKEY_CALL: &str = "passkey";
+
+/// Who the ticket of a call on the sign-in page is for: the guest of `session`.
+/// Signing in gives the session a new id, so a ticket never outlives the page it
+/// was written on.
+fn call_holder(session: &Session) -> TicketHolder {
+    TicketHolder {
+        user: None,
+        session: Some(session.id()),
+    }
+}
+
 /// The routes of [`AuthPages`].
 struct PagesController {
     service: Arc<AuthService>,
     paths: Arc<Paths>,
+    /// Seals the ticket of the passkey call, and takes it back.
+    tickets: Arc<dyn CallTickets>,
+    /// The site's native apps: whether one of the client's family shares its passkeys.
+    apps: Arc<crate::AppsOptions>,
+    /// What other modules say of the sign-ins the system's sheet does, asked for once.
+    sheets: tokio::sync::OnceCell<Vec<Arc<dyn ProviderSheets>>>,
 }
 
 impl Injectable for PagesController {
@@ -1090,6 +1166,8 @@ impl Injectable for PagesController {
         vec![
             ProviderKey::of::<AuthService>(),
             ProviderKey::of::<AuthPages>(),
+            ProviderKey::of::<dyn CallTickets>(),
+            ProviderKey::of::<crate::AppsOptions>(),
         ]
     }
 
@@ -1115,8 +1193,124 @@ impl Injectable for PagesController {
             Ok(PagesController {
                 service,
                 paths: Arc::new(paths),
+                tickets: r.get::<dyn CallTickets>().await?,
+                apps: r.get::<crate::AppsOptions>().await?,
+                sheets: tokio::sync::OnceCell::new(),
             })
         })
+    }
+}
+
+impl PagesController {
+    /// What the sign-in page offers the native client that asks: a passkey in the
+    /// system's own sheet, where the client's app says it can (`passkey`), passkeys
+    /// are on and an app of its family shares the site's; and a button for the
+    /// provider its system has a sheet for, where the app says it can
+    /// (`platform_sign_in`) and a module is set up to take that sign-in. Nothing for
+    /// a browser, and nothing where any of it is missing: the page is then the page
+    /// it always was.
+    async fn native_ways(&self, session: &Session, next: Option<&str>) -> NativeWays {
+        let mut ways = NativeWays::default();
+        if self.paths.has_passkey
+            && let Some(client) = navree_ui::native_client_with(PASSKEY_CALL)
+            && self.passkeys_in_app(client.family)
+        {
+            ways.passkey = self.passkey_call(session, next);
+        }
+        let wanted =
+            match navree_ui::native_client_with("platform_sign_in").map(|client| client.family) {
+                Some(NativeFamily::Apple) => SheetProvider::Apple,
+                Some(NativeFamily::Android) => SheetProvider::Google,
+                _ => return ways,
+            };
+        // One button a provider, whichever module says it first.
+        let sheet = self
+            .provider_sheets()
+            .await
+            .iter()
+            .flat_map(|source| source.sheets())
+            .find(|sheet| sheet.provider == wanted);
+        if let Some(sheet) = sheet {
+            let mut call = NativeCall::provider_sign_in(
+                match sheet.provider {
+                    SheetProvider::Apple => navree_ui::NativeProvider::Apple,
+                    SheetProvider::Google => navree_ui::NativeProvider::Google,
+                },
+                sheet.nonce,
+                sheet.sign_in,
+            )
+            // A sign-in that waits for a second step finishes on the page of it.
+            .second_step(self.paths.two_factor.clone());
+            if let Some(id) = sheet.client_id {
+                call = call.client_id(id);
+            }
+            ways.sheets.push((sheet.provider.label(), call));
+        }
+        ways
+    }
+
+    /// Whether an app of `family` can use the site's passkeys in the system's own
+    /// sheet: one of `auth.apps` for that family has `credentials` (the site names it
+    /// in the association file the system reads before it offers a passkey), and the
+    /// origin its assertions carry is one the passkey routes accept. An Apple app's
+    /// is `https://<auth.passkeys.rp_id>`, which must be among `auth.passkeys.origins`;
+    /// an Android app's is its signing certificate, which `auth.apps` adds itself.
+    fn passkeys_in_app(&self, family: NativeFamily) -> bool {
+        match family {
+            NativeFamily::Apple => {
+                let origin = self
+                    .service
+                    .options()
+                    .passkeys
+                    .rp_id
+                    .as_deref()
+                    .map(|rp_id| format!("https://{}", rp_id.trim()));
+                self.apps.apple.values().any(|app| app.credentials)
+                    && origin.is_some_and(|origin| self.service.passkey_origins.contains(&origin))
+            }
+            NativeFamily::Android => self
+                .apps
+                .android
+                .values()
+                .any(|app| app.credentials && !app.fingerprints.is_empty()),
+            _ => false,
+        }
+    }
+
+    /// The passkey call of a sign-in page drawn for `session`: the options come from
+    /// the page's own route, and the assertion goes back to it with a ticket sealed
+    /// for this session, this call and that route, good once and for five minutes.
+    /// `None` when no ticket can be sealed (the app has no key): the link then leads
+    /// to the passkey page, as it does in a browser.
+    fn passkey_call(&self, session: &Session, next: Option<&str>) -> Option<NativeCall> {
+        let then = format!("{}/native", self.paths.passkey);
+        // The ticket is for the session this page starts.
+        session.csrf_token();
+        let request = TicketRequest::new(call_holder(session), PASSKEY_CALL, "POST", &then);
+        let issued = self.tickets.issue(&request).ok()?;
+        Some(NativeCall::passkey_sign_in(
+            format!("{then}/options"),
+            NativeThen::new(
+                self.paths.with_next(&then, next).as_str(),
+                issued.ticket,
+                issued.expires_at.timestamp(),
+            ),
+        ))
+    }
+
+    /// The modules that say which sign-ins the system's sheet does.
+    async fn provider_sheets(&self) -> &[Arc<dyn ProviderSheets>] {
+        self.sheets
+            .get_or_init(|| async {
+                match self.service.app.upgrade() {
+                    Some(app) => app
+                        .get_all::<dyn ProviderSheets>()
+                        .await
+                        .unwrap_or_default(),
+                    None => Vec::new(),
+                }
+            })
+            .await
     }
 }
 
@@ -1131,13 +1325,13 @@ impl Controller for PagesController {
         let mut routes = Vec::new();
 
         // GET sign-in
-        let at = paths.clone();
+        let (at, this) = (paths.clone(), self.clone());
         routes.push(
             RouteDef::on(
                 Method::GET,
                 absolute(&paths.sign_in),
                 move |parts: Parts, session: Session, Query(query): Query<SignInQuery>| {
-                    let paths = at.clone();
+                    let (paths, this) = (at.clone(), this.clone());
                     async move {
                         if signed_in(&parts) {
                             return Reply::redirect(paths.after(query.next.as_deref()))
@@ -1157,11 +1351,13 @@ impl Controller for PagesController {
                                 remember: false,
                                 next: next.clone(),
                             });
+                        let ways = this.native_ways(&session, next.as_deref()).await;
                         sign_in_page(
                             &paths,
                             form,
                             notice(query.status.as_deref()),
                             next.as_deref(),
+                            ways,
                         )
                         .into_response()
                     }
@@ -1181,7 +1377,7 @@ impl Controller for PagesController {
         );
 
         // POST sign-in
-        let (service, at) = (self.service.clone(), paths.clone());
+        let (service, at, this) = (self.service.clone(), paths.clone(), self.clone());
         routes.push(
             RouteDef::on(
                 Method::POST,
@@ -1190,14 +1386,21 @@ impl Controller for PagesController {
                       session: Session,
                       meta: ClientMeta,
                       submitted: Result<Submit<SignInForm>, Rejected<SignInForm>>| {
-                    let (service, paths) = (service.clone(), at.clone());
+                    let (service, paths, this) = (service.clone(), at.clone(), this.clone());
                     async move {
                         let token = session.csrf_token();
+                        // A form drawn again offers a native client what the page did.
+                        let asked_next = submitted
+                            .as_ref()
+                            .ok()
+                            .and_then(|Submit(input)| input.next.clone());
+                        let ways = this.native_ways(&session, asked_next.as_deref()).await;
                         let redraw = |rejected: Rejected<SignInForm>| {
                             let paths = paths.clone();
                             let token = token.clone();
+                            let ways = ways.clone();
                             rejected.respond(move |form| {
-                                sign_in_page(&paths, form.csrf(token), None, None)
+                                sign_in_page(&paths, form.csrf(token), None, None, ways)
                             })
                         };
                         let input = match submitted {
