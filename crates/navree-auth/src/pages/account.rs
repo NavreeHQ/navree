@@ -139,7 +139,7 @@ fn setup_page(
 fn codes_page(paths: &Paths, codes: &[String], next: &str) -> navree_ui::View {
     const CONTINUE: &str = "I have saved them, continue";
     let on = if finishes_hand_over(next) {
-        plain_link(CONTINUE, next)
+        Node::from(plain_link(CONTINUE, next))
     } else {
         link(CONTINUE, next)
     };
