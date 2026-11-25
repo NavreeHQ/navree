@@ -439,13 +439,13 @@ class PickedFiles internal constructor(private val folder: File) {
 
     /**
      * Takes what can say where it was made out of a Matroska or WebM file
-     * that holds sound alone ([MatroskaData]): every tag that names a place,
-     * every attached file and what a blanked part still held are overwritten
-     * in place, so the sound does not move. A file that holds none of them is
-     * left as it is. Then the copy is read again: it must still read cleanly
-     * as sound alone, with nothing of that left in it, no XMP packet in its
-     * bytes that names a place, and no place the platform itself finds.
-     * False when a step fails or a place is still found.
+     * that holds sound alone ([MatroskaData]): every tag, title and name that
+     * names a place, every attached file and what a blanked part still held
+     * are overwritten in place, so the sound does not move. A file that holds
+     * none of them is left as it is. Then the copy is read again: it must
+     * still read cleanly as sound alone, with nothing of that left in it, no
+     * XMP packet in its bytes that names a place, and no place the platform
+     * itself finds. False when a step fails or a place is still found.
      */
     private fun takeOutSoundPlace(copy: File): Boolean {
         val cleaned = File(copy.path + ".clean")

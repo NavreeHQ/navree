@@ -323,11 +323,18 @@ With nothing opened, the list has the window.
 - A Matroska or WebM file that holds sound alone (`.mka`, a `.webm` with no
   video track) is no video, whatever type or name it came under: it is read
   whole, and when it reads cleanly and every track in it is audio it is taken.
-  A tag in it that names a place, every file attached to it (a cover picture
-  can hold the place it was taken) and what a blanked part still held are
-  overwritten in place first, so the sound does not move; the copy is read
-  again and refused when a place is still in it. One with a track that is not
-  audio, or that does not read cleanly, is refused as a video is.
+  Overwritten in place first, so the sound does not move: a tag that names a
+  place or whose words hold coordinates; the title, a track's name and a
+  chapter's name that do; every file attached to it (a cover picture can hold
+  the place it was taken); and what a blanked part still held. The parts read
+  are the header, the segment, and its seek entries, information, tracks,
+  cues, chapters, attachments and tags, down to the parts that hold a value.
+  The sound itself, the clusters, is not read, but for a blanked part in a
+  cluster that says no size. The copy is read again and refused when a place
+  is still in it. One with a track that is not audio, or that does not read
+  cleanly, is refused as a video is. A place written in plain words (a town,
+  a street) in a title, a name or a tag that names none is not found, nor
+  what a codec keeps of its own in a track's private bytes.
 - While the form is on its way the field cannot be changed. A field that takes
   one file replaces it (a second choice replaces the first); one that takes
   several adds, with no limit on the count.
