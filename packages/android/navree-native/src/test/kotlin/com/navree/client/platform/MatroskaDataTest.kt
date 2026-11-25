@@ -408,7 +408,8 @@ class MatroskaDataTest {
         val about = info(crc(0x40), element(0x7BA9, words("Kirtan at +30.9010+075.8573/")))
         val named = element(0xAE, element(0xD7, number(1)), element(0x83, number(2)), element(0x86, words("A_OPUS")), element(0x536E, words("Location: Ludhiana")))
         val plain = element(0xAE, element(0xD7, number(2)), element(0x83, number(2)), element(0x86, words("A_OPUS")), element(0x536E, words("Tabla")))
-        val placed = element(0xB6, element(0x73C4, number(1)), element(0x91, number(0)), element(0x80, element(0x85, words("GPS Amritsar")), element(0x437C, words("pan"))))
+        // The three ways a place is told: coordinates as ISO 6709 writes them, a word that says a place outright, and two decimal numbers.
+        val placed = element(0xB6, element(0x73C4, number(1)), element(0x91, number(0)), element(0x80, element(0x85, words("Amritsar 31.6340, 74.8723")), element(0x437C, words("pan"))))
         val unplaced = element(0xB6, element(0x73C4, number(2)), element(0x91, number(9)), element(0x80, crc(0x42), element(0x85, words("Alaap")), element(0x437C, words("pan"))))
         val chapters = element(CHAPTERS, element(0x45B9, crc(0x41), placed, unplaced))
         val last = cluster()
@@ -426,7 +427,7 @@ class MatroskaDataTest {
         val bytes = cleaned.readBytes()
         assertEquals(raw.size, bytes.size)
         assertArrayEquals("the sound is where it was", last, bytes.copyOfRange(bytes.size - last.size, bytes.size))
-        for (gone in listOf("30.9010", "Kirtan", "Ludhiana", "Location", "Amritsar", "GPS")) {
+        for (gone in listOf("30.9010", "Kirtan", "Ludhiana", "Location", "Amritsar", "31.6340")) {
             assertFalse("$gone is still in it", text(bytes).contains(gone))
         }
         for (stays in listOf("Tabla", "Alaap", "Charkha")) {
@@ -452,6 +453,46 @@ class MatroskaDataTest {
     }
 
     @Test
+    fun a_title_a_tracks_name_and_a_chapters_name_in_ordinary_words_are_kept() {
+        // Words a tag's name is tested by, which a title holds for other reasons.
+        val ordinary = listOf(
+            "City Lights", "Long Road", "Country Roads", "State of Mind", "Dislocation Blues", "Platitude", "High Altitude", "Address Unknown", "Lat Long",
+            "Take 12.5, 13.5", "Charkha Loom", "",
+        )
+        for (kept in ordinary) {
+            assertFalse(kept, MatroskaData.namesPlace(kept))
+        }
+        val outright = listOf(
+            "Location: Ludhiana", "GPS Amritsar", "shotLocation", "RECORDING_LOCATION Ludhiana", "geo 30N 75E", "Latitude and Longitude",
+            "the coordinates of the hall", "GPSLatitude",
+        )
+        for (said in outright) {
+            assertTrue(said, MatroskaData.holdsPlaceWord(said))
+            assertTrue(said, MatroskaData.namesPlace(said))
+            assertFalse("$said holds no coordinates", MatroskaData.holdsCoordinates(said))
+        }
+
+        val about = info(element(0x7BA9, words("City Lights")))
+        val first = element(0xAE, element(0xD7, number(1)), element(0x83, number(2)), element(0x86, words("A_OPUS")), element(0x536E, words("Long Road")))
+        val second = element(0xAE, element(0xD7, number(2)), element(0x83, number(2)), element(0x86, words("A_OPUS")), element(0x536E, words("Country State")))
+        val chapter = element(0xB6, element(0x73C4, number(1)), element(0x91, number(0)), element(0x80, element(0x85, words("Address Unknown")), element(0x437C, words("pan"))))
+        val raw = head("matroska") + segment(about, tracks(first, second), element(CHAPTERS, element(0x45B9, chapter)), tags(tag(simpleTag("TITLE", "City Lights"))), cluster())
+        val source = file("Ordinary.mka", raw)
+        val found = MatroskaData.inspect(source)
+        assertTrue("$found", found.soundOnly && found.clean)
+        assertEquals(0, found.namedPlaces)
+        val copy = File(folder, "Ordinary-copy.mka")
+        assertEquals(found, MatroskaData.clean(source, copy))
+        assertArrayEquals("nothing in it is changed", raw, copy.readBytes())
+
+        // A tag is still tested by its name in full: there the same words are a place.
+        assertTrue(VideoData.isLocationKeyName("City"))
+        assertTrue(VideoData.isLocationKeyName("Long"))
+        val tagged = file("City.mka", head("matroska") + segment(info(), tracks(track(2, "A_OPUS")), tags(tag(simpleTag("CITY", "Ludhiana"))), cluster()))
+        assertEquals(1, MatroskaData.inspect(tagged).placeTags)
+    }
+
+    @Test
     fun words_that_hold_coordinates_name_a_place_whatever_the_tag_is_called() {
         val places = listOf(
             "+30.9010+075.8573/",
@@ -461,30 +502,44 @@ class MatroskaDataTest {
             "+305403.6+0755126.3/",
             "+30+075/",
             "+3054+07551+247/",
+            // Two decimal numbers of three or more decimal places.
+            "31.6340, 74.8723",
+            "Amritsar 31.6340 74.8723",
+            "30.9010 N 75.8573 E",
+            "N 30.9010 E 75.8573",
+            "30.9010\u00B0N, 75.8573\u00B0E",
+            // Degrees with the letter of a hemisphere.
+            "30\u00B054'N 75\u00B051'E",
+            "30.9\u00B0 N, 75.85\u00B0 E",
         )
         for (place in places) {
             assertTrue(place, MatroskaData.holdsCoordinates(place))
             assertTrue(place, MatroskaData.namesPlace(place))
         }
-        for (none in listOf("", "Charkha Loom", "2026-11-25", "2026-11-25T18:30:00+05:30", "+91 98765 43210", "-7.03 dB", "Sector 17-22", "0.92+0.05", "+12.5")) {
+        val others = listOf(
+            "", "Charkha Loom", "2026-11-25", "2026-11-25T18:30:00+05:30", "+91 98765 43210", "-7.03 dB", "Sector 17-22", "0.92+0.05", "+12.5",
+            "Take 12.5, 13.5", "Lavf58.76.100", "28\u00B0 in the shade",
+        )
+        for (none in others) {
             assertFalse(none, MatroskaData.holdsCoordinates(none))
         }
-        assertTrue("a word a tag's name is known by", MatroskaData.namesPlace("Location: Ludhiana"))
+        assertTrue("a word that says a place outright", MatroskaData.namesPlace("Location: Ludhiana"))
         assertFalse(MatroskaData.namesPlace("Charkha Loom"))
 
         val comment = simpleTag("COMMENT", "Recorded at +30.9010+075.8573/ on the terrace")
+        val described = simpleTag("DESCRIPTION", "The hall is at 30.9010, 75.8573")
         val dated = simpleTag("DATE_RECORDED", "2026-11-25")
         val gain = simpleTag("REPLAYGAIN_TRACK_GAIN", "-7.03 dB")
-        val raw = head("matroska") + segment(info(), tracks(track(2, "A_OPUS")), tags(tag(comment, dated, gain)), cluster())
+        val raw = head("matroska") + segment(info(), tracks(track(2, "A_OPUS")), tags(tag(comment, described, dated, gain)), cluster())
         val source = file("Comment.mka", raw)
         val cleaned = File(folder, "Comment-clean.mka")
         val before = MatroskaData.inspect(source)
         assertTrue("$before", before.soundOnly)
-        assertEquals(1, before.placeTags)
+        assertEquals("the one with coordinates as ISO 6709 writes them, and the one with two decimal numbers", 2, before.placeTags)
         MatroskaData.clean(source, cleaned)
         val bytes = cleaned.readBytes()
         assertEquals(raw.size, bytes.size)
-        for (gone in listOf("30.9010", "terrace", "COMMENT")) {
+        for (gone in listOf("30.9010", "terrace", "COMMENT", "hall", "DESCRIPTION")) {
             assertFalse("$gone is still in it", text(bytes).contains(gone))
         }
         assertTrue(text(bytes).contains("2026-11-25") && text(bytes).contains("-7.03 dB"))

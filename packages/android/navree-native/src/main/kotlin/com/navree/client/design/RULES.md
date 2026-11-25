@@ -325,8 +325,11 @@ With nothing opened, the list has the window.
   whole, and when it reads cleanly and every track in it is audio it is taken.
   Overwritten in place first, so the sound does not move: a tag that names a
   place or whose words hold coordinates; the title, a track's name and a
-  chapter's name that do; every file attached to it (a cover picture can hold
-  the place it was taken); and what a blanked part still held. The parts read
+  chapter's name that hold coordinates or a word that says a place outright
+  (`GPS`, `location`, `latitude`), or that are too long to read; every file
+  attached to it (a cover picture can hold the place it was taken); and what
+  a blanked part still held. A title in ordinary words stays, also one with a
+  word a tag's name is tested by (`City Lights`, `Long Road`). The parts read
   are the header, the segment, and its seek entries, information, tracks,
   cues, chapters, attachments and tags, down to the parts that hold a value.
   The sound itself, the clusters, is not read, but for a blanked part in a

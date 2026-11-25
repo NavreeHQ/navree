@@ -42,12 +42,18 @@ import java.io.RandomAccessFile
  * - every `SimpleTag` whose `TagName` names a place
  *   ([VideoData.isLocationKeyName]: `RECORDING_LOCATION`, `LOCATION-eng`, a
  *   latitude, a city), whose `TagString` holds coordinates in its first 4096
- *   bytes ([holdsCoordinates]), or whose `TagBinary` begins as a picture or
- *   as Exif data does, with the tags inside it;
+ *   bytes ([holdsCoordinates]: as ISO 6709 writes them,
+ *   `+30.9010+075.8573/`; as two decimal numbers of three or more decimal
+ *   places, `30.9010, 75.8573`; or in degrees with the letter of a
+ *   hemisphere, `30°54'N 75°51'E`), or whose `TagBinary` begins as a picture
+ *   or as Exif data does, with the tags inside it;
  * - the segment's `Title`, a track's `Name` and a chapter's `ChapString`
- *   whose words name a place ([namesPlace]): they hold one of the words a
- *   tag's name is known by (`Location: Ludhiana`, and so `City Lights` too),
- *   or coordinates. One longer than 4096 bytes is not read and goes as well;
+ *   whose words name a place ([namesPlace]): they hold such coordinates, or
+ *   a word that says a place outright ([holdsPlaceWord]: `GPS`, `location`,
+ *   `geo`, `latitude`, `longitude`, `coordinates`, as in
+ *   `Location: Ludhiana`). The longer list of words a tag's name is tested
+ *   by is not used for them, so `City Lights` and `Long Road` stay. One
+ *   longer than 4096 bytes is not read and goes as well;
  * - every `AttachedFile`, since a cover picture can hold the place it was
  *   taken and sound needs nothing that is attached;
  * - every `Void` that still holds bytes of what stood there before, wherever
@@ -160,6 +166,33 @@ internal object MatroskaData {
             """|[+-]\d{2}(?:\d{2}){0,2}(?:\.\d+)?[+-]\d{3}(?:\d{2}){0,2}(?:\.\d+)?(?:[+-]\d+(?:\.\d+)?)?/""",
     )
 
+    /**
+     * A latitude and a longitude written as two decimal numbers, each with
+     * three or more decimal places (fewer is a count, a version, a take):
+     * `30.9010, 75.8573`, `30.9010 75.8573`, `30.9010 N 75.8573 E`,
+     * `N 30.9010 E 75.8573`, with a degree sign or without. A comma, a
+     * semicolon or white space stands between them.
+     */
+    private val PAIR = Regex(
+        """(?<![\d.])[+-]?\d{1,2}\.\d{3,}(?:\s*\u00B0)?(?:\s*[NnSs])?(?:\s*[,;]\s*|\s+)(?:[EeWw]\s*)?[+-]?\d{1,3}\.\d{3,}""",
+    )
+
+    /**
+     * A latitude and a longitude written in degrees with the degree sign,
+     * with minutes and seconds or without, the latitude followed by the
+     * letter of its hemisphere: `30°54'N 75°51'E`, `30.9° N, 75.85° E`.
+     */
+    private val DEGREES = Regex("""\d{1,2}(?:\.\d+)?\s*\u00B0[\d\s.'\x22\u2032\u2033]{0,16}[NnSs]\s*[,;]?\s*\d{1,3}(?:\.\d+)?\s*\u00B0""")
+
+    /**
+     * The words that say a place outright, in lower case: the ones a title,
+     * a track's name or a chapter's name is read for. They are the few of
+     * the words a tag's name is tested by ([VideoData.isLocationKeyName])
+     * that mean nothing else: `city`, `state`, `country`, `long`, `address`
+     * and the like are left out, since a title holds them for other reasons.
+     */
+    private val PLACE_WORDS = setOf("gps", "location", "geo", "geolocation", "latitude", "longitude", "longtitude", "coordinates", "coord", "coords", "iso6709")
+
     /** The most elements read in one file: a recording of hours has fewer, and a file made to keep the client busy is given up. */
     private const val MOST_ELEMENTS = 2_000_000
 
@@ -178,15 +211,48 @@ internal object MatroskaData {
     fun isEbml(head: ByteArray): Boolean =
         head.size >= 4 && head[0] == 0x1A.toByte() && head[1] == 0x45.toByte() && head[2] == 0xDF.toByte() && head[3] == 0xA3.toByte()
 
-    /** Whether words hold a place written as coordinates ([COORDINATES]). */
-    fun holdsCoordinates(words: String): Boolean = COORDINATES.containsMatchIn(words)
+    /**
+     * Whether words hold a place written as coordinates: as ISO 6709 writes
+     * them ([COORDINATES]), as two decimal numbers ([PAIR]), or in degrees
+     * with the letter of a hemisphere ([DEGREES]).
+     */
+    fun holdsCoordinates(words: String): Boolean = COORDINATES.containsMatchIn(words) || PAIR.containsMatchIn(words) || DEGREES.containsMatchIn(words)
 
     /**
-     * Whether the words of a title or a name name a place: one of them is a
-     * word a tag's name is known by ([VideoData.isLocationKeyName]), or they
-     * hold coordinates.
+     * Whether one of the words says a place outright ([PLACE_WORDS]), or
+     * begins or ends with `gps` (`GPSLatitude`). Words are told apart by
+     * anything that is no letter and no digit, and where a capital follows
+     * a small letter, so `RECORDING_LOCATION`, `Location: Ludhiana` and
+     * `shotLocation` all hold `location`, and `Dislocation` does not.
      */
-    fun namesPlace(words: String): Boolean = VideoData.isLocationKeyName(words) || holdsCoordinates(words)
+    fun holdsPlaceWord(words: String): Boolean = wordsOf(words).any { it in PLACE_WORDS || it.startsWith("gps") || it.endsWith("gps") }
+
+    /**
+     * Whether the words of a title, a track's name or a chapter's name name
+     * a place: they hold coordinates ([holdsCoordinates]) or a word that
+     * says a place outright ([holdsPlaceWord]). The longer list of words a
+     * tag's name is tested by is not used: `City Lights` and `Long Road`
+     * name no place.
+     */
+    fun namesPlace(words: String): Boolean = holdsCoordinates(words) || holdsPlaceWord(words)
+
+    /** The words of a text, in lower case: runs of letters and digits, ended as well where a capital follows a small letter. */
+    private fun wordsOf(text: String): List<String> {
+        val all = ArrayList<String>()
+        val word = StringBuilder()
+        var before = ' '
+        for (c in text) {
+            val starts = c.isUpperCase() && before.isLowerCase()
+            if ((starts || !c.isLetterOrDigit()) && word.isNotEmpty()) {
+                all.add(word.toString().lowercase())
+                word.setLength(0)
+            }
+            if (c.isLetterOrDigit()) word.append(c)
+            before = c
+        }
+        if (word.isNotEmpty()) all.add(word.toString().lowercase())
+        return all
+    }
 
     /** What [inspect] found in a Matroska or WebM file, or what [clean] overwrote in one. */
     data class Found(
