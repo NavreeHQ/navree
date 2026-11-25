@@ -1149,11 +1149,17 @@ async fn only_the_browsers_own_navigation_finishes_a_hand_over() {
             ("sec-fetch-dest", "empty"),
             ("sec-fetch-site", "same-origin"),
         ],
-        // The browser loading the page ahead of a click, and a frame.
+        // The browser loading the page ahead of a click or for a preview, and
+        // a frame.
         &[
             ("sec-fetch-mode", "navigate"),
             ("sec-fetch-dest", "document"),
             ("sec-purpose", "prefetch"),
+        ],
+        &[
+            ("sec-fetch-mode", "navigate"),
+            ("sec-fetch-dest", "document"),
+            ("x-purpose", "preview"),
         ],
         &[("sec-fetch-mode", "navigate"), ("sec-fetch-dest", "iframe")],
     ] {
