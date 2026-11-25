@@ -974,6 +974,32 @@ pub struct OpenSettings {
     pub page: SettingsPage,
 }
 
+/// What a client lists among its capabilities, beside [`Feature::Passkey`]'s
+/// `passkey`, when its build carries out a [`Passkey`] call from the request's
+/// options the runtime core asked the server for and handed over.
+///
+/// A build from before the core asked lists `passkey` alone: it took the
+/// call's `options`, a route, for the request itself, and can only fail the
+/// call. So a server writes a passkey call only for a client that lists both
+/// names, and a client that lists `passkey` alone is answered as one without
+/// passkeys. The name says how one feature is carried out. It is no feature
+/// of its own: no call belongs to it, and [`Feature::parse`] does not know it.
+///
+/// ```
+/// use navree_native::device::{Feature, PASSKEY_OPTIONS_CAP};
+/// use navree_native::ClientDescriptor;
+///
+/// let fixed = ClientDescriptor::parse(
+///     "platform=android; form=phone; caps=share+passkey+passkey_options",
+/// )
+/// .unwrap();
+/// assert!(fixed.supports(Feature::Passkey.as_str()) && fixed.supports(PASSKEY_OPTIONS_CAP));
+/// let older = ClientDescriptor::parse("platform=android; form=phone; caps=share+passkey").unwrap();
+/// assert!(!older.supports(PASSKEY_OPTIONS_CAP));
+/// assert_eq!(Feature::parse(PASSKEY_OPTIONS_CAP), None);
+/// ```
+pub const PASSKEY_OPTIONS_CAP: &str = "passkey_options";
+
 /// What a passkey call does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -999,6 +1025,9 @@ pub enum PasskeyMode {
 ///
 /// A person who closes the sheet is a refusal ([`Refusal::Cancelled`]): the
 /// client posts the ticket and `outcome` alone.
+///
+/// A client whose build carries the call out this way lists
+/// [`PASSKEY_OPTIONS_CAP`] among its capabilities, beside `passkey`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Passkey {
     /// Sign in or register.
