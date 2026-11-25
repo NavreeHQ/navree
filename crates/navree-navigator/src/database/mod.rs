@@ -823,11 +823,17 @@ fn is_local_host(host: &str) -> bool {
 /// The password is the one SQLx would read, found with the parser SQLx
 /// uses: in the user part (`scheme://user:password@host/...`) or in a
 /// `password` parameter, however the URL is spelled (the `url` crate reads
-/// past tabs and line ends, and decodes the name of a parameter). A URL
-/// that does not parse, or that has an `@` the parser took for no user, may
-/// hold a password anywhere before its query, so of such a URL only the
-/// scheme and what follows the last `@` are shown, without the query. A
-/// SQLite URL has no password and is shown as it is.
+/// past tabs and line ends, and decodes the name of a parameter). Nothing
+/// after a `#` is shown, and neither is the value of any parameter whose
+/// name holds `pass`, nor a parameter SQLx does not know that follows one
+/// (a password with an `&` written as it is reads as several).
+///
+/// A password with a `#`, `?` or `/` written as it is ends the user part
+/// early for the parser, which then finds fewer `@` than the text holds. Of
+/// such a URL, and of one that does not parse, only the scheme and what
+/// follows the last `@` are shown, without the query; with an `@` after a
+/// `?` or a `#`, only the scheme. A SQLite URL has no password and is
+/// shown as it is.
 pub fn redact_url(url: &str) -> String {
     if matches!(Driver::of(url), Ok(Driver::Sqlite)) {
         return url.to_owned();
@@ -836,26 +842,31 @@ pub fn redact_url(url: &str) -> String {
         return redact_unparsed(url);
     };
     let in_user_part = parsed.password().is_some();
-    if !in_user_part && parsed.username().is_empty() && before_query(url).contains('@') {
+    let user_part = in_user_part || !parsed.username().is_empty();
+    if url.matches('@').count() > usize::from(user_part) {
         return redact_unparsed(url);
     }
-    let in_query = parsed.query_pairs().any(|(key, _)| key == "password");
-    if !in_user_part && !in_query {
+    let in_query = parsed.query_pairs().any(|(key, _)| is_password_key(&key));
+    if !in_user_part && !in_query && parsed.fragment().is_none() {
         return url.to_owned();
     }
+    parsed.set_fragment(None);
     if in_user_part && parsed.set_password(Some("***")).is_err() {
         return redact_unparsed(url);
     }
     if in_query {
+        let mut after_password = false;
         let pairs: Vec<(String, String)> = parsed
             .query_pairs()
             .map(|(key, value)| {
-                let value = if key == "password" {
-                    "***".to_owned()
+                if is_password_key(&key) {
+                    after_password = true;
+                    (key.into_owned(), "***".to_owned())
+                } else if after_password && !is_connect_parameter(&key) {
+                    ("***".to_owned(), String::new())
                 } else {
-                    value.into_owned()
-                };
-                (key.into_owned(), value)
+                    (key.into_owned(), value.into_owned())
+                }
             })
             .collect();
         parsed.query_pairs_mut().clear().extend_pairs(pairs);
@@ -863,27 +874,67 @@ pub fn redact_url(url: &str) -> String {
     parsed.into()
 }
 
+/// Whether a URL parameter called `key` holds a password: `password`, which
+/// SQLx reads, and what was meant for it (`Password`, `passwd`).
+fn is_password_key(key: &str) -> bool {
+    key.to_ascii_lowercase().contains("pass")
+}
+
+/// Whether `key` is a parameter sqlx-postgres 0.9 reads from a URL, other
+/// than `password`.
+fn is_connect_parameter(key: &str) -> bool {
+    matches!(
+        key,
+        "sslmode"
+            | "ssl-mode"
+            | "sslrootcert"
+            | "ssl-root-cert"
+            | "ssl-ca"
+            | "sslcert"
+            | "ssl-cert"
+            | "sslkey"
+            | "ssl-key"
+            | "statement-cache-capacity"
+            | "host"
+            | "hostaddr"
+            | "port"
+            | "dbname"
+            | "user"
+            | "application_name"
+            | "options"
+    ) || key.starts_with("options[")
+}
+
 /// What may be shown of a URL whose password cannot be told from the rest:
 /// its scheme and, when it has an `@` before its query, what follows the
-/// last one.
+/// last one. With an `@` after a `?` or a `#`, that mark may stand inside
+/// the password, and only the scheme is shown.
 fn redact_unparsed(url: &str) -> String {
     let Some((scheme, rest)) = url.split_once(':') else {
         return "***".to_owned();
     };
-    let plain = !scheme.is_empty()
-        && scheme
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'));
-    if !plain {
+    if !is_scheme(scheme) {
         return "***".to_owned();
     }
-    let rest = before_query(rest);
-    match rest.rfind('@') {
-        Some(at) => format!("{scheme}:***{}", &rest[at..]),
+    let shown = before_query(rest);
+    if rest[shown.len()..].contains('@') {
+        return format!("{scheme}:***");
+    }
+    match shown.rfind('@') {
+        Some(at) => format!("{scheme}:***{}", &shown[at..]),
         None => format!("{scheme}:***"),
     }
 }
 
+/// Whether `text` is written like the scheme of a URL: a letter, then
+/// letters, digits, `+`, `-` and `.`, twenty characters at most.
+fn is_scheme(text: &str) -> bool {
+    text.len() <= 20
+        && text.starts_with(|c: char| c.is_ascii_alphabetic())
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'))
+}
 /// `text` up to its first `?` or `#`.
 fn before_query(text: &str) -> &str {
     &text[..text.find(['?', '#']).unwrap_or(text.len())]
@@ -1406,6 +1457,48 @@ mod tests {
         }
     }
 
+    /// A `#`, `?` or `/` written as it is in a password ends the user part
+    /// early for the parser. No part of such a password is shown, nor of a
+    /// `password` parameter cut short by a `#` or an `&`.
+    #[test]
+    fn a_password_with_a_mark_written_as_it_is_is_not_shown() {
+        for (url, masked) in [
+            ("postgres://navree:#Abc1@localhost/crm", "postgres:***"),
+            ("postgres://navree:?Abc1@localhost/crm", "postgres:***"),
+            ("postgres://navree:2024#Spring@db/crm", "postgres:***"),
+            ("postgres://us@er:12#s3cret@host/db", "postgres:***"),
+            (
+                "postgres://navree:pa/ss@localhost/crm",
+                "postgres:***@localhost/crm",
+            ),
+            (
+                "postgres://navree:12/ss@localhost/crm",
+                "postgres:***@localhost/crm",
+            ),
+            (
+                "postgres://navree@localhost/crm?password=se#cret",
+                "postgres://navree@localhost/crm?password=***",
+            ),
+            (
+                "postgres://navree@localhost/crm?password=se&cret",
+                "postgres://navree@localhost/crm?password=***&***=",
+            ),
+            (
+                "postgres://navree@localhost/crm?password=se&cr=et&sslmode=require",
+                "postgres://navree@localhost/crm?password=***&***=&sslmode=require",
+            ),
+            (
+                "postgres://localhost/crm?Password=s3cret",
+                "postgres://localhost/crm?Password=***",
+            ),
+            (
+                "postgres://localhost/crm#s3cret",
+                "postgres://localhost/crm",
+            ),
+        ] {
+            assert_eq!(redact_url(url), masked, "{url:?}");
+        }
+    }
     /// Of a URL that does not parse, or whose `@` names no user, nothing
     /// that could be a password is shown.
     #[test]
