@@ -5802,6 +5802,186 @@ mod tests {
         assert!(fetches(&back).is_empty(), "{back:?}");
     }
 
+    /// A server that lists the Windows app names its callback in the shell: a
+    /// link on the app's own scheme. The session then starts with that link
+    /// as its `redirect_uri`, which the server holds to the app's callback,
+    /// and the return is taken at that address alone: another address on the
+    /// scheme, with this sign-in's `state` or not, is not it. A callback the
+    /// shell names on another scheme than the app's starts no sign-in.
+    #[test]
+    fn a_windows_app_comes_back_only_on_the_callback_the_shell_names() {
+        use crate::sign_in::query_value;
+
+        let named = |callback: &str| -> String {
+            let shell = include_str!("../transcripts/fixtures/made/shell-app-nobody-windows.json")
+                .replace(
+                    "\"exchange\": \"/api/auth/app/exchange\",",
+                    &format!(
+                        "\"exchange\": \"/api/auth/app/exchange\", \"callback\": \"{callback}\","
+                    ),
+                );
+            assert!(shell.contains(callback), "the shell names the callback");
+            shell
+        };
+        let fetches = |update: &Update| -> Vec<String> {
+            update
+                .effects
+                .iter()
+                .filter_map(|effect| match effect {
+                    Effect::Fetch(request) => Some(request.url.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        let sign_in = |update: &Update| {
+            update.effects.iter().find_map(|effect| match effect {
+                Effect::SignIn { url, callback, .. } => Some((url.clone(), callback.clone())),
+                _ => None,
+            })
+        };
+        // The app on a shell that names `callback`, with Sign in tapped and
+        // the random bytes handed over: what the core asked for then.
+        let started = |callback: &str| -> (Core, Update) {
+            let config = serde_json::json!({
+                "origin": "https://shop.example",
+                "app_id": "CharkhaSupply_8wekyb3d8bbwe",
+                "client": {"platform": "windows", "form": "desktop", "vocab": 0, "text_percent": 100},
+                "sign_in": {"callback": "charkha", "paths": ["/sign-in"]},
+            });
+            let mut core = Core::new(serde_json::from_value(config).expect("a configuration"));
+            core.send(Event::Start);
+            for (request, body) in [
+                (1, named(callback)),
+                (
+                    2,
+                    include_str!("../transcripts/fixtures/made/welcome.json").to_owned(),
+                ),
+            ] {
+                core.send(Event::Response(Response {
+                    request,
+                    status: 200,
+                    content_type: Some(CONTENT_TYPE.to_owned()),
+                    body,
+                    ..Response::default()
+                }));
+            }
+            let asked = core.send(Event::Act {
+                screen: Some(1),
+                action: serde_json::from_value(
+                    serde_json::json!({"t": "navigate", "href": "/sign-in"}),
+                )
+                .expect("an action"),
+                form: None,
+                overlay: None,
+                text: None,
+                now: None,
+                ask: None,
+                from: None,
+            });
+            let request = asked
+                .effects
+                .iter()
+                .find_map(|effect| match effect {
+                    Effect::Random { request, .. } => Some(*request),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("the hand-over asks for random bytes: {asked:?}"));
+            let opened = core.send(Event::Random {
+                request,
+                bytes: "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30".to_owned(),
+            });
+            (core, opened)
+        };
+
+        let (mut core, opened) = started("charkha:/signed-in");
+        let (url, callback) = sign_in(&opened).expect("the session opens");
+        // What the system is handed is the shell's callback, and the server is
+        // told the same address, with the app, the challenge and the state.
+        assert_eq!(callback.as_deref(), Some("charkha:/signed-in"));
+        assert!(
+            url.starts_with("https://shop.example/auth/app/sign-in?"),
+            "{url}"
+        );
+        for (name, value) in [
+            ("platform", "windows"),
+            ("app", "CharkhaSupply_8wekyb3d8bbwe"),
+            (
+                "code_challenge",
+                "658WgAyQKf_KhWlXY9I8Os5xARz0DpNUrNgQIF4lD4c",
+            ),
+            ("code_challenge_method", "S256"),
+            ("state", "ISIjJCUmJygpKissLS4vMA"),
+            ("redirect_uri", "charkha:/signed-in"),
+        ] {
+            assert_eq!(
+                query_value(&url, name).as_deref(),
+                Some(value),
+                "{name}: {url}"
+            );
+        }
+        let state = "ISIjJCUmJygpKissLS4vMA";
+        for (what, planted) in [
+            (
+                "another address on the scheme, with this sign-in's state",
+                format!("charkha://signed-in?code=PLANTED000&state={state}"),
+            ),
+            (
+                "another path on the scheme, with this sign-in's state",
+                format!("charkha:/other?code=PLANTED000&state={state}"),
+            ),
+            (
+                "an address of the site, with this sign-in's state",
+                format!("https://shop.example/signed-in?code=PLANTED000&state={state}"),
+            ),
+            (
+                "the callback with another state",
+                "charkha:/signed-in?code=PLANTED000&state=not-the-state".to_owned(),
+            ),
+            (
+                "the callback with no state",
+                "charkha:/signed-in?code=PLANTED000".to_owned(),
+            ),
+        ] {
+            let update = core.send(Event::SignInDone { url: Some(planted) });
+            assert!(
+                fetches(&update).is_empty(),
+                "{what}: nothing is exchanged or opened: {update:?}"
+            );
+        }
+        // The callback, with this sign-in's state: the code is exchanged.
+        let back = core.send(Event::SignInDone {
+            url: Some(format!("charkha:/signed-in?code=Tq7uX0b2c9&state={state}")),
+        });
+        let exchange = back
+            .effects
+            .iter()
+            .find_map(|effect| match effect {
+                Effect::Fetch(request) if request.url.ends_with("/api/auth/app/exchange") => {
+                    request.body.clone()
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("the code is exchanged: {back:?}"));
+        assert!(
+            matches!(&exchange, Body::Json { text } if text.contains(r#""platform":"windows""#)
+                && text.contains("CharkhaSupply_8wekyb3d8bbwe")
+                && text.contains(r#""code":"Tq7uX0b2c9""#)),
+            "{exchange:?}"
+        );
+        // The same return again, with the sign-in over, is not used.
+        let twice = core.send(Event::SignInDone {
+            url: Some(format!("charkha:/signed-in?code=Tq7uX0b2c9&state={state}")),
+        });
+        assert!(fetches(&twice).is_empty(), "{twice:?}");
+
+        // A callback on a scheme that is not the app's is handed to nobody:
+        // no session opens.
+        for not_the_apps in ["other:/signed-in", "http://127.0.0.1:5123/signed-in"] {
+            let (_, opened) = started(not_the_apps);
+            assert!(sign_in(&opened).is_none(), "{not_the_apps}: {opened:?}");
+        }
+    }
+
     /// A link is a sign-in's return only for a sign-in that is open, on the
     /// way back that sign-in named and with its `state`. With no callback in
     /// the shell and no sign-in open, a link on the app's scheme that carries
