@@ -238,6 +238,7 @@ mod session_controller;
 #[cfg(feature = "session")]
 mod session_json;
 mod sessions;
+mod sheets;
 mod sign_in_policy;
 mod strategy;
 mod telemetry;
@@ -309,6 +310,7 @@ pub use session_json::{
     SessionLoginInput, SessionMagicLinkInput, SessionOtpInput, SessionTwoFactorInput,
 };
 pub use sessions::{ConfirmProof, ConfirmedToken, SessionResource};
+pub use sheets::{ProviderSheet, ProviderSheets, SheetProvider};
 pub use sign_in_policy::{SignInAttempt, SignInAudience, SignInMethod, SignInPolicy, email_domain};
 pub use strategy::{JwtStrategy, Strategy, StrategyAuthenticator};
 pub use tickets::SealedTickets;
