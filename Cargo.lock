@@ -10646,7 +10646,11 @@ checksum = "9440ea3e5aeabb0ac63af70daf835274065238cdd0cec83418f417eae38bacee"
 name = "xtask"
 version = "1.6.0"
 dependencies = [
+ "chrono",
+ "navree-time",
+ "serde",
  "serde_json",
+ "sqlx",
  "tempfile",
  "toml_edit",
 ]
