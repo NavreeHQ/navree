@@ -1,7 +1,7 @@
 # Walks the demo's place in Windows and writes what each part answered, with a picture of the screen after each:
 # the count on the taskbar, the icon in the notification area and the small window by it, settings, opening at sign-in,
 # a notification, a window of its own, the full screen, the offer to start again, the title bar's search, the first
-# load failing. It then tries what comes from outside on the running app: a second start, and that it claims no scheme of its own.
+# load failing. It then tries what comes from outside on the running app: a second start, and an address on the app's own scheme.
 #
 # Without -Packaged the demo is started from its build folder (no package identity). With -Packaged the demo's package
 # project is registered with the winapp command, which gives the app package identity, and started the same way.
@@ -66,6 +66,16 @@ function Wait-Demo($Process, [int]$Seconds) {
     return "did not end in $Seconds seconds"
 }
 
+# Opens an address on the app's own scheme, as a browser does when a sign-in comes back. No sign-in is open here, so the running app is
+# handed it as a link from outside; what the app says of it is in the probe's file.
+function Open-OnScheme {
+    try {
+        Start-Process 'navree-demo://orders'
+        Say "an address on the app's scheme was opened"
+    } catch { Say ("an address on the app's scheme could not be opened: " + $_.Exception.Message) }
+    Start-Sleep -Seconds 6
+}
+
 $first = $true
 $walks = @(
     @{ Name = 'light'; Arguments = @('--light') },
@@ -85,7 +95,7 @@ foreach ($walk in $walks) {
 
 # What comes from outside, tried on the app while it runs as it would for a person.
 Say ""
-Say "== a second start tried on the running app, and the app's scheme not claimed"
+Say "== a second start and an address on the app's scheme, tried on the running app"
 $probeFile = Join-Path $OutDir 'probe.txt'
 $running = Start-Demo @('--probe', $probeFile, '--light') $false
 if ($null -ne $running) {
@@ -107,16 +117,20 @@ if ($null -ne $running) {
             Say "the app was started again from its entry in the Start menu"
         }
         Start-Sleep -Seconds 6
-        # Signing in through the browser is not offered on Windows, so the package claims no scheme: none is opened here (an address on a scheme
-        # nobody claims makes Windows ask which program to open it with, and that question waits for a person).
-        $registered = 'Registry::HKEY_CLASSES_ROOT\navree-demo'
-        Say ("the scheme is known to Windows (it should not be): " + (Test-Path $registered))
+        # The package declares the app's scheme, which a sign-in in the browser comes back on. An address on it is opened only when Windows
+        # knows the scheme: one on a scheme nobody claims makes Windows ask which program to open it with, and that question waits for a person.
+        $registered = 'Registry::HKEY_CLASSES_ROOT\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\PackageRepository\Extensions\windows.protocol\navree-demo'
+        $known = Test-Path $registered
+        Say ("the package's scheme is known to Windows: " + $known)
+        if ($known) { Open-OnScheme }
         Start-Sleep -Seconds 2
     } else {
         $second = Start-Demo @('--open=%2Forders') $false
         Say ("a second start with a path: " + (Wait-Demo $second 40))
-        # As above: the app registers no scheme, so none is opened.
-        Say ("the scheme is registered for this person (it should not be): " + (Test-Path 'HKCU:\Software\Classes\navree-demo'))
+        # The running app registered its scheme for this person as it started. As above, an address on it is opened only when it is registered.
+        $known = Test-Path 'HKCU:\Software\Classes\navree-demo'
+        Say ("the scheme is registered for this person: " + $known)
+        if ($known) { Open-OnScheme }
         Start-Sleep -Seconds 2
         $third = Start-Demo @('--new-window') $false
         Say ("a second start asking for a window: " + (Wait-Demo $third 40))

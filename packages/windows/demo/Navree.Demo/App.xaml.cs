@@ -9,8 +9,15 @@ namespace Navree.Demo;
 /// <summary>The demo app: the client on recorded answers (or a live server), in one window, with its place in Windows.</summary>
 public partial class App : Application
 {
-    /// <summary>The app's own scheme, which a sign-in in the browser comes back on once that is offered on Windows; until then nothing on it is taken.</summary>
+    /// <summary>The app's own scheme, which a sign-in in the browser comes back on: the package declares it, and a run with no package registers it for this person.</summary>
     public const string Scheme = "navree-demo";
+
+    /// <summary>
+    /// The id the demo names itself by when it runs from its build folder, with no package. A server that lists it (<c>auth.apps.windows</c>:
+    /// <c>app_id</c>, with a <c>callback</c> on <see cref="Scheme"/>) hands a sign-in made in the browser over to it. From its package the demo is
+    /// named by its package family name instead.
+    /// </summary>
+    public const string AppId = "com.navree.demo";
 
     /// <summary>The key a second start finds the running app by.</summary>
     public const string InstanceKey = "navree-demo-main";
@@ -87,6 +94,7 @@ public partial class App : Application
             {
                 Origin = live,
                 AppName = "Navree Demo",
+                AppId = AppId,
                 LoopbackHttp = live.StartsWith("http://", StringComparison.Ordinal),
                 KeptFolder = testing ? Path.Combine(Path.GetTempPath(), "navree-demo-kept-" + Environment.ProcessId) : null,
                 WebFolder = webFolder,
