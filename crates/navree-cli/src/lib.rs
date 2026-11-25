@@ -36,7 +36,7 @@
 //! | `navree browser:install [--version <version>] [--force]` | Download Chrome for Testing into Navree's cache for navree-browser ([`browser`]) |
 //! | `navree openapi:client [--out web/src/lib/api] [--input <file>]` | The OpenAPI document and the front end's `schema.d.ts` for `@navree/client` ([`openapi_client`]) |
 //! | `navree native:coverage [--platform <p>] [--form <f>] [--json] [--fail-on web\|layout] [--features <f>] [--file <path>]` | Each page route of the app asked as a native client: its grade and what is missing, with totals; a gate for a store build (the app needs the native preview; [`native_coverage`]) |
-//! | `navree native:doctor [--platform ios\|android\|all] [--url <site>] [--json]` | What a native build needs, each item ready, missing or not applicable, with the next step for what is missing: the preview feature, the `auth.apps`, passkey, push and sign-in settings, the Android and Apple toolchains ([`native_doctor`]) |
+//! | `navree native:doctor [--platform ios\|android\|windows\|all] [--url <site>] [--json]` | What a native build needs, each item ready, missing or not applicable, with the next step for what is missing: the preview feature, the `auth.apps`, passkey, push and sign-in settings, the Android and Apple toolchains ([`native_doctor`]) |
 //! | `navree plugin:add [PACKAGE] [--version REQ] [--path DIR] [--no-wire] [--publish-config]` | Install a plugin, wire its module, and write its suggested grants and page sources ([`plugin::add::run`]) |
 //! | `navree plugin:remove PACKAGE` | Unwire a plugin and remove its crate, keeping its configuration, grants and data ([`plugin::remove::run`]) |
 //! | `navree plugin:list [--json]` | List the plugins this app depends on and whether each is wired ([`plugin::list::run`]) |

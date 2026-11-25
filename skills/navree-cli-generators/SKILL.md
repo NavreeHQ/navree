@@ -220,7 +220,8 @@ navree native:init --name Dukaan --origin http://127.0.0.1:8080 --dry-run
   streams, the toolkit's files) are counted, not listed.
 - `native:doctor` never changes anything and never prints a secret. It checks
   the preview feature, `auth.apps` (Apple team and bundle ids, Android packages
-  and fingerprints), the association files (`--url` asks a running site), passkey
+  and fingerprints, a Windows app's id and its `callback` on its own scheme:
+  `--platform windows` asks for one), the association files (`--url` asks a running site), passkey
   origins, `notify.push` keys (presence only), social providers, the JDK, the
   Android SDK and platform, and Xcode (on a Mac; elsewhere it says Apple builds
   need a Mac or a cloud build). It exits 1 when anything is missing.

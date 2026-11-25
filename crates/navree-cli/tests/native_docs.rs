@@ -131,6 +131,7 @@ fn the_settings_on_the_page_pass_the_checks_of_the_settings() {
     for id in [
         "auth.apple",
         "auth.android",
+        "auth.windows",
         "auth.paths",
         "links.apple",
         "links.android",
