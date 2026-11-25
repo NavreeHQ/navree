@@ -7559,26 +7559,34 @@ mod tests {
     }
 
     /// A snapshot the release before took names its person by their plain
-    /// key. A core whose client gives a secret now still puts it back for
-    /// that person, and for nobody else. The snapshot taken after names them
-    /// by the key made with the secret, so the plain one is read once.
+    /// key. While the client says it still keeps a key of that kind
+    /// (`old_key`), a core with a secret puts such a snapshot back for that
+    /// person, and for nobody else, and the snapshot taken after names them
+    /// by the key made with the secret. Once the client says so no more, a
+    /// snapshot named by a plain key is put back for nobody: the plain name,
+    /// which anybody can make again from a guess of the id, opens nothing
+    /// after the start the keys were changed at.
     #[test]
-    fn a_snapshot_taken_before_the_client_gave_a_secret_is_put_back_for_its_person_alone() {
+    fn a_snapshot_named_by_a_plain_key_is_put_back_only_while_the_client_keeps_one() {
         const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
         const HARLEEN: &str = "0193a4b2-0000-7000-8000-00000000ha02";
         let released: serde_json::Value = serde_json::from_str(include_str!(
             "../transcripts/fixtures/made/snapshot-released.json"
         ))
         .expect("the snapshot reads");
-        let restored_for = |id: &str| {
+        // A start from `snapshot` with the install's secret, the shell
+        // answered for the person of `id`: the core, and what that answer
+        // led to.
+        let restored = |snapshot: &serde_json::Value, id: &str, old_key: bool| {
             let mut config = Config::new(
                 "https://shop.example",
                 Client::new(Platform::Android, FormFactor::Phone),
             );
             config.secret = SECRET.to_owned();
+            config.old_key = old_key;
             let mut core = Core::new(config);
             let started = core.send(Event::Restore {
-                snapshot: released.clone(),
+                snapshot: snapshot.clone(),
             });
             let shell = started
                 .effects
@@ -7586,8 +7594,8 @@ mod tests {
                 .find_map(asks_for_the_shell)
                 .expect("the shell is asked for");
             let hers = include_str!("../transcripts/fixtures/store/shell.json");
-            core.send(native(shell, hers, Some(id), false));
-            core
+            let answered = core.send(native(shell, hers, Some(id), false));
+            (core, answered)
         };
         let places = |core: &Core| -> Vec<String> {
             core.view.destinations[0]
@@ -7596,21 +7604,48 @@ mod tests {
                 .map(|id| core.view.screens[id].url.clone())
                 .collect()
         };
-        let hers = restored_for(RAVNEET);
+        // The core says a snapshot was another person's, and uses nothing of it.
+        let refused = |update: &Update| {
+            update.effects.iter().any(|effect| {
+                matches!(effect, Effect::Report { what, detail }
+                    if what == "snapshot" && detail.contains("another person"))
+            })
+        };
+
+        // The first start after the update: the client still keeps her plain key.
+        let (hers, said) = restored(&released, RAVNEET, true);
         assert_eq!(places(&hers), ["/", "/orders/1"], "her place is back");
+        assert!(!refused(&said), "{said:?}");
         let key = key_of(&hers).expect("a key");
         assert!(key.starts_with("k2:"), "{key}");
+        let taken = hers.snapshot();
         assert_eq!(
-            hers.snapshot().person,
+            taken.person,
             Some(key),
             "the snapshot taken now names her by a plain key"
         );
-        // Another account finds nothing of hers.
-        let other = restored_for(HARLEEN);
+        // Another account at that start finds nothing of hers.
+        let (other, said) = restored(&released, HARLEEN, true);
         assert!(
             !places(&other).iter().any(|url| url == "/orders/1"),
             "another person was put in her place"
         );
+        assert!(refused(&said), "{said:?}");
+
+        // A later start: the client keeps the key made with the secret, and
+        // says nothing of a plain one. A snapshot named by her plain key is
+        // not put back, for her or for anybody.
+        let (later, said) = restored(&released, RAVNEET, false);
+        assert!(
+            !places(&later).iter().any(|url| url == "/orders/1"),
+            "a snapshot named by a plain key was put back for a client that keeps none"
+        );
+        assert!(refused(&said), "{said:?}");
+        // The snapshot taken with the secret is hers at such a start.
+        let taken = serde_json::to_value(taken).expect("the snapshot writes");
+        let (again, said) = restored(&taken, RAVNEET, false);
+        assert_eq!(places(&again), ["/", "/orders/1"], "her place is back");
+        assert!(!refused(&said), "{said:?}");
     }
 
     /// An answer without an id standing between two distinct ids of one name
