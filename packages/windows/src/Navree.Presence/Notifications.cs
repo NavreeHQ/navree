@@ -408,6 +408,31 @@ public sealed class NotificationSchedule
     /// <returns>How many were let go of.</returns>
     public int DropNobodys() => waiting.RemoveAll(item => item.Owner is null);
 
+    /// <summary>
+    /// Keeps every one that is a person's under another mark of the same person: the app holds that the two marks are one person's (the
+    /// mark of the key the core makes with the install's secret, and the mark of the plain key they had before). What is nobody's, and
+    /// what is anybody else's, stays as it is.
+    /// </summary>
+    /// <param name="from">The mark they had before.</param>
+    /// <param name="to">The mark they have now.</param>
+    /// <returns>How many were moved.</returns>
+    public int Move(string from, string to)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(from);
+        ArgumentException.ThrowIfNullOrEmpty(to);
+        int moved = 0;
+        for (int at = 0; at < waiting.Count; at++)
+        {
+            if (string.Equals(waiting[at].Owner, from, StringComparison.Ordinal))
+            {
+                waiting[at] = waiting[at] with { Owner = to };
+                moved++;
+            }
+        }
+
+        return moved;
+    }
+
     /// <summary>Writes what waits, to be kept between launches.</summary>
     /// <returns>JSON text.</returns>
     public string Write()

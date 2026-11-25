@@ -122,6 +122,12 @@ public sealed record AppPart
 
     /// <summary>Who is signed in, when anybody is.</summary>
     public Models.User? User { get; init; }
+
+    /// <summary>
+    /// What the key of the person signed in was before the client gave the core a secret: their plain key. The core says it only beside
+    /// <see cref="User"/>, and only to a client that said it still keeps a key of that kind. It is compared and never kept.
+    /// </summary>
+    public string? UserWas { get; init; }
 }
 
 /// <summary>A top-level destination and the screens stacked in it, the first at the bottom.</summary>

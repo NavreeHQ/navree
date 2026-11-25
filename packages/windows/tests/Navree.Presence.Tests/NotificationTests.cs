@@ -365,6 +365,35 @@ public sealed class NotificationTests
     }
 
     [TestMethod]
+    public void AReminderKeptUnderTheMarkAPersonHadWaitsUnderTheMarkTheyHaveNow()
+    {
+        // Simran's reminder was kept under the mark of the key she had before the install had a secret. At this start the core makes her
+        // key with that secret and says her key was the one before: the two marks are hers, and the reminder waits under the one she has now.
+        const string Before = "key:1c54d473261f6f17cb6193202ce56588716e85757946078ac43d03b22f93a35e";
+        const string Here = "key:k2:17d27bf8db683479c652471e31c96ac7d03e690c41c4f94f56ca99de886e389e";
+        NotificationSchedule schedule = new();
+        DateTimeOffset nine = new(2026, 11, 16, 9, 0, 0, TimeSpan.FromHours(5.5));
+        _ = schedule.Add(new PendingNotification("insulin", "Call Mr. Arora about the insulin refill", null, null, null, nine, 9, 0) { Owner = Before });
+        _ = schedule.Add(new PendingNotification("courier", "Hand parcel to Ludhiana courier", null, null, null, nine, null, null) { Owner = Manpreet });
+        _ = schedule.Add(new PendingNotification("bedi", "Call Mrs. Bedi about the refund", null, null, null, nine, null, null));
+        Assert.IsNull(schedule.Next(Here), "a reminder under the mark she had is shown under the mark she has now before the two are held to be hers");
+
+        Assert.AreEqual(1, schedule.Move(Before, Here));
+        PendingNotification hers = schedule.Waiting.Single(item => item.Id == "insulin");
+        Assert.AreEqual(Here, hers.Owner);
+        Assert.AreEqual((nine, 9, 0), (hers.At, hers.Hour!.Value, hers.Minute!.Value), "keeping a reminder under her mark changed when it is due");
+        Assert.AreEqual(Manpreet, schedule.Waiting.Single(item => item.Id == "courier").Owner, "another person's reminder was kept as hers");
+        Assert.IsNull(schedule.Waiting.Single(item => item.Id == "bedi").Owner, "what is nobody's was kept as hers");
+        Assert.AreEqual(0, schedule.Move(Before, Here), "what was moved once was moved again");
+
+        // It is written so, and the next start, which reads the mark she has now, keeps it for her and shows it to her alone.
+        NotificationSchedule next = NotificationSchedule.Read(schedule.Write());
+        Assert.AreEqual(1, next.KeepFor(Here), "only the other person's goes at a start that reads her mark");
+        Assert.AreEqual(0, next.Take(nine.AddMinutes(1), India, Before).Count, "the mark she had still shows what is hers");
+        Assert.AreEqual("insulin", next.Take(nine.AddMinutes(1), India, Here).Single().Id);
+    }
+
+    [TestMethod]
     public async Task AReminderDueAfterALongSilenceAsksTheShellBeforeItIsShown()
     {
         Assert.AreEqual(TimeSpan.FromMinutes(15), NotifyRules.DefaultSilence);

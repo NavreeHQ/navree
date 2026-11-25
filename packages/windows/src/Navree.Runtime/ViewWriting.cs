@@ -125,6 +125,11 @@ public static class ViewWriting
             Models.WriteUser(w, app.User);
         }
 
+        if (app.UserWas is not null)
+        {
+            w.WriteString("user_was", app.UserWas);
+        }
+
         w.WriteEndObject();
     }
 

@@ -51,6 +51,14 @@ public static class ClientConfig
     /// <param name="signInCallback">The scheme a sign-in in the browser comes back on, when the app has one.</param>
     /// <param name="loopbackHttp">Whether plain http to the machine itself is allowed.</param>
     /// <param name="undrawable">The kinds this build does not draw.</param>
+    /// <param name="secret">
+    /// The secret of this install, as hex, which the core makes its key for a person with; null from a caller that keeps none, to which
+    /// the core gives plain keys. It is a secret: it goes to the core and nowhere else.
+    /// </param>
+    /// <param name="oldKey">
+    /// Whether the client still keeps the mark of a plain key, made before the install had a secret: the core then says what the plain
+    /// key of the person it names was. It is said only with a secret.
+    /// </param>
     /// <param name="signInPaths">
     /// The addresses that start a sign-in with another site, where a star stands for one segment (<c>/auth/*/redirect</c>): a link to one opens
     /// the sign-in in the browser and is never fetched. None for a run that cannot catch a sign-in's return.
@@ -67,6 +75,8 @@ public static class ClientConfig
         string? signInCallback,
         bool loopbackHttp,
         IReadOnlyList<string> undrawable,
+        string? secret = null,
+        bool oldKey = false,
         IReadOnlyList<string>? signInPaths = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -154,6 +164,15 @@ public static class ClientConfig
             }
 
             w.WriteEndArray();
+            if (secret is not null)
+            {
+                w.WriteString("secret", secret);
+                if (oldKey)
+                {
+                    w.WriteBoolean("old_key", true);
+                }
+            }
+
             w.WriteEndObject();
         }
 

@@ -81,6 +81,28 @@ public sealed class UndrawableTests
         Assert.AreEqual(125, client.GetProperty("text_percent").GetInt32());
         Assert.AreEqual("Asia/Kolkata", client.GetProperty("tz").GetString());
         Assert.AreEqual("navree-demo", root.GetProperty("sign_in").GetProperty("callback").GetString());
+        Assert.IsFalse(root.TryGetProperty("secret", out _) || root.TryGetProperty("old_key", out _), "a caller that keeps no secret says one");
+    }
+
+    [TestMethod]
+    public void The_configuration_carries_the_installs_secret_and_says_when_a_plain_key_is_still_kept()
+    {
+        const string Secret = "0102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F20";
+        ClientSettings settings = new(Dark: false, MoreContrast: false, TextPercent: 100, Locale: "en-IN", TimeZone: "Asia/Kolkata");
+        byte[] Config(string? secret, bool oldKey) =>
+            ClientConfig.Json("https://shop.example", [], "com.charkha.supply", settings, "10.0.26100.0", "1.2.3", Caps, null, false, Undrawable.Kinds, secret, oldKey);
+
+        using JsonDocument plain = JsonDocument.Parse(Config(Secret, oldKey: false));
+        Assert.AreEqual(Secret, plain.RootElement.GetProperty("secret").GetString());
+        Assert.IsFalse(plain.RootElement.TryGetProperty("old_key", out _), "a client that keeps no plain key asks the core for one");
+
+        using JsonDocument kept = JsonDocument.Parse(Config(Secret, oldKey: true));
+        Assert.AreEqual(Secret, kept.RootElement.GetProperty("secret").GetString());
+        Assert.IsTrue(kept.RootElement.GetProperty("old_key").GetBoolean());
+
+        // With no secret the core gives plain keys, and there is no key from before to ask for.
+        using JsonDocument none = JsonDocument.Parse(Config(null, oldKey: true));
+        Assert.IsFalse(none.RootElement.TryGetProperty("secret", out _) || none.RootElement.TryGetProperty("old_key", out _));
     }
 
     // The core, given that configuration, shows a page that holds a range field in the web view and not with a hole.

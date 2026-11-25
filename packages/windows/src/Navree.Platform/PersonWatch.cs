@@ -52,10 +52,19 @@ public enum PersonHeard
 /// another person's when the core gives none. A start that finds something kept and no mark cannot say whose it is, and takes the first
 /// person named for another. It is used from one thread, the window's.
 /// </para>
+/// <para>
+/// One mark is held to another, once. The core makes a person's key with a secret of this install (<see cref="InstallSecret"/>), and such
+/// a key begins <c>k2:</c>. A mark kept from before the install had a secret is the mark of a plain key
+/// (<see cref="IsPlainKeyMark"/>), which the core makes no more. While such a mark is kept the client says so to the core
+/// (<see cref="KeepsPlainKey"/>, <c>old_key</c> in the configuration), and the core says beside the person it names what their plain key
+/// was (<c>app.user_was</c>). When the mark kept is the mark of that key, the person named is the one what is kept is kept for: nothing is
+/// taken away, and the mark of their key as it is now takes its place. Any other mark of a plain key is another person's, as before.
+/// </para>
 /// </remarks>
 public sealed class PersonWatch
 {
     private const string KeyPrefix = "key:";
+    private const string KeyedPrefix = "k2:";
     private string? named;
     private bool unknownBefore;
 
@@ -74,12 +83,22 @@ public sealed class PersonWatch
     /// <summary>The mark of the person named last; null when nobody was named since the start or the last sign-out.</summary>
     public string? Named => named;
 
+    /// <summary>
+    /// Whether the mark of the person named last is the mark of a plain key: one the core made before this install had a secret. Asked at
+    /// the start, before the core is made, it says whether the core is to say what a person's plain key was (<c>old_key</c>).
+    /// </summary>
+    public bool KeepsPlainKey => named is string mark && IsPlainKeyMark(mark);
+
     /// <summary>Hears who a state names as signed in.</summary>
     /// <param name="key">The core's key for the person; null or empty from a core that gives none.</param>
     /// <param name="name">The person's name; null when the state names nobody.</param>
     /// <param name="email">Their email, when they have one.</param>
+    /// <param name="was">
+    /// What the core says the person's plain key was (<c>app.user_was</c>), when it says; null when it does not. It is compared with the
+    /// mark kept and never kept itself.
+    /// </param>
     /// <returns>Whether they are the first named, the one named before, or another person with nobody signed out between.</returns>
-    public PersonHeard Hear(string? key, string? name, string? email)
+    public PersonHeard Hear(string? key, string? name, string? email, string? was = null)
     {
         if (name is null)
         {
@@ -102,6 +121,19 @@ public sealed class PersonWatch
 
         if (string.Equals(before, now, StringComparison.Ordinal))
         {
+            return PersonHeard.Same;
+        }
+
+        // The mark kept is of a plain key, the key given now is made with the install's secret, and the core says the plain key of the
+        // person it names was the one kept: they are the person what is kept is kept for, and their mark is the mark of the key they
+        // have now. A plain key that is not the one kept, and a core that says none, leave the two marks two people's.
+        if (!string.IsNullOrEmpty(key)
+            && !string.IsNullOrEmpty(was)
+            && IsPlainKeyMark(before)
+            && !IsPlainKeyMark(now)
+            && string.Equals(before, MarkOfKey(was), StringComparison.Ordinal))
+        {
+            named = now;
             return PersonHeard.Same;
         }
 
@@ -129,6 +161,18 @@ public sealed class PersonWatch
     {
         ArgumentException.ThrowIfNullOrEmpty(key);
         return KeyPrefix + key;
+    }
+
+    /// <summary>
+    /// Whether a mark is the mark of a plain key: a key the core made before the install had a secret, or makes for a client that gives
+    /// it none. A key made with the secret begins <c>k2:</c>, and a mark made from a name and an email is the mark of no key.
+    /// </summary>
+    /// <param name="mark">The mark.</param>
+    /// <returns>Whether it is the mark of a plain key.</returns>
+    public static bool IsPlainKeyMark(string mark)
+    {
+        ArgumentNullException.ThrowIfNull(mark);
+        return mark.StartsWith(KeyPrefix, StringComparison.Ordinal) && !mark.StartsWith(KeyPrefix + KeyedPrefix, StringComparison.Ordinal);
     }
 
     /// <summary>

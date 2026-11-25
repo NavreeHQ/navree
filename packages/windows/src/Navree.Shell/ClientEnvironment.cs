@@ -63,9 +63,10 @@ internal static class ClientEnvironment
     /// <summary>
     /// The configuration the core is made from. The app's id is its package family name when packaged, the configured id when not. A run that
     /// can catch the return of a sign-in in the browser (it is offered, and the app has a scheme of its own) tells the core it has a sign-in
-    /// session and which addresses start one; any other run tells it neither, so no sign-in in the browser is started.
+    /// session and which addresses start one; any other run tells it neither, so no sign-in in the browser is started. The core makes its
+    /// key for a person with the install's secret, and says what a person's plain key was while the mark of one is kept.
     /// </summary>
-    internal static byte[] Config(ShellOptions options)
+    internal static byte[] Config(ShellOptions options, string secret, bool oldKey)
     {
         IReadOnlyList<Navree.Presence.FeatureOffer> offers = PlaceCapabilities.Current();
         bool comesBack = Navree.Presence.BrowserSignIn.ComesBack(
@@ -82,6 +83,8 @@ internal static class ClientEnvironment
             options.Place.Scheme,
             options.LoopbackHttp,
             options.Undrawable,
+            secret,
+            oldKey,
             signInPaths: comesBack ? options.SignInPaths : null);
     }
 }

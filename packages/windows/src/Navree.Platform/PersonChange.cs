@@ -26,6 +26,11 @@ namespace Navree.Platform;
 /// No part of a change: lets go of what waits for nobody when a session ends at a cover after a person was kept, or when the person
 /// named before becomes signed in again after nobody was, so a reminder asked while nobody was named never goes to the person before.
 /// </param>
+/// <param name="MoveWaiting">
+/// No part of a change: the person what is kept is kept for is named by another mark than before (the mark of the key the core makes with
+/// the install's secret, in place of the mark of their plain key). What waits under the first mark given is theirs still, and is kept
+/// under the second from here on.
+/// </param>
 public sealed record PersonChangeParts(
     Func<string> MoveWebOn,
     Action DropPictures,
@@ -35,7 +40,8 @@ public sealed record PersonChangeParts(
     Func<Func<Task>, Task> OnWindow,
     Func<IEnumerable<WipeStep>> More,
     Action<string> GiveWaitingTo,
-    Action? DropWaitingForNobody = null);
+    Action? DropWaitingForNobody = null,
+    Action<string, string>? MoveWaiting = null);
 
 /// <summary>
 /// Another person signed in than the one before, and nobody signed out between: a session ran out, or the server ended it and said nothing
@@ -166,7 +172,8 @@ public sealed class PersonChange
             Say("the core named the person who is signed in and gave no key for them: they are told by their name and email, which two accounts can share");
         }
 
-        PersonHeard heard = watch.Hear(user.Key, user.Name, user.Email);
+        string? markBefore = watch.Named;
+        PersonHeard heard = watch.Hear(user.Key, user.Name, user.Email, state.App?.UserWas);
 
         // Whom the state names is heard all the same under a cover, so a change of person is seen, while nobody is taken to be signed in
         // for as long as the cover is up.
@@ -184,6 +191,14 @@ public sealed class PersonChange
         }
         else
         {
+            if (heard == PersonHeard.Same && markBefore is not null && !string.Equals(markBefore, mark, StringComparison.Ordinal))
+            {
+                // The same person, named by the key the core makes with the install's secret where the mark kept was of their plain
+                // key: what waits for them under the mark before is theirs still, and waits under the mark they have now. The keeper
+                // writes that mark below, in place of the one before.
+                MoveWaiting(markBefore, mark);
+            }
+
             if (heard == PersonHeard.First)
             {
                 // This person is the first named since a sign-out or since a start that kept nothing of a person: there was no person
@@ -227,6 +242,18 @@ public sealed class PersonChange
         catch (Exception failure)
         {
             Say("what waited for nobody could not be let go of: " + failure.GetType().Name);
+        }
+    }
+
+    private void MoveWaiting(string from, string to)
+    {
+        try
+        {
+            parts.MoveWaiting?.Invoke(from, to);
+        }
+        catch (Exception failure)
+        {
+            Say("what waited for the person under the mark they had before could not be kept under the mark they have now: " + failure.GetType().Name);
         }
     }
 

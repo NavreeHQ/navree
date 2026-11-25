@@ -367,6 +367,26 @@ public sealed class SystemPlace : IDisposable
         Say(dropped + " notifications that waited for nobody were let go of");
     }
 
+    /// <summary>
+    /// The person what is kept is kept for is named by another mark than before: the mark of the key the core makes with the install's
+    /// secret, in place of the mark of their plain key. Every notification that waits for them under the mark before is theirs still,
+    /// and waits under the mark they have now.
+    /// </summary>
+    /// <param name="from">The mark they had before.</param>
+    /// <param name="to">The mark they have now.</param>
+    internal void MoveWaiting(string from, string to)
+    {
+        int moved = schedule.Move(from, to);
+        if (moved == 0)
+        {
+            return;
+        }
+
+        Remember();
+        Arm();
+        Say(moved + " notifications that waited for the person signed in are kept under the mark they have now");
+    }
+
     /// <summary>The core took a notification back.</summary>
     /// <param name="id">Its id.</param>
     public void CancelNotification(string id)
