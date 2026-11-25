@@ -27,8 +27,8 @@ use navree_ui::pages::{PagesOptions, ReturnTo};
 use navree_ui::theme::{Appearance, Theme, ThemeMenu};
 use navree_ui::{
     Alert, AlertTone, AppFont, AppSheet, AuthLayout, Button, Card, Element, Form, LocalHref,
-    NativeCall, NativeFamily, NativeThen, Node, Reply, Shell, Stack, Submit, Text, Validate, View,
-    el,
+    NativeCall, NativeFamily, NativeThen, Node, Presented, Reply, Shell, Stack, Submit, Text,
+    Validate, View, el,
 };
 use serde::Deserialize;
 
@@ -65,18 +65,21 @@ const SIGN_UP_PER_MINUTE: u32 = 5;
 /// | `GET /sign-in/passkey`, `/sign-in/passkey.js`, `POST /sign-in/passkey/options`, `/sign-in/passkey/verify` | when `auth.passkeys.enabled`: the page, its script and the two JSON routes of the ceremony ([`AuthService::login_with_passkey_session`]) |
 /// | `POST /sign-in/passkey/native/options`, `/sign-in/passkey/native` | when `auth.passkeys.enabled`: the two routes of the `passkey` call a native app starts from the sign-in page ([`AuthService::login_with_passkey_call_session`]) |
 ///
-/// A native app (navree-ui's `native-preview`) gets the same pages as screens.
-/// Where its client says the app can, and the site is set up for it, the sign-in
-/// page starts the system's own sheet in place of a page: the link to the
-/// passkey page carries the `passkey` device call (the client lists `passkey`;
-/// passkeys are on; an app of the client's family under `auth.apps` has
-/// `credentials`, and an Apple app's origin `https://<rp_id>` is among
+/// The pages are a browser's: a native app (navree-ui's `native-preview`) shows
+/// them in its web view, or hands signing in to the system's sign-in session.
+/// The sign-in page is the exception where it has something only the app can
+/// start. Where the client says the app can, and the site is set up for it, the
+/// page is answered as a screen that starts the system's own sheet: the link to
+/// the passkey page carries the `passkey` device call (the client lists
+/// `passkey`; passkeys are on; an app of the client's family under `auth.apps`
+/// has `credentials`, and an Apple app's origin `https://<rp_id>` is among
 /// `auth.passkeys.origins`), and a button stands for the provider whose sheet
 /// the client's system has (the client lists `platform_sign_in`; a module
-/// registered a [`ProviderSheets`](crate::ProviderSheets) that takes it). What a
-/// client says of itself decides only what is offered: the routes a call names
-/// check everything it brings back. A browser's pages are not changed by any of
-/// it.
+/// registered a [`ProviderSheets`](crate::ProviderSheets) that takes it). The
+/// form and its links are on that screen too. Without a call the page is the web
+/// view's, as before. What a client says of itself decides only what is
+/// offered: the routes a call names check everything it brings back. A
+/// browser's pages are not changed by any of it.
 ///
 /// Every post carries the session's CSRF token (the forms hold it as
 /// `_csrf`; navree-session checks it), every page works with JavaScript
@@ -914,7 +917,13 @@ fn page(paths: &Paths, title: &'static str, description: &'static str, body: Nod
 
 /// A link under a form.
 fn link(text: &'static str, href: &str) -> Node {
-    el("a").href(href).child(text).into()
+    // On a screen of a native app each is a link of its own, which leads on with a
+    // way back; in a browser it is the link it was.
+    el("a")
+        .href(href)
+        .child(text)
+        .presented(Presented::Push)
+        .into()
 }
 
 /// A link to a page that loads a script of its own: the browser reloads the
