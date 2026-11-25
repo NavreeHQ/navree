@@ -51,6 +51,11 @@ body[data-preview-open] [data-preview-open] > dialog:not([open]){display:flex;fl
 /* Galleries: one captioned cell per variant or state. */
 [data-preview-gallery]{--cell:220px;display:grid;gap:12px;width:100%;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--cell)),1fr))}
 [data-preview-gallery=narrow]{--cell:140px}
+/* A box with buttons in it (a date, a time) shows what it holds beside them, and cuts it where
+   its cell has room for less: a date and its two buttons take 150px. Its cells are never told
+   how many go to a row, so each is at least this wide: three to a row in the docs' column,
+   one on a phone. */
+[data-preview-gallery=roomy]{--cell:200px}
 /* What does not shrink (a month's grid, the boxes of a code, a phone number): its cells are
    never told how many go to a row, so each is at least this wide, down to one to a row. */
 [data-preview-gallery=broad]{--cell:330px}

@@ -1237,6 +1237,9 @@ pub enum Cells {
     Narrow,
     /// About 220px.
     Medium,
+    /// At least 200px, as many to a row as fit: a date or a time box, which shows what it
+    /// holds beside one or two buttons and cuts it when its cell is narrower than the two.
+    Roomy,
     /// At least 330px, as many to a row as fit: a calendar, a one-time code, a phone
     /// number, which are drawn over the next cell when theirs is narrower than they are.
     Broad,
@@ -1253,6 +1256,7 @@ impl Cells {
         match self {
             Self::Narrow => "narrow",
             Self::Medium => "medium",
+            Self::Roomy => "roomy",
             Self::Broad => "broad",
             Self::Wide => "wide",
             Self::Icon => "icon",
@@ -1369,6 +1373,13 @@ impl Example {
 
     pub fn medium(mut self) -> Self {
         self.cells = Cells::Medium;
+        self
+    }
+
+    /// Cells with room for a box and the buttons in it: as many to a row as fit, three in the
+    /// docs' column and one on a phone.
+    pub fn roomy(mut self) -> Self {
+        self.cells = Cells::Roomy;
         self
     }
 

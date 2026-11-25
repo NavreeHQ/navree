@@ -266,6 +266,40 @@ fn a_popup_drawn_in_place_takes_no_focus_as_its_frame_loads() {
     assert!(files["previews/popover/sides.html"].contains(" autofocus "));
 }
 
+/// A date or a time box shows what it holds beside its buttons, and cuts it in a cell with
+/// room for less than the two. A gallery of such boxes is drawn in cells that are never told
+/// how many go to a row and are never narrowed on a phone: each is as wide as the frame's
+/// stylesheet says, which is more than a date, its padding and two buttons take (150px).
+#[test]
+fn a_gallery_of_date_or_time_boxes_gives_each_cell_room_for_a_box_and_its_buttons() {
+    let files = ui_docs::generate();
+    for id in [
+        "date-picker/states",
+        "date-picker/locales",
+        "time-picker/states",
+        "date-time-picker/states",
+    ] {
+        let html = &files[&format!("previews/{id}.html")];
+        assert!(
+            html.contains("<div data-preview-gallery=\"roomy\" data-preview-cols=\"0\">"),
+            "{id} is not drawn in roomy cells"
+        );
+    }
+    let frame = include_str!("../frame/preview.css");
+    let least: u32 = frame
+        .split("[data-preview-gallery=roomy]{--cell:")
+        .nth(1)
+        .and_then(|rest| rest.split("px}").next())
+        .and_then(|px| px.parse().ok())
+        .expect("the frame's stylesheet says how wide a roomy cell is, in px");
+    // The cell's own padding (16px a side) and border come off it before the box.
+    assert!(least >= 150 + 34, "a roomy cell is {least}px at least");
+    // Nothing else in the frame's stylesheet sizes a roomy gallery: no rule for a phone, and
+    // none that counts its columns, which is what `data-preview-cols="0"` asks for.
+    assert_eq!(frame.matches("[data-preview-gallery=roomy]").count(), 1);
+    assert!(!frame.contains("[data-preview-cols=\"0\"]"));
+}
+
 /// A preview draws a drawer open with CSS, so its scrim stands in for the
 /// dialog's `::backdrop`: a sheet asked for a light backdrop gets the toolkit's
 /// own light value, and the default one the toolkit's default.
