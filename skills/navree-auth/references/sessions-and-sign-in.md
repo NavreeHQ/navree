@@ -63,8 +63,8 @@
 - Sign-in hand-over (feature `session`; an app of `auth.apps` with
   `callback`, an https universal link or App Link; `custom_scheme = true`
   for a scheme, which never reuses a browser's sign-in): the app opens the
-  system's sign-in session at `GET /auth/app/sign-in?platform=apple|android
-  &app=<bundle id|package>&code_challenge=<b64url SHA-256(verifier)>
+  system's sign-in session at `GET /auth/app/sign-in?platform=apple|android|windows
+  &app=<bundle id|package|Windows id>&code_challenge=<b64url SHA-256(verifier)>
   &code_challenge_method=S256&state=..`; after the sign-in pages (`next` =
   `/auth/app/finish?attempt=<random>`; a sign-in page of your own keeps the
   whole `next`) the browser is sent to `<callback>?code=..&state=..`
@@ -99,6 +99,20 @@
     `GET` on each https callback's path with an empty `no-store`,
     `no-referrer` page, for a browser the system did not hand to the app;
     leave it off when the app serves that path itself.
+  - A Windows app: `[auth.apps.windows.<name>]` with `package_family_name`
+    (a packaged build's id) and/or `app_id` (an unpackaged build's), and a
+    required `callback` on the app's own scheme, written as it is sent
+    (`com.example.orders:/signed-in`: lower-case scheme of 2 to 39
+    characters, no user, query or fragment; never `https`, `http`, loopback
+    or a scheme a browser or Windows opens itself). `platform=windows`, `app`
+    = the build's id; a code works for the id that started it. Always treated
+    as a custom-scheme app: the browser's own sign-in is never handed over.
+    No association file, no passkey origin.
+  - Only the browser's own navigation finishes a hand-over: `GET
+    /auth/app/finish` asked by a script's `fetch`, the toolkit's runtime, a
+    native client, a prefetch or a frame changes nothing and answers 403.
+    `AuthPages` sends the browser there itself; a sign-in page of your own
+    that posts by script must `location.assign(next)`, never fetch it.
 - A platform sign-in in the app answering `two_factor_required` (navree-social's
   native session route): finish on `GET /sign-in/two-factor?next=..` inside
   the app, or `POST /api/auth/session/2fa/verify {code}`.
