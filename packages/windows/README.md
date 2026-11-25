@@ -88,13 +88,40 @@ A file field is a row: the label, a Choose button, and each file chosen with its
 
 ## The app's place in Windows
 
-Each feature is offered only where the build can do it, and the client's capability list and the About page say which. With a package: the taskbar badge, the jump list, the startup task. Without: an overlay icon on the taskbar button, the person's own list of programs to run at sign-in. Either way: the icon in the notification area with a small window by it, app notifications (not to an app that runs as an administrator), the share sheet, several windows over the one core, and one running app (a second start hands what it was asked to the first). `Activation.Claim` can be told to let every start run, which is for the walks of this repository and not for an app: two running apps share what is kept and the web view's folder, and a sign-out in one does not reach the other. `--system-walk <folder>` walks these and writes what each answered; `--probe <file>` runs the app for a while so a second start can be tried on it; `scripts/take-system-pictures.ps1` does both with and without a package.
+Each feature is offered only where the build can do it, and the client's capability list and the About page say which. With a package: the taskbar badge, the jump list, the startup task. Without: an overlay icon on the taskbar button, the person's own list of programs to run at sign-in. Either way: the icon in the notification area with a small window by it, app notifications (not to an app that runs as an administrator), the share sheet, several windows over the one core, the app's own scheme, on which a sign-in in the browser comes back (the package declares it; a build with none registers it for this person as it starts), and one running app (a second start hands what it was asked to the first). `Activation.Claim` can be told to let every start run, which is for the walks of this repository and not for an app: two running apps share what is kept and the web view's folder, and a sign-out in one does not reach the other. `--system-walk <folder>` walks these and writes what each answered; `--probe <file>` runs the app for a while so a second start can be tried on it; `scripts/take-system-pictures.ps1` does both with and without a package.
 
 ## Signing in
 
-Sign-in through the browser is not available on Windows yet; an app signs people in with its own sign-in page inside the app. That page comes to the client as any page of the app does: drawn by the client, its form sent with the client's own requests, so the session's cookie lands in the client's own cookie store. A sign-in page that holds a part the client does not draw is shown in the web view instead, and a sign-in there signs in the web view, not the app: the web view keeps its own cookies. A server that offers the hand-over to apps names its routes to every client, and on Windows that sign-in does not start, so such an app cannot sign people in on Windows yet.
+An app signs people in with its own sign-in page inside the app, and through the browser.
 
-Until the hand-over is offered for Windows, the client starts no sign-in in the browser, listens on no port for one, registers and claims no scheme of its own, and drops any address that arrives on its scheme, with or without a sign-in open: it is never opened as a page and never taken as a sign-in's return. Whether it is offered is decided in one place, `Navree.Presence/BrowserSignIn.cs`.
+**Inside the app.** The sign-in page comes to the client as any page of the app does: drawn by the client, its form sent with the client's own requests, so the session's cookie lands in the client's own cookie store. A sign-in page that holds a part the client does not draw is shown in the web view instead, and a sign-in there signs in the web view, not the app: the web view keeps its own cookies.
+
+**Through the browser.** A sign-in with another site (Google, a company's single sign-on) runs in the person's own browser, the one Windows opens a web address in. Its cookies are not the app's, so the sign-in reaches the app by the server's hand-over:
+
+1. A link to a sign-in address (`ShellOptions.SignInPaths`: `/auth/*/redirect` and `/api/auth/social/*/redirect` unless the app says otherwise), a control that asks for a sign-in session, or a provider's sign-in the web's way makes the core start one. The core makes a verifier, which never leaves it, and a `state`, and has the client open the browser at the server's start route with the app's id, the verifier's S256 challenge and the `state`.
+2. The person signs in on the site's own pages in the browser, by any way the site offers.
+3. The server sends the browser to a link on the app's own scheme with a one-time code and the `state`, and Windows hands that address to the app. A second start hands it to the app that is already running.
+4. The core takes the address only while the sign-in it opened is open, on the way back that sign-in named and with its `state`, and posts the code with its verifier from the app's own connection: the session's cookie lands in the client's cookie store, and the shell is asked who signed in.
+
+The app says its scheme (`PlaceOptions.Scheme`, such as `charkha`) and, for a build that runs from a folder, its id (`ShellOptions.AppId`); a build installed from a package is named by its package family name, and its manifest declares the scheme (`windows.protocol`), which a build with no package registers for this person as it starts. The server lists the app with the link the sign-in comes back on:
+
+```toml
+[auth.apps.windows.main]
+package_family_name = "CharkhaSupply_8wekyb3d8bbwe"  # a build installed from a package
+app_id = "com.charkha.supply"                         # a build that runs from a folder
+callback = "charkha:/signed-in"                       # a link on the app's own scheme
+```
+
+What holds for it:
+
+- A run takes part only when it can catch the return, which takes a scheme of the app's own. An app with none tells the core neither that it has a sign-in session nor which addresses start one, registers nothing, and a link to a sign-in address is an ordinary link.
+- The sign-in comes back on the app's own scheme and no other way. One that would come back on a link of the site or on a port of this machine is not started, and the app listens on no port.
+- A sign-in that must share nothing with the browser (`ephemeral`) is not started: the person's own browser cannot give one.
+- Any program on the machine can register a scheme, so the server never hands a Windows app a sign-in the browser already had: the person is asked first, is signed out there and signs in again for the app. A code that reaches another program is worth nothing without the verifier, which stays in the core of the app that started the sign-in.
+- An address that arrives on the scheme with no sign-in open is a link from outside: the core opens the page it names when the shell knows it, and never opens a sign-in's return as a page. A return that starts the app (the app that began the sign-in is gone, and its verifier with it) is not used.
+- The start address the server names, the callback and the `state` are the core's to check; the client opens only an `http` or `https` address, and tells the core every address that arrives as it came. The address itself is never written to a log: it can carry a code.
+
+Whether signing in through the browser is offered at all is decided in one place, `Navree.Presence/BrowserSignIn.cs`. Turned off there, the client starts no sign-in in the browser, registers no scheme, and drops any address that arrives on its scheme, with or without a sign-in open. `scripts/take-system-pictures.ps1` opens an address on the scheme on the running demo, with and without a package, and the demo's probe file says what the app was handed.
 
 ## What signing out does
 

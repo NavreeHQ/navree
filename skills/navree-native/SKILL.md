@@ -605,8 +605,8 @@ Say these plainly to the owner; do not build around them.
 - **Widgets, complications, live activities.** Not built. They are written for
   their surface, not lowered from a page.
 - **A Linux client.** Not built. A Windows client is in the repository
-  (`packages/windows`, for Windows 11 on WinUI 3), in preview; sign-in
-  through the browser is not available on Windows yet.
+  (`packages/windows`, for Windows 11 on WinUI 3), in preview; it signs in
+  inside the app and through the browser (an app of `auth.apps.windows`).
 - **The app on the device** (the Rust server running inside the app, offline).
   Not built; it needs a trust design of its own.
 - **Project scaffolding.** `navree native:init` writes the Apple client's
