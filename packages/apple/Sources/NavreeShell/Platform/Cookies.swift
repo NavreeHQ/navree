@@ -389,6 +389,8 @@ protocol SecretSlot: Sendable {
 struct KeychainSlot: SecretSlot {
     let service: String
     let account: String
+    /// What the item holds, in the words a line of the log names it by.
+    var what = "the session"
 
     /// What finds the item, in the data protection keychain on every system.
     var query: [String: Any] {
@@ -432,7 +434,7 @@ struct KeychainSlot: SecretSlot {
         // no application identifier): the session then lasts only as long as
         // the app runs.
         if status != errSecSuccess {
-            Self.log.error("the session could not be kept in the Keychain: \(status, privacy: .public)")
+            Self.log.error("\(what, privacy: .public) could not be kept in the Keychain: \(status, privacy: .public)")
         }
     }
 
@@ -441,7 +443,7 @@ struct KeychainSlot: SecretSlot {
     func delete() -> Bool {
         let status = SecItemDelete(query as CFDictionary)
         if !Self.isGone(status) {
-            Self.log.error("the session could not be taken out of the Keychain: \(status, privacy: .public)")
+            Self.log.error("\(what, privacy: .public) could not be taken out of the Keychain: \(status, privacy: .public)")
         }
         return Self.isGone(status)
     }

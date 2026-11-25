@@ -794,7 +794,9 @@ struct SessionEndTests {
         #expect(run.keeper.number == 0)
         #expect(hers.places.snapshots.read("snapshot-first") == "what Ravneet typed")
         #expect(hers.places.record.person() == keyed)
-        #expect(!run.keeper.keepsPlainKey)
+        // For the rest of this run every core that is made is still asked,
+        // so a window brought back later finds its place too.
+        #expect(run.keeper.keepsPlainKey)
         // The start after reads her new key and asks the core for no plain
         // one; named again, with or without what her key was, nothing goes.
         run = start(hers)
@@ -826,50 +828,130 @@ struct SessionEndTests {
         #expect(unsaid.places.record.person() == keyed)
     }
 
-    @Test func theInstallsSecretIsMadeOnceIsTheSameForEveryWindowAndStaysThroughASignOut() throws {
+    @Test func theInstallsSecretIsKeptInAKeychainItemOfItsOwnAndStaysThroughASignOut() throws {
         let places = Places()
         defer { places.remove() }
-        let made = places.record.secret()
+        let file = places.record.folder.appendingPathComponent("install")
+        // The Keychain item the install's secret is kept in, beside the session's own.
+        let item = MemorySlot()
+        /// A start of the app over what the device holds.
+        func start(keeping install: MemorySlot?) -> SessionKeeper {
+            SessionKeeper.open(
+                origin: "https://shop.example", slot: MemorySlot(), install: install, cache: places.cache,
+                snapshots: places.snapshots, files: places.files, record: places.record, removes: { _ in true }
+            )
+        }
+
+        // The first start makes it. It is what the item holds, and nothing of it is in the session's folder.
+        let keeper = start(keeping: item)
+        let made = keeper.installSecret
         #expect(made.count == 2 * SessionRecord.secretBytes)
         #expect(SessionRecord.reads(secret: made))
-        #expect(places.record.secret() == made)
-
-        // The session gives every window's core the one the record keeps.
-        let keeper = SessionKeeper.open(
-            origin: "https://shop.example", slot: MemorySlot(), cache: places.cache, snapshots: places.snapshots,
-            files: places.files, record: places.record, removes: { _ in true }
-        )
+        #expect(item.read() == Data(made.utf8))
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        // Every window's core of the session is given the same one, and so is the next start.
         #expect(keeper.installSecret == made)
-
-        // A sign-out takes who was written down, and leaves the secret.
-        let window = SystemEffects(transport: FakeTransport(), keeper: keeper)
-        window.devices.notifications = PlayedNotifications()
-        let ravneet = SessionKeeper.Person(
-            key: "k2:17d27bf8db683479c652471e31c96ac7d03e690c41c4f94f56ca99de886e389e",
-            mark: SessionKeeper.mark(name: "Ravneet Kaur", email: nil)
-        )
-        keeper.hears(ravneet, from: window)
-        #expect(places.record.person() == ravneet)
-        keeper.end(by: window)
-        #expect(places.record.person() == nil)
-        #expect(places.record.secret() == made)
-        #expect(keeper.installSecret == made)
-
-        // Another install has another; and a session with no record has one of its own for as long as it lives.
-        let elsewhere = Places()
-        defer { elsewhere.remove() }
-        #expect(elsewhere.record.secret() != made)
-        let loose = SessionKeeper(cache: places.cache, snapshots: places.snapshots)
-        let its = loose.installSecret
-        #expect(SessionRecord.reads(secret: its))
-        #expect(its != made)
-        #expect(loose.installSecret == its)
+        #expect(start(keeping: item).installSecret == made)
 
         // What the core takes for a secret: hex, two characters a byte, of 32 bytes or more.
         #expect(!SessionRecord.reads(secret: String(made.dropLast(2))))
         #expect(!SessionRecord.reads(secret: made + "0"))
         #expect(!SessionRecord.reads(secret: "zz" + made.dropFirst(2)))
         #expect(SessionRecord.reads(secret: made + "0a"))
+
+        // What the item holds that is no secret is replaced, and what replaces it stays.
+        item.write(Data("not a secret".utf8))
+        let again = start(keeping: item).installSecret
+        #expect(SessionRecord.reads(secret: again))
+        #expect(again != made)
+        #expect(item.read() == Data(again.utf8))
+        #expect(start(keeping: item).installSecret == again)
+
+        // An item that is gone is made again.
+        #expect(item.delete())
+        let third = start(keeping: item)
+        #expect(third.installSecret != again)
+        #expect(item.read() == Data(third.installSecret.utf8))
+
+        // A build with no Keychain of its own keeps none: each run has a
+        // secret of its own for as long as it lives, and none is put in a file.
+        let bare = start(keeping: nil)
+        let its = bare.installSecret
+        #expect(SessionRecord.reads(secret: its))
+        #expect(bare.installSecret == its)
+        #expect(start(keeping: nil).installSecret != its)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+
+        // A sign-out takes who was written down and the session's own item, and leaves the secret.
+        let kept = third.installSecret
+        let window = SystemEffects(transport: FakeTransport(), keeper: third)
+        window.devices.notifications = PlayedNotifications()
+        let ravneet = SessionKeeper.Person(
+            key: "k2:17d27bf8db683479c652471e31c96ac7d03e690c41c4f94f56ca99de886e389e",
+            mark: SessionKeeper.mark(name: "Ravneet Kaur", email: nil)
+        )
+        third.hears(ravneet, from: window)
+        #expect(places.record.person() == ravneet)
+        third.end(by: window)
+        #expect(places.record.person() == nil)
+        #expect(item.read() == Data(kept.utf8))
+        #expect(third.installSecret == kept)
+    }
+
+    @Test func aSecretABuildBeforeKeptInAFileIsMovedIntoTheKeychainOnceAndTheFileIsDeleted() throws {
+        let old = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+        /// A session's places with `text` in the file a build before kept the secret in.
+        func left(_ text: String) throws -> (places: Places, file: URL) {
+            let places = Places()
+            let file = places.record.folder.appendingPathComponent("install")
+            try FileManager.default.createDirectory(at: places.record.folder, withIntermediateDirectories: true)
+            try Data(text.utf8).write(to: file)
+            return (places, file)
+        }
+        func start(_ places: Places, keeping install: MemorySlot?) -> SessionKeeper {
+            SessionKeeper.open(
+                origin: "https://shop.example", slot: MemorySlot(), install: install, cache: places.cache,
+                snapshots: places.snapshots, files: places.files, record: places.record, removes: { _ in true }
+            )
+        }
+        func isThere(_ file: URL) -> Bool { FileManager.default.fileExists(atPath: file.path) }
+
+        // The file's secret goes on being the install's, so the keys stay
+        // what they were. The Keychain holds it now, and the file is gone.
+        let moved = try left(old + "\n")
+        defer { moved.places.remove() }
+        #expect(moved.places.record.fileSecret() == old)
+        let item = MemorySlot()
+        #expect(start(moved.places, keeping: item).installSecret == old)
+        #expect(item.read() == Data(old.utf8))
+        #expect(!isThere(moved.file))
+        #expect(start(moved.places, keeping: item).installSecret == old)
+
+        // A file that turns up beside an item that holds a secret is not read, and goes.
+        try Data(String(repeating: "ff", count: 32).utf8).write(to: moved.file)
+        #expect(start(moved.places, keeping: item).installSecret == old)
+        #expect(!isThere(moved.file))
+        #expect(item.read() == Data(old.utf8))
+
+        // A file that holds no secret is deleted too, and a secret is made.
+        let broken = try left("not a secret")
+        defer { broken.places.remove() }
+        #expect(broken.places.record.fileSecret() == nil)
+        let fresh = MemorySlot()
+        let made = start(broken.places, keeping: fresh).installSecret
+        #expect(SessionRecord.reads(secret: made))
+        #expect(made != old)
+        #expect(fresh.read() == Data(made.utf8))
+        #expect(!isThere(broken.file))
+
+        // With no Keychain to move it into, the file's secret is that run's
+        // alone and the file is deleted all the same: a secret is kept in
+        // the Keychain or not at all.
+        let bare = try left(old)
+        defer { bare.places.remove() }
+        #expect(start(bare.places, keeping: nil).installSecret == old)
+        #expect(!isThere(bare.file))
+        #expect(start(bare.places, keeping: nil).installSecret != old)
     }
 
     @Test func withoutAKeyTwoPeopleOfOneNameAndNoAddressAreOneAndARenamedPersonIsAnother() throws {
