@@ -7,19 +7,22 @@
     <!-- The five functions are imported with LibraryImport, which writes the calls at build time. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Navree Native for Windows: the bridge to the runtime core, with the core's library for 64-bit Windows (x64).</Description>
   </PropertyGroup>
 
   <!-- The core's library for the app's processor, when the build has made it (see ../../README.md).
-       It goes next to every program that uses this project, and the import finds it there. -->
+       It goes next to every program that uses this project, and the import finds it there. In the NuGet package it is the
+       native library for win-x64, which a build for that runtime puts next to the program in the same way. -->
   <PropertyGroup>
     <NavreeCoreLibrary Condition="'$(NavreeCoreLibrary)' == ''">$(MSBuildThisFileDirectory)..\..\native\win-x64\navree_native_core.dll</NavreeCoreLibrary>
   </PropertyGroup>
   <ItemGroup Condition="Exists('$(NavreeCoreLibrary)')">
-    <None Include="$(NavreeCoreLibrary)" Link="navree_native_core.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(NavreeCoreLibrary)" Link="navree_native_core.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" Pack="true" PackagePath="runtimes\win-x64\native\" />
   </ItemGroup>
 
-  <!-- A build without the core's library would make an app that cannot start: the build stops instead, and says where it looked. -->
-  <Target Name="NavreeCoreLibraryIsThere" BeforeTargets="CoreCompile" Condition="!Exists('$(NavreeCoreLibrary)')">
+  <!-- A build without the core's library would make an app that cannot start, and a package without it one that no app can
+       use: the build and the packing stop instead, and say where it was looked for. -->
+  <Target Name="NavreeCoreLibraryIsThere" BeforeTargets="CoreCompile;GenerateNuspec" Condition="!Exists('$(NavreeCoreLibrary)')">
     <Error Code="NAVREE0001" Text="The core's library is not at $(NavreeCoreLibrary). Build it and put it there as packages/windows/README.md says, or give its path in the NavreeCoreLibrary property." />
   </Target>
 

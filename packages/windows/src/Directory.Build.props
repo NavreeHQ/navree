@@ -1,0 +1,25 @@
+<Project>
+  <!-- The settings of the whole solution first. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- The libraries under src/ are the client as NuGet packages: one package for each project, with the project's name as
+       its id and its references to the other projects as dependencies at the same version. Navree.Shell is the one an app
+       references, and the others come with it. Each project says what it is in its own file (Description), the version
+       comes from the release (-p:Version), and scripts/pack.ps1 packs them all. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Authors>Amritpal Singh</Authors>
+    <Copyright>Copyright (c) 2026 Amritpal Singh and the Navree contributors</Copyright>
+    <PackageLicenseExpression>MIT OR Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://navree.com</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/NavreeHQ/navree</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>navree;native;windows;winui</PackageTags>
+  </PropertyGroup>
+
+  <!-- The page nuget.org shows for every one of the packages. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+</Project>

@@ -19,5 +19,8 @@
     <AnalysisLevel>latest</AnalysisLevel>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+
+    <!-- Only the libraries under src/ are NuGet packages (src/Directory.Build.props): the demos and the tests are not. -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 </Project>

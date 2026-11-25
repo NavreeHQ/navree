@@ -8,6 +8,7 @@
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
+    <Description>Navree Native for Windows: the app, on WinUI 3. The window, the navigation and the pages of an app whose screens a Navree server draws. An app references this package, and the others come with it.</Description>
   </PropertyGroup>
 
   <ItemGroup>
