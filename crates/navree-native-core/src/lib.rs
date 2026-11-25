@@ -89,18 +89,21 @@ pub struct Core {
 impl Core {
     /// A core for an app built with `config`. Nothing happens until
     /// [`Event::Start`] is sent. A configuration the core can't use (an origin
-    /// that is not `https`) leaves it in [`Stage::Failed`] with
-    /// [`Failure::Config`], and it does nothing.
+    /// that is not `https`, a secret that is not hex or is shorter than 32
+    /// bytes) leaves it in [`Stage::Failed`] with [`Failure::Config`], and it
+    /// does nothing.
     pub fn new(config: Config) -> Self {
         let mut view = ViewState::default();
         let origin = origin::Origin::parse(&config.origin, &config.also, config.loopback_http);
-        if origin.is_none() {
+        let keying = cache::Keying::of(&config);
+        if origin.is_none() || keying.is_none() {
             view.stage = Stage::Failed;
             view.failure = Some(Failure::Config);
         }
         let inner = state::Inner {
-            usable: origin.is_some(),
+            usable: origin.is_some() && keying.is_some(),
             origin: origin.unwrap_or_default(),
+            keying: keying.unwrap_or_default(),
             ..state::Inner::default()
         };
         Self {
@@ -134,5 +137,45 @@ mod tests {
         assert_eq!(core.view().stage, Stage::Failed);
         assert_eq!(core.view().failure, Some(Failure::Config));
         assert_eq!(core.send(Event::Start), Update::default());
+    }
+
+    /// A secret the core can't make keys with is a configuration it can't
+    /// use: nothing is made with half a secret, and no key is made plain
+    /// because the secret did not read.
+    #[test]
+    fn a_secret_that_is_not_hex_or_is_too_short_is_a_configuration_the_core_cant_use() {
+        let client = Client::new(Platform::Android, FormFactor::Phone);
+        let short = "0a".repeat(31);
+        let not_hex = "zz".repeat(32);
+        let odd = format!("{}0", "0a".repeat(32));
+        for secret in [short.as_str(), not_hex.as_str(), odd.as_str(), "0"] {
+            let mut config = Config::new("https://shop.example", client.clone());
+            config.secret = secret.to_owned();
+            let mut core = Core::new(config);
+            assert_eq!(core.view().stage, Stage::Failed, "{secret}");
+            assert_eq!(core.view().failure, Some(Failure::Config), "{secret}");
+            assert_eq!(core.send(Event::Start), Update::default(), "{secret}");
+        }
+        // 32 bytes as hex, in either case, are a secret; so are more.
+        for secret in ["0a".repeat(32), "0A".repeat(32), "0a".repeat(48)] {
+            let mut config = Config::new("https://shop.example", client.clone());
+            config.secret = secret;
+            assert_eq!(Core::new(config).view().stage, Stage::Starting);
+        }
+    }
+
+    /// The secret is never written out with the rest of what the core holds:
+    /// of it, only whether one was given.
+    #[test]
+    fn the_secret_is_not_in_what_the_core_writes_of_itself() {
+        let client = Client::new(Platform::Android, FormFactor::Phone);
+        let secret = "5e".repeat(32);
+        let mut config = Config::new("https://shop.example", client);
+        config.secret = secret.clone();
+        let core = Core::new(config.clone());
+        for written in [format!("{config:?}"), format!("{core:?}")] {
+            assert!(!written.contains("5e5e"), "{written}");
+            assert!(written.contains("secret: true"), "{written}");
+        }
     }
 }

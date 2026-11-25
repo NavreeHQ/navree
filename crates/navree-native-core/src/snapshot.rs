@@ -130,11 +130,11 @@ enum Person {
     Unknown,
 }
 
-fn person_of(user: Option<&crate::cache::Who>) -> Person {
+fn person_of(user: Option<&crate::cache::Who>, keying: &crate::cache::Keying) -> Person {
     match user {
         None => Person::Nobody,
         // The same name a client is given for them in `app.user.key`.
-        Some(who) => match who.id_key() {
+        Some(who) => match keying.id_key(who) {
             Some(key) => Person::Told(key),
             None => Person::Unknown,
         },
@@ -300,7 +300,7 @@ impl Core {
                 .map(kept)
                 .collect()
         };
-        let (person, keeps) = match person_of(self.inner.user.as_ref()) {
+        let (person, keeps) = match person_of(self.inner.user.as_ref(), &self.inner.keying) {
             _ if !answered => (None, false),
             Person::Nobody => (None, true),
             Person::Told(person) => (Some(person), true),
@@ -391,10 +391,18 @@ impl Core {
         let Some(snapshot) = self.inner.restore.take() else {
             return false;
         };
-        let now = person_of(self.inner.user.as_ref());
+        let now = person_of(self.inner.user.as_ref(), &self.inner.keying);
+        // A snapshot taken before the client gave a secret names its person
+        // by their plain key: it is still theirs, and the next one taken
+        // names them by the key made with the secret.
+        let before = self
+            .inner
+            .user
+            .as_ref()
+            .and_then(|who| self.inner.keying.id_key_before(who));
         let theirs = match (&snapshot.person, &now) {
             (None, Person::Nobody) => true,
-            (Some(held), Person::Told(now)) => held == now,
+            (Some(held), Person::Told(now)) => held == now || Some(held) == before.as_ref(),
             _ => false,
         };
         if !theirs {
@@ -566,6 +574,7 @@ mod tests {
     use super::*;
     use crate::cache::Who;
     use navree_native::input::{TextInput, ToggleInput};
+    use navree_native::{Client, FormFactor, Platform};
 
     fn text(kind: TextKind, autofill: Option<&str>) -> Input {
         Input::Text(TextInput {
@@ -621,21 +630,39 @@ mod tests {
             name: name.to_owned(),
             email: None,
         };
-        let ravneet = person_of(Some(&who(Some("u-ra01"), "Ravneet Kaur")));
-        assert!(matches!(ravneet, Person::Told(_)));
-        // A new name is the same person; the same name with another id is not.
-        assert_eq!(
-            ravneet,
-            person_of(Some(&who(Some("u-ra01"), "Ravneet Kaur Sidhu")))
+        // With the secret of an install, and for a client that gives none.
+        let mut config = crate::Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
         );
+        let plain = crate::cache::Keying::of(&config).expect("no secret is a configuration");
+        config.secret = "0a".repeat(32);
+        let keyed = crate::cache::Keying::of(&config).expect("32 bytes are a secret");
+        for keying in [&plain, &keyed] {
+            let person_of = |user: Option<&Who>| person_of(user, keying);
+            let ravneet = person_of(Some(&who(Some("u-ra01"), "Ravneet Kaur")));
+            assert!(matches!(ravneet, Person::Told(_)));
+            // A new name is the same person; the same name with another id is not.
+            assert_eq!(
+                ravneet,
+                person_of(Some(&who(Some("u-ra01"), "Ravneet Kaur Sidhu")))
+            );
+            assert_ne!(
+                ravneet,
+                person_of(Some(&who(Some("u-ra02"), "Ravneet Kaur")))
+            );
+            // Without an id nobody can be told from another of the same name:
+            // not from the person with an id, not from nobody, and not from
+            // themselves in another launch, since no snapshot is for them.
+            assert_eq!(person_of(Some(&who(None, "Ravneet Kaur"))), Person::Unknown);
+            assert_eq!(person_of(None), Person::Nobody);
+        }
+        // The two ways never give one name: a snapshot of one install is
+        // nobody's in another.
+        let hers = who(Some("u-ra01"), "Ravneet Kaur");
         assert_ne!(
-            ravneet,
-            person_of(Some(&who(Some("u-ra02"), "Ravneet Kaur")))
+            person_of(Some(&hers), &plain),
+            person_of(Some(&hers), &keyed)
         );
-        // Without an id nobody can be told from another of the same name:
-        // not from the person with an id, not from nobody, and not from
-        // themselves in another launch, since no snapshot is for them.
-        assert_eq!(person_of(Some(&who(None, "Ravneet Kaur"))), Person::Unknown);
-        assert_eq!(person_of(None), Person::Nobody);
     }
 }

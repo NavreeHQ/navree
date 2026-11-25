@@ -1453,7 +1453,8 @@ impl Core {
                     }
                 }
                 _ => {
-                    self.inner.person = Some(crate::cache::HeldPerson::from_shell(who));
+                    let held = crate::cache::HeldPerson::from_shell(who, &self.inner.keying);
+                    self.inner.person = Some(held);
                 }
             }
         }
@@ -1527,19 +1528,24 @@ impl Core {
         // The person as a client is given them carries the core's key for
         // them, by which a client tells one person from another. It is the
         // core's alone to write: the protocol's own type has no such field,
-        // so whatever a server wrote there was not read.
-        let key = self
-            .inner
-            .user
-            .as_ref()
-            .and_then(|_| self.inner.person.as_ref().map(|held| held.key.clone()));
-        let signed_in = shell.user.zip(key).map(|(user, key)| AppUser { user, key });
+        // so whatever a server wrote there was not read. For a client that
+        // still keeps a key as it was made before it gave a secret, that key
+        // is said beside the person, and only while the person is named.
+        let key = match (&self.inner.user, &self.inner.person) {
+            (Some(_), Some(held)) => Some((held.key.clone(), held.was.clone())),
+            _ => None,
+        };
+        let (user, user_was) = match shell.user.zip(key).filter(|_| !from_device) {
+            Some((user, (key, was))) => (Some(AppUser { user, key }), was),
+            None => (None, None),
+        };
         self.view.app = Some(App {
             name: shell.name,
             context: if from_device { None } else { shell.context },
             home: shell.home,
             theme: shell.theme,
-            user: if from_device { None } else { signed_in },
+            user,
+            user_was,
         });
         self.inner.shell_kept = from_device;
         if self.view.stage != Stage::Upgrade {
@@ -7070,6 +7076,33 @@ mod tests {
         Some(core.view.app.as_ref()?.user.as_ref()?.key.clone())
     }
 
+    /// The key the person signed in had before the client gave a secret,
+    /// when a client is given it.
+    fn was_of(core: &Core) -> Option<String> {
+        core.view.app.as_ref()?.user_was.clone()
+    }
+
+    /// A secret an install of the app made, as its client gives it; and the
+    /// one another install made.
+    const SECRET: &str = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+    const OTHER_SECRET: &str = "65666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f8081828384";
+
+    /// A core whose client gave `secret`, and says with `old_key` whether it
+    /// still keeps a key made before it gave one. Its first shell is `shell`,
+    /// answered for the person of `id`, or with no id.
+    fn keyed_as(secret: &str, old_key: bool, id: Option<&str>, shell: &str) -> Core {
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.secret = secret.to_owned();
+        config.old_key = old_key;
+        let mut core = Core::new(config);
+        core.send(Event::Start);
+        core.send(native(1, shell, id, false));
+        core
+    }
+
     /// A server may sign people in and still give its native shell nobody to
     /// name (no shell of its own): its answers name the person by id, the
     /// shell's answer too. The core holds the session to that id. A page
@@ -7388,6 +7421,195 @@ mod tests {
             key_of(&signed_in_as(Some(RAVNEET), hers)),
             Some(id_key),
             "key differed from a fresh launch with the same id"
+        );
+    }
+
+    /// With the secret of its install, the core makes a person's key as a
+    /// keyed hash. One person has one key at every launch of the install, and
+    /// two accounts have two, as before. But the key is no longer the plain
+    /// hash anybody can make again from a guess: counting through small ids
+    /// finds nobody, and the same person has another key in another install
+    /// and at another origin. It is still the name a snapshot is for.
+    #[test]
+    fn a_key_made_with_the_installs_secret_is_one_for_a_person_and_is_not_found_by_guessing() {
+        // Ids as small as a server may give: the fourth row and the fifth.
+        let harpreet = include_str!("../transcripts/fixtures/made/shell-harpreet-no-email.json");
+        let first = keyed_as(SECRET, false, Some("4"), harpreet);
+        let key = key_of(&first).expect("the person signed in has a key");
+        assert!(key.starts_with("k2:") && key.len() == 67, "{key}");
+        assert_eq!(was_of(&first), None, "a plain key left the core");
+        assert_eq!(
+            key_of(&keyed_as(SECRET, false, Some("4"), harpreet)),
+            Some(key.clone()),
+            "the same account has another key at another launch"
+        );
+        let other = key_of(&keyed_as(SECRET, false, Some("5"), harpreet)).expect("a key");
+        assert_ne!(other, key, "two accounts of one name have one key");
+        assert_eq!(
+            first.snapshot().person.as_deref(),
+            Some(key.as_str()),
+            "the key is the name a snapshot is for"
+        );
+
+        // What a client that gives no secret is given: the plain hash, which
+        // counting through the ids finds. Neither keyed one is found so.
+        let hash = |id: u32| crate::sign_in::fingerprint(&format!("navree-person-id\n{id}"));
+        let plain = key_of(&signed_in_as(Some("4"), harpreet)).expect("a key");
+        assert_eq!(plain, hash(4));
+        let guesses: Vec<String> = (0..1000).map(hash).collect();
+        assert!(guesses.contains(&plain));
+        for keyed in [&key, &other] {
+            let made = keyed.trim_start_matches("k2:");
+            assert!(!guesses.iter().any(|guess| guess == made), "{keyed}");
+        }
+
+        // Another install has another secret, and another key for the person.
+        assert_ne!(
+            key_of(&keyed_as(OTHER_SECRET, false, Some("4"), harpreet)),
+            Some(key.clone()),
+            "two installs have one key for a person"
+        );
+        // And so has the same install at another origin.
+        let mut config = Config::new(
+            "https://store.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.secret = SECRET.to_owned();
+        let mut elsewhere = Core::new(config);
+        elsewhere.send(Event::Start);
+        elsewhere.send(native(1, harpreet, Some("4"), false));
+        let there = key_of(&elsewhere).expect("a key");
+        assert_ne!(there, key, "one key for a person at two origins");
+
+        // A person the server names without an id is told by name and email,
+        // and their key is made with the secret too.
+        let named = key_of(&keyed_as(SECRET, false, None, harpreet)).expect("a key");
+        assert!(named.starts_with("k2:") && named != key, "{named}");
+        assert_eq!(
+            key_of(&keyed_as(SECRET, false, None, harpreet)),
+            Some(named.clone()),
+            "the same name and email have two keys"
+        );
+        assert_ne!(Some(named), key_of(&signed_in_as(None, harpreet)));
+    }
+
+    /// A client that kept a person's key before it gave a secret says so
+    /// (`old_key`), and is given that key beside the person (`user_was`):
+    /// what it kept is that person's, and nobody else's. Once it keeps the
+    /// new key it says so no more, and the plain key does not leave the core
+    /// again. It is said only while the person is named. A client that gives
+    /// no secret has the one key, as before.
+    #[test]
+    fn a_client_that_still_keeps_a_key_made_before_is_given_it_beside_the_new_one() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        const HARLEEN: &str = "0193a4b2-0000-7000-8000-00000000ha02";
+        let hers = include_str!("../transcripts/fixtures/store/shell.json");
+        let app_of = |core: &Core| {
+            serde_json::to_value(core.view())
+                .expect("the view state writes")
+                .pointer("/app")
+                .cloned()
+                .expect("a shell is drawn")
+        };
+        // What the release before gave her, and what a client kept: the key
+        // of a core whose client gives no secret.
+        let kept = key_of(&signed_in_as(Some(RAVNEET), hers)).expect("a key");
+        // The first launch after the update. The client holds a secret now,
+        // finds the key it kept, and says so.
+        let updated = keyed_as(SECRET, true, Some(RAVNEET), hers);
+        let key = key_of(&updated).expect("a key");
+        assert_ne!(key, kept, "the key did not change with the secret");
+        assert_eq!(
+            was_of(&updated),
+            Some(kept.clone()),
+            "what the client kept is not known to be hers"
+        );
+        let app = app_of(&updated);
+        assert_eq!(app["user"]["key"], key.as_str(), "{app}");
+        assert_eq!(app["user_was"], kept.as_str(), "{app}");
+        assert_eq!(app["user"].get("was"), None, "{app}");
+        // Somebody else at that launch has her own plain key said, which is
+        // not the one kept: what was kept goes, as for any other person.
+        let other = keyed_as(SECRET, true, Some(HARLEEN), hers);
+        assert!(was_of(&other).is_some_and(|was| was != kept));
+        // When who is signed in may have changed, nobody is named, and no
+        // key of the person before is said either.
+        let mut ended = keyed_as(SECRET, true, Some(RAVNEET), hers);
+        ended.who_may_have_changed(false);
+        assert_eq!((key_of(&ended), was_of(&ended)), (None, None));
+        assert_eq!(app_of(&ended).get("user_was"), None);
+        // The client keeps the new key now and says so no more: the launches
+        // after give her the same key, and no plain one.
+        let later = keyed_as(SECRET, false, Some(RAVNEET), hers);
+        assert_eq!(key_of(&later), Some(key));
+        assert_eq!(was_of(&later), None);
+        let app = app_of(&later);
+        assert_eq!(app.get("user_was"), None, "{app}");
+        // A client that gives no secret has the one key, whatever it says.
+        let mut config = Config::new(
+            "https://shop.example",
+            Client::new(Platform::Android, FormFactor::Phone),
+        );
+        config.old_key = true;
+        let mut plain = Core::new(config);
+        plain.send(Event::Start);
+        plain.send(native(1, hers, Some(RAVNEET), false));
+        assert_eq!(key_of(&plain), Some(kept));
+        assert_eq!(was_of(&plain), None);
+    }
+
+    /// A snapshot the release before took names its person by their plain
+    /// key. A core whose client gives a secret now still puts it back for
+    /// that person, and for nobody else. The snapshot taken after names them
+    /// by the key made with the secret, so the plain one is read once.
+    #[test]
+    fn a_snapshot_taken_before_the_client_gave_a_secret_is_put_back_for_its_person_alone() {
+        const RAVNEET: &str = "0193a4b2-0000-7000-8000-00000000ra01";
+        const HARLEEN: &str = "0193a4b2-0000-7000-8000-00000000ha02";
+        let released: serde_json::Value = serde_json::from_str(include_str!(
+            "../transcripts/fixtures/made/snapshot-released.json"
+        ))
+        .expect("the snapshot reads");
+        let restored_for = |id: &str| {
+            let mut config = Config::new(
+                "https://shop.example",
+                Client::new(Platform::Android, FormFactor::Phone),
+            );
+            config.secret = SECRET.to_owned();
+            let mut core = Core::new(config);
+            let started = core.send(Event::Restore {
+                snapshot: released.clone(),
+            });
+            let shell = started
+                .effects
+                .iter()
+                .find_map(asks_for_the_shell)
+                .expect("the shell is asked for");
+            let hers = include_str!("../transcripts/fixtures/store/shell.json");
+            core.send(native(shell, hers, Some(id), false));
+            core
+        };
+        let places = |core: &Core| -> Vec<String> {
+            core.view.destinations[0]
+                .stack
+                .iter()
+                .map(|id| core.view.screens[id].url.clone())
+                .collect()
+        };
+        let hers = restored_for(RAVNEET);
+        assert_eq!(places(&hers), ["/", "/orders/1"], "her place is back");
+        let key = key_of(&hers).expect("a key");
+        assert!(key.starts_with("k2:"), "{key}");
+        assert_eq!(
+            hers.snapshot().person,
+            Some(key),
+            "the snapshot taken now names her by a plain key"
+        );
+        // Another account finds nothing of hers.
+        let other = restored_for(HARLEEN);
+        assert!(
+            !places(&other).iter().any(|url| url == "/orders/1"),
+            "another person was put in her place"
         );
     }
 

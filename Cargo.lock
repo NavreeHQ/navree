@@ -5482,6 +5482,7 @@ dependencies = [
 name = "navree-native-core"
 version = "0.1.0"
 dependencies = [
+ "hmac 0.13.0",
  "jni-sys",
  "navree-native",
  "serde",
