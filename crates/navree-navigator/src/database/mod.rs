@@ -818,26 +818,75 @@ fn is_local_host(host: &str) -> bool {
         .is_ok_and(|ip| ip.is_loopback())
 }
 
-/// `scheme://user:password@host/...` with the password replaced by `***`.
+/// `url` with its password replaced by `***`, for messages.
+///
+/// The password is the one SQLx would read, found with the parser SQLx
+/// uses: in the user part (`scheme://user:password@host/...`) or in a
+/// `password` parameter, however the URL is spelled (the `url` crate reads
+/// past tabs and line ends, and decodes the name of a parameter). A URL
+/// that does not parse, or that has an `@` the parser took for no user, may
+/// hold a password anywhere before its query, so of such a URL only the
+/// scheme and what follows the last `@` are shown, without the query. A
+/// SQLite URL has no password and is shown as it is.
 pub fn redact_url(url: &str) -> String {
-    let Some(start) = url.find("://").map(|i| i + 3) else {
+    if matches!(Driver::of(url), Ok(Driver::Sqlite)) {
         return url.to_owned();
-    };
-    let rest = &url[start..];
-    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-    let authority = &rest[..authority_end];
-    match authority.rfind('@') {
-        Some(at) => match authority[..at].find(':') {
-            Some(colon) => format!(
-                "{}{}:***{}",
-                &url[..start],
-                &authority[..colon],
-                &rest[at..]
-            ),
-            None => url.to_owned(),
-        },
-        None => url.to_owned(),
     }
+    let Ok(mut parsed) = Url::parse(url) else {
+        return redact_unparsed(url);
+    };
+    let in_user_part = parsed.password().is_some();
+    if !in_user_part && parsed.username().is_empty() && before_query(url).contains('@') {
+        return redact_unparsed(url);
+    }
+    let in_query = parsed.query_pairs().any(|(key, _)| key == "password");
+    if !in_user_part && !in_query {
+        return url.to_owned();
+    }
+    if in_user_part && parsed.set_password(Some("***")).is_err() {
+        return redact_unparsed(url);
+    }
+    if in_query {
+        let pairs: Vec<(String, String)> = parsed
+            .query_pairs()
+            .map(|(key, value)| {
+                let value = if key == "password" {
+                    "***".to_owned()
+                } else {
+                    value.into_owned()
+                };
+                (key.into_owned(), value)
+            })
+            .collect();
+        parsed.query_pairs_mut().clear().extend_pairs(pairs);
+    }
+    parsed.into()
+}
+
+/// What may be shown of a URL whose password cannot be told from the rest:
+/// its scheme and, when it has an `@` before its query, what follows the
+/// last one.
+fn redact_unparsed(url: &str) -> String {
+    let Some((scheme, rest)) = url.split_once(':') else {
+        return "***".to_owned();
+    };
+    let plain = !scheme.is_empty()
+        && scheme
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'));
+    if !plain {
+        return "***".to_owned();
+    }
+    let rest = before_query(rest);
+    match rest.rfind('@') {
+        Some(at) => format!("{scheme}:***{}", &rest[at..]),
+        None => format!("{scheme}:***"),
+    }
+}
+
+/// `text` up to its first `?` or `#`.
+fn before_query(text: &str) -> &str {
+    &text[..text.find(['?', '#']).unwrap_or(text.len())]
 }
 
 /// Runs one read-only statement (see [`check`]) and returns at most
@@ -1321,5 +1370,71 @@ mod tests {
             redact_url("sqlite://storage/app.db"),
             "sqlite://storage/app.db"
         );
+        assert_eq!(
+            redact_url("postgres://navree@localhost/crm"),
+            "postgres://navree@localhost/crm"
+        );
+    }
+
+    /// The password SQLx would read is masked whatever the spelling: past a
+    /// tab or a line end, and in a `password` parameter.
+    #[test]
+    fn a_password_is_masked_however_the_url_is_spelled() {
+        for (url, masked) in [
+            (
+                "postgres:/\t/navree:s3cret@db.example.com/crm",
+                "postgres://navree:***@db.example.com/crm",
+            ),
+            (
+                "postgres:\n//navree:s3cret@db.example.com/crm",
+                "postgres://navree:***@db.example.com/crm",
+            ),
+            (
+                "postgres:/\r/navree:s3\tcret@localhost:5432/crm?sslmode=require",
+                "postgres://navree:***@localhost:5432/crm?sslmode=require",
+            ),
+            (
+                "postgres://navree@localhost/crm?password=s3cret",
+                "postgres://navree@localhost/crm?password=***",
+            ),
+            (
+                "postgres://localhost/crm?pass%77ord=s3cret&sslmode=require",
+                "postgres://localhost/crm?password=***&sslmode=require",
+            ),
+        ] {
+            assert_eq!(redact_url(url), masked, "{url:?}");
+        }
+    }
+
+    /// Of a URL that does not parse, or whose `@` names no user, nothing
+    /// that could be a password is shown.
+    #[test]
+    fn a_url_that_cannot_be_read_shows_no_password() {
+        for (url, masked) in [
+            // No host after the user part: the `url` crate refuses it.
+            (
+                "postgres://navree:s3cret@/crm?password=s3cret",
+                "postgres:***@/crm",
+            ),
+            // A password where the port belongs.
+            ("postgres://navree:s3cret/crm", "postgres:***"),
+            // No slashes: the parser reads a path, with no user in it.
+            (
+                "postgres:navree:s3cret@db.example.com/crm",
+                "postgres:***@db.example.com/crm",
+            ),
+            (
+                "postgres:/navree:s3cret@db.example.com/crm?password=s3cret",
+                "postgres:***@db.example.com/crm",
+            ),
+            // No scheme to show.
+            ("navree s3cret", "***"),
+        ] {
+            let shown = redact_url(url);
+            assert_eq!(shown, masked, "{url:?}");
+            assert!(!shown.contains("s3cret"), "{url:?}: {shown}");
+        }
+        let error = check_local_in("postgres://navree:s3cret@/crm", env(&[])).unwrap_err();
+        assert!(!error.to_string().contains("s3cret"), "{error}");
     }
 }
