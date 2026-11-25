@@ -119,6 +119,14 @@ pub struct App {
     /// for them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<AppUser>,
+    /// The key of the person signed in as it was made before the client gave
+    /// a secret: the plain hash. There only while `user` is, and only for a
+    /// client that gives a secret and says it still keeps a key of that kind
+    /// ([`crate::Config::old_key`]). When the key the client keeps is this
+    /// one, what it keeps is this person's: it keeps `user.key` in its place
+    /// from then on, and never keeps this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_was: Option<String>,
 }
 
 /// The person signed in, as a client is given them: what the shell says of
@@ -138,8 +146,13 @@ pub struct AppUser {
     /// signed in; the core gives a client no other name for a person. Made when
     /// the person is first held, from the id the server named them by when it
     /// gave one (then it is the value a snapshot's `person` holds, and never
-    /// the id), and from their name and email otherwise. It tells nothing of
-    /// the person only for an id the server makes unguessable.
+    /// the id), and from their name and email otherwise. With the secret of
+    /// the install ([`crate::Config::secret`]) it begins `k2:` and is a keyed
+    /// hash: nobody who does not hold the secret can make it from a guess of
+    /// the id or the name, and the person has another key in every install.
+    /// For a client that gives no secret it is a plain hash, 64 hex digits,
+    /// and tells nothing of the person only for an id the server makes
+    /// unguessable.
     pub key: String,
 }
 
@@ -1076,7 +1089,8 @@ pub(crate) struct Restored {
 #[derive(Debug, Default)]
 pub(crate) struct Inner {
     pub origin: Origin,
-    /// Whether the configuration gave an origin the core can use.
+    /// Whether the configuration gave an origin the core can use, and no
+    /// secret it can't.
     pub usable: bool,
     pub next: Counters,
     /// The requests on their way.
@@ -1116,6 +1130,8 @@ pub(crate) struct Inner {
     /// changes, nothing of the one before may show.
     pub user: Option<crate::cache::Who>,
     pub person: Option<crate::cache::HeldPerson>,
+    /// How a person's key is made: with the install's secret, or plain.
+    pub keying: crate::cache::Keying,
     /// Who the shell about to be installed names, when its answer said it by
     /// id: taken by the install.
     pub naming: Option<String>,

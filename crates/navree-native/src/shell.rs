@@ -72,11 +72,15 @@ pub struct Nav {
 /// In the view state a client reads from the runtime core, this object also
 /// carries `key`: the core's own opaque key for the person, kept for as long as
 /// the core takes them for the same person, and the core gives a client no
-/// other name for a person. Because `key` is an unsalted SHA-256 hash of the id
-/// in `x-navree-person` (or of the name and email when no id was given), the
-/// key tells nothing of the person only for an id the server makes unguessable:
-/// a small sequential number, or a name and email, can be checked against it by
-/// hashing candidates.
+/// other name for a person. A client that gives the core the secret of its
+/// install is given a keyed hash (HMAC-SHA-256 under that secret) of the app's
+/// origin and the id in `x-navree-person`, or of the origin and the name and
+/// email when no id was given: it cannot be made from a guess without the
+/// secret, and the person has another key in every install. Only for a client
+/// that gives no secret is `key` a plain SHA-256 hash of the id (or of the name
+/// and email), which tells nothing of the person only for an id the server
+/// makes unguessable: a small sequential number, or a name and email, can be
+/// checked against it by hashing candidates.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct User {
     /// Their name.

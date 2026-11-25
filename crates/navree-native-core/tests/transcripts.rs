@@ -680,6 +680,8 @@ const REQUIRED: &[&str] = &[
     "shell-retry",
     "person-key-steady",
     "person-key-other-id",
+    "person-key-secret",
+    "person-key-was",
     "session-ended-outside",
     "sign-in-cover",
     "sign-in-another-person",

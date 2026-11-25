@@ -23,6 +23,7 @@
 //! finished on a page of the app, opened here with the app's own cookies and
 //! never in the system's session, which does not have them.
 
+use hmac::{Hmac, KeyInit as _, Mac as _};
 use navree_native::Platform;
 use navree_native::action::Present;
 use navree_native::shell::{SignInExchange, SignInPlatform};
@@ -71,8 +72,18 @@ pub(crate) fn fingerprint(text: &str) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+/// The HMAC-SHA-256 of `text` under `key`, as hex: a name for something that
+/// is not kept itself, which only somebody who holds the key can make, and
+/// against which nobody else can check a guess.
+pub(crate) fn keyed_fingerprint(key: &[u8], text: &str) -> String {
+    let mut mac = <Hmac<Sha256>>::new_from_slice(key).expect("HMAC takes a key of any length");
+    mac.update(text.as_bytes());
+    let bytes: [u8; 32] = mac.finalize().into_bytes().into();
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 /// Reads hex, two characters a byte.
-fn unhex(text: &str) -> Option<Vec<u8>> {
+pub(crate) fn unhex(text: &str) -> Option<Vec<u8>> {
     let text = text.trim().as_bytes();
     if !text.len().is_multiple_of(2) {
         return None;
@@ -599,6 +610,23 @@ mod tests {
             fingerprint("abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
+    }
+
+    #[test]
+    fn a_keyed_fingerprint_is_the_one_the_standard_gives() {
+        // RFC 4231, test cases 1 and 2.
+        assert_eq!(
+            keyed_fingerprint(&[0x0b; 20], "Hi There"),
+            "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+        );
+        assert_eq!(
+            keyed_fingerprint(b"Jefe", "what do ya want for nothing?"),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
+        // Another key, another name for the same thing; and never the plain hash.
+        let under = |key: &[u8]| keyed_fingerprint(key, "abc");
+        assert_ne!(under(b"Jefe"), under(b"Jeff"));
+        assert_ne!(under(b""), fingerprint("abc"));
     }
 
     #[test]

@@ -76,7 +76,7 @@ pub struct SignInConfig {
 /// assert!(config.back_to_first);
 /// assert_eq!(config.cache.pages, 24);
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     /// The app's origin: `https://shop.example`. Everything else opens in the
     /// system's browser.
@@ -124,6 +124,46 @@ pub struct Config {
     /// The system's sign-in session.
     #[serde(default)]
     pub sign_in: SignInConfig,
+    /// A secret of this install of the app, as hex: 32 bytes or more that the
+    /// client made once from the system's own secure random generator, keeps
+    /// on the device where no backup takes it, and gives at every start. The
+    /// core makes its key for a person with it (`app.user.key`, a snapshot's
+    /// `person`), so a key tells nothing of the person to anyone who does not
+    /// hold the secret, and the same person has another key in every install.
+    /// It is a secret: a client never logs it. Every window of an app gives
+    /// the same one. Left out, keys are made as they were before a client
+    /// gave one, as plain hashes. One that is not hex, or is shorter, is a
+    /// configuration the core can't use.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub secret: String,
+    /// Whether the client still keeps a key that was made before it gave a
+    /// secret. While it says so, the key the person signed in had then is
+    /// said beside them (`app.user_was`), so the client can tell that what it
+    /// keeps is theirs; it then keeps the new key in its place, and says so
+    /// no more. Without a secret it says nothing.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub old_key: bool,
+}
+
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Everything but the secret: of that, only whether one was given.
+        f.debug_struct("Config")
+            .field("origin", &self.origin)
+            .field("also", &self.also)
+            .field("loopback_http", &self.loopback_http)
+            .field("app_id", &self.app_id)
+            .field("client", &self.client)
+            .field("back_to_first", &self.back_to_first)
+            .field("deep_links", &self.deep_links)
+            .field("cache", &self.cache)
+            .field("undrawable", &self.undrawable)
+            .field("views", &self.views)
+            .field("sign_in", &self.sign_in)
+            .field("secret", &!self.secret.is_empty())
+            .field("old_key", &self.old_key)
+            .finish()
+    }
 }
 
 impl Config {
@@ -141,6 +181,8 @@ impl Config {
             undrawable: Vec::new(),
             views: Vec::new(),
             sign_in: SignInConfig::default(),
+            secret: String::new(),
+            old_key: false,
         }
     }
 }

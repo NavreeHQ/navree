@@ -66,27 +66,129 @@ impl Who {
         self.id.as_deref()
     }
 
-    /// The core's own name for this person when first held, as a client is
-    /// given it in `app.user.key`, and the core gives a client no other name
-    /// for a person. When the server named them by id it is the name a snapshot
-    /// is for ([`Who::id_key`]), so two accounts of one name and one email are
-    /// two; otherwise it is a hash of their name and email, which is all there
-    /// is to tell such a person by. Because it is an unsalted SHA-256 hash, the
-    /// key tells nothing of the person only for an id the server makes
-    /// unguessable.
-    pub(crate) fn key(&self) -> String {
-        self.id_key().unwrap_or_else(|| {
+    /// The key of this person as it was made before a client gave a secret,
+    /// and as it still is for a client that gives none: the plain SHA-256 of
+    /// the id the server named them by ([`Who::plain_id_key`]), or of their
+    /// name and email when it named them by none. Anybody can make it again
+    /// from a guess, so it tells nothing of the person only for an id the
+    /// server makes unguessable, and the same person has the same one in
+    /// every app.
+    pub(crate) fn plain_key(&self) -> String {
+        self.plain_id_key().unwrap_or_else(|| {
             let named = serde_json::to_string(&(&self.name, &self.email)).unwrap_or_default();
             crate::sign_in::fingerprint(&format!("navree-person-name\n{named}"))
         })
     }
 
-    /// The name for a person the server named by id: a hash of the id, never
-    /// the id. None for a person named without one.
-    pub(crate) fn id_key(&self) -> Option<String> {
+    /// The plain key of a person the server named by id: a hash of the id,
+    /// never the id. None for a person named without one.
+    pub(crate) fn plain_id_key(&self) -> Option<String> {
         self.id
             .as_ref()
             .map(|id| crate::sign_in::fingerprint(&format!("navree-person-id\n{id}")))
+    }
+}
+
+/// What a key made with the install's secret begins with. A plain key is 64
+/// hex digits and nothing else, so the two are told apart by how they begin.
+pub(crate) const KEYED: &str = "k2:";
+
+/// The fewest bytes of a secret the core makes keys with.
+pub(crate) const SECRET_BYTES: usize = 32;
+
+/// How the core makes its own name for a person, the key: what a client is
+/// given in `app.user.key`, and what a snapshot names its person by. The core
+/// gives a client no other name for a person.
+///
+/// With the secret of this install of the app ([`crate::Config::secret`]) a
+/// key is [`KEYED`] and then the HMAC-SHA-256, under that secret, of the
+/// app's origin and the id the server named the person by, or of the origin
+/// and their name and email when it named them by none. Two accounts of one
+/// name and one email, named by two ids, have two keys; an account whose name
+/// changes keeps its key. Nobody who does not hold the secret can make the
+/// key from a guess of the id or the name, however small the id, and the same
+/// person has another key in every install and at every origin, so a key
+/// found in one place names nobody anywhere else.
+///
+/// A client that gives no secret is given the plain key ([`Who::plain_key`]).
+#[derive(Clone, Default)]
+pub(crate) struct Keying {
+    /// The secret's bytes. None for a client that gave none.
+    secret: Option<Vec<u8>>,
+    /// The app's origin, as the configuration says it.
+    origin: String,
+    /// Whether the client still keeps a plain key ([`crate::Config::old_key`]).
+    old: bool,
+}
+
+impl std::fmt::Debug for Keying {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The secret itself is never written out.
+        f.debug_struct("Keying")
+            .field("secret", &self.secret.is_some())
+            .field("origin", &self.origin)
+            .field("old", &self.old)
+            .finish()
+    }
+}
+
+impl Keying {
+    /// How keys are made for an app of this configuration. None when it gives
+    /// a secret the core can't use: one that is not hex, or of fewer than
+    /// [`SECRET_BYTES`] bytes. Nothing is made with half a secret.
+    pub(crate) fn of(config: &crate::Config) -> Option<Self> {
+        let secret = if config.secret.is_empty() {
+            None
+        } else {
+            let bytes = crate::sign_in::unhex(&config.secret)?;
+            if bytes.len() < SECRET_BYTES {
+                return None;
+            }
+            Some(bytes)
+        };
+        Some(Self {
+            secret,
+            origin: config.origin.clone(),
+            old: config.old_key,
+        })
+    }
+
+    /// The key of a person: the same for one person at every launch of this
+    /// install, and another for another account.
+    pub(crate) fn key(&self, who: &Who) -> String {
+        let Some(secret) = &self.secret else {
+            return who.plain_key();
+        };
+        let told = match &who.id {
+            Some(id) => format!("navree-person-id\n{}\n{id}", self.origin),
+            None => {
+                let named = serde_json::to_string(&(&who.name, &who.email)).unwrap_or_default();
+                format!("navree-person-name\n{}\n{named}", self.origin)
+            }
+        };
+        let hash = crate::sign_in::keyed_fingerprint(secret, &told);
+        format!("{KEYED}{hash}")
+    }
+
+    /// The key of a person the server named by id, which is the name a
+    /// snapshot is for. None for a person named without one.
+    pub(crate) fn id_key(&self, who: &Who) -> Option<String> {
+        who.id.as_ref().map(|_| self.key(who))
+    }
+
+    /// The plain key of a person, for a client that gives a secret and says
+    /// it still keeps a key made before it gave one: what it keeps is this
+    /// person's when the key it keeps is this. None for every other client,
+    /// so a plain key leaves the core only for as long as one is kept.
+    pub(crate) fn was(&self, who: &Who) -> Option<String> {
+        (self.old && self.secret.is_some()).then(|| who.plain_key())
+    }
+
+    /// The name a snapshot taken before the client gave a secret has for a
+    /// person the server named by id: such a snapshot is still theirs. None
+    /// when keys are plain, or for a person named without an id.
+    pub(crate) fn id_key_before(&self, who: &Who) -> Option<String> {
+        self.secret.as_ref().and_then(|_| who.plain_id_key())
     }
 }
 
@@ -103,15 +205,18 @@ pub(crate) struct HeldPerson {
     pub email: Option<String>,
     /// The core's own key for this person, kept while they are taken for the same.
     pub key: String,
+    /// Their plain key, for a client that still keeps one ([`Keying::was`]).
+    pub was: Option<String>,
 }
 
 impl HeldPerson {
-    pub(crate) fn from_shell(who: &Who) -> Self {
+    pub(crate) fn from_shell(who: &Who, keying: &Keying) -> Self {
         Self {
             id: who.id.clone(),
             name: who.name.clone(),
             email: who.email.clone(),
-            key: who.key(),
+            key: keying.key(who),
+            was: keying.was(who),
         }
     }
 
@@ -388,10 +493,13 @@ impl Core {
     pub(crate) fn who_may_have_changed(&mut self, ask: bool) {
         self.inner.cache.named = None;
         self.inner.who_unsure = true;
-        if let Some(app) = self.view.app.as_mut()
-            && app.user.take().is_some()
-        {
-            self.touch(Change::App);
+        if let Some(app) = self.view.app.as_mut() {
+            // The key they had before is said only beside them, and goes with them.
+            let named = app.user.take().is_some();
+            let older = app.user_was.take().is_some();
+            if named || older {
+                self.touch(Change::App);
+            }
         }
         let mut cleared_badge = false;
         for destination in &mut self.view.destinations {

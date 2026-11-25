@@ -49,9 +49,17 @@ fn protocol(name: &str) -> Value {
 fn user() -> Value {
     json!({
         "type": "object",
-        "description": "`shell::User` of the protocol: see the schema of `navree-native`. Its `key` is always there. It is the core's own name for the person: the same for one person and another for another account. When the server named the person by id it is a hash of that id, the same value as a snapshot's `person`, and never the id; otherwise it is a hash of their name and email. The core writes it: a `key` a server wrote is not kept. A client that keeps something of its own for the person keeps this beside it, and when a state carries another `key` with no sign-out between, somebody else is signed in.",
+        "description": "`shell::User` of the protocol: see the schema of `navree-native`. Its `key` is always there. It is the core's own name for the person: the same for one person and another for another account. When the server named the person by id it is a hash of that id, the same value as a snapshot's `person`, and never the id; otherwise it is a hash of their name and email. With the secret the client gives in the configuration it begins `k2:` and is a keyed hash (HMAC-SHA-256 under the secret, of the app's origin and the id or the name and email): it cannot be made from a guess without the secret, and the person has another in every install. For a client that gives no secret it is the plain SHA-256, 64 hex digits. The core writes it: a `key` a server wrote is not kept. A client that keeps something of its own for the person keeps this beside it, and when a state carries another `key` with no sign-out between, somebody else is signed in.",
         "properties": {"key": string()},
         "required": ["key"],
+    })
+}
+
+/// The key the person signed in had before the client gave a secret.
+fn user_was() -> Value {
+    json!({
+        "type": "string",
+        "description": "The plain key of the person signed in: the SHA-256 their `key` was before the client gave a secret. There only while `user` is, and only for a client that gives a secret and says with `old_key` that it still keeps a key of that kind. When the key the client keeps is this one, what it keeps is this person's: it keeps `user.key` in its place, and never this.",
     })
 }
 
@@ -420,6 +428,8 @@ pub fn schema() -> Value {
             ("undrawable?", list(string())),
             ("views?", list(string())),
             ("sign_in?", object(&[("paths?", list(string())), ("callback?", string()), ("native?", list(string()))])),
+            ("secret?", string()),
+            ("old_key?", boolean()),
         ]),
         "Event": forms("t", event),
         "FieldValue": forms("t", &[
@@ -474,6 +484,7 @@ pub fn schema() -> Value {
                 ("home", string()),
                 ("theme?", protocol("shell::Theme")),
                 ("user?", user()),
+                ("user_was?", user_was()),
             ])),
             ("destinations", list(object(&[
                 ("label", string()),
