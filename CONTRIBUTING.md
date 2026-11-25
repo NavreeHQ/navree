@@ -567,6 +567,16 @@ You do not need this section to contribute. It says how a release happens.
   with provenance, builds the command line for Linux, macOS and Windows and
   writes the GitHub Release. Publishing needs a maintainer's approval in the
   repository's release environments, and no token lives in the repository.
+- **The native clients.** The same workflow builds the packages of Navree
+  Native's clients and attaches them to the GitHub Release: the Apple client
+  as a Swift package, the Android client as Maven packages
+  (`com.navree:navree-native`, `com.navree:navree-push-fcm`) and the Windows
+  client as NuGet packages (`Navree.Shell` and the seven it stands on). The
+  Maven and NuGet packages are also published, to Maven Central and
+  nuget.org, with the same approval, once each registry is set up:
+  `packages/android/README.md` and `packages/windows/README.md` say what that
+  takes. Until then the release says in a notice that they were not
+  published, and goes on.
 - **Patch and minor releases** follow the same steps from `main`; a patch
   adds no public API. What counts as public API, how long a line is supported
   and the MSRV policy are in the
