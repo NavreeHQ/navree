@@ -597,6 +597,55 @@ inBrowsers(({ open, browserName }) => {
     await close();
   });
 
+  test("on a phone the widest panel opens with a margin from the window on each side", async () => {
+    const { page, close } = await open(PATH, { viewport: PHONE });
+    await page.locator("#site-nav-p1-trigger").click();
+    await placed(page, "#site-nav-p1");
+    await settled(page, "#site-nav-p1");
+    // In layout sizes: where the overlay module put it, and how wide it is laid out.
+    const opened = await page.locator("#site-nav-p1").evaluate((pop) => {
+      const left = parseFloat(pop.style.left);
+      const root = document.documentElement;
+      return { left, right: left + pop.offsetWidth, window: window.innerWidth, sideways: root.scrollWidth > root.clientWidth };
+    });
+    assert.ok(opened.left >= 8 && opened.right <= opened.window - 8 + 0.5, `a margin on each side of it: ${JSON.stringify(opened)}`);
+    assert.equal(opened.sideways, false, "the page does not scroll sideways");
+    await close();
+  });
+
+  test("on a phone a panel drawn in the page, as a picture of the open menu is, is no wider than the list, and neither is any item", async () => {
+    const { page, close } = await open(PATH, { viewport: PHONE });
+    // In a box narrower than the window would let a panel be: a panel's width limit comes from the
+    // window, and its longest line is wider than the box.
+    const drawn = await page.evaluate(() => {
+      const nav = document.getElementById("site-nav");
+      const box = document.createElement("div");
+      box.style.setProperty("width", "280px");
+      nav.before(box);
+      box.append(nav);
+      const panel = document.getElementById("site-nav-p1");
+      for (const [name, value] of [["display", "block"], ["position", "relative"], ["inset", "auto"], ["margin", "0"]]) panel.style.setProperty(name, value);
+      const width = (el) => el.getBoundingClientRect().width;
+      // What the panel takes with nothing to hold it: its longest line, on one line.
+      panel.style.setProperty("max-width", "none");
+      const wants = width(panel);
+      panel.style.removeProperty("max-width");
+      return {
+        wants,
+        box: width(box),
+        list: width(nav.querySelector("[data-slot=navigation-menu-list]")),
+        items: [...nav.querySelectorAll("[data-slot=navigation-menu-item]")].map(width),
+        panel: width(panel),
+      };
+    });
+    assert.ok(drawn.wants > drawn.box + 20, `the panel has more to show than the box is wide: ${JSON.stringify(drawn)}`);
+    assert.ok(drawn.list <= drawn.box + 0.5, `the list is no wider than the box that holds it: ${JSON.stringify(drawn)}`);
+    assert.ok(drawn.items.every((item) => item <= drawn.list + 0.5), `no item is wider than the list: ${JSON.stringify(drawn)}`);
+    assert.ok(drawn.panel <= drawn.list + 0.5, `the panel is no wider than the list: ${JSON.stringify(drawn)}`);
+    await shot(page, `${browserName}-navigation-menu-drawn-390`);
+    await close();
+  });
+
   test("in a right-to-left page Left is the next item and the panel lines up with its button", async () => {
     const { page, close } = await open(PATH);
     await page.locator("#site-nav-rtl-p1-trigger").focus();

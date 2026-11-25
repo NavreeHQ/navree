@@ -43,10 +43,14 @@
 }
 [data-slot=navigation-menu-link-title]{font-size:14px;font-weight:500;line-height:1.25}
 [data-slot=navigation-menu-link-description]{color:var(--fg-3);font-size:13px;line-height:1.35;overflow-wrap:anywhere}
-/* On a phone the items stack, and each button takes the width. */
+/* On a phone the items stack in one column, as wide as the list and no wider, and each button takes
+   the width. A panel open over the page is held by the window. One drawn in the page, as a picture of
+   an open menu is, is held by its item: its width limit is the window's, which is wider than a list
+   that stands inside a page's padding. */
 @media (max-width:40rem){
-  [data-slot=navigation-menu-list]{flex-direction:column;align-items:stretch}
+  [data-slot=navigation-menu-list]{flex-direction:column;flex-wrap:nowrap;align-items:stretch}
   [data-slot=navigation-menu-trigger]{width:100%;justify-content:space-between}
+  [data-slot=navigation-menu-content]{max-width:min(26rem,calc(100vw - 1rem),100%)}
 }
 @media (forced-colors:active){
   [data-slot=menubar-trigger]:hover,[data-slot=menubar-trigger][aria-expanded=true],[data-slot=navigation-menu-link]:hover,[data-slot=navigation-menu-link]:focus-visible{forced-color-adjust:none;background:Highlight;color:HighlightText}
