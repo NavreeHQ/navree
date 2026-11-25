@@ -7,7 +7,10 @@
 use std::sync::Arc;
 
 use navree_auth::testing::VirtualAuthenticator;
-use navree_auth::{AuthPages, ProviderSheet, ProviderSheets, SheetProvider, User};
+use navree_auth::{
+    AuthError, AuthPages, AuthService, ClientMeta, ProviderSheet, ProviderSheets, SessionSignIn,
+    SheetProvider, User,
+};
 use navree_contracts::{AuditSink, Clock as _, FixedClock};
 use navree_kernel::{Factory, Module, ModuleBuilder};
 use navree_native::device::{
@@ -15,12 +18,12 @@ use navree_native::device::{
 };
 use navree_native::node::Node as N;
 use navree_native::{Action, Envelope, Op};
-use navree_session::{SessionModule, SessionOptions};
+use navree_session::{Session, SessionModule, SessionOptions};
 use navree_testing::{TestApp, TestAppBuilder, TestClient, TestResponse};
 use navree_ui::UiModule;
 use serde_json::{Value, json};
 
-use crate::support::{self, RecordingSink, enable_two_factor, signed_in};
+use crate::support::{self, PASSWORD, RecordingSink, enable_two_factor, signed_in};
 
 const NATIVE: &str = "x-navree-native";
 const CLIENT: &str = "x-navree-client";
@@ -747,6 +750,72 @@ async fn a_challenge_of_no_session_is_answered_where_it_always_was_and_not_by_th
         .await
         .assert_status(200)
         .assert_json_path("user_id", json!(user.id));
+}
+
+// A challenge asked for and never answered ends with a sign-in by another way
+// on the same session: the session forgets it, at a sign-in and at the first
+// step of one that waits for its second factor.
+#[tokio::test]
+async fn a_sign_in_by_another_way_forgets_a_waiting_passkey_challenge() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = apple_app(&clock, &sink).await;
+    let (user, authenticator) = with_passkey(&app, "simran@example.com").await;
+    let service = app.get::<AuthService>().await;
+    let meta = ClientMeta::default();
+    let forgotten = |outcome: &Result<SessionSignIn, AuthError>| {
+        matches!(
+            outcome,
+            Err(AuthError::PasskeyRefused(reason))
+                if reason == "no challenge asked for in this session"
+        )
+    };
+
+    // Left alone, the challenge a session asked for is answered in it.
+    let session = Session::detached();
+    let asked = service.passkey_call_options(&session).await.unwrap();
+    let assertion = authenticator.get(&asked).unwrap();
+    let outcome = service
+        .login_with_passkey_call_session(&session, &assertion, false, &meta)
+        .await;
+    assert!(
+        matches!(&outcome, Ok(SessionSignIn::SignedIn(signed)) if signed.id == user.id),
+        "{outcome:?}"
+    );
+
+    // Asked for, then the person signs in another way on the same session.
+    let session = Session::detached();
+    let asked = service.passkey_call_options(&session).await.unwrap();
+    let assertion = authenticator.get(&asked).unwrap();
+    service
+        .start_session(&session, &user, false, &meta)
+        .await
+        .unwrap();
+    let outcome = service
+        .login_with_passkey_call_session(&session, &assertion, false, &meta)
+        .await;
+    assert!(forgotten(&outcome), "{outcome:?}");
+
+    // Asked for, then a password sign-in that waits for its second factor.
+    enable_two_factor(&app, &clock, &user).await;
+    let session = Session::detached();
+    let asked = service.passkey_call_options(&session).await.unwrap();
+    let assertion = authenticator.get(&asked).unwrap();
+    let waits = service
+        .sign_in_session(&session, "simran@example.com", PASSWORD, false, &meta)
+        .await;
+    assert!(
+        matches!(waits, Ok(SessionSignIn::TwoFactorRequired)),
+        "{waits:?}"
+    );
+    let outcome = service
+        .login_with_passkey_call_session(&session, &assertion, false, &meta)
+        .await;
+    assert!(forgotten(&outcome), "{outcome:?}");
+    // Each refusal says the session had no challenge left, not that another's was tried.
+    assert_eq!(
+        refusals(&sink),
+        ["no challenge asked for in this session"; 2]
+    );
 }
 
 // A call that brings no assertion goes back to the sign-in page: with no
