@@ -9,7 +9,7 @@ use std::time::Duration;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
-use navree_auth::AuthService;
+use navree_auth::{AuthService, ProviderSheet, ProviderSheets, SheetProvider};
 use navree_contracts::{AuditSink, Clock};
 use navree_crypto::Encrypter;
 use navree_db::Db;
@@ -202,6 +202,59 @@ impl Native {
             .unwrap()
             .into_models()
     }
+}
+
+/// The sign-ins by the system's sheet this app's modules say to navree-auth's
+/// sign-in page.
+async fn sheets(app: &TestApp) -> Vec<ProviderSheet> {
+    app.ctx()
+        .get_all::<dyn ProviderSheets>()
+        .await
+        .expect("what the modules say")
+        .iter()
+        .flat_map(|source| source.sheets())
+        .collect()
+}
+
+// navree-auth's sign-in page offers a native app the system's sheet for Apple
+// and for Google exactly where this module's nonce route answers: the provider
+// is set up, an app of `auth.apps` takes its token, and the routes are on.
+#[tokio::test]
+async fn the_sheets_an_app_is_offered_are_the_ones_the_nonce_route_answers() {
+    let native = Native::start(|builder| builder).await;
+    assert_eq!(
+        sheets(&native.app).await,
+        [
+            ProviderSheet::new(
+                SheetProvider::Apple,
+                "/api/auth/social/apple/native/nonce",
+                "/api/auth/social/apple/native/session",
+            ),
+            // Android's sheet is asked for a token made for the site's own client id.
+            ProviderSheet::new(
+                SheetProvider::Google,
+                "/api/auth/social/google/native/nonce",
+                "/api/auth/social/google/native/session",
+            )
+            .client_id(GOOGLE_CLIENT),
+        ]
+    );
+    // Each names a route that answers.
+    native.nonce("apple").await;
+    native.nonce("google").await;
+
+    // No app of the site to take a token: the nonce route says no, and no sheet is said.
+    let (bare, _fake) = fake_app(|builder| builder).await;
+    assert!(sheets(&bare).await.is_empty());
+    bare.client()
+        .post("/api/auth/social/google/native/nonce")
+        .send()
+        .await
+        .assert_status(404);
+
+    // Without the routes there is nowhere for a sheet's token to go.
+    let off = Native::start(|builder| builder.config("social.routes", false)).await;
+    assert!(sheets(&off.app).await.is_empty());
 }
 
 /// Apple's form of the nonce: lower-case hex SHA-256.
