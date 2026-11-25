@@ -66,6 +66,11 @@ class VideoDataTest {
 
         val webm = byteArrayOf(0x1A, 0x45, 0xDF.toByte(), 0xA3.toByte(), 1, 2, 3, 4)
         assertEquals(Video.Other, VideoData.kindOf(webm, webm.size.toLong(), "video/webm"))
+        // Its first bytes never say that a Matroska or WebM file holds sound alone: only the whole file does, when it reads cleanly.
+        assertEquals("named as sound, it is still not known to be", Video.Other, VideoData.kindOf(webm, webm.size.toLong(), "audio/webm"))
+        val unread = File(folder, "Moga.webm").apply { writeBytes(webm + ByteArray(512) { (it * 31 + 7).toByte() }) }
+        assertEquals("one that does not read is refused as a video is", Video.Other, VideoData.kindOf(unread, "video/webm"))
+        assertEquals(Video.Other, VideoData.kindOf(unread, "audio/x-matroska"))
         val avi = "RIFF\u0000\u0000\u0000\u0000AVI LIST".toByteArray(Charsets.ISO_8859_1)
         assertEquals(Video.Other, VideoData.kindOf(avi, avi.size.toLong(), "video/x-msvideo"))
         assertEquals("an unknown container named as video is still refused", Video.Other, VideoData.kindOf("unknown".toByteArray(), 7, "video/x-matroska"))

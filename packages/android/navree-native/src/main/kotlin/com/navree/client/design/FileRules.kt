@@ -74,7 +74,10 @@ object FileRules {
         /** A picture of a kind this device cannot read for the place it was taken, for a field that does not keep it. */
         data class PlaceUnchecked(override val name: String) : Refusal
 
-        /** A video of a kind this device cannot rewrite without the place it was made, for a field that does not keep it. */
+        /**
+         * A video of a kind this device cannot rewrite without the place it was made, for a field that does not keep it. A Matroska
+         * or WebM file that holds sound alone is no such video ([Video.Sound]).
+         */
         data class VideoUnchecked(override val name: String) : Refusal
     }
 
@@ -129,19 +132,32 @@ object FileRules {
         Picture.Raw -> Place.Refuse
     }
 
-    /** A kind of video, read from the file's own first bytes (or a `video/` media type when its container is another). */
+    /**
+     * A kind of video, read from the file's own first bytes (or a `video/` media type when its container is another), and the one
+     * kind of file in a video's container that is no video.
+     */
     enum class Video {
         /** An ISO media or QuickTime container (MP4, MOV, M4V, 3GP), whose location boxes can be removed. */
         Iso,
 
         /** Any other video container (WebM, Matroska, AVI, Ogg, transport streams), which the client does not rewrite. */
         Other,
+
+        /**
+         * A Matroska or WebM file that holds sound alone: it read whole, and every track in it is audio (`.mka`, a `.webm` with no
+         * video track). No camera made it, so it holds no place a video was made; a tag that names a place and what is attached to
+         * it can be overwritten in place.
+         */
+        Sound,
     }
 
-    /** What is done about the place a video was made, for a field that does not keep it. */
+    /**
+     * What is done about the place a video was made, for a field that does not keep it. A file of sound alone is taken, with what
+     * names a place in it taken out.
+     */
     fun videoPlace(kind: Video?): Place = when (kind) {
         null -> Place.None
-        Video.Iso -> Place.TakeOut
+        Video.Iso, Video.Sound -> Place.TakeOut
         Video.Other -> Place.Refuse
     }
 
