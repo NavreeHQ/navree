@@ -10,11 +10,16 @@
 [data-slot=time-picker] [data-slot=input-group-addon] [data-slot=button]{--b:1.5rem;width:var(--b);height:var(--b)}
 [data-ui-dates]:not([data-ui-dates=datetime]):not([data-has-value]) [data-ui-act=clear]{display:none}
 [data-slot=time-picker] [data-slot=field-error]{margin:.375rem 0 0}
-/* A date and a time together: the two boxes side by side, the time narrower, on one line where they fit. */
+/* A date and a time together: the two boxes side by side, the time narrower, on one line where they fit,
+   and the time under the date where they don't. A box fits where what it holds has room beside its
+   buttons: 9rem for a date and 7rem for a time, with the one button that opens it; 1.75rem more for the
+   button that clears it, and 1.5rem more for a time's seconds. */
 [data-slot=date-time-picker]{position:relative;display:block;min-width:0}
 [data-slot=date-time-picker-ui]{display:flex;flex-wrap:wrap;align-items:flex-start;gap:.5rem}
-[data-slot=date-time-picker-ui] > [data-slot=date-picker]{flex:3 1 9rem}
-[data-slot=date-time-picker-ui] > [data-slot=time-picker]{flex:2 1 7rem}
+[data-slot=date-time-picker-ui] > [data-slot=date-picker]{flex:3 1 calc(9rem + var(--clear-room,0rem))}
+[data-slot=date-time-picker-ui] > [data-slot=time-picker]{flex:2 1 calc(7rem + var(--clear-room,0rem) + var(--seconds-room,0rem))}
+[data-slot=date-time-picker-ui] > :has([data-slot=input-group-addon] > [data-ui-act=clear]){--clear-room:1.75rem}
+[data-slot=date-time-picker-ui] > [data-seconds]{--seconds-room:1.5rem}
 [data-slot=date-time-picker] > [data-slot=field-description]{margin:.375rem 0 0}
 
 /* The list of times. The overlay module places it. */
