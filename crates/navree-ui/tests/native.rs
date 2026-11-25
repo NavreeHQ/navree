@@ -694,6 +694,9 @@ impl navree_ui::NativeShellPart for Routes {
         if client.family == navree_ui::NativeFamily::Android {
             routes = routes.callback("https://orders.example.in/app/android");
         }
+        if client.family == navree_ui::NativeFamily::Windows {
+            routes = routes.callback("orders:/signed-in");
+        }
         shell
             .sign_in(routes)
             .push_register("/api/notifications/push-devices");
@@ -1651,6 +1654,15 @@ async fn the_shell_document_holds_what_the_apps_modules_say_for_the_client_that_
     assert_eq!(
         apple.sign_in.as_ref().and_then(|s| s.callback.clone()),
         None
+    );
+    // A Windows client is a family of its own, told the link on its app's scheme.
+    let windows = ask(
+        "platform=windows; os=11; form=desktop; app=0.1.0; vocab=0; locale=en-IN; tz=Asia/Kolkata",
+    )
+    .await;
+    assert_eq!(
+        windows.sign_in.as_ref().and_then(|s| s.callback.clone()),
+        Some("orders:/signed-in".to_owned())
     );
     // The pages a client is sent carry the stamp of the document it fetched.
     let screen = ask_native(&app, Method::GET, "/orders/1", &[], "").await.1;
