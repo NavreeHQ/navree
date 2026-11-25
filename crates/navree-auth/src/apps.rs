@@ -253,11 +253,13 @@ impl AndroidApp {
 pub struct WindowsApp {
     /// The package family name (`ExampleOrders_8wekyb3d8bbwe`), by which a
     /// build installed from a package names itself: the package's name, `_`
-    /// and the thirteen characters of its publisher id, exactly as
-    /// `Get-AppxPackage` prints `PackageFamilyName`.
+    /// and the thirteen characters of its publisher id, as `Get-AppxPackage`
+    /// prints `PackageFamilyName`. A build is known by it whatever the case
+    /// of the letters it writes, as Windows tells package family names
+    /// apart; the app is then named as it is written here.
     pub package_family_name: Option<String>,
     /// The id a build with no package was built with (`com.example.orders`),
-    /// by which such a build names itself.
+    /// by which such a build names itself, to the letter.
     pub app_id: Option<String>,
     /// Where the sign-in hand-over sends the app its one-time code: a link
     /// on the app's own scheme (`com.example.orders:/signed-in`), written as
@@ -267,12 +269,27 @@ pub struct WindowsApp {
 }
 
 impl WindowsApp {
-    /// The ids a build of the app may name itself by.
-    fn ids(&self) -> impl Iterator<Item = &str> {
+    /// The id of the app, as it is written here, that a build naming itself
+    /// `id` means: the package family name, whatever the case of the letters
+    /// of `id` (Windows tells package family names apart without regard to
+    /// case), or the id the app was built with, to the letter.
+    #[cfg_attr(not(feature = "session"), allow(dead_code))]
+    fn named_by(&self, id: &str) -> Option<&str> {
         self.package_family_name
             .as_deref()
+            .filter(|family| family.eq_ignore_ascii_case(id))
+            .or_else(|| self.app_id.as_deref().filter(|own| *own == id))
+    }
+
+    /// The ids a build of the app may name itself by, each with what tells
+    /// it apart from another app's: a package family name in lower case, the
+    /// id the app was built with as it is.
+    fn ids(&self) -> impl Iterator<Item = (&str, String)> {
+        self.package_family_name
+            .as_deref()
+            .map(|family| (family, family.to_ascii_lowercase()))
             .into_iter()
-            .chain(self.app_id.as_deref())
+            .chain(self.app_id.as_deref().map(|id| (id, id.to_owned())))
     }
 }
 
@@ -337,8 +354,10 @@ impl AppsOptions {
                 &mut errors,
             );
         }
-        // An id names one app: a hand-over that names it must find one callback.
-        let mut named: BTreeMap<&str, &str> = BTreeMap::new();
+        // An id names one app: a hand-over that names it must find one
+        // callback. Two package family names that differ only in the case of
+        // their letters are one.
+        let mut named: BTreeMap<String, &str> = BTreeMap::new();
         for (name, app) in &self.windows {
             let key = format!("auth.apps.windows.{name}");
             if app.package_family_name.is_none() && app.app_id.is_none() {
@@ -372,8 +391,8 @@ impl AppsOptions {
                      user, password, query or fragment)"
                 ));
             }
-            for id in app.ids() {
-                if let Some(other) = named.insert(id, name.as_str())
+            for (id, told_apart_by) in app.ids() {
+                if let Some(other) = named.insert(told_apart_by, name.as_str())
                     && other != name.as_str()
                 {
                     errors.push(format!(
@@ -491,7 +510,7 @@ pub(crate) struct HandOverApp {
     /// `apple`, `android` or `windows`.
     pub(crate) platform: &'static str,
     /// The bundle id, the package name, or the id a Windows build names
-    /// itself by.
+    /// itself by, as the settings write it.
     pub(crate) id: String,
     /// Where its code goes.
     pub(crate) callback: String,
@@ -501,8 +520,10 @@ pub(crate) struct HandOverApp {
 impl AppsOptions {
     /// The app `id` of `platform`, when it has a hand-over callback: the
     /// bundle id of an `apple` app, the package name of an `android` one,
-    /// and for `windows` either id of an app (its package family name or
-    /// the id it was built with).
+    /// and for `windows` either id of an app (its package family name,
+    /// whatever the case of its letters, or the id it was built with, to the
+    /// letter). The app is named as the settings write it, so a code issued
+    /// for it, the sign-in policies and the audit trail see one spelling.
     pub(crate) fn hand_over_app(&self, platform: &str, id: &str) -> Option<HandOverApp> {
         let found = |callback: &Option<String>, app_id: &str, platform: &'static str| {
             let callback = callback.clone()?;
@@ -523,9 +544,9 @@ impl AppsOptions {
                 .find_map(|app| found(&app.callback, &app.package, "android")),
             "windows" => self.windows.values().find_map(|app| {
                 let callback = app.callback.clone()?;
-                app.ids().any(|own| own == id).then(|| HandOverApp {
+                app.named_by(id).map(|own| HandOverApp {
                     platform: "windows",
-                    id: id.to_owned(),
+                    id: own.to_owned(),
                     callback,
                 })
             }),
@@ -1299,7 +1320,6 @@ mod tests {
             "",
             "main",
             "CharkhaSupply",
-            "charkhasupply_8wekyb3d8bbwe",
             "CharkhaSupply_8wekyb3d8bbwe ",
             "com.charkha",
             "com.charkha.supply.kiosk",
@@ -1341,6 +1361,86 @@ mod tests {
                 "{kept} alone"
             );
         }
+    }
+
+    // Windows tells package family names apart without regard to the case of
+    // their letters, so a build may write its own in another case than the
+    // settings do. The app is then named as the settings write it. The id an
+    // app was built with is the app's own text, held to the letter.
+    #[test]
+    fn a_package_family_name_names_its_app_in_any_case_and_an_app_id_to_the_letter() {
+        let apps = windows(&[]).unwrap();
+        for written in [
+            FAMILY,
+            "charkhasupply_8wekyb3d8bbwe",
+            "CHARKHASUPPLY_8WEKYB3D8BBWE",
+            "cHARKHAsUPPLY_8wekyb3d8bbwE",
+        ] {
+            assert_eq!(
+                apps.hand_over_app("windows", written),
+                Some(HandOverApp {
+                    platform: "windows",
+                    id: FAMILY.to_owned(),
+                    callback: "charkha:/signed-in".to_owned(),
+                }),
+                "{written}"
+            );
+        }
+        for written in ["Com.Charkha.Supply", "COM.CHARKHA.SUPPLY"] {
+            assert_eq!(apps.hand_over_app("windows", written), None, "{written}");
+        }
+        // Letters alone: a name that differs by anything else is another name.
+        for other in [
+            "charkhasupply-8wekyb3d8bbwe",
+            "charkhasupply_8wekyb3d8bbw",
+            "charkha.supply_8wekyb3d8bbwe",
+        ] {
+            assert_eq!(apps.hand_over_app("windows", other), None, "{other}");
+        }
+        // Two apps whose package family names differ only in case are one app
+        // listed twice: a hand-over that names it could go either way.
+        let error = windows(&[
+            (
+                "auth.apps.windows.kiosk.package_family_name",
+                json!("charkhasupply_8wekyb3d8bbwe"),
+            ),
+            (
+                "auth.apps.windows.kiosk.callback",
+                json!("charkha-kiosk:/signed-in"),
+            ),
+        ])
+        .expect_err("one package family name in two cases")
+        .to_string();
+        assert!(
+            error.contains("names the app `")
+                && error.contains("auth.apps.windows.kiosk")
+                && error.contains("auth.apps.windows.main"),
+            "{error}"
+        );
+        // An id an app was built with in another case is another app's id.
+        let two = windows(&[
+            (
+                "auth.apps.windows.kiosk.app_id",
+                json!("Com.Charkha.Supply"),
+            ),
+            (
+                "auth.apps.windows.kiosk.callback",
+                json!("charkha-kiosk:/signed-in"),
+            ),
+        ])
+        .unwrap();
+        assert_eq!(
+            two.hand_over_app("windows", "Com.Charkha.Supply")
+                .map(|app| app.callback)
+                .as_deref(),
+            Some("charkha-kiosk:/signed-in")
+        );
+        assert_eq!(
+            two.hand_over_app("windows", "com.charkha.supply")
+                .map(|app| app.callback)
+                .as_deref(),
+            Some("charkha:/signed-in")
+        );
     }
 
     #[test]

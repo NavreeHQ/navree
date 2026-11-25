@@ -1629,8 +1629,12 @@ async fn a_windows_start_with_a_wrong_app_callback_challenge_or_state_is_refused
             format!("platform=windows&app=CharkhaOther_8wekyb3d8bbwe&{s256}&state=x"),
         ),
         (
-            "the id in another case",
-            format!("platform=windows&app=charkhasupply_8wekyb3d8bbwe&{s256}&state=x"),
+            "the id the app was built with, in another case",
+            format!("platform=windows&app=Com.Charkha.Supply&{s256}&state=x"),
+        ),
+        (
+            "the package family name with another publisher id",
+            format!("platform=windows&app=CharkhaSupply_8wekyb3d8bbwf&{s256}&state=x"),
         ),
         (
             "the name of the app's settings",
@@ -1807,6 +1811,52 @@ async fn a_windows_apps_code_works_once_for_its_id_with_its_verifier() {
             "code expired",
         ]
     );
+}
+
+// Windows tells package family names apart without regard to the case of
+// their letters. A build that writes its own in another case than the
+// settings do starts, and exchanges, as that app, and the audit trail is
+// given the name as the settings write it. The id an app was built with is
+// held to the letter.
+#[tokio::test]
+async fn a_windows_build_that_writes_its_package_family_name_in_another_case_is_that_app() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = with_windows(&clock, &sink).build().await;
+    let user = create_user(&app, "simran@example.com").await;
+    let (verifier, challenge) = pkce("windows-case");
+
+    let (_, code) =
+        browser_sign_in_for_windows(&app, "charkhasupply_8wekyb3d8bbwe", &challenge, "w-10").await;
+    let desktop = phone(&app).await;
+    exchange_as(
+        &desktop,
+        "windows",
+        "CHARKHASUPPLY_8WEKYB3D8BBWE",
+        &code,
+        &verifier,
+    )
+    .await
+    .assert_status(200);
+    whoami(&desktop)
+        .await
+        .assert_status(200)
+        .assert_json_path("id", json!(user.id));
+    let login = sink.with_action("auth.login");
+    let handed = login.last().unwrap();
+    assert_eq!(handed.metadata["method"], "app_hand_over");
+    assert_eq!(handed.metadata["app"], FAMILY);
+    assert!(sink.with_action("auth.app_sign_in_refused").is_empty());
+
+    // The id the app was built with, in another case, is no app's: not at
+    // the start, and not at the exchange of a code the app itself started.
+    let browser = app.client();
+    start_windows(&browser, "Com.Charkha.Supply", &challenge, "w-11", "")
+        .await
+        .assert_status(400);
+    let (_, code) = browser_sign_in_for_windows(&app, UNPACKAGED, &challenge, "w-12").await;
+    let stranger = phone(&app).await;
+    refused(exchange_as(&stranger, "windows", "COM.CHARKHA.SUPPLY", &code, &verifier).await);
+    whoami(&stranger).await.assert_status(401);
 }
 
 // Any program on the machine can register a scheme and start the hand-over

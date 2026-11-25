@@ -14,7 +14,8 @@
 //!    verifier>&code_challenge_method=S256&state=<its own random value>`.
 //!    The app's id is its bundle id (`apple`), its package name (`android`),
 //!    or, on `windows`, its package family name when it is installed from a
-//!    package and the id it was built with when it is not. The app must be
+//!    package (in whatever case it writes the letters) and the id it was
+//!    built with when it is not. The app must be
 //!    one of `auth.apps` with a `callback`. The session remembers the
 //!    request and goes to `GET /auth/app/finish`.
 //! 2. `GET /auth/app/finish` sends a browser that is not signed in to the
@@ -1168,6 +1169,7 @@ impl Controller for AppSignInController {
         );
 
         let service = self.service.clone();
+        let apps = self.apps.clone();
         let exchange_path = format!(
             "!/{}/{}/app/exchange",
             self.api_prefix.trim_matches('/'),
@@ -1179,12 +1181,20 @@ impl Controller for AppSignInController {
                   meta: ClientMeta,
                   Valid(Json(input)): Valid<Json<AppExchangeInput>>| {
                 let service = service.clone();
+                let apps = apps.clone();
                 async move {
+                    // The app is named as the settings write it, as it was
+                    // when the hand-over started: a Windows build may write
+                    // its package family name in another case. An id that is
+                    // no app's stays as it came, and its code is refused.
+                    let app = apps
+                        .hand_over_app(&input.platform, &input.app)
+                        .map_or_else(|| input.app.clone(), |app| app.id);
                     let user = service
                         .exchange_app_code(
                             &session,
                             &input.platform,
-                            &input.app,
+                            &app,
                             &input.code,
                             &input.code_verifier,
                             &meta,
