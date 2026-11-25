@@ -512,6 +512,38 @@ impl Element {
         self
     }
 
+    /// Says what a tap on this control starts on the device of a native app, in place of
+    /// what the control does in a browser: a passkey in the system's own sheet where a
+    /// browser goes to the passkey page. See [`NativeCall`](crate::NativeCall).
+    ///
+    /// The call is written only for a native client whose app lists the call's feature
+    /// among its capabilities, and only when every path of the call is one on this site.
+    /// Every other client gets the control as it is, and so does a browser: it writes no
+    /// HTML. A link keeps its address as what the client does where its build can't start
+    /// the call after all.
+    ///
+    /// ```
+    /// use navree_ui::{NativeCall, NativeThen, el, render};
+    ///
+    /// let call = NativeCall::passkey_sign_in(
+    ///     "/sign-in/passkey/native/options",
+    ///     NativeThen::new("/sign-in/passkey/native", "sealed-by-the-server", 1_794_000_000),
+    /// );
+    /// let link = el("a").href("/sign-in/passkey").child("Sign in with a passkey").native_call(call);
+    /// assert_eq!(
+    ///     render(&link.into()),
+    ///     r#"<a href="/sign-in/passkey">Sign in with a passkey</a>"#
+    /// );
+    /// ```
+    #[cfg_attr(not(feature = "native-preview"), allow(unused_variables, unused_mut))]
+    pub fn native_call(mut self, call: crate::NativeCall) -> Self {
+        #[cfg(feature = "native-preview")]
+        if let Some(device) = call.for_the_client() {
+            self.say(|hints| hints.device = Some(device));
+        }
+        self
+    }
+
     /// Sets a hint for a native client, when one is asking. What is said is kept with the
     /// request, and the element carries its key as a child that writes nothing (a
     /// zero-length slice of a text of the toolkit's own), so an element is no larger and

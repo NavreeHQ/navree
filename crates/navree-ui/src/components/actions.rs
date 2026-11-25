@@ -331,6 +331,26 @@ impl Button {
         self
     }
 
+    /// Says what a tap on the button starts on the device of a native app, in place of
+    /// what it does in a browser: see [`Element::native_call`](crate::Element::native_call).
+    /// The call is written only for a native client whose app says it has the call's
+    /// feature. A browser's page does not change.
+    ///
+    /// ```
+    /// use navree_ui::{Button, NativeCall, NativeProvider, render};
+    ///
+    /// let apple = Button::outline("Sign in with Apple").native_call(NativeCall::provider_sign_in(
+    ///     NativeProvider::Apple,
+    ///     "/api/auth/social/apple/native/nonce",
+    ///     "/api/auth/social/apple/native/session",
+    /// ));
+    /// assert!(render(&apple.into()).starts_with("<button "));
+    /// ```
+    pub fn native_call(mut self, call: crate::NativeCall) -> Self {
+        self.el = self.el.native_call(call);
+        self
+    }
+
     fn into_node(self) -> Node {
         let mut root = self.el;
         root.tag = if self.href.is_some() { "a" } else { "button" };
