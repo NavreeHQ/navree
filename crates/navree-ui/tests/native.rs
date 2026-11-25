@@ -2190,7 +2190,10 @@ fn a_control_starts_its_device_call_for_a_client_whose_app_has_the_feature() {
     };
     let path = |text: &str| OriginPath::parse(text).unwrap();
     let page = TestNative::build(
-        with_caps(Platform::Ios, &["passkey", "platform_sign_in"]),
+        with_caps(
+            Platform::Ios,
+            &["passkey", "passkey_options", "platform_sign_in"],
+        ),
         ways_in,
     );
     assert!(page.is_native(), "{:?}", page.why());
@@ -2246,7 +2249,10 @@ fn a_client_whose_app_lacks_the_feature_gets_the_control_as_it_was() {
     );
     assert_eq!(page.tap("Sign in with Apple"), None);
     // Each call goes by its own feature.
-    let page = TestNative::build(with_caps(Platform::Android, &["passkey"]), ways_in);
+    let page = TestNative::build(
+        with_caps(Platform::Android, &["passkey", "passkey_options"]),
+        ways_in,
+    );
     assert!(matches!(
         page.tap("Sign in with a passkey"),
         Some(Action::Device(_))
@@ -2263,10 +2269,73 @@ fn a_client_whose_app_lacks_the_feature_gets_the_control_as_it_was() {
     assert!(!ways_in().to_html().contains("tk-1"));
 }
 
+// A build that lists `passkey` alone took the call's `options`, a route, for the
+// request itself: it can only fail the call. The name that says a build shows the sheet
+// with the options the core hands over is `passkey_options`, and a passkey call is
+// written only for a client that lists both.
+#[test]
+fn a_build_from_before_a_passkeys_options_were_handed_over_is_given_no_passkey_call() {
+    use navree_native::device::PASSKEY_OPTIONS_CAP;
+    use navree_ui::native_client_with;
+    assert_eq!(PASSKEY_OPTIONS_CAP, "passkey_options");
+    // What an Android build released before the options were handed over lists.
+    let older = || {
+        with_caps(
+            Platform::Android,
+            &["share", "platform_sign_in", "passkey", "confirm"],
+        )
+    };
+    let mut asked = None;
+    let page = TestNative::build(older(), || {
+        asked = Some((
+            native_client_with("passkey").is_some(),
+            native_client_with("platform_sign_in").is_some(),
+        ));
+        ways_in()
+    });
+    // It is answered as a client without passkeys, and keeps what it could always do.
+    assert_eq!(asked, Some((false, true)));
+    assert!(page.is_native(), "{:?}", page.why());
+    assert_eq!(
+        page.tap("Sign in with a passkey"),
+        Some(Action::navigate("/sign-in/passkey?next=%2Fdeals"))
+    );
+    assert!(matches!(
+        page.tap("Sign in with Apple"),
+        Some(Action::Device(_))
+    ));
+    // Nothing of the call reaches it: not its routes, not its ticket.
+    let sent = page.json();
+    assert!(
+        !sent.contains("tk-1") && !sent.contains("/sign-in/passkey/native"),
+        "{sent}"
+    );
+    // The same build with the one name more gets the call.
+    let mut fixed = older();
+    fixed.caps.push(PASSKEY_OPTIONS_CAP.to_owned());
+    let page = TestNative::build(fixed, ways_in);
+    assert!(matches!(
+        page.tap("Sign in with a passkey"),
+        Some(Action::Device(_))
+    ));
+    // The name alone is no passkey: the app must list the feature too.
+    let page = TestNative::build(with_caps(Platform::Android, &["passkey_options"]), ways_in);
+    assert_eq!(
+        page.tap("Sign in with a passkey"),
+        Some(Action::navigate("/sign-in/passkey?next=%2Fdeals"))
+    );
+}
+
 #[test]
 fn a_device_call_that_names_another_site_is_never_sent() {
     use navree_ui::{NativeCall, NativeProvider, NativeThen};
-    let client = || with_caps(Platform::Android, &["passkey", "platform_sign_in"]);
+    // An app that can start both calls, so only the paths decide.
+    let client = || {
+        with_caps(
+            Platform::Android,
+            &["passkey", "passkey_options", "platform_sign_in"],
+        )
+    };
     for (options, then) in [
         ("https://evil.example/options", "/sign-in/passkey/native"),
         ("//evil.example/options", "/sign-in/passkey/native"),
@@ -2338,7 +2407,7 @@ fn a_page_asks_which_native_client_has_a_feature() {
         said.unwrap()
     };
     assert_eq!(
-        asked(with_caps(Platform::Ipados, &["passkey"])),
+        asked(with_caps(Platform::Ipados, &["passkey", "passkey_options"])),
         (Some(NativeFamily::Apple), None)
     );
     assert_eq!(
@@ -2346,10 +2415,22 @@ fn a_page_asks_which_native_client_has_a_feature() {
         (None, Some(NativeFamily::Android))
     );
     assert_eq!(
-        asked(with_caps(Platform::Windows, &["passkey"])),
+        asked(with_caps(
+            Platform::Windows,
+            &["passkey", "passkey_options"]
+        )),
         (Some(NativeFamily::Other), None)
     );
     assert_eq!(asked(with_caps(Platform::Ios, &[])), (None, None));
+    // For a passkey the app lists two names; one of them alone is not the feature.
+    assert_eq!(
+        asked(with_caps(Platform::Ipados, &["passkey"])),
+        (None, None)
+    );
+    assert_eq!(
+        asked(with_caps(Platform::Ipados, &["passkey_options"])),
+        (None, None)
+    );
 }
 
 #[test]

@@ -107,6 +107,10 @@ impl NativeCall {
     /// sheet, then posts the assertion to `then` as a form: `credential` (WebAuthn's
     /// `toJSON()`, as text), the ticket as `_call` and `outcome` (`ok`, or why there is no
     /// assertion). Both posts carry the session's cookie and its token as `X-XSRF-TOKEN`.
+    ///
+    /// It is written for a client whose app lists `passkey` and `passkey_options`: a build
+    /// that lists `passkey` alone is from before the options were handed to it, and gets
+    /// the control as it was.
     pub fn passkey_sign_in(options: impl Into<String>, then: NativeThen) -> Self {
         Self(Kind::PasskeySignIn {
             options: options.into(),
@@ -155,20 +159,29 @@ impl NativeCall {
     }
 
     /// The device feature the call belongs to, as a client's capabilities name it:
-    /// `passkey` or `platform_sign_in`.
+    /// `passkey` or `platform_sign_in`. Ask [`native_client_with`] whether the client of
+    /// the request can start it.
     pub fn feature(&self) -> &'static str {
         match self.0 {
-            Kind::PasskeySignIn { .. } => "passkey",
+            Kind::PasskeySignIn { .. } => PASSKEY,
             Kind::ProviderSignIn { .. } => "platform_sign_in",
         }
     }
 }
+
+/// The feature a passkey call belongs to.
+const PASSKEY: &str = "passkey";
 
 /// The native client the current request is from, when its app says it can do the device
 /// feature `feature` (`passkey`, `platform_sign_in`: the names of the protocol's
 /// catalogue). `None` for a browser, for the web view inside a native client, for a native
 /// client whose app does not list the feature among its capabilities, and always without
 /// the `native-preview` feature.
+///
+/// For `passkey` the app must also list `passkey_options`, which says its build shows the
+/// system's sheet with the options the server gave. A build from before that lists
+/// `passkey` alone and can only fail the call, so it is answered here as a client without
+/// passkeys, and no passkey call is written for it.
 ///
 /// For the page that draws a control only where it can be used, and that makes what the
 /// call needs (a ticket) only then. A capability is the client's own word: it decides what
@@ -178,15 +191,23 @@ pub fn native_client_with(feature: &str) -> Option<NativeClient> {
     #[cfg(feature = "native-preview")]
     {
         let request = crate::native::scope::native()?;
-        request
-            .client
-            .supports(feature)
+        can_start(&request.client, feature)
             .then(|| NativeClient::new(family_of(request.client.platform)))
     }
     #[cfg(not(feature = "native-preview"))]
     {
         None
     }
+}
+
+/// Whether the app of `client` can carry out a call of `feature` as this server writes
+/// it: it lists the feature, and for a passkey also the name that says its build takes
+/// the request's options from the runtime core
+/// ([`PASSKEY_OPTIONS_CAP`](navree_native::device::PASSKEY_OPTIONS_CAP)).
+#[cfg(feature = "native-preview")]
+fn can_start(client: &navree_native::Client, feature: &str) -> bool {
+    client.supports(feature)
+        && (feature != PASSKEY || client.supports(navree_native::device::PASSKEY_OPTIONS_CAP))
 }
 
 /// The family of systems `platform` belongs to.
@@ -204,15 +225,17 @@ pub(crate) fn family_of(platform: navree_native::Platform) -> crate::shell::Nati
 #[cfg(feature = "native-preview")]
 impl NativeCall {
     /// The call as the protocol writes it, for the native client the current request is
-    /// from. `None` when no native client asks, when its app does not list the call's
-    /// feature among its capabilities, and when a path of the call is not one on this site.
+    /// from. `None` when no native client asks, when its app can't start the call (it
+    /// does not list the call's feature among its capabilities, or, for a passkey, its
+    /// build is from before the options were handed over), and when a path of the call is
+    /// not one on this site.
     pub(crate) fn for_the_client(&self) -> Option<navree_native::DeviceCall> {
         use navree_native::device::{
             DeviceCall, OriginPath, Passkey, PasskeyMode, PlatformSignIn, SignInProvider, Then,
             Ticket,
         };
         let request = crate::native::scope::native()?;
-        if !request.client.supports(self.feature()) {
+        if !can_start(&request.client, self.feature()) {
             return None;
         }
         let path = |text: &str| OriginPath::parse(text).ok();

@@ -71,9 +71,10 @@ const SIGN_UP_PER_MINUTE: u32 = 5;
 /// start. Where the client says the app can, and the site is set up for it, the
 /// page is answered as a screen that starts the system's own sheet: the link to
 /// the passkey page carries the `passkey` device call (the client lists
-/// `passkey`; passkeys are on; an app of the client's family under `auth.apps`
-/// has `credentials`, and an Apple app's origin `https://<rp_id>` is among
-/// `auth.passkeys.origins`), and a button stands for the provider whose sheet
+/// `passkey` and `passkey_options`, which a build from before the options were
+/// handed to it does not; passkeys are on; an app of the client's family under
+/// `auth.apps` has `credentials`, and an Apple app's origin `https://<rp_id>`
+/// is among `auth.passkeys.origins`), and a button stands for the provider whose sheet
 /// the client's system has (the client lists `platform_sign_in`; a module
 /// registered a [`ProviderSheets`](crate::ProviderSheets) that takes it). The
 /// form and its links are on that screen too. Without a call the page is the web
@@ -1212,14 +1213,17 @@ impl Injectable for PagesController {
 
 impl PagesController {
     /// What the sign-in page offers the native client that asks: a passkey in the
-    /// system's own sheet, where the client's app says it can (`passkey`), passkeys
-    /// are on and an app of its family shares the site's; and a button for the
-    /// provider its system has a sheet for, where the app says it can
+    /// system's own sheet, where the client's app says it can (`passkey`, and
+    /// `passkey_options`: its build shows the sheet with the options this server
+    /// gives), passkeys are on and an app of its family shares the site's; and a
+    /// button for the provider its system has a sheet for, where the app says it can
     /// (`platform_sign_in`) and a module is set up to take that sign-in. Nothing for
     /// a browser, and nothing where any of it is missing: the page is then the page
-    /// it always was.
+    /// it always was. A build that lists `passkey` alone is from before the options
+    /// were handed to it and could only fail the call, so it is offered none.
     async fn native_ways(&self, session: &Session, next: Option<&str>) -> NativeWays {
         let mut ways = NativeWays::default();
+        // `native_client_with` answers for a passkey only when the app lists both names.
         if self.paths.has_passkey
             && let Some(client) = navree_ui::native_client_with(PASSKEY_CALL)
             && self.passkeys_in_app(client.family)
