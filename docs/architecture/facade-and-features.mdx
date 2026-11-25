@@ -57,6 +57,7 @@ Every module crate is re-exported whole, as a module of the facade. `navree::db:
 | `navree::kernel` | navree-kernel | always | Module graph, DI container, lifecycle, commands |
 | `navree::bounded` | navree-bounded | always | The bounded in-process `Cache`: a strict capacity, SIEVE eviction, TTL and TTI, single-flight loading |
 | `navree::glob` | navree-glob | always | The glob matcher for configured patterns: `*` any run of characters, `?` one, everything else literal |
+| `navree::datetime` | navree-datetime | always | Dates and times of Navree's own: `Timestamp` (an instant), `Date`, `Time`, `DateTime`, `Offset`, and `Span` (an exact length of time) |
 | `navree::contracts` | navree-contracts | always | Cross-module traits: `Principal`, `Job`, `Clock`, `AuditSink`, ... |
 | `navree::config` | navree-config | always | `ConfigModule`, `.env`, TOML, JSON and `APP_*` sources |
 | `navree::plugin` | navree-kernel, navree-config | always | What a plugin names: `PluginInfo`, `Publishable`, `PublishTag`, the plugins report, `ClientModule`, and `navree::plugin::prelude` for the extension traits plugins use |
@@ -197,7 +198,7 @@ The facade has one feature per module crate, named after it (`http-client` for `
 navree = { version = "1", default-features = false, features = ["http", "log"] }
 ```
 
-`navree-kernel`, `navree-bounded`, `navree-glob`, `navree-contracts`, `navree-config`, `navree-openapi`, `navree-macros` and `navree-i18n-macros` are always included. A module's feature also turns on the features of the modules its crate builds on, so `navree::<that module>` is always there to name their types:
+`navree-kernel`, `navree-bounded`, `navree-glob`, `navree-datetime`, `navree-contracts`, `navree-config`, `navree-openapi`, `navree-macros` and `navree-i18n-macros` are always included. A module's feature also turns on the features of the modules its crate builds on, so `navree::<that module>` is always there to name their types:
 
 | Feature | Also turns on |
 |---|---|
