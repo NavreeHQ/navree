@@ -58,9 +58,10 @@ pub enum SignInMethod {
     /// native app of `auth.apps` (`POST /auth/app/exchange`), by the app's
     /// platform and id.
     AppHandOver {
-        /// `apple` or `android`.
+        /// `apple`, `android` or `windows`.
         platform: String,
-        /// The app's bundle id or package name.
+        /// The app's bundle id or package name; for a Windows app, its
+        /// package family name or the id it was built with.
         app: String,
     },
 }

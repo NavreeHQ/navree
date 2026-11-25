@@ -321,9 +321,10 @@ impl navree_ui::NativeShellPart for HandOverShellPart {
         let family = match client.family {
             NativeFamily::Apple => Some("apple"),
             NativeFamily::Android => Some("android"),
+            NativeFamily::Windows => Some("windows"),
             _ => None,
         };
-        if let Some(callback) = family.and_then(|family| self.apps.first_callback(family)) {
+        if let Some(callback) = family.and_then(|family| self.apps.shell_callback(family)) {
             routes = routes.callback(callback);
         }
         shell.sign_in(routes);
@@ -2114,10 +2115,78 @@ mod tests {
                 .second_step("/sign-in/two-factor"),
         );
         assert_eq!(said(NativeFamily::Android), android);
+        // Nor has a Windows client, nor a client of a system the settings do not list.
+        assert_eq!(said(NativeFamily::Windows), android);
+        assert_eq!(said(NativeFamily::Other), android);
         // Where the hand-over routes are not mounted, nothing is said.
         let mut none = NativeShellParts::default();
         part(false).contribute(&mut none, &NativeClient::new(NativeFamily::Apple));
         assert_eq!(none, NativeShellParts::default());
+    }
+
+    #[test]
+    fn the_shell_document_names_a_windows_apps_callback_to_a_windows_client_alone() {
+        use navree_ui::{NativeClient, NativeFamily, NativeShellPart, NativeShellParts};
+        let windows = |name: &str, family: &str, callback: &str| {
+            (
+                name.to_owned(),
+                crate::apps::WindowsApp {
+                    package_family_name: Some(family.to_owned()),
+                    callback: Some(callback.to_owned()),
+                    ..Default::default()
+                },
+            )
+        };
+        let said = |apps: crate::AppsOptions, family| {
+            let mut parts = NativeShellParts::default();
+            HandOverShellPart {
+                handed_over: true,
+                apps: Arc::new(apps),
+                exchange: "/api/auth/app/exchange".to_owned(),
+                second_step: "/sign-in/two-factor".to_owned(),
+            }
+            .contribute(&mut parts, &NativeClient::new(family));
+            parts
+        };
+        let routes = || {
+            navree_ui::NativeSignIn::new("/auth/app/sign-in", "/api/auth/app/exchange")
+                .second_step("/sign-in/two-factor")
+        };
+        let mut one = crate::AppsOptions::default();
+        one.windows.extend([windows(
+            "main",
+            "CharkhaSupply_8wekyb3d8bbwe",
+            "charkha:/signed-in",
+        )]);
+        let mut named = NativeShellParts::default();
+        named.sign_in(routes().callback("charkha:/signed-in"));
+        assert_eq!(said(one.clone(), NativeFamily::Windows), named);
+        // The callback is the Windows app's: no other client is told it.
+        let mut unnamed = NativeShellParts::default();
+        unnamed.sign_in(routes());
+        for family in [
+            NativeFamily::Apple,
+            NativeFamily::Android,
+            NativeFamily::Other,
+        ] {
+            assert_eq!(said(one.clone(), family), unnamed, "{family:?}");
+        }
+        // Two apps that come back the same way are told that way; two that
+        // do not are told none, and each comes back on its own scheme.
+        let mut same = one.clone();
+        same.windows.extend([windows(
+            "kiosk",
+            "CharkhaKiosk_8wekyb3d8bbwe",
+            "charkha:/signed-in",
+        )]);
+        assert_eq!(said(same, NativeFamily::Windows), named);
+        let mut two = one;
+        two.windows.extend([windows(
+            "kiosk",
+            "CharkhaKiosk_8wekyb3d8bbwe",
+            "charkha-kiosk:/signed-in",
+        )]);
+        assert_eq!(said(two, NativeFamily::Windows), unnamed);
     }
 
     #[test]

@@ -2,17 +2,21 @@
 //!
 //! A native app signs a person in through the system's sign-in session
 //! (`ASWebAuthenticationSession` on Apple systems, a Custom Tab or Auth Tab
-//! on Android), which shows the site's own sign-in pages with every way in
-//! the site offers. That session keeps its own cookies, so the app is still
-//! signed out when it ends. The hand-over is an authorization code with a
-//! proof of possession (PKCE, S256 only):
+//! on Android, the person's own browser on Windows), which shows the site's
+//! own sign-in pages with every way in the site offers. That session keeps
+//! its own cookies, so the app is still signed out when it ends. The
+//! hand-over is an authorization code with a proof of possession (PKCE, S256
+//! only):
 //!
 //! 1. The app makes a random `code_verifier` and opens the system's sign-in
-//!    session at `GET /auth/app/sign-in?platform=apple|android&app=<bundle
-//!    id or package>&code_challenge=<base64url SHA-256 of the
+//!    session at `GET /auth/app/sign-in?platform=apple|android|windows&app=<its
+//!    id>&code_challenge=<base64url SHA-256 of the
 //!    verifier>&code_challenge_method=S256&state=<its own random value>`.
-//!    The app must be one of `auth.apps` with a `callback`. The session
-//!    remembers the request and goes to `GET /auth/app/finish`.
+//!    The app's id is its bundle id (`apple`), its package name (`android`),
+//!    or, on `windows`, its package family name when it is installed from a
+//!    package and the id it was built with when it is not. The app must be
+//!    one of `auth.apps` with a `callback`. The session remembers the
+//!    request and goes to `GET /auth/app/finish`.
 //! 2. `GET /auth/app/finish` sends a browser that is not signed in to the
 //!    sign-in page with `next` set back to itself and the hand-over's own
 //!    one-time `attempt`; the person signs in there by any way and in as
@@ -69,9 +73,11 @@
 //! and the hand-over ends. Opening the start address, which any site can
 //! do, signs nobody out and hands nothing over. An app whose callback is a
 //! custom scheme (`custom_scheme`, which another app could claim) never
-//! gets a sign-in the browser already had: the person signs in again. The
-//! answers of the finish and the confirmation are `no-store` and
-//! `no-referrer`.
+//! gets a sign-in the browser already had: the person signs in again. A
+//! Windows app is always such an app: its callback is a link on its own
+//! scheme, which any program on the machine can register, and nothing
+//! proves to the site which program asked. The answers of the finish and
+//! the confirmation are `no-store` and `no-referrer`.
 //!
 //! Only the browser's own navigation finishes a hand-over. The finish
 //! answers with a redirect to the app's callback, which reaches the app only
@@ -322,7 +328,8 @@ pub(crate) enum Finish {
 /// What the confirmation page says and posts back.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct ConfirmPage {
-    /// The app's bundle id or package name.
+    /// The app's id, as it named itself: its bundle id, its package name, or
+    /// the id of a Windows build.
     app: String,
     /// The signed-in person's name.
     name: String,
@@ -952,10 +959,11 @@ impl AuthService {
 #[derive(Deserialize, Validate, ToSchema)]
 #[non_exhaustive]
 pub struct AppExchangeInput {
-    /// `apple` or `android`.
+    /// `apple`, `android` or `windows`.
     #[validate(length(min = 1, max = 16))]
     pub platform: String,
-    /// The app's bundle id or package name.
+    /// The app's id, as it started the hand-over: its bundle id, its package
+    /// name, or the id a Windows build names itself by.
     #[validate(length(min = 1, max = 255))]
     pub app: String,
     /// The one-time code from the callback.
