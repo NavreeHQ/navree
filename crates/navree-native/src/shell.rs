@@ -180,15 +180,15 @@ pub struct Device {
 ///    `A-Za-z0-9-._~`), the `code_challenge` (the unpadded base64url of the
 ///    verifier's SHA-256) and a random `state`.
 /// 2. It opens the system's sign-in session (`ASWebAuthenticationSession` on
-///    Apple systems, an Auth Tab or a Custom Tab on Android) at `start` with
-///    the query `platform` (`apple` or `android`), `app` (the app's bundle id
-///    or package name), `code_challenge`, `code_challenge_method=S256` and
-///    `state`, and `redirect_uri` when it sends one, which must be `callback`.
-///    The route answers `400` (`invalid_hand_over`) for an app it does not
-///    know, an app with no callback, a missing, malformed or `plain`
-///    challenge, or another `redirect_uri`. A client for Windows names itself
-///    `windows` (see [`SignInPlatform::Windows`]); the framework's server does
-///    not accept Windows apps yet, and answers it `400` too.
+///    Apple systems, an Auth Tab or a Custom Tab on Android, the person's own
+///    browser on Windows) at `start` with the query `platform` (`apple`,
+///    `android` or `windows`), `app` (the app's bundle id or package name; on
+///    Windows see [`SignInPlatform::Windows`]), `code_challenge`,
+///    `code_challenge_method=S256` and `state`, and `redirect_uri` when it
+///    sends one, which must be `callback`. The route answers `400`
+///    (`invalid_hand_over`) for an app it does not know, an app with no
+///    callback, a missing, malformed or `plain` challenge, or another
+///    `redirect_uri`.
 /// 3. The person signs in on the app's pages inside the session, which has
 ///    cookies of its own. Once they are signed in, the session ends at the
 ///    app's callback with `?code=`, a one-time code of 43 characters that works
@@ -251,11 +251,10 @@ pub enum SignInPlatform {
     /// Android: the app is named by its package name.
     Android,
     /// Windows: the app is named by its package family name when it is
-    /// packaged, and by the id it was built with when it is not. The
-    /// framework's server does not accept Windows apps yet: its list of apps
-    /// holds Apple and Android ones, and its start route refuses this family,
-    /// so sign-in through the browser is not available on Windows until it
-    /// does.
+    /// installed from a package, and by the id it was built with when it is
+    /// not. Its callback is a link on the app's own scheme, and its sign-in
+    /// session is the person's own browser, whose cookies are not the app's:
+    /// the hand-over is the only way a sign-in there reaches the app.
     Windows,
 }
 
@@ -282,7 +281,8 @@ pub enum SignInPlatform {
 pub struct SignInExchange {
     /// The family of systems the app is for.
     pub platform: SignInPlatform,
-    /// The app's bundle id or package name, as it started the sign-in session.
+    /// The app's id, as it started the sign-in session: its bundle id, its
+    /// package name, or the id a Windows build names itself by.
     pub app: String,
     /// The one-time code from the callback.
     pub code: String,
