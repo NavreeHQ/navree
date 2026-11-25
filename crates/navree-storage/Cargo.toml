@@ -31,8 +31,18 @@ gcs = ["object_store/gcp-base", "__cloud"]
 ## Azure Blob Storage disks.
 azure = ["object_store/azure-base", "__cloud", "dep:base64"]
 # Shared by the cloud drivers: HTTPS on reqwest with rustls and ring (never
-# object_store's `aws`, `gcp` or `azure` features, which turn on aws-lc).
-__cloud = ["dep:object_store", "object_store/ring", "object_store/reqwest", "dep:reqwest", "dep:rustls"]
+# object_store's `aws`, `gcp` or `azure` features, which turn on aws-lc), and
+# the core in `src/cloud`: the client, retries, keys, credentials and XML.
+__cloud = [
+    "dep:object_store",
+    "object_store/ring",
+    "object_store/reqwest",
+    "dep:hyper",
+    "dep:quick-xml",
+    "dep:rand",
+    "dep:reqwest",
+    "dep:rustls",
+]
 
 [dependencies]
 base64 = { workspace = true, optional = true }
@@ -41,6 +51,8 @@ chrono = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
+# The cloud core tells a connection that dropped from other failures.
+hyper = { workspace = true, optional = true }
 infer = { workspace = true }
 navree-config = { workspace = true }
 navree-contracts = { workspace = true }
@@ -51,6 +63,9 @@ navree-telemetry = { workspace = true }
 mime_guess = { workspace = true }
 object_store = { workspace = true, optional = true }
 percent-encoding = { workspace = true }
+# The cloud core: the XML answers of S3 and Azure, and the jitter of a retry.
+quick-xml = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 serde = { workspace = true }
@@ -59,6 +74,8 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+# The link a store signs (`Store::signed_url`).
+url = { workspace = true }
 
 [dev-dependencies]
 http-body-util = { workspace = true }

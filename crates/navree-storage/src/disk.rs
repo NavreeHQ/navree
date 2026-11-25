@@ -479,6 +479,10 @@ impl Disk {
                 disk: self.inner.name.clone(),
                 source,
             },
+            unsupported @ StoreError::Unsupported(_) => StorageError::Backend {
+                disk: self.inner.name.clone(),
+                source: Box::new(unsupported),
+            },
         }
     }
 }

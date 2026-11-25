@@ -6149,6 +6149,7 @@ dependencies = [
  "hex",
  "http",
  "http-body-util",
+ "hyper",
  "infer",
  "mime_guess",
  "navree-config",
@@ -6159,6 +6160,8 @@ dependencies = [
  "navree-telemetry",
  "object_store",
  "percent-encoding",
+ "quick-xml 0.42.0",
+ "rand 0.10.4",
  "reqwest",
  "rustls",
  "serde",
@@ -6168,6 +6171,7 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
+ "url",
  "wiremock",
 ]
 

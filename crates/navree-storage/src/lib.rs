@@ -31,6 +31,11 @@
 //!   disk lacks from another.
 //! - A `storage` readiness check (`dyn HealthCheck`) writes, reads and
 //!   deletes a probe file on every disk, the disks in parallel.
+//! - [`store`] is the file store behind a disk: the [`Store`](store::Store)
+//!   a driver of one implements, a store in memory and a store under a
+//!   directory of another. With a cloud driver's feature, `cloud` holds
+//!   what the cloud stores share: the HTTP client, retries, object keys,
+//!   credentials and XML answers.
 //!
 //! ```
 //! use chrono::{Duration, Utc};
@@ -63,6 +68,12 @@
 
 #[cfg(feature = "azure")]
 mod azure_sas;
+#[cfg(feature = "__cloud")]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(feature = "s3", feature = "gcs", feature = "azure")))
+)]
+pub mod cloud;
 mod disk;
 mod disk_driver_store;
 mod driver;
@@ -76,7 +87,7 @@ mod provider;
 mod serve;
 mod signing;
 mod storage;
-mod store;
+pub mod store;
 mod sync;
 mod upload;
 

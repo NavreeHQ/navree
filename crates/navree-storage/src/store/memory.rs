@@ -1,4 +1,4 @@
-//! [`Memory`]: files in process memory.
+//! [`MemoryStore`]: files in process memory.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -13,8 +13,23 @@ use navree_kernel::BoxFuture;
 use super::{Meta, Object, Store, StoreError, StoreResult, Upload};
 
 /// Files kept in memory, lost with the process: for tests and scratch data.
+/// It signs no links.
+///
+/// ```
+/// use bytes::Bytes;
+/// use navree_storage::store::{MemoryStore, Store};
+///
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), navree_storage::store::StoreError> {
+/// let store = MemoryStore::new();
+/// store.put("challans/CH-0042.txt", Bytes::from("Amritsar")).await?;
+/// assert_eq!(store.read("challans/CH-0042.txt", Some(0..4)).await?, "Amri");
+/// assert_eq!(store.list("challans").await?.len(), 1);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Default)]
-pub(crate) struct Memory {
+pub struct MemoryStore {
     files: Arc<Mutex<BTreeMap<String, Entry>>>,
 }
 
@@ -40,8 +55,9 @@ fn insert(files: &Files, path: &str, contents: Bytes) {
     locked(files).insert(path.to_owned(), entry);
 }
 
-impl Memory {
-    pub(crate) fn new() -> Self {
+impl MemoryStore {
+    /// A store with no files.
+    pub fn new() -> Self {
         Self::default()
     }
 
@@ -53,13 +69,22 @@ impl Memory {
     }
 }
 
-impl fmt::Display for Memory {
+impl fmt::Display for MemoryStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Memory")
     }
 }
 
-impl Store for Memory {
+/// How many files it holds; never their contents.
+impl fmt::Debug for MemoryStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MemoryStore")
+            .field("files", &locked(&self.files).len())
+            .finish()
+    }
+}
+
+impl Store for MemoryStore {
     fn put<'a>(&'a self, path: &'a str, contents: Bytes) -> BoxFuture<'a, StoreResult<()>> {
         Box::pin(async move {
             insert(&self.files, path, contents);
@@ -171,13 +196,16 @@ impl Upload for MemoryUpload {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use futures_util::TryStreamExt;
 
     use super::*;
+    use crate::store::Method;
 
     #[tokio::test]
     async fn files_are_put_read_and_deleted() {
-        let store = Memory::new();
+        let store = MemoryStore::new();
         store.put("a/b.txt", Bytes::from("hello")).await.unwrap();
         assert_eq!(store.read("a/b.txt", None).await.unwrap(), "hello");
         assert_eq!(store.read("a/b.txt", Some(1..3)).await.unwrap(), "el");
@@ -205,7 +233,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_prefix_is_a_directory() {
-        let store = Memory::new();
+        let store = MemoryStore::new();
         for path in [
             "docs/b.txt",
             "docs/a.txt",
@@ -228,7 +256,7 @@ mod tests {
 
     #[tokio::test]
     async fn an_upload_appears_when_it_is_finished_and_not_when_it_is_aborted() {
-        let store = Memory::new();
+        let store = MemoryStore::new();
         let mut upload = store.begin_upload("up.bin").await.unwrap();
         upload.write(Bytes::from("ab")).await.unwrap();
         upload.write(Bytes::from("cd")).await.unwrap();
@@ -250,11 +278,31 @@ mod tests {
 
     #[tokio::test]
     async fn the_last_modified_time_is_the_time_of_the_write() {
-        let store = Memory::new();
+        let store = MemoryStore::new();
         let before = Utc::now();
         store.put("t", Bytes::new()).await.unwrap();
         let meta = store.head("t").await.unwrap();
         assert!(meta.last_modified >= before && meta.last_modified <= Utc::now());
         assert_eq!(meta.size, 0);
+    }
+
+    #[tokio::test]
+    async fn it_signs_no_links_and_shows_no_contents() {
+        let store = MemoryStore::new();
+        store.put("a.txt", Bytes::from("s3cret")).await.unwrap();
+        for method in [Method::GET, Method::PUT] {
+            let signed = store
+                .signed_url("a.txt", method, Duration::from_secs(60))
+                .await;
+            assert!(matches!(
+                signed,
+                Err(StoreError::Unsupported("signed links"))
+            ));
+        }
+        assert_eq!(
+            StoreError::Unsupported("signed links").to_string(),
+            "this store has no signed links"
+        );
+        assert_eq!(format!("{store:?}"), "MemoryStore { files: 1 }");
     }
 }
