@@ -145,6 +145,58 @@ inBrowsers(({ open }) => {
     await close();
   });
 
+  test("a date and a time that can be cleared show the whole of both at every width: side by side where both fit, the time under the date where they don't", async () => {
+    const { page, close } = await open("/dates/datetime");
+    await page.evaluate(() => document.fonts.ready);
+    // The picker at every width from a narrow column to a wide one. Each box has two buttons beside
+    // what it holds, and what it holds is laid out as the box draws it, on one line, and measured
+    // against the room the box has. With `seconds`, the time is marked as the toolkit marks one with
+    // seconds, and holds one.
+    const sweep = (seconds) =>
+      page.evaluate((seconds) => {
+        const picker = document.getElementById("dtp-starts");
+        const boxes = [...picker.querySelectorAll("[data-slot=date-time-picker-ui] [data-ui-text]")];
+        if (seconds) {
+          document.getElementById("dtp-starts-time").setAttribute("data-seconds", "");
+          boxes[1].value = "2:30:45 PM";
+        }
+        // A line of text in the page, out of sight, drawn in each box's own typeface in turn.
+        const ruler = document.createElement("span");
+        for (const [name, value] of [["position", "fixed"], ["left", "0"], ["top", "0"], ["visibility", "hidden"], ["white-space", "pre"]]) ruler.style.setProperty(name, value);
+        document.body.append(ruler);
+        const cut = [];
+        const lines = {};
+        for (let width = 168; width <= 440; width += 4) {
+          picker.style.setProperty("width", `${width}px`);
+          for (const box of boxes) {
+            const style = getComputedStyle(box);
+            for (const name of ["font-family", "font-size", "font-weight", "font-style", "font-stretch", "font-variant-numeric", "font-feature-settings", "letter-spacing"]) ruler.style.setProperty(name, style.getPropertyValue(name));
+            ruler.textContent = box.value;
+            const text = ruler.getBoundingClientRect().width;
+            // The box less its padding and border: an engine may or may not count a text box's padding in its clientWidth.
+            const room = box.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
+            if (text > room + 0.5) cut.push(`${width}px: "${box.value}" is ${text.toFixed(1)}px wide in ${room.toFixed(1)}px`);
+          }
+          lines[width] = new Set(boxes.map((box) => Math.round(box.getBoundingClientRect().top))).size;
+        }
+        ruler.remove();
+        picker.style.removeProperty("width");
+        const shown = (button) => button.getClientRects().length > 0;
+        return { cut, lines, held: boxes.map((box) => box.value), buttons: boxes.map((box) => [...box.closest("[data-slot=input-group]").querySelectorAll("button")].filter(shown).length) };
+      }, seconds);
+    const plain = await sweep(false);
+    assert.deepEqual(plain.held, ["11/12/2026", "2:30 PM"]);
+    assert.deepEqual(plain.buttons, [2, 2], "each box has its clear button and the button that opens it");
+    assert.deepEqual(plain.cut, [], "no width cuts the date or the time");
+    assert.equal(plain.lines[440], 1, "side by side where both fit");
+    assert.equal(plain.lines[240], 2, "the time under the date where they don't");
+    const timed = await sweep(true);
+    assert.deepEqual(timed.held, ["11/12/2026", "2:30:45 PM"]);
+    assert.deepEqual(timed.cut, [], "no width cuts a time with seconds");
+    assert.equal(timed.lines[440], 1, "side by side where both fit, seconds and all");
+    await close();
+  });
+
   test("JavaScript off: a native date-and-time field stands in and posts the same value", async () => {
     const { page, close } = await open("/dates/datetime", { js: false });
     const starts = page.locator("[name=starts]");

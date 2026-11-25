@@ -7,6 +7,8 @@ description: "A date and a time of day in one control: a date box with its calen
 
 `DateTimePicker` puts a date picker and a time picker side by side under one label, and posts the two as one value: `2026-11-12T14:30`, or `2026-11-12T14:30:15` with seconds. That is the form a browser's own date-and-time field posts, and with JavaScript off the picker is that field.
 
+The two boxes share a line where each has room for what it holds beside its buttons. Where they don't, in a narrow column or a form on a phone, the time box goes under the date box.
+
 ```rust
 use chrono::NaiveDate;
 use navree::ui::dates::*;
