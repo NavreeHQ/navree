@@ -25,6 +25,7 @@ use std::time::Duration;
 use http::Method;
 use http::request::Parts;
 use navree_contracts::{AuditKind, AuthVia, BoxFuture, Impersonator, Principal};
+use navree_crypto::{constant_time_eq, sha256_hex};
 use navree_http::AppError;
 use navree_orm::Model as _;
 use navree_session::Session;
@@ -32,6 +33,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::passkeys::webauthn::{ClientData, b64url};
 use crate::refresh_token::Model as RefreshToken;
 use crate::service::{PasswordStep, SessionKind, entry};
 use crate::two_factor::two_factor_enabled;
@@ -49,6 +51,10 @@ pub const SESSION_CHALLENGE_KEY: &str = "_auth_challenge";
 /// The session key holding the sign-in an impersonating administrator goes
 /// back to.
 const SESSION_STASH_KEY: &str = "_auth_stash";
+
+/// The session key holding the challenge of a passkey sign-in a native app
+/// started from a page of this session.
+const SESSION_PASSKEY_CALL_KEY: &str = "_auth_passkey_call";
 
 /// Where browsers sign out (the `POST` route of the sign-out page):
 /// a user who must set up two-factor authentication can still reach it.
@@ -88,6 +94,16 @@ struct SignedIn {
     /// sign-in waits under `SESSION_STASH_KEY`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     impersonator: Option<Uuid>,
+}
+
+/// What the session holds while a passkey sign-in a native app started waits
+/// for its assertion.
+#[derive(Serialize, Deserialize)]
+struct PasskeyCall {
+    /// The SHA-256 (hex) of the challenge, as the options carried it.
+    challenge: String,
+    /// When it stops being accepted (Unix seconds, the app's clock).
+    expires_at: i64,
 }
 
 /// What the session holds while a sign-in waits for its second factor.
@@ -239,6 +255,101 @@ impl AuthService {
             meta,
         )
         .await
+    }
+
+    /// The `publicKey` options of a passkey sign-in that a native app starts
+    /// from a page of `session` (the `passkey` device call): the single-use
+    /// challenge of
+    /// [`passkey_login_options`](AuthService::passkey_login_options), which
+    /// the session remembers as the one it asked for (its SHA-256, until
+    /// `auth.passkeys.timeout_secs`).
+    /// [`login_with_passkey_call_session`](AuthService::login_with_passkey_call_session)
+    /// takes only an assertion over it. One challenge waits at a time: asking
+    /// again replaces it.
+    pub async fn passkey_call_options(
+        &self,
+        session: &Session,
+    ) -> Result<serde_json::Value, AuthError> {
+        let options = self.passkey_login_options(None).await?;
+        let challenge = options["challenge"].as_str().unwrap_or_default();
+        let ttl = i64::try_from(self.options.passkeys.timeout_secs).unwrap_or(i64::MAX);
+        session
+            .insert(
+                SESSION_PASSKEY_CALL_KEY,
+                &PasskeyCall {
+                    challenge: sha256_hex(challenge.as_bytes()),
+                    expires_at: self.clock.now().timestamp().saturating_add(ttl),
+                },
+            )
+            .map_err(session_error)?;
+        Ok(options)
+    }
+
+    /// Signs an app in on its session with the assertion its `passkey` device
+    /// call brought back. The challenge the assertion answers must be the one
+    /// this session asked for with
+    /// [`passkey_call_options`](AuthService::passkey_call_options); the
+    /// session forgets it now, whatever follows. Then come the steps of
+    /// [`login_with_passkey_session`](AuthService::login_with_passkey_session),
+    /// which this calls: the assertion checked as the passkey page checks it
+    /// (the challenge used up, the origin, the relying party, the signature,
+    /// the counter), the sign-in policies, the session or the waiting second
+    /// factor. An assertion over a challenge another session asked for is
+    /// [`AuthError::PasskeyRefused`], logged and audited as
+    /// `auth.login_failed` like every other refusal.
+    pub async fn login_with_passkey_call_session(
+        &self,
+        session: &Session,
+        credential: &serde_json::Value,
+        remember: bool,
+        meta: &ClientMeta,
+    ) -> Result<SessionSignIn, AuthError> {
+        let waiting = session
+            .remove(SESSION_PASSKEY_CALL_KEY)
+            .and_then(|value| serde_json::from_value::<PasskeyCall>(value).ok());
+        if let Err(reason) = self.asked_here(waiting.as_ref(), credential) {
+            tracing::warn!(
+                target: "navree::security",
+                ip = meta.ip.as_deref().unwrap_or("-"),
+                reason,
+                "passkey sign-in refused"
+            );
+            self.audit(
+                entry(AuditKind::Security, "auth.login_failed", meta)
+                    .metadata(json!({ "method": "passkey", "reason": reason })),
+            )
+            .await;
+            return Err(AuthError::PasskeyRefused(reason.to_owned()));
+        }
+        self.login_with_passkey_session(session, credential, remember, meta)
+            .await
+    }
+
+    /// Whether the challenge `credential` answers is the one `waiting` in the
+    /// session, in time; else why not.
+    fn asked_here(
+        &self,
+        waiting: Option<&PasskeyCall>,
+        credential: &serde_json::Value,
+    ) -> Result<(), &'static str> {
+        let Some(waiting) = waiting else {
+            return Err("no challenge asked for in this session");
+        };
+        if self.clock.now().timestamp() >= waiting.expires_at {
+            return Err("challenge expired");
+        }
+        let answered = credential
+            .get("response")
+            .and_then(|response| response.get("clientDataJSON"))
+            .and_then(serde_json::Value::as_str)
+            .and_then(b64url)
+            .and_then(|client| ClientData::parse(&client))
+            .ok_or("malformed client data")?;
+        let answered = sha256_hex(answered.challenge.as_bytes());
+        if !constant_time_eq(answered.as_bytes(), waiting.challenge.as_bytes()) {
+            return Err("challenge of another session");
+        }
+        Ok(())
     }
 
     /// What follows the first step of any browser sign-in: a session and an
