@@ -102,8 +102,9 @@ async fn with_passkey_of(
     (user, authenticator)
 }
 
-/// The sign-in page at `path`, as the native client `descriptor` gets it.
-async fn screen(client: &TestClient, descriptor: &str, path: &str) -> Envelope {
+/// What the native client `descriptor` is answered at `path`: a screen, or
+/// the word to show the page in its web view.
+async fn answer(client: &TestClient, descriptor: &str, path: &str) -> Envelope {
     let response = client
         .get(path)
         .header(NATIVE, "1")
@@ -111,13 +112,30 @@ async fn screen(client: &TestClient, descriptor: &str, path: &str) -> Envelope {
         .send()
         .await
         .assert_status(200);
-    let envelope: Envelope = serde_json::from_str(&response.text()).expect("an envelope");
+    serde_json::from_str(&response.text()).expect("an envelope")
+}
+
+/// The sign-in page at `path`, as the native client `descriptor` gets it
+/// when the page has a call to give it: a screen.
+async fn screen(client: &TestClient, descriptor: &str, path: &str) -> Envelope {
+    let envelope = answer(client, descriptor, path).await;
     assert!(
         envelope.screen.is_some(),
         "the sign-in page is a screen: {:?}",
         envelope.web
     );
     envelope
+}
+
+/// Whether the client is told to show the page in its web view, as every
+/// native client was before a page could give it a call: the layout of the
+/// sign-in pages has no native kind.
+fn is_the_web_views(envelope: &Envelope) -> bool {
+    envelope.screen.is_none()
+        && envelope
+            .web
+            .as_ref()
+            .is_some_and(|web| web.why == ["slot:auth-layout"])
 }
 
 /// What a tap on the link or the button named `label` does.
@@ -292,12 +310,12 @@ async fn the_sign_in_page_gives_an_app_that_can_the_passkey_call() {
 }
 
 // Without the capability, or where the site is not set up for the client's
-// family, the link leads to the passkey page as it did.
+// family, the client is given no call and the page is what it was for a native
+// client: the web view's, where the link leads to the passkey page.
 #[tokio::test]
-async fn without_the_capability_or_an_app_of_its_family_the_link_leads_to_the_page() {
+async fn without_the_capability_or_an_app_of_its_family_the_page_is_what_it_was() {
     let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
     let app = apple_app(&clock, &sink).await;
-    let page = Action::navigate("/sign-in/passkey");
     for descriptor in [
         // An app that does not say it can.
         client_of("ios", "share+platform_sign_in"),
@@ -306,12 +324,8 @@ async fn without_the_capability_or_an_app_of_its_family_the_link_leads_to_the_pa
         // A system no app of the site is on.
         client_of("windows", "passkey"),
     ] {
-        let envelope = screen(&app.client(), &descriptor, "/sign-in").await;
-        assert_eq!(
-            tap(&envelope, "Sign in with a passkey"),
-            Some(page.clone()),
-            "{descriptor}"
-        );
+        let envelope = answer(&app.client(), &descriptor, "/sign-in").await;
+        assert!(is_the_web_views(&envelope), "{descriptor}: {envelope:?}");
     }
     // With an Android app that shares the site's passkeys, its clients get the call.
     let both = with_passkey_pages(support::clocked(&clock), &sink)
@@ -328,8 +342,8 @@ async fn without_the_capability_or_an_app_of_its_family_the_link_leads_to_the_pa
         Some(Action::Device(_))
     ));
     // That site has no Apple app.
-    let envelope = screen(&both.client(), &iphone(), "/sign-in").await;
-    assert_eq!(tap(&envelope, "Sign in with a passkey"), Some(page.clone()));
+    let envelope = answer(&both.client(), &iphone(), "/sign-in").await;
+    assert!(is_the_web_views(&envelope), "{envelope:?}");
 }
 
 // An Apple app is offered the call only when it shares the site's passkeys
@@ -337,7 +351,6 @@ async fn without_the_capability_or_an_app_of_its_family_the_link_leads_to_the_pa
 #[tokio::test]
 async fn an_apple_app_needs_credentials_and_the_relying_partys_origin() {
     let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
-    let page = Action::navigate("/sign-in/passkey");
     // The app does not share the site's passkeys.
     let links_only = with_passkey_pages(support::clocked(&clock), &sink)
         .config("auth.apps.apple.orders.team_id", "ABCDE12345")
@@ -345,8 +358,8 @@ async fn an_apple_app_needs_credentials_and_the_relying_partys_origin() {
         .config("auth.apps.apple.orders.credentials", false)
         .build()
         .await;
-    let envelope = screen(&links_only.client(), &iphone(), "/sign-in").await;
-    assert_eq!(tap(&envelope, "Sign in with a passkey"), Some(page.clone()));
+    let envelope = answer(&links_only.client(), &iphone(), "/sign-in").await;
+    assert!(is_the_web_views(&envelope), "{envelope:?}");
     // `https://<rp_id>` is not among the origins.
     let web_only = support::clocked(&clock)
         .config("auth.passkeys.enabled", true)
@@ -359,8 +372,8 @@ async fn an_apple_app_needs_credentials_and_the_relying_partys_origin() {
         .module(AuthPages::new())
         .build()
         .await;
-    let envelope = screen(&web_only.client(), &iphone(), "/sign-in").await;
-    assert_eq!(tap(&envelope, "Sign in with a passkey"), Some(page));
+    let envelope = answer(&web_only.client(), &iphone(), "/sign-in").await;
+    assert!(is_the_web_views(&envelope), "{envelope:?}");
 }
 
 // The whole call: the options, the system's sheet, the assertion posted with
@@ -696,7 +709,10 @@ async fn the_calls_routes_take_only_the_sessions_own_posts() {
         .build()
         .await;
     let phone = off.client();
-    screen(&phone, &iphone(), "/sign-in").await;
+    // The page starts the session, and has no call to give.
+    assert!(is_the_web_views(
+        &answer(&phone, &iphone(), "/sign-in").await
+    ));
     phone
         .post(OPTIONS)
         .xsrf()
@@ -783,15 +799,23 @@ async fn a_providers_sheet_is_offered_to_the_app_whose_system_has_it() {
         })))
     );
     assert_eq!(tap(&google, "Sign in with Apple"), None);
+    // The form and its links stand on the same screen.
+    assert_eq!(
+        tap(&google, "Forgot your password?"),
+        Some(Action::Navigate {
+            href: "/forgot-password".to_owned(),
+            present: navree_native::Present::Push,
+        })
+    );
 
-    // An app that does not say it can, and a system with no such sheet, get neither.
+    // An app that does not say it can, and a system with no such sheet, get neither:
+    // the page is the web view's, as it was.
     for descriptor in [
         client_of("ios", "passkey+share"),
         client_of("windows", "platform_sign_in"),
     ] {
-        let envelope = screen(&app.client(), &descriptor, "/sign-in").await;
-        assert_eq!(tap(&envelope, "Sign in with Apple"), None, "{descriptor}");
-        assert_eq!(tap(&envelope, "Sign in with Google"), None, "{descriptor}");
+        let envelope = answer(&app.client(), &descriptor, "/sign-in").await;
+        assert!(is_the_web_views(&envelope), "{descriptor}: {envelope:?}");
     }
     // A browser's page has no such button.
     let page = app
@@ -816,6 +840,40 @@ async fn without_a_module_that_takes_it_no_sheet_is_offered() {
         .module(AuthPages::new())
         .build()
         .await;
-    let envelope = screen(&app.client(), &iphone(), "/sign-in").await;
-    assert_eq!(tap(&envelope, "Sign in with Apple"), None);
+    let envelope = answer(&app.client(), &iphone(), "/sign-in").await;
+    assert!(is_the_web_views(&envelope), "{envelope:?}");
+}
+
+// A screen that has one call keeps what it has no call for as it was: an app
+// that opens a provider's sheet and can't do passkeys gets the link to the
+// passkey page.
+#[tokio::test]
+async fn a_screen_with_one_call_keeps_the_link_it_has_no_call_for() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = with_passkey_pages(support::clocked(&clock), &sink)
+        .config("auth.apps.apple.orders.team_id", "ABCDE12345")
+        .config("auth.apps.apple.orders.bundle_id", "com.example.orders")
+        .module(SheetsModule)
+        .build()
+        .await;
+    let sheet_only = client_of("ios", "platform_sign_in");
+    let envelope = screen(&app.client(), &sheet_only, "/sign-in?next=%2Fdeals").await;
+    assert!(matches!(
+        tap(&envelope, "Sign in with Apple"),
+        Some(Action::Device(_))
+    ));
+    assert_eq!(
+        tap(&envelope, "Sign in with a passkey"),
+        Some(Action::navigate("/sign-in/passkey?next=%2Fdeals"))
+    );
+    // An app that can do both gets both.
+    let envelope = screen(&app.client(), &iphone(), "/sign-in?next=%2Fdeals").await;
+    assert!(matches!(
+        tap(&envelope, "Sign in with Apple"),
+        Some(Action::Device(_))
+    ));
+    assert!(matches!(
+        tap(&envelope, "Sign in with a passkey"),
+        Some(Action::Device(_))
+    ));
 }
