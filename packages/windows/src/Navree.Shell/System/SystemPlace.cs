@@ -372,11 +372,11 @@ public sealed class SystemPlace : IDisposable
     /// secret, in place of the mark of their plain key. Every notification that waits for them under the mark before is theirs still,
     /// and waits under the mark they have now.
     /// </summary>
-    /// <param name="from">The mark they had before.</param>
-    /// <param name="to">The mark they have now.</param>
-    internal void MoveWaiting(string from, string to)
+    /// <param name="before">The mark they had before.</param>
+    /// <param name="after">The mark they have now.</param>
+    internal void MoveWaiting(string before, string after)
     {
-        int moved = schedule.Move(from, to);
+        int moved = schedule.Move(before, after);
         if (moved == 0)
         {
             return;

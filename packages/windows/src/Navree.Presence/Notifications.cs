@@ -413,19 +413,19 @@ public sealed class NotificationSchedule
     /// mark of the key the core makes with the install's secret, and the mark of the plain key they had before). What is nobody's, and
     /// what is anybody else's, stays as it is.
     /// </summary>
-    /// <param name="from">The mark they had before.</param>
-    /// <param name="to">The mark they have now.</param>
+    /// <param name="before">The mark they had before.</param>
+    /// <param name="after">The mark they have now.</param>
     /// <returns>How many were moved.</returns>
-    public int Move(string from, string to)
+    public int Move(string before, string after)
     {
-        ArgumentException.ThrowIfNullOrEmpty(from);
-        ArgumentException.ThrowIfNullOrEmpty(to);
+        ArgumentException.ThrowIfNullOrEmpty(before);
+        ArgumentException.ThrowIfNullOrEmpty(after);
         int moved = 0;
         for (int at = 0; at < waiting.Count; at++)
         {
-            if (string.Equals(waiting[at].Owner, from, StringComparison.Ordinal))
+            if (string.Equals(waiting[at].Owner, before, StringComparison.Ordinal))
             {
-                waiting[at] = waiting[at] with { Owner = to };
+                waiting[at] = waiting[at] with { Owner = after };
                 moved++;
             }
         }
