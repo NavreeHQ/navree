@@ -60,7 +60,7 @@ reference `users` use `.after(["auth"])`.
 | `POST /2fa/enable`, `/2fa/confirm`, `/2fa/verify`, `/2fa/disable`, `/2fa/recovery-codes` | mixed | TOTP two-factor |
 | `GET /sessions`, `DELETE /sessions/{id}`, `POST /confirm` `{password}` or `{code}` | signed in | sessions; step-up confirmation |
 | `POST /confirm/options` `{ticket?}`, `POST /confirm/passkey` `{credential}` | signed in | passkey step-up and confirming one action (`auth.passkeys.enabled`) |
-| `GET /auth/app/sign-in`, `GET /auth/app/finish`, `POST /auth/app/confirm` (all outside `/api`), `POST /app/exchange` `{platform, app, code, code_verifier}` | public | a native app takes over a sign-in from the system's sign-in session (PKCE S256; apps of `auth.apps` with a `callback`) |
+| `GET /auth/app/sign-in`, `GET /auth/app/finish`, `POST /auth/app/confirm` (all outside `/api`), `POST /app/exchange` `{platform, app, code, code_verifier}` | public | a native app (Apple, Android, Windows) takes over a sign-in from the system's sign-in session (PKCE S256; apps of `auth.apps` with a `callback`); only the browser's own navigation finishes it |
 | `POST /impersonate/{user}` `{reason}`, `DELETE /impersonate` | `users.impersonate` / signed in | impersonation (`auth.impersonation.enabled`) |
 | `POST /magic-link`, `/magic-link/verify`, `/otp`, `/otp/verify` | public | passwordless (`auth.magic_link.enabled`, `auth.otp.enabled`) |
 | `/passkeys/register/options`, `/passkeys/register`, `/passkeys/login/options`, `/passkeys/login`, `GET /passkeys`, `DELETE /passkeys/{id}` | mixed | passkeys (`auth.passkeys.enabled`) |
