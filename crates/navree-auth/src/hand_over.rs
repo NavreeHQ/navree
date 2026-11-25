@@ -152,10 +152,10 @@ const MAX_STATE_LEN: usize = 512;
 /// navigation.
 const ASKED_BY_CODE: [&str; 2] = ["x-navree-ui", "x-navree-native"];
 
-/// The request headers of a page loaded ahead of a click, which the person
-/// may never open: `Sec-Purpose` of today's browsers, and the two older
-/// ones.
-const AHEAD_OF_A_CLICK: [&str; 3] = ["sec-purpose", "purpose", "x-moz"];
+/// The request headers of a page loaded ahead of a click, or for a preview,
+/// which the person may never open: `Sec-Purpose` of today's browsers, and
+/// the three older ones (`Purpose`, `X-Purpose`, `X-Moz`).
+const AHEAD_OF_A_CLICK: [&str; 4] = ["sec-purpose", "purpose", "x-purpose", "x-moz"];
 
 /// Whether a request with these `headers` is the browser's own navigation to
 /// a page of its own: not navree-ui's runtime or a native client asking, not
@@ -1412,6 +1412,13 @@ mod tests {
             &[("sec-purpose", "prefetch;prerender")],
             &[("purpose", "prefetch")],
             &[("x-moz", "prefetch")],
+            // A page loaded for a preview, which says it is a navigation.
+            &[("x-purpose", "preview")],
+            &[
+                ("x-purpose", "preview"),
+                ("sec-fetch-mode", "navigate"),
+                ("sec-fetch-dest", "document"),
+            ],
         ] {
             assert!(!asked(not_the_browser), "{not_the_browser:?}");
         }
