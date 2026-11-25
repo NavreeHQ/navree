@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Text;
 using Navree.Design;
 using Navree.Protocol;
@@ -119,12 +120,20 @@ public sealed class PersonKeyTests
             SessionGate gate = new();
             RecordedShell shell = new();
             List<(string Before, string After)> moved = [];
+            List<string?> keptWhenMoved = [];
             ConcurrentQueue<string> problems = new();
             PersonChange people = new(
                 new PersonWatch(keptFor, keeper.KeepsOfAPerson()),
                 gate,
                 keeper,
-                shell.Parts with { MoveWaiting = (had, has) => moved.Add((had, has)) },
+                shell.Parts with
+                {
+                    MoveWaiting = (had, has) =>
+                    {
+                        keptWhenMoved.Add(kept.Read(SessionKeeper.PersonKey));
+                        moved.Add((had, has));
+                    },
+                },
                 problems.Enqueue);
 
             // The core names her by the key it makes with the install's secret, and says what her key was.
@@ -134,10 +143,14 @@ public sealed class PersonKeyTests
             Assert.IsNull(people.Last, "a change of person began for the person what is kept is kept for");
             Assert.AreEqual(now, people.KeptFor);
             Assert.AreEqual(now, people.Here);
-            CollectionAssert.AreEqual(new[] { (before, now) }, moved, "what waited under the mark she had is not kept under the mark she has now");
             Assert.AreEqual(0, shell.GivenTo.Length, "she was given what waited for nobody, as a first person is");
 
-            // The mark of her new key is written in place of the one before, and what was kept for her is still there.
+            // The mark of her new key is written in place of the one before, and only then is what waited under the mark she had kept
+            // under the mark she has now. What was kept for her is still there.
+            Assert.IsNotNull(people.Moved, "what waited under the mark she had is not to be kept under the mark she has now");
+            await people.Moved!.WaitAsync(Short);
+            CollectionAssert.AreEqual(new[] { (before, now) }, moved, "what waited under the mark she had is not kept under the mark she has now");
+            CollectionAssert.AreEqual(new string?[] { now }, keptWhenMoved, "what waited was kept under her new mark before that mark was the one kept");
             await keeper.DrainAsync().WaitAsync(Short);
             Assert.AreEqual(now, kept.Read(SessionKeeper.PersonKey));
             Assert.AreEqual("{\"typed\":\"Ravneet's draft\"}", kept.Read("snapshot"));
@@ -146,7 +159,71 @@ public sealed class PersonKeyTests
             // The states after say her key and nothing more: she is the same, and nothing is moved again.
             _ = gate.Asked([], out mark);
             Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(RavneetKeyed, null), mark));
+            await people.Moved!.WaitAsync(Short);
             Assert.AreEqual(1, moved.Count);
+            Assert.AreEqual(0, problems.Count, string.Join("; ", problems));
+        }
+        finally
+        {
+            Delete(folder);
+        }
+    }
+
+    [TestMethod]
+    public async Task A_mark_that_cannot_be_written_leaves_her_reminders_under_the_mark_she_had_until_it_is()
+    {
+        string folder = Folder();
+        string before = PersonWatch.MarkOfKey(RavneetPlain);
+        string now = PersonWatch.MarkOfKey(RavneetKeyed);
+        try
+        {
+            using (SessionKeeper earlier = new(new KeptStore(folder, App), new CookieStore(Shop)))
+            {
+                _ = earlier.Open();
+                earlier.KeepPerson(before);
+                earlier.Write(Waiting, "[{\"id\":\"dr-malhotra\",\"title\":\"Your appointment with Dr. Malhotra, Model Town, 10:30\"}]");
+                await earlier.DrainAsync().WaitAsync(Short);
+            }
+
+            KeptStore kept = new(folder, App);
+            using SessionKeeper keeper = new(kept, new CookieStore(Shop));
+            _ = keeper.Open();
+            SessionGate gate = new();
+            RecordedShell shell = new();
+            List<(string Before, string After)> moved = [];
+            ConcurrentQueue<string> problems = new();
+            PersonChange people = new(
+                new PersonWatch(keeper.KeptPerson(), keeper.KeepsOfAPerson()),
+                gate,
+                keeper,
+                shell.Parts with { MoveWaiting = (had, has) => moved.Add((had, has)) },
+                problems.Enqueue);
+
+            // Another program holds the file the mark is kept in, as one that copies or checks files does for a moment: the mark can be
+            // neither written nor read while it does.
+            string markFile = Path.Combine(folder, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(SessionKeeper.PersonKey))) + ".kept");
+            Assert.IsTrue(File.Exists(markFile), "the mark is not kept where this test holds it");
+            using (FileStream held = new(markFile, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                _ = gate.Asked([], out long mark);
+                Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(RavneetKeyed, RavneetPlain), mark));
+                Assert.IsNotNull(people.Moved);
+                await people.Moved!.WaitAsync(Short);
+                Assert.AreEqual(0, moved.Count, "what waited was kept under a mark that could not be written");
+            }
+
+            // What is on the device is as the release before left it: her mark before, and her reminders under it. A start now would
+            // read that mark and keep them.
+            await keeper.DrainAsync().WaitAsync(Short);
+            Assert.AreEqual(before, kept.Read(SessionKeeper.PersonKey));
+            Assert.AreEqual(0, moved.Count);
+
+            // The next state that names her writes the mark, and only then is what waits kept under it.
+            _ = gate.Asked([], out long next);
+            Assert.AreEqual(PersonHeard.Same, people.Hear(Naming(RavneetKeyed, null), next));
+            await people.Moved!.WaitAsync(Short);
+            Assert.AreEqual(now, kept.Read(SessionKeeper.PersonKey));
+            CollectionAssert.AreEqual(new[] { (before, now) }, moved, "what waited was not kept under her new mark once that mark was kept");
             Assert.AreEqual(0, problems.Count, string.Join("; ", problems));
         }
         finally

@@ -524,6 +524,30 @@ public sealed class SessionKeeper : IDisposable
     }
 
     /// <summary>
+    /// Keeps the mark of the person who is signed in, as <see cref="KeepPerson"/> does, and says, once the mark has had its turn in the
+    /// queue, whether it is the mark kept on the device: read back from where it is kept, after every write asked for before. What is to
+    /// be kept under a mark only when that mark is the one kept waits for this.
+    /// </summary>
+    /// <param name="mark">The person's mark (<see cref="PersonWatch.Named"/>).</param>
+    /// <returns>Whether the mark kept is this one. False when it could not be written, was not to be (a sign-out is under way, or a
+    /// change of person has not finished), or the queue has ended.</returns>
+    public async Task<bool> KeepPersonAsync(string mark)
+    {
+        KeepPerson(mark);
+        bool isKept = false;
+        try
+        {
+            await disk.RunAsync(() => isKept = string.Equals(kept.Read(PersonKey), mark, StringComparison.Ordinal)).ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+
+        return isKept;
+    }
+
+    /// <summary>
     /// Whether anything is kept for a person besides the cookies and the mark of whom it is kept for: a snapshot, the widths of a table's
     /// columns, notifications that wait. A start that reads no mark asks this: when something is kept and nothing says whose, the first
     /// person named is not taken for its owner (<see cref="PersonWatch"/>).
