@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::disk_driver_store::DriverStore;
 use crate::path::normalize;
 use crate::provider::Provider;
-use crate::store::{Local, Memory, Prefixed, Store};
+use crate::store::{Local, MemoryStore, PrefixedStore, Store};
 use crate::{DiskConfig, DiskDriver, RegisteredDisk, StorageError};
 
 /// A disk's store, and the provider that signs its URLs (cloud disks).
@@ -39,7 +39,7 @@ pub(crate) fn build(
             }
         }
         DiskConfig::Memory => Backend {
-            store: Arc::new(Memory::new()),
+            store: Arc::new(MemoryStore::new()),
             provider: None,
         },
         // Its driver's factory is async and needs the app: only the module
@@ -79,7 +79,7 @@ pub(crate) fn build(
         )));
     }
     Ok(Backend {
-        store: Arc::new(Prefixed::new(backend.store, prefix.clone())),
+        store: Arc::new(PrefixedStore::new(backend.store, prefix.clone())),
         provider: backend
             .provider
             .map(|provider| provider.with_prefix(prefix)),

@@ -1,30 +1,62 @@
-//! [`Prefixed`]: a store whose files all sit under one directory of another.
+//! [`PrefixedStore`]: a store whose files all sit under one directory of
+//! another.
 
 use std::fmt;
 use std::ops::Range;
 use std::sync::Arc;
+use std::time::Duration;
 
 use bytes::Bytes;
 use navree_kernel::BoxFuture;
 
-use super::{Meta, Object, Store, StoreResult, Upload};
+use super::{Meta, Method, Object, Store, StoreResult, Upload, Url};
 
 /// `inner`, seen from the directory `prefix`: path `a.txt` is `prefix/a.txt`
-/// in `inner`, and listings leave the prefix out again.
-pub(crate) struct Prefixed {
+/// in `inner`, listings leave the prefix out again, and a link is signed
+/// for the path under the prefix.
+///
+/// ```
+/// use std::sync::Arc;
+///
+/// use bytes::Bytes;
+/// use navree_storage::store::{MemoryStore, PrefixedStore, Store};
+///
+/// # #[tokio::main(flavor = "current_thread")]
+/// # async fn main() -> Result<(), navree_storage::store::StoreError> {
+/// let files = Arc::new(MemoryStore::new());
+/// let jaipur = PrefixedStore::new(files.clone(), "tenants/jaipur");
+/// jaipur.put("a.txt", Bytes::from("a")).await?;
+/// assert_eq!(files.read("tenants/jaipur/a.txt", None).await?, "a");
+/// assert_eq!(jaipur.to_string(), "Prefixed(tenants/jaipur, Memory)");
+/// # Ok(())
+/// # }
+/// ```
+pub struct PrefixedStore {
     inner: Arc<dyn Store>,
-    /// A normalised, non-empty path.
+    /// A normalised path without `/` at its ends; empty for `inner` itself.
     prefix: String,
 }
 
-impl Prefixed {
-    pub(crate) fn new(inner: Arc<dyn Store>, prefix: String) -> Self {
+impl PrefixedStore {
+    /// `inner` seen from its directory `prefix`, a normalised path
+    /// (`tenants/agra`). A `/` at either end of it is dropped; with an
+    /// empty prefix the store is `inner` itself.
+    pub fn new(inner: Arc<dyn Store>, prefix: impl Into<String>) -> Self {
+        let prefix: String = prefix.into();
+        let trimmed = prefix.trim_matches('/');
+        let prefix = if trimmed.len() == prefix.len() {
+            prefix
+        } else {
+            trimmed.to_owned()
+        };
         Self { inner, prefix }
     }
 
     /// The path in `inner` of `path` (which may be `""`, the directory itself).
     fn full(&self, path: &str) -> String {
-        if path.is_empty() {
+        if self.prefix.is_empty() {
+            path.to_owned()
+        } else if path.is_empty() {
             self.prefix.clone()
         } else {
             format!("{}/{path}", self.prefix)
@@ -32,13 +64,23 @@ impl Prefixed {
     }
 }
 
-impl fmt::Display for Prefixed {
+impl fmt::Display for PrefixedStore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Prefixed({}, {})", self.prefix, self.inner)
     }
 }
 
-impl Store for Prefixed {
+/// The prefix and what the store under it calls itself.
+impl fmt::Debug for PrefixedStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PrefixedStore")
+            .field("prefix", &self.prefix)
+            .field("inner", &self.inner.to_string())
+            .finish()
+    }
+}
+
+impl Store for PrefixedStore {
     fn put<'a>(&'a self, path: &'a str, contents: Bytes) -> BoxFuture<'a, StoreResult<()>> {
         Box::pin(async move { self.inner.put(&self.full(path), contents).await })
     }
@@ -73,8 +115,11 @@ impl Store for Prefixed {
 
     fn list<'a>(&'a self, prefix: &'a str) -> BoxFuture<'a, StoreResult<Vec<Meta>>> {
         Box::pin(async move {
-            let directory = format!("{}/", self.prefix);
             let mut files = self.inner.list(&self.full(prefix)).await?;
+            if self.prefix.is_empty() {
+                return Ok(files);
+            }
+            let directory = format!("{}/", self.prefix);
             files.retain_mut(|meta| match meta.path.strip_prefix(&directory) {
                 Some(relative) => {
                     meta.path = relative.to_owned();
@@ -85,16 +130,31 @@ impl Store for Prefixed {
             Ok(files)
         })
     }
+
+    fn signed_url<'a>(
+        &'a self,
+        path: &'a str,
+        method: Method,
+        expires_in: Duration,
+    ) -> BoxFuture<'a, StoreResult<Url>> {
+        Box::pin(async move {
+            self.inner
+                .signed_url(&self.full(path), method, expires_in)
+                .await
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::store::{Memory, StoreError};
+    use std::sync::Mutex;
 
-    fn setup() -> (Arc<Memory>, Prefixed) {
-        let memory = Arc::new(Memory::new());
-        let prefixed = Prefixed::new(memory.clone(), "tenants/agra".to_owned());
+    use super::*;
+    use crate::store::{MemoryStore, StoreError};
+
+    fn setup() -> (Arc<MemoryStore>, PrefixedStore) {
+        let memory = Arc::new(MemoryStore::new());
+        let prefixed = PrefixedStore::new(memory.clone(), "tenants/agra");
         (memory, prefixed)
     }
 
@@ -164,5 +224,131 @@ mod tests {
     fn it_names_its_prefix_and_its_store() {
         let (_, prefixed) = setup();
         assert_eq!(prefixed.to_string(), "Prefixed(tenants/agra, Memory)");
+        assert_eq!(
+            format!("{prefixed:?}"),
+            r#"PrefixedStore { prefix: "tenants/agra", inner: "Memory" }"#
+        );
+    }
+
+    #[tokio::test]
+    async fn a_slash_at_either_end_of_the_prefix_is_dropped() {
+        let memory = Arc::new(MemoryStore::new());
+        let prefixed = PrefixedStore::new(memory.clone(), "/tenants/agra/");
+        prefixed.put("a.txt", Bytes::from("a")).await.unwrap();
+        assert_eq!(memory.read("tenants/agra/a.txt", None).await.unwrap(), "a");
+        assert_eq!(prefixed.list("").await.unwrap()[0].path, "a.txt");
+        assert_eq!(prefixed.to_string(), "Prefixed(tenants/agra, Memory)");
+    }
+
+    #[tokio::test]
+    async fn an_empty_prefix_is_the_store_itself() {
+        let memory = Arc::new(MemoryStore::new());
+        for prefix in ["", "/"] {
+            let prefixed = PrefixedStore::new(memory.clone(), prefix);
+            prefixed.put("docs/a.txt", Bytes::from("a")).await.unwrap();
+            assert_eq!(memory.read("docs/a.txt", None).await.unwrap(), "a");
+            assert_eq!(
+                prefixed.head("docs/a.txt").await.unwrap().path,
+                "docs/a.txt"
+            );
+            let listed = prefixed.list("docs").await.unwrap();
+            assert_eq!(listed.len(), 1);
+            assert_eq!(listed[0].path, "docs/a.txt");
+            assert_eq!(prefixed.list("").await.unwrap().len(), 1);
+        }
+    }
+
+    /// A store that signs: it records the path it is asked to sign and
+    /// answers with a link to it.
+    #[derive(Default)]
+    struct Signing {
+        asked: Mutex<Vec<(String, Method, Duration)>>,
+    }
+
+    impl fmt::Display for Signing {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("Signing")
+        }
+    }
+
+    impl Store for Signing {
+        fn put<'a>(&'a self, _: &'a str, _: Bytes) -> BoxFuture<'a, StoreResult<()>> {
+            unimplemented!()
+        }
+
+        fn begin_upload<'a>(&'a self, _: &'a str) -> BoxFuture<'a, StoreResult<Box<dyn Upload>>> {
+            unimplemented!()
+        }
+
+        fn read<'a>(
+            &'a self,
+            _: &'a str,
+            _: Option<Range<u64>>,
+        ) -> BoxFuture<'a, StoreResult<Bytes>> {
+            unimplemented!()
+        }
+
+        fn open<'a>(&'a self, _: &'a str) -> BoxFuture<'a, StoreResult<Object>> {
+            unimplemented!()
+        }
+
+        fn head<'a>(&'a self, _: &'a str) -> BoxFuture<'a, StoreResult<Meta>> {
+            unimplemented!()
+        }
+
+        fn delete<'a>(&'a self, _: &'a str) -> BoxFuture<'a, StoreResult<()>> {
+            unimplemented!()
+        }
+
+        fn list<'a>(&'a self, _: &'a str) -> BoxFuture<'a, StoreResult<Vec<Meta>>> {
+            unimplemented!()
+        }
+
+        fn signed_url<'a>(
+            &'a self,
+            path: &'a str,
+            method: Method,
+            expires_in: Duration,
+        ) -> BoxFuture<'a, StoreResult<Url>> {
+            Box::pin(async move {
+                self.asked
+                    .lock()
+                    .unwrap()
+                    .push((path.to_owned(), method, expires_in));
+                Url::parse(&format!("https://files.amritsar.example/{path}?sig=abc"))
+                    .map_err(StoreError::failed)
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn a_link_is_signed_for_the_path_under_the_prefix() {
+        let signing = Arc::new(Signing::default());
+        let prefixed = PrefixedStore::new(signing.clone(), "tenants/agra");
+        let link = prefixed
+            .signed_url("docs/a.txt", Method::PUT, Duration::from_secs(300))
+            .await
+            .unwrap();
+        assert_eq!(
+            link.as_str(),
+            "https://files.amritsar.example/tenants/agra/docs/a.txt?sig=abc"
+        );
+        assert_eq!(
+            *signing.asked.lock().unwrap(),
+            [(
+                "tenants/agra/docs/a.txt".to_owned(),
+                Method::PUT,
+                Duration::from_secs(300)
+            )]
+        );
+
+        // Under a store that signs none, there is none either.
+        let (_, prefixed) = setup();
+        assert!(matches!(
+            prefixed
+                .signed_url("docs/a.txt", Method::GET, Duration::from_secs(300))
+                .await,
+            Err(StoreError::Unsupported(_))
+        ));
     }
 }

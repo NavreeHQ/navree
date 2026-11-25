@@ -54,6 +54,8 @@ fn meta(meta: ObjectMeta) -> Meta {
     }
 }
 
+// `signed_url` keeps its default here: the links of a cloud disk are signed
+// by its `Provider` (`provider.rs`), through this client's signer.
 impl Store for Cloud {
     fn put<'a>(&'a self, path: &'a str, contents: Bytes) -> BoxFuture<'a, StoreResult<()>> {
         Box::pin(async move {
