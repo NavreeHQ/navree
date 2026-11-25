@@ -182,9 +182,10 @@ pub(crate) fn read(cx: &mut Cx, slot: &str, element: &Element) -> Option<Read> {
                 "a progress bar with a goal, a glow or its own colours: the protocol's `progress` has none of them",
             ));
         }
-        "copy-field" | "auth-layout" | "breathing" | "chart-skeleton" => {
+        "copy-field" | "breathing" | "chart-skeleton" => {
             return Some(waiting(slot, "the protocol has no kind for it"));
         }
+        "auth-layout" => (auth_layout, &[]),
         _ => return None,
     };
     Some(hooks(element, known).and_then(|()| reader(cx, element)))
@@ -196,6 +197,74 @@ fn waiting(slot: &str, what: &str) -> Read {
         format!("slot:{slot}"),
         format!("a part with no reader here yet: {what}"),
     )
+}
+
+/// `AuthLayout`: the page of one form a guest fills in. The protocol has no kind
+/// for the layout, so such a page is the web view's, as it was, with one
+/// exception: a page that gives the client a call only a screen can start (a
+/// passkey, a provider's sign-in in the system's own sheet) is read, as the
+/// column its form stands in. The panel beside the form and the theme menu in
+/// the corner are a browser's and are left out, and the heading is the screen's
+/// title already.
+fn auth_layout(cx: &mut Cx, element: &Element) -> Read {
+    if !starts_a_call(element.child_nodes()) {
+        return waiting("auth-layout", "the protocol has no kind for it");
+    }
+    let mut parts = Parts::of(element);
+    if parts.slot("auth-aside").is_some() {
+        cx.dropped.push("auth-aside".to_owned());
+    }
+    let Some(main) = parts.slot("auth-main") else {
+        return fail("an auth layout with no main part");
+    };
+    parts.done()?;
+    let mut parts = Parts::of(main);
+    if parts.slot("auth-corner").is_some() {
+        cx.dropped.push("auth-corner".to_owned());
+    }
+    let Some(body) = parts.slot("auth-body") else {
+        return fail("an auth layout with no body");
+    };
+    parts.done()?;
+    let mut column = Vec::new();
+    form_column(flat(body.child_nodes()), &mut column);
+    Ok(cx.flat_sequence(&column))
+}
+
+/// Whether a control under `nodes` carries a device call for the client that
+/// asks: what was said of it holds one only when the client's app can start it.
+fn starts_a_call(nodes: &[Node]) -> bool {
+    let mut walk: Vec<&Node> = nodes.iter().collect();
+    while let Some(node) = walk.pop() {
+        match node {
+            Node::Element(element) => {
+                if element.said().is_some_and(|hints| hints.device.is_some()) {
+                    return true;
+                }
+                walk.extend(element.child_nodes());
+            }
+            Node::Fragment(nodes) => walk.extend(nodes),
+            _ => {}
+        }
+    }
+    false
+}
+
+/// The parts of an auth page's column, through the plain stacks that hold them,
+/// without the heading, which the screen's title says.
+fn form_column<'a>(nodes: Vec<&'a Node>, out: &mut Vec<&'a Node>) {
+    for node in nodes {
+        match node {
+            Node::Element(part) => match slot(part).as_deref() {
+                Some("page-title") => {}
+                Some("stack") if id(part).is_none() && !has(part, "hidden") => {
+                    form_column(flat(part.child_nodes()), out);
+                }
+                _ => out.push(node),
+            },
+            other => out.push(other),
+        }
+    }
 }
 
 /// A menu's button read together with the popup it opens, when `element` is

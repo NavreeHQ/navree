@@ -2353,6 +2353,64 @@ fn a_page_asks_which_native_client_has_a_feature() {
 }
 
 #[test]
+fn an_auth_page_is_a_screen_only_where_it_gives_the_client_a_call() {
+    use navree_ui::{AuthLayout, Card, NativeCall, NativeProvider, Stack};
+    let page = || {
+        let call = NativeCall::provider_sign_in(
+            NativeProvider::Apple,
+            "/api/auth/social/apple/native/nonce",
+            "/api/auth/social/apple/native/session",
+        );
+        let column = Stack::gap(4).children((
+            Text::muted("Sutlej Supply"),
+            el("h1").slot("page-title").child("Sign in"),
+            Card::new()
+                .description("Use the email address and password of your account.")
+                .body(Stack::gap(2).children((
+                    Button::outline("Sign in with Apple").native_call(call),
+                    Button::new("Forgot your password?").href("/forgot-password"),
+                ))),
+        ));
+        View::new("Sign in").body(
+            AuthLayout::new(column)
+                .aside(Text::new("Orders, packed and tracked."))
+                .corner(Text::new("Light or dark")),
+        )
+    };
+    // An app that can open the sheet gets the form's column: the panel beside it and
+    // the corner are a browser's, and the heading is the screen's title.
+    let native = TestNative::build(with_caps(Platform::Ios, &["platform_sign_in"]), page);
+    assert!(native.is_native(), "{:?}", native.why());
+    assert_eq!(native.screen().title, "Sign in");
+    assert!(native.sees("Sutlej Supply"));
+    assert!(native.sees("Use the email address and password of your account."));
+    assert!(matches!(
+        native.tap("Sign in with Apple"),
+        Some(Action::Device(_))
+    ));
+    assert_eq!(
+        native.tap("Forgot your password?"),
+        Some(Action::navigate("/forgot-password"))
+    );
+    assert!(!native.sees("Orders, packed and tracked."));
+    assert!(!native.sees("Light or dark"));
+    assert_eq!(native.page().dropped, ["auth-aside", "auth-corner"]);
+    // The heading is said once, as the title.
+    let headings = native
+        .screen()
+        .body
+        .children()
+        .into_iter()
+        .filter(|node| matches!(node, N::Text(text) if text.value == "Sign in"))
+        .count();
+    assert_eq!(headings, 0);
+    // A client that is given no call gets the page in its web view, as before.
+    let plain = TestNative::build(with_caps(Platform::Ios, &["share"]), page);
+    assert_eq!(plain.why(), ["slot:auth-layout"]);
+    assert_eq!(TestNative::of(&page()).why(), ["slot:auth-layout"]);
+}
+
+#[test]
 fn a_link_a_browser_reloads_the_page_for_is_a_plain_link_to_a_native_client() {
     let page = TestNative::of(
         &View::new("Sign in").body(
