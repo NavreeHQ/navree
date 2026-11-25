@@ -12,12 +12,14 @@ use bytes::Bytes;
 use futures_util::TryStreamExt;
 use navree_kernel::BoxFuture;
 use navree_storage::store::{
-    MemoryStore, Meta, Method, Object, PrefixedStore, Store, StoreError, StoreResult, Upload, Url,
+    HeaderName, HeaderValue, MemoryStore, Meta, Method, Object, PrefixedStore, Store, StoreError,
+    StoreResult, Upload, Url,
 };
 
 /// A store in front of another, as a plugin's would be: it counts what it
 /// is asked, refuses every write once it is told to, and signs links to
-/// `https://files.amritsar.example`.
+/// `https://files.amritsar.example`, bound to a content type and a size
+/// range when asked.
 #[derive(Default)]
 struct Godown {
     files: MemoryStore,
@@ -113,11 +115,14 @@ impl Store for Godown {
         })
     }
 
-    fn signed_url<'a>(
+    // The one method a store that signs writes: `signed_url` is this with
+    // no headers.
+    fn signed_url_with<'a>(
         &'a self,
         path: &'a str,
         method: Method,
         expires_in: Duration,
+        headers: &'a [(HeaderName, HeaderValue)],
     ) -> BoxFuture<'a, StoreResult<Url>> {
         Box::pin(async move {
             self.count();
@@ -126,10 +131,23 @@ impl Store for Godown {
                     "the godown signs no {method} links"
                 )));
             }
-            let link = format!(
-                "https://files.amritsar.example/{path}?method={method}&expires={}&signature=abc",
+            let mut bound = Vec::new();
+            for (name, _) in headers {
+                if name != "content-type" && name != "x-goog-content-length-range" {
+                    return Err(StoreError::failed(format!(
+                        "the godown cannot bind the header `{name}`"
+                    )));
+                }
+                bound.push(name.as_str());
+            }
+            let mut link = format!(
+                "https://files.amritsar.example/{path}?method={method}&expires={}",
                 expires_in.as_secs()
             );
+            if !bound.is_empty() {
+                link.push_str(&format!("&bound={}", bound.join(";")));
+            }
+            link.push_str("&signature=abc");
             Url::parse(&link).map_err(StoreError::failed)
         })
     }
@@ -273,5 +291,76 @@ async fn a_link_is_signed_by_a_store_that_can_sign_and_by_no_other() {
             .unwrap_err();
         assert!(matches!(refused, StoreError::Unsupported(_)), "{refused:?}");
         assert_eq!(refused.to_string(), "this store has no signed links");
+        let refused = store
+            .signed_url_with("a.txt", Method::PUT, Duration::from_secs(60), &[])
+            .await
+            .unwrap_err();
+        assert!(matches!(refused, StoreError::Unsupported(_)), "{refused:?}");
     }
+}
+
+fn header(name: &'static str, value: &'static str) -> (HeaderName, HeaderValue) {
+    (
+        HeaderName::from_static(name),
+        HeaderValue::from_static(value),
+    )
+}
+
+#[tokio::test]
+async fn a_link_is_bound_to_the_headers_the_store_can_bind_and_to_no_other() {
+    let (godown, store) = godown_under("tenants/agra");
+    // An upload held to its type and to its size, as an upload link is.
+    let headers = [
+        header("content-type", "image/png"),
+        header("x-goog-content-length-range", "0,5000000"),
+    ];
+    let link = store
+        .signed_url_with(
+            "avatars/a.png",
+            Method::PUT,
+            Duration::from_secs(600),
+            &headers,
+        )
+        .await
+        .unwrap();
+    assert_eq!(link.path(), "/tenants/agra/avatars/a.png");
+    assert_eq!(
+        link.query(),
+        Some("method=PUT&expires=600&bound=content-type;x-goog-content-length-range&signature=abc")
+    );
+
+    // With no headers it is the link `signed_url` gives.
+    let bare = store
+        .signed_url_with("avatars/a.png", Method::PUT, Duration::from_secs(600), &[])
+        .await
+        .unwrap();
+    let plain = store
+        .signed_url("avatars/a.png", Method::PUT, Duration::from_secs(600))
+        .await
+        .unwrap();
+    assert_eq!(bare, plain);
+    assert_eq!(plain.query(), Some("method=PUT&expires=600&signature=abc"));
+
+    // A header the store cannot bind is refused: no link promises less
+    // than was asked of it.
+    let unbound = [
+        header("content-type", "image/png"),
+        header("x-ms-blob-type", "BlockBlob"),
+    ];
+    match store
+        .signed_url_with(
+            "avatars/a.png",
+            Method::PUT,
+            Duration::from_secs(600),
+            &unbound,
+        )
+        .await
+    {
+        Err(StoreError::Failed(error)) => assert_eq!(
+            error.to_string(),
+            "the godown cannot bind the header `x-ms-blob-type`"
+        ),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(godown.asked(), 4);
 }

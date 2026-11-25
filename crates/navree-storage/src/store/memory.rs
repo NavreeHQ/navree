@@ -201,7 +201,7 @@ mod tests {
     use futures_util::TryStreamExt;
 
     use super::*;
-    use crate::store::Method;
+    use crate::store::{HeaderName, HeaderValue, Method};
 
     #[tokio::test]
     async fn files_are_put_read_and_deleted() {
@@ -290,12 +290,23 @@ mod tests {
     async fn it_signs_no_links_and_shows_no_contents() {
         let store = MemoryStore::new();
         store.put("a.txt", Bytes::from("s3cret")).await.unwrap();
+        let headers = [(
+            HeaderName::from_static("content-type"),
+            HeaderValue::from_static("text/plain"),
+        )];
         for method in [Method::GET, Method::PUT] {
             let signed = store
-                .signed_url("a.txt", method, Duration::from_secs(60))
+                .signed_url("a.txt", method.clone(), Duration::from_secs(60))
                 .await;
             assert!(matches!(
                 signed,
+                Err(StoreError::Unsupported("signed links"))
+            ));
+            let bound = store
+                .signed_url_with("a.txt", method, Duration::from_secs(60), &headers)
+                .await;
+            assert!(matches!(
+                bound,
                 Err(StoreError::Unsupported("signed links"))
             ));
         }
