@@ -1,6 +1,7 @@
 //! `query_database` and `describe_schema` on a SQLite database, and every
 //! refusal.
 
+use navree_navigator::{DatabaseOptions, NavigatorOptions};
 use serde_json::json;
 
 use crate::support::{Fixture, call, refused, sqlite_db};
@@ -321,6 +322,49 @@ async fn pending_migrations_are_unknown_when_the_app_cannot_answer() {
     );
     assert!(
         answer["migrations"]["pending"]["unknown"].is_string(),
+        "{}",
+        answer["migrations"]
+    );
+}
+
+/// `migrate:status` connects with the app's own `database.url`. When
+/// Navigator reads another database and the app's own is not on this
+/// machine, the app is not asked, unless the flag is given.
+#[tokio::test]
+async fn the_app_is_not_asked_for_migrations_of_a_remote_database() {
+    let fixture = Fixture::new("[database]\nurl = \"postgres://app@db.example.com/crm\"\n");
+    crm_db(&fixture).await;
+    let local = DatabaseOptions::default().url("sqlite://storage/app.db?mode=rwc");
+
+    let navigator = fixture.navigator().with_database(local.clone());
+    let answer = call(&navigator, "describe_schema", json!({})).await;
+    assert_eq!(
+        answer["migrations"]["applied"],
+        json!(["crm/m20261026_000001_create_deals"])
+    );
+    let unknown = answer["migrations"]["pending"]["unknown"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        unknown.contains("db.example.com") && unknown.contains("--allow-remote-database"),
+        "{}",
+        answer["migrations"]
+    );
+
+    let allowing = fixture
+        .navigator_with(NavigatorOptions {
+            path: fixture.root().to_path_buf(),
+            docs_offline: true,
+            allow_remote_database: true,
+            ..NavigatorOptions::default()
+        })
+        .with_database(local);
+    let answer = call(&allowing, "describe_schema", json!({})).await;
+    let unknown = answer["migrations"]["pending"]["unknown"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        !unknown.contains("db.example.com"),
         "{}",
         answer["migrations"]
     );
