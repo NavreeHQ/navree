@@ -218,6 +218,7 @@ pub(crate) fn family_of(platform: navree_native::Platform) -> crate::shell::Nati
     match platform {
         P::Ios | P::Ipados | P::Macos | P::Watchos | P::Tvos | P::Visionos => NativeFamily::Apple,
         P::Android | P::Wearos => NativeFamily::Android,
+        P::Windows => NativeFamily::Windows,
         _ => NativeFamily::Other,
     }
 }
