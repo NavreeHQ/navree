@@ -14,7 +14,7 @@ use navree_ui::html::SafeHtml;
 use navree_ui::{Alert, AlertTone, Form, Node, Reply, Stack, Submit, Text, Validate, el};
 use serde::Deserialize;
 
-use super::{PagesController, Paths, api, link, page};
+use super::{PagesController, Paths, api, finishes_hand_over, link, onward, page, plain_link};
 use crate::session_auth::{
     STOP_IMPERSONATING_PATH, TWO_FACTOR_CONFIRM_PATH, TWO_FACTOR_SETUP_PATH,
 };
@@ -133,8 +133,16 @@ fn setup_page(
     )
 }
 
-/// The recovery codes, shown once.
+/// The recovery codes, shown once. The way on is a link the runtime follows
+/// in place, unless it leads to the finish of an app's sign-in hand-over,
+/// which only the browser itself opens.
 fn codes_page(paths: &Paths, codes: &[String], next: &str) -> navree_ui::View {
+    const CONTINUE: &str = "I have saved them, continue";
+    let on = if finishes_hand_over(next) {
+        plain_link(CONTINUE, next)
+    } else {
+        link(CONTINUE, next)
+    };
     page(
         paths,
         "Save your recovery codes",
@@ -148,7 +156,7 @@ fn codes_page(paths: &Paths, codes: &[String], next: &str) -> navree_ui::View {
                         .map(|code| el("li").child(Text::code(code.clone())))
                         .collect::<Vec<_>>(),
                 ),
-                link("I have saved them, continue", next),
+                on,
             ))
             .into(),
     )
@@ -315,7 +323,7 @@ impl PagesController {
                             )
                             .into_response()),
                             Err(AuthError::TwoFactorAlreadyEnabled) => {
-                                Ok(Reply::redirect(paths.after(next.as_deref())).into_response())
+                                Ok(onward(paths.after(next.as_deref())).into_response())
                             }
                             Err(error) => Err(error.into_app_error()),
                         }

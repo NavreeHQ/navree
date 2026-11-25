@@ -1036,6 +1036,86 @@ async fn asked_with(client: &TestClient, path: &str, headers: &[(&str, &str)]) -
     request.send().await
 }
 
+/// The sign-in form posted by the page's own script (navree-ui's runtime),
+/// which is answered with ops: each op's name and where it goes.
+async fn sign_in_by_script(client: &TestClient, email: &str, next: &str) -> Vec<(String, String)> {
+    let token = csrf(client).await;
+    let told = client
+        .post("/sign-in")
+        .header("accept", "text/html")
+        .header("x-navree-ui", "1")
+        .form(&[
+            ("email", email),
+            ("password", PASSWORD),
+            ("next", next),
+            ("_csrf", token.as_str()),
+        ])
+        .send()
+        .await
+        .assert_status(200);
+    assert_eq!(told.header("location"), None);
+    told.json_value()["ops"]
+        .as_array()
+        .expect("ops")
+        .iter()
+        .map(|op| {
+            (
+                op["op"].as_str().unwrap_or_default().to_owned(),
+                op["href"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect()
+}
+
+// The sign-in page's own script posts the form and is told where to go. A
+// page of the site it fetches and shows in place (`navigate`). The finish
+// address it is told to leave for, as for another site
+// (`navigate_external`): the browser goes there itself, and the script
+// fetches nothing.
+#[tokio::test]
+async fn the_sign_in_pages_send_the_browser_itself_to_the_finish_address() {
+    let (clock, sink) = (support::clock(), Arc::new(RecordingSink::default()));
+    let app = app(&clock, &sink).await;
+    create_user(&app, "simran@example.com").await;
+    let (_, challenge) = pkce("told");
+    let sheet = app.client();
+    start(&sheet, &challenge, "s-31").await.assert_status(303);
+    let to_sign_in = get(&sheet, "/auth/app/finish").await.assert_status(303);
+    let back = finish_with_attempt(&location(&to_sign_in));
+    assert_eq!(
+        sign_in_by_script(&sheet, "simran@example.com", &back).await,
+        [("navigate_external".to_owned(), back.clone())]
+    );
+    // A browser that is signed in already and opens the sign-in page again
+    // is sent on the same way.
+    let again = sheet
+        .get(&format!(
+            "/sign-in?next={}",
+            url::form_urlencoded::byte_serialize(back.as_bytes()).collect::<String>()
+        ))
+        .header("accept", "text/html")
+        .header("x-navree-ui", "1")
+        .send()
+        .await
+        .assert_status(200)
+        .json_value();
+    assert_eq!(again["ops"][0]["op"], "navigate_external");
+    assert_eq!(again["ops"][0]["href"].as_str(), Some(back.as_str()));
+
+    // Any other page of the site: fetched and shown in place, as before.
+    let browser = app.client();
+    assert_eq!(
+        sign_in_by_script(&browser, "simran@example.com", "/orders?page=2").await,
+        [("navigate".to_owned(), "/orders?page=2".to_owned())]
+    );
+    // An address that only looks like the finish is such a page.
+    let other = app.client();
+    assert_eq!(
+        sign_in_by_script(&other, "simran@example.com", "/auth/app/finished").await,
+        [("navigate".to_owned(), "/auth/app/finished".to_owned())]
+    );
+}
+
 // Only the browser itself opens the finish address. Fetched by the sign-in
 // page's script or any other, loaded ahead of a click or in a frame, it
 // changes nothing, so the hand-over is still there for the browser; the
