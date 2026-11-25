@@ -2431,7 +2431,7 @@ fn a_page_asks_which_native_client_has_a_feature() {
             Platform::Windows,
             &["passkey", "passkey_options"]
         )),
-        (Some(NativeFamily::Other), None)
+        (Some(NativeFamily::Windows), None)
     );
     assert_eq!(asked(with_caps(Platform::Ios, &[])), (None, None));
     // For a passkey the app lists two names; one of them alone is not the feature.
