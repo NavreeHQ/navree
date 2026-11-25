@@ -55,8 +55,8 @@ sealed interface Effect {
 
     /**
      * A device call. `device` is the protocol's call as JSON (`{"f":"share",...}`);
-     * `options` what the server answered the core for it (a confirmation's passkey
-     * request, a sign-in's nonce).
+     * `options` what the server answered the core for it (the passkey request of a
+     * confirmation or of a passkey, a sign-in's nonce).
      */
     data class Device(val call: Long, val device: JsonObject, val posts: Boolean, val options: JsonObject?) : Effect
 

@@ -69,7 +69,7 @@ class DeviceCalls(
         when (f) {
             "share" -> share(activity, effect.call, call)
             "platform_sign_in" -> signIn(activity, effect.call, call, effect.options)
-            "passkey" -> passkey(activity, effect.call, call)
+            "passkey" -> passkey(activity, effect.call, call, effect.options)
             "confirm" -> confirm(activity, effect.call, effect.options)
             "register_push" -> if (pushes) allowNotifications(activity, effect.call) else answer(Events.deviceRefused(effect.call, "not_built"))
             else -> if (effect.posts) answer(Events.deviceRefused(effect.call, "not_built"))
@@ -154,8 +154,15 @@ class DeviceCalls(
         }
     }
 
-    private fun passkey(activity: ComponentActivity, call: Long, device: JsonObject) {
-        val options = (device["options"] as? JsonPrimitive)?.contentOrNull
+    /**
+     * A passkey made or used: the core has asked the server for the options
+     * of the ceremony; its answer is `options` (`{"publicKey": {...}}`), which
+     * Credential Manager takes as WebAuthn writes them. The call's own
+     * `options` is the route the core asked, never the request itself. The
+     * credential goes back to the core, which posts it with the call's ticket.
+     */
+    private fun passkey(activity: ComponentActivity, call: Long, device: JsonObject, answered: JsonObject?) {
+        val options = (answered?.get("publicKey") as? JsonObject)?.toString()
         val mode = (device["mode"] as? JsonPrimitive)?.contentOrNull
         if (options == null) {
             answer(Events.deviceRefused(call, "failed"))
